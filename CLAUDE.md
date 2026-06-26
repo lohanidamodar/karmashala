@@ -494,3 +494,11 @@ Agent prompt rules:
 ## 16. Autonomous and loops
 
 Work autonomously and in loops to implement, review, test, fix, and verify until the task is complete.
+
+---
+
+## 17. Project specific note
+
+- Use flutter commands from powershell
+- run and test on windows as primary target
+- 
