@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/shell_state.dart';
+import '../../git/application/changes_providers.dart';
+import '../../git/presentation/changes_view.dart';
 import '../../projects/application/projects_controller.dart';
 
-/// Right pane — Detail. In Loop 2 this shows the repositories discovered in the
-/// selected project. Session transcripts and Git diff review arrive later
-/// (Loops 6 and 9).
+/// Right pane — Detail. Shows the repositories of the selected project, and when
+/// a repository is selected, its Git change/diff review (Loop 9). Session
+/// transcripts arrive later.
 class DetailPanel extends ConsumerWidget {
   const DetailPanel({super.key});
 
@@ -15,11 +17,17 @@ class DetailPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final focused =
         ref.watch(shellControllerProvider).focusedPane == ShellPane.detail;
-    final selectedId = ref.watch(selectedProjectIdProvider);
+    final selectedProjectId = ref.watch(selectedProjectIdProvider);
+    final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final repositories = ref.watch(selectedProjectRepositoriesProvider);
 
     final Widget body;
-    if (selectedId == null) {
+    if (selectedRepoId != null) {
+      final repo = repositories
+          .where((r) => r.id == selectedRepoId)
+          .firstOrNull;
+      body = ChangesView(repositoryName: repo?.name ?? 'repository');
+    } else if (selectedProjectId == null) {
       body = const PanePlaceholder(
         message: 'Select a project to see its repositories.',
       );
@@ -43,6 +51,11 @@ class DetailPanel extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            trailing: const Icon(Icons.difference_outlined, size: 16),
+            onTap: () {
+              ref.read(selectedChangeFileProvider.notifier).select(null);
+              ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
+            },
           );
         },
       );

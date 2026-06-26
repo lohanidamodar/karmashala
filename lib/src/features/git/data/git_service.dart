@@ -3,7 +3,9 @@ import 'package:path/path.dart' as p;
 import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
+import '../domain/file_change.dart';
 import '../domain/git_worktree.dart';
+import 'git_diff_parsing.dart';
 
 /// Raised when a `git` invocation fails (non-zero exit). Carries git's stderr
 /// for an actionable diagnostic.
@@ -114,6 +116,33 @@ class GitService {
     if (!result.ok) return null;
     final name = result.stdout.trim();
     return (name.isEmpty || name == 'HEAD') ? null : name;
+  }
+
+  /// Working-tree changes in [repo] (the review surface; Git is authoritative).
+  Future<List<FileChange>> status(EnvironmentPath repo) async {
+    final result = await _git(repo, ['status', '--porcelain=v1']);
+    if (!result.ok) {
+      throw GitException('git status failed: ${result.stderr.trim()}');
+    }
+    return parseGitStatus(result.stdout);
+  }
+
+  /// Returns the unified diff for [repo], optionally limited to [path] and/or the
+  /// staged (index) changes.
+  Future<String> diff(
+    EnvironmentPath repo, {
+    String? path,
+    bool staged = false,
+  }) async {
+    final result = await _git(repo, [
+      'diff',
+      if (staged) '--staged',
+      if (path != null) ...['--', path],
+    ]);
+    if (!result.ok) {
+      throw GitException('git diff failed: ${result.stderr.trim()}');
+    }
+    return result.stdout;
   }
 
   /// Lists the worktrees of [repo].
