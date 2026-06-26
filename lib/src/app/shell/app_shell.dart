@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/detail/presentation/detail_panel.dart';
 import '../../features/projects/presentation/projects_panel.dart';
 import '../../features/sessions/presentation/sessions_panel.dart';
+import '../../features/terminal/application/terminal_controller.dart';
+import '../../features/terminal/presentation/terminal_view.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
@@ -24,24 +26,33 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shell = ref.watch(shellControllerProvider);
+    final terminalVisible = ref.watch(terminalVisibleProvider);
     return ShellShortcuts(
       child: Scaffold(
         appBar: const _ShellAppBar(),
         body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                if (width >= _wideBreakpoint) {
-                  return _WideLayout(shell: shell);
-                }
-                if (width >= _mediumBreakpoint) {
-                  return _MediumLayout(shell: shell);
-                }
-                return _NarrowLayout(shell: shell);
-              },
-            ),
+          child: Column(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width = constraints.maxWidth;
+                      if (width >= _wideBreakpoint) {
+                        return _WideLayout(shell: shell);
+                      }
+                      if (width >= _mediumBreakpoint) {
+                        return _MediumLayout(shell: shell);
+                      }
+                      return _NarrowLayout(shell: shell);
+                    },
+                  ),
+                ),
+              ),
+              if (terminalVisible)
+                const SizedBox(height: 220, child: TerminalView()),
+            ],
           ),
         ),
       ),
@@ -49,14 +60,15 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-class _ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
+class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const _ShellAppBar();
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final terminalVisible = ref.watch(terminalVisibleProvider);
     return AppBar(
       titleSpacing: 16,
       title: Row(
@@ -65,14 +77,26 @@ class _ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
           const SizedBox(width: 10),
           Text('Chitragupta', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(width: 10),
-          Text(
-            'Agent Development Environment',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+          Flexible(
+            child: Text(
+              'Agent Development Environment',
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],
       ),
+      actions: [
+        IconButton(
+          tooltip: 'Toggle terminal (Ctrl+`)',
+          isSelected: terminalVisible,
+          icon: const Icon(Icons.terminal),
+          onPressed: () => ref.read(terminalVisibleProvider.notifier).toggle(),
+        ),
+        const SizedBox(width: 8),
+      ],
     );
   }
 }

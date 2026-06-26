@@ -87,3 +87,4 @@ docs/                       # Product, architecture, roadmap, build log, ADRs
 | `Ctrl+2` | Focus the Sessions pane |
 | `Ctrl+3` | Focus the Detail pane |
 | `Ctrl+B` | Toggle the Projects pane |
+| `` Ctrl+` `` | Toggle the embedded terminal |

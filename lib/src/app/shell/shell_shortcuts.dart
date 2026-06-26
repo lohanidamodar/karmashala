@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/terminal/application/terminal_controller.dart';
 import 'shell_state.dart';
 
 /// Intent: move focus to a specific shell pane.
@@ -13,6 +14,11 @@ class FocusPaneIntent extends Intent {
 /// Intent: show/hide the collapsible projects pane.
 class ToggleProjectsPaneIntent extends Intent {
   const ToggleProjectsPaneIntent();
+}
+
+/// Intent: show/hide the optional embedded terminal.
+class ToggleTerminalIntent extends Intent {
+  const ToggleTerminalIntent();
 }
 
 /// Wraps [child] with the application's desktop keyboard shortcuts.
@@ -39,6 +45,8 @@ class ShellShortcuts extends ConsumerWidget {
     ),
     SingleActivator(LogicalKeyboardKey.keyB, control: true):
         ToggleProjectsPaneIntent(),
+    SingleActivator(LogicalKeyboardKey.backquote, control: true):
+        ToggleTerminalIntent(),
   };
 
   @override
@@ -57,6 +65,12 @@ class ShellShortcuts extends ConsumerWidget {
           ToggleProjectsPaneIntent: CallbackAction<ToggleProjectsPaneIntent>(
             onInvoke: (intent) {
               controller.toggleProjectsPane();
+              return null;
+            },
+          ),
+          ToggleTerminalIntent: CallbackAction<ToggleTerminalIntent>(
+            onInvoke: (intent) {
+              ref.read(terminalVisibleProvider.notifier).toggle();
               return null;
             },
           ),
