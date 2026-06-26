@@ -3,6 +3,8 @@ import 'package:chitragupta/src/features/git/domain/diff_line.dart';
 import 'package:chitragupta/src/features/git/domain/file_change.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+final _us = String.fromCharCode(0x1f);
+
 void main() {
   group('parseGitStatus', () {
     test('classifies staged/unstaged/untracked/added/deleted', () {
@@ -38,6 +40,20 @@ void main() {
 
     test('empty status yields no changes', () {
       expect(parseGitStatus(''), isEmpty);
+    });
+  });
+
+  group('parseGitLog', () {
+    test('parses unit-separated commit lines', () {
+      final out =
+          'abc123${_us}Ada${_us}First commit\n'
+          'def456${_us}Bob${_us}Second commit\n';
+      final commits = parseGitLog(out);
+      expect(commits.length, 2);
+      expect(commits[0].sha, 'abc123');
+      expect(commits[0].author, 'Ada');
+      expect(commits[0].subject, 'First commit');
+      expect(commits[1].subject, 'Second commit');
     });
   });
 

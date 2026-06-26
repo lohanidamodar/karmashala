@@ -1,5 +1,6 @@
 import '../domain/diff_line.dart';
 import '../domain/file_change.dart';
+import '../domain/git_commit.dart';
 
 /// Parses `git status --porcelain=v1` output into [FileChange]s.
 ///
@@ -12,7 +13,7 @@ List<FileChange> parseGitStatus(String porcelain) {
     if (raw.length < 4) continue;
     final x = raw[0];
     final y = raw[1];
-    var rest = raw.substring(3);
+    final rest = raw.substring(3);
 
     String? originalPath;
     var path = rest;
@@ -49,6 +50,20 @@ FileChangeType _typeOf(String code) => switch (code) {
   '?' => FileChangeType.untracked,
   _ => FileChangeType.unknown,
 };
+
+/// Parses `git log --pretty=format:%H%x1f%an%x1f%s` output (unit-separated
+/// fields, one commit per line) into [GitCommit]s.
+List<GitCommit> parseGitLog(String output) {
+  final unitSeparator = String.fromCharCode(0x1f); // %x1f in the format string
+  final commits = <GitCommit>[];
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    if (line.isEmpty) continue;
+    final parts = line.split(unitSeparator);
+    if (parts.length < 3) continue;
+    commits.add(GitCommit(sha: parts[0], author: parts[1], subject: parts[2]));
+  }
+  return commits;
+}
 
 /// Parses unified diff text into classified [DiffLine]s for display.
 List<DiffLine> parseUnifiedDiff(String diff) {

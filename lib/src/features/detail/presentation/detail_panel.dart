@@ -5,6 +5,8 @@ import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/shell_state.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/presentation/changes_view.dart';
+import '../../github/application/github_providers.dart';
+import '../../github/presentation/github_view.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/session_transcript_view.dart';
@@ -31,7 +33,36 @@ class DetailPanel extends ConsumerWidget {
       final repo = repositories
           .where((r) => r.id == selectedRepoId)
           .firstOrNull;
-      body = ChangesView(repositoryName: repo?.name ?? 'repository');
+      final tab = ref.watch(repoReviewTabProvider);
+      body = Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: SegmentedButton<int>(
+              segments: const [
+                ButtonSegment(
+                  value: 0,
+                  icon: Icon(Icons.difference_outlined, size: 16),
+                  label: Text('Changes'),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  icon: Icon(Icons.merge_outlined, size: 16),
+                  label: Text('GitHub'),
+                ),
+              ],
+              selected: {tab},
+              onSelectionChanged: (s) =>
+                  ref.read(repoReviewTabProvider.notifier).select(s.first),
+            ),
+          ),
+          Expanded(
+            child: tab == 0
+                ? ChangesView(repositoryName: repo?.name ?? 'repository')
+                : const GitHubView(),
+          ),
+        ],
+      );
     } else if (selectedProjectId == null) {
       body = const PanePlaceholder(
         message: 'Select a project to see its repositories.',

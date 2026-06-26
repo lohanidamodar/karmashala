@@ -4,6 +4,7 @@ import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/file_change.dart';
+import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
 import 'git_diff_parsing.dart';
 
@@ -143,6 +144,59 @@ class GitService {
       throw GitException('git diff failed: ${result.stderr.trim()}');
     }
     return result.stdout;
+  }
+
+  /// Recent commits on [repo]'s current branch.
+  Future<List<GitCommit>> log(EnvironmentPath repo, {int limit = 20}) async {
+    final result = await _git(repo, [
+      'log',
+      '-n',
+      '$limit',
+      '--pretty=format:%H%x1f%an%x1f%s',
+    ]);
+    if (!result.ok) {
+      throw GitException('git log failed: ${result.stderr.trim()}');
+    }
+    return parseGitLog(result.stdout);
+  }
+
+  /// Stages all changes (`git add -A`).
+  Future<void> stageAll(EnvironmentPath repo) async {
+    final result = await _git(repo, ['add', '-A']);
+    if (!result.ok) {
+      throw GitException('git add failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Commits staged changes with [message].
+  Future<void> commit(EnvironmentPath repo, String message) async {
+    final result = await _git(repo, ['commit', '-m', message]);
+    if (!result.ok) {
+      throw GitException('git commit failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Creates and checks out a new branch [name].
+  Future<void> createBranch(EnvironmentPath repo, String name) async {
+    final result = await _git(repo, ['checkout', '-b', name]);
+    if (!result.ok) {
+      throw GitException('git checkout -b failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Pushes the current branch (optionally to [remote], setting upstream).
+  Future<void> push(
+    EnvironmentPath repo, {
+    String? remote,
+    String? branch,
+  }) async {
+    final result = await _git(repo, [
+      'push',
+      if (remote != null && branch != null) ...['-u', remote, branch],
+    ]);
+    if (!result.ok) {
+      throw GitException('git push failed: ${result.stderr.trim()}');
+    }
   }
 
   /// Lists the worktrees of [repo].

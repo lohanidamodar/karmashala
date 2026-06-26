@@ -173,5 +173,38 @@ bare
         isTrue,
       );
     });
+
+    test('commit stages nothing itself; commit runs git commit -m', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      await GitService(runner).commit(repo(r'C:\app'), 'msg');
+      expect(captured.arguments, ['-C', r'C:\app', 'commit', '-m', 'msg']);
+    });
+
+    test('push sets upstream when remote and branch are given', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      await GitService(
+        runner,
+      ).push(repo(r'C:\app'), remote: 'origin', branch: 'main');
+      expect(captured.arguments, [
+        '-C',
+        r'C:\app',
+        'push',
+        '-u',
+        'origin',
+        'main',
+      ]);
+    });
   });
 }
