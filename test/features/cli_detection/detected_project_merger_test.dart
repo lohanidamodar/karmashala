@@ -1,0 +1,94 @@
+import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/cli_detection/application/detected_project_merger.dart';
+import 'package:chitragupta/src/features/cli_detection/domain/detected_session.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fixtures.dart';
+
+void main() {
+  final envById = {'windows': windowsEnv(), 'wsl:Ubuntu': wslEnv()};
+
+  DetectedSession sess({
+    required AgentKind cli,
+    required String env,
+    required String path,
+    String? entrypoint,
+    String id = 's',
+  }) => DetectedSession(
+    cli: cli,
+    sessionId: id,
+    cwd: EnvironmentPath(environmentId: env, path: path),
+    filePath: '/tmp/$id',
+    storeHome: '/tmp',
+    title: id,
+    entrypoint: entrypoint,
+    modifiedAt: testTime,
+  );
+
+  test('merges the same folder seen via Windows Claude and WSL Codex', () {
+    final projects = mergeDetectedProjects([
+      sess(
+        cli: AgentKind.claudeCode,
+        env: 'windows',
+        path: r'G:\dev\x',
+        id: 'a',
+      ),
+      sess(
+        cli: AgentKind.codex,
+        env: 'wsl:Ubuntu',
+        path: '/mnt/g/dev/x',
+        id: 'b',
+      ),
+    ], envById);
+
+    expect(projects.length, 1);
+    expect(projects.single.sessions.map((s) => s.sessionId).toSet(), {
+      'a',
+      'b',
+    });
+    expect(projects.single.countFor(AgentKind.claudeCode), 1);
+    expect(projects.single.countFor(AgentKind.codex), 1);
+    expect(projects.single.environmentIds, {'windows', 'wsl:Ubuntu'});
+  });
+
+  test('SDK-spawned subagents are nested, not top-level', () {
+    final projects = mergeDetectedProjects([
+      sess(
+        cli: AgentKind.claudeCode,
+        env: 'windows',
+        path: r'G:\dev\x',
+        id: 'real',
+      ),
+      sess(
+        cli: AgentKind.claudeCode,
+        env: 'windows',
+        path: r'G:\dev\x',
+        id: 'sub',
+        entrypoint: 'sdk-cli',
+      ),
+    ], envById);
+
+    final project = projects.single;
+    expect(project.sessions.map((s) => s.sessionId), ['real']);
+    expect(project.subagentSessions.map((s) => s.sessionId), ['sub']);
+  });
+
+  test('WSL-native paths stay separate from Windows projects', () {
+    final projects = mergeDetectedProjects([
+      sess(
+        cli: AgentKind.claudeCode,
+        env: 'windows',
+        path: r'G:\dev\x',
+        id: 'a',
+      ),
+      sess(
+        cli: AgentKind.codex,
+        env: 'wsl:Ubuntu',
+        path: '/home/me/y',
+        id: 'b',
+      ),
+    ], envById);
+    expect(projects.length, 2);
+  });
+}

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/shell_state.dart';
+import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../application/projects_controller.dart';
 import 'new_project_dialog.dart';
 
@@ -17,6 +19,20 @@ class ProjectsPanel extends ConsumerStatefulWidget {
 
 class _ProjectsPanelState extends ConsumerState<ProjectsPanel> {
   String _query = '';
+
+  void _showDetected(BuildContext context) {
+    // Kick off a scan when the browser opens.
+    ref.read(detectedProjectsControllerProvider.notifier).detect();
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 600),
+          child: const DetectedProjectsView(),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +57,11 @@ class _ProjectsPanelState extends ConsumerState<ProjectsPanel> {
       icon: Icons.folder_outlined,
       focused: focused,
       actions: [
+        IconButton(
+          tooltip: 'Detect CLI sessions',
+          icon: const Icon(Icons.travel_explore, size: 18),
+          onPressed: () => _showDetected(context),
+        ),
         IconButton(
           tooltip: 'New project',
           icon: const Icon(Icons.add, size: 18),
