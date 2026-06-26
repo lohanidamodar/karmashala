@@ -18,6 +18,7 @@ typedef MigrationStep = void Function(Database db);
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
+  3: _migrateToV3,
 };
 
 void _migrateToV1(Database db) {
@@ -132,4 +133,25 @@ void _migrateToV2(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_session_events_session '
     'ON session_events (session_id, seq);',
   );
+}
+
+void _migrateToV3(Database db) {
+  // A session may span multiple repositories within its project (Loop 13). The
+  // `sessions.repository_id` column remains the primary repository; this link
+  // table records every repository a session is associated with.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_repositories (
+      session_id    TEXT NOT NULL,
+      repository_id TEXT NOT NULL,
+      role          TEXT NOT NULL,
+      PRIMARY KEY (session_id, repository_id),
+      FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE,
+      FOREIGN KEY (repository_id) REFERENCES repositories (id) ON DELETE CASCADE
+    );
+  ''');
+  // Backfill the primary link for any pre-existing sessions.
+  db.execute('''
+    INSERT OR IGNORE INTO session_repositories (session_id, repository_id, role)
+      SELECT id, repository_id, 'primary' FROM sessions;
+  ''');
 }

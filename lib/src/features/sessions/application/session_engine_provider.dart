@@ -38,6 +38,7 @@ final sessionEngineProvider = Provider<SessionEngine>(
   (ref) => SessionEngine(
     sessionDao: ref.watch(sessionDaoProvider),
     eventDao: ref.watch(sessionEventDaoProvider),
+    sessionRepositoryDao: ref.watch(sessionRepositoryDaoProvider),
     worktreeService: ref.watch(worktreeServiceProvider),
     resolveAdapter: ref.watch(agentAdapterResolverProvider),
     clock: ref.watch(clockProvider),

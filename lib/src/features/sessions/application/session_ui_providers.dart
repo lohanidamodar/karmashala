@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../git/application/changes_providers.dart';
+import '../../repositories/domain/repository.dart';
 import '../domain/session.dart';
 import '../domain/session_event.dart';
 import 'session_engine_provider.dart';
@@ -38,6 +39,16 @@ final selectedSessionIdProvider =
     NotifierProvider<SelectedSessionController, String?>(
       SelectedSessionController.new,
     );
+
+/// Repositories the selected session spans (primary first). Refreshes on a
+/// revision bump (after attach/detach).
+final selectedSessionRepositoriesProvider =
+    Provider.autoDispose<List<Repository>>((ref) {
+      ref.watch(sessionsRevisionProvider);
+      final id = ref.watch(selectedSessionIdProvider);
+      if (id == null) return const [];
+      return ref.read(sessionRepositoriesServiceProvider).forSession(id);
+    });
 
 /// Live transcript for the selected session: the persisted event history,
 /// refreshed whenever the engine appends a new event to an active session.

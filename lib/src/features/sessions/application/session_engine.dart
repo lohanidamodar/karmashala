@@ -11,6 +11,7 @@ import '../../git/application/worktree_service.dart';
 import '../../repositories/domain/repository.dart';
 import '../data/session_dao.dart';
 import '../data/session_event_dao.dart';
+import '../data/session_repository_dao.dart';
 import '../domain/session.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
@@ -30,6 +31,7 @@ class SessionEngine {
   SessionEngine({
     required this.sessionDao,
     required this.eventDao,
+    required this.sessionRepositoryDao,
     required this.worktreeService,
     required this.resolveAdapter,
     required this.clock,
@@ -38,6 +40,7 @@ class SessionEngine {
 
   final SessionDao sessionDao;
   final SessionEventDao eventDao;
+  final SessionRepositoryDao sessionRepositoryDao;
   final WorktreeService worktreeService;
   final AdapterResolver resolveAdapter;
   final Clock clock;
@@ -66,6 +69,7 @@ class SessionEngine {
     required AgentInstallation installation,
     required String title,
     bool useWorktree = false,
+    List<Repository> additionalRepositories = const [],
   }) async {
     final id = ids.newId();
 
@@ -92,6 +96,14 @@ class SessionEngine {
       createdAt: clock.nowUtc(),
     );
     sessionDao.insert(session);
+    sessionRepositoryDao.link(
+      id,
+      repository.id,
+      role: SessionRepositoryRole.primary,
+    );
+    for (final extra in additionalRepositories) {
+      sessionRepositoryDao.link(id, extra.id);
+    }
 
     final controller = StreamController<SessionEvent>.broadcast();
     final runtime = _Runtime(controller: controller);

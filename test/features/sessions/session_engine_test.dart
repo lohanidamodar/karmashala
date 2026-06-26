@@ -10,6 +10,7 @@ import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/session_engine.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_event_dao.dart';
+import 'package:chitragupta/src/features/sessions/data/session_repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_event_types.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,6 +38,7 @@ void main() {
   SessionEngine buildEngine({AdapterResolver? resolver}) => SessionEngine(
     sessionDao: sessionDao,
     eventDao: eventDao,
+    sessionRepositoryDao: SessionRepositoryDao(db),
     worktreeService: WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(),
       environmentDao: ExecutionEnvironmentDao(db),
@@ -137,6 +139,22 @@ void main() {
     expect(sessionDao.getById(session.id)!.status, SessionStatus.cancelled);
     expect(typesOf(session.id).last, SessionEventTypes.sessionCancelled);
     expect(engine.isActive(session.id), isFalse);
+  });
+
+  test('start links the primary repository and any additional ones', () async {
+    // A second repository in the same project to attach.
+    RepositoryDao(db).insert(repository(id: 'r2', name: 'api'));
+    final engine = buildEngine();
+    final s = await engine.start(
+      repository: repository(),
+      installation: agentInstallation(),
+      title: 'Multi',
+      additionalRepositories: [repository(id: 'r2', name: 'api')],
+    );
+
+    final links = SessionRepositoryDao(db).linksFor(s.id);
+    expect(links.first.isPrimary, isTrue);
+    expect(links.map((l) => l.repositoryId).toSet(), {'r1', 'r2'});
   });
 
   test('a self-completing agent marks the session completed', () async {

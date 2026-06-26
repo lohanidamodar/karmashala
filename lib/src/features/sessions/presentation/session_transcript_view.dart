@@ -7,6 +7,7 @@ import '../application/session_engine_provider.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
+import 'session_repositories_bar.dart';
 
 /// The structured-chat transcript for the selected session, with a message input
 /// and a stop control while the session is running.
@@ -72,6 +73,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             ],
           ),
         ),
+        SessionRepositoriesBar(sessionId: widget.sessionId),
         const Divider(height: 1),
         Expanded(
           child: transcript.when(
