@@ -1,0 +1,135 @@
+import 'package:sqlite3/sqlite3.dart';
+
+/// A single schema migration step: SQL applied to move the database **to** the
+/// keyed version. Steps are hand-written (no code generation) and must be
+/// idempotent at the DDL level (`IF NOT EXISTS`) so re-runs are safe.
+typedef MigrationStep = void Function(Database db);
+
+/// Ordered schema migrations, keyed by the target `user_version`.
+///
+/// The database applies every step whose version is greater than the stored
+/// `PRAGMA user_version`, in ascending order, inside a transaction each. The
+/// highest key here is the current [AppDatabase.schemaVersion].
+///
+/// * **v1** — Loop 0: the `app_metadata` key/value table.
+/// * **v2** — Loop 1: the core domain schema (environments, projects,
+///   repositories, agent installations, sessions, and the append-only
+///   session-event log).
+final Map<int, MigrationStep> schemaMigrations = {
+  1: _migrateToV1,
+  2: _migrateToV2,
+};
+
+void _migrateToV1(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS app_metadata (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  ''');
+}
+
+void _migrateToV2(Database db) {
+  // Execution environments: where commands run (Windows native or a WSL distro).
+  // Every path elsewhere references one of these by id (constraints 7 & 8).
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS execution_environments (
+      id               TEXT PRIMARY KEY,
+      kind             TEXT NOT NULL,
+      name             TEXT NOT NULL,
+      wsl_distribution TEXT,
+      created_at       TEXT NOT NULL
+    );
+  ''');
+
+  // Projects: a logical workspace rooted at a folder in some environment.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS projects (
+      id                  TEXT PRIMARY KEY,
+      name                TEXT NOT NULL,
+      root_environment_id TEXT NOT NULL,
+      root_path           TEXT NOT NULL,
+      created_at          TEXT NOT NULL,
+      FOREIGN KEY (root_environment_id)
+        REFERENCES execution_environments (id) ON DELETE RESTRICT
+    );
+  ''');
+
+  // Repositories: a Git repository belonging to a project.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS repositories (
+      id             TEXT PRIMARY KEY,
+      project_id     TEXT NOT NULL,
+      name           TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      path           TEXT NOT NULL,
+      created_at     TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+      FOREIGN KEY (environment_id)
+        REFERENCES execution_environments (id) ON DELETE RESTRICT
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_repositories_project '
+    'ON repositories (project_id);',
+  );
+
+  // Agent installations: an agent executable installed in one environment.
+  // Each (agent, environment, executable) is an independent installation.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS agent_installations (
+      id              TEXT PRIMARY KEY,
+      agent_kind      TEXT NOT NULL,
+      environment_id  TEXT NOT NULL,
+      executable_path TEXT NOT NULL,
+      version         TEXT,
+      created_at      TEXT NOT NULL,
+      FOREIGN KEY (environment_id)
+        REFERENCES execution_environments (id) ON DELETE CASCADE,
+      UNIQUE (agent_kind, environment_id, executable_path)
+    );
+  ''');
+
+  // Sessions: a unit of work targeting one repository, run by one installation,
+  // optionally in a Git worktree (per-session choice).
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS sessions (
+      id                      TEXT PRIMARY KEY,
+      repository_id           TEXT NOT NULL,
+      agent_installation_id   TEXT NOT NULL,
+      title                   TEXT NOT NULL,
+      use_worktree            INTEGER NOT NULL,
+      worktree_environment_id TEXT,
+      worktree_path           TEXT,
+      status                  TEXT NOT NULL,
+      created_at              TEXT NOT NULL,
+      FOREIGN KEY (repository_id) REFERENCES repositories (id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_installation_id)
+        REFERENCES agent_installations (id) ON DELETE RESTRICT
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_repository '
+    'ON sessions (repository_id);',
+  );
+
+  // Session events: the normalized, append-only log of everything that happens
+  // in a session. Rows are never updated or deleted in normal operation.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_events (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      seq        INTEGER NOT NULL,
+      type       TEXT NOT NULL,
+      payload    TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE,
+      UNIQUE (session_id, seq)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_events_session '
+    'ON session_events (session_id, seq);',
+  );
+}
