@@ -5,8 +5,10 @@ import 'src/app/chitragupta_app.dart';
 import 'src/core/database/app_database.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/logging/app_logger.dart';
+import 'src/core/process/windows_command_runner.dart';
 import 'src/core/util/clock.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
+import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
 
 /// Application entry point.
@@ -22,12 +24,22 @@ Future<void> main() async {
   logger.info('Starting Chitragupta.');
   final database = await AppDatabase.open();
   bootstrapMetadata(database, logger: logger);
-  // Ensure the always-present local Windows environment exists so projects can
-  // bind their folders to a real environment (full discovery arrives in Loop 3).
-  ensureLocalEnvironment(
-    ExecutionEnvironmentDao(database),
-    const SystemClock(),
-  );
+
+  // Ensure the Windows environment exists immediately, then discover and persist
+  // all execution environments (Windows host + installed WSL distributions),
+  // best-effort — discovery degrades to Windows-only if WSL is unavailable.
+  const clock = SystemClock();
+  final environmentDao = ExecutionEnvironmentDao(database);
+  ensureLocalEnvironment(environmentDao, clock);
+  final discovered = await EnvironmentDiscoveryService(
+    host: const WindowsCommandRunner(),
+    clock: clock,
+    logger: logger,
+  ).discover();
+  for (final env in discovered) {
+    environmentDao.upsert(env);
+  }
+  logger.info('Discovered ${discovered.length} execution environment(s).');
 
   runApp(
     ProviderScope(
