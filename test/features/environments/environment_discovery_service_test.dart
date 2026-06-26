@@ -35,6 +35,18 @@ void main() {
     test('empty output yields no distributions', () {
       expect(parseWslDistributions(''), isEmpty);
     });
+
+    test('strips a default-distro marker and the non-quiet header', () {
+      const raw =
+          'Windows Subsystem for Linux Distributions:\r\n'
+          '* Ubuntu\r\n'
+          '  Debian\r\n';
+      expect(parseWslDistributions(raw), ['Ubuntu', 'Debian']);
+    });
+
+    test('keeps distribution names containing spaces', () {
+      expect(parseWslDistributions('Docker Desktop\n'), ['Docker Desktop']);
+    });
   });
 
   group('EnvironmentDiscoveryService', () {

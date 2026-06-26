@@ -23,12 +23,17 @@ class PathTranslationException implements Exception {
 class PathTranslator {
   const PathTranslator();
 
-  static final _windowsDrive = RegExp(r'^([A-Za-z]):[\\/](.*)$');
+  // Drive path with an optional separator (handles `C:`, `C:\`, `C:/x`, `C:\x\`).
+  static final _windowsDrive = RegExp(r'^([A-Za-z]):[\\/]?(.*)$');
   static final _wslMount = RegExp(r'^/mnt/([a-zA-Z])(?:/(.*))?$');
   static final _wslAbsolute = RegExp(r'^/(.*)$');
-  static final _unc = RegExp(r'^\\\\wsl(?:\.localhost|\$)\\([^\\]+)\\(.*)$');
+  static final _unc = RegExp(r'^\\\\wsl(?:\.localhost|\$)\\([^\\]+)\\?(.*)$');
 
-  /// `C:\a\b` → `/mnt/c/a/b`.
+  static final _trailingWinSep = RegExp(r'[\\/]+$');
+  static final _trailingPosixSep = RegExp(r'/+$');
+
+  /// `C:\a\b` → `/mnt/c/a/b`. Accepts forward or back slashes, a bare drive
+  /// (`C:` → `/mnt/c`), and trailing separators.
   String windowsDriveToWslMount(String windowsPath) {
     final m = _windowsDrive.firstMatch(windowsPath);
     if (m == null) {
@@ -37,21 +42,24 @@ class PathTranslator {
       );
     }
     final drive = m.group(1)!.toLowerCase();
-    final rest = m.group(2)!.replaceAll(r'\', '/');
-    final trimmed = rest.endsWith('/')
-        ? rest.substring(0, rest.length - 1)
-        : rest;
-    return trimmed.isEmpty ? '/mnt/$drive' : '/mnt/$drive/$trimmed';
+    final rest = m
+        .group(2)!
+        .replaceAll(r'\', '/')
+        .replaceAll(_trailingPosixSep, '');
+    return rest.isEmpty ? '/mnt/$drive' : '/mnt/$drive/$rest';
   }
 
-  /// `/mnt/c/a/b` → `C:\a\b`.
+  /// `/mnt/c/a/b` → `C:\a\b`. Handles the drive root (`/mnt/c` → `C:\`) and
+  /// trailing separators.
   String wslMountToWindowsDrive(String wslPath) {
     final m = _wslMount.firstMatch(wslPath);
     if (m == null) {
       throw PathTranslationException('Not a /mnt drive path: $wslPath');
     }
     final drive = m.group(1)!.toUpperCase();
-    final rest = (m.group(2) ?? '').replaceAll('/', r'\');
+    final rest = (m.group(2) ?? '')
+        .replaceAll(_trailingPosixSep, '')
+        .replaceAll('/', r'\');
     return rest.isEmpty ? '$drive:\\' : '$drive:\\$rest';
   }
 
@@ -98,7 +106,11 @@ class PathTranslator {
           'UNC path is for distribution "$distro", not "${wslEnv.wslDistribution}"',
         );
       }
-      return '/${unc.group(2)!.replaceAll(r'\', '/')}';
+      final rest = unc
+          .group(2)!
+          .replaceAll(_trailingWinSep, '')
+          .replaceAll(r'\', '/');
+      return '/$rest';
     }
     throw PathTranslationException(
       'Cannot translate Windows path to WSL: $windowsPath',
@@ -117,9 +129,15 @@ class PathTranslator {
           'WSL environment ${wslEnv.id} has no distribution name',
         );
       }
-      final rest = abs.group(1)!.replaceAll('/', r'\');
-      return r'\\wsl.localhost\'
-          '$distro\\$rest';
+      final rest = abs
+          .group(1)!
+          .replaceAll(_trailingPosixSep, '')
+          .replaceAll('/', r'\');
+      return rest.isEmpty
+          ? r'\\wsl.localhost\'
+                '$distro'
+          : r'\\wsl.localhost\'
+                '$distro\\$rest';
     }
     throw PathTranslationException(
       'Cannot translate WSL path to Windows: $wslPath',

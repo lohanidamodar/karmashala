@@ -15,11 +15,17 @@ List<String> parseWslDistributions(String rawOutput) {
   final cleaned = String.fromCharCodes(
     rawOutput.codeUnits.where((c) => c != 0x00 && c != 0xFEFF),
   );
-  return cleaned
-      .split(RegExp(r'[\r\n]+'))
-      .map((line) => line.trim())
-      .where((line) => line.isNotEmpty)
-      .toList();
+  final names = <String>[];
+  for (final raw in cleaned.split(RegExp(r'[\r\n]+'))) {
+    // Strip a leading default-distro marker ("* Ubuntu") if `--quiet` was
+    // omitted, then trim surrounding whitespace.
+    final line = raw.replaceFirst(RegExp(r'^\s*\*\s*'), '').trim();
+    if (line.isEmpty) continue;
+    // Drop the header `wsl --list` prints without `--quiet`.
+    if (line.toLowerCase().startsWith('windows subsystem for linux')) continue;
+    names.add(line);
+  }
+  return names;
 }
 
 /// Discovers the available execution environments: the always-present

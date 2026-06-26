@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -29,6 +30,12 @@ class IoProcessHandle implements ProcessHandle {
   @override
   Future<void> kill() async {
     _process.kill();
-    await _process.exitCode;
+    try {
+      // Give the process a moment to exit; force-kill if it ignores SIGTERM.
+      await _process.exitCode.timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      _process.kill(ProcessSignal.sigkill);
+      await _process.exitCode;
+    }
   }
 }
