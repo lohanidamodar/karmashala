@@ -26,10 +26,13 @@ class PaneScaffold extends StatelessWidget {
     final borderColor = focused
         ? theme.colorScheme.primary
         : theme.colorScheme.outlineVariant;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: borderColor, width: focused ? 1.5 : 1),
+    // A Material (not a plain DecoratedBox) so descendant ListTiles have a
+    // valid background/ink ancestor to paint on.
+    return Material(
+      color: theme.colorScheme.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: borderColor, width: focused ? 1.5 : 1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(

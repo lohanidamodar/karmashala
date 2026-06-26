@@ -1,17 +1,37 @@
 import 'package:chitragupta/src/app/chitragupta_app.dart';
 import 'package:chitragupta/src/app/shell/shell_state.dart';
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+
 void main() {
-  // The shell does not read the database, so no override is required here.
+  late AppDatabase db;
+
+  setUp(() {
+    db = AppDatabase.memory();
+    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+  });
+  tearDown(() => db.close());
+
+  // The panels read the database; provide an in-memory one.
   Future<void> pumpApp(WidgetTester tester, {required Size size}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(const ProviderScope(child: ChitraguptaApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(db)],
+        child: const ChitraguptaApp(),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -29,7 +49,6 @@ void main() {
   ) async {
     await pumpApp(tester, size: const Size(640, 900));
 
-    // Default focused pane is Sessions; only it is rendered as a pane header.
     expect(find.widgetWithText(AppBar, 'Chitragupta'), findsOneWidget);
     expect(find.byType(SegmentedButton<ShellPane>), findsOneWidget);
   });
