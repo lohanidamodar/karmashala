@@ -2,6 +2,8 @@ import 'dart:io';
 
 import '../../features/environments/domain/local_environment.dart';
 import 'command_runner.dart';
+import 'io_process_handle.dart';
+import 'process_handle.dart';
 
 /// Runs commands on the **Windows host** via `dart:io` `Process`.
 ///
@@ -33,6 +35,23 @@ class WindowsCommandRunner implements CommandRunner {
     } on ProcessException catch (e) {
       throw CommandException(
         'Failed to run "${request.executable}" on Windows',
+        cause: e,
+      );
+    }
+  }
+
+  @override
+  Future<ProcessHandle> start(CommandRequest request) async {
+    try {
+      final process = await Process.start(
+        request.executable,
+        request.arguments,
+        workingDirectory: request.workingDirectory?.path,
+      );
+      return IoProcessHandle(process);
+    } on ProcessException catch (e) {
+      throw CommandException(
+        'Failed to start "${request.executable}" on Windows',
         cause: e,
       );
     }

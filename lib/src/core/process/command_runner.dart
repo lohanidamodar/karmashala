@@ -1,4 +1,5 @@
 import '../../features/environments/domain/environment_path.dart';
+import 'process_handle.dart';
 
 /// A command to execute, described independently of where it runs.
 ///
@@ -66,4 +67,10 @@ abstract interface class CommandRunner {
   ///
   /// Throws [CommandException] if the process cannot be started.
   Future<CommandResult> run(CommandRequest request);
+
+  /// Starts [request] as a long-lived, streaming process and returns a handle.
+  ///
+  /// Used for interactive agent stdio protocols (Loop 7+). Throws
+  /// [CommandException] if the process cannot be started.
+  Future<ProcessHandle> start(CommandRequest request);
 }

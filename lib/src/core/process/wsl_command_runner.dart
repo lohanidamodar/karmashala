@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'command_runner.dart';
+import 'io_process_handle.dart';
+import 'process_handle.dart';
 
 /// A `wsl.exe` invocation: the Windows-side executable and arguments that run a
 /// command inside a specific WSL distribution.
@@ -60,6 +62,23 @@ class WslCommandRunner implements CommandRunner {
     } on ProcessException catch (e) {
       throw CommandException(
         'Failed to run "${request.executable}" in WSL "$distribution"',
+        cause: e,
+      );
+    }
+  }
+
+  @override
+  Future<ProcessHandle> start(CommandRequest request) async {
+    final invocation = buildWslInvocation(distribution, request);
+    try {
+      final process = await Process.start(
+        invocation.executable,
+        invocation.arguments,
+      );
+      return IoProcessHandle(process);
+    } on ProcessException catch (e) {
+      throw CommandException(
+        'Failed to start "${request.executable}" in WSL "$distribution"',
         cause: e,
       );
     }
