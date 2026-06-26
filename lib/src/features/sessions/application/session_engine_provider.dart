@@ -3,20 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../agents/data/antigravity_adapter.dart';
 import '../../agents/data/claude_code_adapter.dart';
 import '../../agents/data/codex_adapter.dart';
-import '../../agents/data/fake_agent_adapter.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../git/application/git_providers.dart';
 import 'session_engine.dart';
 import 'session_providers.dart';
 
-/// Resolves the [AgentAdapter] for an agent kind.
-///
-/// Real adapters are registered here as they land: Codex (Loop 7) speaks its
-/// app-server protocol; the others still use a fake until their loops (Claude
-/// Code — Loop 8, Antigravity — Loop 10).
+/// Resolves the [AgentAdapter] for an agent kind. All three real adapters are
+/// now registered (Codex — Loop 7, Claude Code — Loop 8, Antigravity — Loop 10).
 final agentAdapterResolverProvider = Provider<AdapterResolver>((ref) {
   final runnerFactory = ref.watch(commandRunnerFactoryProvider);
   final environmentDao = ref.watch(executionEnvironmentDaoProvider);
@@ -29,7 +26,10 @@ final agentAdapterResolverProvider = Provider<AdapterResolver>((ref) {
       runnerFactory: runnerFactory,
       environmentDao: environmentDao,
     ),
-    _ => FakeAgentAdapter(kind: kind),
+    AgentKind.antigravity => AntigravityAdapter(
+      runnerFactory: runnerFactory,
+      environmentDao: environmentDao,
+    ),
   };
 });
 
