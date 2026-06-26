@@ -1,13 +1,12 @@
-import 'dart:async';
 import 'dart:convert';
 
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
-import '../../../core/process/process_handle.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_kind.dart';
+import 'streaming_agent_session.dart';
 
 /// Translates one line of the Codex **app-server** protocol into a normalized
 /// [AgentEvent], or `null` for blank/unknown/ignored lines.
@@ -92,69 +91,17 @@ class CodexAdapter implements AgentAdapter {
   }
 }
 
-/// A live Codex run over a [ProcessHandle]'s stdio.
-class CodexAgentSession implements AgentSession {
-  CodexAgentSession(Future<ProcessHandle> handle) {
-    _attach(handle);
-  }
-
-  final StreamController<AgentEvent> _events = StreamController<AgentEvent>();
-  final List<String> _pending = [];
-  ProcessHandle? _handle;
-  bool _stopped = false;
+/// A live Codex run over a [ProcessHandle]'s stdio. Transport is shared via
+/// [StreamingAgentSession]; only the Codex protocol mapping lives here.
+class CodexAgentSession extends StreamingAgentSession {
+  CodexAgentSession(super.handle);
 
   @override
-  Stream<AgentEvent> get events => _events.stream;
-
-  Future<void> _attach(Future<ProcessHandle> handleFuture) async {
-    final ProcessHandle handle;
-    try {
-      handle = await handleFuture;
-    } catch (error) {
-      if (!_events.isClosed) {
-        _events.add(AgentEvent(SessionEventTypes.error, {'message': '$error'}));
-        await _events.close();
-      }
-      return;
-    }
-    if (_stopped) {
-      await handle.kill();
-      return;
-    }
-    _handle = handle;
-
-    // Closing on stdout's onDone (EOF) — not on exitCode — so all buffered
-    // output is drained before the event stream closes.
-    handle.stdoutLines.listen(
-      (line) {
-        final event = parseCodexMessage(line);
-        if (event != null && !_events.isClosed) _events.add(event);
-      },
-      onDone: () {
-        if (!_events.isClosed) _events.close();
-      },
-    );
-
-    for (final message in _pending) {
-      handle.writeLine(encodeCodexUserMessage(message));
-    }
-    _pending.clear();
+  List<AgentEvent> parseLine(String line) {
+    final event = parseCodexMessage(line);
+    return event == null ? const [] : [event];
   }
 
   @override
-  Future<void> send(String message) async {
-    final handle = _handle;
-    if (handle == null) {
-      _pending.add(message); // queued until the process is ready
-      return;
-    }
-    handle.writeLine(encodeCodexUserMessage(message));
-  }
-
-  @override
-  Future<void> stop() async {
-    _stopped = true;
-    await _handle?.kill();
-    if (!_events.isClosed) await _events.close();
-  }
+  String encodeUserMessage(String message) => encodeCodexUserMessage(message);
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../agents/data/claude_code_adapter.dart';
 import '../../agents/data/codex_adapter.dart';
 import '../../agents/data/fake_agent_adapter.dart';
 import '../../agents/domain/agent_kind.dart';
@@ -21,6 +22,10 @@ final agentAdapterResolverProvider = Provider<AdapterResolver>((ref) {
   final environmentDao = ref.watch(executionEnvironmentDaoProvider);
   return (kind) => switch (kind) {
     AgentKind.codex => CodexAdapter(
+      runnerFactory: runnerFactory,
+      environmentDao: environmentDao,
+    ),
+    AgentKind.claudeCode => ClaudeCodeAdapter(
       runnerFactory: runnerFactory,
       environmentDao: environmentDao,
     ),
