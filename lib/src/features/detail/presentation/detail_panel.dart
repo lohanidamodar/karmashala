@@ -6,6 +6,8 @@ import '../../../app/shell/shell_state.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/presentation/changes_view.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/presentation/session_transcript_view.dart';
 
 /// Right pane — Detail. Shows the repositories of the selected project, and when
 /// a repository is selected, its Git change/diff review (Loop 9). Session
@@ -19,10 +21,13 @@ class DetailPanel extends ConsumerWidget {
         ref.watch(shellControllerProvider).focusedPane == ShellPane.detail;
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
+    final selectedSessionId = ref.watch(selectedSessionIdProvider);
     final repositories = ref.watch(selectedProjectRepositoriesProvider);
 
     final Widget body;
-    if (selectedRepoId != null) {
+    if (selectedSessionId != null) {
+      body = SessionTranscriptView(sessionId: selectedSessionId);
+    } else if (selectedRepoId != null) {
       final repo = repositories
           .where((r) => r.id == selectedRepoId)
           .firstOrNull;
@@ -54,6 +59,7 @@ class DetailPanel extends ConsumerWidget {
             trailing: const Icon(Icons.difference_outlined, size: 16),
             onTap: () {
               ref.read(selectedChangeFileProvider.notifier).select(null);
+              ref.read(selectedSessionIdProvider.notifier).select(null);
               ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
             },
           );

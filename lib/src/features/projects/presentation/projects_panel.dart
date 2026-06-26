@@ -6,17 +6,35 @@ import '../../../app/shell/shell_state.dart';
 import '../application/projects_controller.dart';
 import 'new_project_dialog.dart';
 
-/// Left pane — Projects. Lists persisted projects and lets the user create one
-/// by pointing at a folder (which discovers the Git repositories inside it).
-class ProjectsPanel extends ConsumerWidget {
+/// Left pane — Projects. Lists persisted projects (with search) and lets the
+/// user create one by pointing at a folder (discovering its Git repositories).
+class ProjectsPanel extends ConsumerStatefulWidget {
   const ProjectsPanel({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProjectsPanel> createState() => _ProjectsPanelState();
+}
+
+class _ProjectsPanelState extends ConsumerState<ProjectsPanel> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
     final focused =
         ref.watch(shellControllerProvider).focusedPane == ShellPane.projects;
-    final projects = ref.watch(projectsControllerProvider);
+    final allProjects = ref.watch(projectsControllerProvider);
     final selectedId = ref.watch(selectedProjectIdProvider);
+
+    final query = _query.trim().toLowerCase();
+    final projects = query.isEmpty
+        ? allProjects
+        : allProjects
+              .where(
+                (p) =>
+                    p.name.toLowerCase().contains(query) ||
+                    p.root.path.toLowerCase().contains(query),
+              )
+              .toList();
 
     return PaneScaffold(
       title: 'Projects',
@@ -29,32 +47,52 @@ class ProjectsPanel extends ConsumerWidget {
           onPressed: () => NewProjectDialog.show(context),
         ),
       ],
-      body: projects.isEmpty
-          ? const PanePlaceholder(
-              message:
-                  'No projects yet.\nUse + to create one from a folder and scan '
-                  'it for Git repositories.',
-            )
-          : ListView.builder(
-              itemCount: projects.length,
-              itemBuilder: (context, index) {
-                final project = projects[index];
-                return ListTile(
-                  dense: true,
-                  selected: project.id == selectedId,
-                  leading: const Icon(Icons.folder_outlined, size: 18),
-                  title: Text(project.name),
-                  subtitle: Text(
-                    project.root.path,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () => ref
-                      .read(selectedProjectIdProvider.notifier)
-                      .select(project.id),
-                );
-              },
+      body: Column(
+        children: [
+          if (allProjects.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              child: TextField(
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.search, size: 18),
+                  hintText: 'Search projects',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
             ),
+          Expanded(
+            child: projects.isEmpty
+                ? PanePlaceholder(
+                    message: allProjects.isEmpty
+                        ? 'No projects yet.\nUse + to create one from a folder '
+                              'and scan it for Git repositories.'
+                        : 'No projects match "$_query".',
+                  )
+                : ListView.builder(
+                    itemCount: projects.length,
+                    itemBuilder: (context, index) {
+                      final project = projects[index];
+                      return ListTile(
+                        dense: true,
+                        selected: project.id == selectedId,
+                        leading: const Icon(Icons.folder_outlined, size: 18),
+                        title: Text(project.name),
+                        subtitle: Text(
+                          project.root.path,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () => ref
+                            .read(selectedProjectIdProvider.notifier)
+                            .select(project.id),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
