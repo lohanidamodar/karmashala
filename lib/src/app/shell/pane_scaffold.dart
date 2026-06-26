@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// A consistent frame for a shell pane: a titled header bar over a body.
+import '../theme/design_tokens.dart';
+
+/// A consistent frame for a shell pane: a "ledger tab" header over a body.
 ///
-/// Used by the placeholder feature panels in Loop 0 so all three panes share the
-/// same chrome. [focused] highlights the pane whose pane is currently focused.
+/// All three panes share this chrome. [focused] lights the header's brass accent
+/// so the active pane is obvious without a heavy border.
 class PaneScaffold extends StatelessWidget {
   const PaneScaffold({
     required this.title,
@@ -22,35 +24,55 @@ class PaneScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final borderColor = focused
-        ? theme.colorScheme.primary
-        : theme.colorScheme.outlineVariant;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final accent = focused ? scheme.tertiary : scheme.onSurfaceVariant;
     // A Material (not a plain DecoratedBox) so descendant ListTiles have a
     // valid background/ink ancestor to paint on.
     return Material(
-      color: theme.colorScheme.surface,
+      color: scheme.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: borderColor, width: focused ? 1.5 : 1),
-        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(Radii.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-            child: Row(
+          // "Ledger tab" header: a tracked label over a brass accent rule.
+          Container(
+            color: scheme.surfaceContainerLow,
+            padding: const EdgeInsets.fromLTRB(
+              Insets.md,
+              Insets.sm,
+              Insets.sm,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(icon, size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(title, style: theme.textTheme.titleSmall),
-                const Spacer(),
-                ...actions,
+                Row(
+                  children: [
+                    Icon(icon, size: 16, color: accent),
+                    const SizedBox(width: Insets.sm),
+                    Text(
+                      title.toUpperCase(),
+                      style: text.labelSmall?.copyWith(color: accent),
+                    ),
+                    const Spacer(),
+                    ...actions,
+                  ],
+                ),
+                const SizedBox(height: Insets.sm),
+                // The accent rule: brass when focused, hairline otherwise.
+                AnimatedContainer(
+                  duration: Motion.fast,
+                  height: focused ? 2 : 1,
+                  color: focused ? scheme.tertiary : scheme.outlineVariant,
+                ),
               ],
             ),
           ),
-          Divider(height: 1, color: theme.colorScheme.outlineVariant),
           Expanded(child: body),
         ],
       ),

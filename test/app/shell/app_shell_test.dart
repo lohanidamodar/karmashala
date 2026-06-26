@@ -39,9 +39,10 @@ void main() {
     await pumpApp(tester, size: const Size(1600, 900));
 
     expect(find.text('Chitragupta'), findsOneWidget);
-    expect(find.text('Projects'), findsOneWidget);
-    expect(find.text('Sessions'), findsOneWidget);
-    expect(find.text('Detail'), findsOneWidget);
+    // Pane headers render as tracked "ledger tab" labels (uppercased).
+    expect(find.text('PROJECTS'), findsOneWidget);
+    expect(find.text('SESSIONS'), findsOneWidget);
+    expect(find.text('DETAIL'), findsOneWidget);
   });
 
   testWidgets('narrow layout shows a single pane with a selector', (

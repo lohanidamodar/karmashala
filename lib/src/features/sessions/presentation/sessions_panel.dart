@@ -71,7 +71,7 @@ class SessionsPanel extends ConsumerWidget {
   Widget _statusIcon(SessionStatus status, BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (IconData icon, Color color) = switch (status) {
-      SessionStatus.running => (Icons.play_circle_outline, scheme.primary),
+      SessionStatus.running => (Icons.play_circle_outline, scheme.tertiary),
       SessionStatus.completed => (Icons.check_circle_outline, Colors.green),
       SessionStatus.failed => (Icons.error_outline, scheme.error),
       SessionStatus.cancelled => (Icons.cancel_outlined, scheme.outline),

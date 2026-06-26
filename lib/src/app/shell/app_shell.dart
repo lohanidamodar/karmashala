@@ -73,17 +73,30 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
       titleSpacing: 16,
       title: Row(
         children: [
-          const Icon(Icons.hub_outlined, size: 20),
-          const SizedBox(width: 10),
-          Text('Chitragupta', style: Theme.of(context).textTheme.titleMedium),
+          Icon(
+            Icons.auto_stories_outlined,
+            size: 22,
+            color: Theme.of(context).colorScheme.tertiary,
+          ),
           const SizedBox(width: 10),
           Flexible(
-            child: Text(
-              'Agent Development Environment',
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Chitragupta',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Text(
+                  'THE AGENT LEDGER',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 9,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
