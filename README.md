@@ -5,7 +5,7 @@ Environment (ADE)** that manages local coding-agent CLIs (Claude Code, Codex CLI
 Antigravity CLI).
 
 > **Status:** Loop 0 — Bootstrap. An adaptive three-pane desktop shell with
-> placeholder panels, Riverpod, a Drift/SQLite database, central logging, theming,
+> placeholder panels, Riverpod, a SQLite database, central logging, theming,
 > keyboard handling, and tests. **No** real Git, WSL, or agent execution yet.
 
 See the docs for the full picture:
@@ -43,31 +43,16 @@ From PowerShell, in the project directory (e.g. `G:\dev\projects\chitragupta`):
 # 1. Fetch dependencies
 flutter pub get
 
-# 2. Generate Drift code (required after changing any Drift table/database)
-dart run build_runner build --delete-conflicting-outputs
-
-# 3. Run the app on Windows desktop
+# 2. Run the app on Windows desktop
 flutter run -d windows
 
-# 4. Build a release executable
+# 3. Build a release executable
 flutter build windows
 ```
 
-### Code generation
-
-Drift uses code generation. The generated file `lib/src/core/database/app_database.g.dart`
-is produced by `build_runner` and must be regenerated whenever a Drift table or the
-database definition changes:
-
-```powershell
-dart run build_runner build --delete-conflicting-outputs
-```
-
-While iterating on schema you can watch instead:
-
-```powershell
-dart run build_runner watch --delete-conflicting-outputs
-```
+> **No code generation.** This project uses raw SQL via the `sqlite3` package and
+> plain Riverpod providers — there is no `build_runner` step and no generated
+> `*.g.dart` files. `flutter pub get` is all you need before running.
 
 ## Quality checks
 

@@ -27,23 +27,17 @@ class MetadataKeys {
 ///
 /// Writes the persisted schema version and, on first ever run, a first-run
 /// timestamp. Returns the bootstrap result for logging/inspection.
-Future<MetadataBootstrap> bootstrapMetadata(
-  AppDatabase db, {
-  AppLogger? logger,
-}) async {
-  final existingFirstRun = await db.readMetadata(MetadataKeys.firstRunAt);
+MetadataBootstrap bootstrapMetadata(AppDatabase db, {AppLogger? logger}) {
+  final existingFirstRun = db.readMetadata(MetadataKeys.firstRunAt);
   final isFirstRun = existingFirstRun == null;
 
   if (isFirstRun) {
-    await db.writeMetadata(
+    db.writeMetadata(
       MetadataKeys.firstRunAt,
       DateTime.now().toUtc().toIso8601String(),
     );
   }
-  await db.writeMetadata(
-    MetadataKeys.schemaVersion,
-    db.schemaVersion.toString(),
-  );
+  db.writeMetadata(MetadataKeys.schemaVersion, db.schemaVersion.toString());
 
   logger?.info(
     'Metadata bootstrap complete (firstRun=$isFirstRun, '

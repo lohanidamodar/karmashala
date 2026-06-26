@@ -17,8 +17,8 @@ Future<void> main() async {
   final logger = AppLogger.named('bootstrap');
 
   logger.info('Starting Chitragupta.');
-  final database = AppDatabase.open();
-  await bootstrapMetadata(database, logger: logger);
+  final database = await AppDatabase.open();
+  bootstrapMetadata(database, logger: logger);
 
   runApp(
     ProviderScope(
