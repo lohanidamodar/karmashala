@@ -501,4 +501,4 @@ Work autonomously and in loops to implement, review, test, fix, and verify until
 
 - Use flutter commands from powershell
 - run and test on windows as primary target
-- 
+- https://github.com/Norbert515/vide_cli this project implemented in dart might already have some reference for us regarding how to work with agents and cli, orchestrate multiple agents, manage subagents and handle agent sessions. We can use it as a reference for our project.
