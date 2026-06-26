@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'command_runner.dart';
+import 'command_runner_factory.dart';
 import 'path_translator.dart';
 import 'windows_command_runner.dart';
 
@@ -14,4 +15,10 @@ final hostCommandRunnerProvider = Provider<CommandRunner>(
 /// Provides the [PathTranslator] for explicit Windows⇄WSL path translation.
 final pathTranslatorProvider = Provider<PathTranslator>(
   (ref) => const PathTranslator(),
+);
+
+/// Provides the [CommandRunnerFactory] mapping an environment to a runner.
+/// Overridden in tests to hand out a `FakeCommandRunner`.
+final commandRunnerFactoryProvider = Provider<CommandRunnerFactory>(
+  (ref) => const CommandRunnerFactory(),
 );

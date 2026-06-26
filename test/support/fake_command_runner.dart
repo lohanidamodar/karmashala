@@ -1,4 +1,6 @@
 import 'package:chitragupta/src/core/process/command_runner.dart';
+import 'package:chitragupta/src/core/process/command_runner_factory.dart';
+import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
 
 /// A deterministic [CommandRunner] test double.
 ///
@@ -31,4 +33,21 @@ class FakeCommandRunner implements CommandRunner {
     return responder?.call(request) ??
         const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
+}
+
+/// A [CommandRunnerFactory] that hands out [FakeCommandRunner]s. Returns a
+/// per-environment runner when registered, otherwise [fallback].
+class FakeCommandRunnerFactory implements CommandRunnerFactory {
+  FakeCommandRunnerFactory({
+    Map<String, FakeCommandRunner>? byEnvironmentId,
+    FakeCommandRunner? fallback,
+  }) : _byEnvironmentId = byEnvironmentId ?? {},
+       _fallback = fallback ?? FakeCommandRunner();
+
+  final Map<String, FakeCommandRunner> _byEnvironmentId;
+  final FakeCommandRunner _fallback;
+
+  @override
+  CommandRunner forEnvironment(ExecutionEnvironment environment) =>
+      _byEnvironmentId[environment.id] ?? _fallback;
 }

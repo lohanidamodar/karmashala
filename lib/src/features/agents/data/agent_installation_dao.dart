@@ -37,6 +37,21 @@ class AgentInstallationDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  /// Finds an installation by its natural identity — `(agentKind, environmentId,
+  /// executablePath)` — which the table enforces as unique.
+  AgentInstallation? getByIdentity(
+    AgentKind agentKind,
+    String environmentId,
+    String executablePath,
+  ) {
+    final rows = _db.query(
+      'SELECT * FROM agent_installations WHERE agent_kind = ? '
+      'AND environment_id = ? AND executable_path = ?;',
+      [agentKind.name, environmentId, executablePath],
+    );
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
   List<AgentInstallation> getAll() {
     final rows = _db.query(
       'SELECT * FROM agent_installations ORDER BY created_at, id;',
