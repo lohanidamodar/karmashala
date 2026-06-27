@@ -18,6 +18,8 @@ class _FakeInstance implements TerminalInstance {
   final String title;
   @override
   final Terminal terminal = Terminal();
+  @override
+  final TerminalController controller = TerminalController();
   bool disposed = false;
   @override
   void dispose() => disposed = true;

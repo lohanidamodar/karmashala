@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
@@ -104,6 +105,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                       for (final session in state.sessions)
                         TerminalView(
                           session.terminal,
+                          controller: session.controller,
                           theme: _terminalTheme(theme),
                           textStyle: const TerminalStyle(
                             fontSize: 13,
@@ -116,6 +118,12 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                           // Windows fails with "Could not set client, view ID is
                           // null" and blanks the terminal.
                           hardwareKeyboardOnly: true,
+                          // Right-click → copy selection / paste.
+                          onSecondaryTapDown: (details, _) => _terminalMenu(
+                            context,
+                            details.globalPosition,
+                            session,
+                          ),
                         ),
                     ],
                   ),
@@ -123,6 +131,44 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         ],
       ),
     );
+  }
+
+  Future<void> _terminalMenu(
+    BuildContext context,
+    Offset position,
+    TerminalInstance session,
+  ) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final selection = session.controller.selection;
+    final hasSelection = selection != null;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        position & const Size(40, 40),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'copy',
+          enabled: hasSelection,
+          child: const Text('Copy'),
+        ),
+        const PopupMenuItem(value: 'paste', child: Text('Paste')),
+      ],
+    );
+    switch (choice) {
+      case 'copy':
+        if (selection != null) {
+          final text = session.terminal.buffer.getText(selection);
+          await Clipboard.setData(ClipboardData(text: text));
+        }
+      case 'paste':
+        final data = await Clipboard.getData(Clipboard.kTextPlain);
+        final text = data?.text;
+        if (text != null && text.isNotEmpty) session.terminal.paste(text);
+    }
   }
 }
 

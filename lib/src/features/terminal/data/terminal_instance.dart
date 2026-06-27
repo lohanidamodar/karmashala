@@ -15,6 +15,9 @@ abstract class TerminalInstance {
   String get title;
   Terminal get terminal;
 
+  /// Drives selection/scroll for the view — read to copy the current selection.
+  TerminalController get controller;
+
   /// Tears down the backing process/streams.
   void dispose();
 }
@@ -92,6 +95,8 @@ class PtyTerminalInstance implements TerminalInstance {
   final String title;
   @override
   late final Terminal terminal;
+  @override
+  final TerminalController controller = TerminalController();
 
   late final Pty _pty;
   bool _disposed = false;
@@ -122,6 +127,8 @@ class ErrorTerminalInstance implements TerminalInstance {
   final String title;
   @override
   late final Terminal terminal;
+  @override
+  final TerminalController controller = TerminalController();
 
   @override
   void dispose() {}

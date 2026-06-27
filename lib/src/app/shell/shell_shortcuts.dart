@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import 'command_palette.dart';
 import 'shell_state.dart';
 
 /// Intent: move focus to a specific shell pane.
@@ -19,6 +20,11 @@ class ToggleExplorerPaneIntent extends Intent {
 /// Intent: show/hide the optional embedded terminal.
 class ToggleTerminalIntent extends Intent {
   const ToggleTerminalIntent();
+}
+
+/// Intent: open the command palette.
+class OpenCommandPaletteIntent extends Intent {
+  const OpenCommandPaletteIntent();
 }
 
 /// Wraps [child] with the application's desktop keyboard shortcuts.
@@ -44,6 +50,8 @@ class ShellShortcuts extends ConsumerWidget {
         ToggleExplorerPaneIntent(),
     SingleActivator(LogicalKeyboardKey.backquote, control: true):
         ToggleTerminalIntent(),
+    SingleActivator(LogicalKeyboardKey.keyK, control: true):
+        OpenCommandPaletteIntent(),
   };
 
   @override
@@ -53,6 +61,12 @@ class ShellShortcuts extends ConsumerWidget {
       shortcuts: _shortcuts,
       child: Actions(
         actions: {
+          OpenCommandPaletteIntent: CallbackAction<OpenCommandPaletteIntent>(
+            onInvoke: (intent) {
+              CommandPalette.show(context);
+              return null;
+            },
+          ),
           FocusPaneIntent: CallbackAction<FocusPaneIntent>(
             onInvoke: (intent) {
               controller.focusPane(intent.pane);
