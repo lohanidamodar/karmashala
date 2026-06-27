@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/detail/presentation/detail_panel.dart';
 import '../../features/projects/presentation/projects_panel.dart';
 import '../../features/sessions/presentation/sessions_panel.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/terminal/application/terminal_controller.dart';
 import '../../features/terminal/presentation/terminal_view.dart';
 import 'shell_shortcuts.dart';
@@ -102,6 +103,11 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
+        IconButton(
+          tooltip: 'Settings',
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => SettingsScreen.show(context),
+        ),
         IconButton(
           tooltip: 'Toggle terminal (Ctrl+`)',
           isSelected: terminalVisible,

@@ -5,6 +5,7 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_ui_providers.dart';
 
@@ -83,7 +84,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   @override
   Widget build(BuildContext context) {
     final installations = ref.watch(agentInstallationsControllerProvider);
-    _installation ??= installations.isNotEmpty ? installations.first : null;
+    if (_installation == null && installations.isNotEmpty) {
+      // Prefer the configured default agent, else the first installation.
+      final defaultAgent = ref.read(settingsControllerProvider).defaultAgent;
+      _installation = installations.firstWhere(
+        (i) => i.agentKind == defaultAgent,
+        orElse: () => installations.first,
+      );
+    }
 
     return AlertDialog(
       title: const Text('New session'),
