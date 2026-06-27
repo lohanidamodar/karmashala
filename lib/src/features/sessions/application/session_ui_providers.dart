@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/domain/repository.dart';
@@ -50,6 +51,14 @@ final selectedSessionIdProvider =
     NotifierProvider<SelectedSessionController, String?>(
       SelectedSessionController.new,
     );
+
+/// The full transcript of an imported CLI session, parsed from its store file.
+final importedTranscriptProvider = FutureProvider.autoDispose
+    .family<List<TranscriptMessage>, String>((ref, sessionId) async {
+      final session = ref.read(importedSessionDaoProvider).getById(sessionId);
+      if (session == null) return const [];
+      return readCliTranscript(session.filePath, session.cli);
+    });
 
 /// The imported session whose detail is shown, or `null`.
 class SelectedImportedSessionController extends Notifier<String?> {

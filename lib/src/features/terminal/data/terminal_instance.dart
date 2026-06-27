@@ -61,10 +61,18 @@ class PtyTerminalInstance implements TerminalInstance {
     });
 
     terminal.onOutput = (data) {
-      if (!_disposed) _pty.write(const Utf8Encoder().convert(data));
+      if (_disposed) return;
+      try {
+        _pty.write(const Utf8Encoder().convert(data));
+      } catch (_) {
+        // The PTY has gone away — ignore late keystrokes.
+      }
     };
     terminal.onResize = (width, height, pixelWidth, pixelHeight) {
-      if (!_disposed) _pty.resize(height, width);
+      if (_disposed) return;
+      try {
+        _pty.resize(height, width);
+      } catch (_) {}
     };
   }
 
@@ -86,16 +94,48 @@ class PtyTerminalInstance implements TerminalInstance {
   }
 }
 
+/// A [TerminalInstance] that failed to spawn: it renders the error in its buffer
+/// so the panel surfaces *why* instead of crashing the app.
+class ErrorTerminalInstance implements TerminalInstance {
+  ErrorTerminalInstance({
+    required this.id,
+    required this.title,
+    required String message,
+  }) {
+    terminal = Terminal(maxLines: 1000);
+    terminal.write('\x1b[91m$message\x1b[0m\r\n');
+  }
+
+  @override
+  final String id;
+  @override
+  final String title;
+  @override
+  late final Terminal terminal;
+
+  @override
+  void dispose() {}
+}
+
 /// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the profile
-/// and spawns a [PtyTerminalInstance].
+/// and spawns a [PtyTerminalInstance], degrading to an [ErrorTerminalInstance]
+/// (whose buffer shows the failure) if the PTY cannot be created.
 TerminalInstance createPtyTerminalInstance({
   required String id,
   required TerminalProfile profile,
   String? workingDirectory,
 }) {
-  return PtyTerminalInstance(
-    id: id,
-    title: profile.label,
-    launch: ptyLaunchFor(profile, workingDirectory: workingDirectory),
-  );
+  final launch = ptyLaunchFor(profile, workingDirectory: workingDirectory);
+  try {
+    return PtyTerminalInstance(id: id, title: profile.label, launch: launch);
+  } catch (e) {
+    final args = launch.arguments.join(' ');
+    return ErrorTerminalInstance(
+      id: id,
+      title: profile.label,
+      message:
+          'Failed to start "${launch.executable} $args"'
+          '${launch.workingDirectory == null ? '' : ' in ${launch.workingDirectory}'}: $e',
+    );
+  }
 }

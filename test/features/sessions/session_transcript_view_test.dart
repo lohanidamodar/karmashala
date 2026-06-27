@@ -49,11 +49,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('hello'), findsOneWidget);
-    expect(find.text('Echo: hello'), findsOneWidget);
-    expect(find.text('You'), findsOneWidget);
-    expect(find.text('Agent'), findsOneWidget);
+    // Message bodies render as selectable text, CLI-style.
+    expect(_selectable('hello'), findsOneWidget);
+    expect(_selectable('Echo: hello'), findsOneWidget);
+    // Role eyebrows are uppercased.
+    expect(find.text('YOU'), findsOneWidget);
+    expect(find.text('AGENT'), findsOneWidget);
     // Not active -> input is disabled with the idle hint.
     expect(find.text('Session is not running'), findsOneWidget);
   });
 }
+
+Finder _selectable(String text) =>
+    find.byWidgetPredicate((w) => w is SelectableText && w.data == text);

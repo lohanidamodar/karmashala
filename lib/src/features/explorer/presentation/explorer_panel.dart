@@ -72,6 +72,50 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
   }
 
+  /// Starts a new session in [project]: selects it and its first repository,
+  /// then opens the New session dialog (or warns if there are no repositories).
+  void _newSessionInProject(Project project) {
+    ref.read(selectedProjectIdProvider.notifier).select(project.id);
+    setState(() => _expandedProjects.add(project.id));
+    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
+    if (repos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This project has no Git repositories to run in.'),
+        ),
+      );
+      return;
+    }
+    ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
+    NewSessionDialog.show(context);
+  }
+
+  Future<void> _confirmDeleteProject(Project project) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete project?'),
+        content: Text(
+          'Removes "${project.name}" and all its sessions from the workspace. '
+          'Files on disk are not touched.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok ?? false) {
+      ref.read(projectsControllerProvider.notifier).deleteProject(project.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final focused =
@@ -171,6 +215,28 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         title: project.name,
         subtitle: project.root.path,
         onTap: () => _toggleProject(project),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'New session in this project',
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              icon: const Icon(Icons.add),
+              onPressed: () => _newSessionInProject(project),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Project actions',
+              icon: const Icon(Icons.more_vert, size: 16),
+              onSelected: (action) {
+                if (action == 'delete') _confirmDeleteProject(project);
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'delete', child: Text('Delete project')),
+              ],
+            ),
+          ],
+        ),
       ),
     ];
     if (!expanded) return rows;
@@ -239,6 +305,7 @@ class _TreeRow extends StatelessWidget {
     required this.onTap,
     this.subtitle,
     this.expandedState,
+    this.trailing,
   });
 
   final int depth;
@@ -247,6 +314,7 @@ class _TreeRow extends StatelessWidget {
   final String title;
   final String? subtitle;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   /// When non-null, a disclosure chevron reflecting expansion state is shown.
   final bool? expandedState;
@@ -257,7 +325,7 @@ class _TreeRow extends StatelessWidget {
     return ListTile(
       dense: true,
       selected: selected,
-      contentPadding: EdgeInsets.only(left: 8.0 + depth * 16, right: 8),
+      contentPadding: EdgeInsets.only(left: 8.0 + depth * 16, right: 4),
       leading: SizedBox(
         width: 36,
         child: Row(
@@ -280,6 +348,7 @@ class _TreeRow extends StatelessWidget {
       subtitle: subtitle == null
           ? null
           : Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: trailing,
       onTap: onTap,
     );
   }

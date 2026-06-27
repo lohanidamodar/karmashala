@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/theme/design_tokens.dart';
-import '../../agents/domain/agent_kind.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/presentation/chat_transcript.dart';
+import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/data/system_terminal_service.dart';
 import '../application/cli_detection_providers.dart';
 
-/// Read-only detail for an imported CLI session: where it came from and where it
-/// lives on disk. (Resuming imported sessions arrives in a later loop.)
+/// Read-only history for an imported CLI session, rendered like the chat
+/// transcript. Continue it in-app (Resume) or open it in an external terminal.
 class ImportedSessionView extends ConsumerWidget {
   const ImportedSessionView({required this.sessionId, super.key});
 
@@ -24,16 +25,35 @@ class ImportedSessionView extends ConsumerWidget {
       return const Center(child: Text('Imported session not found.'));
     }
 
-    final cliLabel = session.cli == AgentKind.codex ? 'Codex' : 'Claude Code';
-    final rows = <(String, String)>[
-      ('Source', cliLabel),
-      ('Environment', session.environmentId),
-      ('CLI session id', session.externalId),
-      if (session.isSubagent) ('Kind', 'Subagent (SDK-spawned)'),
-      ('File', session.filePath),
-      if (session.updatedAt != null)
-        ('Last active', session.updatedAt!.toLocal().toString()),
-    ];
+    final transcript = ref.watch(importedTranscriptProvider(sessionId));
+    final terminals = ref.watch(availableSystemTerminalsProvider);
+
+    Future<void> resume() async {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await ref.read(sessionActionsProvider).resumeImported(session);
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(e is StateError ? e.message : '$e')),
+        );
+      }
+    }
+
+    Future<void> openIn(SystemTerminal terminal) async {
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await ref
+            .read(sessionActionsProvider)
+            .openInSystemTerminal(session, terminal);
+        messenger.showSnackBar(
+          SnackBar(content: Text('Opening in ${terminal.label}…')),
+        );
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(e is StateError ? e.message : '$e')),
+        );
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,63 +77,44 @@ class ImportedSessionView extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              terminals.maybeWhen(
+                data: (list) => list.isEmpty
+                    ? const SizedBox.shrink()
+                    : PopupMenuButton<SystemTerminal>(
+                        tooltip: 'Open in system terminal',
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        onSelected: openIn,
+                        itemBuilder: (context) => [
+                          for (final t in list)
+                            PopupMenuItem(
+                              value: t,
+                              child: Text('Open in ${t.label}'),
+                            ),
+                        ],
+                      ),
+                orElse: () => const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 4),
               FilledButton.tonalIcon(
                 icon: const Icon(Icons.play_arrow, size: 18),
                 label: const Text('Resume'),
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  try {
-                    await ref
-                        .read(sessionActionsProvider)
-                        .resumeImported(session);
-                  } catch (e) {
-                    messenger.showSnackBar(
-                      SnackBar(
-                        content: Text(e is StateError ? e.message : '$e'),
-                      ),
-                    );
-                  }
-                },
+                onPressed: resume,
               ),
             ],
           ),
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(Insets.lg),
-            children: [
-              Text('IMPORTED CLI SESSION', style: theme.textTheme.labelSmall),
-              const SizedBox(height: Insets.sm),
-              for (final (label, value) in rows)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: Insets.sm),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 120,
-                        child: Text(label, style: theme.textTheme.bodySmall),
-                      ),
-                      Expanded(
-                        child: SelectableText(
-                          value,
-                          style: const TextStyle(
-                            fontFamily: kMonoFamily,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (session.preview.isNotEmpty) ...[
-                const SizedBox(height: Insets.md),
-                Text('FIRST MESSAGE', style: theme.textTheme.labelSmall),
-                const SizedBox(height: Insets.xs),
-                Text(session.preview, style: theme.textTheme.bodyMedium),
+          child: transcript.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Could not read history: $e')),
+            data: (messages) => ChatTranscriptView(
+              messages: [
+                for (final m in messages)
+                  ChatMessage(role: m.role, text: m.text),
               ],
-            ],
+              emptyHint: 'This session has no readable history.',
+            ),
           ),
         ),
       ],

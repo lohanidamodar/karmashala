@@ -7,10 +7,11 @@ import '../application/session_engine_provider.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
+import 'chat_transcript.dart';
 import 'session_repositories_bar.dart';
 
-/// The structured-chat transcript for the selected session, with a message input
-/// and a stop control while the session is running.
+/// The chat transcript for the selected native session, rendered CLI-style. Only
+/// conversational events are shown — lifecycle/status noise is filtered out.
 class SessionTranscriptView extends ConsumerStatefulWidget {
   const SessionTranscriptView({required this.sessionId, super.key});
 
@@ -79,109 +80,80 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           child: transcript.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
-            data: (events) => events.isEmpty
-                ? const Center(child: Text('No messages yet.'))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: events.length,
-                    itemBuilder: (context, index) =>
-                        _EventTile(event: events[index]),
-                  ),
-          ),
-        ),
-        const Divider(height: 1),
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  enabled: active,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    hintText: active
-                        ? 'Message the agent…'
-                        : 'Session is not running',
-                  ),
-                  onSubmitted: (_) => _send(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: active ? _send : null,
-                icon: const Icon(Icons.send, size: 18),
-              ),
-            ],
+            data: (events) => ChatTranscriptView(
+              messages: _toMessages(events),
+              footer: _buildInput(active),
+              emptyHint: active
+                  ? 'Session is running — say something to the agent.'
+                  : 'No messages yet.',
+            ),
           ),
         ),
       ],
     );
   }
-}
 
-class _EventTile extends StatelessWidget {
-  const _EventTile({required this.event});
-  final SessionEvent event;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final data = _decode(event.payload);
-    final text = (data['text'] ?? '').toString();
-
-    final (String label, Color? color, bool muted) = switch (event.type) {
-      SessionEventTypes.userMessage => (
-        'You',
-        theme.colorScheme.primary,
-        false,
-      ),
-      SessionEventTypes.agentMessage => ('Agent', null, false),
-      SessionEventTypes.error => ('Error', theme.colorScheme.error, false),
-      _ => (event.type, theme.colorScheme.onSurfaceVariant, true),
-    };
-
-    final body = text.isNotEmpty ? text : _summary(event.type, data);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.bold,
+  Widget _buildInput(bool active) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const Divider(height: 1),
+      Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _input,
+                enabled: active,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                  hintText: active
+                      ? 'Message the agent…'
+                      : 'Session is not running',
+                ),
+                onSubmitted: (_) => _send(),
+              ),
             ),
-          ),
-          Text(
-            body,
-            style: muted
-                ? theme.textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  )
-                : theme.textTheme.bodyMedium,
-          ),
-        ],
+            const SizedBox(width: 8),
+            IconButton.filled(
+              onPressed: active ? _send : null,
+              icon: const Icon(Icons.send, size: 18),
+            ),
+          ],
+        ),
       ),
-    );
+    ],
+  );
+
+  /// Maps the persisted event log to displayable chat messages, dropping
+  /// lifecycle/status noise (verbose logs are not shown in the chat).
+  List<ChatMessage> _toMessages(List<SessionEvent> events) {
+    final messages = <ChatMessage>[];
+    for (final event in events) {
+      final role = switch (event.type) {
+        SessionEventTypes.userMessage => 'user',
+        SessionEventTypes.agentMessage => 'agent',
+        SessionEventTypes.error => 'error',
+        _ => null,
+      };
+      if (role == null) continue;
+      final text = _text(event.payload);
+      if (text.isEmpty) continue;
+      messages.add(ChatMessage(role: role, text: text));
+    }
+    return messages;
   }
 
-  Map<String, dynamic> _decode(String payload) {
+  String _text(String payload) {
     try {
       final decoded = jsonDecode(payload);
-      return decoded is Map<String, dynamic> ? decoded : const {};
+      if (decoded is Map<String, dynamic>) {
+        return (decoded['text'] ?? '').toString();
+      }
     } on FormatException {
-      return const {};
+      // not JSON
     }
-  }
-
-  String _summary(String type, Map<String, dynamic> data) {
-    if (data.containsKey('state')) return '${data['state']}';
-    if (data.containsKey('name')) return 'tool: ${data['name']}';
-    return type;
+    return '';
   }
 }

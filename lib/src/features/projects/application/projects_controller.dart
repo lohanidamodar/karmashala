@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../git/application/changes_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -77,6 +78,27 @@ class ProjectsController extends Notifier<List<Project>> {
     await _autoImportSessions(result.repositories);
     _refresh();
     return result;
+  }
+
+  /// Removes [projectId] from the workspace. The database cascades to its
+  /// repositories, sessions, events and imported sessions. Clears any selection
+  /// that pointed into the deleted project.
+  void deleteProject(String projectId) {
+    final repoIds = ref
+        .read(repositoryDaoProvider)
+        .getByProject(projectId)
+        .map((r) => r.id)
+        .toSet();
+    ref.read(projectDaoProvider).delete(projectId);
+    if (ref.read(selectedProjectIdProvider) == projectId) {
+      ref.read(selectedProjectIdProvider.notifier).select(null);
+    }
+    final selectedRepo = ref.read(selectedRepositoryIdProvider);
+    if (selectedRepo != null && repoIds.contains(selectedRepo)) {
+      ref.read(selectedRepositoryIdProvider.notifier).select(null);
+    }
+    ref.read(sessionsRevisionProvider.notifier).bump();
+    _refresh();
   }
 
   void _refresh() => state = ref.read(projectDaoProvider).getAll();

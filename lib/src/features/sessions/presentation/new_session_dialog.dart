@@ -6,6 +6,9 @@ import '../../agents/domain/agent_installation.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/data/system_terminal_service.dart';
+import '../application/session_actions.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_ui_providers.dart';
 
@@ -27,6 +30,8 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   final _titleController = TextEditingController(text: 'New session');
   AgentInstallation? _installation;
   bool _useWorktree = false;
+  bool _external = false;
+  SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
 
@@ -61,6 +66,22 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       _error = null;
     });
     try {
+      if (_external) {
+        final terminal = _terminal;
+        if (terminal == null) {
+          setState(() => _error = 'Choose a terminal to launch in.');
+          return;
+        }
+        await ref
+            .read(sessionActionsProvider)
+            .startNewInSystemTerminal(
+              repo: repo,
+              installation: installation,
+              terminal: terminal,
+            );
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
       final session = await ref
           .read(sessionEngineProvider)
           .start(
@@ -83,6 +104,41 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Widget _terminalPicker() {
+    final terminals = ref.watch(availableSystemTerminalsProvider);
+    return terminals.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.only(top: 12),
+        child: LinearProgressIndicator(),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text('Could not detect terminals: $e'),
+      ),
+      data: (list) {
+        if (list.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text('No external terminals were found on PATH.'),
+          );
+        }
+        _terminal ??= list.first;
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: DropdownButtonFormField<SystemTerminal>(
+            initialValue: list.contains(_terminal) ? _terminal : list.first,
+            decoration: const InputDecoration(labelText: 'Terminal'),
+            items: [
+              for (final t in list)
+                DropdownMenuItem(value: t, child: Text(t.label)),
+            ],
+            onChanged: (v) => setState(() => _terminal = v),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -138,13 +194,32 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                 ],
                 onChanged: (v) => setState(() => _installation = v),
               ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _useWorktree,
-              onChanged: (v) => setState(() => _useWorktree = v ?? false),
-              title: const Text('Run in a dedicated Git worktree'),
+            const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.chat_outlined, size: 15),
+                  label: Text('In-app'),
+                ),
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.open_in_new, size: 15),
+                  label: Text('External terminal'),
+                ),
+              ],
+              selected: {_external},
+              onSelectionChanged: (s) => setState(() => _external = s.first),
             ),
+            if (_external) _terminalPicker(),
+            if (!_external)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _useWorktree,
+                onChanged: (v) => setState(() => _useWorktree = v ?? false),
+                title: const Text('Run in a dedicated Git worktree'),
+              ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
