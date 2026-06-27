@@ -142,7 +142,17 @@ TerminalInstance createPtyTerminalInstance({
   required TerminalProfile profile,
   String? workingDirectory,
 }) {
-  final launch = ptyLaunchFor(profile, workingDirectory: workingDirectory);
+  // The terminal profiles (PowerShell/cmd/WSL) assume a Windows host. When the
+  // app itself runs on Linux/macOS (e.g. inside WSL), `wsl.exe`/`powershell.exe`
+  // don't exist — we're already in the target shell — so just open the login
+  // shell in the working directory.
+  final PtyLaunch launch;
+  if (Platform.isWindows) {
+    launch = ptyLaunchFor(profile, workingDirectory: workingDirectory);
+  } else {
+    final shell = Platform.environment['SHELL'] ?? '/bin/bash';
+    launch = PtyLaunch(executable: shell, workingDirectory: workingDirectory);
+  }
   try {
     return PtyTerminalInstance(id: id, title: profile.label, launch: launch);
   } catch (e) {
