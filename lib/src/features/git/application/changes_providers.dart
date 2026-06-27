@@ -51,10 +51,18 @@ final repositoryChangesProvider = FutureProvider.autoDispose<List<FileChange>>((
 
 /// Unified diff for the selected file in the selected repository.
 final fileDiffProvider = FutureProvider.autoDispose<String>((ref) async {
-  final id = ref.watch(selectedRepositoryIdProvider);
   final file = ref.watch(selectedChangeFileProvider);
-  if (id == null || file == null) return '';
-  final repo = ref.read(repositoryDaoProvider).getById(id);
-  if (repo == null) return '';
-  return ref.read(changesServiceProvider).diff(repo.path, path: file);
+  if (file == null) return '';
+  return ref.watch(fileDiffByPathProvider(file).future);
 });
+
+/// Unified diff for a specific [path] within the selected repository — used to
+/// render each changed file's diff inline (expandable) in the Changes view.
+final fileDiffByPathProvider = FutureProvider.autoDispose
+    .family<String, String>((ref, path) async {
+      final id = ref.watch(selectedRepositoryIdProvider);
+      if (id == null) return '';
+      final repo = ref.read(repositoryDaoProvider).getById(id);
+      if (repo == null) return '';
+      return ref.read(changesServiceProvider).diff(repo.path, path: path);
+    });

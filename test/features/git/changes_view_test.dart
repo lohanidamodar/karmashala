@@ -11,9 +11,9 @@ void main() {
       ProviderScope(
         overrides: [
           repositoryChangesProvider.overrideWith((ref) async => files),
-          fileDiffProvider.overrideWith(
-            (ref) async => '@@ -1 +1 @@\n-old line\n+new line\n',
-          ),
+          fileDiffByPathProvider(
+            'lib/main.dart',
+          ).overrideWith((ref) async => '@@ -1 +1 @@\n-old line\n+new line\n'),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ChangesView(repositoryName: 'app')),
@@ -22,7 +22,7 @@ void main() {
     );
   }
 
-  testWidgets('lists changed files and shows a diff when one is selected', (
+  testWidgets('lists changed files and expands one to show its diff inline', (
     tester,
   ) async {
     await pump(
@@ -38,9 +38,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Collapsed by default: the file is listed, the diff is not shown yet.
     expect(find.text('lib/main.dart'), findsOneWidget);
-    expect(find.text('Select a file to view its diff.'), findsOneWidget);
+    expect(find.text('+new line'), findsNothing);
 
+    // Expanding the file reveals its diff inline.
     await tester.tap(find.text('lib/main.dart'));
     await tester.pumpAndSettle();
 
