@@ -123,6 +123,51 @@ class SessionActions {
     }
   }
 
+  /// Sends [text] to a native session, relaunching its agent first when the
+  /// session has ended — so the message box always works, not only while the
+  /// agent happens to be live. Throws a clear error if the repository or agent is
+  /// no longer available.
+  Future<void> continueSession(String sessionId, String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
+    final engine = _ref.read(sessionEngineProvider);
+
+    if (!engine.isActive(sessionId)) {
+      final session = _ref.read(sessionDaoProvider).getById(sessionId);
+      if (session == null) {
+        throw StateError('This session no longer exists.');
+      }
+      final repo = _ref
+          .read(repositoryDaoProvider)
+          .getById(session.repositoryId);
+      if (repo == null) {
+        throw StateError('The session\'s repository is no longer available.');
+      }
+      final installation = _ref
+          .read(agentInstallationDaoProvider)
+          .getById(session.agentInstallationId);
+      if (installation == null) {
+        throw StateError(
+          'The agent for this session is not installed. '
+          'Run "Discover agents" in Settings.',
+        );
+      }
+      final permission = _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(installation.agentKind)
+          .existingSessions;
+      await engine.resume(
+        session: session,
+        workingDirectory: session.worktree ?? repo.path,
+        installation: installation,
+        permissionMode: permission,
+      );
+      _bump();
+    }
+
+    await engine.sendMessage(sessionId, trimmed);
+  }
+
   /// Copies the imported CLI session's prior transcript into the resumed native
   /// session's event log so resuming continues the conversation instead of
   /// starting blank. Capped to the most recent messages; best-effort.

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../application/session_actions.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
@@ -31,11 +32,25 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     super.dispose();
   }
 
+  bool _sending = false;
+
   Future<void> _send() async {
     final text = _input.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _sending) return;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
     _input.clear();
-    await ref.read(sessionEngineProvider).sendMessage(widget.sessionId, text);
+    try {
+      await ref
+          .read(sessionActionsProvider)
+          .continueSession(widget.sessionId, text);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : '$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   Future<void> _stop() async {
@@ -104,21 +119,27 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             Expanded(
               child: TextField(
                 controller: _input,
-                enabled: active,
+                enabled: !_sending,
                 decoration: InputDecoration(
                   isDense: true,
                   border: const OutlineInputBorder(),
                   hintText: active
                       ? 'Message the agent…'
-                      : 'Session is not running',
+                      : 'Type to continue this session…',
                 ),
                 onSubmitted: (_) => _send(),
               ),
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              onPressed: active ? _send : null,
-              icon: const Icon(Icons.send, size: 18),
+              onPressed: _sending ? null : _send,
+              icon: _sending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send, size: 18),
             ),
           ],
         ),

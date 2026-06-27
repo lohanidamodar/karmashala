@@ -108,11 +108,56 @@ class SessionEngine {
       sessionRepositoryDao.link(id, extra.id);
     }
 
+    _attach(
+      sessionId: id,
+      title: title,
+      workingDirectory: workingDirectory,
+      installation: installation,
+      permissionMode: permissionMode,
+      resumeSessionId: resumeSessionId,
+    );
+
+    return session;
+  }
+
+  /// Relaunches the agent for an existing [session] (e.g. one that has ended), so
+  /// the user can continue it. No-op if it is already active. Reuses the same
+  /// session id and event log.
+  Future<void> resume({
+    required Session session,
+    required EnvironmentPath workingDirectory,
+    required AgentInstallation installation,
+    PermissionMode permissionMode = PermissionMode.ask,
+    String? resumeSessionId,
+  }) async {
+    if (_runtimes.containsKey(session.id)) return;
+    sessionDao.updateStatus(session.id, SessionStatus.running);
+    _attach(
+      sessionId: session.id,
+      title: session.title,
+      workingDirectory: workingDirectory,
+      installation: installation,
+      permissionMode: permissionMode,
+      resumeSessionId: resumeSessionId,
+    );
+  }
+
+  /// Creates the runtime and wires the agent's event stream into the log.
+  void _attach({
+    required String sessionId,
+    required String title,
+    required EnvironmentPath workingDirectory,
+    required AgentInstallation installation,
+    required PermissionMode permissionMode,
+    String? resumeSessionId,
+  }) {
     final controller = StreamController<SessionEvent>.broadcast();
     final runtime = _Runtime(controller: controller);
-    _runtimes[id] = runtime;
+    _runtimes[sessionId] = runtime;
 
-    _emit(runtime, id, SessionEventTypes.sessionStarted, {'title': title});
+    _emit(runtime, sessionId, SessionEventTypes.sessionStarted, {
+      'title': title,
+    });
 
     final agent = resolveAdapter(installation.agentKind).start(
       AgentLaunch(
@@ -124,15 +169,15 @@ class SessionEngine {
     );
     runtime.agent = agent;
     runtime.subscription = agent.events.listen(
-      (event) => _emit(runtime, id, event.type, event.data),
+      (event) => _emit(runtime, sessionId, event.type, event.data),
       onError: (Object error, StackTrace _) {
-        _emit(runtime, id, SessionEventTypes.error, {'message': '$error'});
-        _finish(id, SessionStatus.failed);
+        _emit(runtime, sessionId, SessionEventTypes.error, {
+          'message': '$error',
+        });
+        _finish(sessionId, SessionStatus.failed);
       },
-      onDone: () => _finish(id, SessionStatus.completed),
+      onDone: () => _finish(sessionId, SessionStatus.completed),
     );
-
-    return session;
   }
 
   /// Sends a user [message] to an active session and records it.

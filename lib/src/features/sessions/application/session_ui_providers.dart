@@ -86,6 +86,9 @@ final selectedSessionRepositoriesProvider =
 /// refreshed whenever the engine appends a new event to an active session.
 final sessionTranscriptProvider =
     StreamProvider.autoDispose<List<SessionEvent>>((ref) async* {
+      // Re-subscribe when a session is (re)started so a freshly relaunched
+      // agent's live stream is picked up.
+      ref.watch(sessionsRevisionProvider);
       final id = ref.watch(selectedSessionIdProvider);
       if (id == null) {
         yield const [];

@@ -55,8 +55,8 @@ void main() {
     // Role eyebrows are uppercased.
     expect(find.text('YOU'), findsOneWidget);
     expect(find.text('AGENT'), findsOneWidget);
-    // Not active -> input is disabled with the idle hint.
-    expect(find.text('Session is not running'), findsOneWidget);
+    // The input is always usable; when idle it invites continuing the session.
+    expect(find.text('Type to continue this session…'), findsOneWidget);
   });
 }
 
