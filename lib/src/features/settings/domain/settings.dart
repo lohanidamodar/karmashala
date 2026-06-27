@@ -55,6 +55,9 @@ class Settings {
     this.permissions = const {},
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
+    this.keepAwake = false,
+    this.closeToTray = false,
+    this.autoStart = false,
   });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
@@ -70,6 +73,15 @@ class Settings {
   /// first available (PowerShell). Stored as an id so it survives across runs.
   final String? defaultTerminalProfileId;
 
+  /// Keep the system (and display) awake while the app runs.
+  final bool keepAwake;
+
+  /// Hide to the system tray on window close instead of quitting.
+  final bool closeToTray;
+
+  /// Launch the app automatically when the user logs in.
+  final bool autoStart;
+
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
 
@@ -79,6 +91,9 @@ class Settings {
     Map<AgentKind, AgentPermissions>? permissions,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
+    bool? keepAwake,
+    bool? closeToTray,
+    bool? autoStart,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -87,6 +102,9 @@ class Settings {
     themeMode: themeMode ?? this.themeMode,
     defaultTerminalProfileId:
         defaultTerminalProfileId ?? this.defaultTerminalProfileId,
+    keepAwake: keepAwake ?? this.keepAwake,
+    closeToTray: closeToTray ?? this.closeToTray,
+    autoStart: autoStart ?? this.autoStart,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -97,6 +115,9 @@ class Settings {
     'themeMode': themeMode.name,
     if (defaultTerminalProfileId != null)
       'defaultTerminalProfileId': defaultTerminalProfileId,
+    'keepAwake': keepAwake,
+    'closeToTray': closeToTray,
+    'autoStart': autoStart,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -129,6 +150,9 @@ class Settings {
       permissions: permissions,
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
+      keepAwake: json['keepAwake'] == true,
+      closeToTray: json['closeToTray'] == true,
+      autoStart: json['autoStart'] == true,
     );
   }
 
@@ -138,6 +162,9 @@ class Settings {
       other.defaultAgent == defaultAgent &&
       other.themeMode == themeMode &&
       other.defaultTerminalProfileId == defaultTerminalProfileId &&
+      other.keepAwake == keepAwake &&
+      other.closeToTray == closeToTray &&
+      other.autoStart == autoStart &&
       _mapEquals(other.permissions, permissions);
 
   @override
@@ -145,6 +172,9 @@ class Settings {
     defaultAgent,
     themeMode,
     defaultTerminalProfileId,
+    keepAwake,
+    closeToTray,
+    autoStart,
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),

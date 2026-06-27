@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
@@ -41,10 +42,19 @@ class PtyTerminalInstance implements TerminalInstance {
     required PtyLaunch launch,
   }) {
     terminal = Terminal(maxLines: 10000);
+    // flutter_pty only forwards a tiny allowlist of env vars to the child; pass
+    // the full host environment so Windows shells get SystemRoot/WINDIR/etc.
+    // (without them powershell.exe/cmd.exe and wsl.exe fail to start).
+    final workingDirectory =
+        (launch.workingDirectory != null &&
+            Directory(launch.workingDirectory!).existsSync())
+        ? launch.workingDirectory
+        : null;
     _pty = Pty.start(
       launch.executable,
       arguments: launch.arguments,
-      workingDirectory: launch.workingDirectory,
+      environment: Map<String, String>.of(Platform.environment),
+      workingDirectory: workingDirectory,
     );
 
     _pty.output

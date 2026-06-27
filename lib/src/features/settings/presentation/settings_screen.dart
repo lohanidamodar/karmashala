@@ -69,6 +69,42 @@ class SettingsScreen extends ConsumerWidget {
                   onSelectionChanged: (s) => controller.setThemeMode(s.first),
                 ),
               ),
+              _Section(
+                title: 'SYSTEM',
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settings.keepAwake,
+                      onChanged: controller.setKeepAwake,
+                      title: const Text('Keep system awake'),
+                      subtitle: const Text(
+                        'Prevent the display and system from sleeping while '
+                        'Chitragupta is running.',
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settings.closeToTray,
+                      onChanged: controller.setCloseToTray,
+                      title: const Text('Close to tray'),
+                      subtitle: const Text(
+                        'Hide to the system tray when the window is closed '
+                        'instead of quitting.',
+                      ),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settings.autoStart,
+                      onChanged: controller.setAutoStart,
+                      title: const Text('Start at login'),
+                      subtitle: const Text(
+                        'Launch Chitragupta automatically when you sign in.',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               Builder(
                 builder: (context) {
                   final profiles = terminalProfilesFor(

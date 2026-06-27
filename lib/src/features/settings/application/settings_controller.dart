@@ -26,6 +26,21 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setKeepAwake(bool value) {
+    state = state.copyWith(keepAwake: value);
+    _save();
+  }
+
+  void setCloseToTray(bool value) {
+    state = state.copyWith(closeToTray: value);
+    _save();
+  }
+
+  void setAutoStart(bool value) {
+    state = state.copyWith(autoStart: value);
+    _save();
+  }
+
   void setDefaultAgent(AgentKind? kind) {
     state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);
     _save();

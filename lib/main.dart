@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'src/app/chitragupta_app.dart';
 import 'src/core/database/app_database.dart';
@@ -10,6 +11,7 @@ import 'src/core/util/clock.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/system/system_integration_service.dart';
 
 /// Application entry point.
 ///
@@ -41,9 +43,33 @@ Future<void> main() async {
   }
   logger.info('Discovered ${discovered.length} execution environment(s).');
 
+  final container = ProviderContainer(
+    overrides: [databaseProvider.overrideWithValue(database)],
+  );
+
+  // Desktop OS integration: window/tray/keep-awake/launch-at-login.
+  if (SystemIntegrationService.isSupported) {
+    try {
+      await windowManager.ensureInitialized();
+      const windowOptions = WindowOptions(
+        size: Size(1200, 800),
+        minimumSize: Size(720, 560),
+        center: true,
+        title: 'Chitragupta',
+      );
+      await windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    } catch (error, stack) {
+      logger.warning('Window manager init failed.', error, stack);
+    }
+    await SystemIntegrationService(container).init();
+  }
+
   runApp(
-    ProviderScope(
-      overrides: [databaseProvider.overrideWithValue(database)],
+    UncontrolledProviderScope(
+      container: container,
       child: const ChitraguptaApp(),
     ),
   );

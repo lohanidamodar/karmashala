@@ -65,10 +65,11 @@ class SessionActions {
     _bump();
   }
 
-  /// Resumes an imported CLI session as a new native engine session, launching
-  /// the agent with `--resume` and the per-agent "existing sessions" permission.
-  /// Throws if the repository or a matching agent installation is missing.
-  Future<void> resumeImported(ImportedSession session) async {
+  /// Resumes an imported CLI session in place: it becomes a live native session
+  /// (seeded with its prior transcript and launched with `--resume`), and the
+  /// imported entry is replaced by it so there is no duplicate. Returns the live
+  /// session's id. Throws if the repository or a matching installation is gone.
+  Future<String> resumeImported(ImportedSession session) async {
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
       throw StateError(
@@ -100,9 +101,26 @@ class SessionActions {
           permissionMode: permission,
         );
     await _seedHistory(started.id, session);
-    _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+    // Replace the imported entry with the now-live session (drop only our row,
+    // keeping the CLI store file intact).
+    _ref.read(importedSessionDaoProvider).delete(session.id);
+    if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
+      _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+    }
     _ref.read(selectedSessionIdProvider.notifier).select(started.id);
     _bump();
+    return started.id;
+  }
+
+  /// Resumes [session] and immediately sends [text] to it — the flow behind the
+  /// imported session's message box, so typing a reply continues the session in
+  /// place instead of spawning a separate one.
+  Future<void> resumeAndSend(ImportedSession session, String text) async {
+    final id = await resumeImported(session);
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) {
+      await _ref.read(sessionEngineProvider).sendMessage(id, trimmed);
+    }
   }
 
   /// Copies the imported CLI session's prior transcript into the resumed native
