@@ -4,9 +4,27 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_kind.dart';
 import 'streaming_agent_session.dart';
+
+/// Builds the Claude Code CLI arguments for [launch], mapping the permission
+/// mode to `--permission-mode` and resuming when a session id is set. Pure /
+/// testable; the wire shape is a provisional contract.
+List<String> claudeLaunchArgs(AgentLaunch launch) => [
+  '--input-format',
+  'stream-json',
+  '--output-format',
+  'stream-json',
+  '--verbose',
+  ...switch (launch.permissionMode) {
+    PermissionMode.ask => const <String>[],
+    PermissionMode.acceptEdits => const ['--permission-mode', 'acceptEdits'],
+    PermissionMode.bypass => const ['--permission-mode', 'bypassPermissions'],
+  },
+  if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
+];
 
 /// Translates one line of Claude Code's `stream-json` output into zero or more
 /// normalized [AgentEvent]s.
@@ -111,13 +129,7 @@ class ClaudeCodeAdapter implements AgentAdapter {
     final runner = runnerFactory.forEnvironment(env);
     final request = CommandRequest(
       executable: launch.installation.executable.path,
-      arguments: const [
-        '--input-format',
-        'stream-json',
-        '--output-format',
-        'stream-json',
-        '--verbose',
-      ],
+      arguments: claudeLaunchArgs(launch),
       workingDirectory: launch.workingDirectory,
     );
     return ClaudeCodeAgentSession(runner.start(request));

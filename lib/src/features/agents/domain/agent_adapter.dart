@@ -1,4 +1,5 @@
 import '../../environments/domain/environment_path.dart';
+import '../../settings/domain/permission_mode.dart';
 import 'agent_installation.dart';
 import 'agent_kind.dart';
 
@@ -22,6 +23,8 @@ class AgentLaunch {
   const AgentLaunch({
     required this.workingDirectory,
     required this.installation,
+    this.permissionMode = PermissionMode.ask,
+    this.resumeSessionId,
   });
 
   /// Directory the agent runs in (the repo or a worktree), bound to its
@@ -30,6 +33,13 @@ class AgentLaunch {
 
   /// The specific agent installation to launch.
   final AgentInstallation installation;
+
+  /// How much the agent may do without prompting (mapped to CLI flags). Defaults
+  /// to the safe [PermissionMode.ask].
+  final PermissionMode permissionMode;
+
+  /// When resuming an existing CLI session, its id; otherwise `null`.
+  final String? resumeSessionId;
 }
 
 /// A live run of an agent: a stream of normalized [AgentEvent]s, plus the ability

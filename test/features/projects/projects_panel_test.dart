@@ -1,5 +1,7 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
+import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
 import 'package:chitragupta/src/core/util/id_generator_provider.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
@@ -40,6 +42,9 @@ void main() {
           repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           clockProvider.overrideWithValue(FixedClock(testTime)),
+          autoImportRunnerProvider.overrideWithValue(
+            (_) async => const ImportSummary(),
+          ),
         ],
         child: const MaterialApp(home: Scaffold(body: ProjectsPanel())),
       ),

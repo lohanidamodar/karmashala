@@ -4,9 +4,17 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_kind.dart';
 import 'streaming_agent_session.dart';
+
+/// Builds the Antigravity CLI arguments for [launch] (compatibility; provisional).
+List<String> antigravityLaunchArgs(AgentLaunch launch) => [
+  '--stdio',
+  if (launch.permissionMode == PermissionMode.bypass) '--yolo',
+  if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
+];
 
 /// Translates one line of Antigravity CLI output into normalized events.
 ///
@@ -90,7 +98,7 @@ class AntigravityAdapter implements AgentAdapter {
     final runner = runnerFactory.forEnvironment(env);
     final request = CommandRequest(
       executable: launch.installation.executable.path,
-      arguments: const ['--stdio'],
+      arguments: antigravityLaunchArgs(launch),
       workingDirectory: launch.workingDirectory,
     );
     return AntigravityAgentSession(runner.start(request));

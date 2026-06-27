@@ -9,6 +9,7 @@ import '../../agents/domain/agent_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../git/application/worktree_service.dart';
 import '../../repositories/domain/repository.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../data/session_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_repository_dao.dart';
@@ -70,6 +71,8 @@ class SessionEngine {
     required String title,
     bool useWorktree = false,
     List<Repository> additionalRepositories = const [],
+    PermissionMode permissionMode = PermissionMode.ask,
+    String? resumeSessionId,
   }) async {
     final id = ids.newId();
 
@@ -115,6 +118,8 @@ class SessionEngine {
       AgentLaunch(
         workingDirectory: workingDirectory,
         installation: installation,
+        permissionMode: permissionMode,
+        resumeSessionId: resumeSessionId,
       ),
     );
     runtime.agent = agent;

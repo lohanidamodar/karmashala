@@ -8,12 +8,14 @@ import '../../environments/application/environment_providers.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../repositories/domain/repository.dart';
 import '../data/cli_session_mutator.dart';
 import '../data/imported_session_dao.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'cli_detection_service.dart';
 import 'project_import_service.dart';
+import 'session_auto_import_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
   (ref) => const CliDetectionService(),
@@ -31,6 +33,26 @@ final projectImportServiceProvider = Provider<ProjectImportService>(
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
   ),
+);
+
+final sessionAutoImportServiceProvider = Provider<SessionAutoImportService>(
+  (ref) => SessionAutoImportService(
+    locator: ref.watch(cliStoreLocatorProvider),
+    detectionService: ref.watch(cliDetectionServiceProvider),
+    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    importedSessionDao: ref.watch(importedSessionDaoProvider),
+    ids: ref.watch(idGeneratorProvider),
+    clock: ref.watch(clockProvider),
+  ),
+);
+
+/// Runs auto-import for a project's repositories. Exposed as a function provider
+/// so callers (and tests) can substitute it without touching the filesystem.
+typedef AutoImportRunner =
+    Future<ImportSummary> Function(List<Repository> repos);
+
+final autoImportRunnerProvider = Provider<AutoImportRunner>(
+  (ref) => ref.read(sessionAutoImportServiceProvider).importForRepositories,
 );
 
 final cliStoreLocatorProvider = Provider<CliStoreLocator>(

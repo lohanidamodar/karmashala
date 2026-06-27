@@ -91,4 +91,30 @@ void main() {
     ], envById);
     expect(projects.length, 2);
   });
+
+  group('canonicalProjectPath', () {
+    test('Windows drive and WSL /mnt fold to the same key', () {
+      final (winKey, _) = canonicalProjectPath(
+        const EnvironmentPath(environmentId: 'windows', path: r'G:\dev\x'),
+        windowsEnv(),
+      );
+      final (wslKey, _) = canonicalProjectPath(
+        const EnvironmentPath(
+          environmentId: 'wsl:Ubuntu',
+          path: '/mnt/g/dev/x',
+        ),
+        wslEnv(),
+      );
+      expect(winKey, wslKey);
+    });
+
+    test('WSL-native paths are scoped to the environment', () {
+      final (key, display) = canonicalProjectPath(
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/home/me/y'),
+        wslEnv(),
+      );
+      expect(key, 'wsl:Ubuntu:/home/me/y');
+      expect(display, '/home/me/y');
+    });
+  });
 }

@@ -1,5 +1,6 @@
 import '../../../core/process/path_translator.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
@@ -55,8 +56,20 @@ List<DetectedProject> mergeDetectedProjects(
   ExecutionEnvironment? env,
   PathTranslator translator,
 ) {
-  final path = session.cwd.path;
-  final trimmed = path.replaceAll(RegExp(r'[\\/]+$'), '');
+  final (key, display) = canonicalProjectPath(session.cwd, env, translator);
+  return (key, display);
+}
+
+/// The canonical `(mergeKey, displayPath)` for a path in [env] — the same
+/// normalization the merger uses, exposed so other features (e.g. auto-import
+/// matching) can compute a project's key. WSL `/mnt/<drive>` folds to its
+/// Windows-drive form; comparison is case-insensitive.
+(String, String) canonicalProjectPath(
+  EnvironmentPath path,
+  ExecutionEnvironment? env, [
+  PathTranslator translator = const PathTranslator(),
+]) {
+  final trimmed = path.path.replaceAll(RegExp(r'[\\/]+$'), '');
 
   if (env != null && env.kind == EnvironmentKind.windowsNative) {
     final win = trimmed.replaceAll('/', r'\');
@@ -64,8 +77,6 @@ List<DetectedProject> mergeDetectedProjects(
   }
 
   if (env != null && env.kind == EnvironmentKind.wsl) {
-    // Fold WSL drive mounts to their Windows form so they merge with native
-    // Windows sessions for the same folder.
     if (RegExp(r'^/mnt/[a-zA-Z](/|$)').hasMatch(trimmed)) {
       try {
         final win = translator.wslMountToWindowsDrive(trimmed);
@@ -74,12 +85,10 @@ List<DetectedProject> mergeDetectedProjects(
         // fall through
       }
     }
-    // WSL-native path: scope the key to the environment.
-    return ('${session.environmentId}:${trimmed.toLowerCase()}', trimmed);
+    return ('${path.environmentId}:${trimmed.toLowerCase()}', trimmed);
   }
 
-  // Unknown environment: scope to the environment id.
-  return ('${session.environmentId}:${trimmed.toLowerCase()}', trimmed);
+  return ('${path.environmentId}:${trimmed.toLowerCase()}', trimmed);
 }
 
 class _Group {

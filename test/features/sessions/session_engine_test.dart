@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/data/fake_agent_adapter.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_adapter.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:chitragupta/src/features/git/application/worktree_service.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
@@ -157,6 +160,20 @@ void main() {
     expect(links.map((l) => l.repositoryId).toSet(), {'r1', 'r2'});
   });
 
+  test('forwards permission mode and resume id to the adapter', () async {
+    final adapter = _CapturingAdapter();
+    final engine = buildEngine(resolver: (_) => adapter);
+    await engine.start(
+      repository: repository(),
+      installation: agentInstallation(),
+      title: 'Resume',
+      permissionMode: PermissionMode.bypass,
+      resumeSessionId: 'ext-123',
+    );
+    expect(adapter.captured!.permissionMode, PermissionMode.bypass);
+    expect(adapter.captured!.resumeSessionId, 'ext-123');
+  });
+
   test('a self-completing agent marks the session completed', () async {
     final engine = buildEngine(
       resolver: (kind) => FakeAgentAdapter(kind: kind, autoComplete: true),
@@ -172,4 +189,18 @@ void main() {
     expect(sessionDao.getById(session.id)!.status, SessionStatus.completed);
     expect(typesOf(session.id).last, SessionEventTypes.sessionCompleted);
   });
+}
+
+/// Captures the [AgentLaunch] it receives, for asserting what the engine passed.
+class _CapturingAdapter implements AgentAdapter {
+  AgentLaunch? captured;
+
+  @override
+  AgentKind get kind => AgentKind.claudeCode;
+
+  @override
+  AgentSession start(AgentLaunch launch) {
+    captured = launch;
+    return FakeAgentSession('hi');
+  }
 }

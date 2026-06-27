@@ -4,9 +4,25 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_kind.dart';
 import 'streaming_agent_session.dart';
+
+/// Builds the Codex `app-server` arguments for [launch], mapping the permission
+/// mode to approval/sandbox flags and resuming when a session id is set. Pure /
+/// testable; the wire shape is a provisional contract.
+List<String> codexLaunchArgs(AgentLaunch launch) => [
+  'app-server',
+  ...switch (launch.permissionMode) {
+    PermissionMode.ask => const ['--ask-for-approval', 'on-request'],
+    PermissionMode.acceptEdits => const ['--ask-for-approval', 'on-failure'],
+    PermissionMode.bypass => const [
+      '--dangerously-bypass-approvals-and-sandbox',
+    ],
+  },
+  if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
+];
 
 /// Translates one line of the Codex **app-server** protocol into a normalized
 /// [AgentEvent], or `null` for blank/unknown/ignored lines.
@@ -84,7 +100,7 @@ class CodexAdapter implements AgentAdapter {
     final runner = runnerFactory.forEnvironment(env);
     final request = CommandRequest(
       executable: launch.installation.executable.path,
-      arguments: const ['app-server'],
+      arguments: codexLaunchArgs(launch),
       workingDirectory: launch.workingDirectory,
     );
     return CodexAgentSession(runner.start(request));

@@ -70,6 +70,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                 ? 'Session'
                 : _titleController.text.trim(),
             useWorktree: _useWorktree,
+            permissionMode: ref
+                .read(settingsControllerProvider)
+                .permissionsFor(installation.agentKind)
+                .newSessions,
           );
       ref.read(sessionsRevisionProvider.notifier).bump();
       ref.read(selectedSessionIdProvider.notifier).select(session.id);

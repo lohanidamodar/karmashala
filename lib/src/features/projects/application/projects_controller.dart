@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import '../domain/project.dart';
 import 'project_providers.dart';
 import 'project_service.dart';
@@ -32,8 +34,22 @@ class ProjectsController extends Notifier<List<Project>> {
     final result = await ref
         .read(projectServiceProvider)
         .createProjectByDiscovery(name: name, root: root);
+    await _autoImportSessions(result.repositories);
     _refresh();
     return result;
+  }
+
+  /// Scans the CLI stores and imports any existing sessions for the new
+  /// project's repositories (best-effort — never blocks project creation).
+  Future<void> _autoImportSessions(List<Repository> repositories) async {
+    try {
+      final summary = await ref.read(autoImportRunnerProvider)(repositories);
+      if (summary.sessions > 0) {
+        ref.read(sessionsRevisionProvider.notifier).bump();
+      }
+    } catch (_) {
+      // CLI stores unavailable — project creation still succeeds.
+    }
   }
 
   /// Creates a project for [targetEnvironmentId] from a Windows-host folder
@@ -58,6 +74,7 @@ class ProjectsController extends Notifier<List<Project>> {
           windows: windows,
           target: target,
         );
+    await _autoImportSessions(result.repositories);
     _refresh();
     return result;
   }

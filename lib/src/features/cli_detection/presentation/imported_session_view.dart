@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/domain/agent_kind.dart';
+import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/cli_detection_providers.dart';
 
@@ -55,6 +56,24 @@ class ImportedSessionView extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
+              FilledButton.tonalIcon(
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Resume'),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await ref
+                        .read(sessionActionsProvider)
+                        .resumeImported(session);
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(e is StateError ? e.message : '$e'),
+                      ),
+                    );
+                  }
+                },
               ),
             ],
           ),

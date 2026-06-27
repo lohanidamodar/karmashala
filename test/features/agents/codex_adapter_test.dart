@@ -126,7 +126,8 @@ void main() {
 
       final req = runner.startRequests.single;
       expect(req.executable, r'C:\bin\codex.exe');
-      expect(req.arguments, ['app-server']);
+      // Default permission (ask) maps to an on-request approval flag.
+      expect(req.arguments, ['app-server', '--ask-for-approval', 'on-request']);
       expect(req.workingDirectory!.path, r'C:\src\demo\app');
     });
   });

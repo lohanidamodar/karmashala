@@ -148,16 +148,30 @@ class _ImportedSessionTile extends ConsumerWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text('$cliLabel · ${session.environmentId}'),
-      trailing: _SessionMenu(
-        onRename: () async {
-          final name = await _promptRename(context, session.displayTitle);
-          if (name != null) await actions.renameImported(session, name);
-        },
-        onDelete: () async {
-          if (await _confirmDelete(context, session.displayTitle, cli: true)) {
-            await actions.deleteImported(session);
+      trailing: PopupMenuButton<String>(
+        tooltip: 'Session actions',
+        onSelected: (action) async {
+          switch (action) {
+            case 'resume':
+              await _resume(context, actions, session);
+            case 'rename':
+              final name = await _promptRename(context, session.displayTitle);
+              if (name != null) await actions.renameImported(session, name);
+            case 'delete':
+              if (await _confirmDelete(
+                context,
+                session.displayTitle,
+                cli: true,
+              )) {
+                await actions.deleteImported(session);
+              }
           }
         },
+        itemBuilder: (context) => const [
+          PopupMenuItem(value: 'resume', child: Text('Resume')),
+          PopupMenuItem(value: 'rename', child: Text('Rename')),
+          PopupMenuItem(value: 'delete', child: Text('Delete')),
+        ],
       ),
       onTap: () {
         ref.read(selectedSessionIdProvider.notifier).select(null);
@@ -181,6 +195,22 @@ class _SessionMenu extends StatelessWidget {
         PopupMenuItem(value: 'rename', child: Text('Rename')),
         PopupMenuItem(value: 'delete', child: Text('Delete')),
       ],
+    );
+  }
+}
+
+Future<void> _resume(
+  BuildContext context,
+  SessionActions actions,
+  ImportedSession session,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await actions.resumeImported(session);
+    messenger.showSnackBar(const SnackBar(content: Text('Resuming session…')));
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(e is StateError ? e.message : '$e')),
     );
   }
 }
