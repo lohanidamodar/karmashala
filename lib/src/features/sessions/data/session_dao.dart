@@ -47,6 +47,11 @@ class SessionDao {
     );
   }
 
+  /// Updates only the [title] of session [id].
+  void updateTitle(String id, String title) {
+    _db.execute('UPDATE sessions SET title = ? WHERE id = ?;', [title, id]);
+  }
+
   /// Updates only the [status] of session [id].
   void updateStatus(String id, SessionStatus status) {
     _db.execute('UPDATE sessions SET status = ? WHERE id = ?;', [

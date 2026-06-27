@@ -1,14 +1,36 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database_providers.dart';
 import '../../../core/process/command_runner_providers.dart';
+import '../../../core/util/clock_provider.dart';
+import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../projects/application/project_providers.dart';
+import '../../projects/application/projects_controller.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../data/cli_session_mutator.dart';
+import '../data/imported_session_dao.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'cli_detection_service.dart';
+import 'project_import_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
   (ref) => const CliDetectionService(),
+);
+
+final importedSessionDaoProvider = Provider<ImportedSessionDao>(
+  (ref) => ImportedSessionDao(ref.watch(databaseProvider)),
+);
+
+final projectImportServiceProvider = Provider<ProjectImportService>(
+  (ref) => ProjectImportService(
+    projectDao: ref.watch(projectDaoProvider),
+    repositoryDao: ref.watch(repositoryDaoProvider),
+    importedSessionDao: ref.watch(importedSessionDaoProvider),
+    ids: ref.watch(idGeneratorProvider),
+    clock: ref.watch(clockProvider),
+  ),
 );
 
 final cliStoreLocatorProvider = Provider<CliStoreLocator>(
@@ -37,6 +59,16 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
     final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
     final byId = {for (final e in environments) e.id: e};
     return ref.read(cliDetectionServiceProvider).detect(stores, byId);
+  }
+
+  /// Imports every detected project/session into the workspace, ignoring
+  /// duplicates. Returns what was added.
+  ImportSummary importAll() {
+    final projects = state.asData?.value ?? const [];
+    final summary = ref.read(projectImportServiceProvider).importAll(projects);
+    // Refresh the workspace project list so imports appear immediately.
+    ref.invalidate(projectsControllerProvider);
+    return summary;
   }
 
   Future<void> renameSession(DetectedSession session, String newTitle) async {

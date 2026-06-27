@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/design_tokens.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../application/cli_detection_providers.dart';
 import '../domain/detected_project.dart';
@@ -34,6 +35,26 @@ class DetectedProjectsView extends ConsumerWidget {
                   style: theme.textTheme.titleMedium,
                 ),
               ),
+              if (detected.asData?.value.isNotEmpty ?? false) ...[
+                FilledButton.icon(
+                  onPressed: () {
+                    final summary = controller.importAll();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          summary.isEmpty
+                              ? 'Already imported — nothing new.'
+                              : 'Imported ${summary.projects} project(s), '
+                                    '${summary.sessions} session(s).',
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.download_done, size: 18),
+                  label: const Text('Import all'),
+                ),
+                const SizedBox(width: Insets.sm),
+              ],
               FilledButton.tonalIcon(
                 onPressed: () => controller.detect(),
                 icon: const Icon(Icons.refresh, size: 18),

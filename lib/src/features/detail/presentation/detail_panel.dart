@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/shell_state.dart';
+import '../../cli_detection/presentation/imported_session_view.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/presentation/changes_view.dart';
 import '../../github/application/github_providers.dart';
@@ -24,10 +25,13 @@ class DetailPanel extends ConsumerWidget {
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final selectedSessionId = ref.watch(selectedSessionIdProvider);
+    final selectedImportedId = ref.watch(selectedImportedSessionIdProvider);
     final repositories = ref.watch(selectedProjectRepositoriesProvider);
 
     final Widget body;
-    if (selectedSessionId != null) {
+    if (selectedImportedId != null) {
+      body = ImportedSessionView(sessionId: selectedImportedId);
+    } else if (selectedSessionId != null) {
       body = SessionTranscriptView(sessionId: selectedSessionId);
     } else if (selectedRepoId != null) {
       final repo = repositories

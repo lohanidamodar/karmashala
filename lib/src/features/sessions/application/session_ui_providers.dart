@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/domain/imported_session.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../domain/session.dart';
@@ -28,7 +30,16 @@ final sessionsForSelectedRepositoryProvider =
       return ref.read(sessionDaoProvider).getByRepository(repoId);
     });
 
-/// The session whose transcript is shown, or `null`.
+/// Imported CLI sessions belonging to the selected repository.
+final importedSessionsForSelectedRepositoryProvider =
+    Provider.autoDispose<List<ImportedSession>>((ref) {
+      ref.watch(sessionsRevisionProvider);
+      final repoId = ref.watch(selectedRepositoryIdProvider);
+      if (repoId == null) return const [];
+      return ref.read(importedSessionDaoProvider).getByRepository(repoId);
+    });
+
+/// The native session whose transcript is shown, or `null`.
 class SelectedSessionController extends Notifier<String?> {
   @override
   String? build() => null;
@@ -38,6 +49,18 @@ class SelectedSessionController extends Notifier<String?> {
 final selectedSessionIdProvider =
     NotifierProvider<SelectedSessionController, String?>(
       SelectedSessionController.new,
+    );
+
+/// The imported session whose detail is shown, or `null`.
+class SelectedImportedSessionController extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void select(String? id) => state = id;
+}
+
+final selectedImportedSessionIdProvider =
+    NotifierProvider<SelectedImportedSessionController, String?>(
+      SelectedImportedSessionController.new,
     );
 
 /// Repositories the selected session spans (primary first). Refreshes on a

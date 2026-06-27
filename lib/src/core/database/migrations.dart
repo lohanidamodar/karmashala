@@ -19,6 +19,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
   3: _migrateToV3,
+  4: _migrateToV4,
 };
 
 void _migrateToV1(Database db) {
@@ -154,4 +155,33 @@ void _migrateToV3(Database db) {
     INSERT OR IGNORE INTO session_repositories (session_id, repository_id, role)
       SELECT id, repository_id, 'primary' FROM sessions;
   ''');
+}
+
+void _migrateToV4(Database db) {
+  // Sessions imported from a CLI store (Claude Code / Codex) — a read-only
+  // history that lives beside native engine sessions (Loop 20). Kept in its own
+  // table so the native `sessions` schema/FKs are untouched. `UNIQUE(source,
+  // external_id)` makes re-imports idempotent (duplicates ignored).
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS imported_sessions (
+      id             TEXT PRIMARY KEY,
+      repository_id  TEXT NOT NULL,
+      source         TEXT NOT NULL,
+      external_id    TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      title          TEXT,
+      preview        TEXT NOT NULL,
+      file_path      TEXT NOT NULL,
+      store_home     TEXT NOT NULL,
+      is_subagent    INTEGER NOT NULL,
+      updated_at     TEXT,
+      created_at     TEXT NOT NULL,
+      FOREIGN KEY (repository_id) REFERENCES repositories (id) ON DELETE CASCADE,
+      UNIQUE (source, external_id)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_imported_sessions_repo '
+    'ON imported_sessions (repository_id);',
+  );
 }
