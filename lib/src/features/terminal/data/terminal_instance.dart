@@ -46,8 +46,9 @@ class PtyTerminalInstance implements TerminalInstance {
   }) {
     terminal = Terminal(maxLines: 10000);
     // flutter_pty only forwards a tiny allowlist of env vars to the child; pass
-    // the full host environment so Windows shells get SystemRoot/WINDIR/etc.
-    // (without them powershell.exe/cmd.exe and wsl.exe fail to start).
+    // the host environment so Windows shells get SystemRoot/WINDIR/etc. (without
+    // them powershell.exe/cmd.exe and wsl.exe fail to start) — sanitized so a
+    // POSIX env leaked from launching via WSL doesn't break wsl.exe.
     final workingDirectory =
         (launch.workingDirectory != null &&
             Directory(launch.workingDirectory!).existsSync())
@@ -56,7 +57,7 @@ class PtyTerminalInstance implements TerminalInstance {
     _pty = Pty.start(
       launch.executable,
       arguments: launch.arguments,
-      environment: Map<String, String>.of(Platform.environment),
+      environment: _ptyEnvironment(),
       workingDirectory: workingDirectory,
     );
 
@@ -107,6 +108,40 @@ class PtyTerminalInstance implements TerminalInstance {
     _disposed = true;
     _pty.kill();
   }
+}
+
+/// Builds the environment for a Windows PTY child.
+///
+/// Normally this is just the host environment. But when the app is launched from
+/// a WSL/Unix shell (e.g. `flutter run -d windows` from fish), a POSIX `PATH`
+/// (`/usr/bin:/bin:…`), `SHELL=/usr/bin/fish` and `WSL*` interop vars leak into
+/// the Windows process. Handing those to `wsl.exe`/`powershell.exe` breaks them,
+/// so we rebuild a clean Windows `Path` and drop the Unix leak.
+Map<String, String> _ptyEnvironment() {
+  final env = Map<String, String>.of(Platform.environment);
+
+  // WSL-interop / Unix-shell leaks (present only when launched from WSL); these
+  // confuse wsl.exe and the Windows shells. Harmless no-ops on a clean launch.
+  final shell = env['SHELL'];
+  if (shell != null && shell.startsWith('/')) env.remove('SHELL');
+  env
+    ..remove('WSLENV')
+    ..remove('WSL_INTEROP')
+    ..remove('WSL_DISTRO_NAME');
+
+  // A POSIX PATH means we were launched from a Unix shell — rebuild a Windows
+  // PATH so wsl.exe / powershell.exe / cmd.exe resolve.
+  final path = env['Path'] ?? env['PATH'];
+  if (path != null && path.startsWith('/')) {
+    final sysRoot = env['SystemRoot'] ?? env['windir'] ?? r'C:\Windows';
+    env
+      ..remove('PATH')
+      ..['Path'] =
+          '$sysRoot\\System32;$sysRoot;'
+          '$sysRoot\\System32\\WindowsPowerShell\\v1.0;'
+          '$sysRoot\\System32\\wbem';
+  }
+  return env;
 }
 
 /// A [TerminalInstance] that failed to spawn: it renders the error in its buffer
