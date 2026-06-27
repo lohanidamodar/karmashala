@@ -73,6 +73,17 @@ class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: text.titleMedium,
+        toolbarHeight: 46,
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(30),
+          maximumSize: const Size.square(34),
+          padding: const EdgeInsets.all(6),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Radii.sm),
+          ),
+        ),
       ),
       listTileTheme: ListTileThemeData(
         selectedColor: scheme.primary,
@@ -85,6 +96,9 @@ class AppTheme {
           horizontal: Insets.md,
           vertical: 0,
         ),
+        minVerticalPadding: 2,
+        minLeadingWidth: 20,
+        horizontalTitleGap: 8,
       ),
       inputDecorationTheme: InputDecorationTheme(
         isDense: true,
@@ -93,6 +107,7 @@ class AppTheme {
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
         focusedBorder: _inputBorder(scheme.primary, width: 1.5),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
       ),
       chipTheme: ChipThemeData(
         shape: const RoundedRectangleBorder(
@@ -105,6 +120,8 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: Insets.md),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -112,6 +129,8 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          minimumSize: const Size(0, 32),
+          padding: const EdgeInsets.symmetric(horizontal: Insets.md),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -119,6 +138,8 @@ class AppTheme {
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          minimumSize: const WidgetStatePropertyAll(Size(0, 32)),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(Radii.sm),
@@ -144,6 +165,20 @@ class AppTheme {
           borderRadius: BorderRadius.circular(Radii.sm),
         ),
         textStyle: text.labelSmall?.copyWith(color: scheme.onInverseSurface),
+        waitDuration: const Duration(milliseconds: 450),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        position: PopupMenuPosition.under,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.sm),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.md),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
       ),
     );
   }

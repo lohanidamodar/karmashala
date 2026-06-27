@@ -13,9 +13,12 @@ import '../../support/fixtures.dart';
 void main() {
   group('parseClaudeMessage', () {
     test('system init becomes an agent status', () {
-      final events = parseClaudeMessage('{"type":"system","subtype":"init"}');
+      final events = parseClaudeMessage(
+        '{"type":"system","subtype":"init","session_id":"cli-1"}',
+      );
       expect(events.single.type, SessionEventTypes.agentStatus);
       expect(events.single.data['state'], 'init');
+      expect(events.single.data['sessionId'], 'cli-1');
     });
 
     test('an assistant message yields text and tool_use events in order', () {

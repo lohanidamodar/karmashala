@@ -52,6 +52,8 @@ List<AgentEvent> parseClaudeMessage(String line) {
       return [
         AgentEvent(SessionEventTypes.agentStatus, {
           'state': message['subtype'] ?? 'system',
+          if (message['session_id'] is String)
+            'sessionId': message['session_id'] as String,
         }),
       ];
     case 'assistant':

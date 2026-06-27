@@ -82,5 +82,29 @@ void main() {
       expect(found.map((t) => t.executable), contains('wt.exe'));
       expect(found.map((t) => t.executable), isNot(contains('wezterm.exe')));
     });
+
+    test(
+      'PowerShell safely quotes executable, arguments, and working dir',
+      () async {
+        final runner = FakeCommandRunner();
+        final service = SystemTerminalService(runner);
+
+        await service.launch(
+          const SystemTerminal(
+            kind: SystemTerminalKind.powerShell,
+            label: 'PowerShell',
+            executable: 'powershell.exe',
+          ),
+          command: [r'C:\Program Files\Claude\claude.exe', '--resume', 'a b'],
+          workingDirectory: r"C:\work\owner's app",
+        );
+
+        expect(
+          runner.startRequests.single.arguments.last,
+          "Set-Location -LiteralPath 'C:\\work\\owner''s app'; "
+          "& 'C:\\Program Files\\Claude\\claude.exe' '--resume' 'a b'",
+        );
+      },
+    );
   });
 }

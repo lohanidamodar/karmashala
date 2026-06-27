@@ -18,6 +18,7 @@ class Session {
     required this.status,
     required this.createdAt,
     this.worktree,
+    this.externalSessionId,
   });
 
   final String id;
@@ -35,6 +36,10 @@ class Session {
   final SessionStatus status;
   final DateTime createdAt;
 
+  /// Session/thread id assigned by the underlying CLI, when it has announced
+  /// one. External terminals must resume this id, never the app database id.
+  final String? externalSessionId;
+
   Session copyWith({
     String? id,
     String? repositoryId,
@@ -44,6 +49,7 @@ class Session {
     EnvironmentPath? worktree,
     SessionStatus? status,
     DateTime? createdAt,
+    String? externalSessionId,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -53,6 +59,7 @@ class Session {
     worktree: worktree ?? this.worktree,
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
+    externalSessionId: externalSessionId ?? this.externalSessionId,
   );
 
   @override
@@ -65,7 +72,8 @@ class Session {
       other.useWorktree == useWorktree &&
       other.worktree == worktree &&
       other.status == status &&
-      other.createdAt == createdAt;
+      other.createdAt == createdAt &&
+      other.externalSessionId == externalSessionId;
 
   @override
   int get hashCode => Object.hash(
@@ -77,6 +85,7 @@ class Session {
     worktree,
     status,
     createdAt,
+    externalSessionId,
   );
 
   @override

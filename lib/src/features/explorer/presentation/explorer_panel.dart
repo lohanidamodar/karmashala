@@ -50,6 +50,30 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     );
   }
 
+  Future<void> _syncProject(Project project) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(projectsControllerProvider.notifier)
+          .syncSessions(project.id);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result.sessions == 0
+                ? 'Sessions are up to date.'
+                : 'Added ${result.sessions} CLI session${result.sessions == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not refresh sessions: $error')),
+      );
+    }
+  }
+
   void _toggleProject(Project project) {
     setState(() {
       if (_expandedProjects.remove(project.id)) return;
@@ -136,6 +160,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               .toList();
 
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
+    final syncing = ref.watch(sessionSyncingProvider) > 0;
 
     final Widget body;
     if (projects.isEmpty) {
@@ -157,6 +182,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       icon: Icons.account_tree_outlined,
       focused: focused,
       actions: [
+        if (syncing)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
         IconButton(
           tooltip: 'Detect CLI sessions',
           icon: const Icon(Icons.travel_explore, size: 18),
@@ -229,9 +262,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               tooltip: 'Project actions',
               icon: const Icon(Icons.more_vert, size: 16),
               onSelected: (action) {
+                if (action == 'refresh') _syncProject(project);
                 if (action == 'delete') _confirmDeleteProject(project);
               },
               itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'refresh',
+                  child: Text('Refresh CLI sessions'),
+                ),
                 PopupMenuItem(value: 'delete', child: Text('Delete project')),
               ],
             ),

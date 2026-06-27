@@ -97,6 +97,7 @@ class SessionEngine {
       worktree: worktree,
       status: SessionStatus.running,
       createdAt: clock.nowUtc(),
+      externalSessionId: resumeSessionId,
     );
     sessionDao.insert(session);
     sessionRepositoryDao.link(
@@ -169,7 +170,13 @@ class SessionEngine {
     );
     runtime.agent = agent;
     runtime.subscription = agent.events.listen(
-      (event) => _emit(runtime, sessionId, event.type, event.data),
+      (event) {
+        final externalId = event.data['sessionId'];
+        if (externalId is String && externalId.isNotEmpty) {
+          sessionDao.updateExternalSessionId(sessionId, externalId);
+        }
+        _emit(runtime, sessionId, event.type, event.data);
+      },
       onError: (Object error, StackTrace _) {
         _emit(runtime, sessionId, SessionEventTypes.error, {
           'message': '$error',

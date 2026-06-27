@@ -53,6 +53,12 @@ void main() {
     expect(dao.getById('s1')!.status, SessionStatus.running);
   });
 
+  test('persists the CLI session id used for external resume', () {
+    dao.insert(session());
+    dao.updateExternalSessionId('s1', 'cli-thread-42');
+    expect(dao.getById('s1')!.externalSessionId, 'cli-thread-42');
+  });
+
   test('getByRepository filters by repository', () {
     dao.insert(session(id: 's1'));
     dao.insert(session(id: 's2', title: 'Other'));

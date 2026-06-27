@@ -161,6 +161,7 @@ class SessionActions {
         workingDirectory: session.worktree ?? repo.path,
         installation: installation,
         permissionMode: permission,
+        resumeSessionId: session.externalSessionId,
       );
       _bump();
     }
@@ -300,11 +301,32 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    await startNewInSystemTerminal(
-      repo: repo,
-      installation: installation,
-      terminal: terminal,
+    final externalId = session.externalSessionId;
+    if (externalId == null || externalId.isEmpty) {
+      throw StateError(
+        'This agent has not reported a resumable session id yet. '
+        'Send a message and wait for the session to initialize, then try again.',
+      );
+    }
+    final env = _ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(repo.path.environmentId);
+    if (env == null) {
+      throw StateError('The session\'s environment is unavailable.');
+    }
+    final command = resumeCommandLine(
+      agentExecutable: installation.executable.path,
+      cli: installation.agentKind.name,
+      externalId: externalId,
+      environment: env,
+      cwd: session.worktree ?? repo.path,
     );
+    final cwd = env.wslDistribution == null
+        ? (session.worktree ?? repo.path).path
+        : null;
+    await _ref
+        .read(systemTerminalServiceProvider)
+        .launch(terminal, command: command, workingDirectory: cwd);
   }
 
   DetectedSession _toDetected(ImportedSession session) => DetectedSession(

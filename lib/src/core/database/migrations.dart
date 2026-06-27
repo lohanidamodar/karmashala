@@ -20,6 +20,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   2: _migrateToV2,
   3: _migrateToV3,
   4: _migrateToV4,
+  5: _migrateToV5,
 };
 
 void _migrateToV1(Database db) {
@@ -30,6 +31,13 @@ void _migrateToV1(Database db) {
       updated_at TEXT NOT NULL
     );
   ''');
+}
+
+void _migrateToV5(Database db) {
+  // The CLI's own identity for a native session. This is deliberately distinct
+  // from the app's row id and is required to resume the same conversation in an
+  // external terminal.
+  db.execute('ALTER TABLE sessions ADD COLUMN external_session_id TEXT;');
 }
 
 void _migrateToV2(Database db) {

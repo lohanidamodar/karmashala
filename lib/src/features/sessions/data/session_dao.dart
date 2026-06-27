@@ -14,8 +14,8 @@ class SessionDao {
     _db.execute(
       'INSERT INTO sessions '
       '(id, repository_id, agent_installation_id, title, use_worktree, '
-      'worktree_environment_id, worktree_path, status, created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'worktree_environment_id, worktree_path, status, created_at, '
+      'external_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -26,6 +26,7 @@ class SessionDao {
         session.worktree?.path,
         session.status.name,
         isoFromDate(session.createdAt),
+        session.externalSessionId,
       ],
     );
   }
@@ -60,8 +61,23 @@ class SessionDao {
     ]);
   }
 
+  void updateExternalSessionId(String id, String externalSessionId) {
+    _db.execute('UPDATE sessions SET external_session_id = ? WHERE id = ?;', [
+      externalSessionId,
+      id,
+    ]);
+  }
+
   Session? getById(String id) {
     final rows = _db.query('SELECT * FROM sessions WHERE id = ?;', [id]);
+    return rows.isEmpty ? null : _fromRow(rows.first);
+  }
+
+  Session? getByExternalSessionId(String externalSessionId) {
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE external_session_id = ? LIMIT 1;',
+      [externalSessionId],
+    );
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
@@ -97,6 +113,7 @@ class SessionDao {
           : null,
       status: SessionStatus.values.byName(row['status']! as String),
       createdAt: dateFromIso(row['created_at']),
+      externalSessionId: row['external_session_id'] as String?,
     );
   }
 }

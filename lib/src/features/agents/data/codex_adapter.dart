@@ -46,6 +46,13 @@ AgentEvent? parseCodexMessage(String line) {
   }
 
   switch (message['type']) {
+    case 'thread.started':
+      final thread = message['thread'];
+      final id = thread is Map ? thread['id'] : message['thread_id'];
+      return AgentEvent(SessionEventTypes.agentStatus, {
+        'state': 'started',
+        if (id is String) 'sessionId': id,
+      });
     case 'agent_message':
       return AgentEvent(SessionEventTypes.agentMessage, {
         'role': 'assistant',

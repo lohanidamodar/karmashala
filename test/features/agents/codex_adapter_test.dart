@@ -38,6 +38,13 @@ void main() {
       );
     });
 
+    test('captures the resumable id when a thread starts', () {
+      final event = parseCodexMessage(
+        '{"type":"thread.started","thread":{"id":"thread-1"}}',
+      )!;
+      expect(event.data['sessionId'], 'thread-1');
+    });
+
     test('ignores blank, malformed, and unknown lines', () {
       expect(parseCodexMessage(''), isNull);
       expect(parseCodexMessage('not json'), isNull);

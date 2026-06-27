@@ -9,6 +9,7 @@ import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../../sessions/application/session_providers.dart';
 import '../data/cli_session_mutator.dart';
 import '../data/imported_session_dao.dart';
 import '../domain/detected_project.dart';
@@ -41,6 +42,7 @@ final sessionAutoImportServiceProvider = Provider<SessionAutoImportService>(
     detectionService: ref.watch(cliDetectionServiceProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
     importedSessionDao: ref.watch(importedSessionDaoProvider),
+    sessionDao: ref.watch(sessionDaoProvider),
     ids: ref.watch(idGeneratorProvider),
     clock: ref.watch(clockProvider),
   ),

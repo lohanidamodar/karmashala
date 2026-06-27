@@ -32,7 +32,7 @@ class AppShell extends ConsumerWidget {
             children: [
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(4),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       if (constraints.maxWidth >= _mediumBreakpoint) {
@@ -57,7 +57,7 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const _ShellAppBar();
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(46);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -123,8 +123,8 @@ class _SplitLayout extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (shell.explorerPaneVisible) ...[
-          const SizedBox(width: 320, child: ExplorerPanel()),
-          const SizedBox(width: 8),
+          const SizedBox(width: 304, child: ExplorerPanel()),
+          const SizedBox(width: 4),
         ],
         const Expanded(child: DetailPanel()),
       ],

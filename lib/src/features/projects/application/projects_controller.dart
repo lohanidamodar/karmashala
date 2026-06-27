@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/application/project_import_service.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../environments/domain/environment_path.dart';
@@ -18,6 +21,8 @@ import 'project_service_provider.dart';
 /// Reads are synchronous (SQLite), so the state is the plain project list; it is
 /// refreshed explicitly after mutations.
 class ProjectsController extends Notifier<List<Project>> {
+  final Map<String, Future<ImportSummary>> _syncs = {};
+
   @override
   List<Project> build() => ref.watch(projectDaoProvider).getAll();
 
@@ -51,6 +56,25 @@ class ProjectsController extends Notifier<List<Project>> {
     } catch (_) {
       // CLI stores unavailable — project creation still succeeds.
     }
+  }
+
+  /// Discovers CLI sessions created outside the app for an existing project.
+  /// Concurrent requests for the same project share one filesystem scan.
+  Future<ImportSummary> syncSessions(String projectId) {
+    return _syncs.putIfAbsent(projectId, () async {
+      ref.read(sessionSyncingProvider.notifier).start();
+      try {
+        final repos = ref.read(repositoryDaoProvider).getByProject(projectId);
+        final summary = await ref.read(autoImportRunnerProvider)(repos);
+        if (summary.sessions > 0) {
+          ref.read(sessionsRevisionProvider.notifier).bump();
+        }
+        return summary;
+      } finally {
+        _syncs.remove(projectId);
+        ref.read(sessionSyncingProvider.notifier).finish();
+      }
+    });
   }
 
   /// Creates a project for [targetEnvironmentId] from a Windows-host folder
@@ -112,8 +136,33 @@ class SelectedProjectController extends Notifier<String?> {
   @override
   String? build() => null;
 
-  void select(String? id) => state = id;
+  void select(String? id) {
+    state = id;
+    if (id != null) {
+      // Selection should remain immediate; discovery completes in the
+      // background and bumps the session list when new CLI sessions are found.
+      unawaited(
+        ref
+            .read(projectsControllerProvider.notifier)
+            .syncSessions(id)
+            .catchError((_) => const ImportSummary()),
+      );
+    }
+  }
 }
+
+class SessionSyncingController extends Notifier<int> {
+  @override
+  int build() => 0;
+  void start() => state++;
+  void finish() => state = state > 0 ? state - 1 : 0;
+}
+
+/// Number of active CLI-store scans. Exposed so the Explorer can make
+/// background synchronization visible without blocking project navigation.
+final sessionSyncingProvider = NotifierProvider<SessionSyncingController, int>(
+  SessionSyncingController.new,
+);
 
 /// The currently selected project id, or `null` when none is selected.
 final selectedProjectIdProvider =

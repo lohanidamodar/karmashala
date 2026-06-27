@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 4);
+    expect(db.schemaVersion, 5);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 4);
+    expect(version, 5);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -45,7 +45,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 4);
+    expect(db.schemaVersion, 5);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });

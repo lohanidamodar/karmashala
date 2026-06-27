@@ -3,6 +3,7 @@ import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../repositories/domain/repository.dart';
+import '../../sessions/data/session_dao.dart';
 import '../data/imported_session_dao.dart';
 import '../domain/imported_session.dart';
 import 'cli_detection_service.dart';
@@ -18,6 +19,7 @@ class SessionAutoImportService {
     required this.detectionService,
     required this.environmentDao,
     required this.importedSessionDao,
+    required this.sessionDao,
     required this.ids,
     required this.clock,
     this.translator = const PathTranslator(),
@@ -27,6 +29,7 @@ class SessionAutoImportService {
   final CliDetectionService detectionService;
   final ExecutionEnvironmentDao environmentDao;
   final ImportedSessionDao importedSessionDao;
+  final SessionDao sessionDao;
   final IdGenerator ids;
   final Clock clock;
   final PathTranslator translator;
@@ -49,6 +52,12 @@ class SessionAutoImportService {
       if (match == null) continue;
       final now = clock.nowUtc();
       for (final session in [...match.sessions, ...match.subagentSessions]) {
+        // A session started in Chitragupta also appears in the CLI store. Keep
+        // the native row as the single representation instead of importing a
+        // duplicate history row beside it.
+        if (sessionDao.getByExternalSessionId(session.sessionId) != null) {
+          continue;
+        }
         final added = importedSessionDao.insertIfAbsent(
           ImportedSession(
             id: ids.newId(),

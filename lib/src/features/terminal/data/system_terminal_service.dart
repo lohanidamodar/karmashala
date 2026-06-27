@@ -130,17 +130,24 @@ class SystemTerminalService {
           ...command,
         ];
       case SystemTerminalKind.powerShell:
+        final invocation = '& ${command.map(_quotePowerShell).join(' ')}';
         final inner = cwd == null
-            ? command.join(' ')
-            : "Set-Location -LiteralPath '$cwd'; ${command.join(' ')}";
+            ? invocation
+            : 'Set-Location -LiteralPath ${_quotePowerShell(cwd)}; '
+                  '$invocation';
         return ['-NoExit', '-Command', inner];
       case SystemTerminalKind.cmd:
+        final invocation = command.map(_quoteCmd).join(' ');
         final inner = cwd == null
-            ? command.join(' ')
-            : 'cd /d "$cwd" && ${command.join(' ')}';
+            ? invocation
+            : 'cd /d ${_quoteCmd(cwd)} && $invocation';
         return ['/K', inner];
     }
   }
+
+  String _quotePowerShell(String value) => "'${value.replaceAll("'", "''")}'";
+
+  String _quoteCmd(String value) => '"${value.replaceAll('"', '""')}"';
 }
 
 /// Builds the host command line that resumes [cli]'s session [externalId] using

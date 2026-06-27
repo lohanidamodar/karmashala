@@ -34,7 +34,7 @@ class PaneScaffold extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(Radii.md),
+        borderRadius: BorderRadius.circular(Radii.sm),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42,12 +42,7 @@ class PaneScaffold extends StatelessWidget {
           // "Ledger tab" header: a tracked label over a brass accent rule.
           Container(
             color: scheme.surfaceContainerLow,
-            padding: const EdgeInsets.fromLTRB(
-              Insets.md,
-              Insets.sm,
-              Insets.sm,
-              0,
-            ),
+            padding: const EdgeInsets.fromLTRB(Insets.sm, 3, Insets.xs, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -63,7 +58,7 @@ class PaneScaffold extends StatelessWidget {
                     ...actions,
                   ],
                 ),
-                const SizedBox(height: Insets.sm),
+                const SizedBox(height: 3),
                 // The accent rule: brass when focused, hairline otherwise.
                 AnimatedContainer(
                   duration: Motion.fast,
