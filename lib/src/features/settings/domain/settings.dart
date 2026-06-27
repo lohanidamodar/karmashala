@@ -63,6 +63,8 @@ class Settings {
     this.compactDensity = true,
     this.windowWidth,
     this.windowHeight,
+    this.defaultSystemTerminalId,
+    this.customTerminalPath,
   });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
@@ -98,6 +100,15 @@ class Settings {
   final double? windowWidth;
   final double? windowHeight;
 
+  /// The external terminal app used to resume sessions (mini mode / "open in
+  /// terminal"): a detected terminal id (`windowsTerminal`, …), the sentinel
+  /// `custom`, or `null` to use the first detected one.
+  final String? defaultSystemTerminalId;
+
+  /// Path to a custom terminal executable, used when
+  /// [defaultSystemTerminalId] is `custom`.
+  final String? customTerminalPath;
+
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
 
@@ -115,6 +126,8 @@ class Settings {
     bool? compactDensity,
     double? windowWidth,
     double? windowHeight,
+    String? defaultSystemTerminalId,
+    String? customTerminalPath,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -131,6 +144,9 @@ class Settings {
     compactDensity: compactDensity ?? this.compactDensity,
     windowWidth: windowWidth ?? this.windowWidth,
     windowHeight: windowHeight ?? this.windowHeight,
+    defaultSystemTerminalId:
+        defaultSystemTerminalId ?? this.defaultSystemTerminalId,
+    customTerminalPath: customTerminalPath ?? this.customTerminalPath,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -149,6 +165,9 @@ class Settings {
     'compactDensity': compactDensity,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
+    if (defaultSystemTerminalId != null)
+      'defaultSystemTerminalId': defaultSystemTerminalId,
+    if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -192,6 +211,12 @@ class Settings {
           : true,
       windowWidth: toDouble(json['windowWidth']),
       windowHeight: toDouble(json['windowHeight']),
+      defaultSystemTerminalId: json['defaultSystemTerminalId'] is String
+          ? json['defaultSystemTerminalId'] as String
+          : null,
+      customTerminalPath: json['customTerminalPath'] is String
+          ? json['customTerminalPath'] as String
+          : null,
     );
   }
 
@@ -209,6 +234,8 @@ class Settings {
       other.compactDensity == compactDensity &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
+      other.defaultSystemTerminalId == defaultSystemTerminalId &&
+      other.customTerminalPath == customTerminalPath &&
       _mapEquals(other.permissions, permissions);
 
   @override
@@ -224,6 +251,8 @@ class Settings {
     compactDensity,
     windowWidth,
     windowHeight,
+    defaultSystemTerminalId,
+    customTerminalPath,
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),

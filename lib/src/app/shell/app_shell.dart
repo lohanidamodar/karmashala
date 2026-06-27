@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/desktop_dialog.dart';
+import 'app_mode.dart';
 import 'resize_handle.dart';
 
 import '../../features/detail/presentation/detail_panel.dart';
@@ -110,6 +111,11 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
+        IconButton(
+          tooltip: 'Mini launcher',
+          icon: const Icon(Icons.picture_in_picture_alt_outlined),
+          onPressed: () => ref.read(appModeProvider.notifier).enterMini(),
+        ),
         IconButton(
           tooltip: 'Settings',
           icon: const Icon(Icons.settings_outlined),

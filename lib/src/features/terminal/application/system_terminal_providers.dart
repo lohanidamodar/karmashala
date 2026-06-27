@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../data/system_terminal_service.dart';
 
 /// The host-backed [SystemTerminalService] (detect + launch external terminals).
@@ -13,4 +14,26 @@ final availableSystemTerminalsProvider = FutureProvider<List<SystemTerminal>>((
   ref,
 ) async {
   return ref.watch(systemTerminalServiceProvider).available();
+});
+
+/// The terminal app used to resume sessions: the configured custom exe, the
+/// chosen detected terminal, or the first detected one. `null` if none.
+final defaultSystemTerminalProvider = FutureProvider<SystemTerminal?>((
+  ref,
+) async {
+  final settings = ref.watch(settingsControllerProvider);
+  final id = settings.defaultSystemTerminalId;
+  if (id == 'custom') {
+    final path = settings.customTerminalPath;
+    if (path != null && path.trim().isNotEmpty) {
+      return customSystemTerminal(path.trim());
+    }
+  }
+  final available = await ref.watch(availableSystemTerminalsProvider.future);
+  if (id != null) {
+    for (final terminal in available) {
+      if (terminal.id == id) return terminal;
+    }
+  }
+  return available.isEmpty ? null : available.first;
 });

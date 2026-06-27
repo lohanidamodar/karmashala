@@ -7,10 +7,13 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../app/shell/app_mode.dart';
 import '../settings/application/settings_controller.dart';
 import '../settings/domain/settings.dart';
 
 const _kMenuShow = 'show';
+const _kMenuMini = 'mini';
+const _kMenuHide = 'hide';
 const _kMenuKeepAwake = 'keep_awake';
 const _kMenuQuit = 'quit';
 
@@ -106,6 +109,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
         Menu(
           items: [
             MenuItem(key: _kMenuShow, label: 'Open Chitragupta'),
+            MenuItem(key: _kMenuMini, label: 'Mini launcher'),
+            MenuItem(key: _kMenuHide, label: 'Hide window'),
             MenuItem.separator(),
             MenuItem.checkbox(
               key: _kMenuKeepAwake,
@@ -148,7 +153,12 @@ class SystemIntegrationService with TrayListener, WindowListener {
   void onTrayMenuItemClick(MenuItem menuItem) {
     switch (menuItem.key) {
       case _kMenuShow:
+        _container.read(appModeProvider.notifier).enterFull();
         _showWindow();
+      case _kMenuMini:
+        _container.read(appModeProvider.notifier).enterMini();
+      case _kMenuHide:
+        windowManager.hide();
       case _kMenuKeepAwake:
         _controller.setKeepAwake(!_settings.keepAwake);
       case _kMenuQuit:

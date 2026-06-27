@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/settings/application/settings_controller.dart';
 import '../features/settings/domain/app_theme_mode.dart';
+import 'shell/app_mode.dart';
 import 'shell/app_shell.dart';
+import 'shell/mini_launcher.dart';
 import 'theme/app_theme.dart';
 
 /// Root application widget.
@@ -23,6 +25,7 @@ class ChitraguptaApp extends ConsumerWidget {
       settingsControllerProvider.select((s) => s.compactDensity),
     );
     final density = compact ? VisualDensity.compact : VisualDensity.standard;
+    final mode = ref.watch(appModeProvider);
     return MaterialApp(
       title: 'Chitragupta',
       debugShowCheckedModeBanner: false,
@@ -33,7 +36,7 @@ class ChitraguptaApp extends ConsumerWidget {
         AppThemeMode.light => ThemeMode.light,
         AppThemeMode.dark => ThemeMode.dark,
       },
-      home: const AppShell(),
+      home: mode == AppMode.mini ? const MiniLauncher() : const AppShell(),
     );
   }
 }

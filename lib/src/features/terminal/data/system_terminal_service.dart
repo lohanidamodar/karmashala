@@ -1,10 +1,25 @@
 import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
+import '../../environments/domain/local_environment.dart';
 
 /// A standalone terminal emulator installed on the host that we can launch
 /// externally (as opposed to the in-app PTY tabs).
-enum SystemTerminalKind { windowsTerminal, wezterm, alacritty, powerShell, cmd }
+enum SystemTerminalKind {
+  windowsTerminal,
+  wezterm,
+  alacritty,
+  powerShell,
+  cmd,
+  custom,
+}
+
+/// Wraps a user-chosen terminal executable as a [SystemTerminal].
+SystemTerminal customSystemTerminal(String executablePath) => SystemTerminal(
+  kind: SystemTerminalKind.custom,
+  label: 'Custom',
+  executable: executablePath,
+);
 
 class SystemTerminal {
   const SystemTerminal({
@@ -94,10 +109,20 @@ class SystemTerminalService {
     String? workingDirectory,
   }) async {
     final args = _argsFor(terminal.kind, command, workingDirectory);
+    // A custom terminal's CLI flags are unknown, so we can't embed the cwd in
+    // args — set it as the process working directory instead (best-effort).
+    final processCwd =
+        terminal.kind == SystemTerminalKind.custom && workingDirectory != null
+        ? EnvironmentPath(
+            environmentId: localWindowsEnvironmentId,
+            path: workingDirectory,
+          )
+        : null;
     await _runner.start(
       CommandRequest(
         executable: terminal.executable,
         arguments: args,
+        workingDirectory: processCwd,
         // Windows Terminal (wt.exe) and friends are app-execution aliases that
         // only launch through the shell.
         runInShell: true,
@@ -142,6 +167,9 @@ class SystemTerminalService {
             ? invocation
             : 'cd /d ${_quoteCmd(cwd)} && $invocation';
         return ['/K', inner];
+      case SystemTerminalKind.custom:
+        // Pass the command through; cwd is set as the process working dir.
+        return command;
     }
   }
 

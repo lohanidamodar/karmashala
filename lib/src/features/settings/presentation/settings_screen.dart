@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:file_selector/file_selector.dart';
+
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
 import '../domain/app_theme_mode.dart';
@@ -147,6 +150,7 @@ class SettingsScreen extends ConsumerWidget {
                   );
                 },
               ),
+              const _TerminalAppSection(),
               _Section(
                 title: 'DEFAULT AGENT',
                 child: DropdownButtonFormField<AgentKind?>(
@@ -358,6 +362,117 @@ class _PermissionCard extends StatelessWidget {
       onChanged: (m) {
         if (m != null) onChanged(m);
       },
+    );
+  }
+}
+
+/// The external terminal app used to resume sessions (mini mode / open-in-
+/// terminal): a detected terminal or a custom executable (browse or paste path).
+class _TerminalAppSection extends ConsumerStatefulWidget {
+  const _TerminalAppSection();
+
+  @override
+  ConsumerState<_TerminalAppSection> createState() =>
+      _TerminalAppSectionState();
+}
+
+class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
+  late final TextEditingController _path = TextEditingController(
+    text: ref.read(settingsControllerProvider).customTerminalPath ?? '',
+  );
+
+  @override
+  void dispose() {
+    _path.dispose();
+    super.dispose();
+  }
+
+  Future<void> _browse() async {
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Executables', extensions: ['exe']),
+      ],
+    );
+    if (file == null) return;
+    _path.text = file.path;
+    ref
+        .read(settingsControllerProvider.notifier)
+        .setCustomTerminalPath(file.path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsControllerProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final detected =
+        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
+    final isCustom = settings.defaultSystemTerminalId == 'custom';
+    final current = settings.defaultSystemTerminalId == null && detected.isEmpty
+        ? 'custom'
+        : (settings.defaultSystemTerminalId ??
+              (detected.isNotEmpty ? detected.first.id : 'custom'));
+
+    return _Section(
+      title: 'TERMINAL APP (resumes sessions)',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: current,
+            decoration: const InputDecoration(labelText: 'Open sessions in'),
+            items: [
+              for (final t in detected)
+                DropdownMenuItem(value: t.id, child: Text(t.label)),
+              const DropdownMenuItem(
+                value: 'custom',
+                child: Text('Custom executable…'),
+              ),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              if (v == 'custom') {
+                controller.setCustomTerminalPath(_path.text.trim());
+              } else {
+                controller.setDefaultSystemTerminal(v);
+              }
+            },
+          ),
+          if (isCustom) ...[
+            const SizedBox(height: Insets.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _path,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Terminal executable path',
+                      hintText: r'C:\path\to\terminal.exe',
+                    ),
+                    onChanged: (v) =>
+                        controller.setCustomTerminalPath(v.trim()),
+                  ),
+                ),
+                const SizedBox(width: Insets.sm),
+                OutlinedButton.icon(
+                  onPressed: _browse,
+                  icon: const Icon(Icons.folder_open, size: 16),
+                  label: const Text('Browse'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'The session\'s agent runs in this app (cwd set to the repo); flags '
+              'vary by terminal, so it is best-effort.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

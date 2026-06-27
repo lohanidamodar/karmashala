@@ -61,6 +61,19 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setDefaultSystemTerminal(String id) {
+    state = state.copyWith(defaultSystemTerminalId: id);
+    _save();
+  }
+
+  void setCustomTerminalPath(String path) {
+    state = state.copyWith(
+      defaultSystemTerminalId: 'custom',
+      customTerminalPath: path,
+    );
+    _save();
+  }
+
   void setDefaultAgent(AgentKind? kind) {
     state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);
     _save();
