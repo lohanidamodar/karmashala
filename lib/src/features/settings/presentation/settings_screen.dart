@@ -102,6 +102,16 @@ class SettingsScreen extends ConsumerWidget {
                         'Launch Chitragupta automatically when you sign in.',
                       ),
                     ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settings.compactDensity,
+                      onChanged: controller.setCompactDensity,
+                      title: const Text('Compact density'),
+                      subtitle: const Text(
+                        'Denser lists and controls. Turn off for a roomier '
+                        'layout.',
+                      ),
+                    ),
                   ],
                 ),
               ),

@@ -19,11 +19,15 @@ class ChitraguptaApp extends ConsumerWidget {
     final themeMode = ref.watch(
       settingsControllerProvider.select((s) => s.themeMode),
     );
+    final compact = ref.watch(
+      settingsControllerProvider.select((s) => s.compactDensity),
+    );
+    final density = compact ? VisualDensity.compact : VisualDensity.standard;
     return MaterialApp(
       title: 'Chitragupta',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.light().copyWith(visualDensity: density),
+      darkTheme: AppTheme.dark().copyWith(visualDensity: density),
       themeMode: switch (themeMode) {
         AppThemeMode.system => ThemeMode.system,
         AppThemeMode.light => ThemeMode.light,

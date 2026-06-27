@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../widgets/desktop_dialog.dart';
+import 'resize_handle.dart';
 
 import '../../features/detail/presentation/detail_panel.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
@@ -11,6 +12,7 @@ import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
+import '../../features/settings/application/settings_controller.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
@@ -277,18 +279,40 @@ class _DesktopMenuBar extends ConsumerWidget {
 }
 
 /// Split: the Explorer tree beside the Detail view, Explorer collapsible.
-class _SplitLayout extends StatelessWidget {
+class _SplitLayout extends ConsumerStatefulWidget {
   const _SplitLayout({required this.shell});
   final ShellState shell;
 
   @override
+  ConsumerState<_SplitLayout> createState() => _SplitLayoutState();
+}
+
+class _SplitLayoutState extends ConsumerState<_SplitLayout> {
+  static const _min = 220.0;
+  static const _max = 620.0;
+  double? _width;
+
+  @override
   Widget build(BuildContext context) {
+    _width ??= ref.read(
+      settingsControllerProvider.select((s) => s.explorerPaneWidth),
+    );
+    final width = _width!;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (shell.explorerPaneVisible) ...[
-          const SizedBox(width: 304, child: ExplorerPanel()),
-          const SizedBox(width: 4),
+        if (widget.shell.explorerPaneVisible) ...[
+          SizedBox(
+            width: width.clamp(_min, _max),
+            child: const ExplorerPanel(),
+          ),
+          ResizeHandle(
+            onDelta: (dx) =>
+                setState(() => _width = (width + dx).clamp(_min, _max)),
+            onEnd: () => ref
+                .read(settingsControllerProvider.notifier)
+                .setExplorerPaneWidth(_width!.clamp(_min, _max)),
+          ),
         ],
         const Expanded(child: DetailPanel()),
       ],

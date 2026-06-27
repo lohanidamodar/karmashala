@@ -41,6 +41,26 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setExplorerPaneWidth(double value) {
+    state = state.copyWith(explorerPaneWidth: value);
+    _save();
+  }
+
+  void setDetailSidebarWidth(double value) {
+    state = state.copyWith(detailSidebarWidth: value);
+    _save();
+  }
+
+  void setCompactDensity(bool value) {
+    state = state.copyWith(compactDensity: value);
+    _save();
+  }
+
+  void setWindowSize(double width, double height) {
+    state = state.copyWith(windowWidth: width, windowHeight: height);
+    _save();
+  }
+
   void setDefaultAgent(AgentKind? kind) {
     state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);
     _save();

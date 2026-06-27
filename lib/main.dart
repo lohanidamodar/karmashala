@@ -11,6 +11,7 @@ import 'src/core/util/clock.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
 
 /// Application entry point.
@@ -51,9 +52,14 @@ Future<void> main() async {
   if (SystemIntegrationService.isSupported) {
     try {
       await windowManager.ensureInitialized();
-      const windowOptions = WindowOptions(
-        size: Size(1200, 800),
-        minimumSize: Size(720, 560),
+      final settings = container.read(settingsControllerProvider);
+      final restoredSize =
+          (settings.windowWidth != null && settings.windowHeight != null)
+          ? Size(settings.windowWidth!, settings.windowHeight!)
+          : const Size(1200, 800);
+      final windowOptions = WindowOptions(
+        size: restoredSize,
+        minimumSize: const Size(720, 560),
         center: true,
         title: 'Chitragupta',
       );

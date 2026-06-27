@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
+import '../../../app/shell/resize_handle.dart';
 import '../../../app/shell/shell_state.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../cli_detection/presentation/imported_session_view.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/presentation/changes_view.dart';
@@ -58,12 +60,45 @@ class DetailPanel extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Expanded(child: _MainArea()),
-          if (showSidebar) ...[
-            const VerticalDivider(width: 1),
-            const SizedBox(width: 320, child: _Sidebar()),
-          ],
+          if (showSidebar) const _ResizableSidebar(),
         ],
       ),
+    );
+  }
+}
+
+/// The detail right sidebar with a draggable left edge; its width is persisted.
+class _ResizableSidebar extends ConsumerStatefulWidget {
+  const _ResizableSidebar();
+
+  @override
+  ConsumerState<_ResizableSidebar> createState() => _ResizableSidebarState();
+}
+
+class _ResizableSidebarState extends ConsumerState<_ResizableSidebar> {
+  static const _min = 240.0;
+  static const _max = 600.0;
+  double? _width;
+
+  @override
+  Widget build(BuildContext context) {
+    _width ??= ref.read(
+      settingsControllerProvider.select((s) => s.detailSidebarWidth),
+    );
+    final width = _width!;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ResizeHandle(
+          // Dragging the left edge leftwards widens the sidebar.
+          onDelta: (dx) =>
+              setState(() => _width = (width - dx).clamp(_min, _max)),
+          onEnd: () => ref
+              .read(settingsControllerProvider.notifier)
+              .setDetailSidebarWidth(_width!.clamp(_min, _max)),
+        ),
+        SizedBox(width: width.clamp(_min, _max), child: const _Sidebar()),
+      ],
     );
   }
 }

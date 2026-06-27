@@ -58,6 +58,11 @@ class Settings {
     this.keepAwake = false,
     this.closeToTray = false,
     this.autoStart = false,
+    this.explorerPaneWidth = 304,
+    this.detailSidebarWidth = 320,
+    this.compactDensity = true,
+    this.windowWidth,
+    this.windowHeight,
   });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
@@ -82,6 +87,17 @@ class Settings {
   /// Launch the app automatically when the user logs in.
   final bool autoStart;
 
+  /// Persisted width of the Explorer pane and the detail sidebar.
+  final double explorerPaneWidth;
+  final double detailSidebarWidth;
+
+  /// Compact UI density (denser lists/controls) when true.
+  final bool compactDensity;
+
+  /// Last window size, restored on launch (null until first saved).
+  final double? windowWidth;
+  final double? windowHeight;
+
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
 
@@ -94,6 +110,11 @@ class Settings {
     bool? keepAwake,
     bool? closeToTray,
     bool? autoStart,
+    double? explorerPaneWidth,
+    double? detailSidebarWidth,
+    bool? compactDensity,
+    double? windowWidth,
+    double? windowHeight,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -105,6 +126,11 @@ class Settings {
     keepAwake: keepAwake ?? this.keepAwake,
     closeToTray: closeToTray ?? this.closeToTray,
     autoStart: autoStart ?? this.autoStart,
+    explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
+    detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
+    compactDensity: compactDensity ?? this.compactDensity,
+    windowWidth: windowWidth ?? this.windowWidth,
+    windowHeight: windowHeight ?? this.windowHeight,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -118,6 +144,11 @@ class Settings {
     'keepAwake': keepAwake,
     'closeToTray': closeToTray,
     'autoStart': autoStart,
+    'explorerPaneWidth': explorerPaneWidth,
+    'detailSidebarWidth': detailSidebarWidth,
+    'compactDensity': compactDensity,
+    if (windowWidth != null) 'windowWidth': windowWidth,
+    if (windowHeight != null) 'windowHeight': windowHeight,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -145,6 +176,7 @@ class Settings {
       }
     }
     final terminalId = json['defaultTerminalProfileId'];
+    double? toDouble(Object? v) => v is num ? v.toDouble() : null;
     return Settings(
       defaultAgent: defaultAgent,
       permissions: permissions,
@@ -153,6 +185,13 @@ class Settings {
       keepAwake: json['keepAwake'] == true,
       closeToTray: json['closeToTray'] == true,
       autoStart: json['autoStart'] == true,
+      explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
+      detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
+      compactDensity: json['compactDensity'] is bool
+          ? json['compactDensity'] as bool
+          : true,
+      windowWidth: toDouble(json['windowWidth']),
+      windowHeight: toDouble(json['windowHeight']),
     );
   }
 
@@ -165,6 +204,11 @@ class Settings {
       other.keepAwake == keepAwake &&
       other.closeToTray == closeToTray &&
       other.autoStart == autoStart &&
+      other.explorerPaneWidth == explorerPaneWidth &&
+      other.detailSidebarWidth == detailSidebarWidth &&
+      other.compactDensity == compactDensity &&
+      other.windowWidth == windowWidth &&
+      other.windowHeight == windowHeight &&
       _mapEquals(other.permissions, permissions);
 
   @override
@@ -175,6 +219,11 @@ class Settings {
     keepAwake,
     closeToTray,
     autoStart,
+    explorerPaneWidth,
+    detailSidebarWidth,
+    compactDensity,
+    windowWidth,
+    windowHeight,
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),

@@ -166,4 +166,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
       _quit();
     }
   }
+
+  @override
+  void onWindowResized() => _saveWindowSize();
+
+  Future<void> _saveWindowSize() async {
+    try {
+      final size = await windowManager.getSize();
+      if (size.width >= 200 && size.height >= 200) {
+        _controller.setWindowSize(size.width, size.height);
+      }
+    } catch (_) {}
+  }
 }
