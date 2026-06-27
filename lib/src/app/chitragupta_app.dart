@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/settings/application/settings_controller.dart';
+import '../features/settings/domain/app_theme_mode.dart';
 import 'shell/app_shell.dart';
 import 'theme/app_theme.dart';
 
@@ -14,12 +16,19 @@ class ChitraguptaApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(
+      settingsControllerProvider.select((s) => s.themeMode),
+    );
     return MaterialApp(
       title: 'Chitragupta',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: switch (themeMode) {
+        AppThemeMode.system => ThemeMode.system,
+        AppThemeMode.light => ThemeMode.light,
+        AppThemeMode.dark => ThemeMode.dark,
+      },
       home: const AppShell(),
     );
   }

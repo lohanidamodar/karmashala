@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_providers.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../data/settings_repository.dart';
+import '../domain/app_theme_mode.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 
@@ -14,6 +15,11 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
 class SettingsController extends Notifier<Settings> {
   @override
   Settings build() => ref.watch(settingsRepositoryProvider).load();
+
+  void setThemeMode(AppThemeMode mode) {
+    state = state.copyWith(themeMode: mode);
+    _save();
+  }
 
   void setDefaultAgent(AgentKind? kind) {
     state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);

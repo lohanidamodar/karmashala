@@ -36,15 +36,19 @@ class AppTheme {
           )
         : base.copyWith(
             primary: AppColors.inkBright,
+            onPrimary: Colors.white,
             tertiary: AppColors.brassBright,
             onTertiary: Colors.black,
             surface: AppColors.slate,
+            onSurface: const Color(0xFFEDEAF6),
+            onSurfaceVariant: const Color(0xFFBFB8D2),
             surfaceContainerLowest: const Color(0xFF100E18),
             surfaceContainerLow: const Color(0xFF1A1726),
             surfaceContainer: AppColors.slateRaised,
             surfaceContainerHigh: const Color(0xFF262238),
             surfaceContainerHighest: const Color(0xFF2E2942),
-            outlineVariant: const Color(0xFF332E45),
+            outline: const Color(0xFF6F6889),
+            outlineVariant: const Color(0xFF3C3654),
           );
 
     final text = _textTheme(scheme);
@@ -153,7 +157,12 @@ class AppTheme {
   /// Intentional type scale: tighter, confident titles; calm body; a spaced,
   /// small label used as the "ledger" eyebrow.
   static TextTheme _textTheme(ColorScheme scheme) {
-    final base = Typography.material2021(colorScheme: scheme).black;
+    final typography = Typography.material2021(colorScheme: scheme);
+    // Use light-on-dark glyph colours in dark mode (the bug that made dark text
+    // unreadable was always using the `.black` set).
+    final base = scheme.brightness == Brightness.dark
+        ? typography.white
+        : typography.black;
     final onSurface = scheme.onSurface;
     return base.copyWith(
       titleLarge: base.titleLarge?.copyWith(

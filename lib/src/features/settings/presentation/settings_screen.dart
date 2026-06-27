@@ -5,23 +5,20 @@ import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../application/settings_controller.dart';
+import '../domain/app_theme_mode.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 
-/// Settings: the default agent, the agent installations identified on this
-/// machine, and per-agent permission preferences for new vs. existing sessions.
+/// Settings (a full page): appearance, the default agent, identified agent
+/// installations, and per-agent permission preferences for new vs. existing
+/// sessions.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  static Future<void> show(BuildContext context) => showDialog<void>(
-    context: context,
-    builder: (_) => Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 640),
-        child: const SettingsScreen(),
-      ),
-    ),
-  );
+  static Future<void> show(BuildContext context) =>
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,36 +27,48 @@ class SettingsScreen extends ConsumerWidget {
     final controller = ref.read(settingsControllerProvider.notifier);
     final installations = ref.watch(agentInstallationsControllerProvider);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.lg,
-            Insets.md,
-            Insets.sm,
-            Insets.md,
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.settings_outlined, color: theme.colorScheme.tertiary),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Text('Settings', style: theme.textTheme.titleMedium),
-              ),
-              IconButton(
-                tooltip: 'Close',
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        leading: const BackButton(),
+        title: Row(
+          children: [
+            Icon(Icons.settings_outlined, color: theme.colorScheme.tertiary),
+            const SizedBox(width: Insets.sm),
+            const Text('Settings'),
+          ],
         ),
-        const Divider(height: 1),
-        Expanded(
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
           child: ListView(
-            padding: const EdgeInsets.all(Insets.lg),
+            padding: const EdgeInsets.all(Insets.xl),
             children: [
+              _Section(
+                title: 'APPEARANCE',
+                child: SegmentedButton<AppThemeMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: AppThemeMode.system,
+                      icon: Icon(Icons.brightness_auto_outlined, size: 16),
+                      label: Text('System'),
+                    ),
+                    ButtonSegment(
+                      value: AppThemeMode.light,
+                      icon: Icon(Icons.light_mode_outlined, size: 16),
+                      label: Text('Light'),
+                    ),
+                    ButtonSegment(
+                      value: AppThemeMode.dark,
+                      icon: Icon(Icons.dark_mode_outlined, size: 16),
+                      label: Text('Dark'),
+                    ),
+                  ],
+                  selected: {settings.themeMode},
+                  onSelectionChanged: (s) =>
+                      controller.setThemeMode(s.first),
+                ),
+              ),
               _Section(
                 title: 'DEFAULT AGENT',
                 child: DropdownButtonFormField<AgentKind?>(
@@ -137,7 +146,7 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 

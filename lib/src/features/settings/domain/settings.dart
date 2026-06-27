@@ -1,4 +1,5 @@
 import '../../agents/domain/agent_kind.dart';
+import 'app_theme_mode.dart';
 import 'permission_mode.dart';
 
 /// Per-agent permission preferences for new vs. existing sessions.
@@ -49,13 +50,20 @@ class AgentPermissions {
 
 /// User settings: the default agent and per-agent permission preferences.
 class Settings {
-  const Settings({this.defaultAgent, this.permissions = const {}});
+  const Settings({
+    this.defaultAgent,
+    this.permissions = const {},
+    this.themeMode = AppThemeMode.system,
+  });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
   final AgentKind? defaultAgent;
 
   /// Per-agent permission preferences (defaults to "ask" when absent).
   final Map<AgentKind, AgentPermissions> permissions;
+
+  /// The app theme preference.
+  final AppThemeMode themeMode;
 
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
@@ -64,11 +72,13 @@ class Settings {
     AgentKind? defaultAgent,
     bool clearDefaultAgent = false,
     Map<AgentKind, AgentPermissions>? permissions,
+    AppThemeMode? themeMode,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
         : (defaultAgent ?? this.defaultAgent),
     permissions: permissions ?? this.permissions,
+    themeMode: themeMode ?? this.themeMode,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -76,6 +86,7 @@ class Settings {
 
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent!.name,
+    'themeMode': themeMode.name,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -88,6 +99,10 @@ class Settings {
     for (final k in AgentKind.values) {
       if (k.name == defaultName) defaultAgent = k;
     }
+    var themeMode = AppThemeMode.system;
+    for (final m in AppThemeMode.values) {
+      if (m.name == json['themeMode']) themeMode = m;
+    }
     final permissions = <AgentKind, AgentPermissions>{};
     final perms = json['permissions'];
     if (perms is Map) {
@@ -98,18 +113,24 @@ class Settings {
         }
       }
     }
-    return Settings(defaultAgent: defaultAgent, permissions: permissions);
+    return Settings(
+      defaultAgent: defaultAgent,
+      permissions: permissions,
+      themeMode: themeMode,
+    );
   }
 
   @override
   bool operator ==(Object other) =>
       other is Settings &&
       other.defaultAgent == defaultAgent &&
+      other.themeMode == themeMode &&
       _mapEquals(other.permissions, permissions);
 
   @override
   int get hashCode => Object.hash(
     defaultAgent,
+    themeMode,
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),
