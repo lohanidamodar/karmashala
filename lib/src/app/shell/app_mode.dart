@@ -45,6 +45,9 @@ class AppModeController extends Notifier<AppMode> {
         TitleBarStyle.hidden,
         windowButtonVisibility: false,
       );
+      // Treat the mini launcher like a floating utility/dialog: no taskbar
+      // button, doesn't act as the app's primary window.
+      await windowManager.setSkipTaskbar(true);
       await windowManager.show();
       await windowManager.focus();
     } catch (_) {}
@@ -55,6 +58,7 @@ class AppModeController extends Notifier<AppMode> {
     try {
       await windowManager.setTitleBarStyle(TitleBarStyle.normal);
       await windowManager.setAlwaysOnTop(false);
+      await windowManager.setSkipTaskbar(false);
       await windowManager.setResizable(true);
       await windowManager.setMinimumSize(const Size(720, 560));
       final settings = ref.read(settingsControllerProvider);
