@@ -2,7 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/terminal/application/terminal_controller.dart';
+import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'shell_state.dart';
 
 /// Intent: move focus to a specific shell pane.

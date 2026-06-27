@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/detail/presentation/detail_panel.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/presentation/settings_screen.dart';
-import '../../features/terminal/application/terminal_controller.dart';
-import '../../features/terminal/presentation/terminal_view.dart';
+import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/presentation/terminal_panel.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
@@ -44,7 +44,7 @@ class AppShell extends ConsumerWidget {
                 ),
               ),
               if (terminalVisible)
-                const SizedBox(height: 220, child: TerminalView()),
+                const SizedBox(height: 280, child: TerminalPanel()),
             ],
           ),
         ),

@@ -54,6 +54,7 @@ class Settings {
     this.defaultAgent,
     this.permissions = const {},
     this.themeMode = AppThemeMode.system,
+    this.defaultTerminalProfileId,
   });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
@@ -65,6 +66,10 @@ class Settings {
   /// The app theme preference.
   final AppThemeMode themeMode;
 
+  /// Id of the [TerminalProfile] new terminals open with, or `null` to use the
+  /// first available (PowerShell). Stored as an id so it survives across runs.
+  final String? defaultTerminalProfileId;
+
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
 
@@ -73,12 +78,15 @@ class Settings {
     bool clearDefaultAgent = false,
     Map<AgentKind, AgentPermissions>? permissions,
     AppThemeMode? themeMode,
+    String? defaultTerminalProfileId,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
         : (defaultAgent ?? this.defaultAgent),
     permissions: permissions ?? this.permissions,
     themeMode: themeMode ?? this.themeMode,
+    defaultTerminalProfileId:
+        defaultTerminalProfileId ?? this.defaultTerminalProfileId,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -87,6 +95,8 @@ class Settings {
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent!.name,
     'themeMode': themeMode.name,
+    if (defaultTerminalProfileId != null)
+      'defaultTerminalProfileId': defaultTerminalProfileId,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -113,10 +123,12 @@ class Settings {
         }
       }
     }
+    final terminalId = json['defaultTerminalProfileId'];
     return Settings(
       defaultAgent: defaultAgent,
       permissions: permissions,
       themeMode: themeMode,
+      defaultTerminalProfileId: terminalId is String ? terminalId : null,
     );
   }
 
@@ -125,12 +137,14 @@ class Settings {
       other is Settings &&
       other.defaultAgent == defaultAgent &&
       other.themeMode == themeMode &&
+      other.defaultTerminalProfileId == defaultTerminalProfileId &&
       _mapEquals(other.permissions, permissions);
 
   @override
   int get hashCode => Object.hash(
     defaultAgent,
     themeMode,
+    defaultTerminalProfileId,
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_kind.dart';
+import '../../environments/application/environments_controller.dart';
+import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/permission_mode.dart';
@@ -66,6 +68,38 @@ class SettingsScreen extends ConsumerWidget {
                   selected: {settings.themeMode},
                   onSelectionChanged: (s) => controller.setThemeMode(s.first),
                 ),
+              ),
+              Builder(
+                builder: (context) {
+                  final profiles = terminalProfilesFor(
+                    ref.watch(environmentsControllerProvider),
+                  );
+                  final current = resolveTerminalProfile(
+                    settings.defaultTerminalProfileId,
+                    profiles,
+                  );
+                  return _Section(
+                    title: 'DEFAULT TERMINAL',
+                    child: DropdownButtonFormField<String>(
+                      initialValue: current.id,
+                      decoration: const InputDecoration(
+                        labelText: 'Shell new terminals open with',
+                      ),
+                      items: [
+                        for (final profile in profiles)
+                          DropdownMenuItem(
+                            value: profile.id,
+                            child: Text(profile.label),
+                          ),
+                      ],
+                      onChanged: (id) {
+                        if (id != null) {
+                          controller.setDefaultTerminalProfile(id);
+                        }
+                      },
+                    ),
+                  );
+                },
               ),
               _Section(
                 title: 'DEFAULT AGENT',

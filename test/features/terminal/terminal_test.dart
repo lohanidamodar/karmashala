@@ -1,93 +1,143 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_controller.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_session.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 
-import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 
+/// A process-free [TerminalInstance] so the controller can be tested without
+/// spawning a real PTY.
+class _FakeInstance implements TerminalInstance {
+  _FakeInstance(this.id, this.title);
+  @override
+  final String id;
+  @override
+  final String title;
+  @override
+  final Terminal terminal = Terminal();
+  bool disposed = false;
+  @override
+  void dispose() => disposed = true;
+}
+
 void main() {
-  group('shellLaunch', () {
-    test('uses cmd.exe on Windows and bash in WSL', () {
-      final win = shellLaunch(EnvironmentKind.windowsNative);
-      expect(win.executable, 'cmd.exe');
-      expect(win.arguments, ['/Q']);
-      expect(shellLaunch(EnvironmentKind.wsl).executable, 'bash');
+  group('terminalProfilesFor', () {
+    test('always offers PowerShell and Command Prompt, then WSL distros', () {
+      final profiles = terminalProfilesFor([
+        windowsEnv(),
+        wslEnv(distro: 'Ubuntu'),
+        wslEnv(id: 'wsl:Debian', distro: 'Debian'),
+      ]);
+      expect(profiles.map((p) => p.id), [
+        'powershell',
+        'cmd',
+        'wsl:Ubuntu',
+        'wsl:Debian',
+      ]);
+      expect(profiles[2].shell, TerminalShell.wsl);
+      expect(profiles[2].wslDistribution, 'Ubuntu');
+    });
+
+    test(
+      'resolveTerminalProfile falls back to the first when id is unknown',
+      () {
+        final profiles = terminalProfilesFor([windowsEnv()]);
+        expect(resolveTerminalProfile('wsl:Gone', profiles).id, 'powershell');
+        expect(resolveTerminalProfile('cmd', profiles).id, 'cmd');
+      },
+    );
+  });
+
+  group('ptyLaunchFor', () {
+    test('PowerShell runs powershell.exe with the host working dir', () {
+      final launch = ptyLaunchFor(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws\app',
+      );
+      expect(launch.executable, 'powershell.exe');
+      expect(launch.arguments, ['-NoLogo']);
+      expect(launch.workingDirectory, r'C:\ws\app');
+    });
+
+    test('WSL launches the distro via wsl.exe --cd, not a host cwd', () {
+      final launch = ptyLaunchFor(
+        const TerminalProfile(
+          id: 'wsl:Ubuntu',
+          label: 'Ubuntu (WSL)',
+          shell: TerminalShell.wsl,
+          wslDistribution: 'Ubuntu',
+        ),
+        workingDirectory: '/home/me/app',
+      );
+      expect(launch.executable, 'wsl.exe');
+      expect(launch.arguments, ['-d', 'Ubuntu', '--cd', '/home/me/app']);
+      expect(launch.workingDirectory, isNull);
     });
   });
 
-  group('TerminalSession', () {
-    test('streams stdout and stderr, runs commands, and stops', () async {
-      final handle = FakeProcessHandle();
-      final session = TerminalSession(Future.value(handle));
-      final lines = <TerminalLine>[];
-      session.lines.listen(lines.add);
-
-      await Future<void>.delayed(Duration.zero);
-      session.run('echo hi');
-      handle.emitStdout('hi');
-      handle.emitStderr('oops');
-      await Future<void>.delayed(Duration.zero);
-
-      expect(handle.written, ['echo hi']);
-      expect(lines.firstWhere((l) => l.text == 'hi').isError, isFalse);
-      expect(lines.firstWhere((l) => l.text == 'oops').isError, isTrue);
-
-      await session.stop();
-      expect(handle.killed, isTrue);
-    });
-  });
-
-  group('TerminalController', () {
-    test('starts a shell and accumulates output and echoes commands', () async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-
-      final handle = FakeProcessHandle();
-      final runner = FakeCommandRunner(processFactory: (_) => handle);
+  group('TerminalSessionsController', () {
+    ProviderContainer containerWithFake() {
       final container = ProviderContainer(
         overrides: [
-          databaseProvider.overrideWithValue(db),
-          commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: runner),
+          terminalInstanceFactoryProvider.overrideWithValue(
+            ({required id, required profile, workingDirectory}) =>
+                _FakeInstance(id, profile.label),
           ),
         ],
       );
       addTearDown(container.dispose);
+      return container;
+    }
 
-      final controller = container.read(terminalControllerProvider.notifier);
-      controller.start(windowsEnv());
-      await Future<void>.delayed(Duration.zero);
-      expect(container.read(terminalControllerProvider).running, isTrue);
-
-      handle.emitStdout('ready');
-      await Future<void>.delayed(Duration.zero);
-      expect(
-        container
-            .read(terminalControllerProvider)
-            .lines
-            .any((l) => l.text == 'ready'),
-        isTrue,
+    test('opens tabs, activates the newest, and switches', () {
+      final container = containerWithFake();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
       );
 
-      controller.run('dir');
-      expect(handle.written, contains('dir'));
+      final first = controller.open(TerminalProfile.powerShell);
+      final second = controller.open(TerminalProfile.commandPrompt);
+
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(state.sessions.length, 2);
+      expect(state.activeId, second);
+
+      controller.activate(first);
       expect(
-        container
-            .read(terminalControllerProvider)
-            .lines
-            .any((l) => l.text == r'$ dir'),
-        isTrue,
+        container.read(terminalSessionsControllerProvider).activeId,
+        first,
       );
     });
 
-    test('terminal visibility toggles', () {
+    test('closing the active tab disposes it and re-activates another', () {
+      final container = containerWithFake();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final first = controller.open(TerminalProfile.powerShell);
+      final second = controller.open(TerminalProfile.commandPrompt);
+
+      final closed =
+          container
+                  .read(terminalSessionsControllerProvider)
+                  .sessions
+                  .firstWhere((s) => s.id == second)
+              as _FakeInstance;
+
+      controller.close(second);
+
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(closed.disposed, isTrue);
+      expect(state.sessions.length, 1);
+      expect(state.activeId, first);
+    });
+  });
+
+  group('terminalVisibleProvider', () {
+    test('toggles visibility', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       expect(container.read(terminalVisibleProvider), isFalse);

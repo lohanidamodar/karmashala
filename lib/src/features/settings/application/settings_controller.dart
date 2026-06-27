@@ -21,6 +21,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setDefaultTerminalProfile(String profileId) {
+    state = state.copyWith(defaultTerminalProfileId: profileId);
+    _save();
+  }
+
   void setDefaultAgent(AgentKind? kind) {
     state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);
     _save();
