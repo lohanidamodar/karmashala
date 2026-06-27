@@ -131,18 +131,29 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   List<ChatMessage> _toMessages(List<SessionEvent> events) {
     final messages = <ChatMessage>[];
     for (final event in events) {
-      final role = switch (event.type) {
-        SessionEventTypes.userMessage => 'user',
-        SessionEventTypes.agentMessage => 'agent',
-        SessionEventTypes.error => 'error',
-        _ => null,
-      };
-      if (role == null) continue;
-      final text = _text(event.payload);
-      if (text.isEmpty) continue;
-      messages.add(ChatMessage(role: role, text: text));
+      // Surface conversation turns and any failure, but keep ordinary
+      // lifecycle/status chatter out of the chat.
+      switch (event.type) {
+        case SessionEventTypes.userMessage:
+          _addText(messages, 'user', event.payload);
+        case SessionEventTypes.agentMessage:
+          _addText(messages, 'agent', event.payload);
+        case SessionEventTypes.error:
+          _addText(messages, 'error', event.payload);
+        case SessionEventTypes.sessionFailed:
+          messages.add(
+            const ChatMessage(role: 'error', text: 'Session failed.'),
+          );
+        case SessionEventTypes.sessionCancelled:
+          messages.add(const ChatMessage(role: 'tool', text: 'Session ended.'));
+      }
     }
     return messages;
+  }
+
+  void _addText(List<ChatMessage> out, String role, String payload) {
+    final text = _text(payload);
+    if (text.isNotEmpty) out.add(ChatMessage(role: role, text: text));
   }
 
   String _text(String payload) {

@@ -111,6 +111,11 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                           ),
                           padding: const EdgeInsets.all(Insets.sm),
                           autofocus: session.id == state.activeId,
+                          // Desktop uses the physical keyboard; this also avoids
+                          // xterm opening a software text-input client, which on
+                          // Windows fails with "Could not set client, view ID is
+                          // null" and blanks the terminal.
+                          hardwareKeyboardOnly: true,
                         ),
                     ],
                   ),
