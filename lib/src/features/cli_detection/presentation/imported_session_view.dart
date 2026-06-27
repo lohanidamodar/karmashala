@@ -112,7 +112,14 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                           for (final t in list)
                             PopupMenuItem(
                               value: t,
-                              child: Text('Open in ${t.label}'),
+                              height: 32,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.terminal, size: 16),
+                                  const SizedBox(width: 10),
+                                  Text('Open in ${t.label}'),
+                                ],
+                              ),
                             ),
                         ],
                       ),

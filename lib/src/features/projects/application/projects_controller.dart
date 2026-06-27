@@ -77,6 +77,34 @@ class ProjectsController extends Notifier<List<Project>> {
     });
   }
 
+  /// Rebuilds the workspace project list entirely from Claude/Codex stores.
+  /// Detection completes before any destructive change, so a scan failure
+  /// leaves the current workspace untouched.
+  Future<ImportSummary> clearAndReimportFromCli() async {
+    final detectedController = ref.read(
+      detectedProjectsControllerProvider.notifier,
+    );
+    await detectedController.detect();
+    final detectedState = ref.read(detectedProjectsControllerProvider);
+    if (detectedState.hasError) {
+      throw StateError('CLI session detection failed: ${detectedState.error}');
+    }
+    final detected = detectedState.asData?.value ?? const [];
+
+    for (final project in ref.read(projectDaoProvider).getAll()) {
+      ref.read(projectDaoProvider).delete(project.id);
+    }
+    ref.read(selectedProjectIdProvider.notifier).select(null);
+    ref.read(selectedRepositoryIdProvider.notifier).select(null);
+    ref.read(selectedSessionIdProvider.notifier).select(null);
+    ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+
+    final summary = ref.read(projectImportServiceProvider).importAll(detected);
+    ref.read(sessionsRevisionProvider.notifier).bump();
+    _refresh();
+    return summary;
+  }
+
   /// Creates a project for [targetEnvironmentId] from a Windows-host folder
   /// [windowsPath] (a drive or `\\wsl.localhost\…` path the picker returned),
   /// binding the project and its repositories to the chosen environment.

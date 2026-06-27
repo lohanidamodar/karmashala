@@ -169,16 +169,80 @@ class AppTheme {
       ),
       popupMenuTheme: PopupMenuThemeData(
         position: PopupMenuPosition.under,
+        elevation: 8,
+        color: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        menuPadding: const EdgeInsets.symmetric(vertical: 4),
+        textStyle: text.bodySmall,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.sm),
           side: BorderSide(color: scheme.outlineVariant),
         ),
       ),
       dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surfaceContainerLowest,
+        surfaceTintColor: Colors.transparent,
+        elevation: 16,
+        alignment: Alignment.center,
+        insetPadding: const EdgeInsets.all(32),
+        titleTextStyle: text.titleMedium,
+        contentTextStyle: text.bodyMedium,
+        actionsPadding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.md),
           side: BorderSide(color: scheme.outlineVariant),
         ),
+      ),
+      menuBarTheme: MenuBarThemeData(
+        style: MenuStyle(
+          elevation: const WidgetStatePropertyAll(0),
+          backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+          padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 30)),
+          shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+        ),
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 30)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 9),
+          ),
+          textStyle: WidgetStatePropertyAll(text.bodySmall),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+          ),
+        ),
+      ),
+      dropdownMenuTheme: DropdownMenuThemeData(
+        menuStyle: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              side: BorderSide(color: scheme.outlineVariant),
+            ),
+          ),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: scheme.surfaceContainerLow,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.sm),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+      ),
+      switchTheme: const SwitchThemeData(
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }

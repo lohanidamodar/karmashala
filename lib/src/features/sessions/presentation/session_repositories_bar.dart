@@ -64,7 +64,17 @@ class SessionRepositoriesBar extends ConsumerWidget {
               },
               itemBuilder: (context) => [
                 for (final repo in attachable)
-                  PopupMenuItem(value: repo.id, child: Text(repo.name)),
+                  PopupMenuItem(
+                    value: repo.id,
+                    height: 32,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.add_link, size: 16),
+                        const SizedBox(width: 10),
+                        Text(repo.name),
+                      ],
+                    ),
+                  ),
               ],
               child: const Chip(
                 avatar: Icon(Icons.add, size: 14),

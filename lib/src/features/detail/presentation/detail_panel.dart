@@ -60,7 +60,7 @@ class DetailPanel extends ConsumerWidget {
           const Expanded(child: _MainArea()),
           if (showSidebar) ...[
             const VerticalDivider(width: 1),
-            const SizedBox(width: 340, child: _Sidebar()),
+            const SizedBox(width: 320, child: _Sidebar()),
           ],
         ],
       ),
@@ -141,33 +141,47 @@ class _Sidebar extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(Insets.sm),
-          child: SegmentedButton<int>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: 0,
-                icon: Icon(Icons.difference_outlined, size: 15),
-                label: Text('Changes'),
+        Container(
+          height: 38,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).colorScheme.outlineVariant,
               ),
-              ButtonSegment(
-                value: 1,
-                icon: Icon(Icons.merge_outlined, size: 15),
-                label: Text('GitHub'),
+            ),
+          ),
+          child: Row(
+            children: [
+              _SidebarTab(
+                selected: tab == 0,
+                icon: Icons.difference_outlined,
+                label: 'Changes',
+                onTap: () => ref.read(repoReviewTabProvider.notifier).select(0),
               ),
-              ButtonSegment(
-                value: 2,
-                icon: Icon(Icons.info_outline, size: 15),
-                label: Text('Info'),
+              _SidebarTab(
+                selected: tab == 1,
+                icon: Icons.merge_outlined,
+                label: 'GitHub',
+                onTap: () => ref.read(repoReviewTabProvider.notifier).select(1),
               ),
+              _SidebarTab(
+                selected: tab == 2,
+                icon: Icons.info_outline,
+                label: 'Info',
+                onTap: () => ref.read(repoReviewTabProvider.notifier).select(2),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Close sidebar',
+                icon: const Icon(Icons.close, size: 15),
+                onPressed: () =>
+                    ref.read(detailSidebarVisibleProvider.notifier).toggle(),
+              ),
+              const SizedBox(width: 2),
             ],
-            selected: {tab},
-            onSelectionChanged: (s) =>
-                ref.read(repoReviewTabProvider.notifier).select(s.first),
           ),
         ),
-        const Divider(height: 1),
         Expanded(
           child: switch (tab) {
             0 => ChangesView(repositoryName: repo?.name ?? 'repository'),
@@ -176,6 +190,57 @@ class _Sidebar extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _SidebarTab extends StatelessWidget {
+  const _SidebarTab({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = selected
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              width: 2,
+              color: selected ? theme.colorScheme.tertiary : Colors.transparent,
+            ),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: color,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

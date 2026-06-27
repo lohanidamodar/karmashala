@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/widgets/desktop_dialog.dart';
+
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../git/application/changes_providers.dart';
@@ -154,7 +156,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
 
     return AlertDialog(
-      title: const Text('New session'),
+      title: const DesktopDialogTitle(
+        icon: Icons.add_comment_outlined,
+        title: 'New session',
+        subtitle: 'Choose where and how the coding agent should run.',
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Column(
@@ -220,14 +226,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                 onChanged: (v) => setState(() => _useWorktree = v ?? false),
                 title: const Text('Run in a dedicated Git worktree'),
               ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              DesktopErrorBanner(_error!),
+            ],
           ],
         ),
       ),

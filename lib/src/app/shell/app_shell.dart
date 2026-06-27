@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
+
+import '../widgets/desktop_dialog.dart';
 
 import '../../features/detail/presentation/detail_panel.dart';
+import '../../features/cli_detection/application/cli_detection_providers.dart';
+import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
+import '../../features/git/application/changes_providers.dart';
+import '../../features/projects/presentation/new_project_dialog.dart';
+import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'shell_shortcuts.dart';
@@ -92,6 +101,10 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
               ],
             ),
           ),
+          if (MediaQuery.sizeOf(context).width >= 900) ...[
+            const SizedBox(width: 18),
+            const _DesktopMenuBar(),
+          ],
         ],
       ),
       actions: [
@@ -107,6 +120,157 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
           onPressed: () => ref.read(terminalVisibleProvider.notifier).toggle(),
         ),
         const SizedBox(width: 8),
+      ],
+    );
+  }
+}
+
+class _DesktopMenuBar extends ConsumerWidget {
+  const _DesktopMenuBar();
+
+  void _showDetected(BuildContext context, WidgetRef ref) {
+    ref.read(detectedProjectsControllerProvider.notifier).detect();
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 820, maxHeight: 680),
+          child: const DetectedProjectsView(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _clearAndReimport(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const DesktopDialogTitle(
+          icon: Icons.sync,
+          title: 'Rebuild workspace from CLI sessions?',
+          subtitle: 'All current project entries will be replaced.',
+        ),
+        content: const SizedBox(
+          width: 440,
+          child: Text(
+            'This clears projects and sessions from Chitragupta, then scans '
+            'Claude Code and Codex stores and imports everything it finds. '
+            'Repository files and CLI sessions are not deleted.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            icon: const Icon(Icons.sync, size: 16),
+            onPressed: () => Navigator.of(context).pop(true),
+            label: const Text('Clear and re-import'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final summary = await ref
+          .read(projectsControllerProvider.notifier)
+          .clearAndReimportFromCli();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Imported ${summary.projects} projects and '
+            '${summary.sessions} sessions.',
+          ),
+        ),
+      );
+    } catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not rebuild workspace: $error')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedRepo = ref.watch(selectedRepositoryIdProvider);
+    final shell = ref.watch(shellControllerProvider);
+    final terminalVisible = ref.watch(terminalVisibleProvider);
+    final sidebarVisible = ref.watch(detailSidebarVisibleProvider);
+    return MenuBar(
+      children: [
+        SubmenuButton(
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.create_new_folder_outlined),
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.keyN,
+                control: true,
+                shift: true,
+              ),
+              onPressed: () => NewProjectDialog.show(context),
+              child: const Text('New project'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.add_comment_outlined),
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.keyN,
+                control: true,
+              ),
+              onPressed: selectedRepo == null
+                  ? null
+                  : () => NewSessionDialog.show(context),
+              child: const Text('New session'),
+            ),
+            const Divider(height: 1),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.travel_explore_outlined),
+              onPressed: () => _showDetected(context, ref),
+              child: const Text('Detect CLI sessions'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.sync),
+              onPressed: () => _clearAndReimport(context, ref),
+              child: const Text('Clear projects and re-import'),
+            ),
+          ],
+          child: const Text('Workspace'),
+        ),
+        SubmenuButton(
+          menuChildren: [
+            CheckboxMenuButton(
+              value: shell.explorerPaneVisible,
+              onChanged: (_) => ref
+                  .read(shellControllerProvider.notifier)
+                  .toggleExplorerPane(),
+              child: const Text('Explorer'),
+            ),
+            CheckboxMenuButton(
+              value: sidebarVisible,
+              onChanged: (_) =>
+                  ref.read(detailSidebarVisibleProvider.notifier).toggle(),
+              child: const Text('Detail sidebar'),
+            ),
+            CheckboxMenuButton(
+              value: terminalVisible,
+              onChanged: (_) =>
+                  ref.read(terminalVisibleProvider.notifier).toggle(),
+              child: const Text('Terminal'),
+            ),
+          ],
+          child: const Text('View'),
+        ),
+        SubmenuButton(
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.settings_outlined),
+              onPressed: () => SettingsScreen.show(context),
+              child: const Text('Settings'),
+            ),
+          ],
+          child: const Text('Tools'),
+        ),
       ],
     );
   }

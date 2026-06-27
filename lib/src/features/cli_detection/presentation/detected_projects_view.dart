@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_dialog.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../application/cli_detection_providers.dart';
 import '../domain/detected_project.dart';
@@ -183,9 +185,19 @@ class _SessionTile extends ConsumerWidget {
             if (ok) await controller.deleteSession(session);
           }
         },
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'rename', child: Text('Rename')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
+        itemBuilder: (context) => [
+          DesktopMenuItem(
+            value: 'rename',
+            label: 'Rename',
+            icon: Icons.drive_file_rename_outline,
+          ),
+          const DesktopMenuDivider(),
+          DesktopMenuItem(
+            value: 'delete',
+            label: 'Delete from CLI store',
+            icon: Icons.delete_outline,
+            destructive: true,
+          ),
         ],
       ),
     );
@@ -196,7 +208,10 @@ class _SessionTile extends ConsumerWidget {
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Rename session'),
+        title: const DesktopDialogTitle(
+          icon: Icons.drive_file_rename_outline,
+          title: 'Rename session',
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -220,7 +235,11 @@ class _SessionTile extends ConsumerWidget {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete session?'),
+        title: const DesktopDialogTitle(
+          icon: Icons.delete_outline,
+          title: 'Delete session?',
+          subtitle: 'This permanently removes it from the CLI store.',
+        ),
         content: Text('This permanently deletes "$title" from the CLI store.'),
         actions: [
           TextButton(
@@ -228,6 +247,10 @@ class _SessionTile extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),

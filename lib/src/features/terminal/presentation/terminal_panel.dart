@@ -175,7 +175,17 @@ class _TabBar extends StatelessWidget {
             onSelected: onOpen,
             itemBuilder: (context) => [
               for (final profile in profiles)
-                PopupMenuItem(value: profile, child: Text(profile.label)),
+                PopupMenuItem(
+                  value: profile,
+                  height: 32,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.terminal, size: 16),
+                      const SizedBox(width: 10),
+                      Text(profile.label),
+                    ],
+                  ),
+                ),
             ],
           ),
           IconButton(

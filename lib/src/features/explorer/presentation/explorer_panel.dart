@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/shell_state.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
+import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
@@ -20,6 +22,8 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
+import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/data/system_terminal_service.dart';
 
 /// The unified left pane — an Explorer tree of projects, their repositories and
 /// the sessions (native + imported) within each. Selecting/expanding a project
@@ -118,7 +122,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete project?'),
+        title: const DesktopDialogTitle(
+          icon: Icons.delete_outline,
+          title: 'Remove project?',
+          subtitle: 'This only changes the Chitragupta workspace.',
+        ),
         content: Text(
           'Removes "${project.name}" and all its sessions from the workspace. '
           'Files on disk are not touched.',
@@ -129,6 +137,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             child: const Text('Cancel'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -248,6 +260,30 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         title: project.name,
         subtitle: project.root.path,
         onTap: () => _toggleProject(project),
+        menuItems: [
+          DesktopMenuItem(
+            value: 'new-session',
+            label: 'New session',
+            icon: Icons.add_comment_outlined,
+          ),
+          DesktopMenuItem(
+            value: 'refresh',
+            label: 'Refresh CLI sessions',
+            icon: Icons.refresh,
+          ),
+          const DesktopMenuDivider(),
+          DesktopMenuItem(
+            value: 'delete',
+            label: 'Remove from workspace',
+            icon: Icons.delete_outline,
+            destructive: true,
+          ),
+        ],
+        onMenu: (action) {
+          if (action == 'new-session') _newSessionInProject(project);
+          if (action == 'refresh') _syncProject(project);
+          if (action == 'delete') _confirmDeleteProject(project);
+        },
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -265,12 +301,19 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 if (action == 'refresh') _syncProject(project);
                 if (action == 'delete') _confirmDeleteProject(project);
               },
-              itemBuilder: (context) => const [
-                PopupMenuItem(
+              itemBuilder: (context) => [
+                DesktopMenuItem(
                   value: 'refresh',
-                  child: Text('Refresh CLI sessions'),
+                  label: 'Refresh CLI sessions',
+                  icon: Icons.refresh,
                 ),
-                PopupMenuItem(value: 'delete', child: Text('Delete project')),
+                const DesktopMenuDivider(),
+                DesktopMenuItem(
+                  value: 'delete',
+                  label: 'Remove from workspace',
+                  icon: Icons.delete_outline,
+                  destructive: true,
+                ),
               ],
             ),
           ],
@@ -344,6 +387,8 @@ class _TreeRow extends StatelessWidget {
     this.subtitle,
     this.expandedState,
     this.trailing,
+    this.menuItems,
+    this.onMenu,
   });
 
   final int depth;
@@ -353,6 +398,8 @@ class _TreeRow extends StatelessWidget {
   final String? subtitle;
   final VoidCallback onTap;
   final Widget? trailing;
+  final List<PopupMenuEntry<String>>? menuItems;
+  final ValueChanged<String>? onMenu;
 
   /// When non-null, a disclosure chevron reflecting expansion state is shown.
   final bool? expandedState;
@@ -360,7 +407,7 @@ class _TreeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
+    final tile = ListTile(
       dense: true,
       selected: selected,
       contentPadding: EdgeInsets.only(left: 8.0 + depth * 16, right: 4),
@@ -382,12 +429,35 @@ class _TreeRow extends StatelessWidget {
           ],
         ),
       ),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(width: 7),
+            Expanded(
+              child: Tooltip(
+                message: subtitle!,
+                child: Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
       trailing: trailing,
       onTap: onTap,
+    );
+    if (menuItems == null || onMenu == null) return tile;
+    return _ContextMenuRegion(
+      menuItems: menuItems!,
+      onSelected: onMenu!,
+      child: tile,
     );
   }
 }
@@ -428,6 +498,8 @@ class _NativeSessionRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedSessionIdProvider) == session.id;
     final actions = ref.read(sessionActionsProvider);
+    final terminals =
+        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
 
     Future<void> rename() async {
       final name = await _promptRename(context, session.title);
@@ -435,8 +507,17 @@ class _NativeSessionRow extends ConsumerWidget {
     }
 
     Future<void> delete() async {
-      if (await _confirmDelete(context, session.title, cli: false)) {
-        actions.deleteNative(session.id);
+      final deleteFromCli = await _confirmDelete(context, session.title);
+      if (deleteFromCli == null) return;
+      try {
+        await actions.deleteNative(session.id, deleteFromCli: deleteFromCli);
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error is StateError ? error.message : '$error'),
+          ),
+        );
       }
     }
 
@@ -455,11 +536,36 @@ class _NativeSessionRow extends ConsumerWidget {
           '${session.status.name}'
           '${session.useWorktree ? ' · worktree' : ''}',
       onTap: select,
-      menuItems: const [
-        PopupMenuItem(value: 'rename', child: Text('Rename')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      menuItems: [
+        for (final terminal in terminals)
+          DesktopMenuItem(
+            value: 'terminal:${terminal.id}',
+            label: 'Open in ${terminal.label}',
+            icon: Icons.terminal,
+          ),
+        if (terminals.isNotEmpty) const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'rename',
+          label: 'Rename',
+          icon: Icons.drive_file_rename_outline,
+          shortcut: 'F2',
+        ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'delete',
+          label: 'Delete',
+          icon: Icons.delete_outline,
+          destructive: true,
+        ),
       ],
-      onMenu: (action) {
+      onMenu: (action) async {
+        if (action.startsWith('terminal:')) {
+          final id = action.substring('terminal:'.length);
+          final terminal = terminals.where((t) => t.id == id).firstOrNull;
+          if (terminal != null) {
+            await _openNativeInTerminal(context, actions, session, terminal);
+          }
+        }
         if (action == 'rename') rename();
         if (action == 'delete') delete();
       },
@@ -494,18 +600,30 @@ class _ImportedSessionRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedImportedSessionIdProvider) == session.id;
     final actions = ref.read(sessionActionsProvider);
+    final terminals =
+        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
     final cliLabel = session.cli == AgentKind.codex ? 'Codex' : 'Claude';
 
     Future<void> onMenu(String action) async {
       switch (action) {
+        case final value when value.startsWith('terminal:'):
+          final id = value.substring('terminal:'.length);
+          final terminal = terminals.where((t) => t.id == id).firstOrNull;
+          if (terminal != null) {
+            await _openImportedInTerminal(context, actions, session, terminal);
+          }
         case 'resume':
           await _resume(context, actions, session);
         case 'rename':
           final name = await _promptRename(context, session.displayTitle);
           if (name != null) await actions.renameImported(session, name);
         case 'delete':
-          if (await _confirmDelete(context, session.displayTitle, cli: true)) {
-            await actions.deleteImported(session);
+          final deleteFromCli = await _confirmDelete(
+            context,
+            session.displayTitle,
+          );
+          if (deleteFromCli != null) {
+            await actions.deleteImported(session, deleteFromCli: deleteFromCli);
           }
       }
     }
@@ -526,10 +644,32 @@ class _ImportedSessionRow extends ConsumerWidget {
       title: session.displayTitle,
       subtitle: '$cliLabel · imported',
       onTap: select,
-      menuItems: const [
-        PopupMenuItem(value: 'resume', child: Text('Resume')),
-        PopupMenuItem(value: 'rename', child: Text('Rename')),
-        PopupMenuItem(value: 'delete', child: Text('Delete')),
+      menuItems: [
+        DesktopMenuItem(
+          value: 'resume',
+          label: 'Resume in app',
+          icon: Icons.play_arrow,
+        ),
+        for (final terminal in terminals)
+          DesktopMenuItem(
+            value: 'terminal:${terminal.id}',
+            label: 'Open in ${terminal.label}',
+            icon: Icons.terminal,
+          ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'rename',
+          label: 'Rename',
+          icon: Icons.drive_file_rename_outline,
+          shortcut: 'F2',
+        ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'delete',
+          label: 'Delete from CLI store',
+          icon: Icons.delete_outline,
+          destructive: true,
+        ),
       ],
       onMenu: onMenu,
     );
@@ -559,33 +699,33 @@ class _SessionRow extends StatelessWidget {
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
 
-  Future<void> _showContextMenu(BuildContext context, Offset position) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        position & const Size(40, 40),
-        Offset.zero & overlay.size,
-      ),
-      items: menuItems,
-    );
-    if (selected != null) onMenu(selected);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onSecondaryTapDown: (details) =>
-          _showContextMenu(context, details.globalPosition),
+    return _ContextMenuRegion(
+      menuItems: menuItems,
+      onSelected: onMenu,
       child: ListTile(
         dense: true,
         selected: selected,
         contentPadding: EdgeInsets.only(left: 8.0 + depth * 16 + 36, right: 0),
         leading: leading,
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 6),
+            Tooltip(
+              message: subtitle,
+              child: Text(
+                subtitle,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontSize: 10),
+              ),
+            ),
+          ],
+        ),
         trailing: PopupMenuButton<String>(
           tooltip: 'Session actions',
           icon: const Icon(Icons.more_vert, size: 16),
@@ -594,6 +734,78 @@ class _SessionRow extends StatelessWidget {
         ),
         onTap: onTap,
       ),
+    );
+  }
+}
+
+class _ContextMenuRegion extends StatelessWidget {
+  const _ContextMenuRegion({
+    required this.menuItems,
+    required this.onSelected,
+    required this.child,
+  });
+
+  final List<PopupMenuEntry<String>> menuItems;
+  final ValueChanged<String> onSelected;
+  final Widget child;
+
+  Future<void> _show(BuildContext context, Offset position) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(position.dx, position.dy, 1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: menuItems,
+    );
+    if (selected != null) onSelected(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    onSecondaryTapDown: (details) => _show(context, details.globalPosition),
+    child: child,
+  );
+}
+
+Future<void> _openNativeInTerminal(
+  BuildContext context,
+  SessionActions actions,
+  Session session,
+  SystemTerminal terminal,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await actions.openSessionInSystemTerminal(session.id, terminal);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Opening in ${terminal.label}…')),
+    );
+  } catch (error) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(error is StateError ? error.message : '$error')),
+    );
+  }
+}
+
+Future<void> _openImportedInTerminal(
+  BuildContext context,
+  SessionActions actions,
+  ImportedSession session,
+  SystemTerminal terminal,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await actions.openInSystemTerminal(session, terminal);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Opening in ${terminal.label}…')),
+    );
+  } catch (error) {
+    messenger.showSnackBar(
+      SnackBar(content: Text(error is StateError ? error.message : '$error')),
     );
   }
 }
@@ -619,7 +831,10 @@ Future<String?> _promptRename(BuildContext context, String current) {
   return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Rename session'),
+      title: const DesktopDialogTitle(
+        icon: Icons.drive_file_rename_outline,
+        title: 'Rename session',
+      ),
       content: TextField(
         controller: controller,
         autofocus: true,
@@ -639,30 +854,54 @@ Future<String?> _promptRename(BuildContext context, String current) {
   ).then((v) => (v == null || v.isEmpty) ? null : v);
 }
 
-Future<bool> _confirmDelete(
-  BuildContext context,
-  String title, {
-  required bool cli,
-}) {
+Future<bool?> _confirmDelete(BuildContext context, String title) {
+  var deleteFromCli = true;
   return showDialog<bool>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Delete session?'),
-      content: Text(
-        cli
-            ? 'Removes "$title" from the workspace and the CLI store.'
-            : 'Permanently deletes "$title".',
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const DesktopDialogTitle(
+          icon: Icons.delete_outline,
+          title: 'Delete session?',
+          subtitle: 'Choose whether to also remove the CLI history.',
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Remove "$title" from Chitragupta.'),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: deleteFromCli,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('Also delete from the CLI store'),
+                subtitle: const Text(
+                  'Checked by default. This removes the original transcript.',
+                ),
+                onChanged: (value) =>
+                    setState(() => deleteFromCli = value ?? true),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(context).pop(deleteFromCli),
+            child: const Text('Delete'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Delete'),
-        ),
-      ],
     ),
-  ).then((v) => v ?? false);
+  );
 }

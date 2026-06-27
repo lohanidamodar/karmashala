@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
+import '../../agents/domain/agent_kind.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/application/detected_project_merger.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/detected_session.dart';
 import '../../cli_detection/domain/imported_session.dart';
@@ -18,6 +20,7 @@ import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
+import '../domain/session.dart';
 import 'session_engine_provider.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
@@ -34,7 +37,37 @@ class SessionActions {
     _bump();
   }
 
-  void deleteNative(String id) {
+  Future<void> deleteNative(String id, {bool deleteFromCli = true}) async {
+    final session = _ref.read(sessionDaoProvider).getById(id);
+    if (session == null) return;
+    if (deleteFromCli) {
+      final repo = _ref
+          .read(repositoryDaoProvider)
+          .getById(session.repositoryId);
+      final installation = _ref
+          .read(agentInstallationDaoProvider)
+          .getById(session.agentInstallationId);
+      if (repo == null || installation == null) {
+        throw StateError('The session repository or agent is unavailable.');
+      }
+      final externalId =
+          session.externalSessionId ??
+          await _recoverExternalSessionId(session, repo, installation);
+      if (externalId == null) {
+        throw StateError(
+          'The CLI session could not be identified. Uncheck "Delete from CLI '
+          'store" to remove only the app record.',
+        );
+      }
+      final detected = await _detectedSessionById(
+        installation.agentKind,
+        externalId,
+      );
+      if (detected == null) {
+        throw StateError('The CLI session file could not be found.');
+      }
+      await _ref.read(cliSessionMutatorProvider).delete(detected);
+    }
     _ref.read(sessionDaoProvider).delete(id);
     if (_ref.read(selectedSessionIdProvider) == id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
@@ -54,11 +87,14 @@ class SessionActions {
     _bump();
   }
 
-  Future<void> deleteImported(ImportedSession session) async {
-    _ref.read(importedSessionDaoProvider).delete(session.id);
-    try {
+  Future<void> deleteImported(
+    ImportedSession session, {
+    bool deleteFromCli = true,
+  }) async {
+    if (deleteFromCli) {
       await _ref.read(cliSessionMutatorProvider).delete(_toDetected(session));
-    } catch (_) {}
+    }
+    _ref.read(importedSessionDaoProvider).delete(session.id);
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
@@ -301,11 +337,14 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    final externalId = session.externalSessionId;
+    final externalId =
+        session.externalSessionId ??
+        await _recoverExternalSessionId(session, repo, installation);
     if (externalId == null || externalId.isEmpty) {
       throw StateError(
-        'This agent has not reported a resumable session id yet. '
-        'Send a message and wait for the session to initialize, then try again.',
+        'No resumable CLI session id could be found. For an older session, '
+        'open its imported CLI history entry instead; new sessions capture '
+        'their id automatically.',
       );
     }
     final env = _ref
@@ -327,6 +366,112 @@ class SessionActions {
     await _ref
         .read(systemTerminalServiceProvider)
         .launch(terminal, command: command, workingDirectory: cwd);
+  }
+
+  /// Recovers the CLI id for sessions created before schema v5. Matching is
+  /// intentionally conservative: the agent kind and repository must match and
+  /// the first user message must identify exactly one CLI transcript.
+  Future<String?> _recoverExternalSessionId(
+    Session session,
+    Repository repo,
+    AgentInstallation installation,
+  ) async {
+    try {
+      final events = _ref
+          .read(sessionEventDaoProvider)
+          .listForSession(session.id);
+      String? firstUserMessage;
+      for (final event in events) {
+        if (event.type != SessionEventTypes.userMessage) continue;
+        final payload = jsonDecode(event.payload);
+        if (payload is Map && payload['text'] is String) {
+          firstUserMessage = _normalizeMatchText(payload['text'] as String);
+          if (firstUserMessage.isNotEmpty) break;
+        }
+      }
+      final environmentDao = _ref.read(executionEnvironmentDaoProvider);
+      final environments = environmentDao.getAll();
+      final stores = await _ref
+          .read(cliStoreLocatorProvider)
+          .locate(environments);
+      final detected = await _ref.read(cliDetectionServiceProvider).detect(
+        stores,
+        {for (final environment in environments) environment.id: environment},
+      );
+      final environment = environmentDao.getById(repo.path.environmentId);
+      final (key, _) = canonicalProjectPath(repo.path, environment);
+      final project = detected
+          .where((item) => item.canonicalKey == key)
+          .firstOrNull;
+      if (project == null) return null;
+
+      final candidates = [...project.sessions, ...project.subagentSessions]
+          .where((candidate) => candidate.cli == installation.agentKind)
+          .where(
+            (candidate) =>
+                _ref
+                    .read(sessionDaoProvider)
+                    .getByExternalSessionId(candidate.sessionId) ==
+                null,
+          )
+          .toList();
+      var matches = firstUserMessage == null || firstUserMessage.isEmpty
+          ? <DetectedSession>[]
+          : candidates.where((candidate) {
+              final preview = _normalizeMatchText(candidate.preview);
+              return preview.isNotEmpty &&
+                  (firstUserMessage!.startsWith(preview) ||
+                      preview.startsWith(firstUserMessage));
+            }).toList();
+      if (matches.isEmpty) {
+        final normalizedTitle = _normalizeMatchText(session.title);
+        matches = candidates
+            .where(
+              (candidate) =>
+                  candidate.title != null &&
+                  _normalizeMatchText(candidate.title!) == normalizedTitle,
+            )
+            .toList();
+      }
+      if (matches.length != 1) return null;
+
+      final recovered = matches.single.sessionId;
+      _ref
+          .read(sessionDaoProvider)
+          .updateExternalSessionId(session.id, recovered);
+      _bump();
+      return recovered;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _normalizeMatchText(String value) =>
+      value.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
+  Future<DetectedSession?> _detectedSessionById(
+    AgentKind kind,
+    String externalId,
+  ) async {
+    final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+    final stores = await _ref
+        .read(cliStoreLocatorProvider)
+        .locate(environments);
+    final projects = await _ref.read(cliDetectionServiceProvider).detect(
+      stores,
+      {for (final environment in environments) environment.id: environment},
+    );
+    for (final project in projects) {
+      for (final session in [
+        ...project.sessions,
+        ...project.subagentSessions,
+      ]) {
+        if (session.cli == kind && session.sessionId == externalId) {
+          return session;
+        }
+      }
+    }
+    return null;
   }
 
   DetectedSession _toDetected(ImportedSession session) => DetectedSession(

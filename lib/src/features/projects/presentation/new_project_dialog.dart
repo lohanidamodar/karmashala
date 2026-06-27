@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../app/widgets/desktop_dialog.dart';
+
 import '../../../core/process/path_translator.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
@@ -130,7 +132,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final preview = _targetPreview(environments);
 
     return AlertDialog(
-      title: const Text('New project'),
+      title: const DesktopDialogTitle(
+        icon: Icons.create_new_folder_outlined,
+        title: 'New project',
+        subtitle: 'Add a folder and discover its Git repositories.',
+      ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
         child: Column(
@@ -194,24 +200,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 18,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              DesktopErrorBanner(_error!),
             ],
           ],
         ),
