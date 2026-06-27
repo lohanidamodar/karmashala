@@ -276,6 +276,37 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
+  /// Opens the native [sessionId] in an external [terminal], starting in its
+  /// repository and running the agent there. Throws a clear error if the repo or
+  /// agent installation is no longer available.
+  Future<void> openSessionInSystemTerminal(
+    String sessionId,
+    SystemTerminal terminal,
+  ) async {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) {
+      throw StateError('This session no longer exists.');
+    }
+    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    if (repo == null) {
+      throw StateError('The session\'s repository is no longer available.');
+    }
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (installation == null) {
+      throw StateError(
+        'The agent for this session is not installed. '
+        'Run "Discover agents" in Settings.',
+      );
+    }
+    await startNewInSystemTerminal(
+      repo: repo,
+      installation: installation,
+      terminal: terminal,
+    );
+  }
+
   DetectedSession _toDetected(ImportedSession session) => DetectedSession(
     cli: session.cli,
     sessionId: session.externalId,

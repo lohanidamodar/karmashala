@@ -47,6 +47,7 @@ class WindowsCommandRunner implements CommandRunner {
         request.executable,
         request.arguments,
         workingDirectory: request.workingDirectory?.path,
+        runInShell: request.runInShell,
       );
       return IoProcessHandle(process);
     } on ProcessException catch (e) {

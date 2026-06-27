@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_ui_providers.dart';
@@ -80,6 +82,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               Expanded(
                 child: Text('Transcript', style: theme.textTheme.titleSmall),
               ),
+              _OpenInTerminalButton(sessionId: widget.sessionId),
               if (active)
                 IconButton(
                   tooltip: 'Stop session',
@@ -187,5 +190,45 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       // not JSON
     }
     return '';
+  }
+}
+
+/// A header action that opens the session in one of the installed external
+/// terminals (Windows Terminal, WezTerm, …), running its agent in the repo.
+class _OpenInTerminalButton extends ConsumerWidget {
+  const _OpenInTerminalButton({required this.sessionId});
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final terminals = ref.watch(availableSystemTerminalsProvider);
+    return terminals.maybeWhen(
+      data: (list) => list.isEmpty
+          ? const SizedBox.shrink()
+          : PopupMenuButton<SystemTerminal>(
+              tooltip: 'Open in system terminal',
+              icon: const Icon(Icons.open_in_new, size: 18),
+              onSelected: (terminal) async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await ref
+                      .read(sessionActionsProvider)
+                      .openSessionInSystemTerminal(sessionId, terminal);
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Opening in ${terminal.label}…')),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text(e is StateError ? e.message : '$e')),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                for (final t in list)
+                  PopupMenuItem(value: t, child: Text('Open in ${t.label}')),
+              ],
+            ),
+      orElse: () => const SizedBox.shrink(),
+    );
   }
 }

@@ -10,11 +10,17 @@ class CommandRequest {
     required this.executable,
     this.arguments = const [],
     this.workingDirectory,
+    this.runInShell = false,
   });
 
   final String executable;
   final List<String> arguments;
   final EnvironmentPath? workingDirectory;
+
+  /// Run via the system shell. Needed to launch Windows **app-execution
+  /// aliases** (e.g. `wt.exe`, Windows Terminal), which `Process.start` cannot
+  /// resolve on its own.
+  final bool runInShell;
 
   @override
   String toString() =>

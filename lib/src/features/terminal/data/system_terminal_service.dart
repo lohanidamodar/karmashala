@@ -95,7 +95,13 @@ class SystemTerminalService {
   }) async {
     final args = _argsFor(terminal.kind, command, workingDirectory);
     await _runner.start(
-      CommandRequest(executable: terminal.executable, arguments: args),
+      CommandRequest(
+        executable: terminal.executable,
+        arguments: args,
+        // Windows Terminal (wt.exe) and friends are app-execution aliases that
+        // only launch through the shell.
+        runInShell: true,
+      ),
     );
   }
 

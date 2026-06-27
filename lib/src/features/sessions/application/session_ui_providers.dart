@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -52,12 +54,33 @@ final selectedSessionIdProvider =
       SelectedSessionController.new,
     );
 
-/// The full transcript of an imported CLI session, parsed from its store file.
-final importedTranscriptProvider = FutureProvider.autoDispose
-    .family<List<TranscriptMessage>, String>((ref, sessionId) async {
+/// The full transcript of an imported CLI session, parsed from its store file
+/// and **kept live**: the file is polled, so a session running elsewhere (e.g.
+/// the same CLI session open in an external terminal) streams into the app.
+final importedTranscriptProvider = StreamProvider.autoDispose
+    .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
       final session = ref.read(importedSessionDaoProvider).getById(sessionId);
-      if (session == null) return const [];
-      return readCliTranscript(session.filePath, session.cli);
+      if (session == null) {
+        yield const [];
+        return;
+      }
+      final file = File(session.filePath);
+      DateTime? lastModified;
+      var firstRead = true;
+      while (true) {
+        DateTime? modified;
+        try {
+          modified = file.existsSync() ? file.lastModifiedSync() : null;
+        } catch (_) {
+          modified = null;
+        }
+        if (firstRead || modified != lastModified) {
+          firstRead = false;
+          lastModified = modified;
+          yield await readCliTranscript(session.filePath, session.cli);
+        }
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
     });
 
 /// The imported session whose detail is shown, or `null`.
