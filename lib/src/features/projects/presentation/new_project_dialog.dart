@@ -1,19 +1,24 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
+import '../../../core/process/path_translator.dart';
+import '../../environments/application/environments_controller.dart';
+import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/execution_environment.dart';
+import '../../environments/domain/local_environment.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../application/projects_controller.dart';
 
-/// Dialog to create a project by pointing at a folder. Runs repository discovery
-/// and reports how many repositories were found.
-///
-/// A native folder picker is deferred to a later quality-of-life loop; for now
-/// the folder is entered as a path. The field is validated and discovery errors
-/// are surfaced inline.
+/// Creates a project from a folder. The folder is chosen with the native
+/// Windows picker (which can browse drives and `\\wsl.localhost\…`); choosing a
+/// WSL distribution as the target binds the project to that distro's namespace
+/// (e.g. `C:\src` → `/mnt/c/src`).
 class NewProjectDialog extends ConsumerStatefulWidget {
   const NewProjectDialog({super.key});
 
-  /// Shows the dialog. Returns `true` if a project was created.
   static Future<bool?> show(BuildContext context) => showDialog<bool>(
     context: context,
     builder: (_) => const NewProjectDialog(),
@@ -24,21 +29,68 @@ class NewProjectDialog extends ConsumerStatefulWidget {
 }
 
 class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
-  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _pathController = TextEditingController();
+  final _folderController = TextEditingController();
+  String _targetId = localWindowsEnvironmentId;
   bool _busy = false;
   String? _error;
+
+  static const _translator = PathTranslator();
 
   @override
   void dispose() {
     _nameController.dispose();
-    _pathController.dispose();
+    _folderController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _browse() async {
+    final dir = await getDirectoryPath();
+    if (dir == null) return;
+    setState(() {
+      _folderController.text = dir;
+      if (_nameController.text.trim().isEmpty) {
+        _nameController.text = p.basename(
+          dir.replaceAll(RegExp(r'[\\/]+$'), ''),
+        );
+      }
+    });
+  }
+
+  /// The path as it will be stored for the chosen target (for the preview).
+  String? _targetPreview(List<ExecutionEnvironment> environments) {
+    final folder = _folderController.text.trim();
+    if (folder.isEmpty || _targetId == localWindowsEnvironmentId) return null;
+    final windows = _envById(environments, localWindowsEnvironmentId);
+    final target = _envById(environments, _targetId);
+    if (windows == null || target == null) return null;
+    try {
+      return _translator
+          .translate(
+            EnvironmentPath(environmentId: windows.id, path: folder),
+            from: windows,
+            to: target,
+          )
+          .path;
+    } on PathTranslationException catch (e) {
+      return '⚠ ${e.message}';
+    }
+  }
+
+  ExecutionEnvironment? _envById(List<ExecutionEnvironment> envs, String id) {
+    for (final e in envs) {
+      if (e.id == id) return e;
+    }
+    return null;
+  }
+
+  Future<void> _create() async {
+    final name = _nameController.text.trim();
+    final folder = _folderController.text.trim();
+    if (name.isEmpty || folder.isEmpty) {
+      setState(() => _error = 'Choose a folder and enter a project name.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -46,9 +98,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     try {
       final result = await ref
           .read(projectsControllerProvider.notifier)
-          .createByDiscovery(
-            name: _nameController.text.trim(),
-            path: _pathController.text.trim(),
+          .createInEnvironment(
+            name: name,
+            windowsPath: folder,
+            targetEnvironmentId: _targetId,
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -62,6 +115,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       Navigator.of(context).pop(true);
     } on RepositoryDiscoveryException catch (e) {
       setState(() => _error = e.message);
+    } on PathTranslationException catch (e) {
+      setState(() => _error = e.message);
     } catch (e) {
       setState(() => _error = 'Could not create project: $e');
     } finally {
@@ -71,60 +126,94 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final environments = ref.watch(environmentsControllerProvider);
+    final preview = _targetPreview(environments);
+
     return AlertDialog(
       title: const Text('New project'),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _nameController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Project name',
-                  hintText: 'My workspace',
-                ),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Enter a project name'
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _pathController,
-                decoration: const InputDecoration(
-                  labelText: 'Folder path',
-                  hintText: r'C:\src\my-workspace',
-                ),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Enter a folder path'
-                    : null,
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.error,
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: _targetId,
+              decoration: const InputDecoration(labelText: 'Environment'),
+              items: [
+                for (final env in environments)
+                  DropdownMenuItem(
+                    value: env.id,
+                    child: Text(
+                      env.kind == EnvironmentKind.windowsNative
+                          ? 'Windows'
+                          : 'WSL · ${env.wslDistribution ?? env.name}',
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
+                  ),
+              ],
+              onChanged: (v) =>
+                  setState(() => _targetId = v ?? localWindowsEnvironmentId),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _folderController,
+                    decoration: const InputDecoration(
+                      labelText: 'Folder path',
+                      hintText: r'C:\src\my-workspace',
                     ),
-                  ],
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _browse,
+                  icon: const Icon(Icons.folder_open, size: 18),
+                  label: const Text('Browse'),
                 ),
               ],
+            ),
+            if (preview != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Stored as: $preview',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Project name',
+                hintText: 'My workspace',
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
       actions: [
@@ -133,7 +222,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _busy ? null : _submit,
+          onPressed: _busy ? null : _create,
           child: _busy
               ? const SizedBox(
                   width: 16,

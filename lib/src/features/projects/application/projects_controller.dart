@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -31,6 +32,32 @@ class ProjectsController extends Notifier<List<Project>> {
     final result = await ref
         .read(projectServiceProvider)
         .createProjectByDiscovery(name: name, root: root);
+    _refresh();
+    return result;
+  }
+
+  /// Creates a project for [targetEnvironmentId] from a Windows-host folder
+  /// [windowsPath] (a drive or `\\wsl.localhost\…` path the picker returned),
+  /// binding the project and its repositories to the chosen environment.
+  Future<ProjectCreationResult> createInEnvironment({
+    required String name,
+    required String windowsPath,
+    required String targetEnvironmentId,
+  }) async {
+    final dao = ref.read(executionEnvironmentDaoProvider);
+    final windows = dao.getById(localWindowsEnvironmentId);
+    final target = dao.getById(targetEnvironmentId) ?? windows;
+    if (windows == null || target == null) {
+      throw StateError('No execution environments available.');
+    }
+    final result = await ref
+        .read(projectServiceProvider)
+        .createProjectForEnvironment(
+          name: name,
+          windowsScanPath: windowsPath,
+          windows: windows,
+          target: target,
+        );
     _refresh();
     return result;
   }

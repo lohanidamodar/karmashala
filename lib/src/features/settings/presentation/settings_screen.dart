@@ -165,7 +165,7 @@ class _Section extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(title, style: theme.textTheme.labelSmall)),
-              if (trailing != null) trailing!,
+              ?trailing,
             ],
           ),
           const SizedBox(height: Insets.sm),

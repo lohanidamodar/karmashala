@@ -31,9 +31,9 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
-    ExecutionEnvironmentDao(
-      db,
-    ).upsert(windowsEnv(id: localWindowsEnvironmentId));
+    ExecutionEnvironmentDao(db)
+      ..upsert(windowsEnv(id: localWindowsEnvironmentId))
+      ..upsert(wslEnv());
     projectDao = ProjectDao(db);
     repositoryDao = RepositoryDao(db);
     discovery = FakeRepositoryDiscoveryService();
@@ -85,4 +85,40 @@ void main() {
     expect(added.map((r) => r.name), ['api']);
     expect(repositoryDao.getByProject(created.project.id).length, 2);
   });
+
+  test('createProjectForEnvironment binds repos to a WSL target', () async {
+    discovery.result = [
+      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
+    ];
+    final result = await build().createProjectForEnvironment(
+      name: 'Workspace',
+      windowsScanPath: r'C:\ws',
+      windows: windowsEnv(id: localWindowsEnvironmentId),
+      target: wslEnv(),
+    );
+
+    // The scan ran on the Windows path; results were bound to the WSL namespace.
+    expect(discovery.calls.single.path, r'C:\ws');
+    expect(result.project.root.environmentId, 'wsl:Ubuntu');
+    expect(result.project.root.path, '/mnt/c/ws');
+    expect(result.repositories.single.path.environmentId, 'wsl:Ubuntu');
+    expect(result.repositories.single.path.path, '/mnt/c/ws/app');
+  });
+
+  test(
+    'createProjectForEnvironment keeps Windows paths for a Windows target',
+    () async {
+      discovery.result = [
+        DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
+      ];
+      final result = await build().createProjectForEnvironment(
+        name: 'Workspace',
+        windowsScanPath: r'C:\ws',
+        windows: windowsEnv(id: localWindowsEnvironmentId),
+        target: windowsEnv(id: localWindowsEnvironmentId),
+      );
+      expect(result.project.root.path, r'C:\ws');
+      expect(result.repositories.single.path.environmentId, 'windows');
+    },
+  );
 }

@@ -61,12 +61,12 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Project name').first,
-      'Workspace',
+      find.widgetWithText(TextField, 'Folder path').first,
+      r'C:\ws',
     );
     await tester.enterText(
-      find.widgetWithText(TextFormField, 'Folder path').first,
-      r'C:\ws',
+      find.widgetWithText(TextField, 'Project name').first,
+      'Workspace',
     );
     await tester.tap(find.text('Create & scan'));
     await tester.pumpAndSettle();
