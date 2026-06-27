@@ -11,6 +11,7 @@ import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import 'chat_transcript.dart';
+import 'message_composer.dart';
 import 'session_repositories_bar.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
@@ -26,35 +27,6 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
 }
 
 class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
-  final _input = TextEditingController();
-
-  @override
-  void dispose() {
-    _input.dispose();
-    super.dispose();
-  }
-
-  bool _sending = false;
-
-  Future<void> _send() async {
-    final text = _input.text.trim();
-    if (text.isEmpty || _sending) return;
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _sending = true);
-    _input.clear();
-    try {
-      await ref
-          .read(sessionActionsProvider)
-          .continueSession(widget.sessionId, text);
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : '$e')),
-      );
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
-  }
-
   Future<void> _stop() async {
     await ref.read(sessionEngineProvider).stop(widget.sessionId);
     ref.read(sessionsRevisionProvider.notifier).bump();
@@ -100,7 +72,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (events) => ChatTranscriptView(
               messages: _toMessages(events),
-              footer: _buildInput(active),
+              footer: MessageComposer(
+                hintText: active
+                    ? 'Message the agent…  (attach an image with 🖼)'
+                    : 'Type to continue this session…',
+                onSend: (text) => ref
+                    .read(sessionActionsProvider)
+                    .continueSession(widget.sessionId, text),
+              ),
               emptyHint: active
                   ? 'Session is running — say something to the agent.'
                   : 'No messages yet.',
@@ -110,45 +89,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       ],
     );
   }
-
-  Widget _buildInput(bool active) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const Divider(height: 1),
-      Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _input,
-                enabled: !_sending,
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  hintText: active
-                      ? 'Message the agent…'
-                      : 'Type to continue this session…',
-                ),
-                onSubmitted: (_) => _send(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: _sending ? null : _send,
-              icon: _sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send, size: 18),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
 
   /// Maps the persisted event log to displayable chat messages, dropping
   /// lifecycle/status noise (verbose logs are not shown in the chat).

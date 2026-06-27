@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/chat_transcript.dart';
+import '../../sessions/presentation/message_composer.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/cli_detection_providers.dart';
@@ -23,31 +24,6 @@ class ImportedSessionView extends ConsumerStatefulWidget {
 }
 
 class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
-  final _input = TextEditingController();
-  bool _resuming = false;
-
-  @override
-  void dispose() {
-    _input.dispose();
-    super.dispose();
-  }
-
-  Future<void> _resumeAndSend(ImportedSession session) async {
-    final text = _input.text.trim();
-    if (text.isEmpty || _resuming) return;
-    final messenger = ScaffoldMessenger.of(context);
-    setState(() => _resuming = true);
-    try {
-      _input.clear();
-      await ref.read(sessionActionsProvider).resumeAndSend(session, text);
-    } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : '$e')),
-      );
-      if (mounted) setState(() => _resuming = false);
-    }
-  }
-
   Future<void> _openIn(ImportedSession session, SystemTerminal terminal) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -139,50 +115,16 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                   ChatMessage(role: m.role, text: m.text),
               ],
               emptyHint: 'No readable history — send a message to continue it.',
-              footer: _buildInput(session),
+              footer: MessageComposer(
+                hintText: 'Continue this session — type a message',
+                onSend: (text) => ref
+                    .read(sessionActionsProvider)
+                    .resumeAndSend(session, text),
+              ),
             ),
           ),
         ),
       ],
     );
   }
-
-  Widget _buildInput(ImportedSession session) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const Divider(height: 1),
-      Padding(
-        padding: const EdgeInsets.all(8),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _input,
-                enabled: !_resuming,
-                decoration: InputDecoration(
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  hintText: _resuming
-                      ? 'Resuming…'
-                      : 'Continue this session — type a message',
-                ),
-                onSubmitted: (_) => _resumeAndSend(session),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              onPressed: _resuming ? null : () => _resumeAndSend(session),
-              icon: _resuming
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send, size: 18),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
 }
