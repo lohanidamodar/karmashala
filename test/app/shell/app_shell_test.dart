@@ -35,13 +35,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('wide layout shows all three panes', (tester) async {
+  testWidgets('wide layout shows the explorer and detail panes', (
+    tester,
+  ) async {
     await pumpApp(tester, size: const Size(1600, 900));
 
     expect(find.text('Chitragupta'), findsOneWidget);
     // Pane headers render as tracked "ledger tab" labels (uppercased).
-    expect(find.text('PROJECTS'), findsOneWidget);
-    expect(find.text('SESSIONS'), findsOneWidget);
+    expect(find.text('EXPLORER'), findsOneWidget);
     expect(find.text('DETAIL'), findsOneWidget);
   });
 

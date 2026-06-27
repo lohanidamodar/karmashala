@@ -2,26 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/detail/presentation/detail_panel.dart';
-import '../../features/projects/presentation/projects_panel.dart';
-import '../../features/sessions/presentation/sessions_panel.dart';
+import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/terminal/application/terminal_controller.dart';
 import '../../features/terminal/presentation/terminal_view.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
-/// The adaptive three-pane desktop shell: Projects | Sessions | Detail.
+/// The adaptive two-pane desktop shell: Explorer | Detail.
 ///
 /// Layout adapts to the available width:
-/// * **Wide** (≥ 1100): all three panes side by side.
-/// * **Medium** (≥ 760): Sessions | Detail, with Projects collapsible.
+/// * **Wide/Medium** (≥ 760): Explorer tree beside the Detail view, with the
+///   Explorer collapsible via `Ctrl+B`.
 /// * **Narrow** (< 760): a single pane (the focused one) with a bottom selector.
-///
-/// At medium/wide widths the projects pane can also be toggled with `Ctrl+B`.
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
-  static const double _wideBreakpoint = 1100;
   static const double _mediumBreakpoint = 760;
 
   @override
@@ -39,12 +35,8 @@ class AppShell extends ConsumerWidget {
                   padding: const EdgeInsets.all(8),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final width = constraints.maxWidth;
-                      if (width >= _wideBreakpoint) {
-                        return _WideLayout(shell: shell);
-                      }
-                      if (width >= _mediumBreakpoint) {
-                        return _MediumLayout(shell: shell);
+                      if (constraints.maxWidth >= _mediumBreakpoint) {
+                        return _SplitLayout(shell: shell);
                       }
                       return _NarrowLayout(shell: shell);
                     },
@@ -120,9 +112,9 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 }
 
-/// Wide: three resizable-feeling columns via flex weights.
-class _WideLayout extends StatelessWidget {
-  const _WideLayout({required this.shell});
+/// Split: the Explorer tree beside the Detail view, Explorer collapsible.
+class _SplitLayout extends StatelessWidget {
+  const _SplitLayout({required this.shell});
   final ShellState shell;
 
   @override
@@ -130,35 +122,11 @@ class _WideLayout extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (shell.projectsPaneVisible) ...[
-          const Expanded(flex: 3, child: ProjectsPanel()),
+        if (shell.explorerPaneVisible) ...[
+          const SizedBox(width: 320, child: ExplorerPanel()),
           const SizedBox(width: 8),
         ],
-        const Expanded(flex: 4, child: SessionsPanel()),
-        const SizedBox(width: 8),
-        const Expanded(flex: 5, child: DetailPanel()),
-      ],
-    );
-  }
-}
-
-/// Medium: Sessions | Detail, projects collapsible to the left.
-class _MediumLayout extends StatelessWidget {
-  const _MediumLayout({required this.shell});
-  final ShellState shell;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (shell.projectsPaneVisible) ...[
-          const SizedBox(width: 260, child: ProjectsPanel()),
-          const SizedBox(width: 8),
-        ],
-        const Expanded(flex: 4, child: SessionsPanel()),
-        const SizedBox(width: 8),
-        const Expanded(flex: 5, child: DetailPanel()),
+        const Expanded(child: DetailPanel()),
       ],
     );
   }
@@ -173,8 +141,7 @@ class _NarrowLayout extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(shellControllerProvider.notifier);
     final Widget active = switch (shell.focusedPane) {
-      ShellPane.projects => const ProjectsPanel(),
-      ShellPane.sessions => const SessionsPanel(),
+      ShellPane.explorer => const ExplorerPanel(),
       ShellPane.detail => const DetailPanel(),
     };
     return Column(
@@ -184,14 +151,9 @@ class _NarrowLayout extends ConsumerWidget {
         SegmentedButton<ShellPane>(
           segments: const [
             ButtonSegment(
-              value: ShellPane.projects,
-              icon: Icon(Icons.folder_outlined),
-              label: Text('Projects'),
-            ),
-            ButtonSegment(
-              value: ShellPane.sessions,
-              icon: Icon(Icons.chat_bubble_outline),
-              label: Text('Sessions'),
+              value: ShellPane.explorer,
+              icon: Icon(Icons.account_tree_outlined),
+              label: Text('Explorer'),
             ),
             ButtonSegment(
               value: ShellPane.detail,

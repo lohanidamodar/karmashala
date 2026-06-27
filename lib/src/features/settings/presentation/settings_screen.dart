@@ -15,10 +15,9 @@ import '../domain/settings.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  static Future<void> show(BuildContext context) =>
-      Navigator.of(context).push<void>(
-        MaterialPageRoute(builder: (_) => const SettingsScreen()),
-      );
+  static Future<void> show(BuildContext context) => Navigator.of(
+    context,
+  ).push<void>(MaterialPageRoute(builder: (_) => const SettingsScreen()));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,8 +64,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ],
                   selected: {settings.themeMode},
-                  onSelectionChanged: (s) =>
-                      controller.setThemeMode(s.first),
+                  onSelectionChanged: (s) => controller.setThemeMode(s.first),
                 ),
               ),
               _Section(

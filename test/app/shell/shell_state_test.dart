@@ -9,10 +9,10 @@ void main() {
   tearDown(() => container.dispose());
 
   group('ShellController', () {
-    test('defaults to the sessions pane with projects visible', () {
+    test('defaults to the explorer pane with the explorer visible', () {
       final state = container.read(shellControllerProvider);
-      expect(state.focusedPane, ShellPane.sessions);
-      expect(state.projectsPaneVisible, isTrue);
+      expect(state.focusedPane, ShellPane.explorer);
+      expect(state.explorerPaneVisible, isTrue);
     });
 
     test('focusPane updates the focused pane', () {
@@ -25,16 +25,16 @@ void main() {
       );
     });
 
-    test('toggleProjectsPane flips visibility', () {
+    test('toggleExplorerPane flips visibility', () {
       final controller = container.read(shellControllerProvider.notifier);
-      controller.toggleProjectsPane();
+      controller.toggleExplorerPane();
       expect(
-        container.read(shellControllerProvider).projectsPaneVisible,
+        container.read(shellControllerProvider).explorerPaneVisible,
         isFalse,
       );
-      controller.toggleProjectsPane();
+      controller.toggleExplorerPane();
       expect(
-        container.read(shellControllerProvider).projectsPaneVisible,
+        container.read(shellControllerProvider).explorerPaneVisible,
         isTrue,
       );
     });

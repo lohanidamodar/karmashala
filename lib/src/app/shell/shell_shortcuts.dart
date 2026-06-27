@@ -11,9 +11,9 @@ class FocusPaneIntent extends Intent {
   final ShellPane pane;
 }
 
-/// Intent: show/hide the collapsible projects pane.
-class ToggleProjectsPaneIntent extends Intent {
-  const ToggleProjectsPaneIntent();
+/// Intent: show/hide the collapsible explorer pane.
+class ToggleExplorerPaneIntent extends Intent {
+  const ToggleExplorerPaneIntent();
 }
 
 /// Intent: show/hide the optional embedded terminal.
@@ -26,8 +26,8 @@ class ToggleTerminalIntent extends Intent {
 /// Bindings are declared through Flutter's [Shortcuts]/[Actions] system rather
 /// than raw key listeners so they are declarative and testable:
 ///
-/// * `Ctrl+1` / `Ctrl+2` / `Ctrl+3` — focus Projects / Sessions / Detail.
-/// * `Ctrl+B` — toggle the projects pane.
+/// * `Ctrl+1` / `Ctrl+2` — focus Explorer / Detail.
+/// * `Ctrl+B` — toggle the explorer pane.
 class ShellShortcuts extends ConsumerWidget {
   const ShellShortcuts({required this.child, super.key});
 
@@ -35,16 +35,13 @@ class ShellShortcuts extends ConsumerWidget {
 
   static const Map<ShortcutActivator, Intent> _shortcuts = {
     SingleActivator(LogicalKeyboardKey.digit1, control: true): FocusPaneIntent(
-      ShellPane.projects,
+      ShellPane.explorer,
     ),
     SingleActivator(LogicalKeyboardKey.digit2, control: true): FocusPaneIntent(
-      ShellPane.sessions,
-    ),
-    SingleActivator(LogicalKeyboardKey.digit3, control: true): FocusPaneIntent(
       ShellPane.detail,
     ),
     SingleActivator(LogicalKeyboardKey.keyB, control: true):
-        ToggleProjectsPaneIntent(),
+        ToggleExplorerPaneIntent(),
     SingleActivator(LogicalKeyboardKey.backquote, control: true):
         ToggleTerminalIntent(),
   };
@@ -62,9 +59,9 @@ class ShellShortcuts extends ConsumerWidget {
               return null;
             },
           ),
-          ToggleProjectsPaneIntent: CallbackAction<ToggleProjectsPaneIntent>(
+          ToggleExplorerPaneIntent: CallbackAction<ToggleExplorerPaneIntent>(
             onInvoke: (intent) {
-              controller.toggleProjectsPane();
+              controller.toggleExplorerPane();
               return null;
             },
           ),

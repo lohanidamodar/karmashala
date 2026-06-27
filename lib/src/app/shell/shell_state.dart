@@ -1,23 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// The three logical panes of the desktop shell.
-enum ShellPane { projects, sessions, detail }
+/// The two logical panes of the desktop shell: the Explorer tree (projects and
+/// their sessions) and the Detail view.
+enum ShellPane { explorer, detail }
 
 /// UI state for the desktop shell: which pane currently has focus and whether
-/// the (collapsible) projects pane is shown.
+/// the (collapsible) explorer pane is shown.
 class ShellState {
   const ShellState({
-    this.focusedPane = ShellPane.sessions,
-    this.projectsPaneVisible = true,
+    this.focusedPane = ShellPane.explorer,
+    this.explorerPaneVisible = true,
   });
 
   final ShellPane focusedPane;
-  final bool projectsPaneVisible;
+  final bool explorerPaneVisible;
 
-  ShellState copyWith({ShellPane? focusedPane, bool? projectsPaneVisible}) {
+  ShellState copyWith({ShellPane? focusedPane, bool? explorerPaneVisible}) {
     return ShellState(
       focusedPane: focusedPane ?? this.focusedPane,
-      projectsPaneVisible: projectsPaneVisible ?? this.projectsPaneVisible,
+      explorerPaneVisible: explorerPaneVisible ?? this.explorerPaneVisible,
     );
   }
 }
@@ -31,8 +32,8 @@ class ShellController extends Notifier<ShellState> {
     state = state.copyWith(focusedPane: pane);
   }
 
-  void toggleProjectsPane() {
-    state = state.copyWith(projectsPaneVisible: !state.projectsPaneVisible);
+  void toggleExplorerPane() {
+    state = state.copyWith(explorerPaneVisible: !state.explorerPaneVisible);
   }
 }
 

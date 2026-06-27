@@ -1,8 +1,8 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/projects/presentation/projects_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fixtures.dart';
 
 void main() {
-  testWidgets('filters the project list by the search query', (tester) async {
+  testWidgets('filters the project tree by the search query', (tester) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -21,7 +21,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(db)],
-        child: const MaterialApp(home: Scaffold(body: ProjectsPanel())),
+        child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
       ),
     );
     await tester.pumpAndSettle();

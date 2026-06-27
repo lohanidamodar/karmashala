@@ -1,14 +1,14 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
 import 'package:chitragupta/src/core/util/id_generator_provider.dart';
+import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
+import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/environments/domain/local_environment.dart';
-import 'package:chitragupta/src/features/projects/presentation/projects_panel.dart';
+import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:chitragupta/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:chitragupta/src/features/repositories/domain/discovered_repository.dart';
 import 'package:flutter/material.dart';
@@ -46,7 +46,7 @@ void main() {
             (_) async => const ImportSummary(),
           ),
         ],
-        child: const MaterialApp(home: Scaffold(body: ProjectsPanel())),
+        child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
       ),
     );
     await tester.pumpAndSettle();
@@ -57,7 +57,7 @@ void main() {
     expect(find.textContaining('No projects yet'), findsOneWidget);
   });
 
-  testWidgets('creating a project via the dialog adds it to the list', (
+  testWidgets('creating a project via the dialog adds it to the tree', (
     tester,
   ) async {
     await pump(tester);
