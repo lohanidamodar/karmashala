@@ -32,6 +32,20 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+# App icon generation: `dart run flutter_launcher_icons` (regenerates the Windows
+# .ico and other platform icons from assets/icon/app_icon.png).
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+
 flutter:
   uses-material-design: true
   assets:

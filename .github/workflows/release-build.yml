@@ -1,0 +1,109 @@
+name: Release
+
+# Builds the desktop release artifacts (Windows installer + portable zip, Linux
+# tarball) and attaches them to the GitHub release.
+#   - publishing a release uploads the artifacts to it,
+#   - pushing a `v*` tag or dispatching with a version input creates the release.
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0 (creates tag v<version>)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # Resolves the tag and whether to fill in release notes, so the build jobs
+  # stay trigger-agnostic.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Resolve release tag
+        id: resolve
+        shell: bash
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="v$INPUT_VERSION"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            tag="$EVENT_TAG"
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag"
+
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - name: Build Windows release
+        run: flutter build windows --release
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=$env:VERSION" "windows\installer\chitragupta.iss"
+      - name: Archive portable Windows build
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path build\artifacts -Force | Out-Null
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "build/artifacts/Chitragupta-windows-portable.zip"
+      - name: Upload Windows artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: |
+            windows/installer/output/Chitragupta-Setup-${{ env.VERSION }}.exe
+            build/artifacts/Chitragupta-windows-portable.zip
+
+  build-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsqlite3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter config --enable-linux-desktop
+      - run: flutter pub get
+      - name: Build Linux release
+        run: flutter build linux --release
+      - name: Archive Linux build
+        run: |
+          mkdir -p build/artifacts
+          tar -czf build/artifacts/Chitragupta-linux.tar.gz -C build/linux/x64/release/bundle .
+      - name: Upload Linux artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: build/artifacts/Chitragupta-linux.tar.gz
