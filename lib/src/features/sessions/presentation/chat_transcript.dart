@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/theme/design_tokens.dart';
+import 'markdown_message.dart';
 
 /// A normalized chat message for the transcript view, independent of whether it
 /// came from a native session's event log or an imported CLI transcript.
@@ -142,18 +144,14 @@ class _ChatMessageTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    final (
-      String gutter,
-      Color color,
-      String label,
-      bool mono,
-    ) = switch (message.role) {
-      'user' => ('›', scheme.primary, 'You', false),
-      'tool' => ('⏺', scheme.tertiary, 'Tool', true),
-      'error' => ('✗', scheme.error, 'Error', true),
-      _ => ('●', scheme.onSurface, 'Agent', false),
+    final (String gutter, Color color, String label) = switch (message.role) {
+      'user' => ('›', scheme.primary, 'You'),
+      'tool' => ('⏺', scheme.tertiary, 'Tool'),
+      'error' => ('✗', scheme.error, 'Error'),
+      _ => ('●', scheme.onSurface, 'Agent'),
     };
 
+    final prose = message.role == 'user' || message.role == 'agent';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.sm),
       child: Row(
@@ -171,29 +169,70 @@ class _ChatMessageTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label.toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    _CopyButton(text: message.text),
+                  ],
                 ),
                 const SizedBox(height: 2),
-                SelectableText(
-                  message.text,
-                  style: mono
-                      ? const TextStyle(
-                          fontFamily: kMonoFamily,
-                          fontSize: 12.5,
-                          height: 1.35,
-                        )
-                      : theme.textTheme.bodyMedium?.copyWith(height: 1.4),
-                ),
+                if (prose)
+                  MarkdownMessage(message.text)
+                else
+                  SelectableText(
+                    message.text,
+                    style: const TextStyle(
+                      fontFamily: kMonoFamily,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
+                  ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A low-emphasis copy-to-clipboard button shown on each message.
+class _CopyButton extends StatefulWidget {
+  const _CopyButton({required this.text});
+  final String text;
+
+  @override
+  State<_CopyButton> createState() => _CopyButtonState();
+}
+
+class _CopyButtonState extends State<_CopyButton> {
+  bool _copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: _copied ? 'Copied' : 'Copy message',
+      visualDensity: VisualDensity.compact,
+      iconSize: 13,
+      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      padding: EdgeInsets.zero,
+      color: _copied ? Colors.green : scheme.onSurfaceVariant,
+      icon: Icon(_copied ? Icons.check : Icons.copy_all_outlined),
+      onPressed: () async {
+        await Clipboard.setData(ClipboardData(text: widget.text));
+        if (!mounted) return;
+        setState(() => _copied = true);
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (mounted) setState(() => _copied = false);
+      },
     );
   }
 }

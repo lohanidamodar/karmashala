@@ -3,6 +3,7 @@ import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_event.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_event_types.dart';
+import 'package:chitragupta/src/features/sessions/presentation/markdown_message.dart';
 import 'package:chitragupta/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,9 +50,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Message bodies render as selectable text, CLI-style.
-    expect(_selectable('hello'), findsOneWidget);
-    expect(_selectable('Echo: hello'), findsOneWidget);
+    // Message bodies render as (selectable) Markdown, CLI-style.
+    expect(find.byType(MarkdownMessage), findsNWidgets(2));
+    expect(find.textContaining('Echo: hello'), findsOneWidget);
     // Role eyebrows are uppercased.
     expect(find.text('YOU'), findsOneWidget);
     expect(find.text('AGENT'), findsOneWidget);
@@ -59,6 +60,3 @@ void main() {
     expect(find.text('Type to continue this session…'), findsOneWidget);
   });
 }
-
-Finder _selectable(String text) =>
-    find.byWidgetPredicate((w) => w is SelectableText && w.data == text);
