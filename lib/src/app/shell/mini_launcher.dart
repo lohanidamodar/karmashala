@@ -33,23 +33,25 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     SystemTerminal? terminal,
     Future<void> Function(SystemTerminal) run,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     if (terminal == null) {
-      messenger.showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No terminal set. Pick one in Settings.')),
       );
       return;
     }
+    String message;
     try {
       await run(terminal);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Opening in ${terminal.label}…')),
-      );
+      message = 'Opening in ${terminal.label}…';
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : '$e')),
-      );
+      message = e is StateError ? e.message : '$e';
     }
+    // Focus/mode may have changed during the launch — only touch the messenger
+    // while still mounted, and look it up fresh (not captured across the await).
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

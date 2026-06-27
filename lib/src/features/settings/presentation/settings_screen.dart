@@ -377,9 +377,13 @@ class _TerminalAppSection extends ConsumerStatefulWidget {
 }
 
 class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
-  late final TextEditingController _path = TextEditingController(
-    text: ref.read(settingsControllerProvider).customTerminalPath ?? '',
-  );
+  final _path = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _path.text = ref.read(settingsControllerProvider).customTerminalPath ?? '';
+  }
 
   @override
   void dispose() {
