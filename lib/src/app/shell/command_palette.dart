@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/git/application/changes_providers.dart';
@@ -12,6 +11,7 @@ import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import 'shell_state.dart';
 
@@ -65,7 +65,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'New project…',
-        icon: PiconsRegular.folderPlus,
+        icon: AppIcons.folderPlus,
         onSelect: () => run(() => NewProjectDialog.show(context)),
       ),
     );
@@ -73,7 +73,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
       entries.add(
         _PaletteEntry(
           label: 'New session…',
-          icon: PiconsRegular.chatCircleDots,
+          icon: AppIcons.chatCircleDots,
           onSelect: () => run(() => NewSessionDialog.show(context)),
         ),
       );
@@ -81,7 +81,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'Toggle terminal',
-        icon: PiconsRegular.terminal,
+        icon: AppIcons.terminal,
         onSelect: () =>
             run(() => ref.read(terminalVisibleProvider.notifier).toggle()),
       ),
@@ -89,7 +89,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'Toggle Explorer',
-        icon: PiconsRegular.treeStructure,
+        icon: AppIcons.treeStructure,
         onSelect: () => run(
           () => ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
         ),
@@ -98,7 +98,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'Open Settings',
-        icon: PiconsRegular.gearSix,
+        icon: AppIcons.gearSix,
         onSelect: () => run(() => SettingsScreen.show(context)),
       ),
     );
@@ -112,7 +112,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
         _PaletteEntry(
           label: project.name,
           sublabel: 'Project',
-          icon: PiconsRegular.folder,
+          icon: AppIcons.folder,
           onSelect: () => run(
             () =>
                 ref.read(selectedProjectIdProvider.notifier).select(project.id),
@@ -125,7 +125,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
             _PaletteEntry(
               label: s.title,
               sublabel: '${project.name} · ${repo.name}',
-              icon: PiconsRegular.chatCircle,
+              icon: AppIcons.chatCircle,
               onSelect: () => run(() {
                 ref.read(selectedProjectIdProvider.notifier).select(project.id);
                 ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
@@ -142,7 +142,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
             _PaletteEntry(
               label: s.displayTitle,
               sublabel: '${project.name} · ${repo.name} · imported',
-              icon: PiconsRegular.clockCounterClockwise,
+              icon: AppIcons.clockCounterClockwise,
               onSelect: () => run(() {
                 ref.read(selectedProjectIdProvider.notifier).select(project.id);
                 ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
@@ -183,7 +183,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
                 controller: _controller,
                 autofocus: true,
                 decoration: const InputDecoration(
-                  prefixIcon: Icon(PiconsRegular.magnifyingGlass, size: 18),
+                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 18),
                   hintText: 'Jump to a project or session, or run an action…',
                   border: OutlineInputBorder(),
                   isDense: true,

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
-import 'package:picons/picons.dart';
 
+import '../theme/app_icons.dart';
 import '../widgets/desktop_dialog.dart';
 import 'app_mode.dart';
 import 'resize_handle.dart';
@@ -80,7 +80,7 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
       title: Row(
         children: [
           Icon(
-            PiconsRegular.bookOpen,
+            AppIcons.bookOpen,
             size: 22,
             color: Theme.of(context).colorScheme.tertiary,
           ),
@@ -114,18 +114,18 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
       actions: [
         IconButton(
           tooltip: 'Mini launcher',
-          icon: const Icon(PiconsRegular.pictureInpicture),
+          icon: const Icon(AppIcons.pictureInpicture),
           onPressed: () => ref.read(appModeProvider.notifier).enterMini(),
         ),
         IconButton(
           tooltip: 'Settings',
-          icon: const Icon(PiconsRegular.gearSix),
+          icon: const Icon(AppIcons.gearSix),
           onPressed: () => SettingsScreen.show(context),
         ),
         IconButton(
           tooltip: 'Toggle terminal (Ctrl+`)',
           isSelected: terminalVisible,
-          icon: const Icon(PiconsRegular.terminal),
+          icon: const Icon(AppIcons.terminal),
           onPressed: () => ref.read(terminalVisibleProvider.notifier).toggle(),
         ),
         const SizedBox(width: 8),
@@ -155,7 +155,7 @@ class _DesktopMenuBar extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const DesktopDialogTitle(
-          icon: PiconsRegular.arrowsClockwise,
+          icon: AppIcons.arrowsClockwise,
           title: 'Rebuild workspace from CLI sessions?',
           subtitle: 'All current project entries will be replaced.',
         ),
@@ -173,7 +173,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton.icon(
-            icon: const Icon(PiconsRegular.arrowsClockwise, size: 16),
+            icon: const Icon(AppIcons.arrowsClockwise, size: 16),
             onPressed: () => Navigator.of(context).pop(true),
             label: const Text('Clear and re-import'),
           ),
@@ -212,7 +212,7 @@ class _DesktopMenuBar extends ConsumerWidget {
         SubmenuButton(
           menuChildren: [
             MenuItemButton(
-              leadingIcon: const Icon(PiconsRegular.folderPlus),
+              leadingIcon: const Icon(AppIcons.folderPlus),
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyN,
                 control: true,
@@ -222,7 +222,7 @@ class _DesktopMenuBar extends ConsumerWidget {
               child: const Text('New project'),
             ),
             MenuItemButton(
-              leadingIcon: const Icon(PiconsRegular.chatCircleDots),
+              leadingIcon: const Icon(AppIcons.chatCircleDots),
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyN,
                 control: true,
@@ -234,12 +234,12 @@ class _DesktopMenuBar extends ConsumerWidget {
             ),
             const Divider(height: 1),
             MenuItemButton(
-              leadingIcon: const Icon(PiconsRegular.globe),
+              leadingIcon: const Icon(AppIcons.globe),
               onPressed: () => _showDetected(context, ref),
               child: const Text('Detect CLI sessions'),
             ),
             MenuItemButton(
-              leadingIcon: const Icon(PiconsRegular.arrowsClockwise),
+              leadingIcon: const Icon(AppIcons.arrowsClockwise),
               onPressed: () => _clearAndReimport(context, ref),
               child: const Text('Clear projects and re-import'),
             ),
@@ -273,7 +273,7 @@ class _DesktopMenuBar extends ConsumerWidget {
         SubmenuButton(
           menuChildren: [
             MenuItemButton(
-              leadingIcon: const Icon(PiconsRegular.gearSix),
+              leadingIcon: const Icon(AppIcons.gearSix),
               onPressed: () => SettingsScreen.show(context),
               child: const Text('Settings'),
             ),
@@ -347,12 +347,12 @@ class _NarrowLayout extends ConsumerWidget {
           segments: const [
             ButtonSegment(
               value: ShellPane.explorer,
-              icon: Icon(PiconsRegular.treeStructure),
+              icon: Icon(AppIcons.treeStructure),
               label: Text('Explorer'),
             ),
             ButtonSegment(
               value: ShellPane.detail,
-              icon: Icon(PiconsRegular.article),
+              icon: Icon(AppIcons.article),
               label: Text('Detail'),
             ),
           ],

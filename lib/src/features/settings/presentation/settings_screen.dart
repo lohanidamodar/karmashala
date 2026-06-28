@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:picons/picons.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_kind.dart';
@@ -13,6 +13,7 @@ import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
 import '../domain/app_theme_mode.dart';
+import '../domain/mini_position.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 
@@ -38,7 +39,7 @@ class SettingsScreen extends ConsumerWidget {
         leading: const BackButton(),
         title: Row(
           children: [
-            Icon(PiconsRegular.gearSix, color: theme.colorScheme.tertiary),
+            Icon(AppIcons.gearSix, color: theme.colorScheme.tertiary),
             const SizedBox(width: Insets.sm),
             const Text('Settings'),
           ],
@@ -56,17 +57,17 @@ class SettingsScreen extends ConsumerWidget {
                   segments: const [
                     ButtonSegment(
                       value: AppThemeMode.system,
-                      icon: Icon(PiconsRegular.circleHalf, size: 16),
+                      icon: Icon(AppIcons.circleHalf, size: 16),
                       label: Text('System'),
                     ),
                     ButtonSegment(
                       value: AppThemeMode.light,
-                      icon: Icon(PiconsRegular.sun, size: 16),
+                      icon: Icon(AppIcons.sun, size: 16),
                       label: Text('Light'),
                     ),
                     ButtonSegment(
                       value: AppThemeMode.dark,
-                      icon: Icon(PiconsRegular.moon, size: 16),
+                      icon: Icon(AppIcons.moon, size: 16),
                       label: Text('Dark'),
                     ),
                   ],
@@ -154,6 +155,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const _TerminalAppSection(),
               const _CodeEditorSection(),
+              const _MiniLauncherSection(),
               _Section(
                 title: 'DEFAULT AGENT',
                 child: DropdownButtonFormField<AgentKind?>(
@@ -178,7 +180,7 @@ class SettingsScreen extends ConsumerWidget {
                   onPressed: () => ref
                       .read(agentInstallationsControllerProvider.notifier)
                       .discoverAll(),
-                  icon: const Icon(PiconsRegular.magnifyingGlass, size: 16),
+                  icon: const Icon(AppIcons.magnifyingGlass, size: 16),
                   label: const Text('Discover'),
                 ),
                 child: installations.isEmpty
@@ -193,10 +195,7 @@ class SettingsScreen extends ConsumerWidget {
                             ListTile(
                               dense: true,
                               contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                PiconsRegular.robot,
-                                size: 18,
-                              ),
+                              leading: const Icon(AppIcons.robot, size: 18),
                               title: Text(_agentLabel(i.agentKind)),
                               subtitle: Text(
                                 '${i.environmentId} · ${i.executable.path}'
@@ -326,7 +325,7 @@ class _PermissionCard extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(
-                      PiconsRegular.warning,
+                      AppIcons.warning,
                       size: 16,
                       color: theme.colorScheme.error,
                     ),
@@ -464,7 +463,7 @@ class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
                 const SizedBox(width: Insets.sm),
                 OutlinedButton.icon(
                   onPressed: _browse,
-                  icon: const Icon(PiconsRegular.folderOpen, size: 16),
+                  icon: const Icon(AppIcons.folderOpen, size: 16),
                   label: const Text('Browse'),
                 ),
               ],
@@ -577,7 +576,7 @@ class _CodeEditorSectionState extends ConsumerState<_CodeEditorSection> {
                 const SizedBox(width: Insets.sm),
                 OutlinedButton.icon(
                   onPressed: _browse,
-                  icon: const Icon(PiconsRegular.folderOpen, size: 16),
+                  icon: const Icon(AppIcons.folderOpen, size: 16),
                   label: const Text('Browse'),
                 ),
               ],
@@ -591,6 +590,102 @@ class _CodeEditorSectionState extends ConsumerState<_CodeEditorSection> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Mini-launcher preferences: where the compact window appears on screen. The
+/// six choices are laid out spatially (top row / bottom row) so the grid mirrors
+/// the eventual on-screen position.
+class _MiniLauncherSection extends ConsumerWidget {
+  const _MiniLauncherSection();
+
+  static const _rows = <List<MiniPosition>>[
+    [MiniPosition.topLeft, MiniPosition.topCenter, MiniPosition.topRight],
+    [
+      MiniPosition.bottomLeft,
+      MiniPosition.bottomCenter,
+      MiniPosition.bottomRight,
+    ],
+  ];
+
+  static const _icons = <MiniPosition, IconData>{
+    MiniPosition.topLeft: AppIcons.arrowUpLeft,
+    MiniPosition.topCenter: AppIcons.arrowUp,
+    MiniPosition.topRight: AppIcons.arrowUpRight,
+    MiniPosition.bottomLeft: AppIcons.arrowDownLeft,
+    MiniPosition.bottomCenter: AppIcons.arrowDown,
+    MiniPosition.bottomRight: AppIcons.arrowDownRight,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final current = ref.watch(
+      settingsControllerProvider.select((s) => s.miniPosition),
+    );
+    final controller = ref.read(settingsControllerProvider.notifier);
+
+    Widget cell(MiniPosition pos) {
+      final selected = pos == current;
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.all(3),
+          child: Tooltip(
+            message: pos.label,
+            child: Material(
+              color: selected
+                  ? theme.colorScheme.primaryContainer
+                  : theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => controller.setMiniPosition(pos),
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outlineVariant,
+                      width: selected ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Icon(
+                    _icons[pos],
+                    size: 18,
+                    color: selected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return _Section(
+      title: 'MINI LAUNCHER',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Window position', style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 2),
+          Text(
+            'Where the compact launcher appears, inset from the screen edge.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: Insets.sm),
+          for (final row in _MiniLauncherSection._rows)
+            Row(children: [for (final pos in row) cell(pos)]),
         ],
       ),
     );

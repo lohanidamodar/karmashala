@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../features/settings/application/settings_controller.dart';
+import '../../features/settings/domain/mini_position.dart';
 
 /// The app's window mode: the full desktop shell, or a small borderless mini
 /// launcher (projects + sessions only).
@@ -56,10 +57,27 @@ class AppModeController extends Notifier<AppMode> {
       await windowManager.setSkipTaskbar(true);
       await windowManager.show();
       await windowManager.focus();
+      await _placeMini(settings.miniPosition, size);
       // Assert always-on-top LAST: setTitleBarStyle/setSkipTaskbar/show reset the
       // topmost z-order on Windows, so doing it earlier doesn't stick.
       await windowManager.setAlwaysOnTop(true);
     } catch (_) {}
+  }
+
+  /// Places the mini window at [position], inset from the work area by [_miniPad]
+  /// so it never sits flush against the screen edge.
+  static const _miniPad = 24.0;
+
+  Future<void> _placeMini(MiniPosition position, Size size) async {
+    final alignment = position.alignment;
+    final flush = await calcWindowPosition(size, alignment);
+    // alignment.x/y are -1 / 0 / +1 for the edges the window touches; nudge
+    // inward by the padding only on those edges (centered axes stay put).
+    final padded = Offset(
+      flush.dx - alignment.x * _miniPad,
+      flush.dy - alignment.y * _miniPad,
+    );
+    await windowManager.setPosition(padded);
   }
 
   Future<void> _applyFull() async {
@@ -77,6 +95,9 @@ class AppModeController extends Notifier<AppMode> {
           ? Size(settings.windowWidth!, settings.windowHeight!)
           : const Size(1200, 800);
       await windowManager.setSize(size);
+      // Re-center on the current display so growing from a corner mini position
+      // never lands the larger window partly off-screen.
+      await windowManager.center();
       await windowManager.show();
       await windowManager.focus();
     } catch (_) {}

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../app/widgets/desktop_menu.dart';
@@ -30,7 +30,7 @@ class DetectedProjectsView extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
           child: Row(
             children: [
-              Icon(PiconsRegular.globe, color: theme.colorScheme.primary),
+              Icon(AppIcons.globe, color: theme.colorScheme.primary),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -53,14 +53,14 @@ class DetectedProjectsView extends ConsumerWidget {
                       ),
                     );
                   },
-                  icon: const Icon(PiconsRegular.downloadSimple, size: 18),
+                  icon: const Icon(AppIcons.downloadSimple, size: 18),
                   label: const Text('Import all'),
                 ),
                 const SizedBox(width: Insets.sm),
               ],
               FilledButton.tonalIcon(
                 onPressed: () => controller.detect(),
-                icon: const Icon(PiconsRegular.arrowsClockwise, size: 18),
+                icon: const Icon(AppIcons.arrowsClockwise, size: 18),
                 label: const Text('Detect'),
               ),
             ],
@@ -112,7 +112,7 @@ class _ProjectTile extends StatelessWidget {
     final claude = project.countFor(AgentKind.claudeCode);
     final codex = project.countFor(AgentKind.codex);
     return ExpansionTile(
-      leading: const Icon(PiconsRegular.folder),
+      leading: const Icon(AppIcons.folder),
       title: Text(project.name),
       subtitle: Text(
         project.displayPath,
@@ -132,7 +132,7 @@ class _ProjectTile extends StatelessWidget {
         for (final session in project.sessions) _SessionTile(session: session),
         if (project.subagentSessions.isNotEmpty)
           ExpansionTile(
-            leading: const Icon(PiconsRegular.treeStructure, size: 18),
+            leading: const Icon(AppIcons.treeStructure, size: 18),
             title: Text('Subagents (${project.subagentSessions.length})'),
             childrenPadding: const EdgeInsets.only(left: 16),
             children: [
@@ -158,11 +158,11 @@ class _SessionTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       leading: subagent
-          ? const Icon(PiconsRegular.arrowBendDownRight, size: 16)
+          ? const Icon(AppIcons.arrowBendDownRight, size: 16)
           : Icon(
               session.cli == AgentKind.codex
-                  ? PiconsRegular.terminal
-                  : PiconsRegular.robot,
+                  ? AppIcons.terminal
+                  : AppIcons.robot,
               size: 16,
             ),
       title: Text(
@@ -190,13 +190,13 @@ class _SessionTile extends ConsumerWidget {
           DesktopMenuItem(
             value: 'rename',
             label: 'Rename',
-            icon: PiconsRegular.pencilSimple,
+            icon: AppIcons.pencilSimple,
           ),
           const DesktopMenuDivider(),
           DesktopMenuItem(
             value: 'delete',
             label: 'Delete from CLI store',
-            icon: PiconsRegular.trash,
+            icon: AppIcons.trash,
             destructive: true,
           ),
         ],
@@ -210,7 +210,7 @@ class _SessionTile extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const DesktopDialogTitle(
-          icon: PiconsRegular.pencilSimple,
+          icon: AppIcons.pencilSimple,
           title: 'Rename session',
         ),
         content: TextField(
@@ -237,7 +237,7 @@ class _SessionTile extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const DesktopDialogTitle(
-          icon: PiconsRegular.trash,
+          icon: AppIcons.trash,
           title: 'Delete session?',
           subtitle: 'This permanently removes it from the CLI store.',
         ),

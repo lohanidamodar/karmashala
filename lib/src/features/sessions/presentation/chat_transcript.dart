@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:picons/picons.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'markdown_message.dart';
 
@@ -117,7 +117,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                           onPressed: () => setState(
                             () => _shown = math.min(_shown + _page, total),
                           ),
-                          icon: const Icon(PiconsRegular.caretUp, size: 16),
+                          icon: const Icon(AppIcons.caretUp, size: 16),
                           label: Text(
                             'Load $start earlier message'
                             '${start == 1 ? '' : 's'}',
@@ -226,7 +226,7 @@ class _CopyButtonState extends State<_CopyButton> {
       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       padding: EdgeInsets.zero,
       color: _copied ? Colors.green : scheme.onSurfaceVariant,
-      icon: Icon(_copied ? PiconsRegular.check : PiconsRegular.copySimple),
+      icon: Icon(_copied ? AppIcons.check : AppIcons.copySimple),
       onPressed: () async {
         await Clipboard.setData(ClipboardData(text: widget.text));
         if (!mounted) return;

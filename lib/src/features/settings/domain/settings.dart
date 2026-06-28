@@ -1,5 +1,6 @@
 import '../../agents/domain/agent_kind.dart';
 import 'app_theme_mode.dart';
+import 'mini_position.dart';
 import 'permission_mode.dart';
 
 /// Per-agent permission preferences for new vs. existing sessions.
@@ -65,6 +66,7 @@ class Settings {
     this.windowHeight,
     this.miniWidth,
     this.miniHeight,
+    this.miniPosition = MiniPosition.bottomRight,
     this.defaultSystemTerminalId,
     this.customTerminalPath,
     this.defaultCodeEditorId,
@@ -109,6 +111,9 @@ class Settings {
   final double? miniWidth;
   final double? miniHeight;
 
+  /// Where the mini launcher window is placed on screen.
+  final MiniPosition miniPosition;
+
   /// The external terminal app used to resume sessions (mini mode / "open in
   /// terminal"): a detected terminal id (`windowsTerminal`, …), the sentinel
   /// `custom`, or `null` to use the first detected one.
@@ -151,6 +156,7 @@ class Settings {
     double? windowHeight,
     double? miniWidth,
     double? miniHeight,
+    MiniPosition? miniPosition,
     String? defaultSystemTerminalId,
     String? customTerminalPath,
     String? defaultCodeEditorId,
@@ -174,6 +180,7 @@ class Settings {
     windowHeight: windowHeight ?? this.windowHeight,
     miniWidth: miniWidth ?? this.miniWidth,
     miniHeight: miniHeight ?? this.miniHeight,
+    miniPosition: miniPosition ?? this.miniPosition,
     defaultSystemTerminalId:
         defaultSystemTerminalId ?? this.defaultSystemTerminalId,
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
@@ -200,6 +207,7 @@ class Settings {
     if (windowHeight != null) 'windowHeight': windowHeight,
     if (miniWidth != null) 'miniWidth': miniWidth,
     if (miniHeight != null) 'miniHeight': miniHeight,
+    'miniPosition': miniPosition.name,
     if (defaultSystemTerminalId != null)
       'defaultSystemTerminalId': defaultSystemTerminalId,
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
@@ -251,6 +259,7 @@ class Settings {
       windowHeight: toDouble(json['windowHeight']),
       miniWidth: toDouble(json['miniWidth']),
       miniHeight: toDouble(json['miniHeight']),
+      miniPosition: MiniPosition.fromName(json['miniPosition']),
       defaultSystemTerminalId: json['defaultSystemTerminalId'] is String
           ? json['defaultSystemTerminalId'] as String
           : null,
@@ -285,6 +294,7 @@ class Settings {
       other.windowHeight == windowHeight &&
       other.miniWidth == miniWidth &&
       other.miniHeight == miniHeight &&
+      other.miniPosition == miniPosition &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
       other.customTerminalPath == customTerminalPath &&
       other.defaultCodeEditorId == defaultCodeEditorId &&
@@ -307,6 +317,7 @@ class Settings {
     windowHeight,
     miniWidth,
     miniHeight,
+    miniPosition,
     defaultSystemTerminalId,
     customTerminalPath,
     defaultCodeEditorId,

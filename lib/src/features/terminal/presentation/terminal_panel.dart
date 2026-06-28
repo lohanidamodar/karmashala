@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
@@ -200,11 +200,7 @@ class _TabBar extends StatelessWidget {
       child: Row(
         children: [
           const SizedBox(width: Insets.sm),
-          Icon(
-            PiconsRegular.terminal,
-            size: 16,
-            color: theme.colorScheme.tertiary,
-          ),
+          Icon(AppIcons.terminal, size: 16, color: theme.colorScheme.tertiary),
           const SizedBox(width: Insets.sm),
           Expanded(
             child: ListView(
@@ -222,7 +218,7 @@ class _TabBar extends StatelessWidget {
           ),
           PopupMenuButton<TerminalProfile>(
             tooltip: 'New terminal',
-            icon: const Icon(PiconsRegular.plus, size: 18),
+            icon: const Icon(AppIcons.plus, size: 18),
             onSelected: onOpen,
             itemBuilder: (context) => [
               for (final profile in profiles)
@@ -231,7 +227,7 @@ class _TabBar extends StatelessWidget {
                   height: 32,
                   child: Row(
                     children: [
-                      const Icon(PiconsRegular.terminal, size: 16),
+                      const Icon(AppIcons.terminal, size: 16),
                       const SizedBox(width: 10),
                       Text(profile.label),
                     ],
@@ -241,7 +237,7 @@ class _TabBar extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Hide terminal (Ctrl+`)',
-            icon: const Icon(PiconsRegular.x, size: 18),
+            icon: const Icon(AppIcons.x, size: 18),
             onPressed: onHide,
           ),
           const SizedBox(width: Insets.xs),
@@ -299,7 +295,7 @@ class _Tab extends StatelessWidget {
                     minHeight: 24,
                   ),
                   padding: EdgeInsets.zero,
-                  icon: const Icon(PiconsRegular.x),
+                  icon: const Icon(AppIcons.x),
                   onPressed: onClose,
                 ),
               ],

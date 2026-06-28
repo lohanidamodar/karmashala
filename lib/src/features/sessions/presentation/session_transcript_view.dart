@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
@@ -48,7 +48,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             children: [
               IconButton(
                 tooltip: 'Back',
-                icon: const Icon(PiconsRegular.arrowLeft, size: 18),
+                icon: const Icon(AppIcons.arrowLeft, size: 18),
                 onPressed: () =>
                     ref.read(selectedSessionIdProvider.notifier).select(null),
               ),
@@ -59,7 +59,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               if (active)
                 IconButton(
                   tooltip: 'Stop session',
-                  icon: const Icon(PiconsRegular.stopCircle, size: 18),
+                  icon: const Icon(AppIcons.stopCircle, size: 18),
                   onPressed: _stop,
                 ),
             ],
@@ -148,7 +148,7 @@ class _OpenInTerminalButton extends ConsumerWidget {
           ? const SizedBox.shrink()
           : PopupMenuButton<SystemTerminal>(
               tooltip: 'Open in system terminal',
-              icon: const Icon(PiconsRegular.arrowSquareOut, size: 18),
+              icon: const Icon(AppIcons.arrowSquareOut, size: 18),
               onSelected: (terminal) async {
                 final messenger = ScaffoldMessenger.of(context);
                 try {
@@ -171,7 +171,7 @@ class _OpenInTerminalButton extends ConsumerWidget {
                     height: 32,
                     child: Row(
                       children: [
-                        const Icon(PiconsRegular.terminal, size: 16),
+                        const Icon(AppIcons.terminal, size: 16),
                         const SizedBox(width: 10),
                         Text('Open in ${t.label}'),
                       ],

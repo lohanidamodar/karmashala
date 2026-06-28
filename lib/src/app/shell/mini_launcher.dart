@@ -1,11 +1,12 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/domain/imported_session.dart';
+import '../../features/editor/application/code_editor_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/projects/domain/project.dart';
 import '../../features/repositories/application/repository_providers.dart';
@@ -16,8 +17,15 @@ import '../../features/sessions/domain/session.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/system_terminal_providers.dart';
 import '../../features/terminal/data/system_terminal_service.dart';
+import '../widgets/desktop_menu.dart';
+import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import 'app_mode.dart';
+
+/// Below this width the mini launcher stays minimal (tap to act); at or above it
+/// the window is "expanded" and rows gain a right-click context menu like the
+/// full Explorer.
+const double _miniWideBreakpoint = 420;
 
 /// The borderless mini launcher: projects expand to their sessions; tapping a
 /// session resumes it in the default system terminal. The header is draggable
@@ -72,6 +80,259 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Opens [project] in the configured code editor; with [chooseSubfolder] a
+  /// directory picker (rooted at the project) lets the user pick a sub-folder.
+  Future<void> _openEditor(
+    Project project, {
+    bool chooseSubfolder = false,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final editor = ref.read(editorActionsProvider);
+    String? subPath;
+    if (chooseSubfolder) {
+      final picked = await getDirectoryPath(
+        initialDirectory: editor.windowsRootPath(project),
+        confirmButtonText: 'Open in editor',
+      );
+      if (picked == null) return;
+      subPath = picked;
+    }
+    try {
+      await editor.openProject(project.id, windowsSubPath: subPath);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Opening in editor…')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : '$e')),
+      );
+    }
+  }
+
+  Future<void> _syncProject(Project project) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(projectsControllerProvider.notifier)
+          .syncSessions(project.id);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            result.sessions == 0
+                ? 'Sessions are up to date.'
+                : 'Added ${result.sessions} CLI session'
+                      '${result.sessions == 1 ? '' : 's'}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not refresh sessions: $e')),
+      );
+    }
+  }
+
+  /// Shows a context menu at [global] and returns the chosen value.
+  Future<String?> _rowMenu(Offset global, List<PopupMenuEntry<String>> items) {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    return showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        global.dx,
+        global.dy,
+        overlay.size.width - global.dx,
+        overlay.size.height - global.dy,
+      ),
+      items: items,
+    );
+  }
+
+  Future<void> _renameSession(
+    String current,
+    Future<void> Function(String) onSubmit,
+  ) async {
+    final controller = TextEditingController(text: current);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename session'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Title'),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.isEmpty) return;
+    await onSubmit(name);
+  }
+
+  Future<void> _confirmAndRun(
+    String title,
+    String message,
+    Future<void> Function() onConfirm, {
+    String confirmLabel = 'Delete',
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    if (ok ?? false) await onConfirm();
+  }
+
+  Future<void> _projectMenu(
+    Offset pos,
+    Project project,
+    SystemTerminal? terminal,
+    SessionActions actions,
+    bool pinned,
+  ) async {
+    final action = await _rowMenu(pos, [
+      DesktopMenuItem(
+        value: 'new',
+        label: 'New session in terminal',
+        icon: AppIcons.plus,
+      ),
+      DesktopMenuItem(
+        value: 'copy',
+        label: 'Copy new-session command',
+        icon: AppIcons.copy,
+      ),
+      DesktopMenuItem(
+        value: 'editor',
+        label: 'Open in editor',
+        icon: AppIcons.code,
+      ),
+      DesktopMenuItem(
+        value: 'editor-sub',
+        label: 'Open sub-folder in editor…',
+        icon: AppIcons.folderOpen,
+      ),
+      DesktopMenuItem(
+        value: 'pin',
+        label: pinned ? 'Unpin' : 'Pin to top',
+        icon: AppIcons.pushPin,
+      ),
+      DesktopMenuItem(
+        value: 'refresh',
+        label: 'Refresh CLI sessions',
+        icon: AppIcons.arrowsClockwise,
+      ),
+      const DesktopMenuDivider(),
+      DesktopMenuItem(
+        value: 'remove',
+        label: 'Remove from workspace',
+        icon: AppIcons.trash,
+        destructive: true,
+      ),
+    ]);
+    switch (action) {
+      case 'new':
+        await _launch(
+          terminal,
+          (t) => actions.startNewSessionInTerminal(project.id, t),
+        );
+      case 'copy':
+        await _copyCommand(() => actions.newSessionShellCommand(project.id));
+      case 'editor':
+        await _openEditor(project);
+      case 'editor-sub':
+        await _openEditor(project, chooseSubfolder: true);
+      case 'pin':
+        ref
+            .read(settingsControllerProvider.notifier)
+            .togglePinnedProject(project.id);
+      case 'refresh':
+        await _syncProject(project);
+      case 'remove':
+        await _confirmAndRun(
+          'Remove project?',
+          'Removes "${project.name}" and its sessions from the workspace. '
+              'Files on disk are not touched.',
+          () async => ref
+              .read(projectsControllerProvider.notifier)
+              .deleteProject(project.id),
+          confirmLabel: 'Remove',
+        );
+    }
+  }
+
+  Future<void> _sessionMenu(
+    Offset pos, {
+    required VoidCallback onResume,
+    required String Function() copyCommand,
+    required Future<void> Function() onRename,
+    required Future<void> Function() onDelete,
+  }) async {
+    final action = await _rowMenu(pos, [
+      DesktopMenuItem(
+        value: 'resume',
+        label: 'Resume in terminal',
+        icon: AppIcons.arrowSquareOut,
+      ),
+      DesktopMenuItem(
+        value: 'copy',
+        label: 'Copy resume command',
+        icon: AppIcons.copy,
+      ),
+      const DesktopMenuDivider(),
+      DesktopMenuItem(
+        value: 'rename',
+        label: 'Rename…',
+        icon: AppIcons.pencilSimple,
+      ),
+      DesktopMenuItem(
+        value: 'delete',
+        label: 'Delete…',
+        icon: AppIcons.trash,
+        destructive: true,
+      ),
+    ]);
+    switch (action) {
+      case 'resume':
+        onResume();
+      case 'copy':
+        await _copyCommand(copyCommand);
+      case 'rename':
+        await onRename();
+      case 'delete':
+        await onDelete();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -98,7 +359,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               child: Row(
                 children: [
                   Icon(
-                    PiconsRegular.bookOpen,
+                    AppIcons.bookOpen,
                     size: 16,
                     color: theme.colorScheme.tertiary,
                   ),
@@ -113,7 +374,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     tooltip: 'Expand to full window',
                     iconSize: 16,
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(PiconsRegular.arrowsOutSimple),
+                    icon: const Icon(AppIcons.arrowsOutSimple),
                     onPressed: () =>
                         ref.read(appModeProvider.notifier).enterFull(),
                   ),
@@ -121,7 +382,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     tooltip: 'Hide to tray',
                     iconSize: 16,
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(PiconsRegular.minus),
+                    icon: const Icon(AppIcons.x),
                     onPressed: () => windowManager.hide(),
                   ),
                 ],
@@ -135,7 +396,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               child: TextField(
                 decoration: const InputDecoration(
                   isDense: true,
-                  prefixIcon: Icon(PiconsRegular.magnifyingGlass, size: 16),
+                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
                   hintText: 'Search projects & sessions',
                   border: OutlineInputBorder(),
                 ),
@@ -152,18 +413,27 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                       ),
                     ),
                   )
-                : ListView(
-                    padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                    children: [
-                      for (final project in projects)
-                        ..._projectNodes(
-                          project,
-                          terminal,
-                          actions,
-                          query,
-                          pinned.contains(project.id),
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide =
+                          constraints.maxWidth >= _miniWideBreakpoint;
+                      return ListView(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: Insets.xs,
                         ),
-                    ],
+                        children: [
+                          for (final project in projects)
+                            ..._projectNodes(
+                              project,
+                              terminal,
+                              actions,
+                              query,
+                              pinned.contains(project.id),
+                              isWide,
+                            ),
+                        ],
+                      );
+                    },
                   ),
           ),
         ],
@@ -177,6 +447,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     SessionActions actions,
     String query,
     bool pinned,
+    bool isWide,
   ) {
     final nameMatches =
         query.isEmpty || project.name.toLowerCase().contains(query);
@@ -193,13 +464,32 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
             s.title.toLowerCase().contains(query)) {
           sessions.add(
             _sessionTile(
-              s.title,
-              PiconsRegular.chatCircle,
-              () => _launch(
+              title: s.title,
+              icon: AppIcons.chatCircle,
+              onTap: () => _launch(
                 terminal,
                 (t) => actions.openSessionInSystemTerminal(s.id, t),
               ),
-              () => actions.nativeResumeShellCommand(s.id),
+              copyCommand: () => actions.nativeResumeShellCommand(s.id),
+              onContextMenu: !isWide
+                  ? null
+                  : (pos) => _sessionMenu(
+                      pos,
+                      onResume: () => _launch(
+                        terminal,
+                        (t) => actions.openSessionInSystemTerminal(s.id, t),
+                      ),
+                      copyCommand: () => actions.nativeResumeShellCommand(s.id),
+                      onRename: () => _renameSession(
+                        s.title,
+                        (name) async => actions.renameNative(s.id, name),
+                      ),
+                      onDelete: () => _confirmAndRun(
+                        'Delete session?',
+                        'Removes "${s.title}".',
+                        () => actions.deleteNative(s.id),
+                      ),
+                    ),
             ),
           );
         }
@@ -210,11 +500,30 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
             s.displayTitle.toLowerCase().contains(query)) {
           sessions.add(
             _sessionTile(
-              s.displayTitle,
-              PiconsRegular.clockCounterClockwise,
-              () =>
+              title: s.displayTitle,
+              icon: AppIcons.clockCounterClockwise,
+              onTap: () =>
                   _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
-              () => actions.resumeShellCommand(s),
+              copyCommand: () => actions.resumeShellCommand(s),
+              onContextMenu: !isWide
+                  ? null
+                  : (pos) => _sessionMenu(
+                      pos,
+                      onResume: () => _launch(
+                        terminal,
+                        (t) => actions.openInSystemTerminal(s, t),
+                      ),
+                      copyCommand: () => actions.resumeShellCommand(s),
+                      onRename: () => _renameSession(
+                        s.displayTitle,
+                        (name) => actions.renameImported(s, name),
+                      ),
+                      onDelete: () => _confirmAndRun(
+                        'Delete session?',
+                        'Removes "${s.displayTitle}".',
+                        () => actions.deleteImported(s),
+                      ),
+                    ),
             ),
           );
         }
@@ -226,55 +535,73 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     if (query.isNotEmpty && !nameMatches && sessions.isEmpty) return const [];
     final expanded = query.isNotEmpty ? true : _expanded.contains(project.id);
 
-    final rows = <Widget>[
-      ListTile(
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        leading: Icon(
-          expanded ? PiconsRegular.caretDown : PiconsRegular.caretRight,
-          size: 16,
-        ),
-        title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              tooltip: 'Copy new-session command',
-              iconSize: 14,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(PiconsRegular.copy),
-              onPressed: () => _copyCommand(
-                () => actions.newSessionShellCommand(project.id),
-              ),
-            ),
-            IconButton(
-              tooltip: 'New session in terminal',
-              iconSize: 16,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(PiconsRegular.plus),
-              onPressed: () => _launch(
-                terminal,
-                (t) => actions.startNewSessionInTerminal(project.id, t),
-              ),
-            ),
-            IconButton(
-              tooltip: pinned ? 'Unpin' : 'Pin to top',
-              iconSize: 15,
-              visualDensity: VisualDensity.compact,
-              icon: Icon(
-                pinned ? PiconsRegular.pushPin : PiconsRegular.pushPin,
-              ),
-              color: pinned ? Theme.of(context).colorScheme.tertiary : null,
-              onPressed: () => ref
-                  .read(settingsControllerProvider.notifier)
-                  .togglePinnedProject(project.id),
-            ),
-          ],
-        ),
-        onTap: () => setState(() {
-          if (!_expanded.remove(project.id)) _expanded.add(project.id);
-        }),
+    final projectTile = ListTile(
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      leading: Icon(
+        expanded ? AppIcons.caretDown : AppIcons.caretRight,
+        size: 16,
       ),
+      title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Open in editor',
+            iconSize: 14,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(AppIcons.code),
+            onPressed: () => _openEditor(project),
+          ),
+          IconButton(
+            tooltip: 'Copy new-session command',
+            iconSize: 14,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(AppIcons.copy),
+            onPressed: () =>
+                _copyCommand(() => actions.newSessionShellCommand(project.id)),
+          ),
+          IconButton(
+            tooltip: 'New session in terminal',
+            iconSize: 16,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(AppIcons.plus),
+            onPressed: () => _launch(
+              terminal,
+              (t) => actions.startNewSessionInTerminal(project.id, t),
+            ),
+          ),
+          IconButton(
+            tooltip: pinned ? 'Unpin' : 'Pin to top',
+            iconSize: 15,
+            visualDensity: VisualDensity.compact,
+            icon: Icon(pinned ? AppIcons.pushPinFill : AppIcons.pushPin),
+            color: pinned ? Theme.of(context).colorScheme.tertiary : null,
+            onPressed: () => ref
+                .read(settingsControllerProvider.notifier)
+                .togglePinnedProject(project.id),
+          ),
+        ],
+      ),
+      onTap: () => setState(() {
+        if (!_expanded.remove(project.id)) _expanded.add(project.id);
+      }),
+    );
+
+    final rows = <Widget>[
+      isWide
+          ? GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onSecondaryTapDown: (d) => _projectMenu(
+                d.globalPosition,
+                project,
+                terminal,
+                actions,
+                pinned,
+              ),
+              child: projectTile,
+            )
+          : projectTile,
     ];
     if (!expanded) return rows;
     if (sessions.isEmpty) {
@@ -290,13 +617,14 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     return rows;
   }
 
-  Widget _sessionTile(
-    String title,
-    IconData icon,
-    VoidCallback onTap,
-    String Function() copyCommand,
-  ) {
-    return Padding(
+  Widget _sessionTile({
+    required String title,
+    required IconData icon,
+    required VoidCallback onTap,
+    required String Function() copyCommand,
+    void Function(Offset)? onContextMenu,
+  }) {
+    final tile = Padding(
       padding: const EdgeInsets.only(left: 24),
       child: ListTile(
         dense: true,
@@ -310,20 +638,26 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               tooltip: 'Copy resume command',
               iconSize: 13,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(PiconsRegular.copy),
+              icon: const Icon(AppIcons.copy),
               onPressed: () => _copyCommand(copyCommand),
             ),
             IconButton(
               tooltip: 'Resume in terminal',
               iconSize: 14,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(PiconsRegular.arrowSquareOut),
+              icon: const Icon(AppIcons.arrowSquareOut),
               onPressed: onTap,
             ),
           ],
         ),
         onTap: onTap,
       ),
+    );
+    if (onContextMenu == null) return tile;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: (d) => onContextMenu(d.globalPosition),
+      child: tile,
     );
   }
 }

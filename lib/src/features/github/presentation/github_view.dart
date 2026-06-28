@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../application/github_providers.dart';
 
 /// Read-only GitHub overview for the selected repository: open pull requests and
@@ -28,7 +28,7 @@ class GitHubView extends ConsumerWidget {
               ),
               IconButton(
                 tooltip: 'Refresh',
-                icon: const Icon(PiconsRegular.arrowsClockwise, size: 18),
+                icon: const Icon(AppIcons.arrowsClockwise, size: 18),
                 onPressed: () {
                   ref.invalidate(githubPullRequestsProvider);
                   ref.invalidate(githubIssuesProvider);
@@ -41,16 +41,13 @@ class GitHubView extends ConsumerWidget {
         Expanded(
           child: ListView(
             children: [
-              _SectionHeader(
-                icon: PiconsRegular.gitMerge,
-                label: 'Pull requests',
-              ),
+              _SectionHeader(icon: AppIcons.gitMerge, label: 'Pull requests'),
               _AsyncList(
                 value: prs,
                 empty: 'No open pull requests.',
                 itemBuilder: (pr) => ListTile(
                   dense: true,
-                  leading: const Icon(PiconsRegular.gitMerge, size: 16),
+                  leading: const Icon(AppIcons.gitMerge, size: 16),
                   title: Text('#${pr.number} ${pr.title}'),
                   subtitle: Text(
                     '${pr.state}${pr.author == null ? '' : ' · ${pr.author}'}',
@@ -58,13 +55,13 @@ class GitHubView extends ConsumerWidget {
                 ),
               ),
               const Divider(height: 1),
-              _SectionHeader(icon: PiconsRegular.target, label: 'Issues'),
+              _SectionHeader(icon: AppIcons.target, label: 'Issues'),
               _AsyncList(
                 value: issues,
                 empty: 'No open issues.',
                 itemBuilder: (issue) => ListTile(
                   dense: true,
-                  leading: const Icon(PiconsRegular.target, size: 16),
+                  leading: const Icon(AppIcons.target, size: 16),
                   title: Text('#${issue.number} ${issue.title}'),
                   subtitle: Text(issue.state),
                 ),

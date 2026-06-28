@@ -2,10 +2,10 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:picons/picons.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/shell_state.dart';
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/desktop_dialog.dart';
@@ -166,7 +166,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       context: context,
       builder: (context) => AlertDialog(
         title: const DesktopDialogTitle(
-          icon: PiconsRegular.trash,
+          icon: AppIcons.trash,
           title: 'Remove project?',
           subtitle: 'This only changes the Chitragupta workspace.',
         ),
@@ -234,7 +234,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     return PaneScaffold(
       title: 'Explorer',
-      icon: PiconsRegular.treeStructure,
+      icon: AppIcons.treeStructure,
       focused: focused,
       actions: [
         if (syncing)
@@ -247,21 +247,21 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ),
         IconButton(
           tooltip: 'Detect CLI sessions',
-          icon: const Icon(PiconsRegular.globe, size: 18),
+          icon: const Icon(AppIcons.globe, size: 18),
           onPressed: _showDetected,
         ),
         IconButton(
           tooltip: selectedRepoId == null
               ? 'Select a repository first'
               : 'New session',
-          icon: const Icon(PiconsRegular.chatCircleDots, size: 18),
+          icon: const Icon(AppIcons.chatCircleDots, size: 18),
           onPressed: selectedRepoId == null
               ? null
               : () => NewSessionDialog.show(context),
         ),
         IconButton(
           tooltip: 'New project',
-          icon: const Icon(PiconsRegular.folderPlus, size: 18),
+          icon: const Icon(AppIcons.folderPlus, size: 18),
           onPressed: () => NewProjectDialog.show(context),
         ),
       ],
@@ -273,7 +273,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               child: TextField(
                 decoration: const InputDecoration(
                   isDense: true,
-                  prefixIcon: Icon(PiconsRegular.magnifyingGlass, size: 18),
+                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 18),
                   hintText: 'Search projects',
                   border: OutlineInputBorder(),
                 ),
@@ -299,7 +299,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         depth: 0,
         selected: project.id == selectedProjectId,
         leading: Icon(
-          expanded ? PiconsRegular.folderOpen : PiconsRegular.folder,
+          expanded ? AppIcons.folderOpen : AppIcons.folder,
           size: 18,
         ),
         expandedState: expanded,
@@ -310,38 +310,38 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           DesktopMenuItem(
             value: 'new-session',
             label: 'New session',
-            icon: PiconsRegular.chatCircleDots,
+            icon: AppIcons.chatCircleDots,
           ),
           DesktopMenuItem(
             value: 'copy-cmd',
             label: 'Copy new-session command',
-            icon: PiconsRegular.copy,
+            icon: AppIcons.copy,
           ),
           DesktopMenuItem(
             value: 'open-editor',
             label: 'Open in editor',
-            icon: PiconsRegular.code,
+            icon: AppIcons.code,
           ),
           DesktopMenuItem(
             value: 'open-editor-subfolder',
             label: 'Open sub-folder in editor…',
-            icon: PiconsRegular.folderOpen,
+            icon: AppIcons.folderOpen,
           ),
           DesktopMenuItem(
             value: 'pin',
             label: pinned ? 'Unpin' : 'Pin to top',
-            icon: pinned ? PiconsRegular.pushPin : PiconsRegular.pushPin,
+            icon: pinned ? AppIcons.pushPin : AppIcons.pushPin,
           ),
           DesktopMenuItem(
             value: 'refresh',
             label: 'Refresh CLI sessions',
-            icon: PiconsRegular.arrowsClockwise,
+            icon: AppIcons.arrowsClockwise,
           ),
           const DesktopMenuDivider(),
           DesktopMenuItem(
             value: 'delete',
             label: 'Remove from workspace',
-            icon: PiconsRegular.trash,
+            icon: AppIcons.trash,
             destructive: true,
           ),
         ],
@@ -372,19 +372,19 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 visualDensity: VisualDensity.compact,
                 iconSize: 15,
                 color: Theme.of(context).colorScheme.tertiary,
-                icon: const Icon(PiconsRegular.pushPin),
+                icon: const Icon(AppIcons.pushPin),
                 onPressed: () => _togglePin(project),
               ),
             IconButton(
               tooltip: 'New session in this project',
               visualDensity: VisualDensity.compact,
               iconSize: 16,
-              icon: const Icon(PiconsRegular.plus),
+              icon: const Icon(AppIcons.plus),
               onPressed: () => _newSessionInProject(project),
             ),
             PopupMenuButton<String>(
               tooltip: 'Project actions',
-              icon: const Icon(PiconsRegular.dotsThreeVertical, size: 16),
+              icon: const Icon(AppIcons.dotsThreeVertical, size: 16),
               onSelected: (action) {
                 if (action == 'copy-cmd') {
                   copyCommandToClipboard(
@@ -406,33 +406,33 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 DesktopMenuItem(
                   value: 'copy-cmd',
                   label: 'Copy new-session command',
-                  icon: PiconsRegular.copy,
+                  icon: AppIcons.copy,
                 ),
                 DesktopMenuItem(
                   value: 'open-editor',
                   label: 'Open in editor',
-                  icon: PiconsRegular.code,
+                  icon: AppIcons.code,
                 ),
                 DesktopMenuItem(
                   value: 'open-editor-subfolder',
                   label: 'Open sub-folder in editor…',
-                  icon: PiconsRegular.folderOpen,
+                  icon: AppIcons.folderOpen,
                 ),
                 DesktopMenuItem(
                   value: 'pin',
                   label: pinned ? 'Unpin' : 'Pin to top',
-                  icon: pinned ? PiconsRegular.pushPin : PiconsRegular.pushPin,
+                  icon: pinned ? AppIcons.pushPin : AppIcons.pushPin,
                 ),
                 DesktopMenuItem(
                   value: 'refresh',
                   label: 'Refresh CLI sessions',
-                  icon: PiconsRegular.arrowsClockwise,
+                  icon: AppIcons.arrowsClockwise,
                 ),
                 const DesktopMenuDivider(),
                 DesktopMenuItem(
                   value: 'delete',
                   label: 'Remove from workspace',
-                  icon: PiconsRegular.trash,
+                  icon: AppIcons.trash,
                   destructive: true,
                 ),
               ],
@@ -465,7 +465,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       _TreeRow(
         depth: 1,
         selected: repo.id == selectedRepoId,
-        leading: const Icon(PiconsRegular.gitBranch, size: 16),
+        leading: const Icon(AppIcons.gitBranch, size: 16),
         expandedState: expanded,
         title: repo.name,
         onTap: () => _toggleRepo(repo),
@@ -539,9 +539,7 @@ class _TreeRow extends StatelessWidget {
           children: [
             if (expandedState != null)
               Icon(
-                expandedState!
-                    ? PiconsRegular.caretDown
-                    : PiconsRegular.caretRight,
+                expandedState! ? AppIcons.caretDown : AppIcons.caretRight,
                 size: 16,
                 color: theme.colorScheme.onSurfaceVariant,
               )
@@ -664,25 +662,25 @@ class _NativeSessionRow extends ConsumerWidget {
           DesktopMenuItem(
             value: 'terminal:${terminal.id}',
             label: 'Open in ${terminal.label}',
-            icon: PiconsRegular.terminal,
+            icon: AppIcons.terminal,
           ),
         if (terminals.isNotEmpty) const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'copy-cmd',
           label: 'Copy resume command',
-          icon: PiconsRegular.copy,
+          icon: AppIcons.copy,
         ),
         DesktopMenuItem(
           value: 'rename',
           label: 'Rename',
-          icon: PiconsRegular.pencilSimple,
+          icon: AppIcons.pencilSimple,
           shortcut: 'F2',
         ),
         const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'delete',
           label: 'Delete',
-          icon: PiconsRegular.trash,
+          icon: AppIcons.trash,
           destructive: true,
         ),
       ],
@@ -713,11 +711,11 @@ class _NativeSessionRow extends ConsumerWidget {
   Widget _statusIcon(SessionStatus status, BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (IconData icon, Color color) = switch (status) {
-      SessionStatus.running => (PiconsRegular.playCircle, scheme.tertiary),
-      SessionStatus.completed => (PiconsRegular.checkCircle, Colors.green),
-      SessionStatus.failed => (PiconsRegular.warningCircle, scheme.error),
-      SessionStatus.cancelled => (PiconsRegular.xCircle, scheme.outline),
-      _ => (PiconsRegular.circle, scheme.outline),
+      SessionStatus.running => (AppIcons.playCircle, scheme.tertiary),
+      SessionStatus.completed => (AppIcons.checkCircle, Colors.green),
+      SessionStatus.failed => (AppIcons.warningCircle, scheme.error),
+      SessionStatus.cancelled => (AppIcons.xCircle, scheme.outline),
+      _ => (AppIcons.circle, scheme.outline),
     };
     return Icon(icon, size: 16, color: color);
   }
@@ -782,8 +780,8 @@ class _ImportedSessionRow extends ConsumerWidget {
       selected: selected,
       leading: Icon(
         session.isSubagent
-            ? PiconsRegular.arrowBendDownRight
-            : PiconsRegular.clockCounterClockwise,
+            ? AppIcons.arrowBendDownRight
+            : AppIcons.clockCounterClockwise,
         size: 16,
       ),
       title: session.displayTitle,
@@ -793,31 +791,31 @@ class _ImportedSessionRow extends ConsumerWidget {
         DesktopMenuItem(
           value: 'resume',
           label: 'Resume in app',
-          icon: PiconsRegular.play,
+          icon: AppIcons.play,
         ),
         for (final terminal in terminals)
           DesktopMenuItem(
             value: 'terminal:${terminal.id}',
             label: 'Open in ${terminal.label}',
-            icon: PiconsRegular.terminal,
+            icon: AppIcons.terminal,
           ),
         const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'copy-cmd',
           label: 'Copy resume command',
-          icon: PiconsRegular.copy,
+          icon: AppIcons.copy,
         ),
         DesktopMenuItem(
           value: 'rename',
           label: 'Rename',
-          icon: PiconsRegular.pencilSimple,
+          icon: AppIcons.pencilSimple,
           shortcut: 'F2',
         ),
         const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'delete',
           label: 'Delete from CLI store',
-          icon: PiconsRegular.trash,
+          icon: AppIcons.trash,
           destructive: true,
         ),
       ],
@@ -878,7 +876,7 @@ class _SessionRow extends StatelessWidget {
         ),
         trailing: PopupMenuButton<String>(
           tooltip: 'Session actions',
-          icon: const Icon(PiconsRegular.dotsThreeVertical, size: 16),
+          icon: const Icon(AppIcons.dotsThreeVertical, size: 16),
           onSelected: onMenu,
           itemBuilder: (context) => menuItems,
         ),
@@ -999,7 +997,7 @@ Future<String?> _promptRename(BuildContext context, String current) {
     context: context,
     builder: (context) => AlertDialog(
       title: const DesktopDialogTitle(
-        icon: PiconsRegular.pencilSimple,
+        icon: AppIcons.pencilSimple,
         title: 'Rename session',
       ),
       content: TextField(
@@ -1028,7 +1026,7 @@ Future<bool?> _confirmDelete(BuildContext context, String title) {
     builder: (context) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
         title: const DesktopDialogTitle(
-          icon: PiconsRegular.trash,
+          icon: AppIcons.trash,
           title: 'Delete session?',
           subtitle: 'Choose whether to also remove the CLI history.',
         ),

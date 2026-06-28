@@ -4,6 +4,7 @@ import '../../../core/database/database_providers.dart';
 import '../../agents/domain/agent_kind.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
+import '../domain/mini_position.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 
@@ -63,6 +64,11 @@ class SettingsController extends Notifier<Settings> {
 
   void setMiniSize(double width, double height) {
     state = state.copyWith(miniWidth: width, miniHeight: height);
+    _save();
+  }
+
+  void setMiniPosition(MiniPosition position) {
+    state = state.copyWith(miniPosition: position);
     _save();
   }
 
