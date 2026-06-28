@@ -44,7 +44,6 @@ class AppModeController extends Notifier<AppMode> {
       await windowManager.setMinimumSize(const Size(240, 280));
       await windowManager.setSize(size);
       await windowManager.setResizable(true);
-      await windowManager.setAlwaysOnTop(true);
       await windowManager.setTitleBarStyle(
         TitleBarStyle.hidden,
         windowButtonVisibility: false,
@@ -54,6 +53,9 @@ class AppModeController extends Notifier<AppMode> {
       await windowManager.setSkipTaskbar(true);
       await windowManager.show();
       await windowManager.focus();
+      // Assert always-on-top LAST: setTitleBarStyle/setSkipTaskbar/show reset the
+      // topmost z-order on Windows, so doing it earlier doesn't stick.
+      await windowManager.setAlwaysOnTop(true);
     } catch (_) {}
   }
 
