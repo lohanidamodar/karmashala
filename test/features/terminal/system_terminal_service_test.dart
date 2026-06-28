@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,7 +11,7 @@ void main() {
   group('resumeCommandLine', () {
     final cwd = EnvironmentPath(environmentId: 'windows', path: r'C:\ws\app');
 
-    test('Claude on the Windows host resumes by id', () {
+    test('Claude on the Windows host resumes by id (ask adds no flags)', () {
       final cmd = resumeCommandLine(
         agentExecutable: 'claude',
         cli: 'claudeCode',
@@ -21,7 +22,25 @@ void main() {
       expect(cmd, ['claude', '--resume', 'abc']);
     });
 
-    test('a WSL session is wrapped in wsl.exe with --cd', () {
+    test('Claude bypass adds --permission-mode bypassPermissions', () {
+      final cmd = resumeCommandLine(
+        agentExecutable: 'claude',
+        cli: 'claudeCode',
+        externalId: 'abc',
+        environment: windowsEnv(),
+        cwd: cwd,
+        permissionMode: PermissionMode.bypass,
+      );
+      expect(cmd, [
+        'claude',
+        '--permission-mode',
+        'bypassPermissions',
+        '--resume',
+        'abc',
+      ]);
+    });
+
+    test('a WSL session is wrapped in wsl.exe with --cd (codex ask flag)', () {
       final cmd = resumeCommandLine(
         agentExecutable: 'codex',
         cli: 'codex',
@@ -37,6 +56,8 @@ void main() {
         '/home/me/app',
         '--',
         'codex',
+        '--ask-for-approval',
+        'on-request',
         'resume',
         'sid',
       ]);

@@ -16,6 +16,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../domain/session_event.dart';
@@ -246,6 +247,7 @@ class SessionActions {
     required Repository repo,
     required AgentInstallation installation,
     required SystemTerminal terminal,
+    PermissionMode? permissionMode,
   }) async {
     final env = _ref
         .read(executionEnvironmentDaoProvider)
@@ -254,6 +256,16 @@ class SessionActions {
       throw StateError('The repository\'s environment is unavailable.');
     }
     final exe = installation.executable.path;
+    final mode =
+        permissionMode ??
+        _ref
+            .read(settingsControllerProvider)
+            .permissionsFor(installation.agentKind)
+            .newSessions;
+    final agentArgs = [
+      exe,
+      ...permissionArgsFor(installation.agentKind.name, mode),
+    ];
     final command = env.wslDistribution != null
         ? [
             'wsl.exe',
@@ -262,9 +274,9 @@ class SessionActions {
             '--cd',
             repo.path.path,
             '--',
-            exe,
+            ...agentArgs,
           ]
-        : [exe];
+        : agentArgs;
     final cwd = env.wslDistribution == null ? repo.path.path : null;
     await _ref
         .read(systemTerminalServiceProvider)
@@ -304,6 +316,10 @@ class SessionActions {
       externalId: session.externalId,
       environment: env,
       cwd: repo.path,
+      permissionMode: _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(session.cli)
+          .existingSessions,
     );
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host shells
     // take a start directory.
@@ -359,6 +375,10 @@ class SessionActions {
       externalId: externalId,
       environment: env,
       cwd: session.worktree ?? repo.path,
+      permissionMode: _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(installation.agentKind)
+          .existingSessions,
     );
     final cwd = env.wslDistribution == null
         ? (session.worktree ?? repo.path).path

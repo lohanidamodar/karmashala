@@ -2,6 +2,7 @@ import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
+import '../../settings/domain/permission_mode.dart';
 
 /// A standalone terminal emulator installed on the host that we can launch
 /// externally (as opposed to the in-app PTY tabs).
@@ -178,22 +179,52 @@ class SystemTerminalService {
   String _quoteCmd(String value) => '"${value.replaceAll('"', '""')}"';
 }
 
+/// The agent CLI flags for a [permissionMode], matching the in-app adapters so
+/// terminal launches honour the same per-agent permission setting.
+List<String> permissionArgsFor(String cli, PermissionMode permissionMode) {
+  return switch (cli) {
+    'claudeCode' => switch (permissionMode) {
+      PermissionMode.ask => const <String>[],
+      PermissionMode.acceptEdits => const ['--permission-mode', 'acceptEdits'],
+      PermissionMode.bypass => const ['--permission-mode', 'bypassPermissions'],
+    },
+    'codex' => switch (permissionMode) {
+      PermissionMode.ask => const ['--ask-for-approval', 'on-request'],
+      PermissionMode.acceptEdits => const ['--ask-for-approval', 'on-failure'],
+      PermissionMode.bypass => const [
+        '--dangerously-bypass-approvals-and-sandbox',
+      ],
+    },
+    _ =>
+      permissionMode == PermissionMode.bypass
+          ? const ['--yolo']
+          : const <String>[],
+  };
+}
+
 /// Builds the host command line that resumes [cli]'s session [externalId] using
 /// agent executable [agentExecutable], wrapping in `wsl.exe` when the session
-/// lives in a WSL [environment].
+/// lives in a WSL [environment]. [permissionMode] adds the per-agent permission
+/// flags (e.g. bypass).
 List<String> resumeCommandLine({
   required String agentExecutable,
   required String cli,
   required String externalId,
   required ExecutionEnvironment environment,
   required EnvironmentPath cwd,
+  PermissionMode permissionMode = PermissionMode.ask,
 }) {
   final resumeArgs = switch (cli) {
     'claudeCode' => ['--resume', externalId],
     'codex' => ['resume', externalId],
     _ => <String>[],
   };
-  final base = [agentExecutable, ...resumeArgs];
+  // Permission flags before the resume subcommand/args (global flags first).
+  final base = [
+    agentExecutable,
+    ...permissionArgsFor(cli, permissionMode),
+    ...resumeArgs,
+  ];
   if (environment.wslDistribution != null) {
     return [
       'wsl.exe',
