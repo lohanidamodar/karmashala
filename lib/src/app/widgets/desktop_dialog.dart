@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:picons/picons.dart';
 
 /// Consistent title row for desktop dialogs, including a visible close affordance.
 class DesktopDialogTitle extends StatelessWidget {
@@ -38,7 +39,7 @@ class DesktopDialogTitle extends StatelessWidget {
         ),
         IconButton(
           tooltip: 'Close',
-          icon: const Icon(Icons.close, size: 16),
+          icon: const Icon(PiconsRegular.x, size: 16),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ],
@@ -62,7 +63,7 @@ class DesktopErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline, size: 16, color: scheme.error),
+          Icon(PiconsRegular.warningCircle, size: 16, color: scheme.error),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/resize_handle.dart';
@@ -44,14 +45,14 @@ class DetailPanel extends ConsumerWidget {
 
     return PaneScaffold(
       title: 'Detail',
-      icon: Icons.article_outlined,
+      icon: PiconsRegular.article,
       focused: focused,
       actions: [
         if (selectedRepoId != null)
           IconButton(
             tooltip: sidebarVisible ? 'Hide sidebar' : 'Show sidebar',
             isSelected: sidebarVisible,
-            icon: const Icon(Icons.view_sidebar_outlined, size: 18),
+            icon: const Icon(PiconsRegular.sidebarSimple, size: 18),
             onPressed: () =>
                 ref.read(detailSidebarVisibleProvider.notifier).toggle(),
           ),
@@ -145,7 +146,7 @@ class _MainArea extends ConsumerWidget {
         final repo = repositories[index];
         return ListTile(
           dense: true,
-          leading: const Icon(Icons.source_outlined, size: 18),
+          leading: const Icon(PiconsRegular.gitBranch, size: 18),
           title: Text(repo.name),
           subtitle: Text(
             repo.path.path,
@@ -190,26 +191,26 @@ class _Sidebar extends ConsumerWidget {
             children: [
               _SidebarTab(
                 selected: tab == 0,
-                icon: Icons.difference_outlined,
+                icon: PiconsRegular.gitDiff,
                 label: 'Changes',
                 onTap: () => ref.read(repoReviewTabProvider.notifier).select(0),
               ),
               _SidebarTab(
                 selected: tab == 1,
-                icon: Icons.merge_outlined,
+                icon: PiconsRegular.gitMerge,
                 label: 'GitHub',
                 onTap: () => ref.read(repoReviewTabProvider.notifier).select(1),
               ),
               _SidebarTab(
                 selected: tab == 2,
-                icon: Icons.info_outline,
+                icon: PiconsRegular.info,
                 label: 'Info',
                 onTap: () => ref.read(repoReviewTabProvider.notifier).select(2),
               ),
               const Spacer(),
               IconButton(
                 tooltip: 'Close sidebar',
-                icon: const Icon(Icons.close, size: 15),
+                icon: const Icon(PiconsRegular.x, size: 15),
                 onPressed: () =>
                     ref.read(detailSidebarVisibleProvider.notifier).toggle(),
               ),

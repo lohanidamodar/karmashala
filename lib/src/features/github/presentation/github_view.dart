@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 
 import '../application/github_providers.dart';
 
@@ -27,7 +28,7 @@ class GitHubView extends ConsumerWidget {
               ),
               IconButton(
                 tooltip: 'Refresh',
-                icon: const Icon(Icons.refresh, size: 18),
+                icon: const Icon(PiconsRegular.arrowsClockwise, size: 18),
                 onPressed: () {
                   ref.invalidate(githubPullRequestsProvider);
                   ref.invalidate(githubIssuesProvider);
@@ -41,7 +42,7 @@ class GitHubView extends ConsumerWidget {
           child: ListView(
             children: [
               _SectionHeader(
-                icon: Icons.merge_outlined,
+                icon: PiconsRegular.gitMerge,
                 label: 'Pull requests',
               ),
               _AsyncList(
@@ -49,7 +50,7 @@ class GitHubView extends ConsumerWidget {
                 empty: 'No open pull requests.',
                 itemBuilder: (pr) => ListTile(
                   dense: true,
-                  leading: const Icon(Icons.merge_outlined, size: 16),
+                  leading: const Icon(PiconsRegular.gitMerge, size: 16),
                   title: Text('#${pr.number} ${pr.title}'),
                   subtitle: Text(
                     '${pr.state}${pr.author == null ? '' : ' · ${pr.author}'}',
@@ -57,13 +58,13 @@ class GitHubView extends ConsumerWidget {
                 ),
               ),
               const Divider(height: 1),
-              _SectionHeader(icon: Icons.adjust_outlined, label: 'Issues'),
+              _SectionHeader(icon: PiconsRegular.target, label: 'Issues'),
               _AsyncList(
                 value: issues,
                 empty: 'No open issues.',
                 itemBuilder: (issue) => ListTile(
                   dense: true,
-                  leading: const Icon(Icons.adjust_outlined, size: 16),
+                  leading: const Icon(PiconsRegular.target, size: 16),
                   title: Text('#${issue.number} ${issue.title}'),
                   subtitle: Text(issue.state),
                 ),

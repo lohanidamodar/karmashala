@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:pasteboard/pasteboard.dart';
+import 'package:picons/picons.dart';
 
 import '../../../app/theme/design_tokens.dart';
 
@@ -159,7 +160,7 @@ class _MessageComposerState extends State<MessageComposer> {
               IconButton(
                 tooltip: 'Attach image (paste from clipboard or pick a file)',
                 onPressed: canType ? _attach : null,
-                icon: const Icon(Icons.image_outlined, size: 20),
+                icon: const Icon(PiconsRegular.image, size: 20),
               ),
               Expanded(
                 child: TextField(
@@ -184,7 +185,7 @@ class _MessageComposerState extends State<MessageComposer> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.send, size: 18),
+                    : const Icon(PiconsRegular.paperPlaneRight, size: 18),
               ),
             ],
           ),
@@ -230,7 +231,7 @@ class _Thumbnail extends StatelessWidget {
             style: IconButton.styleFrom(
               backgroundColor: scheme.surfaceContainerHighest,
             ),
-            icon: const Icon(Icons.close),
+            icon: const Icon(PiconsRegular.x),
             onPressed: onRemove,
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/git/application/changes_providers.dart';
@@ -64,7 +65,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'New project…',
-        icon: Icons.create_new_folder_outlined,
+        icon: PiconsRegular.folderPlus,
         onSelect: () => run(() => NewProjectDialog.show(context)),
       ),
     );
@@ -72,7 +73,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
       entries.add(
         _PaletteEntry(
           label: 'New session…',
-          icon: Icons.add_comment_outlined,
+          icon: PiconsRegular.chatCircleDots,
           onSelect: () => run(() => NewSessionDialog.show(context)),
         ),
       );
@@ -80,7 +81,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'Toggle terminal',
-        icon: Icons.terminal,
+        icon: PiconsRegular.terminal,
         onSelect: () =>
             run(() => ref.read(terminalVisibleProvider.notifier).toggle()),
       ),
@@ -88,7 +89,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'Toggle Explorer',
-        icon: Icons.account_tree_outlined,
+        icon: PiconsRegular.treeStructure,
         onSelect: () => run(
           () => ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
         ),
@@ -97,7 +98,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     entries.add(
       _PaletteEntry(
         label: 'Open Settings',
-        icon: Icons.settings_outlined,
+        icon: PiconsRegular.gearSix,
         onSelect: () => run(() => SettingsScreen.show(context)),
       ),
     );
@@ -111,7 +112,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
         _PaletteEntry(
           label: project.name,
           sublabel: 'Project',
-          icon: Icons.folder_outlined,
+          icon: PiconsRegular.folder,
           onSelect: () => run(
             () =>
                 ref.read(selectedProjectIdProvider.notifier).select(project.id),
@@ -124,7 +125,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
             _PaletteEntry(
               label: s.title,
               sublabel: '${project.name} · ${repo.name}',
-              icon: Icons.chat_bubble_outline,
+              icon: PiconsRegular.chatCircle,
               onSelect: () => run(() {
                 ref.read(selectedProjectIdProvider.notifier).select(project.id);
                 ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
@@ -141,7 +142,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
             _PaletteEntry(
               label: s.displayTitle,
               sublabel: '${project.name} · ${repo.name} · imported',
-              icon: Icons.history,
+              icon: PiconsRegular.clockCounterClockwise,
               onSelect: () => run(() {
                 ref.read(selectedProjectIdProvider.notifier).select(project.id);
                 ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
@@ -182,7 +183,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
                 controller: _controller,
                 autofocus: true,
                 decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search, size: 18),
+                  prefixIcon: Icon(PiconsRegular.magnifyingGlass, size: 18),
                   hintText: 'Jump to a project or session, or run an action…',
                   border: OutlineInputBorder(),
                   isDense: true,

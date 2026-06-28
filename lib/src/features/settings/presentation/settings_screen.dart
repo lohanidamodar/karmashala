@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:picons/picons.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -37,7 +38,7 @@ class SettingsScreen extends ConsumerWidget {
         leading: const BackButton(),
         title: Row(
           children: [
-            Icon(Icons.settings_outlined, color: theme.colorScheme.tertiary),
+            Icon(PiconsRegular.gearSix, color: theme.colorScheme.tertiary),
             const SizedBox(width: Insets.sm),
             const Text('Settings'),
           ],
@@ -55,17 +56,17 @@ class SettingsScreen extends ConsumerWidget {
                   segments: const [
                     ButtonSegment(
                       value: AppThemeMode.system,
-                      icon: Icon(Icons.brightness_auto_outlined, size: 16),
+                      icon: Icon(PiconsRegular.circleHalf, size: 16),
                       label: Text('System'),
                     ),
                     ButtonSegment(
                       value: AppThemeMode.light,
-                      icon: Icon(Icons.light_mode_outlined, size: 16),
+                      icon: Icon(PiconsRegular.sun, size: 16),
                       label: Text('Light'),
                     ),
                     ButtonSegment(
                       value: AppThemeMode.dark,
-                      icon: Icon(Icons.dark_mode_outlined, size: 16),
+                      icon: Icon(PiconsRegular.moon, size: 16),
                       label: Text('Dark'),
                     ),
                   ],
@@ -177,7 +178,7 @@ class SettingsScreen extends ConsumerWidget {
                   onPressed: () => ref
                       .read(agentInstallationsControllerProvider.notifier)
                       .discoverAll(),
-                  icon: const Icon(Icons.search, size: 16),
+                  icon: const Icon(PiconsRegular.magnifyingGlass, size: 16),
                   label: const Text('Discover'),
                 ),
                 child: installations.isEmpty
@@ -193,7 +194,7 @@ class SettingsScreen extends ConsumerWidget {
                               dense: true,
                               contentPadding: EdgeInsets.zero,
                               leading: const Icon(
-                                Icons.smart_toy_outlined,
+                                PiconsRegular.robot,
                                 size: 18,
                               ),
                               title: Text(_agentLabel(i.agentKind)),
@@ -325,7 +326,7 @@ class _PermissionCard extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(
-                      Icons.warning_amber_rounded,
+                      PiconsRegular.warning,
                       size: 16,
                       color: theme.colorScheme.error,
                     ),
@@ -463,7 +464,7 @@ class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
                 const SizedBox(width: Insets.sm),
                 OutlinedButton.icon(
                   onPressed: _browse,
-                  icon: const Icon(Icons.folder_open, size: 16),
+                  icon: const Icon(PiconsRegular.folderOpen, size: 16),
                   label: const Text('Browse'),
                 ),
               ],
@@ -576,7 +577,7 @@ class _CodeEditorSectionState extends ConsumerState<_CodeEditorSection> {
                 const SizedBox(width: Insets.sm),
                 OutlinedButton.icon(
                   onPressed: _browse,
-                  icon: const Icon(Icons.folder_open, size: 16),
+                  icon: const Icon(PiconsRegular.folderOpen, size: 16),
                   label: const Text('Browse'),
                 ),
               ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -64,7 +65,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
             children: [
               IconButton(
                 tooltip: 'Back',
-                icon: const Icon(Icons.arrow_back, size: 18),
+                icon: const Icon(PiconsRegular.arrowLeft, size: 18),
                 onPressed: () => ref
                     .read(selectedImportedSessionIdProvider.notifier)
                     .select(null),
@@ -82,7 +83,10 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                     ? const SizedBox.shrink()
                     : PopupMenuButton<SystemTerminal>(
                         tooltip: 'Open in system terminal',
-                        icon: const Icon(Icons.open_in_new, size: 18),
+                        icon: const Icon(
+                          PiconsRegular.arrowSquareOut,
+                          size: 18,
+                        ),
                         onSelected: (t) => _openIn(session, t),
                         itemBuilder: (context) => [
                           for (final t in list)
@@ -91,7 +95,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                               height: 32,
                               child: Row(
                                 children: [
-                                  const Icon(Icons.terminal, size: 16),
+                                  const Icon(PiconsRegular.terminal, size: 16),
                                   const SizedBox(width: 10),
                                   Text('Open in ${t.label}'),
                                 ],

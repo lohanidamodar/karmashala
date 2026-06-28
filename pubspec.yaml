@@ -20,6 +20,7 @@ dependencies:
   pasteboard: ^0.5.0
   path: ^1.9.1
   path_provider: ^2.1.6
+  picons: ^3.0.1
   sqlite3: ^3.3.3
   sqlite3_flutter_libs: ^0.6.0+eol
   tray_manager: ^0.5.3

@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:picons/picons.dart';
 
 import '../../../app/widgets/desktop_dialog.dart';
 
@@ -133,7 +134,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
 
     return AlertDialog(
       title: const DesktopDialogTitle(
-        icon: Icons.create_new_folder_outlined,
+        icon: PiconsRegular.folderPlus,
         title: 'New project',
         subtitle: 'Add a folder and discover its Git repositories.',
       ),
@@ -177,7 +178,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _browse,
-                  icon: const Icon(Icons.folder_open, size: 18),
+                  icon: const Icon(PiconsRegular.folderOpen, size: 18),
                   label: const Text('Browse'),
                 ),
               ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
@@ -97,7 +98,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               child: Row(
                 children: [
                   Icon(
-                    Icons.auto_stories_outlined,
+                    PiconsRegular.bookOpen,
                     size: 16,
                     color: theme.colorScheme.tertiary,
                   ),
@@ -112,7 +113,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     tooltip: 'Expand to full window',
                     iconSize: 16,
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.open_in_full),
+                    icon: const Icon(PiconsRegular.arrowsOutSimple),
                     onPressed: () =>
                         ref.read(appModeProvider.notifier).enterFull(),
                   ),
@@ -120,7 +121,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     tooltip: 'Hide to tray',
                     iconSize: 16,
                     visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.remove),
+                    icon: const Icon(PiconsRegular.minus),
                     onPressed: () => windowManager.hide(),
                   ),
                 ],
@@ -134,7 +135,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               child: TextField(
                 decoration: const InputDecoration(
                   isDense: true,
-                  prefixIcon: Icon(Icons.search, size: 16),
+                  prefixIcon: Icon(PiconsRegular.magnifyingGlass, size: 16),
                   hintText: 'Search projects & sessions',
                   border: OutlineInputBorder(),
                 ),
@@ -193,7 +194,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           sessions.add(
             _sessionTile(
               s.title,
-              Icons.chat_bubble_outline,
+              PiconsRegular.chatCircle,
               () => _launch(
                 terminal,
                 (t) => actions.openSessionInSystemTerminal(s.id, t),
@@ -210,7 +211,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           sessions.add(
             _sessionTile(
               s.displayTitle,
-              Icons.history,
+              PiconsRegular.clockCounterClockwise,
               () =>
                   _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
               () => actions.resumeShellCommand(s),
@@ -230,7 +231,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         dense: true,
         visualDensity: VisualDensity.compact,
         leading: Icon(
-          expanded ? Icons.expand_more : Icons.chevron_right,
+          expanded ? PiconsRegular.caretDown : PiconsRegular.caretRight,
           size: 16,
         ),
         title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -241,7 +242,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               tooltip: 'Copy new-session command',
               iconSize: 14,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.content_copy_outlined),
+              icon: const Icon(PiconsRegular.copy),
               onPressed: () => _copyCommand(
                 () => actions.newSessionShellCommand(project.id),
               ),
@@ -250,7 +251,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               tooltip: 'New session in terminal',
               iconSize: 16,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.add),
+              icon: const Icon(PiconsRegular.plus),
               onPressed: () => _launch(
                 terminal,
                 (t) => actions.startNewSessionInTerminal(project.id, t),
@@ -260,7 +261,9 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               tooltip: pinned ? 'Unpin' : 'Pin to top',
               iconSize: 15,
               visualDensity: VisualDensity.compact,
-              icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
+              icon: Icon(
+                pinned ? PiconsRegular.pushPin : PiconsRegular.pushPin,
+              ),
               color: pinned ? Theme.of(context).colorScheme.tertiary : null,
               onPressed: () => ref
                   .read(settingsControllerProvider.notifier)
@@ -307,14 +310,14 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               tooltip: 'Copy resume command',
               iconSize: 13,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.content_copy_outlined),
+              icon: const Icon(PiconsRegular.copy),
               onPressed: () => _copyCommand(copyCommand),
             ),
             IconButton(
               tooltip: 'Resume in terminal',
               iconSize: 14,
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.open_in_new),
+              icon: const Icon(PiconsRegular.arrowSquareOut),
               onPressed: onTap,
             ),
           ],

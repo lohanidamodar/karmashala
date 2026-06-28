@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 
 import '../../../app/widgets/desktop_dialog.dart';
 
@@ -157,7 +158,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
 
     return AlertDialog(
       title: const DesktopDialogTitle(
-        icon: Icons.add_comment_outlined,
+        icon: PiconsRegular.chatCircleDots,
         title: 'New session',
         subtitle: 'Choose where and how the coding agent should run.',
       ),
@@ -206,12 +207,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               segments: const [
                 ButtonSegment(
                   value: false,
-                  icon: Icon(Icons.chat_outlined, size: 15),
+                  icon: Icon(PiconsRegular.chat, size: 15),
                   label: Text('In-app'),
                 ),
                 ButtonSegment(
                   value: true,
-                  icon: Icon(Icons.open_in_new, size: 15),
+                  icon: Icon(PiconsRegular.arrowSquareOut, size: 15),
                   label: Text('External terminal'),
                 ),
               ],

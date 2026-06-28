@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:picons/picons.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../application/changes_providers.dart';
@@ -64,7 +65,7 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
               IconButton(
                 tooltip: 'Refresh',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.refresh, size: 16),
+                icon: const Icon(PiconsRegular.arrowsClockwise, size: 16),
                 onPressed: () => ref.invalidate(repositoryChangesProvider),
               ),
             ],
@@ -142,7 +143,7 @@ class _ChangedFileSection extends ConsumerWidget {
             child: Row(
               children: [
                 Icon(
-                  expanded ? Icons.expand_more : Icons.chevron_right,
+                  expanded ? PiconsRegular.caretDown : PiconsRegular.caretRight,
                   size: 16,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -172,7 +173,7 @@ class _ChangedFileSection extends ConsumerWidget {
                     minHeight: 26,
                   ),
                   padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.open_in_full),
+                  icon: const Icon(PiconsRegular.arrowsOutSimple),
                   onPressed: onFullscreen,
                 ),
               ],
@@ -281,7 +282,7 @@ class _DiffFullscreenDialog extends StatelessWidget {
                   Consumer(
                     builder: (context, ref, _) => IconButton(
                       tooltip: 'Copy diff',
-                      icon: const Icon(Icons.copy_all_outlined, size: 18),
+                      icon: const Icon(PiconsRegular.copySimple, size: 18),
                       onPressed: () async {
                         final diff = await ref.read(
                           fileDiffByPathProvider(file.path).future,
@@ -292,7 +293,7 @@ class _DiffFullscreenDialog extends StatelessWidget {
                   ),
                   IconButton(
                     tooltip: 'Close',
-                    icon: const Icon(Icons.close, size: 18),
+                    icon: const Icon(PiconsRegular.x, size: 18),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -383,11 +384,11 @@ class _ErrorBox extends StatelessWidget {
 }
 
 IconData _iconFor(FileChangeType type) => switch (type) {
-  FileChangeType.added => Icons.add_circle_outline,
-  FileChangeType.deleted => Icons.remove_circle_outline,
-  FileChangeType.renamed => Icons.drive_file_rename_outline,
-  FileChangeType.untracked => Icons.help_outline,
-  _ => Icons.edit_outlined,
+  FileChangeType.added => PiconsRegular.plusCircle,
+  FileChangeType.deleted => PiconsRegular.minusCircle,
+  FileChangeType.renamed => PiconsRegular.pencilSimple,
+  FileChangeType.untracked => PiconsRegular.question,
+  _ => PiconsRegular.pencil,
 };
 
 Color _colorFor(FileChangeType type, BuildContext context) {
