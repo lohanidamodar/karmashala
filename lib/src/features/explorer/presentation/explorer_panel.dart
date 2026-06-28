@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
@@ -277,6 +278,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             icon: Icons.add_comment_outlined,
           ),
           DesktopMenuItem(
+            value: 'copy-cmd',
+            label: 'Copy new-session command',
+            icon: Icons.content_copy_outlined,
+          ),
+          DesktopMenuItem(
             value: 'pin',
             label: pinned ? 'Unpin' : 'Pin to top',
             icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
@@ -296,6 +302,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         ],
         onMenu: (action) {
           if (action == 'new-session') _newSessionInProject(project);
+          if (action == 'copy-cmd') {
+            copyCommandToClipboard(
+              context,
+              () => ref
+                  .read(sessionActionsProvider)
+                  .newSessionShellCommand(project.id),
+            );
+          }
           if (action == 'pin') _togglePin(project);
           if (action == 'refresh') _syncProject(project);
           if (action == 'delete') _confirmDeleteProject(project);
@@ -323,11 +337,24 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               tooltip: 'Project actions',
               icon: const Icon(Icons.more_vert, size: 16),
               onSelected: (action) {
+                if (action == 'copy-cmd') {
+                  copyCommandToClipboard(
+                    context,
+                    () => ref
+                        .read(sessionActionsProvider)
+                        .newSessionShellCommand(project.id),
+                  );
+                }
                 if (action == 'pin') _togglePin(project);
                 if (action == 'refresh') _syncProject(project);
                 if (action == 'delete') _confirmDeleteProject(project);
               },
               itemBuilder: (context) => [
+                DesktopMenuItem(
+                  value: 'copy-cmd',
+                  label: 'Copy new-session command',
+                  icon: Icons.content_copy_outlined,
+                ),
                 DesktopMenuItem(
                   value: 'pin',
                   label: pinned ? 'Unpin' : 'Pin to top',
@@ -576,6 +603,11 @@ class _NativeSessionRow extends ConsumerWidget {
           ),
         if (terminals.isNotEmpty) const DesktopMenuDivider(),
         DesktopMenuItem(
+          value: 'copy-cmd',
+          label: 'Copy resume command',
+          icon: Icons.content_copy_outlined,
+        ),
+        DesktopMenuItem(
           value: 'rename',
           label: 'Rename',
           icon: Icons.drive_file_rename_outline,
@@ -596,9 +628,19 @@ class _NativeSessionRow extends ConsumerWidget {
           if (terminal != null) {
             await _openNativeInTerminal(context, actions, session, terminal);
           }
+          return;
         }
-        if (action == 'rename') rename();
-        if (action == 'delete') delete();
+        switch (action) {
+          case 'copy-cmd':
+            copyCommandToClipboard(
+              context,
+              () => actions.nativeResumeShellCommand(session.id),
+            );
+          case 'rename':
+            rename();
+          case 'delete':
+            delete();
+        }
       },
     );
   }
@@ -645,6 +687,11 @@ class _ImportedSessionRow extends ConsumerWidget {
           }
         case 'resume':
           await _resume(context, actions, session);
+        case 'copy-cmd':
+          copyCommandToClipboard(
+            context,
+            () => actions.resumeShellCommand(session),
+          );
         case 'rename':
           final name = await _promptRename(context, session.displayTitle);
           if (name != null) await actions.renameImported(session, name);
@@ -688,6 +735,11 @@ class _ImportedSessionRow extends ConsumerWidget {
             icon: Icons.terminal,
           ),
         const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'copy-cmd',
+          label: 'Copy resume command',
+          icon: Icons.content_copy_outlined,
+        ),
         DesktopMenuItem(
           value: 'rename',
           label: 'Rename',
@@ -855,6 +907,23 @@ Future<void> _resume(
       SnackBar(content: Text(e is StateError ? e.message : '$e')),
     );
   }
+}
+
+/// Builds a shell command with [build], copies it to the clipboard, and reports
+/// the result. Used by the "Copy … command" menu actions.
+Future<void> copyCommandToClipboard(
+  BuildContext context,
+  String Function() build,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  String message;
+  try {
+    await Clipboard.setData(ClipboardData(text: build()));
+    message = 'Command copied to clipboard';
+  } catch (e) {
+    message = e is StateError ? e.message : '$e';
+  }
+  messenger.showSnackBar(SnackBar(content: Text(message)));
 }
 
 Future<String?> _promptRename(BuildContext context, String current) {

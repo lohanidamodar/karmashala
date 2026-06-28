@@ -283,6 +283,92 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
+  /// A shell command (cd + resume, with permission flags) for [session], to copy
+  /// to the clipboard. Throws if the repository is gone.
+  String resumeShellCommand(ImportedSession session) {
+    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    if (repo == null) {
+      throw StateError('This session\'s repository is no longer available.');
+    }
+    final installs = _ref
+        .read(agentInstallationDaoProvider)
+        .getByEnvironment(session.environmentId)
+        .where((i) => i.agentKind == session.cli)
+        .toList();
+    final exe = installs.isNotEmpty
+        ? installs.first.executable.path
+        : session.cli.name;
+    return shellCommandLine(
+      agentExecutable: exe,
+      cli: session.cli.name,
+      externalId: session.externalId,
+      permissionMode: _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(session.cli)
+          .existingSessions,
+      cwd: repo.path.path,
+    );
+  }
+
+  /// A shell command (cd + resume, with permission flags) for native [sessionId].
+  String nativeResumeShellCommand(String sessionId) {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) throw StateError('This session no longer exists.');
+    final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
+    if (repo == null) {
+      throw StateError('This session\'s repository is no longer available.');
+    }
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (installation == null) {
+      throw StateError('The agent for this session is not installed.');
+    }
+    return shellCommandLine(
+      agentExecutable: installation.executable.path,
+      cli: installation.agentKind.name,
+      externalId: session.externalSessionId,
+      permissionMode: _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(installation.agentKind)
+          .existingSessions,
+      cwd: (session.worktree ?? repo.path).path,
+    );
+  }
+
+  /// A shell command (cd + fresh session, with permission flags) for [projectId]'s
+  /// first repository with the default agent.
+  String newSessionShellCommand(String projectId) {
+    final repos = _ref.read(repositoryDaoProvider).getByProject(projectId);
+    if (repos.isEmpty) {
+      throw StateError('This project has no Git repositories to run in.');
+    }
+    final repo = repos.first;
+    final installs = _ref
+        .read(agentInstallationDaoProvider)
+        .getByEnvironment(repo.path.environmentId);
+    if (installs.isEmpty) {
+      throw StateError(
+        'No agent installed in ${repo.path.environmentId}. '
+        'Run "Discover agents" in Settings.',
+      );
+    }
+    final defaultAgent = _ref.read(settingsControllerProvider).defaultAgent;
+    final installation = installs.firstWhere(
+      (i) => i.agentKind == defaultAgent,
+      orElse: () => installs.first,
+    );
+    return shellCommandLine(
+      agentExecutable: installation.executable.path,
+      cli: installation.agentKind.name,
+      permissionMode: _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(installation.agentKind)
+          .newSessions,
+      cwd: repo.path.path,
+    );
+  }
+
   /// Starts a new session for [projectId] in an external [terminal] using the
   /// configured default agent (or the first installed one) in the project's first
   /// repository. For the mini launcher, where there is no New-session dialog.

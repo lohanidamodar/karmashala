@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -54,6 +55,20 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _copyCommand(String Function() build) async {
+    final messenger = ScaffoldMessenger.of(context);
+    String message;
+    try {
+      final command = build();
+      await Clipboard.setData(ClipboardData(text: command));
+      message = 'Command copied to clipboard';
+    } catch (e) {
+      message = e is StateError ? e.message : '$e';
+    }
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -198,6 +213,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                 terminal,
                 (t) => actions.openSessionInSystemTerminal(s.id, t),
               ),
+              () => actions.nativeResumeShellCommand(s.id),
             ),
           );
         }
@@ -212,6 +228,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
               Icons.history,
               () =>
                   _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
+              () => actions.resumeShellCommand(s),
             ),
           );
         }
@@ -235,6 +252,15 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              tooltip: 'Copy new-session command',
+              iconSize: 14,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.content_copy_outlined),
+              onPressed: () => _copyCommand(
+                () => actions.newSessionShellCommand(project.id),
+              ),
+            ),
             IconButton(
               tooltip: 'New session in terminal',
               iconSize: 16,
@@ -276,7 +302,12 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     return rows;
   }
 
-  Widget _sessionTile(String title, IconData icon, VoidCallback onTap) {
+  Widget _sessionTile(
+    String title,
+    IconData icon,
+    VoidCallback onTap,
+    String Function() copyCommand,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(left: 24),
       child: ListTile(
@@ -284,7 +315,25 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         visualDensity: VisualDensity.compact,
         leading: Icon(icon, size: 15),
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: const Icon(Icons.open_in_new, size: 14),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Copy resume command',
+              iconSize: 13,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.content_copy_outlined),
+              onPressed: () => _copyCommand(copyCommand),
+            ),
+            IconButton(
+              tooltip: 'Resume in terminal',
+              iconSize: 14,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.open_in_new),
+              onPressed: onTap,
+            ),
+          ],
+        ),
         onTap: onTap,
       ),
     );

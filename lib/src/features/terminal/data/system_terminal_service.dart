@@ -124,9 +124,10 @@ class SystemTerminalService {
         executable: terminal.executable,
         arguments: args,
         workingDirectory: processCwd,
-        // Windows Terminal (wt.exe) and friends are app-execution aliases that
-        // only launch through the shell.
-        runInShell: true,
+        // Only Windows Terminal (wt.exe) is an app-execution alias that needs the
+        // shell. Wrapping real exes (wezterm/alacritty/custom) in `cmd /c`
+        // mangles their nested args, so launch those directly.
+        runInShell: terminal.kind == SystemTerminalKind.windowsTerminal,
       ),
     );
   }
@@ -201,6 +202,38 @@ List<String> permissionArgsFor(String cli, PermissionMode permissionMode) {
           : const <String>[],
   };
 }
+
+/// A single shell-pasteable command: `cd <cwd> && <agent> <flags> [resume]`.
+///
+/// Used by the "copy command" buttons — the user pastes it into whichever shell
+/// the session lives in (so it is NOT wsl-wrapped). When [externalId] is null it
+/// is a fresh-session command. [permissionMode] adds the per-agent flags.
+String shellCommandLine({
+  required String agentExecutable,
+  required String cli,
+  String? externalId,
+  required PermissionMode permissionMode,
+  required String cwd,
+}) {
+  final resumeArgs = externalId == null
+      ? const <String>[]
+      : switch (cli) {
+          'claudeCode' => ['--resume', externalId],
+          'codex' => ['resume', externalId],
+          _ => const <String>[],
+        };
+  final parts = [
+    agentExecutable,
+    ...permissionArgsFor(cli, permissionMode),
+    ...resumeArgs,
+  ];
+  return 'cd ${_shQuote(cwd)} && ${parts.map(_shQuote).join(' ')}';
+}
+
+String _shQuote(String value) =>
+    RegExp(r'^[A-Za-z0-9_@%+=:,./\\-]+$').hasMatch(value)
+    ? value
+    : "'${value.replaceAll("'", r"'\''")}'";
 
 /// Builds the host command line that resumes [cli]'s session [externalId] using
 /// agent executable [agentExecutable], wrapping in `wsl.exe` when the session
