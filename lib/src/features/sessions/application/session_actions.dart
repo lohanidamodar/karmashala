@@ -283,6 +283,39 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
+  /// Starts a new session for [projectId] in an external [terminal] using the
+  /// configured default agent (or the first installed one) in the project's first
+  /// repository. For the mini launcher, where there is no New-session dialog.
+  Future<void> startNewSessionInTerminal(
+    String projectId,
+    SystemTerminal terminal,
+  ) async {
+    final repos = _ref.read(repositoryDaoProvider).getByProject(projectId);
+    if (repos.isEmpty) {
+      throw StateError('This project has no Git repositories to run in.');
+    }
+    final repo = repos.first;
+    final installs = _ref
+        .read(agentInstallationDaoProvider)
+        .getByEnvironment(repo.path.environmentId);
+    if (installs.isEmpty) {
+      throw StateError(
+        'No agent installed in ${repo.path.environmentId}. '
+        'Run "Discover agents" in Settings.',
+      );
+    }
+    final defaultAgent = _ref.read(settingsControllerProvider).defaultAgent;
+    final installation = installs.firstWhere(
+      (i) => i.agentKind == defaultAgent,
+      orElse: () => installs.first,
+    );
+    await startNewInSystemTerminal(
+      repo: repo,
+      installation: installation,
+      terminal: terminal,
+    );
+  }
+
   /// Opens [session] in an external [terminal] (Windows Terminal, WezTerm, …),
   /// starting in its repository and running the agent's resume command. Throws
   /// if the repository/environment is no longer available.

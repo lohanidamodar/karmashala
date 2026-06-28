@@ -232,15 +232,30 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           size: 16,
         ),
         title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: IconButton(
-          tooltip: pinned ? 'Unpin' : 'Pin to top',
-          iconSize: 15,
-          visualDensity: VisualDensity.compact,
-          icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
-          color: pinned ? Theme.of(context).colorScheme.tertiary : null,
-          onPressed: () => ref
-              .read(settingsControllerProvider.notifier)
-              .togglePinnedProject(project.id),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'New session in terminal',
+              iconSize: 16,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.add),
+              onPressed: () => _launch(
+                terminal,
+                (t) => actions.startNewSessionInTerminal(project.id, t),
+              ),
+            ),
+            IconButton(
+              tooltip: pinned ? 'Unpin' : 'Pin to top',
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
+              color: pinned ? Theme.of(context).colorScheme.tertiary : null,
+              onPressed: () => ref
+                  .read(settingsControllerProvider.notifier)
+                  .togglePinnedProject(project.id),
+            ),
+          ],
         ),
         onTap: () => setState(() {
           if (!_expanded.remove(project.id)) _expanded.add(project.id);
