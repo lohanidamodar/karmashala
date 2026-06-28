@@ -44,6 +44,9 @@ class AppModeController extends Notifier<AppMode> {
       await windowManager.setMinimumSize(const Size(240, 280));
       await windowManager.setSize(size);
       await windowManager.setResizable(true);
+      // A distinct title so a tiling WM (e.g. GlazeWM) can target just the mini
+      // window with a float/ignore rule.
+      await windowManager.setTitle('Chitragupta Mini');
       await windowManager.setTitleBarStyle(
         TitleBarStyle.hidden,
         windowButtonVisibility: false,
@@ -62,6 +65,7 @@ class AppModeController extends Notifier<AppMode> {
   Future<void> _applyFull() async {
     if (!_supported) return;
     try {
+      await windowManager.setTitle('Chitragupta');
       await windowManager.setTitleBarStyle(TitleBarStyle.normal);
       await windowManager.setAlwaysOnTop(false);
       await windowManager.setSkipTaskbar(false);
