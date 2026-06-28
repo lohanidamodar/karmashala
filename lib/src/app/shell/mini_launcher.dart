@@ -165,21 +165,6 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     ],
                   ),
           ),
-          if (terminal != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.md,
-                vertical: 4,
-              ),
-              color: theme.colorScheme.surfaceContainerLow,
-              child: Text(
-                'Resumes in ${terminal.label}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
         ],
       ),
     );
