@@ -70,46 +70,18 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
   const _ShellAppBar();
 
   @override
-  Size get preferredSize => const Size.fromHeight(46);
+  Size get preferredSize => const Size.fromHeight(40);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final terminalVisible = ref.watch(terminalVisibleProvider);
+    // No app icon/name here — the OS title bar already shows those. Lead with the
+    // menu bar so the chrome reads like a native desktop menu bar.
     return AppBar(
-      titleSpacing: 16,
-      title: Row(
-        children: [
-          Icon(
-            AppIcons.bookOpen,
-            size: 22,
-            color: Theme.of(context).colorScheme.tertiary,
-          ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Chitragupta',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Text(
-                  'THE AGENT LEDGER',
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 9,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (MediaQuery.sizeOf(context).width >= 900) ...[
-            const SizedBox(width: 18),
-            const _DesktopMenuBar(),
-          ],
-        ],
+      titleSpacing: 8,
+      title: const Align(
+        alignment: Alignment.centerLeft,
+        child: _DesktopMenuBar(),
       ),
       actions: [
         IconButton(

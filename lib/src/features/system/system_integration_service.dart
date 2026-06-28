@@ -132,6 +132,21 @@ class SystemIntegrationService with TrayListener, WindowListener {
     } catch (_) {}
   }
 
+  /// Toggles window visibility: hide when it's already up front, otherwise bring
+  /// it back. Used by the tray icon click.
+  Future<void> _toggleWindow() async {
+    try {
+      final visible = await windowManager.isVisible();
+      final focused = visible && await windowManager.isFocused();
+      if (visible && focused) {
+        await windowManager.hide();
+      } else {
+        await windowManager.show();
+        await windowManager.focus();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _quit() async {
     try {
       await windowManager.setPreventClose(false);
@@ -144,7 +159,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   // --- TrayListener ---
 
   @override
-  void onTrayIconMouseDown() => _showWindow();
+  void onTrayIconMouseDown() => _toggleWindow();
 
   @override
   void onTrayIconRightMouseDown() => trayManager.popUpContextMenu();

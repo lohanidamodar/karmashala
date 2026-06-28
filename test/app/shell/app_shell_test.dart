@@ -40,7 +40,9 @@ void main() {
   ) async {
     await pumpApp(tester, size: const Size(1600, 900));
 
-    expect(find.text('Chitragupta'), findsOneWidget);
+    // The app bar reads like a native menu bar (no app icon/name — the OS title
+    // bar carries those).
+    expect(find.byType(AppBar), findsOneWidget);
     // Pane headers render as tracked "ledger tab" labels (uppercased).
     expect(find.text('EXPLORER'), findsOneWidget);
     expect(find.text('DETAIL'), findsOneWidget);
@@ -51,7 +53,7 @@ void main() {
   ) async {
     await pumpApp(tester, size: const Size(640, 900));
 
-    expect(find.widgetWithText(AppBar, 'Chitragupta'), findsOneWidget);
+    expect(find.byType(AppBar), findsOneWidget);
     expect(find.byType(SegmentedButton<ShellPane>), findsOneWidget);
   });
 }

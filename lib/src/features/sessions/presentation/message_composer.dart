@@ -1,8 +1,8 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pasteboard/pasteboard.dart';
 
 import '../../../app/theme/app_icons.dart';
@@ -40,11 +40,40 @@ class _MessageComposerState extends State<MessageComposer> {
   final _input = TextEditingController();
   final _attachments = <_Attachment>[];
   bool _busy = false;
+  late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKey);
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _input.dispose();
     super.dispose();
+  }
+
+  /// Enter sends, Shift+Enter inserts a newline, and Ctrl/Cmd+V also attaches a
+  /// clipboard image when one is present (text paste still proceeds).
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keys = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.keyV &&
+        (keys.isControlPressed || keys.isMetaPressed)) {
+      _pasteImageIfAny();
+      return KeyEventResult.ignored;
+    }
+    final isEnter =
+        event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    if (isEnter && !keys.isShiftPressed) {
+      _send();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Future<void> _pasteImageIfAny() async {
+    try {
+      final img = await Pasteboard.image;
+      if (img != null && img.isNotEmpty) await _addImageBytes(img);
+    } catch (_) {}
   }
 
   Future<Directory> _attachmentsDir() async {
@@ -158,22 +187,23 @@ class _MessageComposerState extends State<MessageComposer> {
           child: Row(
             children: [
               IconButton(
-                tooltip: 'Attach image (paste from clipboard or pick a file)',
+                tooltip: 'Attach image (or paste with Ctrl+V)',
                 onPressed: canType ? _attach : null,
                 icon: const Icon(AppIcons.image, size: 20),
               ),
               Expanded(
                 child: TextField(
                   controller: _input,
+                  focusNode: _focusNode,
                   enabled: canType,
                   minLines: 1,
                   maxLines: 6,
+                  textInputAction: TextInputAction.newline,
                   decoration: InputDecoration(
                     isDense: true,
                     border: const OutlineInputBorder(),
                     hintText: widget.hintText,
                   ),
-                  onSubmitted: (_) => _send(),
                 ),
               ),
               const SizedBox(width: 8),
