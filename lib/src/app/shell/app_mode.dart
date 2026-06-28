@@ -37,9 +37,13 @@ class AppModeController extends Notifier<AppMode> {
   Future<void> _applyMini() async {
     if (!_supported) return;
     try {
-      await windowManager.setMinimumSize(const Size(260, 320));
-      await windowManager.setSize(_miniSize);
-      await windowManager.setResizable(false);
+      final settings = ref.read(settingsControllerProvider);
+      final size = (settings.miniWidth != null && settings.miniHeight != null)
+          ? Size(settings.miniWidth!, settings.miniHeight!)
+          : _miniSize;
+      await windowManager.setMinimumSize(const Size(240, 280));
+      await windowManager.setSize(size);
+      await windowManager.setResizable(true);
       await windowManager.setAlwaysOnTop(true);
       await windowManager.setTitleBarStyle(
         TitleBarStyle.hidden,

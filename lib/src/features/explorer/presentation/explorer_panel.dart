@@ -20,6 +20,7 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -118,6 +119,12 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     NewSessionDialog.show(context);
   }
 
+  void _togglePin(Project project) {
+    ref
+        .read(settingsControllerProvider.notifier)
+        .togglePinnedProject(project.id);
+  }
+
   Future<void> _confirmDeleteProject(Project project) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -156,7 +163,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   Widget build(BuildContext context) {
     final focused =
         ref.watch(shellControllerProvider).focusedPane == ShellPane.explorer;
-    final allProjects = ref.watch(projectsControllerProvider);
+    final allProjects = ref.watch(sortedProjectsProvider);
     // Re-read sessions whenever the workspace mutates.
     ref.watch(sessionsRevisionProvider);
 
@@ -247,6 +254,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   /// and sessions.
   List<Widget> _projectNodes(Project project) {
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
+    final pinned = ref.watch(
+      settingsControllerProvider.select((s) => s.isPinned(project.id)),
+    );
     final expanded = _expandedProjects.contains(project.id);
     final rows = <Widget>[
       _TreeRow(
@@ -267,6 +277,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             icon: Icons.add_comment_outlined,
           ),
           DesktopMenuItem(
+            value: 'pin',
+            label: pinned ? 'Unpin' : 'Pin to top',
+            icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+          ),
+          DesktopMenuItem(
             value: 'refresh',
             label: 'Refresh CLI sessions',
             icon: Icons.refresh,
@@ -281,12 +296,22 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         ],
         onMenu: (action) {
           if (action == 'new-session') _newSessionInProject(project);
+          if (action == 'pin') _togglePin(project);
           if (action == 'refresh') _syncProject(project);
           if (action == 'delete') _confirmDeleteProject(project);
         },
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (pinned)
+              IconButton(
+                tooltip: 'Unpin',
+                visualDensity: VisualDensity.compact,
+                iconSize: 15,
+                color: Theme.of(context).colorScheme.tertiary,
+                icon: const Icon(Icons.push_pin),
+                onPressed: () => _togglePin(project),
+              ),
             IconButton(
               tooltip: 'New session in this project',
               visualDensity: VisualDensity.compact,
@@ -298,10 +323,16 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               tooltip: 'Project actions',
               icon: const Icon(Icons.more_vert, size: 16),
               onSelected: (action) {
+                if (action == 'pin') _togglePin(project);
                 if (action == 'refresh') _syncProject(project);
                 if (action == 'delete') _confirmDeleteProject(project);
               },
               itemBuilder: (context) => [
+                DesktopMenuItem(
+                  value: 'pin',
+                  label: pinned ? 'Unpin' : 'Pin to top',
+                  icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                ),
                 DesktopMenuItem(
                   value: 'refresh',
                   label: 'Refresh CLI sessions',

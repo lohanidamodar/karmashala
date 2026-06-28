@@ -61,6 +61,19 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setMiniSize(double width, double height) {
+    state = state.copyWith(miniWidth: width, miniHeight: height);
+    _save();
+  }
+
+  /// Pins/unpins a project; pinned projects sort to the top.
+  void togglePinnedProject(String projectId) {
+    final pinned = [...state.pinnedProjectIds];
+    if (!pinned.remove(projectId)) pinned.add(projectId);
+    state = state.copyWith(pinnedProjectIds: pinned);
+    _save();
+  }
+
   void setDefaultSystemTerminal(String id) {
     state = state.copyWith(defaultSystemTerminalId: id);
     _save();

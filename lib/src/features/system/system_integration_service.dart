@@ -183,7 +183,12 @@ class SystemIntegrationService with TrayListener, WindowListener {
   Future<void> _saveWindowSize() async {
     try {
       final size = await windowManager.getSize();
-      if (size.width >= 200 && size.height >= 200) {
+      if (size.width < 200 || size.height < 200) return;
+      // Persist the mini size separately so resizing the mini launcher doesn't
+      // clobber the full-window size (and vice versa).
+      if (_container.read(appModeProvider) == AppMode.mini) {
+        _controller.setMiniSize(size.width, size.height);
+      } else {
         _controller.setWindowSize(size.width, size.height);
       }
     } catch (_) {}

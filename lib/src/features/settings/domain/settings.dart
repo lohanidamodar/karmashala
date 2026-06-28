@@ -63,8 +63,11 @@ class Settings {
     this.compactDensity = true,
     this.windowWidth,
     this.windowHeight,
+    this.miniWidth,
+    this.miniHeight,
     this.defaultSystemTerminalId,
     this.customTerminalPath,
+    this.pinnedProjectIds = const [],
   });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
@@ -100,6 +103,10 @@ class Settings {
   final double? windowWidth;
   final double? windowHeight;
 
+  /// Last mini-launcher window size (resizable), null until first saved.
+  final double? miniWidth;
+  final double? miniHeight;
+
   /// The external terminal app used to resume sessions (mini mode / "open in
   /// terminal"): a detected terminal id (`windowsTerminal`, …), the sentinel
   /// `custom`, or `null` to use the first detected one.
@@ -108,6 +115,11 @@ class Settings {
   /// Path to a custom terminal executable, used when
   /// [defaultSystemTerminalId] is `custom`.
   final String? customTerminalPath;
+
+  /// Project ids the user has pinned (shown first), most-recent pin last.
+  final List<String> pinnedProjectIds;
+
+  bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
@@ -126,8 +138,11 @@ class Settings {
     bool? compactDensity,
     double? windowWidth,
     double? windowHeight,
+    double? miniWidth,
+    double? miniHeight,
     String? defaultSystemTerminalId,
     String? customTerminalPath,
+    List<String>? pinnedProjectIds,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -144,9 +159,12 @@ class Settings {
     compactDensity: compactDensity ?? this.compactDensity,
     windowWidth: windowWidth ?? this.windowWidth,
     windowHeight: windowHeight ?? this.windowHeight,
+    miniWidth: miniWidth ?? this.miniWidth,
+    miniHeight: miniHeight ?? this.miniHeight,
     defaultSystemTerminalId:
         defaultSystemTerminalId ?? this.defaultSystemTerminalId,
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
+    pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -165,9 +183,12 @@ class Settings {
     'compactDensity': compactDensity,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
+    if (miniWidth != null) 'miniWidth': miniWidth,
+    if (miniHeight != null) 'miniHeight': miniHeight,
     if (defaultSystemTerminalId != null)
       'defaultSystemTerminalId': defaultSystemTerminalId,
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
+    'pinnedProjectIds': pinnedProjectIds,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -211,12 +232,17 @@ class Settings {
           : true,
       windowWidth: toDouble(json['windowWidth']),
       windowHeight: toDouble(json['windowHeight']),
+      miniWidth: toDouble(json['miniWidth']),
+      miniHeight: toDouble(json['miniHeight']),
       defaultSystemTerminalId: json['defaultSystemTerminalId'] is String
           ? json['defaultSystemTerminalId'] as String
           : null,
       customTerminalPath: json['customTerminalPath'] is String
           ? json['customTerminalPath'] as String
           : null,
+      pinnedProjectIds: json['pinnedProjectIds'] is List
+          ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
+          : const [],
     );
   }
 
@@ -234,8 +260,11 @@ class Settings {
       other.compactDensity == compactDensity &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
+      other.miniWidth == miniWidth &&
+      other.miniHeight == miniHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
       other.customTerminalPath == customTerminalPath &&
+      _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _mapEquals(other.permissions, permissions);
 
   @override
@@ -251,12 +280,23 @@ class Settings {
     compactDensity,
     windowWidth,
     windowHeight,
+    miniWidth,
+    miniHeight,
     defaultSystemTerminalId,
     customTerminalPath,
+    Object.hashAll(pinnedProjectIds),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),
   );
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   static bool _mapEquals(
     Map<AgentKind, AgentPermissions> a,

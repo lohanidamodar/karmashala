@@ -11,6 +11,7 @@ import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../domain/project.dart';
 import 'project_providers.dart';
 import 'project_service.dart';
@@ -197,6 +198,22 @@ final selectedProjectIdProvider =
     NotifierProvider<SelectedProjectController, String?>(
       SelectedProjectController.new,
     );
+
+/// Projects ordered with pinned ones first (preserving their relative order),
+/// then the rest. Used by the Explorer and the mini launcher.
+final sortedProjectsProvider = Provider<List<Project>>((ref) {
+  final projects = ref.watch(projectsControllerProvider);
+  final pinned = ref
+      .watch(settingsControllerProvider.select((s) => s.pinnedProjectIds))
+      .toSet();
+  if (pinned.isEmpty) return projects;
+  final top = <Project>[];
+  final rest = <Project>[];
+  for (final project in projects) {
+    (pinned.contains(project.id) ? top : rest).add(project);
+  }
+  return [...top, ...rest];
+});
 
 /// Repositories belonging to the currently selected project. Recomputes when the
 /// selection or the project list changes.

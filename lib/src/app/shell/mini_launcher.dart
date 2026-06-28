@@ -11,6 +11,7 @@ import '../../features/sessions/application/session_actions.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
+import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/system_terminal_providers.dart';
 import '../../features/terminal/data/system_terminal_service.dart';
 import '../theme/design_tokens.dart';
@@ -28,6 +29,7 @@ class MiniLauncher extends ConsumerStatefulWidget {
 
 class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   final _expanded = <String>{};
+  String _query = '';
 
   Future<void> _launch(
     SystemTerminal? terminal,
@@ -58,9 +60,13 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     ref.watch(sessionsRevisionProvider);
-    final projects = ref.watch(projectsControllerProvider);
+    final projects = ref.watch(sortedProjectsProvider);
+    final pinned = ref
+        .watch(settingsControllerProvider.select((s) => s.pinnedProjectIds))
+        .toSet();
     final terminal = ref.watch(defaultSystemTerminalProvider).asData?.value;
     final actions = ref.read(sessionActionsProvider);
+    final query = _query.trim().toLowerCase();
 
     return Scaffold(
       body: Column(
@@ -107,6 +113,19 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
             ),
           ),
           const Divider(height: 1),
+          if (projects.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
+              child: TextField(
+                decoration: const InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.search, size: 16),
+                  hintText: 'Search projects & sessions',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+            ),
           Expanded(
             child: projects.isEmpty
                 ? Center(
@@ -121,7 +140,13 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     padding: const EdgeInsets.symmetric(vertical: Insets.xs),
                     children: [
                       for (final project in projects)
-                        ..._projectNodes(project, terminal, actions),
+                        ..._projectNodes(
+                          project,
+                          terminal,
+                          actions,
+                          query,
+                          pinned.contains(project.id),
+                        ),
                     ],
                   ),
           ),
@@ -149,8 +174,55 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     Project project,
     SystemTerminal? terminal,
     SessionActions actions,
+    String query,
+    bool pinned,
   ) {
-    final expanded = _expanded.contains(project.id);
+    final nameMatches =
+        query.isEmpty || project.name.toLowerCase().contains(query);
+
+    // Gather this project's session tiles (filtered by the query).
+    final sessions = <Widget>[];
+    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
+    final sessionDao = ref.read(sessionDaoProvider);
+    final importedDao = ref.read(importedSessionDaoProvider);
+    for (final repo in repos) {
+      for (final Session s in sessionDao.getByRepository(repo.id)) {
+        if (query.isEmpty ||
+            nameMatches ||
+            s.title.toLowerCase().contains(query)) {
+          sessions.add(
+            _sessionTile(
+              s.title,
+              Icons.chat_bubble_outline,
+              () => _launch(
+                terminal,
+                (t) => actions.openSessionInSystemTerminal(s.id, t),
+              ),
+            ),
+          );
+        }
+      }
+      for (final ImportedSession s in importedDao.getByRepository(repo.id)) {
+        if (query.isEmpty ||
+            nameMatches ||
+            s.displayTitle.toLowerCase().contains(query)) {
+          sessions.add(
+            _sessionTile(
+              s.displayTitle,
+              Icons.history,
+              () =>
+                  _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
+            ),
+          );
+        }
+      }
+    }
+
+    // When searching, hide projects with no name/session match; show the rest
+    // force-expanded so matches are visible.
+    if (query.isNotEmpty && !nameMatches && sessions.isEmpty) return const [];
+    final expanded = query.isNotEmpty ? true : _expanded.contains(project.id);
+
     final rows = <Widget>[
       ListTile(
         dense: true,
@@ -160,49 +232,31 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           size: 16,
         ),
         title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: IconButton(
+          tooltip: pinned ? 'Unpin' : 'Pin to top',
+          iconSize: 15,
+          visualDensity: VisualDensity.compact,
+          icon: Icon(pinned ? Icons.push_pin : Icons.push_pin_outlined),
+          color: pinned ? Theme.of(context).colorScheme.tertiary : null,
+          onPressed: () => ref
+              .read(settingsControllerProvider.notifier)
+              .togglePinnedProject(project.id),
+        ),
         onTap: () => setState(() {
           if (!_expanded.remove(project.id)) _expanded.add(project.id);
         }),
       ),
     ];
     if (!expanded) return rows;
-
-    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
-    final sessionDao = ref.read(sessionDaoProvider);
-    final importedDao = ref.read(importedSessionDaoProvider);
-    var any = false;
-    for (final repo in repos) {
-      for (final Session s in sessionDao.getByRepository(repo.id)) {
-        any = true;
-        rows.add(
-          _sessionTile(
-            s.title,
-            Icons.chat_bubble_outline,
-            () => _launch(
-              terminal,
-              (t) => actions.openSessionInSystemTerminal(s.id, t),
-            ),
-          ),
-        );
-      }
-      for (final ImportedSession s in importedDao.getByRepository(repo.id)) {
-        any = true;
-        rows.add(
-          _sessionTile(
-            s.displayTitle,
-            Icons.history,
-            () => _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
-          ),
-        );
-      }
-    }
-    if (!any) {
+    if (sessions.isEmpty) {
       rows.add(
         const Padding(
           padding: EdgeInsets.fromLTRB(52, 2, 8, 8),
           child: Text('No sessions', style: TextStyle(fontSize: 12)),
         ),
       );
+    } else {
+      rows.addAll(sessions);
     }
     return rows;
   }
