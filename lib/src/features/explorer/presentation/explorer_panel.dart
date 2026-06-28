@@ -1,3 +1,4 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import '../../agents/domain/agent_kind.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
+import '../../editor/application/code_editor_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
@@ -124,6 +126,38 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     ref
         .read(settingsControllerProvider.notifier)
         .togglePinnedProject(project.id);
+  }
+
+  /// Opens the project's root folder in the configured code editor. When
+  /// [chooseSubfolder] is set, a directory picker (rooted at the project) lets
+  /// the user open a sub-folder instead.
+  Future<void> _openProjectInEditor(
+    Project project, {
+    bool chooseSubfolder = false,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final actions = ref.read(editorActionsProvider);
+    String? subPath;
+    if (chooseSubfolder) {
+      final picked = await getDirectoryPath(
+        initialDirectory: actions.windowsRootPath(project),
+        confirmButtonText: 'Open in editor',
+      );
+      if (picked == null) return;
+      subPath = picked;
+    }
+    try {
+      await actions.openProject(project.id, windowsSubPath: subPath);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Opening in editor…')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : '$e')),
+      );
+    }
   }
 
   Future<void> _confirmDeleteProject(Project project) async {
@@ -283,6 +317,16 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             icon: Icons.content_copy_outlined,
           ),
           DesktopMenuItem(
+            value: 'open-editor',
+            label: 'Open in editor',
+            icon: Icons.code,
+          ),
+          DesktopMenuItem(
+            value: 'open-editor-subfolder',
+            label: 'Open sub-folder in editor…',
+            icon: Icons.folder_open_outlined,
+          ),
+          DesktopMenuItem(
             value: 'pin',
             label: pinned ? 'Unpin' : 'Pin to top',
             icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
@@ -309,6 +353,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                   .read(sessionActionsProvider)
                   .newSessionShellCommand(project.id),
             );
+          }
+          if (action == 'open-editor') _openProjectInEditor(project);
+          if (action == 'open-editor-subfolder') {
+            _openProjectInEditor(project, chooseSubfolder: true);
           }
           if (action == 'pin') _togglePin(project);
           if (action == 'refresh') _syncProject(project);
@@ -345,6 +393,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                         .newSessionShellCommand(project.id),
                   );
                 }
+                if (action == 'open-editor') _openProjectInEditor(project);
+                if (action == 'open-editor-subfolder') {
+                  _openProjectInEditor(project, chooseSubfolder: true);
+                }
                 if (action == 'pin') _togglePin(project);
                 if (action == 'refresh') _syncProject(project);
                 if (action == 'delete') _confirmDeleteProject(project);
@@ -354,6 +406,16 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                   value: 'copy-cmd',
                   label: 'Copy new-session command',
                   icon: Icons.content_copy_outlined,
+                ),
+                DesktopMenuItem(
+                  value: 'open-editor',
+                  label: 'Open in editor',
+                  icon: Icons.code,
+                ),
+                DesktopMenuItem(
+                  value: 'open-editor-subfolder',
+                  label: 'Open sub-folder in editor…',
+                  icon: Icons.folder_open_outlined,
                 ),
                 DesktopMenuItem(
                   value: 'pin',

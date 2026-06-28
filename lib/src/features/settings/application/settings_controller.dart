@@ -87,6 +87,19 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setDefaultCodeEditor(String id) {
+    state = state.copyWith(defaultCodeEditorId: id);
+    _save();
+  }
+
+  void setCustomEditorPath(String path) {
+    state = state.copyWith(
+      defaultCodeEditorId: 'custom',
+      customEditorPath: path,
+    );
+    _save();
+  }
+
   void setDefaultAgent(AgentKind? kind) {
     state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);
     _save();

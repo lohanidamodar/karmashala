@@ -67,6 +67,8 @@ class Settings {
     this.miniHeight,
     this.defaultSystemTerminalId,
     this.customTerminalPath,
+    this.defaultCodeEditorId,
+    this.customEditorPath,
     this.pinnedProjectIds = const [],
   });
 
@@ -116,6 +118,15 @@ class Settings {
   /// [defaultSystemTerminalId] is `custom`.
   final String? customTerminalPath;
 
+  /// The code editor used to open a project/folder ("open in editor"): a
+  /// detected editor id (`vscode`, `zed`), the sentinel `custom`, or `null` to
+  /// use the first detected one.
+  final String? defaultCodeEditorId;
+
+  /// Path to a custom editor executable, used when [defaultCodeEditorId] is
+  /// `custom`.
+  final String? customEditorPath;
+
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
@@ -142,6 +153,8 @@ class Settings {
     double? miniHeight,
     String? defaultSystemTerminalId,
     String? customTerminalPath,
+    String? defaultCodeEditorId,
+    String? customEditorPath,
     List<String>? pinnedProjectIds,
   }) => Settings(
     defaultAgent: clearDefaultAgent
@@ -164,6 +177,8 @@ class Settings {
     defaultSystemTerminalId:
         defaultSystemTerminalId ?? this.defaultSystemTerminalId,
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
+    defaultCodeEditorId: defaultCodeEditorId ?? this.defaultCodeEditorId,
+    customEditorPath: customEditorPath ?? this.customEditorPath,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
   );
 
@@ -188,6 +203,8 @@ class Settings {
     if (defaultSystemTerminalId != null)
       'defaultSystemTerminalId': defaultSystemTerminalId,
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
+    if (defaultCodeEditorId != null) 'defaultCodeEditorId': defaultCodeEditorId,
+    if (customEditorPath != null) 'customEditorPath': customEditorPath,
     'pinnedProjectIds': pinnedProjectIds,
     'permissions': {
       for (final entry in permissions.entries)
@@ -240,6 +257,12 @@ class Settings {
       customTerminalPath: json['customTerminalPath'] is String
           ? json['customTerminalPath'] as String
           : null,
+      defaultCodeEditorId: json['defaultCodeEditorId'] is String
+          ? json['defaultCodeEditorId'] as String
+          : null,
+      customEditorPath: json['customEditorPath'] is String
+          ? json['customEditorPath'] as String
+          : null,
       pinnedProjectIds: json['pinnedProjectIds'] is List
           ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
           : const [],
@@ -264,6 +287,8 @@ class Settings {
       other.miniHeight == miniHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
       other.customTerminalPath == customTerminalPath &&
+      other.defaultCodeEditorId == defaultCodeEditorId &&
+      other.customEditorPath == customEditorPath &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _mapEquals(other.permissions, permissions);
 
@@ -284,6 +309,8 @@ class Settings {
     miniHeight,
     defaultSystemTerminalId,
     customTerminalPath,
+    defaultCodeEditorId,
+    customEditorPath,
     Object.hashAll(pinnedProjectIds),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

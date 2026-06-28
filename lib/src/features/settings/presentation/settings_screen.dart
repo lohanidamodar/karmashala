@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_kind.dart';
+import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/domain/terminal_profile.dart';
@@ -151,6 +152,7 @@ class SettingsScreen extends ConsumerWidget {
                 },
               ),
               const _TerminalAppSection(),
+              const _CodeEditorSection(),
               _Section(
                 title: 'DEFAULT AGENT',
                 child: DropdownButtonFormField<AgentKind?>(
@@ -470,6 +472,119 @@ class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
             Text(
               'The session\'s agent runs in this app (cwd set to the repo); flags '
               'vary by terminal, so it is best-effort.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The code editor used by "open in editor" on projects: a detected editor
+/// (VS Code, Zed) or a custom executable (browse or paste path).
+class _CodeEditorSection extends ConsumerStatefulWidget {
+  const _CodeEditorSection();
+
+  @override
+  ConsumerState<_CodeEditorSection> createState() => _CodeEditorSectionState();
+}
+
+class _CodeEditorSectionState extends ConsumerState<_CodeEditorSection> {
+  final _path = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _path.text = ref.read(settingsControllerProvider).customEditorPath ?? '';
+  }
+
+  @override
+  void dispose() {
+    _path.dispose();
+    super.dispose();
+  }
+
+  Future<void> _browse() async {
+    final file = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Executables', extensions: ['exe']),
+      ],
+    );
+    if (file == null) return;
+    _path.text = file.path;
+    ref
+        .read(settingsControllerProvider.notifier)
+        .setCustomEditorPath(file.path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsControllerProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final detected =
+        ref.watch(availableCodeEditorsProvider).asData?.value ?? const [];
+    final isCustom = settings.defaultCodeEditorId == 'custom';
+    final current = settings.defaultCodeEditorId == null && detected.isEmpty
+        ? 'custom'
+        : (settings.defaultCodeEditorId ??
+              (detected.isNotEmpty ? detected.first.id : 'custom'));
+
+    return _Section(
+      title: 'CODE EDITOR (open in editor)',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: current,
+            decoration: const InputDecoration(labelText: 'Open folders in'),
+            items: [
+              for (final e in detected)
+                DropdownMenuItem(value: e.id, child: Text(e.label)),
+              const DropdownMenuItem(
+                value: 'custom',
+                child: Text('Custom executable…'),
+              ),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              if (v == 'custom') {
+                controller.setCustomEditorPath(_path.text.trim());
+              } else {
+                controller.setDefaultCodeEditor(v);
+              }
+            },
+          ),
+          if (isCustom) ...[
+            const SizedBox(height: Insets.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _path,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Editor executable path',
+                      hintText: r'C:\path\to\editor.exe',
+                    ),
+                    onChanged: (v) => controller.setCustomEditorPath(v.trim()),
+                  ),
+                ),
+                const SizedBox(width: Insets.sm),
+                OutlinedButton.icon(
+                  onPressed: _browse,
+                  icon: const Icon(Icons.folder_open, size: 16),
+                  label: const Text('Browse'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'The editor opens with the folder path as its argument '
+              '(e.g. `editor.exe <folder>`).',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
