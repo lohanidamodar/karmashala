@@ -30,6 +30,31 @@ void main() {
       expect(parseGhPullRequests(''), isEmpty);
       expect(parseGhIssues('{}'), isEmpty);
     });
+
+    test('parseGhRepo reads metadata and default branch', () {
+      final repo = parseGhRepo(
+        '{"nameWithOwner":"me/app","description":"A thing",'
+        '"url":"https://github.com/me/app","isPrivate":false,'
+        '"stargazerCount":12,"defaultBranchRef":{"name":"main"}}',
+      );
+      expect(repo, isNotNull);
+      expect(repo!.nameWithOwner, 'me/app');
+      expect(repo.description, 'A thing');
+      expect(repo.isPrivate, isFalse);
+      expect(repo.stargazerCount, 12);
+      expect(repo.defaultBranch, 'main');
+    });
+
+    test('parseGhRepo tolerates missing description/branch and empty input', () {
+      final repo = parseGhRepo(
+        '{"nameWithOwner":"me/app","url":"u","isPrivate":true,'
+        '"stargazerCount":0}',
+      );
+      expect(repo!.description, isNull);
+      expect(repo.defaultBranch, isNull);
+      expect(repo.isPrivate, isTrue);
+      expect(parseGhRepo(''), isNull);
+    });
   });
 
   group('GitHubService', () {

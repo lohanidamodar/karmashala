@@ -8,7 +8,10 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../cli_detection/presentation/imported_session_view.dart';
+import '../../file_explorer/presentation/file_explorer_view.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/domain/git_commit.dart';
+import '../../git/domain/git_worktree.dart';
 import '../../git/presentation/changes_view.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/presentation/github_view.dart';
@@ -202,6 +205,12 @@ class _Sidebar extends ConsumerWidget {
                 onTap: () => ref.read(repoReviewTabProvider.notifier).select(1),
               ),
               _SidebarTab(
+                selected: tab == 3,
+                icon: AppIcons.folder,
+                label: 'Files',
+                onTap: () => ref.read(repoReviewTabProvider.notifier).select(3),
+              ),
+              _SidebarTab(
                 selected: tab == 2,
                 icon: AppIcons.info,
                 label: 'Info',
@@ -222,6 +231,7 @@ class _Sidebar extends ConsumerWidget {
           child: switch (tab) {
             0 => ChangesView(repositoryName: repo?.name ?? 'repository'),
             1 => const GitHubView(),
+            3 => const FileExplorerView(),
             _ => _InfoView(repo: repo),
           },
         ),
@@ -324,7 +334,144 @@ class _InfoView extends ConsumerWidget {
               ],
             ),
           ),
+        if (repo != null) ...[const Divider(height: Insets.md), _GitDetails()],
       ],
     );
   }
+}
+
+/// Local Git details for the selected repository: branch, remote, worktrees and
+/// recent commits. Git is authoritative; these read live.
+class _GitDetails extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final branch = ref.watch(currentBranchProvider);
+    final remote = ref.watch(repoRemoteUrlProvider);
+    final worktrees = ref.watch(repoWorktreesProvider);
+    final commits = ref.watch(recentCommitsProvider);
+
+    String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
+      AsyncData(:final value) => value ?? fallback,
+      AsyncError() => 'unavailable',
+      _ => '…',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(theme, 'GIT'),
+        _kv(theme, 'Branch', textOf(branch, 'detached')),
+        _kv(theme, 'Remote', textOf(remote, 'none')),
+        const SizedBox(height: Insets.md),
+        _label(theme, 'WORKTREES'),
+        worktrees.when(
+          loading: () => _dim(theme, '…'),
+          error: (_, _) => _dim(theme, 'unavailable'),
+          data: (list) => list.isEmpty
+              ? _dim(theme, 'none')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final GitWorktree w in list)
+                      _line(
+                        theme,
+                        w.branch ?? '(detached)',
+                        w.path.path,
+                        icon: AppIcons.gitBranch,
+                      ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: Insets.md),
+        _label(theme, 'RECENT COMMITS'),
+        commits.when(
+          loading: () => _dim(theme, '…'),
+          error: (_, _) => _dim(theme, 'unavailable'),
+          data: (list) => list.isEmpty
+              ? _dim(theme, 'none')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final GitCommit c in list)
+                      _line(
+                        theme,
+                        c.sha.length >= 7 ? c.sha.substring(0, 7) : c.sha,
+                        c.subject,
+                        icon: AppIcons.gitDiff,
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _label(ThemeData theme, String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(text, style: theme.textTheme.labelSmall),
+  );
+
+  static Widget _kv(ThemeData theme, String key, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 64,
+          child: Text(
+            key,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(
+          child: SelectableText(
+            value,
+            style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  static Widget _line(
+    ThemeData theme,
+    String lead,
+    String rest, {
+    required IconData icon,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Icon(icon, size: 13, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(
+          lead,
+          style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11.5),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            rest,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  static Widget _dim(ThemeData theme, String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Text(
+      text,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        fontStyle: FontStyle.italic,
+      ),
+    ),
+  );
 }

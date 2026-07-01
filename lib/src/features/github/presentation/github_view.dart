@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../application/github_providers.dart';
+import '../domain/github_repo.dart';
 
 /// Read-only GitHub overview for the selected repository: open pull requests and
 /// issues, via the `gh` CLI. Refreshable; surfaces gh errors (e.g. not
@@ -13,6 +14,7 @@ class GitHubView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final repo = ref.watch(githubRepositoryProvider);
     final prs = ref.watch(githubPullRequestsProvider);
     final issues = ref.watch(githubIssuesProvider);
 
@@ -30,6 +32,7 @@ class GitHubView extends ConsumerWidget {
                 tooltip: 'Refresh',
                 icon: const Icon(AppIcons.arrowsClockwise, size: 18),
                 onPressed: () {
+                  ref.invalidate(githubRepositoryProvider);
                   ref.invalidate(githubPullRequestsProvider);
                   ref.invalidate(githubIssuesProvider);
                 },
@@ -41,6 +44,7 @@ class GitHubView extends ConsumerWidget {
         Expanded(
           child: ListView(
             children: [
+              _RepoHeader(value: repo),
               _SectionHeader(icon: AppIcons.gitMerge, label: 'Pull requests'),
               _AsyncList(
                 value: prs,
@@ -70,6 +74,65 @@ class GitHubView extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Repo metadata banner (name, description, stars/visibility/default branch).
+/// Renders nothing while loading or when the repo isn't a GitHub repo.
+class _RepoHeader extends StatelessWidget {
+  const _RepoHeader({required this.value});
+  final AsyncValue<GitHubRepo?> value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final repo = value.asData?.value;
+    if (repo == null) return const SizedBox.shrink();
+    final meta = <String>[
+      '★ ${repo.stargazerCount}',
+      repo.isPrivate ? 'private' : 'public',
+      if (repo.defaultBranch != null) 'default: ${repo.defaultBranch}',
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                AppIcons.gitBranch,
+                size: 15,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SelectableText(
+                  repo.nameWithOwner,
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+            ],
+          ),
+          if (repo.description != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              repo.description!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            meta.join('  ·  '),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

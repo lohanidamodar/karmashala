@@ -26,6 +26,14 @@ class ChangesService {
   Future<List<FileChange>> changes(EnvironmentPath repo) =>
       _gitFor(repo).status(repo);
 
+  /// The current branch of [repo], or `null` if detached/unknown.
+  Future<String?> currentBranch(EnvironmentPath repo) =>
+      _gitFor(repo).currentBranch(repo);
+
+  /// The `origin` remote URL of [repo], or `null` if there is none.
+  Future<String?> remoteUrl(EnvironmentPath repo) =>
+      _gitFor(repo).remoteUrl(repo);
+
   /// Unified diff for [repo], optionally limited to [path] / staged changes.
   Future<String> diff(
     EnvironmentPath repo, {

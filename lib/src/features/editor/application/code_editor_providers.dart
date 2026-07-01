@@ -4,6 +4,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/process/path_translator.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/domain/project.dart';
@@ -49,22 +50,25 @@ class EditorActions {
 
   static const _translator = PathTranslator();
 
-  /// The project's root as a Windows-host path (translating WSL paths to their
+  /// The Windows-host form of [path] (translating WSL paths to their
   /// `\\wsl.localhost\…` / drive form), or `null` if it can't be resolved.
-  /// Editors run on the Windows host, so they need a host-visible path.
-  String? windowsRootPath(Project project) {
+  /// Editors and `dart:io` run on the Windows host, so they need a host path.
+  String? windowsPathFor(EnvironmentPath path) {
     final dao = _ref.read(executionEnvironmentDaoProvider);
-    final env = dao.getById(project.root.environmentId);
+    final env = dao.getById(path.environmentId);
     if (env == null) return null;
-    if (env.kind == EnvironmentKind.windowsNative) return project.root.path;
+    if (env.kind == EnvironmentKind.windowsNative) return path.path;
     final windows = dao.getById(localWindowsEnvironmentId);
     if (windows == null) return null;
     try {
-      return _translator.translate(project.root, from: env, to: windows).path;
+      return _translator.translate(path, from: env, to: windows).path;
     } on PathTranslationException {
       return null;
     }
   }
+
+  /// The project's root as a Windows-host path, or `null`.
+  String? windowsRootPath(Project project) => windowsPathFor(project.root);
 
   /// Opens [windowsPath] in the configured editor (or [editor] when given).
   /// Throws a [StateError] when no editor is configured/detected.

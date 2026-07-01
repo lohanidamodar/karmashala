@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
+import '../domain/github_repo.dart';
 import '../domain/issue.dart';
 import '../domain/pull_request.dart';
 
@@ -45,6 +46,26 @@ List<Issue> parseGhIssues(String json) {
   ];
 }
 
+/// Parses `gh repo view --json …` output (a single object).
+GitHubRepo? parseGhRepo(String json) {
+  final trimmed = json.trim();
+  if (trimmed.isEmpty) return null;
+  final decoded = jsonDecode(trimmed);
+  if (decoded is! Map<String, dynamic>) return null;
+  final desc = (decoded['description'] ?? '').toString();
+  final defaultBranch = decoded['defaultBranchRef'] is Map
+      ? (decoded['defaultBranchRef']['name'] as String?)
+      : null;
+  return GitHubRepo(
+    nameWithOwner: (decoded['nameWithOwner'] ?? '').toString(),
+    url: (decoded['url'] ?? '').toString(),
+    isPrivate: decoded['isPrivate'] == true,
+    stargazerCount: (decoded['stargazerCount'] as num?)?.toInt() ?? 0,
+    description: desc.isEmpty ? null : desc,
+    defaultBranch: defaultBranch,
+  );
+}
+
 List<dynamic> _decodeList(String json) {
   final trimmed = json.trim();
   if (trimmed.isEmpty) return const [];
@@ -64,6 +85,21 @@ class GitHubService {
     return runner.run(
       CommandRequest(executable: 'gh', arguments: args, workingDirectory: repo),
     );
+  }
+
+  /// Repository metadata for [repo] (name, description, visibility, stars,
+  /// default branch). Returns `null` if `gh` reports no repository.
+  Future<GitHubRepo?> getRepository(EnvironmentPath repo) async {
+    final result = await _gh(repo, [
+      'repo',
+      'view',
+      '--json',
+      'nameWithOwner,description,url,isPrivate,stargazerCount,defaultBranchRef',
+    ]);
+    if (!result.ok) {
+      throw GitHubException('gh repo view failed: ${result.stderr.trim()}');
+    }
+    return parseGhRepo(result.stdout);
   }
 
   /// Open pull requests for [repo].

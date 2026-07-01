@@ -4,7 +4,10 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/file_change.dart';
+import '../domain/git_commit.dart';
+import '../domain/git_worktree.dart';
 import 'changes_service.dart';
+import 'git_providers.dart';
 
 /// Provides the [ChangesService].
 final changesServiceProvider = Provider<ChangesService>(
@@ -47,6 +50,46 @@ final repositoryChangesProvider = FutureProvider.autoDispose<List<FileChange>>((
   final repo = ref.read(repositoryDaoProvider).getById(id);
   if (repo == null) return const [];
   return ref.read(changesServiceProvider).changes(repo.path);
+});
+
+/// The current branch of the selected repository.
+final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
+  final id = ref.watch(selectedRepositoryIdProvider);
+  if (id == null) return null;
+  final repo = ref.read(repositoryDaoProvider).getById(id);
+  if (repo == null) return null;
+  return ref.read(changesServiceProvider).currentBranch(repo.path);
+});
+
+/// The `origin` remote URL of the selected repository.
+final repoRemoteUrlProvider = FutureProvider.autoDispose<String?>((ref) async {
+  final id = ref.watch(selectedRepositoryIdProvider);
+  if (id == null) return null;
+  final repo = ref.read(repositoryDaoProvider).getById(id);
+  if (repo == null) return null;
+  return ref.read(changesServiceProvider).remoteUrl(repo.path);
+});
+
+/// Recent commits on the selected repository's current branch.
+final recentCommitsProvider = FutureProvider.autoDispose<List<GitCommit>>((
+  ref,
+) async {
+  final id = ref.watch(selectedRepositoryIdProvider);
+  if (id == null) return const [];
+  final repo = ref.read(repositoryDaoProvider).getById(id);
+  if (repo == null) return const [];
+  return ref.read(changesServiceProvider).log(repo.path, limit: 8);
+});
+
+/// The worktrees of the selected repository.
+final repoWorktreesProvider = FutureProvider.autoDispose<List<GitWorktree>>((
+  ref,
+) async {
+  final id = ref.watch(selectedRepositoryIdProvider);
+  if (id == null) return const [];
+  final repo = ref.read(repositoryDaoProvider).getById(id);
+  if (repo == null) return const [];
+  return ref.read(worktreeServiceProvider).list(repo.path);
 });
 
 /// Unified diff for the selected file in the selected repository.

@@ -119,6 +119,14 @@ class GitService {
     return (name.isEmpty || name == 'HEAD') ? null : name;
   }
 
+  /// The URL of [repo]'s `origin` remote, or `null` if there is none.
+  Future<String?> remoteUrl(EnvironmentPath repo) async {
+    final result = await _git(repo, ['remote', 'get-url', 'origin']);
+    if (!result.ok) return null;
+    final url = result.stdout.trim();
+    return url.isEmpty ? null : url;
+  }
+
   /// Working-tree changes in [repo] (the review surface; Git is authoritative).
   Future<List<FileChange>> status(EnvironmentPath repo) async {
     final result = await _git(repo, ['status', '--porcelain=v1']);

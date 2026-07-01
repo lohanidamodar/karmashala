@@ -8,6 +8,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../data/github_service.dart';
+import '../domain/github_repo.dart';
 import '../domain/issue.dart';
 import '../domain/pull_request.dart';
 
@@ -29,6 +30,9 @@ class GitHubReviewService {
     }
     return GitHubService(runnerFactory.forEnvironment(env));
   }
+
+  Future<GitHubRepo?> repository(EnvironmentPath repo) =>
+      _ghFor(repo).getRepository(repo);
 
   Future<List<PullRequest>> pullRequests(EnvironmentPath repo) =>
       _ghFor(repo).listPullRequests(repo);
@@ -61,6 +65,17 @@ class RepoReviewTabController extends Notifier<int> {
 final repoReviewTabProvider = NotifierProvider<RepoReviewTabController, int>(
   RepoReviewTabController.new,
 );
+
+/// GitHub metadata for the selected repository (null if not a GitHub repo).
+final githubRepositoryProvider = FutureProvider.autoDispose<GitHubRepo?>((
+  ref,
+) async {
+  final id = ref.watch(selectedRepositoryIdProvider);
+  if (id == null) return null;
+  final repo = ref.read(repositoryDaoProvider).getById(id);
+  if (repo == null) return null;
+  return ref.read(gitHubReviewServiceProvider).repository(repo.path);
+});
 
 /// Open pull requests for the selected repository.
 final githubPullRequestsProvider =
