@@ -296,6 +296,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     required String Function() copyCommand,
     required Future<void> Function() onRename,
     required Future<void> Function() onDelete,
+    required bool pinned,
+    required VoidCallback onTogglePin,
   }) async {
     final action = await _rowMenu(pos, [
       DesktopMenuItem(
@@ -307,6 +309,11 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         value: 'copy',
         label: 'Copy resume command',
         icon: AppIcons.copy,
+      ),
+      DesktopMenuItem(
+        value: 'pin',
+        label: pinned ? 'Unpin' : 'Pin to top',
+        icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
       ),
       const DesktopMenuDivider(),
       DesktopMenuItem(
@@ -326,6 +333,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         onResume();
       case 'copy':
         await _copyCommand(copyCommand);
+      case 'pin':
+        onTogglePin();
       case 'rename':
         await onRename();
       case 'delete':
@@ -452,83 +461,107 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     final nameMatches =
         query.isEmpty || project.name.toLowerCase().contains(query);
 
-    // Gather this project's session tiles (filtered by the query).
-    final sessions = <Widget>[];
+    // Gather this project's sessions (filtered by the query), newest first with
+    // pinned sessions on top.
+    final pinnedSessions = ref
+        .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
+        .toSet();
+    final settings = ref.read(settingsControllerProvider.notifier);
+    final entries = <({DateTime ts, bool pinned, Widget row})>[];
     final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
     final sessionDao = ref.read(sessionDaoProvider);
     final importedDao = ref.read(importedSessionDaoProvider);
     for (final repo in repos) {
       for (final Session s in sessionDao.getByRepository(repo.id)) {
-        if (query.isEmpty ||
-            nameMatches ||
-            s.title.toLowerCase().contains(query)) {
-          sessions.add(
-            _sessionTile(
-              title: s.title,
-              icon: AppIcons.chatCircle,
-              onTap: () => _launch(
-                terminal,
-                (t) => actions.openSessionInSystemTerminal(s.id, t),
-              ),
-              copyCommand: () => actions.nativeResumeShellCommand(s.id),
-              onContextMenu: !isWide
-                  ? null
-                  : (pos) => _sessionMenu(
-                      pos,
-                      onResume: () => _launch(
-                        terminal,
-                        (t) => actions.openSessionInSystemTerminal(s.id, t),
-                      ),
-                      copyCommand: () => actions.nativeResumeShellCommand(s.id),
-                      onRename: () => _renameSession(
-                        s.title,
-                        (name) async => actions.renameNative(s.id, name),
-                      ),
-                      onDelete: () => _confirmAndRun(
-                        'Delete session?',
-                        'Removes "${s.title}".',
-                        () => actions.deleteNative(s.id),
-                      ),
-                    ),
-            ),
-          );
+        if (query.isNotEmpty &&
+            !nameMatches &&
+            !s.title.toLowerCase().contains(query)) {
+          continue;
         }
+        final isPinned = pinnedSessions.contains(s.id);
+        entries.add((
+          ts: s.createdAt,
+          pinned: isPinned,
+          row: _sessionTile(
+            title: s.title,
+            icon: AppIcons.chatCircle,
+            pinned: isPinned,
+            onTap: () => _launch(
+              terminal,
+              (t) => actions.openSessionInSystemTerminal(s.id, t),
+            ),
+            copyCommand: () => actions.nativeResumeShellCommand(s.id),
+            onContextMenu: !isWide
+                ? null
+                : (pos) => _sessionMenu(
+                    pos,
+                    onResume: () => _launch(
+                      terminal,
+                      (t) => actions.openSessionInSystemTerminal(s.id, t),
+                    ),
+                    copyCommand: () => actions.nativeResumeShellCommand(s.id),
+                    onRename: () => _renameSession(
+                      s.title,
+                      (name) async => actions.renameNative(s.id, name),
+                    ),
+                    onDelete: () => _confirmAndRun(
+                      'Delete session?',
+                      'Removes "${s.title}".',
+                      () => actions.deleteNative(s.id),
+                    ),
+                    pinned: isPinned,
+                    onTogglePin: () => settings.togglePinnedSession(s.id),
+                  ),
+          ),
+        ));
       }
       for (final ImportedSession s in importedDao.getByRepository(repo.id)) {
-        if (query.isEmpty ||
-            nameMatches ||
-            s.displayTitle.toLowerCase().contains(query)) {
-          sessions.add(
-            _sessionTile(
-              title: s.displayTitle,
-              icon: AppIcons.clockCounterClockwise,
-              onTap: () =>
-                  _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
-              copyCommand: () => actions.resumeShellCommand(s),
-              onContextMenu: !isWide
-                  ? null
-                  : (pos) => _sessionMenu(
-                      pos,
-                      onResume: () => _launch(
-                        terminal,
-                        (t) => actions.openInSystemTerminal(s, t),
-                      ),
-                      copyCommand: () => actions.resumeShellCommand(s),
-                      onRename: () => _renameSession(
-                        s.displayTitle,
-                        (name) => actions.renameImported(s, name),
-                      ),
-                      onDelete: () => _confirmAndRun(
-                        'Delete session?',
-                        'Removes "${s.displayTitle}".',
-                        () => actions.deleteImported(s),
-                      ),
-                    ),
-            ),
-          );
+        if (query.isNotEmpty &&
+            !nameMatches &&
+            !s.displayTitle.toLowerCase().contains(query)) {
+          continue;
         }
+        final isPinned = pinnedSessions.contains(s.id);
+        entries.add((
+          ts: s.updatedAt ?? s.createdAt,
+          pinned: isPinned,
+          row: _sessionTile(
+            title: s.displayTitle,
+            icon: AppIcons.clockCounterClockwise,
+            pinned: isPinned,
+            onTap: () =>
+                _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
+            copyCommand: () => actions.resumeShellCommand(s),
+            onContextMenu: !isWide
+                ? null
+                : (pos) => _sessionMenu(
+                    pos,
+                    onResume: () => _launch(
+                      terminal,
+                      (t) => actions.openInSystemTerminal(s, t),
+                    ),
+                    copyCommand: () => actions.resumeShellCommand(s),
+                    onRename: () => _renameSession(
+                      s.displayTitle,
+                      (name) => actions.renameImported(s, name),
+                    ),
+                    onDelete: () => _confirmAndRun(
+                      'Delete session?',
+                      'Removes "${s.displayTitle}".',
+                      () => actions.deleteImported(s),
+                    ),
+                    pinned: isPinned,
+                    onTogglePin: () => settings.togglePinnedSession(s.id),
+                  ),
+          ),
+        ));
       }
     }
+    entries.sort((a, b) {
+      if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+      return b.ts.compareTo(a.ts);
+    });
+    final sessions = [for (final e in entries) e.row];
 
     // When searching, hide projects with no name/session match; show the rest
     // force-expanded so matches are visible.
@@ -583,9 +616,22 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           ),
         ],
       ),
-      onTap: () => setState(() {
-        if (!_expanded.remove(project.id)) _expanded.add(project.id);
-      }),
+      onTap: () {
+        final expanding = !_expanded.contains(project.id);
+        setState(() {
+          if (expanding) {
+            _expanded.add(project.id);
+          } else {
+            _expanded.remove(project.id);
+          }
+        });
+        // Refresh live CLI sessions on expand so the newest surface.
+        if (expanding) {
+          ref
+              .read(projectsControllerProvider.notifier)
+              .syncSessions(project.id);
+        }
+      },
     );
 
     final rows = <Widget>[
@@ -622,6 +668,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     required IconData icon,
     required VoidCallback onTap,
     required String Function() copyCommand,
+    bool pinned = false,
     void Function(Offset)? onContextMenu,
   }) {
     final tile = Padding(
@@ -630,7 +677,21 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         dense: true,
         visualDensity: VisualDensity.compact,
         leading: Icon(icon, size: 15),
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Row(
+          children: [
+            if (pinned) ...[
+              Icon(
+                AppIcons.pushPinFill,
+                size: 10,
+                color: Theme.of(context).colorScheme.tertiary,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Expanded(
+              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

@@ -81,6 +81,9 @@ void main() {
 
       expect(runner.startRequests.single.executable, 'wt.exe');
       expect(runner.startRequests.single.arguments, [
+        '-w',
+        '0',
+        'new-tab',
         '-d',
         r'C:\ws\app',
         'claude',

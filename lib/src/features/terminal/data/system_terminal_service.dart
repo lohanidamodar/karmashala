@@ -139,7 +139,13 @@ class SystemTerminalService {
   ) {
     switch (kind) {
       case SystemTerminalKind.windowsTerminal:
+        // `-w 0` targets the current Windows Terminal window (creating one if
+        // none exists), so each session opens as a new tab rather than a new
+        // window.
         return [
+          '-w',
+          '0',
+          'new-tab',
           if (cwd != null) ...['-d', cwd],
           ...command,
         ];

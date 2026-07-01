@@ -80,6 +80,14 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Pins/unpins a session; pinned sessions sort to the top of their project.
+  void togglePinnedSession(String sessionId) {
+    final pinned = [...state.pinnedSessionIds];
+    if (!pinned.remove(sessionId)) pinned.add(sessionId);
+    state = state.copyWith(pinnedSessionIds: pinned);
+    _save();
+  }
+
   void setDefaultSystemTerminal(String id) {
     state = state.copyWith(defaultSystemTerminalId: id);
     _save();

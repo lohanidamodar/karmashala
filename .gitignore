@@ -46,3 +46,18 @@ app.*.map.json
 
 # Inno Setup installer output
 windows/installer/output/
+.env.android
+.env.android.codemagic
+.env.ios
+.env.ios.codemagic
+android/key.properties
+android/app/**/*.jks
+android/app/**/*.keystore
+android/vendor/bundle
+android/.bundle/
+ios/vendor/bundle
+ios/.bundle/
+android/fastlane/report.xml
+android/fastlane/README.md
+ios/fastlane/report.xml
+ios/fastlane/README.md

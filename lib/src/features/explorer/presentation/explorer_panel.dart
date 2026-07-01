@@ -84,9 +84,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   }
 
   void _toggleProject(Project project) {
+    final expanding = !_expandedProjects.contains(project.id);
     setState(() {
-      if (_expandedProjects.remove(project.id)) return;
-      _expandedProjects.add(project.id);
+      if (expanding) {
+        _expandedProjects.add(project.id);
+      } else {
+        _expandedProjects.remove(project.id);
+      }
     });
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     // Single-repository projects select that repository so "New session" and
@@ -94,6 +98,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
     if (repos.length == 1) {
       ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
+    }
+    // Refresh live CLI sessions on expand so the newest ones surface without a
+    // manual import. Quiet (no snackbar); the list updates via sessionsRevision.
+    if (expanding) {
+      ref.read(projectsControllerProvider.notifier).syncSessions(project.id);
     }
   }
 
@@ -488,12 +497,42 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         ),
       ];
     }
-    return [
-      for (final session in native)
-        _NativeSessionRow(session: session, repoId: repo.id, depth: depth),
-      for (final session in imported)
-        _ImportedSessionRow(session: session, repoId: repo.id, depth: depth),
-    ];
+    final pinned = ref
+        .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
+        .toSet();
+
+    // Merge native + imported sessions and order them: pinned first, then most
+    // recently active. Native sessions sort by creation; imported by their CLI
+    // store's last-updated time.
+    final entries =
+        <({DateTime ts, bool pinned, Widget row})>[
+          for (final s in native)
+            (
+              ts: s.createdAt,
+              pinned: pinned.contains(s.id),
+              row: _NativeSessionRow(
+                session: s,
+                repoId: repo.id,
+                depth: depth,
+                pinned: pinned.contains(s.id),
+              ),
+            ),
+          for (final s in imported)
+            (
+              ts: s.updatedAt ?? s.createdAt,
+              pinned: pinned.contains(s.id),
+              row: _ImportedSessionRow(
+                session: s,
+                repoId: repo.id,
+                depth: depth,
+                pinned: pinned.contains(s.id),
+              ),
+            ),
+        ]..sort((a, b) {
+          if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+          return b.ts.compareTo(a.ts);
+        });
+    return [for (final e in entries) e.row];
   }
 }
 
@@ -609,11 +648,13 @@ class _NativeSessionRow extends ConsumerWidget {
     required this.session,
     required this.repoId,
     required this.depth,
+    this.pinned = false,
   });
 
   final Session session;
   final String repoId;
   final int depth;
+  final bool pinned;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -651,6 +692,7 @@ class _NativeSessionRow extends ConsumerWidget {
     return _SessionRow(
       depth: depth,
       selected: selected,
+      pinned: pinned,
       leading: _statusIcon(session.status, context),
       title: session.title,
       subtitle:
@@ -665,6 +707,11 @@ class _NativeSessionRow extends ConsumerWidget {
             icon: AppIcons.terminal,
           ),
         if (terminals.isNotEmpty) const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'pin',
+          label: pinned ? 'Unpin' : 'Pin to top',
+          icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
+        ),
         DesktopMenuItem(
           value: 'copy-cmd',
           label: 'Copy resume command',
@@ -694,6 +741,10 @@ class _NativeSessionRow extends ConsumerWidget {
           return;
         }
         switch (action) {
+          case 'pin':
+            ref
+                .read(settingsControllerProvider.notifier)
+                .togglePinnedSession(session.id);
           case 'copy-cmd':
             copyCommandToClipboard(
               context,
@@ -726,11 +777,13 @@ class _ImportedSessionRow extends ConsumerWidget {
     required this.session,
     required this.repoId,
     required this.depth,
+    this.pinned = false,
   });
 
   final ImportedSession session;
   final String repoId;
   final int depth;
+  final bool pinned;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -748,6 +801,10 @@ class _ImportedSessionRow extends ConsumerWidget {
           if (terminal != null) {
             await _openImportedInTerminal(context, actions, session, terminal);
           }
+        case 'pin':
+          ref
+              .read(settingsControllerProvider.notifier)
+              .togglePinnedSession(session.id);
         case 'resume':
           await _resume(context, actions, session);
         case 'copy-cmd':
@@ -778,6 +835,7 @@ class _ImportedSessionRow extends ConsumerWidget {
     return _SessionRow(
       depth: depth + (session.isSubagent ? 1 : 0),
       selected: selected,
+      pinned: pinned,
       leading: Icon(
         session.isSubagent
             ? AppIcons.arrowBendDownRight
@@ -800,6 +858,11 @@ class _ImportedSessionRow extends ConsumerWidget {
             icon: AppIcons.terminal,
           ),
         const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'pin',
+          label: pinned ? 'Unpin' : 'Pin to top',
+          icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
+        ),
         DesktopMenuItem(
           value: 'copy-cmd',
           label: 'Copy resume command',
@@ -836,6 +899,7 @@ class _SessionRow extends StatelessWidget {
     required this.onTap,
     required this.menuItems,
     required this.onMenu,
+    this.pinned = false,
   });
 
   final int depth;
@@ -846,6 +910,7 @@ class _SessionRow extends StatelessWidget {
   final VoidCallback onTap;
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
+  final bool pinned;
 
   @override
   Widget build(BuildContext context) {
@@ -859,6 +924,14 @@ class _SessionRow extends StatelessWidget {
         leading: leading,
         title: Row(
           children: [
+            if (pinned) ...[
+              Icon(
+                AppIcons.pushPinFill,
+                size: 11,
+                color: Theme.of(context).colorScheme.tertiary,
+              ),
+              const SizedBox(width: 4),
+            ],
             Expanded(
               child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),

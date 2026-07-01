@@ -72,6 +72,7 @@ class Settings {
     this.defaultCodeEditorId,
     this.customEditorPath,
     this.pinnedProjectIds = const [],
+    this.pinnedSessionIds = const [],
   });
 
   /// The agent pre-selected when starting a new session, or `null` for none.
@@ -135,7 +136,15 @@ class Settings {
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
+  /// Session ids (native or imported) the user has pinned within their project;
+  /// pinned sessions sort above the rest. Stored as metadata — the sessions
+  /// themselves stay sourced live from the CLI agents.
+  final List<String> pinnedSessionIds;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
+
+  bool isSessionPinned(String sessionId) =>
+      pinnedSessionIds.contains(sessionId);
 
   AgentPermissions permissionsFor(AgentKind kind) =>
       permissions[kind] ?? const AgentPermissions();
@@ -162,6 +171,7 @@ class Settings {
     String? defaultCodeEditorId,
     String? customEditorPath,
     List<String>? pinnedProjectIds,
+    List<String>? pinnedSessionIds,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -187,6 +197,7 @@ class Settings {
     defaultCodeEditorId: defaultCodeEditorId ?? this.defaultCodeEditorId,
     customEditorPath: customEditorPath ?? this.customEditorPath,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
+    pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
   );
 
   Settings withPermissions(AgentKind kind, AgentPermissions value) =>
@@ -214,6 +225,7 @@ class Settings {
     if (defaultCodeEditorId != null) 'defaultCodeEditorId': defaultCodeEditorId,
     if (customEditorPath != null) 'customEditorPath': customEditorPath,
     'pinnedProjectIds': pinnedProjectIds,
+    'pinnedSessionIds': pinnedSessionIds,
     'permissions': {
       for (final entry in permissions.entries)
         entry.key.name: entry.value.toJson(),
@@ -275,6 +287,9 @@ class Settings {
       pinnedProjectIds: json['pinnedProjectIds'] is List
           ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
           : const [],
+      pinnedSessionIds: json['pinnedSessionIds'] is List
+          ? (json['pinnedSessionIds'] as List).whereType<String>().toList()
+          : const [],
     );
   }
 
@@ -300,6 +315,7 @@ class Settings {
       other.defaultCodeEditorId == defaultCodeEditorId &&
       other.customEditorPath == customEditorPath &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
+      _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
 
   @override
@@ -322,7 +338,10 @@ class Settings {
     customTerminalPath,
     defaultCodeEditorId,
     customEditorPath,
-    Object.hashAll(pinnedProjectIds),
+    Object.hash(
+      Object.hashAll(pinnedProjectIds),
+      Object.hashAll(pinnedSessionIds),
+    ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),
