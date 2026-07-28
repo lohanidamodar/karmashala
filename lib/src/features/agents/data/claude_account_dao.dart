@@ -12,7 +12,37 @@ class ClaudeAccountDao {
 
   /// Inserts [account], or replaces the existing row with the same natural
   /// identity `(email, organization_uuid)`.
-  void upsert(ClaudeAccount account) {
+  ClaudeAccount upsert(ClaudeAccount account) {
+    // SQLite considers NULL values distinct in UNIQUE constraints, so the
+    // table constraint alone cannot deduplicate accounts whose organization is
+    // unknown. Resolve the natural identity explicitly and retain its row id.
+    final existing = _db.query(
+      'SELECT id FROM claude_accounts '
+      'WHERE email = ? AND organization_uuid IS ? LIMIT 1;',
+      [account.email, account.organizationUuid],
+    );
+    final saved = existing.isEmpty
+        ? account
+        : account.copyWith(id: existing.first['id']! as String);
+    if (existing.isNotEmpty) {
+      _db.execute(
+        'UPDATE claude_accounts SET '
+        'organization_name = ?, subscription_type = ?, rate_limit_tier = ?, '
+        'claude_ai_oauth = ?, oauth_account = ?, captured_env_id = ?, '
+        'captured_at = ? WHERE id = ?;',
+        [
+          saved.organizationName,
+          saved.subscriptionType,
+          saved.rateLimitTier,
+          saved.claudeAiOauthJson,
+          saved.oauthAccountJson,
+          saved.capturedEnvironmentId,
+          isoFromDate(saved.capturedAt),
+          saved.id,
+        ],
+      );
+      return saved;
+    }
     _db.execute(
       'INSERT INTO claude_accounts '
       '(id, email, organization_uuid, organization_name, subscription_type, '
@@ -28,18 +58,19 @@ class ClaudeAccountDao {
       'captured_env_id = excluded.captured_env_id, '
       'captured_at = excluded.captured_at;',
       [
-        account.id,
-        account.email,
-        account.organizationUuid,
-        account.organizationName,
-        account.subscriptionType,
-        account.rateLimitTier,
-        account.claudeAiOauthJson,
-        account.oauthAccountJson,
-        account.capturedEnvironmentId,
-        isoFromDate(account.capturedAt),
+        saved.id,
+        saved.email,
+        saved.organizationUuid,
+        saved.organizationName,
+        saved.subscriptionType,
+        saved.rateLimitTier,
+        saved.claudeAiOauthJson,
+        saved.oauthAccountJson,
+        saved.capturedEnvironmentId,
+        isoFromDate(saved.capturedAt),
       ],
     );
+    return saved;
   }
 
   List<ClaudeAccount> getAll() {

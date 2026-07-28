@@ -42,7 +42,9 @@ void main() {
     test('is signed out when there is no oauthAccount email', () {
       final snap = parseClaudeSnapshot(
         environmentId: 'windows',
-        credentials: {'claudeAiOauth': {'accessToken': 'a'}},
+        credentials: {
+          'claudeAiOauth': {'accessToken': 'a'},
+        },
         config: {},
       );
       expect(snap.isSignedIn, isFalse);
@@ -80,13 +82,15 @@ void main() {
         'claudeAiOauth': {'accessToken': 'tok', 'subscriptionType': 'max'},
         'mcpOAuth': {'server': 'keep-me'},
       });
-      writeConfig(jsonEncode({
-        'oauthAccount': {
-          'emailAddress': 'a@x.com',
-          'organizationUuid': 'org-a',
-          'organizationName': 'Org A',
-        },
-      }));
+      writeConfig(
+        jsonEncode({
+          'oauthAccount': {
+            'emailAddress': 'a@x.com',
+            'organizationUuid': 'org-a',
+            'organizationName': 'Org A',
+          },
+        }),
+      );
 
       final account = await service.capture(paths);
       expect(account.email, 'a@x.com');
@@ -97,69 +101,93 @@ void main() {
     });
 
     test('capture fails clearly when no email is present', () async {
-      writeCreds({'claudeAiOauth': {'accessToken': 'tok'}});
-      writeConfig(jsonEncode({'projects': {}}));
-      expect(
-        () => service.capture(paths),
-        throwsA(isA<ClaudeAuthException>()),
-      );
-    });
-
-    test('switch swaps token + identity, preserves the rest, and backs up',
-        () async {
-      // Existing install is account A, with an MCP token and case-differing keys.
       writeCreds({
-        'claudeAiOauth': {'accessToken': 'A-token'},
-        'mcpOAuth': {'server': 'keep-me'},
+        'claudeAiOauth': {'accessToken': 'tok'},
       });
-      writeConfig(
-        '{"g:/p": 1, "G:/p": 2, '
-        '"oauthAccount": {"emailAddress": "a@x.com", "organizationUuid": "org-a"}, '
-        '"projects": {"x": true}}',
-      );
-
-      final accountB = ClaudeAccount(
-        id: 'b',
-        email: 'b@y.com',
-        claudeAiOauth: {'accessToken': 'B-token', 'subscriptionType': 'pro'},
-        oauthAccount: {
-          'emailAddress': 'b@y.com',
-          'organizationUuid': 'org-b',
-        },
-        capturedAt: DateTime.utc(2026, 1, 1),
-      );
-
-      await service.switchTo(accountB, paths);
-
-      final creds =
-          jsonDecode(File(paths.credentialsFile).readAsStringSync()) as Map;
-      expect((creds['claudeAiOauth'] as Map)['accessToken'], 'B-token');
-      // MCP token preserved.
-      expect((creds['mcpOAuth'] as Map)['server'], 'keep-me');
-
-      final rawConfig = File(paths.configFile).readAsStringSync();
-      final config = jsonDecode(rawConfig) as Map;
-      expect((config['oauthAccount'] as Map)['emailAddress'], 'b@y.com');
-      // Everything else preserved, including case-differing keys.
-      expect(config['projects'], {'x': true});
-      expect(rawConfig.contains('"g:/p": 1'), isTrue);
-      expect(rawConfig.contains('"G:/p": 2'), isTrue);
-
-      // One-time backups exist and hold the original contents.
-      final credBak = File('${paths.credentialsFile}.chitragupta.bak');
-      final cfgBak = File('${paths.configFile}.chitragupta.bak');
-      expect(credBak.existsSync(), isTrue);
-      expect(cfgBak.existsSync(), isTrue);
-      expect(
-        (jsonDecode(credBak.readAsStringSync()) as Map)['claudeAiOauth']
-            ['accessToken'],
-        'A-token',
-      );
+      writeConfig(jsonEncode({'projects': {}}));
+      expect(() => service.capture(paths), throwsA(isA<ClaudeAuthException>()));
     });
+
+    test(
+      'switch swaps token + identity, preserves the rest, and backs up',
+      () async {
+        // Existing install is account A, with an MCP token and case-differing keys.
+        writeCreds({
+          'claudeAiOauth': {'accessToken': 'A-token'},
+          'mcpOAuth': {'server': 'keep-me'},
+        });
+        writeConfig(
+          '{"g:/p": 1, "G:/p": 2, '
+          '"oauthAccount": {"emailAddress": "a@x.com", "organizationUuid": "org-a"}, '
+          '"projects": {"x": true}}',
+        );
+
+        final accountB = ClaudeAccount(
+          id: 'b',
+          email: 'b@y.com',
+          claudeAiOauth: {'accessToken': 'B-token', 'subscriptionType': 'pro'},
+          oauthAccount: {
+            'emailAddress': 'b@y.com',
+            'organizationUuid': 'org-b',
+          },
+          capturedAt: DateTime.utc(2026, 1, 1),
+        );
+
+        await service.switchTo(accountB, paths);
+
+        final creds =
+            jsonDecode(File(paths.credentialsFile).readAsStringSync()) as Map;
+        expect((creds['claudeAiOauth'] as Map)['accessToken'], 'B-token');
+        // MCP token preserved.
+        expect((creds['mcpOAuth'] as Map)['server'], 'keep-me');
+
+        final rawConfig = File(paths.configFile).readAsStringSync();
+        final config = jsonDecode(rawConfig) as Map;
+        expect((config['oauthAccount'] as Map)['emailAddress'], 'b@y.com');
+        // Everything else preserved, including case-differing keys.
+        expect(config['projects'], {'x': true});
+        expect(rawConfig.contains('"g:/p": 1'), isTrue);
+        expect(rawConfig.contains('"G:/p": 2'), isTrue);
+
+        // One-time backups exist and hold the original contents.
+        final credBak = File('${paths.credentialsFile}.chitragupta.bak');
+        final cfgBak = File('${paths.configFile}.chitragupta.bak');
+        expect(credBak.existsSync(), isTrue);
+        expect(cfgBak.existsSync(), isTrue);
+        expect(
+          (jsonDecode(credBak.readAsStringSync())
+              as Map)['claudeAiOauth']['accessToken'],
+          'A-token',
+        );
+      },
+    );
 
     test('readSnapshot returns signed-out when files are absent', () async {
       final snap = await service.readSnapshot(paths);
       expect(snap.isSignedIn, isFalse);
+    });
+
+    test('malformed config does not partially switch credentials', () async {
+      writeCreds({
+        'claudeAiOauth': {'accessToken': 'A-token'},
+      });
+      writeConfig('{not valid json');
+      final accountB = ClaudeAccount(
+        id: 'b',
+        email: 'b@y.com',
+        claudeAiOauth: {'accessToken': 'B-token'},
+        oauthAccount: {'emailAddress': 'b@y.com'},
+        capturedAt: DateTime.utc(2026, 1, 1),
+      );
+
+      await expectLater(
+        service.switchTo(accountB, paths),
+        throwsA(isA<ClaudeAuthException>()),
+      );
+
+      final creds = jsonDecode(File(paths.credentialsFile).readAsStringSync());
+      expect((creds as Map)['claudeAiOauth']['accessToken'], 'A-token');
+      expect(File(paths.configFile).readAsStringSync(), '{not valid json');
     });
   });
 }

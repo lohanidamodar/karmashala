@@ -37,9 +37,7 @@ final claudeAuthSnapshotProvider =
       ref,
       installation,
     ) async {
-      final environments = ref
-          .watch(executionEnvironmentDaoProvider)
-          .getAll();
+      final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
       final paths = await ref
           .watch(claudeAuthLocatorProvider)
           .pathsFor(installation, environments);
@@ -62,9 +60,9 @@ class ClaudeAccountsController extends Notifier<List<ClaudeAccount>> {
     final paths = await _pathsFor(installation);
     final account = await ref.read(claudeAuthServiceProvider).capture(paths);
     final dao = ref.read(claudeAccountDaoProvider);
-    dao.upsert(account);
+    final saved = dao.upsert(account);
     state = dao.getAll();
-    return account;
+    return saved;
   }
 
   /// Switches [installation] to the saved [account]. Before writing, the account
@@ -82,7 +80,9 @@ class ClaudeAccountsController extends Notifier<List<ClaudeAccount>> {
       final current = await service.capture(paths);
       dao.upsert(current);
     } on ClaudeAuthException catch (e) {
-      _logger.info('No current account to back up before switch (${e.message}).');
+      _logger.info(
+        'No current account to back up before switch (${e.message}).',
+      );
     }
 
     await service.switchTo(account, paths);

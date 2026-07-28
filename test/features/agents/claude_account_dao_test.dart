@@ -43,16 +43,25 @@ void main() {
       expect(a.claudeAiOauth['accessToken'], 'tok');
       expect(a.oauthAccount!['emailAddress'], 'me@x.com');
       expect(a.capturedEnvironmentId, 'wsl:archlinux');
-      expect(a.accessTokenExpiresAt,
-          DateTime.fromMillisecondsSinceEpoch(123));
+      expect(a.accessTokenExpiresAt, DateTime.fromMillisecondsSinceEpoch(123));
     });
 
     test('re-capturing the same (email, org) updates in place', () {
       dao.upsert(account(token: 'old'));
-      dao.upsert(account(id: 'a2', token: 'new'));
+      final saved = dao.upsert(account(id: 'a2', token: 'new'));
       final loaded = dao.getAll();
       expect(loaded, hasLength(1));
+      expect(saved.id, 'a1');
       expect(loaded.first.claudeAiOauth['accessToken'], 'new');
+    });
+
+    test('re-capturing an account without an org updates in place', () {
+      dao.upsert(account(org: null, token: 'old'));
+      final saved = dao.upsert(account(id: 'a2', org: null, token: 'new'));
+      final loaded = dao.getAll();
+      expect(loaded, hasLength(1));
+      expect(saved.id, 'a1');
+      expect(loaded.single.claudeAiOauth['accessToken'], 'new');
     });
 
     test('same email in different orgs are distinct rows', () {

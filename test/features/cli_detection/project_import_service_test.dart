@@ -66,6 +66,7 @@ void main() {
     expect(ProjectDao(db).getAll().single.name, 'app');
     final repo = RepositoryDao(db).getAll().single;
     expect(importedDao.getByRepository(repo.id).length, 3);
+    expect(importedDao.getAll().length, 3);
   });
 
   test('re-importing the same sessions is a no-op (duplicates ignored)', () {

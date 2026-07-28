@@ -135,7 +135,8 @@ class ClaudeAuthService {
       organizationUuid: oauthAccount['organizationUuid'] as String?,
       organizationName: oauthAccount['organizationName'] as String?,
       subscriptionType: oauth['subscriptionType'] as String?,
-      rateLimitTier: (oauth['rateLimitTier'] as String?) ??
+      rateLimitTier:
+          (oauth['rateLimitTier'] as String?) ??
           (oauthAccount['organizationRateLimitTier'] as String?),
       capturedEnvironmentId: paths.environmentId,
       capturedAt: clock.nowUtc(),
@@ -146,36 +147,65 @@ class ClaudeAuthService {
   /// making it the logged-in account. Preserves everything else in both files
   /// (other credential keys such as MCP tokens, and all of `.claude.json`).
   Future<void> switchTo(ClaudeAccount account, ClaudeAuthPaths paths) async {
-    // --- credentials: swap only claudeAiOauth ---
-    final existingCreds =
-        await _readJsonFile(paths.credentialsFile) ?? <String, dynamic>{};
+    // Prepare every update before writing either file. In particular, a
+    // malformed config must not leave the new token paired with the old
+    // identity after the config splice fails.
+    final existingCreds = await _readJsonFileForSwitch(paths.credentialsFile);
     existingCreds['claudeAiOauth'] = account.claudeAiOauth;
+
+    final oauthAccount = account.oauthAccount;
+    String? updatedConfig;
+    var configExists = false;
+    if (oauthAccount != null) {
+      final configFile = File(paths.configFile);
+      configExists = await configFile.exists();
+      if (configExists) {
+        final raw = await configFile.readAsString();
+        try {
+          updatedConfig = replaceTopLevelJsonValue(
+            raw,
+            'oauthAccount',
+            jsonEncode(oauthAccount),
+          );
+        } on FormatException catch (e) {
+          throw ClaudeAuthException(
+            'Cannot switch accounts because ${paths.configFile} is not valid '
+            'JSON (${e.message}).',
+          );
+        }
+      } else {
+        updatedConfig = '${jsonEncode({'oauthAccount': oauthAccount})}\n';
+      }
+    }
+
+    // --- credentials: swap only claudeAiOauth ---
     await _backupOnce(paths.credentialsFile);
     await _writeAtomic(paths.credentialsFile, jsonEncode(existingCreds));
 
     // --- config: splice only oauthAccount, if we have one to write ---
-    final oauthAccount = account.oauthAccount;
-    if (oauthAccount != null) {
-      final configFile = File(paths.configFile);
-      if (await configFile.exists()) {
-        final raw = await configFile.readAsString();
-        final updated = replaceTopLevelJsonValue(
-          raw,
-          'oauthAccount',
-          jsonEncode(oauthAccount),
-        );
-        await _backupOnce(paths.configFile);
-        await _writeAtomic(paths.configFile, updated);
-      } else {
-        await _writeAtomic(
-          paths.configFile,
-          '${jsonEncode({'oauthAccount': oauthAccount})}\n',
-        );
-      }
+    if (updatedConfig != null) {
+      if (configExists) await _backupOnce(paths.configFile);
+      await _writeAtomic(paths.configFile, updatedConfig);
     }
 
     _logger.info(
       'Switched ${paths.environmentId} Claude account to ${account.email}.',
+    );
+  }
+
+  Future<Map<String, dynamic>> _readJsonFileForSwitch(String path) async {
+    final file = File(path);
+    if (!await file.exists()) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is Map<String, dynamic>) return decoded;
+    } on FormatException catch (e) {
+      throw ClaudeAuthException(
+        'Cannot switch accounts because $path is not valid JSON (${e.message}).',
+      );
+    }
+    throw ClaudeAuthException(
+      'Cannot switch accounts because $path does not contain a JSON object.',
     );
   }
 
@@ -239,7 +269,8 @@ ClaudeAuthSnapshot parseClaudeSnapshot({
     organizationName: accountMap?['organizationName'] as String?,
     organizationUuid: accountMap?['organizationUuid'] as String?,
     subscriptionType: oauthMap?['subscriptionType'] as String?,
-    rateLimitTier: (oauthMap?['rateLimitTier'] as String?) ??
+    rateLimitTier:
+        (oauthMap?['rateLimitTier'] as String?) ??
         (accountMap?['organizationRateLimitTier'] as String?),
     accessTokenExpiresAt: expiresAt,
   );

@@ -71,12 +71,10 @@ class AgentDiscoveryService {
   final Clock clock;
 
   Future<List<AgentInstallation>> discover() async {
-    final installations = <AgentInstallation>[];
-    for (final kind in AgentKind.values) {
-      final installation = await _probe(kind);
-      if (installation != null) installations.add(installation);
-    }
-    return installations;
+    // The probes are independent subprocesses. Run them concurrently so a
+    // slow or missing CLI does not serially delay every other agent check.
+    final probed = await Future.wait(AgentKind.values.map(_probe));
+    return probed.whereType<AgentInstallation>().toList();
   }
 
   Future<AgentInstallation?> _probe(AgentKind kind) async {

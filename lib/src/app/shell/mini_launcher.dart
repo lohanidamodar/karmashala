@@ -10,6 +10,7 @@ import '../../features/editor/application/code_editor_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/projects/domain/project.dart';
 import '../../features/repositories/application/repository_providers.dart';
+import '../../features/repositories/domain/repository.dart';
 import '../../features/sessions/application/session_actions.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
@@ -96,11 +97,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _selectedRowKey.currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.5,
-          duration: Motion.fast,
-        );
+        Scrollable.ensureVisible(ctx, alignment: 0.5, duration: Motion.fast);
       }
     });
   }
@@ -441,6 +438,30 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     final pinned = ref
         .watch(settingsControllerProvider.select((s) => s.pinnedProjectIds))
         .toSet();
+    final pinnedSessions = ref
+        .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
+        .toSet();
+    // Search rebuilds on every keystroke. Load each table once and group in
+    // memory instead of issuing one repository query per project and two
+    // session queries per repository.
+    final repositoriesByProject = <String, List<Repository>>{};
+    for (final repository in ref.read(repositoryDaoProvider).getAll()) {
+      repositoriesByProject
+          .putIfAbsent(repository.projectId, () => [])
+          .add(repository);
+    }
+    final sessionsByRepository = <String, List<Session>>{};
+    for (final session in ref.read(sessionDaoProvider).getAll()) {
+      sessionsByRepository
+          .putIfAbsent(session.repositoryId, () => [])
+          .add(session);
+    }
+    final importedByRepository = <String, List<ImportedSession>>{};
+    for (final session in ref.read(importedSessionDaoProvider).getAll()) {
+      importedByRepository
+          .putIfAbsent(session.repositoryId, () => [])
+          .add(session);
+    }
     final terminal = ref.watch(defaultSystemTerminalProvider).asData?.value;
     final actions = ref.read(sessionActionsProvider);
     final query = _query.trim().toLowerCase();
@@ -478,118 +499,126 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         autofocus: false,
         child: Scaffold(
           body: Column(
-        children: [
-          // Draggable header (no title bar in mini mode).
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (_) => windowManager.startDragging(),
-            child: Container(
-              height: 38,
-              color: theme.colorScheme.surfaceContainerHigh,
-              padding: const EdgeInsets.only(left: Insets.md, right: 2),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.bookOpen,
-                    size: 16,
-                    color: theme.colorScheme.tertiary,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      'Chitragupta',
-                      style: theme.textTheme.labelLarge,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: chatVisible ? 'Back to launcher' : 'Chat with agent',
-                    iconSize: 16,
-                    isSelected: chatVisible,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(AppIcons.chatCircleDots),
-                    onPressed: () =>
-                        ref.read(launcherChatVisibleProvider.notifier).toggle(),
-                  ),
-                  IconButton(
-                    tooltip: 'Expand to full window',
-                    iconSize: 16,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(AppIcons.arrowsOutSimple),
-                    onPressed: () =>
-                        ref.read(appModeProvider.notifier).enterFull(),
-                  ),
-                  IconButton(
-                    tooltip: 'Hide to tray',
-                    iconSize: 16,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(AppIcons.x),
-                    onPressed: () => windowManager.hide(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          if (chatVisible)
-            const Expanded(child: LauncherChatView())
-          else ...[
-          if (projects.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
-              child: TextField(
-                decoration: const InputDecoration(
-                  isDense: true,
-                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
-                  hintText: 'Search projects & sessions',
-                  border: OutlineInputBorder(),
-                ),
-                focusNode: _searchFocus,
-                onChanged: (v) => setState(() {
-                  _query = v;
-                  _selected = 0; // typing resets the highlight to the top
-                }),
-              ),
-            ),
-          Expanded(
-            child: projects.isEmpty
-                ? Center(
-                    child: Text(
-                      'No projects yet.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+            children: [
+              // Draggable header (no title bar in mini mode).
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => windowManager.startDragging(),
+                child: Container(
+                  height: 38,
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  padding: const EdgeInsets.only(left: Insets.md, right: 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        AppIcons.bookOpen,
+                        size: 16,
+                        color: theme.colorScheme.tertiary,
                       ),
-                    ),
-                  )
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide =
-                          constraints.maxWidth >= _miniWideBreakpoint;
-                      return ListView(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: Insets.xs,
+                      const SizedBox(width: Insets.sm),
+                      Expanded(
+                        child: Text(
+                          'Chitragupta',
+                          style: theme.textTheme.labelLarge,
                         ),
-                        children: [
-                          for (final project in projects)
-                            ..._projectNodes(
-                              project,
-                              terminal,
-                              actions,
-                              query,
-                              pinned.contains(project.id),
-                              isWide,
-                            ),
-                        ],
-                      );
-                    },
+                      ),
+                      IconButton(
+                        tooltip: chatVisible
+                            ? 'Back to launcher'
+                            : 'Chat with agent',
+                        iconSize: 16,
+                        isSelected: chatVisible,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(AppIcons.chatCircleDots),
+                        onPressed: () => ref
+                            .read(launcherChatVisibleProvider.notifier)
+                            .toggle(),
+                      ),
+                      IconButton(
+                        tooltip: 'Expand to full window',
+                        iconSize: 16,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(AppIcons.arrowsOutSimple),
+                        onPressed: () =>
+                            ref.read(appModeProvider.notifier).enterFull(),
+                      ),
+                      IconButton(
+                        tooltip: 'Hide to tray',
+                        iconSize: 16,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(AppIcons.x),
+                        onPressed: () => windowManager.hide(),
+                      ),
+                    ],
                   ),
+                ),
+              ),
+              const Divider(height: 1),
+              if (chatVisible)
+                const Expanded(child: LauncherChatView())
+              else ...[
+                if (projects.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
+                        hintText: 'Search projects & sessions',
+                        border: OutlineInputBorder(),
+                      ),
+                      focusNode: _searchFocus,
+                      onChanged: (v) => setState(() {
+                        _query = v;
+                        _selected = 0; // typing resets the highlight to the top
+                      }),
+                    ),
+                  ),
+                Expanded(
+                  child: projects.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No projects yet.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isWide =
+                                constraints.maxWidth >= _miniWideBreakpoint;
+                            return ListView(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: Insets.xs,
+                              ),
+                              children: [
+                                for (final project in projects)
+                                  ..._projectNodes(
+                                    project,
+                                    terminal,
+                                    actions,
+                                    query,
+                                    pinned.contains(project.id),
+                                    pinnedSessions,
+                                    repositoriesByProject[project.id] ??
+                                        const [],
+                                    sessionsByRepository,
+                                    importedByRepository,
+                                    isWide,
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+              _MiniShortcutBar(
+                chatVisible: chatVisible,
+                toggleLabel: toggleLabel,
+              ),
+            ],
           ),
-          ],
-          _MiniShortcutBar(
-            chatVisible: chatVisible,
-            toggleLabel: toggleLabel,
-          ),
-        ],
-      ),
         ),
       ),
     );
@@ -601,6 +630,10 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     SessionActions actions,
     String query,
     bool pinned,
+    Set<String> pinnedSessions,
+    List<Repository> repositories,
+    Map<String, List<Session>> sessionsByRepository,
+    Map<String, List<ImportedSession>> importedByRepository,
     bool isWide,
   ) {
     final nameMatches =
@@ -608,9 +641,6 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
 
     // Gather this project's sessions (filtered by the query), newest first with
     // pinned sessions on top.
-    final pinnedSessions = ref
-        .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
-        .toSet();
     final settings = ref.read(settingsControllerProvider.notifier);
     final entries =
         <
@@ -621,11 +651,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
             Widget Function(bool selected, Key? key) build,
           })
         >[];
-    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
-    final sessionDao = ref.read(sessionDaoProvider);
-    final importedDao = ref.read(importedSessionDaoProvider);
-    for (final repo in repos) {
-      for (final Session s in sessionDao.getByRepository(repo.id)) {
+    for (final repo in repositories) {
+      for (final Session s in sessionsByRepository[repo.id] ?? const []) {
         if (query.isNotEmpty &&
             !nameMatches &&
             !s.title.toLowerCase().contains(query)) {
@@ -669,7 +696,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           ),
         ));
       }
-      for (final ImportedSession s in importedDao.getByRepository(repo.id)) {
+      for (final ImportedSession s
+          in importedByRepository[repo.id] ?? const []) {
         if (query.isNotEmpty &&
             !nameMatches &&
             !s.displayTitle.toLowerCase().contains(query)) {
@@ -916,7 +944,10 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
 /// A compact keyboard-hint bar at the foot of the mini window, showing how to
 /// switch views and dismiss. The toggle key mirrors the configured shortcut.
 class _MiniShortcutBar extends StatelessWidget {
-  const _MiniShortcutBar({required this.chatVisible, required this.toggleLabel});
+  const _MiniShortcutBar({
+    required this.chatVisible,
+    required this.toggleLabel,
+  });
 
   final bool chatVisible;
   final String toggleLabel;
