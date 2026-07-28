@@ -15,7 +15,12 @@ String agentExecutableName(AgentKind kind) => switch (kind) {
 };
 
 /// The command that locates an executable by name in a given environment:
-/// `where` on Windows, `which` inside WSL.
+/// `where` on Windows, `command -v` inside WSL.
+///
+/// The WSL lookup runs through a login shell (`bash -lc`) so the distro's PATH
+/// additions — e.g. `~/.local/bin` sourced from `~/.profile`, where agent CLIs
+/// are commonly installed — are present. A bare `which` runs in a non-login
+/// shell that can't see them, so WSL-installed agents go undetected.
 CommandRequest locateRequest(EnvironmentKind kind, String executableName) =>
     switch (kind) {
       EnvironmentKind.windowsNative => CommandRequest(
@@ -23,8 +28,8 @@ CommandRequest locateRequest(EnvironmentKind kind, String executableName) =>
         arguments: [executableName],
       ),
       EnvironmentKind.wsl => CommandRequest(
-        executable: 'which',
-        arguments: [executableName],
+        executable: 'bash',
+        arguments: ['-lc', 'command -v $executableName'],
       ),
     };
 
