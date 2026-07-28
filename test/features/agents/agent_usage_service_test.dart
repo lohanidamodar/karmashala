@@ -5,7 +5,7 @@ void main() {
   final now = DateTime.utc(2026, 7, 28, 12);
 
   group('parseClaudeUsage', () {
-    test('maps present windows with utilization to UsageWindows', () {
+    test('maps present named windows with utilization to UsageWindows', () {
       final usage = parseClaudeUsage({
         'five_hour': {'utilization': 42.0, 'resets_at': '2026-07-28T17:00:00Z'},
         'seven_day': {'utilization': 13.5, 'resets_at': null},
@@ -19,12 +19,48 @@ void main() {
         'Opus · 7-day',
       ]);
       expect(usage.windows.first.percent, 42.0);
-      expect(
-        usage.windows.first.resetsAt,
-        DateTime.utc(2026, 7, 28, 17),
-      );
+      expect(usage.windows.first.resetsAt, DateTime.utc(2026, 7, 28, 17));
       expect(usage.windows[1].resetsAt, isNull);
       expect(usage.fetchedAt, now);
+    });
+
+    test('adds per-model weekly limits and drops the session mirror', () {
+      final usage = parseClaudeUsage({
+        'five_hour': {'utilization': 8, 'resets_at': null},
+        'seven_day': null,
+        'limits': [
+          // Mirrors five_hour — must be dropped.
+          {'kind': 'session', 'group': 'session', 'percent': 8},
+          {
+            'kind': 'weekly_scoped',
+            'group': 'weekly',
+            'percent': 0,
+            'scope': {
+              'model': {'display_name': 'Fable'},
+            },
+          },
+        ],
+      }, now);
+
+      expect(usage.windows.map((w) => w.label).toList(), [
+        '5-hour',
+        'Fable · weekly',
+      ]);
+    });
+
+    test('includes extra usage only when enabled', () {
+      final enabled = parseClaudeUsage({
+        'five_hour': {'utilization': 1},
+        'extra_usage': {'is_enabled': true, 'utilization': 12.0},
+      }, now);
+      expect(enabled.windows.last.label, 'Extra usage');
+      expect(enabled.windows.last.percent, 12.0);
+
+      final disabled = parseClaudeUsage({
+        'five_hour': {'utilization': 1},
+        'extra_usage': {'is_enabled': false, 'utilization': 12.0},
+      }, now);
+      expect(disabled.windows.map((w) => w.label), isNot(contains('Extra usage')));
     });
 
     test('is empty when no windows are present', () {

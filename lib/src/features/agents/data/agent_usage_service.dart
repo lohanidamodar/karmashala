@@ -162,11 +162,15 @@ class AgentUsageService {
 
 // --- Pure parsers (testable without any IO) ---------------------------------
 
-/// Parses Claude Code's `/api/oauth/usage` response. Each present window with a
-/// numeric `utilization` becomes a [UsageWindow].
+/// Parses Claude Code's `/api/oauth/usage` response into every quota it reports:
+/// the named 5-hour / 7-day / Opus / Sonnet windows, the per-model weekly limits
+/// in `limits[]` (e.g. a model-scoped weekly cap), and paid `extra_usage` when
+/// enabled. The `session` entry in `limits[]` mirrors `five_hour`, so it is
+/// dropped to avoid a duplicate row.
 AgentUsage parseClaudeUsage(Map<String, dynamic> json, DateTime now) {
   final windows = <UsageWindow>[];
-  void add(String key, String label) {
+
+  void addNamed(String key, String label) {
     final w = json[key];
     if (w is Map<String, dynamic> && w['utilization'] is num) {
       windows.add(
@@ -179,10 +183,47 @@ AgentUsage parseClaudeUsage(Map<String, dynamic> json, DateTime now) {
     }
   }
 
-  add('five_hour', '5-hour');
-  add('seven_day', '7-day');
-  add('seven_day_opus', 'Opus · 7-day');
-  add('seven_day_sonnet', 'Sonnet · 7-day');
+  addNamed('five_hour', '5-hour');
+  addNamed('seven_day', '7-day');
+  addNamed('seven_day_opus', 'Opus · 7-day');
+  addNamed('seven_day_sonnet', 'Sonnet · 7-day');
+
+  // Per-model / scoped limits. Only model-scoped entries are added here; the
+  // generic session/weekly buckets are already covered by the named keys above.
+  final limits = json['limits'];
+  if (limits is List) {
+    for (final entry in limits) {
+      if (entry is! Map<String, dynamic> || entry['percent'] is! num) continue;
+      final scope = entry['scope'];
+      final model = scope is Map<String, dynamic> && scope['model'] is Map
+          ? (scope['model'] as Map)['display_name'] as String?
+          : null;
+      if (model == null) continue;
+      final group = entry['group'];
+      final period = group == 'weekly' ? 'weekly' : (group as String? ?? '');
+      windows.add(
+        UsageWindow(
+          label: period.isEmpty ? model : '$model · $period',
+          percent: (entry['percent'] as num).toDouble(),
+          resetsAt: _parseIsoDate(entry['resets_at']),
+        ),
+      );
+    }
+  }
+
+  // Paid overage, only when the account has it enabled.
+  final extra = json['extra_usage'];
+  if (extra is Map<String, dynamic> &&
+      extra['is_enabled'] == true &&
+      extra['utilization'] is num) {
+    windows.add(
+      UsageWindow(
+        label: 'Extra usage',
+        percent: (extra['utilization'] as num).toDouble(),
+      ),
+    );
+  }
+
   return AgentUsage(windows: windows, fetchedAt: now);
 }
 
