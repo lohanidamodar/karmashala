@@ -17,6 +17,20 @@ import '../sessions/domain/session_event_types.dart';
 import '../settings/application/settings_controller.dart';
 import 'launcher_mcp.dart';
 
+/// Appended to the launcher agent's system prompt so it understands its role
+/// and the guarantees of Chitragupta's tools.
+const _launcherSystemPrompt =
+    'You are the Chitragupta launcher assistant. The user manages local '
+    'coding-agent sessions (Claude Code, Codex) across projects and '
+    'repositories. Use the mcp__chitragupta__* tools to find and act on them '
+    '(list_projects, list_sessions, open_session, open_sessions_in_tmux, '
+    'get_usage). Prefer list_sessions with a query to locate sessions before '
+    'acting. open_sessions_in_tmux is non-destructive: if a tmux session with '
+    'the requested name already exists it is never killed — the sessions are '
+    'added as new windows without disturbing or switching the focus of any '
+    'running tab. Confirm before opening a large number of sessions. Keep '
+    'replies concise.';
+
 enum LauncherChatStatus { idle, connecting, ready, error }
 
 enum LauncherChatRole { user, agent, tool, error }
@@ -144,6 +158,7 @@ class LauncherChatController extends Notifier<LauncherChatState> {
         permissionMode: permission,
         mcpConfigPath: mcpConfigPath,
         allowedTools: mcpConfigPath == null ? const [] : LauncherMcp.allowedTools,
+        appendSystemPrompt: mcpConfigPath == null ? null : _launcherSystemPrompt,
       ),
     );
     _session = session;

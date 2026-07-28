@@ -200,7 +200,10 @@ class LauncherControlServer {
       'description':
           'Open several sessions together as windows in a single tmux session '
           '(WSL), in one new terminal tab. All sessions must live in the same '
-          'WSL distribution. Pass the session ids from list_sessions.',
+          'WSL distribution. Pass the session ids from list_sessions. '
+          'Non-destructive: if a tmux session with the given name already '
+          'exists it is NOT killed — the sessions are appended as new windows '
+          'without switching the focused window of any running tab.',
       'inputSchema': {
         'type': 'object',
         'properties': {

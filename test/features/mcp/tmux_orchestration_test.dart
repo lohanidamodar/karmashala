@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('buildTmuxScript', () {
-    test('creates a session then a window per entry and attaches', () {
+    test('is non-destructive: appends to an existing session, else creates', () {
       final script = buildTmuxScript('appwrite', [
         const TmuxWindow(
           label: 'analytics',
@@ -17,9 +17,20 @@ void main() {
         ),
       ]);
 
-      final lines = script.trim().split('\n');
-      expect(lines.first, '#!/usr/bin/env bash');
-      expect(script, contains("tmux kill-session -t 'appwrite'"));
+      expect(script.split('\n').first, '#!/usr/bin/env bash');
+      // Never kills an existing session.
+      expect(script, isNot(contains('kill-session')));
+      // Branches on whether the session already exists.
+      expect(script, contains("if tmux has-session -t 'appwrite' 2>/dev/null"));
+      // Existing branch: append windows with -d (no focus steal).
+      expect(
+        script,
+        contains(
+          "tmux new-window -d -t 'appwrite' -n 'analytics' "
+          "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume A'",
+        ),
+      );
+      // New branch: first is a new-session, rest are new-window.
       expect(
         script,
         contains(
@@ -27,17 +38,7 @@ void main() {
           "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume A'",
         ),
       );
-      expect(
-        script,
-        contains(
-          "tmux new-window -t 'appwrite' -n 'usage' "
-          "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume B'",
-        ),
-      );
       expect(script.trim(), endsWith("tmux attach -t 'appwrite'"));
-      // Exactly one new-session, one new-window.
-      expect('new-session'.allMatches(script).length, 1);
-      expect('new-window'.allMatches(script).length, 1);
     });
 
     test('escapes embedded single quotes', () {

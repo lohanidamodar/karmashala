@@ -11,29 +11,44 @@ class TmuxWindow {
   final String command;
 }
 
-/// Builds a bash script that (re)creates a single tmux session with one window
-/// per entry in [windows] and attaches to it. Written to a file and run as
-/// `bash <file>` so nothing has to survive shell-quoting through the terminal
-/// launcher.
+/// Builds a bash script that opens one tmux window per entry in [windows] in a
+/// tmux session named [sessionName], then attaches to it. Written to a file and
+/// run as `bash <file>` so nothing has to survive shell-quoting through the
+/// terminal launcher.
 ///
-/// A stale session of the same name is killed first so re-running is idempotent.
-/// Returns an empty string when [windows] is empty.
+/// The operation is **non-destructive**: if a session of that name already
+/// exists it is left running and the windows are appended to it with `-d` (so
+/// the currently focused tab in any attached client is not switched). Only when
+/// the session does not exist is a new one created. Returns an empty string when
+/// [windows] is empty.
 String buildTmuxScript(String sessionName, List<TmuxWindow> windows) {
   if (windows.isEmpty) return '';
+  final session = _qq(sessionName);
   final buffer = StringBuffer()
     ..writeln('#!/usr/bin/env bash')
-    ..writeln('tmux kill-session -t ${_qq(sessionName)} 2>/dev/null || true');
+    ..writeln('if tmux has-session -t $session 2>/dev/null; then');
+  // Existing session: append each window without stealing focus (-d), so the
+  // running tabs are untouched.
+  for (final window in windows) {
+    buffer.writeln(
+      '  tmux new-window -d -t $session -n ${_qq(window.label)} '
+      '-c ${_qq(window.cwd)} ${_qq(window.command)}',
+    );
+  }
+  buffer.writeln('else');
   for (var i = 0; i < windows.length; i++) {
     final window = windows[i];
     final verb = i == 0
-        ? 'new-session -d -s ${_qq(sessionName)}'
-        : 'new-window -t ${_qq(sessionName)}';
+        ? 'new-session -d -s $session'
+        : 'new-window -t $session';
     buffer.writeln(
-      'tmux $verb -n ${_qq(window.label)} -c ${_qq(window.cwd)} '
+      '  tmux $verb -n ${_qq(window.label)} -c ${_qq(window.cwd)} '
       '${_qq(window.command)}',
     );
   }
-  buffer.writeln('tmux attach -t ${_qq(sessionName)}');
+  buffer
+    ..writeln('fi')
+    ..writeln('tmux attach -t $session');
   return buffer.toString();
 }
 

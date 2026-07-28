@@ -29,6 +29,10 @@ List<String> claudeLaunchArgs(AgentLaunch launch) => [
     '--allowedTools',
     launch.allowedTools.join(','),
   ],
+  if (launch.appendSystemPrompt != null) ...[
+    '--append-system-prompt',
+    launch.appendSystemPrompt!,
+  ],
 ];
 
 /// Translates one line of Claude Code's `stream-json` output into zero or more
