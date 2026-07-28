@@ -18,6 +18,7 @@ import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/system_terminal_providers.dart';
 import '../../features/mcp/launcher_chat_controller.dart';
 import '../../features/mcp/launcher_chat_view.dart';
+import '../../features/system/launcher_hotkey.dart';
 import '../../features/terminal/data/system_terminal_service.dart';
 import '../widgets/desktop_menu.dart';
 import '../theme/app_icons.dart';
@@ -41,7 +42,14 @@ class MiniLauncher extends ConsumerStatefulWidget {
 
 class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   final _expanded = <String>{};
+  final _searchFocus = FocusNode();
   String _query = '';
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _launch(
     SystemTerminal? terminal,
@@ -381,9 +389,39 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     final actions = ref.read(sessionActionsProvider);
     final query = _query.trim().toLowerCase();
     final chatVisible = ref.watch(launcherChatVisibleProvider);
+    final toggleActivator = chatToggleActivator(
+      decodeChatToggleHotKey(
+        ref.watch(
+          settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
+        ),
+      ),
+    );
 
-    return Scaffold(
-      body: Column(
+    // Focus the search field when the launcher requests focus while showing the
+    // list (chat handles its own focus).
+    ref.listen(launcherFocusRequestProvider, (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !ref.read(launcherChatVisibleProvider)) {
+          _searchFocus.requestFocus();
+        }
+      });
+    });
+
+    void toggleChat() {
+      ref.read(launcherChatVisibleProvider.notifier).toggle();
+      ref.read(launcherFocusRequestProvider.notifier).bump();
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        toggleActivator: toggleChat,
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            windowManager.hide(),
+      },
+      child: Focus(
+        autofocus: false,
+        child: Scaffold(
+          body: Column(
         children: [
           // Draggable header (no title bar in mini mode).
           GestureDetector(
@@ -449,6 +487,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                   hintText: 'Search projects & sessions',
                   border: OutlineInputBorder(),
                 ),
+                focusNode: _searchFocus,
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
@@ -487,6 +526,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           ),
           ],
         ],
+      ),
+        ),
       ),
     );
   }

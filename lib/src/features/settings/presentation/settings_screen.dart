@@ -764,11 +764,42 @@ class _AgentLauncherSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final bridge = const LauncherMcp().bridgeExecutable();
     final available = bridge != null;
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final chatShortcut = decodeChatToggleHotKey(
+      ref.watch(
+        settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
+      ),
+    );
     return _Section(
       title: 'AGENT LAUNCHER (MCP)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Toggle chat shortcut'),
+            subtitle: Text(
+              'Show/hide the agent chat (mini: chat ↔ list; full: chat panel).'
+              '  Current: ${launcherHotKeyLabel(chatShortcut)}',
+              style: theme.textTheme.bodySmall,
+            ),
+            trailing: OutlinedButton.icon(
+              onPressed: () async {
+                final recorded = await showDialog<HotKey>(
+                  context: context,
+                  builder: (_) => _HotkeyRecorderDialog(initial: chatShortcut),
+                );
+                if (recorded != null) {
+                  controller.setChatToggleShortcut(
+                    encodeLauncherHotKey(recorded),
+                  );
+                }
+              },
+              icon: const Icon(AppIcons.pencilSimple, size: 15),
+              label: const Text('Change'),
+            ),
+          ),
+          const Divider(),
           Text(
             'The chat with your default agent (in the launcher and the mini '
             'window) can query and act on your projects and sessions through '

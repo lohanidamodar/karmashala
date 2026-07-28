@@ -12,7 +12,9 @@ import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/git/application/changes_providers.dart';
+import '../../features/mcp/launcher_chat_controller.dart';
 import '../../features/mcp/launcher_chat_view.dart';
+import '../../features/system/launcher_hotkey.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -29,19 +31,47 @@ import 'shell_state.dart';
 /// * **Wide/Medium** (≥ 760): Explorer tree beside the Detail view, with the
 ///   Explorer collapsible via `Ctrl+B`.
 /// * **Narrow** (< 760): a single pane (the focused one) with a bottom selector.
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   static const double _mediumBreakpoint = 760;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _toggleChat() {
+    final state = _scaffoldKey.currentState;
+    if (state == null) return;
+    if (state.isEndDrawerOpen) {
+      state.closeEndDrawer();
+    } else {
+      state.openEndDrawer();
+      ref.read(launcherFocusRequestProvider.notifier).bump();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final shell = ref.watch(shellControllerProvider);
     final terminalVisible = ref.watch(terminalVisibleProvider);
-    return ShellShortcuts(
-      child: Scaffold(
-        appBar: const _ShellAppBar(),
-        endDrawer: const Drawer(
+    final toggleActivator = chatToggleActivator(
+      decodeChatToggleHotKey(
+        ref.watch(
+          settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
+        ),
+      ),
+    );
+    return CallbackShortcuts(
+      bindings: {toggleActivator: _toggleChat},
+      child: ShellShortcuts(
+        child: Scaffold(
+          key: _scaffoldKey,
+          appBar: const _ShellAppBar(),
+          endDrawer: const Drawer(
           width: 420,
           child: SafeArea(
             child: Padding(
@@ -58,7 +88,7 @@ class AppShell extends ConsumerWidget {
                   padding: const EdgeInsets.all(4),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      if (constraints.maxWidth >= _mediumBreakpoint) {
+                      if (constraints.maxWidth >= AppShell._mediumBreakpoint) {
                         return _SplitLayout(shell: shell);
                       }
                       return _NarrowLayout(shell: shell);
@@ -71,6 +101,7 @@ class AppShell extends ConsumerWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

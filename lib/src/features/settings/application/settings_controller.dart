@@ -140,6 +140,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setChatToggleShortcut(String hotkeyJson) {
+    state = state.copyWith(chatToggleShortcutJson: hotkeyJson);
+    _save();
+  }
+
   void setNewSessionPermission(AgentKind kind, PermissionMode mode) {
     state = state.withPermissions(
       kind,

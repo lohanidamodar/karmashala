@@ -74,6 +74,7 @@ class Settings {
     this.customEditorPath,
     this.launcherHotkeyJson,
     this.launcherHotkeyEnabled = true,
+    this.chatToggleShortcutJson,
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
   });
@@ -151,6 +152,11 @@ class Settings {
   /// Whether the global launcher hotkey is registered at all.
   final bool launcherHotkeyEnabled;
 
+  /// The in-app shortcut that toggles the agent chat (mini: chat↔list; full:
+  /// chat drawer), as an encoded HotKey. `null` means the default (Ctrl+L).
+  /// This is an app shortcut, not a global one.
+  final String? chatToggleShortcutJson;
+
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
@@ -191,6 +197,7 @@ class Settings {
     String? customEditorPath,
     String? launcherHotkeyJson,
     bool? launcherHotkeyEnabled,
+    String? chatToggleShortcutJson,
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
   }) => Settings(
@@ -223,6 +230,8 @@ class Settings {
     launcherHotkeyJson: launcherHotkeyJson ?? this.launcherHotkeyJson,
     launcherHotkeyEnabled:
         launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
+    chatToggleShortcutJson:
+        chatToggleShortcutJson ?? this.chatToggleShortcutJson,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
   );
@@ -255,6 +264,8 @@ class Settings {
     if (customEditorPath != null) 'customEditorPath': customEditorPath,
     if (launcherHotkeyJson != null) 'launcherHotkeyJson': launcherHotkeyJson,
     'launcherHotkeyEnabled': launcherHotkeyEnabled,
+    if (chatToggleShortcutJson != null)
+      'chatToggleShortcutJson': chatToggleShortcutJson,
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'permissions': {
@@ -324,6 +335,9 @@ class Settings {
       launcherHotkeyEnabled: json['launcherHotkeyEnabled'] is bool
           ? json['launcherHotkeyEnabled'] as bool
           : true,
+      chatToggleShortcutJson: json['chatToggleShortcutJson'] is String
+          ? json['chatToggleShortcutJson'] as String
+          : null,
       pinnedProjectIds: json['pinnedProjectIds'] is List
           ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
           : const [],
@@ -357,6 +371,7 @@ class Settings {
       other.customEditorPath == customEditorPath &&
       other.launcherHotkeyJson == launcherHotkeyJson &&
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
+      other.chatToggleShortcutJson == chatToggleShortcutJson &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -387,6 +402,7 @@ class Settings {
       launcherHotkeyJson,
       launcherHotkeyEnabled,
       defaultAgentInstallationId,
+      chatToggleShortcutJson,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

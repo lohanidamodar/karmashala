@@ -17,11 +17,13 @@ class LauncherChatView extends ConsumerStatefulWidget {
 
 class _LauncherChatViewState extends ConsumerState<LauncherChatView> {
   final _input = TextEditingController();
+  final _inputFocus = FocusNode();
   final _scroll = ScrollController();
 
   @override
   void dispose() {
     _input.dispose();
+    _inputFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -51,6 +53,13 @@ class _LauncherChatViewState extends ConsumerState<LauncherChatView> {
       });
     });
 
+    // Re-focus the input when the launcher asks for focus (e.g. on hotkey).
+    ref.listen(launcherFocusRequestProvider, (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _inputFocus.requestFocus();
+      });
+    });
+
     return Column(
       children: [
         Expanded(
@@ -71,6 +80,8 @@ class _LauncherChatViewState extends ConsumerState<LauncherChatView> {
               Expanded(
                 child: TextField(
                   controller: _input,
+                  focusNode: _inputFocus,
+                  autofocus: true,
                   minLines: 1,
                   maxLines: 4,
                   textInputAction: TextInputAction.send,

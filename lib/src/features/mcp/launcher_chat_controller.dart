@@ -244,3 +244,16 @@ class LauncherChatVisible extends Notifier<bool> {
 
 final launcherChatVisibleProvider =
     NotifierProvider<LauncherChatVisible, bool>(LauncherChatVisible.new);
+
+/// A monotonically increasing tick bumped whenever the launcher wants to move
+/// focus to its active input (chat field or search field). Widgets watch it and
+/// re-focus themselves; the counter value itself is meaningless.
+class LauncherFocusRequest extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state = state + 1;
+}
+
+final launcherFocusRequestProvider =
+    NotifierProvider<LauncherFocusRequest, int>(LauncherFocusRequest.new);

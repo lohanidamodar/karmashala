@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/app_mode.dart';
+import '../mcp/launcher_chat_controller.dart';
 import '../settings/application/settings_controller.dart';
 import '../settings/domain/settings.dart';
 import 'launcher_hotkey.dart';
@@ -31,6 +33,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   bool _closeToTray = false;
   bool _autoStartConfigured = false;
+
+  /// True briefly while the mini launcher is being summoned, so the focus
+  /// transition doesn't trigger an immediate blur-hide.
+  bool _summoning = false;
 
   /// The last hotkey config applied, so [apply] only re-registers when it
   /// actually changes (re-registering on every settings change is wasteful and
@@ -118,10 +124,24 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Brings up the mini launcher from anywhere: enter mini mode, show, focus.
+  /// Global-hotkey handler. Toggles the mini launcher: if it is already
+  /// showing, hide it; otherwise bring it up in chat mode with the input
+  /// focused. A brief guard stops the show transition from self-dismissing via
+  /// [onWindowBlur].
   Future<void> _summonLauncher() async {
+    final inMini = _container.read(appModeProvider) == AppMode.mini;
+    if (inMini && await windowManager.isVisible()) {
+      await windowManager.hide();
+      return;
+    }
+    _summoning = true;
+    _container.read(launcherChatVisibleProvider.notifier).set(true);
     _container.read(appModeProvider.notifier).enterMini();
     await _showWindow();
+    _container.read(launcherFocusRequestProvider.notifier).bump();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _summoning = false;
+    });
   }
 
   Future<void> _applyAutoStart(bool enabled) async {
@@ -232,6 +252,21 @@ class SystemIntegrationService with TrayListener, WindowListener {
     } else {
       _quit();
     }
+  }
+
+  @override
+  void onWindowBlur() {
+    // The mini launcher is ephemeral: dismiss it when it loses focus (click
+    // away / Alt-Tab). Only in mini mode, and not during the summon transition.
+    if (_summoning) return;
+    if (_container.read(appModeProvider) != AppMode.mini) return;
+    unawaited(_hideIfVisible());
+  }
+
+  Future<void> _hideIfVisible() async {
+    try {
+      if (await windowManager.isVisible()) await windowManager.hide();
+    } catch (_) {}
   }
 
   @override
