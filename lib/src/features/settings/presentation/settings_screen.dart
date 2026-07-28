@@ -17,6 +17,9 @@ import '../../agents/domain/agent_usage.dart';
 import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../mcp/launcher_control_server.dart';
+import '../../mcp/launcher_chat_controller.dart';
+import '../../mcp/launcher_mcp.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../system/launcher_hotkey.dart';
@@ -56,222 +59,220 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: ListView(
-            padding: const EdgeInsets.all(Insets.xl),
-            children: [
-              _Section(
-                title: 'APPEARANCE',
-                child: SegmentedButton<AppThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: AppThemeMode.system,
-                      icon: Icon(AppIcons.circleHalf, size: 16),
-                      label: Text('System'),
-                    ),
-                    ButtonSegment(
-                      value: AppThemeMode.light,
-                      icon: Icon(AppIcons.sun, size: 16),
-                      label: Text('Light'),
-                    ),
-                    ButtonSegment(
-                      value: AppThemeMode.dark,
-                      icon: Icon(AppIcons.moon, size: 16),
-                      label: Text('Dark'),
-                    ),
-                  ],
-                  selected: {settings.themeMode},
-                  onSelectionChanged: (s) => controller.setThemeMode(s.first),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.xxl,
+          vertical: Insets.lg,
+        ),
+        children: [
+          _Section(
+            title: 'APPEARANCE',
+            child: SegmentedButton<AppThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemeMode.system,
+                  icon: Icon(AppIcons.circleHalf, size: 16),
+                  label: Text('System'),
                 ),
-              ),
-              _Section(
-                title: 'SYSTEM',
-                child: Column(
-                  children: [
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: settings.keepAwake,
-                      onChanged: controller.setKeepAwake,
-                      title: const Text('Keep system awake'),
-                      subtitle: const Text(
-                        'Prevent the display and system from sleeping while '
-                        'Chitragupta is running.',
-                      ),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: settings.closeToTray,
-                      onChanged: controller.setCloseToTray,
-                      title: const Text('Close to tray'),
-                      subtitle: const Text(
-                        'Hide to the system tray when the window is closed '
-                        'instead of quitting.',
-                      ),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: settings.autoStart,
-                      onChanged: controller.setAutoStart,
-                      title: const Text('Start at login'),
-                      subtitle: const Text(
-                        'Launch Chitragupta automatically when you sign in.',
-                      ),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: settings.compactDensity,
-                      onChanged: controller.setCompactDensity,
-                      title: const Text('Compact density'),
-                      subtitle: const Text(
-                        'Denser lists and controls. Turn off for a roomier '
-                        'layout.',
-                      ),
-                    ),
-                  ],
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  icon: Icon(AppIcons.sun, size: 16),
+                  label: Text('Light'),
                 ),
-              ),
-              Builder(
-                builder: (context) {
-                  final profiles = terminalProfilesFor(
-                    ref.watch(environmentsControllerProvider),
-                  );
-                  final current = resolveTerminalProfile(
-                    settings.defaultTerminalProfileId,
-                    profiles,
-                  );
-                  return _Section(
-                    title: 'DEFAULT TERMINAL',
-                    child: DropdownButtonFormField<String>(
-                      initialValue: current.id,
-                      decoration: const InputDecoration(
-                        labelText: 'Shell new terminals open with',
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  icon: Icon(AppIcons.moon, size: 16),
+                  label: Text('Dark'),
+                ),
+              ],
+              selected: {settings.themeMode},
+              onSelectionChanged: (s) => controller.setThemeMode(s.first),
+            ),
+          ),
+          _Section(
+            title: 'SYSTEM',
+            child: Column(
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: settings.keepAwake,
+                  onChanged: controller.setKeepAwake,
+                  title: const Text('Keep system awake'),
+                  subtitle: const Text(
+                    'Prevent the display and system from sleeping while '
+                    'Chitragupta is running.',
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: settings.closeToTray,
+                  onChanged: controller.setCloseToTray,
+                  title: const Text('Close to tray'),
+                  subtitle: const Text(
+                    'Hide to the system tray when the window is closed '
+                    'instead of quitting.',
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: settings.autoStart,
+                  onChanged: controller.setAutoStart,
+                  title: const Text('Start at login'),
+                  subtitle: const Text(
+                    'Launch Chitragupta automatically when you sign in.',
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: settings.compactDensity,
+                  onChanged: controller.setCompactDensity,
+                  title: const Text('Compact density'),
+                  subtitle: const Text(
+                    'Denser lists and controls. Turn off for a roomier '
+                    'layout.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Builder(
+            builder: (context) {
+              final profiles = terminalProfilesFor(
+                ref.watch(environmentsControllerProvider),
+              );
+              final current = resolveTerminalProfile(
+                settings.defaultTerminalProfileId,
+                profiles,
+              );
+              return _Section(
+                title: 'DEFAULT TERMINAL',
+                child: DropdownButtonFormField<String>(
+                  initialValue: current.id,
+                  decoration: const InputDecoration(
+                    labelText: 'Shell new terminals open with',
+                  ),
+                  items: [
+                    for (final profile in profiles)
+                      DropdownMenuItem(
+                        value: profile.id,
+                        child: Text(profile.label),
                       ),
-                      items: [
-                        for (final profile in profiles)
-                          DropdownMenuItem(
-                            value: profile.id,
-                            child: Text(profile.label),
-                          ),
-                      ],
-                      onChanged: (id) {
-                        if (id != null) {
-                          controller.setDefaultTerminalProfile(id);
-                        }
-                      },
-                    ),
-                  );
-                },
-              ),
-              const _TerminalAppSection(),
-              const _CodeEditorSection(),
-              const _MiniLauncherSection(),
-              const _LauncherHotkeySection(),
-              _Section(
-                title: 'DEFAULT AGENT',
-                child: Builder(
-                  builder: (_) {
-                    // Only offer agents that are actually installed. Clamp the
-                    // saved value so the dropdown never holds a value with no
-                    // matching item (which would throw).
-                    final availableKinds = {
-                      for (final i in installations) i.agentKind,
-                    }.toList()..sort((a, b) => a.index.compareTo(b.index));
-                    if (availableKinds.isEmpty) {
-                      return Text(
-                        'No agents found. Press Discover under Identified '
-                        'Agents to scan your environments.',
-                        style: theme.textTheme.bodySmall,
-                      );
+                  ],
+                  onChanged: (id) {
+                    if (id != null) {
+                      controller.setDefaultTerminalProfile(id);
                     }
-                    final current = availableKinds.contains(settings.defaultAgent)
-                        ? settings.defaultAgent
-                        : null;
-                    return DropdownButtonFormField<AgentKind?>(
-                      initialValue: current,
-                      decoration: const InputDecoration(
-                        labelText: 'Pre-selected when starting a session',
-                      ),
-                      items: [
-                        const DropdownMenuItem(value: null, child: Text('None')),
-                        for (final kind in availableKinds)
-                          DropdownMenuItem(
-                            value: kind,
-                            child: Text(_agentLabel(kind)),
-                          ),
-                      ],
-                      onChanged: controller.setDefaultAgent,
-                    );
                   },
                 ),
-              ),
-              _Section(
-                title: 'IDENTIFIED AGENTS',
-                trailing: TextButton.icon(
-                  onPressed: () => ref
-                      .read(agentInstallationsControllerProvider.notifier)
-                      .discoverAll(),
-                  icon: const Icon(AppIcons.magnifyingGlass, size: 16),
-                  label: const Text('Discover'),
-                ),
-                child: installations.isEmpty
-                    ? Text(
-                        'No agents identified yet. Press Discover to scan your '
-                        'environments.',
-                        style: theme.textTheme.bodySmall,
-                      )
-                    : Column(
-                        children: [
-                          for (final i in installations)
-                            ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(AppIcons.robot, size: 18),
-                              title: Text(_agentLabel(i.agentKind)),
-                              subtitle: Text(
-                                '${i.environmentId} · ${i.executable.path}'
-                                '${i.version == null ? '' : ' · v${i.version}'}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontFamily: kMonoFamily,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-              ),
-              _ClaudeAccountsSection(
-                installations: installations
-                    .where((i) => i.agentKind == AgentKind.claudeCode)
-                    .toList(),
-              ),
-              _UsageSection(
-                installations: installations
-                    .where((i) => i.agentKind != AgentKind.antigravity)
-                    .toList(),
-              ),
-              _Section(
-                title: 'PERMISSIONS',
-                child: Column(
-                  children: [
-                    for (final kind in AgentKind.values)
-                      _PermissionCard(
-                        kind: kind,
-                        permissions: settings.permissionsFor(kind),
-                        onNew: (m) =>
-                            controller.setNewSessionPermission(kind, m),
-                        onExisting: (m) =>
-                            controller.setExistingSessionPermission(kind, m),
+              );
+            },
+          ),
+          const _TerminalAppSection(),
+          const _CodeEditorSection(),
+          const _MiniLauncherSection(),
+          const _LauncherHotkeySection(),
+          const _AgentLauncherSection(),
+          _Section(
+            title: 'DEFAULT AGENT',
+            child: Builder(
+              builder: (_) {
+                // Only offer agents that are actually installed. Clamp the
+                // saved value so the dropdown never holds a value with no
+                // matching item (which would throw).
+                final availableKinds = {
+                  for (final i in installations) i.agentKind,
+                }.toList()..sort((a, b) => a.index.compareTo(b.index));
+                if (availableKinds.isEmpty) {
+                  return Text(
+                    'No agents found. Press Discover under Identified '
+                    'Agents to scan your environments.',
+                    style: theme.textTheme.bodySmall,
+                  );
+                }
+                final current = availableKinds.contains(settings.defaultAgent)
+                    ? settings.defaultAgent
+                    : null;
+                return DropdownButtonFormField<AgentKind?>(
+                  initialValue: current,
+                  decoration: const InputDecoration(
+                    labelText: 'Pre-selected when starting a session',
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('None')),
+                    for (final kind in availableKinds)
+                      DropdownMenuItem(
+                        value: kind,
+                        child: Text(_agentLabel(kind)),
                       ),
                   ],
-                ),
-              ),
-            ],
+                  onChanged: controller.setDefaultAgent,
+                );
+              },
+            ),
           ),
-        ),
+          _Section(
+            title: 'IDENTIFIED AGENTS',
+            trailing: TextButton.icon(
+              onPressed: () => ref
+                  .read(agentInstallationsControllerProvider.notifier)
+                  .discoverAll(),
+              icon: const Icon(AppIcons.magnifyingGlass, size: 16),
+              label: const Text('Discover'),
+            ),
+            child: installations.isEmpty
+                ? Text(
+                    'No agents identified yet. Press Discover to scan your '
+                    'environments.',
+                    style: theme.textTheme.bodySmall,
+                  )
+                : Column(
+                    children: [
+                      for (final i in installations)
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(AppIcons.robot, size: 18),
+                          title: Text(_agentLabel(i.agentKind)),
+                          subtitle: Text(
+                            '${i.environmentId} · ${i.executable.path}'
+                            '${i.version == null ? '' : ' · v${i.version}'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontFamily: kMonoFamily,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+          _ClaudeAccountsSection(
+            installations: installations
+                .where((i) => i.agentKind == AgentKind.claudeCode)
+                .toList(),
+          ),
+          _UsageSection(
+            installations: installations
+                .where((i) => i.agentKind != AgentKind.antigravity)
+                .toList(),
+          ),
+          _Section(
+            title: 'PERMISSIONS',
+            child: Column(
+              children: [
+                for (final kind in AgentKind.values)
+                  _PermissionCard(
+                    kind: kind,
+                    permissions: settings.permissionsFor(kind),
+                    onNew: (m) => controller.setNewSessionPermission(kind, m),
+                    onExisting: (m) =>
+                        controller.setExistingSessionPermission(kind, m),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -740,6 +741,88 @@ class _MiniLauncherSection extends ConsumerWidget {
   }
 }
 
+/// The agent launcher / MCP status: whether the chat agent can use
+/// Chitragupta's own tools, and which tools are exposed.
+class _AgentLauncherSection extends ConsumerWidget {
+  const _AgentLauncherSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final bridge = const LauncherMcp().bridgeExecutable();
+    final available = bridge != null;
+    return _Section(
+      title: 'AGENT LAUNCHER (MCP)',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The chat with your default agent (in the launcher and the mini '
+            'window) can query and act on your projects and sessions through '
+            'these built-in tools:',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: Insets.sm),
+          Wrap(
+            spacing: Insets.xs,
+            runSpacing: Insets.xs,
+            children: [
+              for (final tool in LauncherControlServer.toolSchemas)
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text(
+                    tool['name'] as String,
+                    style: const TextStyle(
+                      fontFamily: kMonoFamily,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: Insets.sm),
+          Row(
+            children: [
+              Icon(
+                available ? AppIcons.checkCircle : AppIcons.warningCircle,
+                size: 16,
+                color: available
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.error,
+              ),
+              const SizedBox(width: Insets.xs),
+              Expanded(
+                child: Text(
+                  available
+                      ? 'Tools available — the MCP bridge is installed.'
+                      : 'Tools unavailable — the MCP bridge (chitragupta_mcp) '
+                            'was not found next to the app. Chat still works '
+                            'without tools.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: Insets.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                Navigator.of(context).maybePop();
+                ref.read(launcherChatVisibleProvider.notifier).set(true);
+              },
+              icon: const Icon(AppIcons.chatCircleDots, size: 16),
+              label: const Text('Open agent chat'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A global hotkey that summons the mini launcher from anywhere. Shows the
 /// current combo with a Change button; recording only happens inside the dialog
 /// the button opens, so it never captures stray keypresses on the settings page.
@@ -849,7 +932,8 @@ class _HotkeyRecorderDialogState extends State<_HotkeyRecorderDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(_recorded ?? widget.initial),
+          onPressed: () =>
+              Navigator.of(context).pop(_recorded ?? widget.initial),
           child: const Text('Save'),
         ),
       ],
@@ -904,9 +988,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
       _error = null;
     });
     try {
-      final environments = ref
-          .read(executionEnvironmentDaoProvider)
-          .getAll();
+      final environments = ref.read(executionEnvironmentDaoProvider).getAll();
       final usage = await ref
           .read(agentUsageServiceProvider)
           .fetch(widget.installation, environments);
@@ -975,8 +1057,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                   style: theme.textTheme.bodySmall,
                 )
               else
-                for (final window in usage.windows)
-                  _UsageBar(window: window),
+                for (final window in usage.windows) _UsageBar(window: window),
             ],
           ],
         ),
@@ -1010,10 +1091,7 @@ class _UsageBar extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(
-                  window.label,
-                  style: theme.textTheme.bodySmall,
-                ),
+                child: Text(window.label, style: theme.textTheme.bodySmall),
               ),
               Text(
                 '${window.percent.toStringAsFixed(0)}%$reset',
@@ -1110,7 +1188,10 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
 
   AgentInstallation get _installation => widget.installation;
 
-  Future<void> _run(Future<void> Function() action, String successMessage) async {
+  Future<void> _run(
+    Future<void> Function() action,
+    String successMessage,
+  ) async {
     setState(() => _busy = true);
     try {
       await action();
