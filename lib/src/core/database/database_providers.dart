@@ -21,6 +21,11 @@ class MetadataKeys {
 
   static const schemaVersion = 'schema_version';
   static const firstRunAt = 'first_run_at';
+
+  /// Set once the first automatic agent discovery has completed successfully.
+  /// Absence means discovery has never run, which triggers a one-time probe on
+  /// startup (see `main.dart`).
+  static const agentsDiscoveredAt = 'agents_discovered_at';
 }
 
 /// Records baseline application metadata on startup.
