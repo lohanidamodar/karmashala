@@ -170,20 +170,40 @@ class SettingsScreen extends ConsumerWidget {
               const _LauncherHotkeySection(),
               _Section(
                 title: 'DEFAULT AGENT',
-                child: DropdownButtonFormField<AgentKind?>(
-                  initialValue: settings.defaultAgent,
-                  decoration: const InputDecoration(
-                    labelText: 'Pre-selected when starting a session',
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('None')),
-                    for (final kind in AgentKind.values)
-                      DropdownMenuItem(
-                        value: kind,
-                        child: Text(_agentLabel(kind)),
+                child: Builder(
+                  builder: (_) {
+                    // Only offer agents that are actually installed. Clamp the
+                    // saved value so the dropdown never holds a value with no
+                    // matching item (which would throw).
+                    final availableKinds = {
+                      for (final i in installations) i.agentKind,
+                    }.toList()..sort((a, b) => a.index.compareTo(b.index));
+                    if (availableKinds.isEmpty) {
+                      return Text(
+                        'No agents found. Press Discover under Identified '
+                        'Agents to scan your environments.',
+                        style: theme.textTheme.bodySmall,
+                      );
+                    }
+                    final current = availableKinds.contains(settings.defaultAgent)
+                        ? settings.defaultAgent
+                        : null;
+                    return DropdownButtonFormField<AgentKind?>(
+                      initialValue: current,
+                      decoration: const InputDecoration(
+                        labelText: 'Pre-selected when starting a session',
                       ),
-                  ],
-                  onChanged: controller.setDefaultAgent,
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('None')),
+                        for (final kind in availableKinds)
+                          DropdownMenuItem(
+                            value: kind,
+                            child: Text(_agentLabel(kind)),
+                          ),
+                      ],
+                      onChanged: controller.setDefaultAgent,
+                    );
+                  },
                 ),
               ),
               _Section(
