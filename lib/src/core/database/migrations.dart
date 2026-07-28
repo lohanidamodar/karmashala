@@ -21,6 +21,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   3: _migrateToV3,
   4: _migrateToV4,
   5: _migrateToV5,
+  6: _migrateToV6,
 };
 
 void _migrateToV1(Database db) {
@@ -29,6 +30,32 @@ void _migrateToV1(Database db) {
       key        TEXT PRIMARY KEY,
       value      TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+  ''');
+}
+
+void _migrateToV6(Database db) {
+  // Saved Claude Code accounts (Loop 22): OAuth token snapshots captured from a
+  // Claude installation so the user can switch the logged-in account without
+  // re-authenticating. `claude_ai_oauth` and `oauth_account` hold the two JSON
+  // blobs Claude Code persists (the token bundle from `.credentials.json` and
+  // the identity record from `.claude.json`); the other columns are denormalized
+  // copies for display. Uniqueness is by (email, organization_uuid) so the same
+  // email in two orgs stays distinct while re-capturing the same account
+  // updates in place.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS claude_accounts (
+      id                TEXT PRIMARY KEY,
+      email             TEXT NOT NULL,
+      organization_uuid TEXT,
+      organization_name TEXT,
+      subscription_type TEXT,
+      rate_limit_tier   TEXT,
+      claude_ai_oauth   TEXT NOT NULL,
+      oauth_account     TEXT,
+      captured_env_id   TEXT,
+      captured_at       TEXT NOT NULL,
+      UNIQUE (email, organization_uuid)
     );
   ''');
 }
