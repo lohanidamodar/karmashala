@@ -720,8 +720,9 @@ class _MiniLauncherSection extends ConsumerWidget {
   }
 }
 
-/// A global hotkey that summons the mini launcher from anywhere. Records a new
-/// combo inline and toggles whether the global binding is registered at all.
+/// A global hotkey that summons the mini launcher from anywhere. Shows the
+/// current combo with a Change button; recording only happens inside the dialog
+/// the button opens, so it never captures stray keypresses on the settings page.
 class _LauncherHotkeySection extends ConsumerWidget {
   const _LauncherHotkeySection();
 
@@ -762,26 +763,76 @@ class _LauncherHotkeySection extends ConsumerWidget {
                     ),
                   ),
                 ),
-                IgnorePointer(
-                  ignoring: !enabled,
-                  child: HotKeyRecorder(
-                    initalHotKey: hotKey,
-                    onHotKeyRecorded: (recorded) => controller
-                        .setLauncherHotkey(encodeLauncherHotKey(recorded)),
-                  ),
+                OutlinedButton.icon(
+                  onPressed: enabled
+                      ? () async {
+                          final recorded = await showDialog<HotKey>(
+                            context: context,
+                            builder: (_) =>
+                                _HotkeyRecorderDialog(initial: hotKey),
+                          );
+                          if (recorded != null) {
+                            controller.setLauncherHotkey(
+                              encodeLauncherHotKey(recorded),
+                            );
+                          }
+                        }
+                      : null,
+                  icon: const Icon(AppIcons.pencilSimple, size: 15),
+                  label: const Text('Change'),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: Insets.xs),
+        ],
+      ),
+    );
+  }
+}
+
+/// A modal that records a single hotkey. The recorder is only active while this
+/// dialog is open, so it can't swallow keypresses meant for the settings page.
+class _HotkeyRecorderDialog extends StatefulWidget {
+  const _HotkeyRecorderDialog({required this.initial});
+
+  final HotKey initial;
+
+  @override
+  State<_HotkeyRecorderDialog> createState() => _HotkeyRecorderDialogState();
+}
+
+class _HotkeyRecorderDialogState extends State<_HotkeyRecorderDialog> {
+  HotKey? _recorded;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Set launcher hotkey'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Text(
-            'Click the recorder and press the keys you want.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            'Press the key combination you want, then Save.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: Insets.md),
+          HotKeyRecorder(
+            initalHotKey: _recorded ?? widget.initial,
+            onHotKeyRecorded: (hotKey) => setState(() => _recorded = hotKey),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_recorded ?? widget.initial),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
