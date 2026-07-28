@@ -413,11 +413,17 @@ class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
     final controller = ref.read(settingsControllerProvider.notifier);
     final detected =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-    final isCustom = settings.defaultSystemTerminalId == 'custom';
-    final current = settings.defaultSystemTerminalId == null && detected.isEmpty
-        ? 'custom'
-        : (settings.defaultSystemTerminalId ??
-              (detected.isNotEmpty ? detected.first.id : 'custom'));
+    // The dropdown value must match exactly one item, so clamp the saved
+    // selection to a currently-valid option. The saved terminal can be missing
+    // from `detected` while the async probe is still loading (or if it was
+    // uninstalled); without this clamp DropdownButtonFormField throws and the
+    // settings screen flashes a red error until the probe resolves.
+    final validIds = <String>{for (final t in detected) t.id, 'custom'};
+    final saved = settings.defaultSystemTerminalId;
+    final current = (saved != null && validIds.contains(saved))
+        ? saved
+        : (detected.isNotEmpty ? detected.first.id : 'custom');
+    final isCustom = current == 'custom';
 
     return _Section(
       title: 'TERMINAL APP (resumes sessions)',
