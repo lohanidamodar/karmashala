@@ -14,6 +14,7 @@ import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
 
@@ -81,6 +82,13 @@ Future<void> main() async {
       logger.warning('Window manager init failed.', error, stack);
     }
     await SystemIntegrationService(container).init();
+
+    // Local control server for the launcher agent's MCP bridge (best-effort).
+    try {
+      await LauncherControlServer(container, logger: logger).start();
+    } catch (error, stack) {
+      logger.warning('Launcher control server failed to start.', error, stack);
+    }
   }
 
   runApp(
