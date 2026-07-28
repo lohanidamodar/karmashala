@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/logging/app_logger.dart';
 import '../../core/process/command_runner_providers.dart';
+import '../agents/application/agent_installations_controller.dart';
 import '../agents/application/agent_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
 import '../agents/domain/agent_installation.dart';
@@ -19,6 +20,8 @@ import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
+import '../repositories/domain/repository.dart';
+import '../sessions/application/session_actions.dart';
 import '../settings/application/settings_controller.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
@@ -122,10 +125,19 @@ class LauncherControlServer {
           query: args['query'] as String?,
           cli: args['cli'] as String?,
         );
+      case 'list_agents':
+        return _listAgents();
       case 'get_usage':
         return _getUsage(
           cli: args['cli'] as String?,
           environmentId: args['environmentId'] as String?,
+        );
+      case 'open_new_session':
+        return _openNewSession(
+          projectId: args['projectId'] as String?,
+          cli: args['cli'] as String?,
+          agentInstallationId: args['agentInstallationId'] as String?,
+          repositoryId: args['repositoryId'] as String?,
         );
       case 'open_session':
         return _openSession(args['id'] as String?);
@@ -166,6 +178,44 @@ class LauncherControlServer {
             'description': 'Filter by agent CLI: "claude" or "codex".',
           },
         },
+      },
+    },
+    {
+      'name': 'list_agents',
+      'description':
+          'List the installed agents available to start sessions with — each '
+          'is an (agentInstallationId, cli, environmentId) the caller can pass '
+          'to open_new_session. Use this to map a user request like "a codex '
+          'session" to a concrete installation.',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'open_new_session',
+      'description':
+          'Start a NEW agent session (not a resume) in a project, in a new '
+          'terminal. Choose the agent with agentInstallationId (from '
+          'list_agents) or cli ("claude"/"codex"); omit both to use the '
+          "configured default. repositoryId is optional (defaults to the "
+          "project's first repository). The agent must be installed in the "
+          "project's environment.",
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'projectId': {
+            'type': 'string',
+            'description': 'Project id from list_projects.',
+          },
+          'cli': {
+            'type': 'string',
+            'description': 'Agent CLI to use: "claude" or "codex".',
+          },
+          'agentInstallationId': {
+            'type': 'string',
+            'description': 'Specific installation id from list_agents.',
+          },
+          'repositoryId': {'type': 'string'},
+        },
+        'required': ['projectId'],
       },
     },
     {
@@ -285,6 +335,97 @@ class LauncherControlServer {
       return AgentKind.claudeCode;
     }
     return null;
+  }
+
+  List<Map<String, dynamic>> _listAgents() {
+    return [
+      for (final install in _container.read(agentInstallationDaoProvider).getAll())
+        {
+          'agentInstallationId': install.id,
+          'cli': install.agentKind.name,
+          'environmentId': install.environmentId,
+          if (install.version != null) 'version': install.version,
+          'path': install.executable.path,
+        },
+    ];
+  }
+
+  Future<Object?> _openNewSession({
+    String? projectId,
+    String? cli,
+    String? agentInstallationId,
+    String? repositoryId,
+  }) async {
+    if (projectId == null) throw ArgumentError('Missing projectId.');
+    final repos = _container.read(repositoryDaoProvider).getByProject(projectId);
+    if (repos.isEmpty) {
+      throw StateError('This project has no repositories to run in.');
+    }
+    Repository repo;
+    if (repositoryId != null) {
+      repo = repos.firstWhere(
+        (r) => r.id == repositoryId,
+        orElse: () => throw StateError('Repository not found in this project.'),
+      );
+    } else {
+      repo = repos.first;
+    }
+
+    final installs = _container
+        .read(agentInstallationDaoProvider)
+        .getByEnvironment(repo.path.environmentId);
+    if (installs.isEmpty) {
+      throw StateError('No agent is installed in ${repo.path.environmentId}.');
+    }
+    AgentInstallation? install;
+    if (agentInstallationId != null) {
+      for (final i in installs) {
+        if (i.id == agentInstallationId) {
+          install = i;
+          break;
+        }
+      }
+      if (install == null) {
+        throw StateError(
+          'That agent installation is not available in this project.',
+        );
+      }
+    } else if (cli != null) {
+      final kind = _parseCli(cli);
+      for (final i in installs) {
+        if (i.agentKind == kind) {
+          install = i;
+          break;
+        }
+      }
+      if (install == null) {
+        throw StateError('$cli is not installed in ${repo.path.environmentId}.');
+      }
+    } else {
+      final settings = _container.read(settingsControllerProvider);
+      install =
+          resolveDefaultInstallation(
+            installs,
+            defaultInstallationId: settings.defaultAgentInstallationId,
+            defaultKind: settings.defaultAgent,
+          ) ??
+          installs.first;
+    }
+
+    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    if (terminal == null) {
+      throw StateError('No external terminal is configured.');
+    }
+    await _container.read(sessionActionsProvider).startNewInSystemTerminal(
+      repo: repo,
+      installation: install,
+      terminal: terminal,
+    );
+    return {
+      'opened': 'new ${install.agentKind.name} session',
+      'repository': repo.name,
+      'environmentId': repo.path.environmentId,
+    };
   }
 
   Future<Object?> _getUsage({String? cli, String? environmentId}) async {
