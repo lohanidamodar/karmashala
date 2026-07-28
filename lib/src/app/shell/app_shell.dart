@@ -12,6 +12,7 @@ import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/git/application/changes_providers.dart';
+import '../../features/mcp/launcher_chat_view.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -40,6 +41,15 @@ class AppShell extends ConsumerWidget {
     return ShellShortcuts(
       child: Scaffold(
         appBar: const _ShellAppBar(),
+        endDrawer: const Drawer(
+          width: 420,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.all(4),
+              child: LauncherChatView(),
+            ),
+          ),
+        ),
         body: SafeArea(
           child: Column(
             children: [
@@ -84,6 +94,13 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
         child: _DesktopMenuBar(),
       ),
       actions: [
+        Builder(
+          builder: (context) => IconButton(
+            tooltip: 'Chat with agent',
+            icon: const Icon(AppIcons.chatCircleDots),
+            onPressed: () => Scaffold.of(context).openEndDrawer(),
+          ),
+        ),
         IconButton(
           tooltip: 'Mini launcher',
           icon: const Icon(AppIcons.pictureInpicture),

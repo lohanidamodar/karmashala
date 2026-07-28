@@ -25,6 +25,8 @@ class AgentLaunch {
     required this.installation,
     this.permissionMode = PermissionMode.ask,
     this.resumeSessionId,
+    this.mcpConfigPath,
+    this.allowedTools = const [],
   });
 
   /// Directory the agent runs in (the repo or a worktree), bound to its
@@ -40,6 +42,15 @@ class AgentLaunch {
 
   /// When resuming an existing CLI session, its id; otherwise `null`.
   final String? resumeSessionId;
+
+  /// Path to an MCP config file (`--mcp-config`) exposing extra tools to the
+  /// agent, or `null` for none. Used by the launcher chat to give the agent
+  /// Chitragupta's own tools.
+  final String? mcpConfigPath;
+
+  /// Tool names to pre-approve (`--allowedTools`) so the agent can call them
+  /// without an interactive prompt (there is no TTY in stream-json mode).
+  final List<String> allowedTools;
 }
 
 /// A live run of an agent: a stream of normalized [AgentEvent]s, plus the ability

@@ -16,6 +16,8 @@ import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/system_terminal_providers.dart';
+import '../../features/mcp/launcher_chat_controller.dart';
+import '../../features/mcp/launcher_chat_view.dart';
 import '../../features/terminal/data/system_terminal_service.dart';
 import '../widgets/desktop_menu.dart';
 import '../theme/app_icons.dart';
@@ -353,6 +355,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     final terminal = ref.watch(defaultSystemTerminalProvider).asData?.value;
     final actions = ref.read(sessionActionsProvider);
     final query = _query.trim().toLowerCase();
+    final chatVisible = ref.watch(launcherChatVisibleProvider);
 
     return Scaffold(
       body: Column(
@@ -380,6 +383,15 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     ),
                   ),
                   IconButton(
+                    tooltip: chatVisible ? 'Back to launcher' : 'Chat with agent',
+                    iconSize: 16,
+                    isSelected: chatVisible,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(AppIcons.chatCircleDots),
+                    onPressed: () =>
+                        ref.read(launcherChatVisibleProvider.notifier).toggle(),
+                  ),
+                  IconButton(
                     tooltip: 'Expand to full window',
                     iconSize: 16,
                     visualDensity: VisualDensity.compact,
@@ -399,6 +411,9 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
             ),
           ),
           const Divider(height: 1),
+          if (chatVisible)
+            const Expanded(child: LauncherChatView())
+          else ...[
           if (projects.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
@@ -445,6 +460,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     },
                   ),
           ),
+          ],
         ],
       ),
     );
