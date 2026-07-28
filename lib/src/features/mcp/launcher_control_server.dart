@@ -98,6 +98,10 @@ class LauncherControlServer {
 
   Future<Object?> _dispatch(String? tool, Map<String, dynamic> args) async {
     switch (tool) {
+      // Meta-call: the MCP bridge fetches tool schemas from here so there is a
+      // single source of truth for the tool list.
+      case '__list_tools__':
+        return toolSchemas;
       case 'list_projects':
         return _listProjects();
       case 'list_sessions':
@@ -109,6 +113,36 @@ class LauncherControlServer {
         throw ArgumentError('Unknown tool: $tool');
     }
   }
+
+  /// MCP tool definitions (name/description/inputSchema) served to the bridge.
+  static const List<Map<String, dynamic>> toolSchemas = [
+    {
+      'name': 'list_projects',
+      'description':
+          'List the projects known to Chitragupta (name, environment, path).',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'list_sessions',
+      'description':
+          'List coding-agent sessions. Optionally filter by a case-insensitive '
+          'substring (matched against project, repository, title, and preview) '
+          'and by CLI ("claude" or "codex").',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'query': {
+            'type': 'string',
+            'description': 'Substring filter, e.g. "appwrite".',
+          },
+          'cli': {
+            'type': 'string',
+            'description': 'Filter by agent CLI: "claude" or "codex".',
+          },
+        },
+      },
+    },
+  ];
 
   List<Map<String, dynamic>> _listProjects() {
     final projects = _container.read(projectsControllerProvider);
