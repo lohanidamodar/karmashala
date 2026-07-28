@@ -43,12 +43,66 @@ class MiniLauncher extends ConsumerStatefulWidget {
 class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   final _expanded = <String>{};
   final _searchFocus = FocusNode();
+  final _selectedRowKey = GlobalKey();
+
+  /// Activate callbacks for the currently visible session rows, in render
+  /// order. Rebuilt every frame; drives arrow-key navigation while the search
+  /// field keeps focus.
+  final List<VoidCallback> _navActivate = [];
   String _query = '';
+  int _selected = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Intercept up/down/enter on the search field so results can be navigated
+    // without the field losing focus (left/right still edit the query).
+    _searchFocus.onKeyEvent = _handleSearchKey;
+  }
 
   @override
   void dispose() {
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  KeyEventResult _handleSearchKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveSelection(1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveSelection(-1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (_selected >= 0 && _selected < _navActivate.length) {
+        _navActivate[_selected]();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _moveSelection(int delta) {
+    final count = _navActivate.length;
+    if (count == 0) return;
+    setState(() => _selected = (_selected + delta).clamp(0, count - 1));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _selectedRowKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.5,
+          duration: Motion.fast,
+        );
+      }
+    });
   }
 
   Future<void> _launch(
@@ -380,6 +434,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Rebuilt as project nodes render below; arrow-key navigation reads it.
+    _navActivate.clear();
     ref.watch(sessionsRevisionProvider);
     final projects = ref.watch(sortedProjectsProvider);
     final pinned = ref
@@ -488,7 +544,10 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                   border: OutlineInputBorder(),
                 ),
                 focusNode: _searchFocus,
-                onChanged: (v) => setState(() => _query = v),
+                onChanged: (v) => setState(() {
+                  _query = v;
+                  _selected = 0; // typing resets the highlight to the top
+                }),
               ),
             ),
           Expanded(
@@ -553,7 +612,15 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
         .toSet();
     final settings = ref.read(settingsControllerProvider.notifier);
-    final entries = <({DateTime ts, bool pinned, Widget row})>[];
+    final entries =
+        <
+          ({
+            DateTime ts,
+            bool pinned,
+            VoidCallback onActivate,
+            Widget Function(bool selected, Key? key) build,
+          })
+        >[];
     final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
     final sessionDao = ref.read(sessionDaoProvider);
     final importedDao = ref.read(importedSessionDaoProvider);
@@ -565,26 +632,27 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           continue;
         }
         final isPinned = pinnedSessions.contains(s.id);
+        void activate() => _launch(
+          terminal,
+          (t) => actions.openSessionInSystemTerminal(s.id, t),
+        );
         entries.add((
           ts: s.createdAt,
           pinned: isPinned,
-          row: _sessionTile(
+          onActivate: activate,
+          build: (selected, key) => _sessionTile(
+            rowKey: key,
+            selected: selected,
             title: s.title,
             icon: AppIcons.chatCircle,
             pinned: isPinned,
-            onTap: () => _launch(
-              terminal,
-              (t) => actions.openSessionInSystemTerminal(s.id, t),
-            ),
+            onTap: activate,
             copyCommand: () => actions.nativeResumeShellCommand(s.id),
             onContextMenu: !isWide
                 ? null
                 : (pos) => _sessionMenu(
                     pos,
-                    onResume: () => _launch(
-                      terminal,
-                      (t) => actions.openSessionInSystemTerminal(s.id, t),
-                    ),
+                    onResume: activate,
                     copyCommand: () => actions.nativeResumeShellCommand(s.id),
                     onRename: () => _renameSession(
                       s.title,
@@ -608,24 +676,25 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           continue;
         }
         final isPinned = pinnedSessions.contains(s.id);
+        void activate() =>
+            _launch(terminal, (t) => actions.openInSystemTerminal(s, t));
         entries.add((
           ts: s.updatedAt ?? s.createdAt,
           pinned: isPinned,
-          row: _sessionTile(
+          onActivate: activate,
+          build: (selected, key) => _sessionTile(
+            rowKey: key,
+            selected: selected,
             title: s.displayTitle,
             icon: AppIcons.clockCounterClockwise,
             pinned: isPinned,
-            onTap: () =>
-                _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
+            onTap: activate,
             copyCommand: () => actions.resumeShellCommand(s),
             onContextMenu: !isWide
                 ? null
                 : (pos) => _sessionMenu(
                     pos,
-                    onResume: () => _launch(
-                      terminal,
-                      (t) => actions.openInSystemTerminal(s, t),
-                    ),
+                    onResume: activate,
                     copyCommand: () => actions.resumeShellCommand(s),
                     onRename: () => _renameSession(
                       s.displayTitle,
@@ -647,11 +716,10 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
       if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       return b.ts.compareTo(a.ts);
     });
-    final sessions = [for (final e in entries) e.row];
 
     // When searching, hide projects with no name/session match; show the rest
     // force-expanded so matches are visible.
-    if (query.isNotEmpty && !nameMatches && sessions.isEmpty) return const [];
+    if (query.isNotEmpty && !nameMatches && entries.isEmpty) return const [];
     final expanded = query.isNotEmpty ? true : _expanded.contains(project.id);
 
     final missing =
@@ -759,7 +827,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           : projectTile,
     ];
     if (!expanded) return rows;
-    if (sessions.isEmpty) {
+    if (entries.isEmpty) {
       rows.add(
         const Padding(
           padding: EdgeInsets.fromLTRB(52, 2, 8, 8),
@@ -767,7 +835,14 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         ),
       );
     } else {
-      rows.addAll(sessions);
+      for (final entry in entries) {
+        // Assign this visible session its position in the arrow-nav list, and
+        // mark/keep-a-handle-on the currently selected row.
+        final navIndex = _navActivate.length;
+        _navActivate.add(entry.onActivate);
+        final selected = navIndex == _selected;
+        rows.add(entry.build(selected, selected ? _selectedRowKey : null));
+      }
     }
     return rows;
   }
@@ -778,12 +853,18 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     required VoidCallback onTap,
     required String Function() copyCommand,
     bool pinned = false,
+    bool selected = false,
+    Key? rowKey,
     void Function(Offset)? onContextMenu,
   }) {
     final tile = Padding(
+      key: rowKey,
       padding: const EdgeInsets.only(left: 24),
       child: ListTile(
         dense: true,
+        selected: selected,
+        selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+        selectedColor: Theme.of(context).colorScheme.onPrimaryContainer,
         visualDensity: VisualDensity.compact,
         leading: Icon(icon, size: 15),
         title: Row(
@@ -854,6 +935,10 @@ class _MiniShortcutBar extends StatelessWidget {
         children: [
           _KeyHint(keys: toggleLabel, label: chatVisible ? 'sessions' : 'chat'),
           const SizedBox(width: Insets.md),
+          if (!chatVisible) ...[
+            const _KeyHint(keys: '↑↓', label: 'navigate'),
+            const SizedBox(width: Insets.md),
+          ],
           if (chatVisible)
             const _KeyHint(keys: 'Enter', label: 'send')
           else
