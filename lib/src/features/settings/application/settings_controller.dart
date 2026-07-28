@@ -119,6 +119,32 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Sets the default to a specific installation (or clears it). Keeps
+  /// [Settings.defaultAgent] in sync with the installation's kind.
+  void setDefaultAgentInstallation(AgentKind? kind, String? installationId) {
+    state = state.copyWith(
+      defaultAgent: kind,
+      clearDefaultAgent: installationId == null,
+      defaultAgentInstallationId: installationId,
+    );
+    _save();
+  }
+
+  void setLauncherHotkey(String hotkeyJson) {
+    state = state.copyWith(launcherHotkeyJson: hotkeyJson);
+    _save();
+  }
+
+  void setLauncherHotkeyEnabled(bool enabled) {
+    state = state.copyWith(launcherHotkeyEnabled: enabled);
+    _save();
+  }
+
+  void setChatToggleShortcut(String hotkeyJson) {
+    state = state.copyWith(chatToggleShortcutJson: hotkeyJson);
+    _save();
+  }
+
   void setNewSessionPermission(AgentKind kind, PermissionMode mode) {
     state = state.withPermissions(
       kind,

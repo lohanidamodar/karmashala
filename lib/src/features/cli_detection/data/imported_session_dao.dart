@@ -52,6 +52,14 @@ class ImportedSessionDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  List<ImportedSession> getAll() {
+    final rows = _db.query(
+      'SELECT * FROM imported_sessions '
+      'ORDER BY updated_at DESC, created_at DESC;',
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   List<ImportedSession> getByRepository(String repositoryId) {
     final rows = _db.query(
       'SELECT * FROM imported_sessions WHERE repository_id = ? '

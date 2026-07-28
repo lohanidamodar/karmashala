@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
@@ -8,9 +10,11 @@ import 'src/core/database/database_providers.dart';
 import 'src/core/logging/app_logger.dart';
 import 'src/core/process/windows_command_runner.dart';
 import 'src/core/util/clock.dart';
+import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
 
@@ -48,6 +52,13 @@ Future<void> main() async {
     overrides: [databaseProvider.overrideWithValue(database)],
   );
 
+  // First run (or if it has never completed): probe every environment for
+  // installed agents once, in the background so it doesn't delay window show.
+  // The controller's state updates when it finishes, so the UI fills in live.
+  if (database.readMetadata(MetadataKeys.agentsDiscoveredAt) == null) {
+    unawaited(_discoverAgentsOnFirstRun(container, database, clock, logger));
+  }
+
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
   if (SystemIntegrationService.isSupported) {
     try {
@@ -71,6 +82,13 @@ Future<void> main() async {
       logger.warning('Window manager init failed.', error, stack);
     }
     await SystemIntegrationService(container).init();
+
+    // Local control server for the launcher agent's MCP bridge (best-effort).
+    try {
+      await LauncherControlServer(container, logger: logger).start();
+    } catch (error, stack) {
+      logger.warning('Launcher control server failed to start.', error, stack);
+    }
   }
 
   runApp(
@@ -79,4 +97,31 @@ Future<void> main() async {
       child: const ChitraguptaApp(),
     ),
   );
+}
+
+/// Runs the one-time startup agent discovery. On success it stamps
+/// [MetadataKeys.agentsDiscoveredAt] so it never repeats; on failure it leaves
+/// the flag unset so the next launch retries.
+Future<void> _discoverAgentsOnFirstRun(
+  ProviderContainer container,
+  AppDatabase database,
+  Clock clock,
+  AppLogger logger,
+) async {
+  try {
+    final found = await container
+        .read(agentInstallationsControllerProvider.notifier)
+        .discoverAll();
+    database.writeMetadata(
+      MetadataKeys.agentsDiscoveredAt,
+      clock.nowUtc().toIso8601String(),
+    );
+    logger.info('First-run agent discovery found ${found.length} agent(s).');
+  } catch (error, stack) {
+    logger.warning(
+      'First-run agent discovery failed; will retry next launch.',
+      error,
+      stack,
+    );
+  }
 }

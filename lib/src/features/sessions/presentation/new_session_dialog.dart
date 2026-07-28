@@ -148,12 +148,16 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   Widget build(BuildContext context) {
     final installations = ref.watch(agentInstallationsControllerProvider);
     if (_installation == null && installations.isNotEmpty) {
-      // Prefer the configured default agent, else the first installation.
-      final defaultAgent = ref.read(settingsControllerProvider).defaultAgent;
-      _installation = installations.firstWhere(
-        (i) => i.agentKind == defaultAgent,
-        orElse: () => installations.first,
-      );
+      // Prefer the configured default installation, else the default kind,
+      // else the first installation.
+      final settings = ref.read(settingsControllerProvider);
+      _installation =
+          resolveDefaultInstallation(
+            installations,
+            defaultInstallationId: settings.defaultAgentInstallationId,
+            defaultKind: settings.defaultAgent,
+          ) ??
+          installations.first;
     }
 
     return AlertDialog(

@@ -1,15 +1,19 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/app_mode.dart';
+import '../mcp/launcher_chat_controller.dart';
 import '../settings/application/settings_controller.dart';
 import '../settings/domain/settings.dart';
+import 'launcher_hotkey.dart';
 
 const _kMenuShow = 'show';
 const _kMenuMini = 'mini';
@@ -29,6 +33,15 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   bool _closeToTray = false;
   bool _autoStartConfigured = false;
+
+  /// True briefly while the mini launcher is being summoned, so the focus
+  /// transition doesn't trigger an immediate blur-hide.
+  bool _summoning = false;
+
+  /// The last hotkey config applied, so [apply] only re-registers when it
+  /// actually changes (re-registering on every settings change is wasteful and
+  /// can briefly drop the global binding).
+  String? _appliedHotkeySignature;
 
   static bool get isSupported =>
       !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
@@ -51,6 +64,12 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     windowManager.addListener(this);
     trayManager.addListener(this);
+
+    // Clear any stale system hotkeys left registered by a previous run/crash
+    // before we register ours (recommended by hotkey_manager).
+    try {
+      await hotKeyManager.unregisterAll();
+    } catch (_) {}
 
     try {
       await trayManager.setIcon('assets/tray_icon.ico');
@@ -79,7 +98,50 @@ class SystemIntegrationService with TrayListener, WindowListener {
     } catch (_) {}
 
     await _applyAutoStart(settings.autoStart);
+    await _applyLauncherHotkey(settings);
     await _refreshMenu(settings);
+  }
+
+  /// Registers (or clears) the global launcher hotkey to match [settings],
+  /// re-registering only when the hotkey or its enabled state changed.
+  Future<void> _applyLauncherHotkey(Settings settings) async {
+    final signature = settings.launcherHotkeyEnabled
+        ? (settings.launcherHotkeyJson ?? 'default')
+        : 'disabled';
+    if (signature == _appliedHotkeySignature) return;
+    _appliedHotkeySignature = signature;
+
+    try {
+      await hotKeyManager.unregisterAll();
+      if (!settings.launcherHotkeyEnabled) return;
+      await hotKeyManager.register(
+        decodeLauncherHotKey(settings.launcherHotkeyJson),
+        keyDownHandler: (_) => _summonLauncher(),
+      );
+    } catch (_) {
+      // Registration can fail if the combo is already held by another app;
+      // leave the launcher reachable via the tray/app-bar buttons.
+    }
+  }
+
+  /// Global-hotkey handler. Toggles the mini launcher: if it is already
+  /// showing, hide it; otherwise bring it up in chat mode with the input
+  /// focused. A brief guard stops the show transition from self-dismissing via
+  /// [onWindowBlur].
+  Future<void> _summonLauncher() async {
+    final inMini = _container.read(appModeProvider) == AppMode.mini;
+    if (inMini && await windowManager.isVisible()) {
+      await windowManager.hide();
+      return;
+    }
+    _summoning = true;
+    _container.read(launcherChatVisibleProvider.notifier).set(true);
+    _container.read(appModeProvider.notifier).enterMini();
+    await _showWindow();
+    _container.read(launcherFocusRequestProvider.notifier).bump();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _summoning = false;
+    });
   }
 
   Future<void> _applyAutoStart(bool enabled) async {
@@ -190,6 +252,21 @@ class SystemIntegrationService with TrayListener, WindowListener {
     } else {
       _quit();
     }
+  }
+
+  @override
+  void onWindowBlur() {
+    // The mini launcher is ephemeral: dismiss it when it loses focus (click
+    // away / Alt-Tab). Only in mini mode, and not during the summon transition.
+    if (_summoning) return;
+    if (_container.read(appModeProvider) != AppMode.mini) return;
+    unawaited(_hideIfVisible());
+  }
+
+  Future<void> _hideIfVisible() async {
+    try {
+      if (await windowManager.isVisible()) await windowManager.hide();
+    } catch (_) {}
   }
 
   @override

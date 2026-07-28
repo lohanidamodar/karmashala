@@ -24,6 +24,15 @@ List<String> claudeLaunchArgs(AgentLaunch launch) => [
     PermissionMode.bypass => const ['--permission-mode', 'bypassPermissions'],
   },
   if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
+  if (launch.mcpConfigPath != null) ...['--mcp-config', launch.mcpConfigPath!],
+  if (launch.allowedTools.isNotEmpty) ...[
+    '--allowedTools',
+    launch.allowedTools.join(','),
+  ],
+  if (launch.appendSystemPrompt != null) ...[
+    '--append-system-prompt',
+    launch.appendSystemPrompt!,
+  ],
 ];
 
 /// Translates one line of Claude Code's `stream-json` output into zero or more

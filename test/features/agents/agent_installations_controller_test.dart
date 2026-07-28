@@ -21,8 +21,16 @@ void main() {
   // Both environments report only Claude installed.
   FakeCommandRunner claudeOnlyRunner() => FakeCommandRunner(
     responder: (req) {
-      if (req.executable == 'where' || req.executable == 'which') {
-        return req.arguments.first == 'claude'
+      // Windows probes with `where <name>`; WSL probes through a login shell
+      // as `bash -lc 'command -v <name>'`.
+      final isWindowsLocate = req.executable == 'where';
+      final isWslLocate =
+          req.executable == 'bash' && req.arguments.first == '-lc';
+      if (isWindowsLocate || isWslLocate) {
+        final target = isWslLocate
+            ? req.arguments.last.split(' ').last
+            : req.arguments.first;
+        return target == 'claude'
             ? CommandResult(
                 exitCode: 0,
                 stdout: '/usr/bin/claude\n',

@@ -62,6 +62,17 @@ jobs:
       - run: flutter pub get
       - name: Build Windows release
         run: flutter build windows --release
+      - name: Build and bundle the MCP bridge
+        shell: pwsh
+        run: |
+          # The launcher agent's MCP bridge is a standalone dependency-free
+          # package; compile it into the Release folder so the installer and the
+          # portable zip ship it next to chitragupta.exe (the app looks for it
+          # there). Without this, the in-app agent chat has no tools.
+          Push-Location mcp_bridge
+          dart pub get
+          Pop-Location
+          dart compile exe mcp_bridge/bin/chitragupta_mcp.dart -o build/windows/x64/runner/Release/chitragupta_mcp.exe
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |

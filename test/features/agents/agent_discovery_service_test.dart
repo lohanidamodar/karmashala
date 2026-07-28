@@ -20,12 +20,14 @@ void main() {
       expect(agentExecutableName(AgentKind.antigravity), 'antigravity');
     });
 
-    test('locateRequest uses where on Windows and which in WSL', () {
+    test('locateRequest uses where on Windows and a login shell in WSL', () {
       expect(
         locateRequest(EnvironmentKind.windowsNative, 'claude').executable,
         'where',
       );
-      expect(locateRequest(EnvironmentKind.wsl, 'claude').executable, 'which');
+      final wsl = locateRequest(EnvironmentKind.wsl, 'claude');
+      expect(wsl.executable, 'bash');
+      expect(wsl.arguments, ['-lc', 'command -v claude']);
     });
 
     test('firstNonEmptyLine', () {

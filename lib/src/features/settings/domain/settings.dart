@@ -53,6 +53,7 @@ class AgentPermissions {
 class Settings {
   const Settings({
     this.defaultAgent,
+    this.defaultAgentInstallationId,
     this.permissions = const {},
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
@@ -71,12 +72,21 @@ class Settings {
     this.customTerminalPath,
     this.defaultCodeEditorId,
     this.customEditorPath,
+    this.launcherHotkeyJson,
+    this.launcherHotkeyEnabled = true,
+    this.chatToggleShortcutJson,
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
   });
 
-  /// The agent pre-selected when starting a new session, or `null` for none.
+  /// The agent kind pre-selected when starting a new session, or `null` for
+  /// none. Kept in sync with [defaultAgentInstallationId].
   final AgentKind? defaultAgent;
+
+  /// The specific installation chosen as default (e.g. Claude on WSL vs Claude
+  /// on Windows), by installation id. Preferred over [defaultAgent] when the
+  /// installation is still present; falls back to the kind otherwise.
+  final String? defaultAgentInstallationId;
 
   /// Per-agent permission preferences (defaults to "ask" when absent).
   final Map<AgentKind, AgentPermissions> permissions;
@@ -133,6 +143,20 @@ class Settings {
   /// `custom`.
   final String? customEditorPath;
 
+  /// The global hotkey that summons the mini launcher, as the encoded JSON of a
+  /// `hotkey_manager` HotKey. `null` means use the built-in default
+  /// (Ctrl+Alt+Space). Stored as an opaque string so this domain stays free of
+  /// the hotkey package.
+  final String? launcherHotkeyJson;
+
+  /// Whether the global launcher hotkey is registered at all.
+  final bool launcherHotkeyEnabled;
+
+  /// The in-app shortcut that toggles the agent chat (mini: chat↔list; full:
+  /// chat drawer), as an encoded HotKey. `null` means the default (Ctrl+L).
+  /// This is an app shortcut, not a global one.
+  final String? chatToggleShortcutJson;
+
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
@@ -152,6 +176,7 @@ class Settings {
   Settings copyWith({
     AgentKind? defaultAgent,
     bool clearDefaultAgent = false,
+    String? defaultAgentInstallationId,
     Map<AgentKind, AgentPermissions>? permissions,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
@@ -170,12 +195,18 @@ class Settings {
     String? customTerminalPath,
     String? defaultCodeEditorId,
     String? customEditorPath,
+    String? launcherHotkeyJson,
+    bool? launcherHotkeyEnabled,
+    String? chatToggleShortcutJson,
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
         : (defaultAgent ?? this.defaultAgent),
+    defaultAgentInstallationId: clearDefaultAgent
+        ? null
+        : (defaultAgentInstallationId ?? this.defaultAgentInstallationId),
     permissions: permissions ?? this.permissions,
     themeMode: themeMode ?? this.themeMode,
     defaultTerminalProfileId:
@@ -196,6 +227,11 @@ class Settings {
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
     defaultCodeEditorId: defaultCodeEditorId ?? this.defaultCodeEditorId,
     customEditorPath: customEditorPath ?? this.customEditorPath,
+    launcherHotkeyJson: launcherHotkeyJson ?? this.launcherHotkeyJson,
+    launcherHotkeyEnabled:
+        launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
+    chatToggleShortcutJson:
+        chatToggleShortcutJson ?? this.chatToggleShortcutJson,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
   );
@@ -205,6 +241,8 @@ class Settings {
 
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent!.name,
+    if (defaultAgentInstallationId != null)
+      'defaultAgentInstallationId': defaultAgentInstallationId,
     'themeMode': themeMode.name,
     if (defaultTerminalProfileId != null)
       'defaultTerminalProfileId': defaultTerminalProfileId,
@@ -224,6 +262,10 @@ class Settings {
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
     if (defaultCodeEditorId != null) 'defaultCodeEditorId': defaultCodeEditorId,
     if (customEditorPath != null) 'customEditorPath': customEditorPath,
+    if (launcherHotkeyJson != null) 'launcherHotkeyJson': launcherHotkeyJson,
+    'launcherHotkeyEnabled': launcherHotkeyEnabled,
+    if (chatToggleShortcutJson != null)
+      'chatToggleShortcutJson': chatToggleShortcutJson,
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'permissions': {
@@ -256,6 +298,9 @@ class Settings {
     double? toDouble(Object? v) => v is num ? v.toDouble() : null;
     return Settings(
       defaultAgent: defaultAgent,
+      defaultAgentInstallationId: json['defaultAgentInstallationId'] is String
+          ? json['defaultAgentInstallationId'] as String
+          : null,
       permissions: permissions,
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
@@ -284,6 +329,15 @@ class Settings {
       customEditorPath: json['customEditorPath'] is String
           ? json['customEditorPath'] as String
           : null,
+      launcherHotkeyJson: json['launcherHotkeyJson'] is String
+          ? json['launcherHotkeyJson'] as String
+          : null,
+      launcherHotkeyEnabled: json['launcherHotkeyEnabled'] is bool
+          ? json['launcherHotkeyEnabled'] as bool
+          : true,
+      chatToggleShortcutJson: json['chatToggleShortcutJson'] is String
+          ? json['chatToggleShortcutJson'] as String
+          : null,
       pinnedProjectIds: json['pinnedProjectIds'] is List
           ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
           : const [],
@@ -297,6 +351,7 @@ class Settings {
   bool operator ==(Object other) =>
       other is Settings &&
       other.defaultAgent == defaultAgent &&
+      other.defaultAgentInstallationId == defaultAgentInstallationId &&
       other.themeMode == themeMode &&
       other.defaultTerminalProfileId == defaultTerminalProfileId &&
       other.keepAwake == keepAwake &&
@@ -314,6 +369,9 @@ class Settings {
       other.customTerminalPath == customTerminalPath &&
       other.defaultCodeEditorId == defaultCodeEditorId &&
       other.customEditorPath == customEditorPath &&
+      other.launcherHotkeyJson == launcherHotkeyJson &&
+      other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
+      other.chatToggleShortcutJson == chatToggleShortcutJson &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -341,6 +399,10 @@ class Settings {
     Object.hash(
       Object.hashAll(pinnedProjectIds),
       Object.hashAll(pinnedSessionIds),
+      launcherHotkeyJson,
+      launcherHotkeyEnabled,
+      defaultAgentInstallationId,
+      chatToggleShortcutJson,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

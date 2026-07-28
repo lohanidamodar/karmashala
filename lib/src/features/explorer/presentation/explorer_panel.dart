@@ -171,36 +171,60 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   }
 
   Future<void> _confirmDeleteProject(Project project) async {
+    var deleteCliSessions = false;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const DesktopDialogTitle(
-          icon: AppIcons.trash,
-          title: 'Remove project?',
-          subtitle: 'This only changes the Chitragupta workspace.',
-        ),
-        content: Text(
-          'Removes "${project.name}" and all its sessions from the workspace. '
-          'Files on disk are not touched.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const DesktopDialogTitle(
+            icon: AppIcons.trash,
+            title: 'Remove project?',
+            subtitle: 'This only changes the Chitragupta workspace.',
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Removes "${project.name}" and all its sessions from the '
+                'workspace.',
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: deleteCliSessions,
+                onChanged: (v) =>
+                    setState(() => deleteCliSessions = v ?? false),
+                title: const Text('Also delete session files on disk'),
+                subtitle: const Text(
+                  "Permanently removes this project's Claude/Codex session "
+                  'history from the CLI store. Otherwise, files on disk are '
+                  'left untouched.',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
       ),
     );
     if (ok ?? false) {
-      ref.read(projectsControllerProvider.notifier).deleteProject(project.id);
+      await ref
+          .read(projectsControllerProvider.notifier)
+          .deleteProject(project.id, deleteCliSessions: deleteCliSessions);
     }
   }
 
@@ -303,6 +327,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       settingsControllerProvider.select((s) => s.isPinned(project.id)),
     );
     final expanded = _expandedProjects.contains(project.id);
+    final missing =
+        ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
     final rows = <Widget>[
       _TreeRow(
         depth: 0,
@@ -310,10 +336,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         leading: Icon(
           expanded ? AppIcons.folderOpen : AppIcons.folder,
           size: 18,
+          color: missing ? Theme.of(context).colorScheme.error : null,
         ),
         expandedState: expanded,
         title: project.name,
-        subtitle: project.root.path,
+        subtitle: missing
+            ? 'Folder not found — ${project.root.path}'
+            : project.root.path,
         onTap: () => _toggleProject(project),
         menuItems: [
           DesktopMenuItem(
@@ -375,6 +404,18 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (missing)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Tooltip(
+                  message: 'Folder not found: ${project.root.path}',
+                  child: Icon(
+                    AppIcons.warningCircle,
+                    size: 15,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
             if (pinned)
               IconButton(
                 tooltip: 'Unpin',

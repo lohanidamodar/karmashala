@@ -10,12 +10,16 @@ import '../../features/editor/application/code_editor_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/projects/domain/project.dart';
 import '../../features/repositories/application/repository_providers.dart';
+import '../../features/repositories/domain/repository.dart';
 import '../../features/sessions/application/session_actions.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/system_terminal_providers.dart';
+import '../../features/mcp/launcher_chat_controller.dart';
+import '../../features/mcp/launcher_chat_view.dart';
+import '../../features/system/launcher_hotkey.dart';
 import '../../features/terminal/data/system_terminal_service.dart';
 import '../widgets/desktop_menu.dart';
 import '../theme/app_icons.dart';
@@ -39,7 +43,64 @@ class MiniLauncher extends ConsumerStatefulWidget {
 
 class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   final _expanded = <String>{};
+  final _searchFocus = FocusNode();
+  final _selectedRowKey = GlobalKey();
+
+  /// Activate callbacks for the currently visible session rows, in render
+  /// order. Rebuilt every frame; drives arrow-key navigation while the search
+  /// field keeps focus.
+  final List<VoidCallback> _navActivate = [];
   String _query = '';
+  int _selected = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Intercept up/down/enter on the search field so results can be navigated
+    // without the field losing focus (left/right still edit the query).
+    _searchFocus.onKeyEvent = _handleSearchKey;
+  }
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleSearchKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveSelection(1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveSelection(-1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (_selected >= 0 && _selected < _navActivate.length) {
+        _navActivate[_selected]();
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _moveSelection(int delta) {
+    final count = _navActivate.length;
+    if (count == 0) return;
+    setState(() => _selected = (_selected + delta).clamp(0, count - 1));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _selectedRowKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, alignment: 0.5, duration: Motion.fast);
+      }
+    });
+  }
 
   Future<void> _launch(
     SystemTerminal? terminal,
@@ -186,31 +247,53 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   Future<void> _confirmAndRun(
     String title,
     String message,
-    Future<void> Function() onConfirm, {
+    Future<void> Function(bool checked) onConfirm, {
     String confirmLabel = 'Delete',
+    String? checkboxLabel,
+    String? checkboxSubtitle,
   }) async {
+    var checked = false;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              if (checkboxLabel != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: checked,
+                  onChanged: (v) => setState(() => checked = v ?? false),
+                  title: Text(checkboxLabel),
+                  subtitle: checkboxSubtitle == null
+                      ? null
+                      : Text(checkboxSubtitle),
+                ),
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(confirmLabel),
-          ),
-        ],
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
       ),
     );
-    if (ok ?? false) await onConfirm();
+    if (ok ?? false) await onConfirm(checked);
   }
 
   Future<void> _projectMenu(
@@ -280,12 +363,15 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
       case 'remove':
         await _confirmAndRun(
           'Remove project?',
-          'Removes "${project.name}" and its sessions from the workspace. '
-              'Files on disk are not touched.',
-          () async => ref
+          'Removes "${project.name}" and its sessions from the workspace.',
+          (deleteCli) async => ref
               .read(projectsControllerProvider.notifier)
-              .deleteProject(project.id),
+              .deleteProject(project.id, deleteCliSessions: deleteCli),
           confirmLabel: 'Remove',
+          checkboxLabel: 'Also delete session files on disk',
+          checkboxSubtitle:
+              "Permanently removes this project's Claude/Codex session "
+              'history from the CLI store.',
         );
     }
   }
@@ -345,107 +431,195 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Rebuilt as project nodes render below; arrow-key navigation reads it.
+    _navActivate.clear();
     ref.watch(sessionsRevisionProvider);
     final projects = ref.watch(sortedProjectsProvider);
     final pinned = ref
         .watch(settingsControllerProvider.select((s) => s.pinnedProjectIds))
         .toSet();
+    final pinnedSessions = ref
+        .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
+        .toSet();
+    // Search rebuilds on every keystroke. Load each table once and group in
+    // memory instead of issuing one repository query per project and two
+    // session queries per repository.
+    final repositoriesByProject = <String, List<Repository>>{};
+    for (final repository in ref.read(repositoryDaoProvider).getAll()) {
+      repositoriesByProject
+          .putIfAbsent(repository.projectId, () => [])
+          .add(repository);
+    }
+    final sessionsByRepository = <String, List<Session>>{};
+    for (final session in ref.read(sessionDaoProvider).getAll()) {
+      sessionsByRepository
+          .putIfAbsent(session.repositoryId, () => [])
+          .add(session);
+    }
+    final importedByRepository = <String, List<ImportedSession>>{};
+    for (final session in ref.read(importedSessionDaoProvider).getAll()) {
+      importedByRepository
+          .putIfAbsent(session.repositoryId, () => [])
+          .add(session);
+    }
     final terminal = ref.watch(defaultSystemTerminalProvider).asData?.value;
     final actions = ref.read(sessionActionsProvider);
     final query = _query.trim().toLowerCase();
+    final chatVisible = ref.watch(launcherChatVisibleProvider);
+    final chatToggle = decodeChatToggleHotKey(
+      ref.watch(
+        settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
+      ),
+    );
+    final toggleActivator = chatToggleActivator(chatToggle);
+    final toggleLabel = launcherHotKeyLabel(chatToggle);
 
-    return Scaffold(
-      body: Column(
-        children: [
-          // Draggable header (no title bar in mini mode).
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanStart: (_) => windowManager.startDragging(),
-            child: Container(
-              height: 38,
-              color: theme.colorScheme.surfaceContainerHigh,
-              padding: const EdgeInsets.only(left: Insets.md, right: 2),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.bookOpen,
-                    size: 16,
-                    color: theme.colorScheme.tertiary,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      'Chitragupta',
-                      style: theme.textTheme.labelLarge,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Expand to full window',
-                    iconSize: 16,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(AppIcons.arrowsOutSimple),
-                    onPressed: () =>
-                        ref.read(appModeProvider.notifier).enterFull(),
-                  ),
-                  IconButton(
-                    tooltip: 'Hide to tray',
-                    iconSize: 16,
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(AppIcons.x),
-                    onPressed: () => windowManager.hide(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const Divider(height: 1),
-          if (projects.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
-              child: TextField(
-                decoration: const InputDecoration(
-                  isDense: true,
-                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
-                  hintText: 'Search projects & sessions',
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (v) => setState(() => _query = v),
-              ),
-            ),
-          Expanded(
-            child: projects.isEmpty
-                ? Center(
-                    child: Text(
-                      'No projects yet.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+    // Focus the search field when the launcher requests focus while showing the
+    // list (chat handles its own focus).
+    ref.listen(launcherFocusRequestProvider, (_, _) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !ref.read(launcherChatVisibleProvider)) {
+          _searchFocus.requestFocus();
+        }
+      });
+    });
+
+    void toggleChat() {
+      ref.read(launcherChatVisibleProvider.notifier).toggle();
+      ref.read(launcherFocusRequestProvider.notifier).bump();
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        toggleActivator: toggleChat,
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            windowManager.hide(),
+      },
+      child: Focus(
+        autofocus: false,
+        child: Scaffold(
+          body: Column(
+            children: [
+              // Draggable header (no title bar in mini mode).
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanStart: (_) => windowManager.startDragging(),
+                child: Container(
+                  height: 38,
+                  color: theme.colorScheme.surfaceContainerHigh,
+                  padding: const EdgeInsets.only(left: Insets.md, right: 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        AppIcons.bookOpen,
+                        size: 16,
+                        color: theme.colorScheme.tertiary,
                       ),
-                    ),
-                  )
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide =
-                          constraints.maxWidth >= _miniWideBreakpoint;
-                      return ListView(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: Insets.xs,
+                      const SizedBox(width: Insets.sm),
+                      Expanded(
+                        child: Text(
+                          'Chitragupta',
+                          style: theme.textTheme.labelLarge,
                         ),
-                        children: [
-                          for (final project in projects)
-                            ..._projectNodes(
-                              project,
-                              terminal,
-                              actions,
-                              query,
-                              pinned.contains(project.id),
-                              isWide,
-                            ),
-                        ],
-                      );
-                    },
+                      ),
+                      IconButton(
+                        tooltip: chatVisible
+                            ? 'Back to launcher'
+                            : 'Chat with agent',
+                        iconSize: 16,
+                        isSelected: chatVisible,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(AppIcons.chatCircleDots),
+                        onPressed: () => ref
+                            .read(launcherChatVisibleProvider.notifier)
+                            .toggle(),
+                      ),
+                      IconButton(
+                        tooltip: 'Expand to full window',
+                        iconSize: 16,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(AppIcons.arrowsOutSimple),
+                        onPressed: () =>
+                            ref.read(appModeProvider.notifier).enterFull(),
+                      ),
+                      IconButton(
+                        tooltip: 'Hide to tray',
+                        iconSize: 16,
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(AppIcons.x),
+                        onPressed: () => windowManager.hide(),
+                      ),
+                    ],
                   ),
+                ),
+              ),
+              const Divider(height: 1),
+              if (chatVisible)
+                const Expanded(child: LauncherChatView())
+              else ...[
+                if (projects.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 2),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        prefixIcon: Icon(AppIcons.magnifyingGlass, size: 16),
+                        hintText: 'Search projects & sessions',
+                        border: OutlineInputBorder(),
+                      ),
+                      focusNode: _searchFocus,
+                      onChanged: (v) => setState(() {
+                        _query = v;
+                        _selected = 0; // typing resets the highlight to the top
+                      }),
+                    ),
+                  ),
+                Expanded(
+                  child: projects.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No projects yet.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isWide =
+                                constraints.maxWidth >= _miniWideBreakpoint;
+                            return ListView(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: Insets.xs,
+                              ),
+                              children: [
+                                for (final project in projects)
+                                  ..._projectNodes(
+                                    project,
+                                    terminal,
+                                    actions,
+                                    query,
+                                    pinned.contains(project.id),
+                                    pinnedSessions,
+                                    repositoriesByProject[project.id] ??
+                                        const [],
+                                    sessionsByRepository,
+                                    importedByRepository,
+                                    isWide,
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+              ],
+              _MiniShortcutBar(
+                chatVisible: chatVisible,
+                toggleLabel: toggleLabel,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -456,6 +630,10 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     SessionActions actions,
     String query,
     bool pinned,
+    Set<String> pinnedSessions,
+    List<Repository> repositories,
+    Map<String, List<Session>> sessionsByRepository,
+    Map<String, List<ImportedSession>> importedByRepository,
     bool isWide,
   ) {
     final nameMatches =
@@ -463,42 +641,45 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
 
     // Gather this project's sessions (filtered by the query), newest first with
     // pinned sessions on top.
-    final pinnedSessions = ref
-        .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
-        .toSet();
     final settings = ref.read(settingsControllerProvider.notifier);
-    final entries = <({DateTime ts, bool pinned, Widget row})>[];
-    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
-    final sessionDao = ref.read(sessionDaoProvider);
-    final importedDao = ref.read(importedSessionDaoProvider);
-    for (final repo in repos) {
-      for (final Session s in sessionDao.getByRepository(repo.id)) {
+    final entries =
+        <
+          ({
+            DateTime ts,
+            bool pinned,
+            VoidCallback onActivate,
+            Widget Function(bool selected, Key? key) build,
+          })
+        >[];
+    for (final repo in repositories) {
+      for (final Session s in sessionsByRepository[repo.id] ?? const []) {
         if (query.isNotEmpty &&
             !nameMatches &&
             !s.title.toLowerCase().contains(query)) {
           continue;
         }
         final isPinned = pinnedSessions.contains(s.id);
+        void activate() => _launch(
+          terminal,
+          (t) => actions.openSessionInSystemTerminal(s.id, t),
+        );
         entries.add((
           ts: s.createdAt,
           pinned: isPinned,
-          row: _sessionTile(
+          onActivate: activate,
+          build: (selected, key) => _sessionTile(
+            rowKey: key,
+            selected: selected,
             title: s.title,
             icon: AppIcons.chatCircle,
             pinned: isPinned,
-            onTap: () => _launch(
-              terminal,
-              (t) => actions.openSessionInSystemTerminal(s.id, t),
-            ),
+            onTap: activate,
             copyCommand: () => actions.nativeResumeShellCommand(s.id),
             onContextMenu: !isWide
                 ? null
                 : (pos) => _sessionMenu(
                     pos,
-                    onResume: () => _launch(
-                      terminal,
-                      (t) => actions.openSessionInSystemTerminal(s.id, t),
-                    ),
+                    onResume: activate,
                     copyCommand: () => actions.nativeResumeShellCommand(s.id),
                     onRename: () => _renameSession(
                       s.title,
@@ -507,7 +688,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     onDelete: () => _confirmAndRun(
                       'Delete session?',
                       'Removes "${s.title}".',
-                      () => actions.deleteNative(s.id),
+                      (_) => actions.deleteNative(s.id),
                     ),
                     pinned: isPinned,
                     onTogglePin: () => settings.togglePinnedSession(s.id),
@@ -515,31 +696,33 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           ),
         ));
       }
-      for (final ImportedSession s in importedDao.getByRepository(repo.id)) {
+      for (final ImportedSession s
+          in importedByRepository[repo.id] ?? const []) {
         if (query.isNotEmpty &&
             !nameMatches &&
             !s.displayTitle.toLowerCase().contains(query)) {
           continue;
         }
         final isPinned = pinnedSessions.contains(s.id);
+        void activate() =>
+            _launch(terminal, (t) => actions.openInSystemTerminal(s, t));
         entries.add((
           ts: s.updatedAt ?? s.createdAt,
           pinned: isPinned,
-          row: _sessionTile(
+          onActivate: activate,
+          build: (selected, key) => _sessionTile(
+            rowKey: key,
+            selected: selected,
             title: s.displayTitle,
             icon: AppIcons.clockCounterClockwise,
             pinned: isPinned,
-            onTap: () =>
-                _launch(terminal, (t) => actions.openInSystemTerminal(s, t)),
+            onTap: activate,
             copyCommand: () => actions.resumeShellCommand(s),
             onContextMenu: !isWide
                 ? null
                 : (pos) => _sessionMenu(
                     pos,
-                    onResume: () => _launch(
-                      terminal,
-                      (t) => actions.openInSystemTerminal(s, t),
-                    ),
+                    onResume: activate,
                     copyCommand: () => actions.resumeShellCommand(s),
                     onRename: () => _renameSession(
                       s.displayTitle,
@@ -548,7 +731,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     onDelete: () => _confirmAndRun(
                       'Delete session?',
                       'Removes "${s.displayTitle}".',
-                      () => actions.deleteImported(s),
+                      (_) => actions.deleteImported(s),
                     ),
                     pinned: isPinned,
                     onTogglePin: () => settings.togglePinnedSession(s.id),
@@ -561,13 +744,14 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
       if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       return b.ts.compareTo(a.ts);
     });
-    final sessions = [for (final e in entries) e.row];
 
     // When searching, hide projects with no name/session match; show the rest
     // force-expanded so matches are visible.
-    if (query.isNotEmpty && !nameMatches && sessions.isEmpty) return const [];
+    if (query.isNotEmpty && !nameMatches && entries.isEmpty) return const [];
     final expanded = query.isNotEmpty ? true : _expanded.contains(project.id);
 
+    final missing =
+        ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
     final projectTile = ListTile(
       dense: true,
       visualDensity: VisualDensity.compact,
@@ -575,7 +759,28 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         expanded ? AppIcons.caretDown : AppIcons.caretRight,
         size: 16,
       ),
-      title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              project.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (missing) ...[
+            const SizedBox(width: Insets.xs),
+            Tooltip(
+              message: 'Folder not found: ${project.root.path}',
+              child: Icon(
+                AppIcons.warningCircle,
+                size: 13,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -650,7 +855,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
           : projectTile,
     ];
     if (!expanded) return rows;
-    if (sessions.isEmpty) {
+    if (entries.isEmpty) {
       rows.add(
         const Padding(
           padding: EdgeInsets.fromLTRB(52, 2, 8, 8),
@@ -658,7 +863,14 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         ),
       );
     } else {
-      rows.addAll(sessions);
+      for (final entry in entries) {
+        // Assign this visible session its position in the arrow-nav list, and
+        // mark/keep-a-handle-on the currently selected row.
+        final navIndex = _navActivate.length;
+        _navActivate.add(entry.onActivate);
+        final selected = navIndex == _selected;
+        rows.add(entry.build(selected, selected ? _selectedRowKey : null));
+      }
     }
     return rows;
   }
@@ -669,12 +881,18 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     required VoidCallback onTap,
     required String Function() copyCommand,
     bool pinned = false,
+    bool selected = false,
+    Key? rowKey,
     void Function(Offset)? onContextMenu,
   }) {
     final tile = Padding(
+      key: rowKey,
       padding: const EdgeInsets.only(left: 24),
       child: ListTile(
         dense: true,
+        selected: selected,
+        selectedTileColor: Theme.of(context).colorScheme.primaryContainer,
+        selectedColor: Theme.of(context).colorScheme.onPrimaryContainer,
         visualDensity: VisualDensity.compact,
         leading: Icon(icon, size: 15),
         title: Row(
@@ -719,6 +937,84 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
       behavior: HitTestBehavior.opaque,
       onSecondaryTapDown: (d) => onContextMenu(d.globalPosition),
       child: tile,
+    );
+  }
+}
+
+/// A compact keyboard-hint bar at the foot of the mini window, showing how to
+/// switch views and dismiss. The toggle key mirrors the configured shortcut.
+class _MiniShortcutBar extends StatelessWidget {
+  const _MiniShortcutBar({
+    required this.chatVisible,
+    required this.toggleLabel,
+  });
+
+  final bool chatVisible;
+  final String toggleLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh,
+        border: Border(top: BorderSide(color: theme.dividerColor)),
+      ),
+      child: Row(
+        children: [
+          _KeyHint(keys: toggleLabel, label: chatVisible ? 'sessions' : 'chat'),
+          const SizedBox(width: Insets.md),
+          if (!chatVisible) ...[
+            const _KeyHint(keys: '↑↓', label: 'navigate'),
+            const SizedBox(width: Insets.md),
+          ],
+          if (chatVisible)
+            const _KeyHint(keys: 'Enter', label: 'send')
+          else
+            const _KeyHint(keys: 'Enter', label: 'resume'),
+          const Spacer(),
+          const _KeyHint(keys: 'Esc', label: 'hide'),
+        ],
+      ),
+    );
+  }
+}
+
+/// One `key — action` hint: a small keycap followed by a muted label.
+class _KeyHint extends StatelessWidget {
+  const _KeyHint({required this.keys, required this.label});
+
+  final String keys;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: theme.dividerColor),
+          ),
+          child: Text(
+            keys,
+            style: const TextStyle(fontFamily: kMonoFamily, fontSize: 10),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }

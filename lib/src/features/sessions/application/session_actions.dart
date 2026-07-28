@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_kind.dart';
@@ -353,11 +354,14 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    final defaultAgent = _ref.read(settingsControllerProvider).defaultAgent;
-    final installation = installs.firstWhere(
-      (i) => i.agentKind == defaultAgent,
-      orElse: () => installs.first,
-    );
+    final settings = _ref.read(settingsControllerProvider);
+    final installation =
+        resolveDefaultInstallation(
+          installs,
+          defaultInstallationId: settings.defaultAgentInstallationId,
+          defaultKind: settings.defaultAgent,
+        ) ??
+        installs.first;
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentKind.name,
@@ -390,11 +394,14 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    final defaultAgent = _ref.read(settingsControllerProvider).defaultAgent;
-    final installation = installs.firstWhere(
-      (i) => i.agentKind == defaultAgent,
-      orElse: () => installs.first,
-    );
+    final settings = _ref.read(settingsControllerProvider);
+    final installation =
+        resolveDefaultInstallation(
+          installs,
+          defaultInstallationId: settings.defaultAgentInstallationId,
+          defaultKind: settings.defaultAgent,
+        ) ??
+        installs.first;
     await startNewInSystemTerminal(
       repo: repo,
       installation: installation,

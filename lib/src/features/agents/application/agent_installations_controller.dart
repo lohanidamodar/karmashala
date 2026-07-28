@@ -6,6 +6,7 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../data/agent_discovery_service.dart';
 import '../domain/agent_installation.dart';
+import '../domain/agent_kind.dart';
 import 'agent_providers.dart';
 
 /// Holds the known agent installations and can (re)discover them across every
@@ -54,3 +55,24 @@ final agentInstallationsControllerProvider =
     NotifierProvider<AgentInstallationsController, List<AgentInstallation>>(
       AgentInstallationsController.new,
     );
+
+/// Resolves the default installation to use from [installs]: the specific one
+/// pinned by [defaultInstallationId] if still present, else the first matching
+/// [defaultKind], else `null`.
+AgentInstallation? resolveDefaultInstallation(
+  List<AgentInstallation> installs, {
+  String? defaultInstallationId,
+  AgentKind? defaultKind,
+}) {
+  if (defaultInstallationId != null) {
+    for (final install in installs) {
+      if (install.id == defaultInstallationId) return install;
+    }
+  }
+  if (defaultKind != null) {
+    for (final install in installs) {
+      if (install.agentKind == defaultKind) return install;
+    }
+  }
+  return null;
+}

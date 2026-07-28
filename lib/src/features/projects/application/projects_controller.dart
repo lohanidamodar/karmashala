@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/process/command_runner_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/execution_environment.dart';
 import '../../git/application/changes_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../domain/project.dart';
@@ -136,12 +141,30 @@ class ProjectsController extends Notifier<List<Project>> {
   /// Removes [projectId] from the workspace. The database cascades to its
   /// repositories, sessions, events and imported sessions. Clears any selection
   /// that pointed into the deleted project.
-  void deleteProject(String projectId) {
-    final repoIds = ref
-        .read(repositoryDaoProvider)
-        .getByProject(projectId)
-        .map((r) => r.id)
-        .toSet();
+  ///
+  /// When [deleteCliSessions] is set, each of the project's imported CLI
+  /// sessions is also deleted from the originating agent's on-disk store
+  /// (Claude/Codex history), best-effort, before the workspace rows are removed.
+  Future<void> deleteProject(
+    String projectId, {
+    bool deleteCliSessions = false,
+  }) async {
+    final repos = ref.read(repositoryDaoProvider).getByProject(projectId);
+    if (deleteCliSessions) {
+      final actions = ref.read(sessionActionsProvider);
+      final importedDao = ref.read(importedSessionDaoProvider);
+      for (final repo in repos) {
+        for (final session in importedDao.getByRepository(repo.id)) {
+          try {
+            await actions.deleteImported(session, deleteFromCli: true);
+          } catch (_) {
+            // Best-effort per session — a locked/removed file shouldn't block
+            // deleting the rest or the project itself.
+          }
+        }
+      }
+    }
+    final repoIds = repos.map((r) => r.id).toSet();
     ref.read(projectDaoProvider).delete(projectId);
     if (ref.read(selectedProjectIdProvider) == projectId) {
       ref.read(selectedProjectIdProvider.notifier).select(null);
@@ -159,6 +182,42 @@ class ProjectsController extends Notifier<List<Project>> {
 
 final projectsControllerProvider =
     NotifierProvider<ProjectsController, List<Project>>(ProjectsController.new);
+
+/// Whether a project's root folder no longer exists on disk. Resolves the
+/// Windows-reachable path (a `\\wsl.localhost\…` UNC form for WSL projects) and
+/// checks it. Defaults to "not missing" while loading or if it can't be
+/// resolved, so the UI never falsely flags a project.
+final projectPathMissingProvider = FutureProvider.autoDispose
+    .family<bool, Project>((ref, project) async {
+      final environmentDao = ref.read(executionEnvironmentDaoProvider);
+      final env = environmentDao.getById(project.environmentId);
+      if (env == null) return false;
+
+      var path = project.root.path;
+      if (env.kind == EnvironmentKind.wsl) {
+        ExecutionEnvironment? windows;
+        for (final e in environmentDao.getAll()) {
+          if (e.kind == EnvironmentKind.windowsNative) {
+            windows = e;
+            break;
+          }
+        }
+        if (windows == null) return false;
+        try {
+          path = ref
+              .read(pathTranslatorProvider)
+              .translate(project.root, from: env, to: windows)
+              .path;
+        } catch (_) {
+          return false;
+        }
+      }
+      try {
+        return !await Directory(path).exists();
+      } catch (_) {
+        return false;
+      }
+    });
 
 /// Holds the currently selected project id, or `null` when none is selected.
 class SelectedProjectController extends Notifier<String?> {
