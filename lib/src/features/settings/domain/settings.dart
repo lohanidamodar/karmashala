@@ -71,6 +71,8 @@ class Settings {
     this.customTerminalPath,
     this.defaultCodeEditorId,
     this.customEditorPath,
+    this.launcherHotkeyJson,
+    this.launcherHotkeyEnabled = true,
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
   });
@@ -133,6 +135,15 @@ class Settings {
   /// `custom`.
   final String? customEditorPath;
 
+  /// The global hotkey that summons the mini launcher, as the encoded JSON of a
+  /// `hotkey_manager` HotKey. `null` means use the built-in default
+  /// (Ctrl+Alt+Space). Stored as an opaque string so this domain stays free of
+  /// the hotkey package.
+  final String? launcherHotkeyJson;
+
+  /// Whether the global launcher hotkey is registered at all.
+  final bool launcherHotkeyEnabled;
+
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
@@ -170,6 +181,8 @@ class Settings {
     String? customTerminalPath,
     String? defaultCodeEditorId,
     String? customEditorPath,
+    String? launcherHotkeyJson,
+    bool? launcherHotkeyEnabled,
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
   }) => Settings(
@@ -196,6 +209,9 @@ class Settings {
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
     defaultCodeEditorId: defaultCodeEditorId ?? this.defaultCodeEditorId,
     customEditorPath: customEditorPath ?? this.customEditorPath,
+    launcherHotkeyJson: launcherHotkeyJson ?? this.launcherHotkeyJson,
+    launcherHotkeyEnabled:
+        launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
   );
@@ -224,6 +240,8 @@ class Settings {
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
     if (defaultCodeEditorId != null) 'defaultCodeEditorId': defaultCodeEditorId,
     if (customEditorPath != null) 'customEditorPath': customEditorPath,
+    if (launcherHotkeyJson != null) 'launcherHotkeyJson': launcherHotkeyJson,
+    'launcherHotkeyEnabled': launcherHotkeyEnabled,
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'permissions': {
@@ -284,6 +302,12 @@ class Settings {
       customEditorPath: json['customEditorPath'] is String
           ? json['customEditorPath'] as String
           : null,
+      launcherHotkeyJson: json['launcherHotkeyJson'] is String
+          ? json['launcherHotkeyJson'] as String
+          : null,
+      launcherHotkeyEnabled: json['launcherHotkeyEnabled'] is bool
+          ? json['launcherHotkeyEnabled'] as bool
+          : true,
       pinnedProjectIds: json['pinnedProjectIds'] is List
           ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
           : const [],
@@ -314,6 +338,8 @@ class Settings {
       other.customTerminalPath == customTerminalPath &&
       other.defaultCodeEditorId == defaultCodeEditorId &&
       other.customEditorPath == customEditorPath &&
+      other.launcherHotkeyJson == launcherHotkeyJson &&
+      other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -341,6 +367,8 @@ class Settings {
     Object.hash(
       Object.hashAll(pinnedProjectIds),
       Object.hashAll(pinnedSessionIds),
+      launcherHotkeyJson,
+      launcherHotkeyEnabled,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

@@ -119,6 +119,16 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setLauncherHotkey(String hotkeyJson) {
+    state = state.copyWith(launcherHotkeyJson: hotkeyJson);
+    _save();
+  }
+
+  void setLauncherHotkeyEnabled(bool enabled) {
+    state = state.copyWith(launcherHotkeyEnabled: enabled);
+    _save();
+  }
+
   void setNewSessionPermission(AgentKind kind, PermissionMode mode) {
     state = state.withPermissions(
       kind,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
@@ -14,6 +15,7 @@ import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../system/launcher_hotkey.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
@@ -161,6 +163,7 @@ class SettingsScreen extends ConsumerWidget {
               const _TerminalAppSection(),
               const _CodeEditorSection(),
               const _MiniLauncherSection(),
+              const _LauncherHotkeySection(),
               _Section(
                 title: 'DEFAULT AGENT',
                 child: DropdownButtonFormField<AgentKind?>(
@@ -702,6 +705,72 @@ class _MiniLauncherSection extends ConsumerWidget {
           const SizedBox(height: Insets.sm),
           for (final row in _MiniLauncherSection._rows)
             Row(children: [for (final pos in row) cell(pos)]),
+        ],
+      ),
+    );
+  }
+}
+
+/// A global hotkey that summons the mini launcher from anywhere. Records a new
+/// combo inline and toggles whether the global binding is registered at all.
+class _LauncherHotkeySection extends ConsumerWidget {
+  const _LauncherHotkeySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsControllerProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final hotKey = decodeLauncherHotKey(settings.launcherHotkeyJson);
+    final enabled = settings.launcherHotkeyEnabled;
+
+    return _Section(
+      title: 'LAUNCHER HOTKEY',
+      trailing: Switch(
+        value: enabled,
+        onChanged: controller.setLauncherHotkeyEnabled,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'A global shortcut that opens the mini launcher from any app.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: Insets.sm),
+          Opacity(
+            opacity: enabled ? 1 : 0.5,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    launcherHotKeyLabel(hotKey),
+                    style: const TextStyle(
+                      fontFamily: kMonoFamily,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  ignoring: !enabled,
+                  child: HotKeyRecorder(
+                    initalHotKey: hotKey,
+                    onHotKeyRecorded: (recorded) => controller
+                        .setLauncherHotkey(encodeLauncherHotKey(recorded)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: Insets.xs),
+          Text(
+            'Click the recorder and press the keys you want.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
