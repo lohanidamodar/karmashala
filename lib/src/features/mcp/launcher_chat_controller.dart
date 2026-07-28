@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/logging/app_logger.dart';
+import '../agents/application/agent_installations_controller.dart';
 import '../agents/application/agent_providers.dart';
 import '../agents/domain/agent_adapter.dart';
 import '../agents/domain/agent_installation.dart';
@@ -117,7 +118,14 @@ class LauncherChatController extends Notifier<LauncherChatState> {
     if (installation == null) {
       throw StateError('No Claude Code installation found. Run Discover first.');
     }
-    final mcpConfigPath = await _mcp.ensureConfig();
+    // The MCP bridge is a Windows executable and reaches the control server over
+    // Windows loopback, so tools are only wired when the agent runs on Windows.
+    final env = ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(installation.environmentId);
+    final mcpConfigPath = env?.kind == EnvironmentKind.windowsNative
+        ? await _mcp.ensureConfig()
+        : null;
     final permission = ref
         .read(settingsControllerProvider)
         .permissionsFor(AgentKind.claudeCode)
@@ -178,8 +186,9 @@ class LauncherChatController extends Notifier<LauncherChatState> {
     );
   }
 
-  /// Prefer a Claude install in the Windows host (so the MCP bridge can reach
-  /// the loopback control server); fall back to any Claude install.
+  /// Resolve which Claude install to chat with. Honor the configured default
+  /// installation when it is Claude; otherwise prefer a Windows-host Claude (so
+  /// the MCP bridge can reach the loopback control server), then any Claude.
   AgentInstallation? _resolveClaudeInstallation() {
     final installs = ref
         .read(agentInstallationDaoProvider)
@@ -187,12 +196,24 @@ class LauncherChatController extends Notifier<LauncherChatState> {
         .where((i) => i.agentKind == AgentKind.claudeCode)
         .toList();
     if (installs.isEmpty) return null;
+
+    final settings = ref.read(settingsControllerProvider);
+    final preferred = resolveDefaultInstallation(
+      installs,
+      defaultInstallationId: settings.defaultAgentInstallationId,
+      defaultKind: AgentKind.claudeCode,
+    );
+    if (preferred != null &&
+        settings.defaultAgentInstallationId == preferred.id) {
+      return preferred; // explicit user choice wins, even if it's WSL
+    }
+
     final environmentDao = ref.read(executionEnvironmentDaoProvider);
     for (final install in installs) {
       final env = environmentDao.getById(install.environmentId);
       if (env?.kind == EnvironmentKind.windowsNative) return install;
     }
-    return installs.first;
+    return preferred ?? installs.first;
   }
 
   String _workingDirFor(AgentInstallation installation) {

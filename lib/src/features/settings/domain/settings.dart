@@ -53,6 +53,7 @@ class AgentPermissions {
 class Settings {
   const Settings({
     this.defaultAgent,
+    this.defaultAgentInstallationId,
     this.permissions = const {},
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
@@ -77,8 +78,14 @@ class Settings {
     this.pinnedSessionIds = const [],
   });
 
-  /// The agent pre-selected when starting a new session, or `null` for none.
+  /// The agent kind pre-selected when starting a new session, or `null` for
+  /// none. Kept in sync with [defaultAgentInstallationId].
   final AgentKind? defaultAgent;
+
+  /// The specific installation chosen as default (e.g. Claude on WSL vs Claude
+  /// on Windows), by installation id. Preferred over [defaultAgent] when the
+  /// installation is still present; falls back to the kind otherwise.
+  final String? defaultAgentInstallationId;
 
   /// Per-agent permission preferences (defaults to "ask" when absent).
   final Map<AgentKind, AgentPermissions> permissions;
@@ -163,6 +170,7 @@ class Settings {
   Settings copyWith({
     AgentKind? defaultAgent,
     bool clearDefaultAgent = false,
+    String? defaultAgentInstallationId,
     Map<AgentKind, AgentPermissions>? permissions,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
@@ -189,6 +197,9 @@ class Settings {
     defaultAgent: clearDefaultAgent
         ? null
         : (defaultAgent ?? this.defaultAgent),
+    defaultAgentInstallationId: clearDefaultAgent
+        ? null
+        : (defaultAgentInstallationId ?? this.defaultAgentInstallationId),
     permissions: permissions ?? this.permissions,
     themeMode: themeMode ?? this.themeMode,
     defaultTerminalProfileId:
@@ -221,6 +232,8 @@ class Settings {
 
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent!.name,
+    if (defaultAgentInstallationId != null)
+      'defaultAgentInstallationId': defaultAgentInstallationId,
     'themeMode': themeMode.name,
     if (defaultTerminalProfileId != null)
       'defaultTerminalProfileId': defaultTerminalProfileId,
@@ -274,6 +287,9 @@ class Settings {
     double? toDouble(Object? v) => v is num ? v.toDouble() : null;
     return Settings(
       defaultAgent: defaultAgent,
+      defaultAgentInstallationId: json['defaultAgentInstallationId'] is String
+          ? json['defaultAgentInstallationId'] as String
+          : null,
       permissions: permissions,
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
@@ -321,6 +337,7 @@ class Settings {
   bool operator ==(Object other) =>
       other is Settings &&
       other.defaultAgent == defaultAgent &&
+      other.defaultAgentInstallationId == defaultAgentInstallationId &&
       other.themeMode == themeMode &&
       other.defaultTerminalProfileId == defaultTerminalProfileId &&
       other.keepAwake == keepAwake &&
@@ -369,6 +386,7 @@ class Settings {
       Object.hashAll(pinnedSessionIds),
       launcherHotkeyJson,
       launcherHotkeyEnabled,
+      defaultAgentInstallationId,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

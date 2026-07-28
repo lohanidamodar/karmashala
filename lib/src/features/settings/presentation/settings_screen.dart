@@ -176,36 +176,49 @@ class SettingsScreen extends ConsumerWidget {
             title: 'DEFAULT AGENT',
             child: Builder(
               builder: (_) {
-                // Only offer agents that are actually installed. Clamp the
-                // saved value so the dropdown never holds a value with no
-                // matching item (which would throw).
-                final availableKinds = {
-                  for (final i in installations) i.agentKind,
-                }.toList()..sort((a, b) => a.index.compareTo(b.index));
-                if (availableKinds.isEmpty) {
+                // Offer every discovered installation (e.g. Claude on WSL vs
+                // Claude on Windows), not just the kind. Clamp the saved value
+                // so the dropdown never holds an id with no matching item.
+                if (installations.isEmpty) {
                   return Text(
                     'No agents found. Press Discover under Identified '
                     'Agents to scan your environments.',
                     style: theme.textTheme.bodySmall,
                   );
                 }
-                final current = availableKinds.contains(settings.defaultAgent)
-                    ? settings.defaultAgent
+                final currentId =
+                    installations.any(
+                      (i) => i.id == settings.defaultAgentInstallationId,
+                    )
+                    ? settings.defaultAgentInstallationId
                     : null;
-                return DropdownButtonFormField<AgentKind?>(
-                  initialValue: current,
+                return DropdownButtonFormField<String?>(
+                  initialValue: currentId,
+                  isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Pre-selected when starting a session',
                   ),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('None')),
-                    for (final kind in availableKinds)
+                    for (final install in installations)
                       DropdownMenuItem(
-                        value: kind,
-                        child: Text(_agentLabel(kind)),
+                        value: install.id,
+                        child: Text(
+                          '${_agentLabel(install.agentKind)} · '
+                          '${install.environmentId}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
-                  onChanged: controller.setDefaultAgent,
+                  onChanged: (id) {
+                    final install = id == null
+                        ? null
+                        : installations.firstWhere((i) => i.id == id);
+                    controller.setDefaultAgentInstallation(
+                      install?.agentKind,
+                      install?.id,
+                    );
+                  },
                 );
               },
             ),
