@@ -127,7 +127,8 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
       actions: [
         Builder(
           builder: (context) => IconButton(
-            tooltip: 'Chat with agent',
+            tooltip:
+                'Chat with agent  ·  ${launcherHotKeyLabel(decodeChatToggleHotKey(ref.watch(settingsControllerProvider.select((s) => s.chatToggleShortcutJson))))}',
             icon: const Icon(AppIcons.chatCircleDots),
             onPressed: () => Scaffold.of(context).openEndDrawer(),
           ),

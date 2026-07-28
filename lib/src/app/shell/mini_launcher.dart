@@ -389,13 +389,13 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     final actions = ref.read(sessionActionsProvider);
     final query = _query.trim().toLowerCase();
     final chatVisible = ref.watch(launcherChatVisibleProvider);
-    final toggleActivator = chatToggleActivator(
-      decodeChatToggleHotKey(
-        ref.watch(
-          settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
-        ),
+    final chatToggle = decodeChatToggleHotKey(
+      ref.watch(
+        settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
       ),
     );
+    final toggleActivator = chatToggleActivator(chatToggle);
+    final toggleLabel = launcherHotKeyLabel(chatToggle);
 
     // Focus the search field when the launcher requests focus while showing the
     // list (chat handles its own focus).
@@ -525,6 +525,10 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                   ),
           ),
           ],
+          _MiniShortcutBar(
+            chatVisible: chatVisible,
+            toggleLabel: toggleLabel,
+          ),
         ],
       ),
         ),
@@ -824,6 +828,77 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
       behavior: HitTestBehavior.opaque,
       onSecondaryTapDown: (d) => onContextMenu(d.globalPosition),
       child: tile,
+    );
+  }
+}
+
+/// A compact keyboard-hint bar at the foot of the mini window, showing how to
+/// switch views and dismiss. The toggle key mirrors the configured shortcut.
+class _MiniShortcutBar extends StatelessWidget {
+  const _MiniShortcutBar({required this.chatVisible, required this.toggleLabel});
+
+  final bool chatVisible;
+  final String toggleLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh,
+        border: Border(top: BorderSide(color: theme.dividerColor)),
+      ),
+      child: Row(
+        children: [
+          _KeyHint(keys: toggleLabel, label: chatVisible ? 'sessions' : 'chat'),
+          const SizedBox(width: Insets.md),
+          if (chatVisible)
+            const _KeyHint(keys: 'Enter', label: 'send')
+          else
+            const _KeyHint(keys: 'Enter', label: 'resume'),
+          const Spacer(),
+          const _KeyHint(keys: 'Esc', label: 'hide'),
+        ],
+      ),
+    );
+  }
+}
+
+/// One `key — action` hint: a small keycap followed by a muted label.
+class _KeyHint extends StatelessWidget {
+  const _KeyHint({required this.keys, required this.label});
+
+  final String keys;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: theme.dividerColor),
+          ),
+          child: Text(
+            keys,
+            style: const TextStyle(fontFamily: kMonoFamily, fontSize: 10),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
