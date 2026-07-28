@@ -188,31 +188,53 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
   Future<void> _confirmAndRun(
     String title,
     String message,
-    Future<void> Function() onConfirm, {
+    Future<void> Function(bool checked) onConfirm, {
     String confirmLabel = 'Delete',
+    String? checkboxLabel,
+    String? checkboxSubtitle,
   }) async {
+    var checked = false;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              if (checkboxLabel != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: checked,
+                  onChanged: (v) => setState(() => checked = v ?? false),
+                  title: Text(checkboxLabel),
+                  subtitle: checkboxSubtitle == null
+                      ? null
+                      : Text(checkboxSubtitle),
+                ),
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
             ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(confirmLabel),
-          ),
-        ],
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        ),
       ),
     );
-    if (ok ?? false) await onConfirm();
+    if (ok ?? false) await onConfirm(checked);
   }
 
   Future<void> _projectMenu(
@@ -282,12 +304,15 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
       case 'remove':
         await _confirmAndRun(
           'Remove project?',
-          'Removes "${project.name}" and its sessions from the workspace. '
-              'Files on disk are not touched.',
-          () async => ref
+          'Removes "${project.name}" and its sessions from the workspace.',
+          (deleteCli) async => ref
               .read(projectsControllerProvider.notifier)
-              .deleteProject(project.id),
+              .deleteProject(project.id, deleteCliSessions: deleteCli),
           confirmLabel: 'Remove',
+          checkboxLabel: 'Also delete session files on disk',
+          checkboxSubtitle:
+              "Permanently removes this project's Claude/Codex session "
+              'history from the CLI store.',
         );
     }
   }
@@ -523,7 +548,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     onDelete: () => _confirmAndRun(
                       'Delete session?',
                       'Removes "${s.title}".',
-                      () => actions.deleteNative(s.id),
+                      (_) => actions.deleteNative(s.id),
                     ),
                     pinned: isPinned,
                     onTogglePin: () => settings.togglePinnedSession(s.id),
@@ -564,7 +589,7 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
                     onDelete: () => _confirmAndRun(
                       'Delete session?',
                       'Removes "${s.displayTitle}".',
-                      () => actions.deleteImported(s),
+                      (_) => actions.deleteImported(s),
                     ),
                     pinned: isPinned,
                     onTogglePin: () => settings.togglePinnedSession(s.id),
@@ -584,6 +609,8 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
     if (query.isNotEmpty && !nameMatches && sessions.isEmpty) return const [];
     final expanded = query.isNotEmpty ? true : _expanded.contains(project.id);
 
+    final missing =
+        ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
     final projectTile = ListTile(
       dense: true,
       visualDensity: VisualDensity.compact,
@@ -591,7 +618,28 @@ class _MiniLauncherState extends ConsumerState<MiniLauncher> {
         expanded ? AppIcons.caretDown : AppIcons.caretRight,
         size: 16,
       ),
-      title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              project.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (missing) ...[
+            const SizedBox(width: Insets.xs),
+            Tooltip(
+              message: 'Folder not found: ${project.root.path}',
+              child: Icon(
+                AppIcons.warningCircle,
+                size: 13,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
