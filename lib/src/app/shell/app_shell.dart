@@ -43,6 +43,13 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  static const _minTerminalHeight = 120.0;
+
+  /// Dock height, held in widget state rather than Settings: persisting it needs
+  /// a settings field owned by another branch this cycle, and a remembered pixel
+  /// count is not worth a cross-branch schema edit.
+  double _terminalHeight = 280;
+
   void _toggleChat() {
     final state = _scaffoldKey.currentState;
     if (state == null) return;
@@ -81,25 +88,49 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
           ),
           body: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (constraints.maxWidth >=
-                            AppShell._mediumBreakpoint) {
-                          return _SplitLayout(shell: shell);
-                        }
-                        return _NarrowLayout(shell: shell);
-                      },
-                    ),
-                  ),
-                ),
-                if (terminalVisible)
-                  const SizedBox(height: 280, child: TerminalPanel()),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // The terminal is a first-class surface, not a fixed strip: it
+                // is draggable, and can take the whole body.
+                final maximized =
+                    terminalVisible && ref.watch(terminalMaximizedProvider);
+                final maxDock = constraints.maxHeight * 0.8;
+                return Column(
+                  children: [
+                    if (!maximized)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: constraints.maxWidth >=
+                                  AppShell._mediumBreakpoint
+                              ? _SplitLayout(shell: shell)
+                              : _NarrowLayout(shell: shell),
+                        ),
+                      ),
+                    if (terminalVisible && !maximized)
+                      ResizeHandle(
+                        axis: Axis.vertical,
+                        // Dragging up (negative dy) makes the dock taller.
+                        onDelta: (dy) => setState(
+                          () => _terminalHeight = (_terminalHeight - dy).clamp(
+                            _minTerminalHeight,
+                            maxDock,
+                          ),
+                        ),
+                      ),
+                    if (terminalVisible)
+                      maximized
+                          ? const Expanded(child: TerminalPanel())
+                          : SizedBox(
+                              height: _terminalHeight.clamp(
+                                _minTerminalHeight,
+                                maxDock,
+                              ),
+                              child: const TerminalPanel(),
+                            ),
+                  ],
+                );
+              },
             ),
           ),
         ),
