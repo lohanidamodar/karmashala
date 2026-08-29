@@ -61,3 +61,6 @@ android/fastlane/report.xml
 android/fastlane/README.md
 ios/fastlane/report.xml
 ios/fastlane/README.md
+
+# Loop 27 device-pane decode spike (throwaway, never shipped)
+.spike/
