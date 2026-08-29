@@ -38,7 +38,28 @@ Runtime dependencies are unchanged (`convert`, `meta`, `quiver`, `equatable`,
 
 | File | Divergence |
 | --- | --- |
-| `lib/src/ui/painter.dart` | `paintLine` rewritten to batch consecutive cells into one merged background rect per colour run and one `Paragraph` per style run. The original per-cell loop is kept verbatim as `paintLinePerCell` (`@visibleForTesting`) so `test/terminal/perf/pixel_equivalence_test.dart` can assert the two rasterise identically. |
+| `lib/src/ui/painter.dart` | `paintLine` rewritten as two passes: one merged `drawRect` per run of equal background colour, then one `Paragraph` per run of cells sharing (foreground, background, flags). Adds a record-keyed LRU for run paragraphs beside the existing per-cell `ParagraphCache`, cleared in the same places. The original per-cell loop is kept verbatim as `paintLinePerCell` (`@visibleForTesting`) so `test/terminal/perf/pixel_equivalence_test.dart` can assert the two rasterise identically. |
+| `lib/ui.dart` | One added line: `export 'src/ui/painter.dart';`. Upstream keeps `TerminalPainter` package-private, which the app's perf and pixel-equivalence harness needs to reach. No other export changed. |
+
+### Rules the batched painter must keep
+
+These are the reasons the two painters rasterise identically. Breaking one
+breaks `pixel_equivalence_test.dart`:
+
+- Only cells with `charWidth == 1` merge into a text run. A double-width glyph's
+  font advance is not guaranteed to be exactly `2 * cellWidth`, and a zero-width
+  combining mark composes with the previous glyph — either would shift every
+  following glyph in the run.
+- A cell with code point `0` breaks the run and draws nothing. It must not
+  become a space: a space under the `underline` flag paints, an empty cell does
+  not.
+- The `0x20` → `0xA0` underline-on-space workaround applies to the whole run at
+  once (a run has uniform flags), which is equivalent to applying it per cell.
+- Background runs merge only equal, opaque colours; the merged rect is
+  `span * cellWidth + 1` wide, exactly the union of the per-cell rects
+  (including the same 1 px right-hand spill).
+- A text run can never straddle a background run, because the text run key
+  includes `background` and `flags` — the only inputs to the background colour.
 
 Nothing else differs. **Keep it that way:** every new divergence must be listed
 here with its reason, and must be justified by a measurement.

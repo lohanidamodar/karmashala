@@ -147,3 +147,41 @@ String _adversarial(int columns, int rows) {
 String _fit(String text, int columns) => text.length >= columns
     ? text.substring(0, columns)
     : text + ' ' * (columns - text.length);
+
+/// A small terminal built to exercise exactly the cases the run-batched painter
+/// has to *refuse* to merge, plus the ones it has to transform per run.
+///
+/// Not one of the four measured corpora — its lines are deliberately short and
+/// ragged, which would make a draw-op budget meaningless. It exists so the
+/// pixel-equivalence test covers underline-on-space, faint/bold/italic/inverse,
+/// double-width glyphs, zero-width combining marks, and empty (never written)
+/// cells.
+Terminal buildEdgeCaseTerminal({int columns = 40, int rows = 12}) {
+  final terminal = Terminal(maxLines: rows);
+  terminal.resize(columns, rows);
+  terminal.write(
+    // Underlined text with interior and trailing spaces: the 0x20 -> 0xA0
+    // substitution must apply per run, not per cell.
+    '\x1b[4mab  cd  \x1b[0m\r\n'
+    // A short line: the cells past its end are code point 0 and must draw
+    // nothing at all, not a space.
+    'short\r\n'
+    // Every attribute, each its own run.
+    '\x1b[1mbold\x1b[0m\x1b[2mfaint\x1b[0m\x1b[3mital\x1b[0m'
+    '\x1b[7minv\x1b[0m\x1b[9mstrike\x1b[0m\r\n'
+    // Underline + inverse together, over spaces.
+    '\x1b[4;7m  x  \x1b[0m\r\n'
+    // Double-width CJK between single-width text: the wide cells must not be
+    // merged into a run, and their trailing half must stay unpainted.
+    'a\u4f60\u597db\u65e5\u672c\u8a9ec\r\n'
+    // A combining mark (zero width) after a base character.
+    'e\u0301fg\r\n'
+    // Coloured background runs interrupted by a default-background cell.
+    '\x1b[41mrr\x1b[0m \x1b[44mbb\x1b[0m\r\n'
+    // A wide glyph carrying a background colour.
+    '\x1b[42m\u4f60\u597d\x1b[0m\r\n'
+    // Same style either side of a wide glyph — must not merge across it.
+    '\x1b[33mxx\u4e2dyy\x1b[0m\r\n',
+  );
+  return terminal;
+}
