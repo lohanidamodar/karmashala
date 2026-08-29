@@ -60,10 +60,7 @@ void main() {
         'five_hour': {'utilization': 1},
         'extra_usage': {'is_enabled': false, 'utilization': 12.0},
       }, now);
-      expect(
-        disabled.windows.map((w) => w.label),
-        isNot(contains('Extra usage')),
-      );
+      expect(disabled.windows.map((w) => w.label), isNot(contains('Extra usage')));
     });
 
     test('is empty when no windows are present', () {
@@ -77,7 +74,10 @@ void main() {
       final usage = parseCodexUsage({
         'email': 'me@openai.com',
         'rate_limit': {
-          'primary_window': {'used_percent': 30.0, 'reset_after_seconds': 3600},
+          'primary_window': {
+            'used_percent': 30.0,
+            'reset_after_seconds': 3600,
+          },
           'secondary_window': {
             'used_percent': 66.0,
             'reset_at': 1785325200, // epoch seconds

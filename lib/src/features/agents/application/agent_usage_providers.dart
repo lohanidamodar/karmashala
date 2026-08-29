@@ -20,7 +20,9 @@ final agentUsageServiceProvider = Provider<AgentUsageService>(
 /// force a refresh.
 final agentUsageProvider = FutureProvider.autoDispose
     .family<AgentUsage, AgentInstallation>((ref, installation) async {
-      final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
+      final environments = ref
+          .watch(executionEnvironmentDaoProvider)
+          .getAll();
       return ref
           .watch(agentUsageServiceProvider)
           .fetch(installation, environments);
