@@ -126,3 +126,17 @@ List<int> parsePidsFromPidof(String output) => [
   for (final token in output.trim().split(RegExp(r'\s+')))
     if (token.isNotEmpty) int.tryParse(token) ?? -1,
 ].where((pid) => pid > 0).toList();
+
+/// First meaningful line of command output.
+///
+/// Skips blank lines and adb's `OK` acknowledgement, which `emu` subcommands
+/// append after their real answer.
+String? firstMeaningfulLine(String output) {
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+    if (trimmed == 'OK') continue;
+    return trimmed;
+  }
+  return null;
+}
