@@ -1,29 +1,12 @@
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xterm/xterm.dart';
 
 import '../../support/fixtures.dart';
-
-/// A process-free [TerminalInstance] so the controller can be tested without
-/// spawning a real PTY.
-class _FakeInstance implements TerminalInstance {
-  _FakeInstance(this.id, this.title);
-  @override
-  final String id;
-  @override
-  final String title;
-  @override
-  final Terminal terminal = Terminal();
-  @override
-  final TerminalController controller = TerminalController();
-  bool disposed = false;
-  @override
-  void dispose() => disposed = true;
-}
+import 'fake_instance.dart';
 
 void main() {
   group('terminalProfilesFor', () {
@@ -81,60 +64,200 @@ void main() {
   });
 
   group('TerminalSessionsController', () {
-    ProviderContainer containerWithFake() {
-      final container = ProviderContainer(
-        overrides: [
-          terminalInstanceFactoryProvider.overrideWithValue(
-            ({required id, required profile, workingDirectory}) =>
-                _FakeInstance(id, profile.label),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      return container;
-    }
-
     test('opens tabs, activates the newest, and switches', () {
-      final container = containerWithFake();
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
       );
 
-      final first = controller.open(TerminalProfile.powerShell);
-      final second = controller.open(TerminalProfile.commandPrompt);
+      final first = controller.openTab(TerminalProfile.powerShell);
+      final second = controller.openTab(TerminalProfile.commandPrompt);
 
       final state = container.read(terminalSessionsControllerProvider);
-      expect(state.sessions.length, 2);
-      expect(state.activeId, second);
+      expect(state.tabs.length, 2);
+      expect(state.activeTabId, second);
 
-      controller.activate(first);
+      controller.activateTab(first);
       expect(
-        container.read(terminalSessionsControllerProvider).activeId,
+        container.read(terminalSessionsControllerProvider).activeTabId,
         first,
       );
     });
 
-    test('closing the active tab disposes it and re-activates another', () {
-      final container = containerWithFake();
+    test('closing the active tab disposes its panes and activates another', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
       final controller = container.read(
         terminalSessionsControllerProvider.notifier,
       );
-      final first = controller.open(TerminalProfile.powerShell);
-      final second = controller.open(TerminalProfile.commandPrompt);
+      final first = controller.openTab(TerminalProfile.powerShell);
+      final second = controller.openTab(TerminalProfile.commandPrompt);
+      final pane = container
+          .read(terminalSessionsControllerProvider)
+          .tabs
+          .firstWhere((t) => t.id == second)
+          .layout
+          .panes
+          .single;
+      final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
 
-      final closed =
-          container
-                  .read(terminalSessionsControllerProvider)
-                  .sessions
-                  .firstWhere((s) => s.id == second)
-              as _FakeInstance;
-
-      controller.close(second);
+      controller.closeTab(second);
 
       final state = container.read(terminalSessionsControllerProvider);
-      expect(closed.disposed, isTrue);
-      expect(state.sessions.length, 1);
-      expect(state.activeId, first);
+      expect(instance.disposed, isTrue);
+      expect(state.tabs.length, 1);
+      expect(state.activeTabId, first);
+      expect(controller.instanceFor(pane), isNull);
+    });
+
+    test('splitting adds a pane to the active tab and focuses it', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final newPane = controller.splitPane(
+        SplitAxis.horizontal,
+        TerminalProfile.commandPrompt,
+      )!;
+
+      final tab = container.read(terminalSessionsControllerProvider).activeTab!;
+      expect(tab.layout.panes.length, 2);
+      expect(tab.focusedPaneId, newPane);
+      expect(controller.instanceFor(newPane), isNotNull);
+    });
+
+    test('splitting with no tab open does nothing', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      expect(
+        controller.splitPane(SplitAxis.horizontal, TerminalProfile.powerShell),
+        isNull,
+      );
+    });
+
+    test('closing a pane collapses the split and keeps the tab', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final second = controller.splitPane(
+        SplitAxis.vertical,
+        TerminalProfile.commandPrompt,
+      )!;
+      final instance = controller.instanceFor(second)! as FakeTerminalInstance;
+
+      controller.closePane(second);
+
+      final tab = container.read(terminalSessionsControllerProvider).activeTab!;
+      expect(instance.disposed, isTrue);
+      expect(tab.layout.panes.length, 1);
+      expect(tab.focusedPaneId, tab.layout.panes.single);
+    });
+
+    test('closing the last pane of a tab closes the tab', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final only = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+
+      controller.closePane(only);
+
+      expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+    });
+
+    test('movePaneFocus walks the tree and stops at the edge', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final left = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      final right = controller.splitPane(
+        SplitAxis.horizontal,
+        TerminalProfile.commandPrompt,
+      )!;
+
+      controller.movePaneFocus(PaneDirection.left);
+      expect(
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
+            .focusedPaneId,
+        left,
+      );
+      controller.movePaneFocus(PaneDirection.left);
+      expect(
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
+            .focusedPaneId,
+        left,
+        reason: 'already at the edge',
+      );
+      controller.movePaneFocus(PaneDirection.right);
+      expect(
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
+            .focusedPaneId,
+        right,
+      );
+    });
+
+    test('nextTab and previousTab wrap', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final first = controller.openTab(TerminalProfile.powerShell);
+      final second = controller.openTab(TerminalProfile.commandPrompt);
+
+      controller.nextTab();
+      expect(
+        container.read(terminalSessionsControllerProvider).activeTabId,
+        first,
+      );
+      controller.previousTab();
+      expect(
+        container.read(terminalSessionsControllerProvider).activeTabId,
+        second,
+      );
+    });
+
+    test('a tab title names the focused pane and counts the panes', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final tabId = controller.openTab(TerminalProfile.powerShell);
+      expect(controller.titleForTab(tabId), 'PowerShell');
+
+      controller.splitPane(SplitAxis.horizontal, TerminalProfile.commandPrompt);
+      expect(controller.titleForTab(tabId), 'Command Prompt (2)');
     });
   });
 

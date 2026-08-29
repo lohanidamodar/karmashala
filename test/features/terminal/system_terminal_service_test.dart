@@ -131,4 +131,54 @@ void main() {
       },
     );
   });
+
+  group('permissionArgsFor', () {
+    test('an unrecognised agent never gets a guessed bypass flag', () {
+      // --yolo is Antigravity's flag. Guessing it for a binary we know nothing
+      // about may be wrong or may mean something else entirely; PRODUCT.md
+      // principle 5 puts that on the wrong side of "safety by default".
+      for (final mode in PermissionMode.values) {
+        expect(
+          permissionArgsFor('someAgentWeHaveNeverHeardOf', mode),
+          isEmpty,
+          reason: mode.name,
+        );
+      }
+    });
+
+    test('the built-in agents keep the flags they already had', () {
+      expect(permissionArgsFor('claudeCode', PermissionMode.ask), isEmpty);
+      expect(permissionArgsFor('claudeCode', PermissionMode.acceptEdits), [
+        '--permission-mode',
+        'acceptEdits',
+      ]);
+      expect(permissionArgsFor('claudeCode', PermissionMode.bypass), [
+        '--permission-mode',
+        'bypassPermissions',
+      ]);
+
+      expect(permissionArgsFor('codex', PermissionMode.ask), [
+        '--ask-for-approval',
+        'on-request',
+      ]);
+      expect(permissionArgsFor('codex', PermissionMode.acceptEdits), [
+        '--ask-for-approval',
+        'on-failure',
+      ]);
+      expect(permissionArgsFor('codex', PermissionMode.bypass), [
+        '--dangerously-bypass-approvals-and-sandbox',
+      ]);
+
+      // Antigravity keeps --yolo because its descriptor actually declares it,
+      // not because it fell through a default arm.
+      expect(permissionArgsFor('antigravity', PermissionMode.ask), isEmpty);
+      expect(
+        permissionArgsFor('antigravity', PermissionMode.acceptEdits),
+        isEmpty,
+      );
+      expect(permissionArgsFor('antigravity', PermissionMode.bypass), [
+        '--yolo',
+      ]);
+    });
+  });
 }

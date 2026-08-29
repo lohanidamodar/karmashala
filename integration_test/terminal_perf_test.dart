@@ -39,6 +39,7 @@ void main() {
     final instance = PtyTerminalInstance(
       id: 'perf',
       title: 'perf',
+      profileId: 'powershell',
       launch: PtyLaunch(
         executable: 'powershell.exe',
         arguments: ['-NoLogo', '-NoProfile'],
