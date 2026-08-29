@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/painting.dart';
+import 'package:meta/meta.dart';
 
 import 'package:xterm/src/ui/palette_builder.dart';
 import 'package:xterm/src/ui/paragraph_cache.dart';
@@ -140,6 +141,32 @@ class TerminalPainter {
   /// Paints [line] to [canvas] at [offset]. The x offset of [offset] is usually
   /// 0, and the y offset is the top of the line.
   void paintLine(
+    Canvas canvas,
+    Offset offset,
+    BufferLine line,
+  ) {
+    final cellData = CellData.empty();
+    final cellWidth = _cellSize.width;
+
+    for (var i = 0; i < line.length; i++) {
+      line.getCellData(i, cellData);
+
+      final charWidth = cellData.content >> CellContent.widthShift;
+      final cellOffset = offset.translate(i * cellWidth, 0);
+
+      paintCell(canvas, cellOffset, cellData);
+
+      if (charWidth == 2) {
+        i++;
+      }
+    }
+  }
+
+  /// The original, unbatched per-cell paint loop, retained verbatim so the
+  /// pixel-equivalence test can prove the batched [paintLine] draws exactly the
+  /// same thing. Not used in production. See VENDORED.md.
+  @visibleForTesting
+  void paintLinePerCell(
     Canvas canvas,
     Offset offset,
     BufferLine line,

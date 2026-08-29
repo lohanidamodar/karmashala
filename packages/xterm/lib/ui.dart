@@ -1,6 +1,9 @@
 export 'src/terminal_view.dart';
 export 'src/ui/controller.dart';
 export 'src/ui/cursor_type.dart';
+// Exported (upstream does not) so the app's perf/pixel-equivalence harness can
+// drive the painter directly. See VENDORED.md.
+export 'src/ui/painter.dart';
 export 'src/ui/keyboard_visibility.dart';
 export 'src/ui/pointer_input.dart';
 export 'src/ui/selection_mode.dart';
