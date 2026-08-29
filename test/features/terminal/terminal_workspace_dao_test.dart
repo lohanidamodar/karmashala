@@ -1,0 +1,136 @@
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late AppDatabase db;
+  late TerminalWorkspaceDao dao;
+
+  setUp(() {
+    db = AppDatabase.memory();
+    dao = TerminalWorkspaceDao(db);
+  });
+  tearDown(() => db.close());
+
+  StoredTerminalTab tab({String id = 'tab1'}) {
+    final layout = PaneLayout.single(
+      '$id-p1',
+    ).split('$id-p1', SplitAxis.horizontal, '$id-p2', '$id-s1');
+    return StoredTerminalTab(
+      id: id,
+      layout: layout,
+      focusedPaneId: '$id-p2',
+      panes: [
+        StoredTerminalPane(
+          id: '$id-p1',
+          tabId: id,
+          profileId: 'powershell',
+          title: 'PowerShell',
+          workingDirectory: r'C:\ws',
+          scrollback: 'one',
+        ),
+        StoredTerminalPane(
+          id: '$id-p2',
+          tabId: id,
+          profileId: 'cmd',
+          title: 'Command Prompt',
+          workingDirectory: null,
+          scrollback: 'two',
+        ),
+      ],
+    );
+  }
+
+  test('the schema reaches v7 with the terminal tables', () {
+    expect(db.schemaVersion, greaterThanOrEqualTo(7));
+    final tables = db.query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "AND name IN ('terminal_tabs', 'terminal_panes');",
+    );
+    expect(tables.length, 2);
+  });
+
+  test('saves and loads a workspace', () {
+    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+
+    final loaded = dao.loadWorkspace();
+    expect(loaded.activeTabId, 'tab1');
+    expect(loaded.tabs.single.id, 'tab1');
+    expect(loaded.tabs.single.focusedPaneId, 'tab1-p2');
+    expect(loaded.tabs.single.layout.panes, ['tab1-p1', 'tab1-p2']);
+    expect(loaded.tabs.single.panes.map((p) => p.scrollback), ['one', 'two']);
+    expect(loaded.tabs.single.panes.first.workingDirectory, r'C:\ws');
+    expect(loaded.tabs.single.panes.first.profileId, 'powershell');
+    expect(loaded.tabs.single.panes[1].workingDirectory, isNull);
+    expect(loaded.tabs.single.panes[1].title, 'Command Prompt');
+  });
+
+  test('an empty database loads an empty workspace', () {
+    final loaded = dao.loadWorkspace();
+    expect(loaded.tabs, isEmpty);
+    expect(loaded.activeTabId, isNull);
+  });
+
+  test('saving replaces the previous workspace rather than appending', () {
+    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveWorkspace([tab(id: 'tab2')], activeTabId: 'tab2');
+    final loaded = dao.loadWorkspace();
+    expect(loaded.tabs.map((t) => t.id), ['tab2']);
+    expect(loaded.activeTabId, 'tab2');
+  });
+
+  test('saveScrollback updates one pane in place', () {
+    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveScrollback('tab1-p1', 'updated');
+    final panes = dao.loadWorkspace().tabs.single.panes;
+    expect(panes.first.scrollback, 'updated');
+    expect(panes[1].scrollback, 'two', reason: 'the other pane is untouched');
+  });
+
+  test('saveScrollback for an unknown pane is a no-op', () {
+    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveScrollback('ghost', 'nothing');
+    expect(dao.loadWorkspace().tabs.single.panes.length, 2);
+  });
+
+  test('clear removes tabs and cascades to their panes', () {
+    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.clear();
+    expect(db.query('SELECT id FROM terminal_panes;'), isEmpty);
+    expect(dao.loadWorkspace().tabs, isEmpty);
+  });
+
+  test('a tab with unparseable layout json is skipped, not thrown on', () {
+    db.execute(
+      'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
+      'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
+      ['bad', 0, '{not json', null, 1, '2026-01-01T00:00:00.000Z'],
+    );
+    expect(dao.loadWorkspace().tabs, isEmpty);
+  });
+
+  test('a tab whose layout is valid json but not a layout is skipped', () {
+    db.execute(
+      'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
+      'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
+      ['bad', 0, '{"t":"split"}', null, 1, '2026-01-01T00:00:00.000Z'],
+    );
+    expect(dao.loadWorkspace().tabs, isEmpty);
+  });
+
+  test('tabs and panes come back in the order they were saved', () {
+    dao.saveWorkspace(
+      [tab(id: 'a'), tab(id: 'b'), tab(id: 'c')],
+      activeTabId: 'b',
+    );
+    final loaded = dao.loadWorkspace();
+    expect(loaded.tabs.map((t) => t.id), ['a', 'b', 'c']);
+    expect(loaded.tabs.first.panes.map((p) => p.id), ['a-p1', 'a-p2']);
+  });
+
+  test('an active tab id that no longer exists comes back as null', () {
+    dao.saveWorkspace([tab()], activeTabId: 'gone');
+    expect(dao.loadWorkspace().activeTabId, isNull);
+  });
+}

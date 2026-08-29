@@ -15,6 +15,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v2** — Loop 1: the core domain schema (environments, projects,
 ///   repositories, agent installations, sessions, and the append-only
 ///   session-event log).
+/// * **v7** — Loop 29: the terminal workspace (tabs, their pane split trees and
+///   each pane's persisted scrollback).
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -22,7 +24,44 @@ final Map<int, MigrationStep> schemaMigrations = {
   4: _migrateToV4,
   5: _migrateToV5,
   6: _migrateToV6,
+  7: _migrateToV7,
 };
+
+void _migrateToV7(Database db) {
+  // The terminal workspace (Loop 29): which tabs were open, how each tab's panes
+  // were split, and each pane's scrollback, so the terminal comes back after a
+  // restart. `layout` is the pane tree as JSON (see PaneLayout.toJson);
+  // `scrollback` is the rendered buffer re-emitted as text + SGR runs, capped
+  // per pane — inert replayed content, never a command to re-run.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_tabs (
+      id              TEXT PRIMARY KEY,
+      ordinal         INTEGER NOT NULL,
+      layout          TEXT NOT NULL,
+      focused_pane_id TEXT,
+      is_active       INTEGER NOT NULL,
+      updated_at      TEXT NOT NULL
+    );
+  ''');
+
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_panes (
+      id                TEXT PRIMARY KEY,
+      tab_id            TEXT NOT NULL,
+      ordinal           INTEGER NOT NULL,
+      profile_id        TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      working_directory TEXT,
+      scrollback        TEXT NOT NULL,
+      updated_at        TEXT NOT NULL,
+      FOREIGN KEY (tab_id) REFERENCES terminal_tabs (id) ON DELETE CASCADE
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_terminal_panes_tab '
+    'ON terminal_panes (tab_id);',
+  );
+}
 
 void _migrateToV1(Database db) {
   db.execute('''
