@@ -12,7 +12,7 @@ import '../agents/application/agent_installations_controller.dart';
 import '../agents/application/agent_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
 import '../agents/domain/agent_installation.dart';
-import '../agents/domain/agent_kind.dart';
+import '../agents/domain/agent_ids.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import '../environments/domain/environment_kind.dart';
@@ -315,7 +315,7 @@ class LauncherControlServer {
             'id': session.id,
             'externalId': session.externalId,
             'title': session.displayTitle,
-            'cli': session.cli.name,
+            'cli': session.cli,
             'project': project.name,
             'repository': repo.name,
             'environmentId': session.environmentId,
@@ -328,14 +328,15 @@ class LauncherControlServer {
     return sessions;
   }
 
-  AgentKind? _parseCli(String? cli) {
+  String? _parseCli(String? cli) {
     if (cli == null) return null;
     final normalized = cli.trim().toLowerCase();
-    for (final kind in AgentKind.values) {
-      if (kind.name.toLowerCase() == normalized) return kind;
+    for (final descriptor
+        in _container.read(agentRegistryProvider).descriptors) {
+      if (descriptor.id.toLowerCase() == normalized) return descriptor.id;
     }
     if (normalized == 'claude' || normalized == 'claude code') {
-      return AgentKind.claudeCode;
+      return AgentIds.claudeCode;
     }
     return null;
   }
@@ -346,7 +347,7 @@ class LauncherControlServer {
           in _container.read(agentInstallationDaoProvider).getAll())
         {
           'agentInstallationId': install.id,
-          'cli': install.agentKind.name,
+          'cli': install.agentId,
           'environmentId': install.environmentId,
           if (install.version != null) 'version': install.version,
           'path': install.executable.path,
@@ -397,9 +398,9 @@ class LauncherControlServer {
         );
       }
     } else if (cli != null) {
-      final kind = _parseCli(cli);
+      final agentId = _parseCli(cli);
       for (final i in installs) {
-        if (i.agentKind == kind) {
+        if (i.agentId == agentId) {
           install = i;
           break;
         }
@@ -415,7 +416,7 @@ class LauncherControlServer {
           resolveDefaultInstallation(
             installs,
             defaultInstallationId: settings.defaultAgentInstallationId,
-            defaultKind: settings.defaultAgent,
+            defaultAgentId: settings.defaultAgent,
           ) ??
           installs.first;
     }
@@ -434,17 +435,17 @@ class LauncherControlServer {
           terminal: terminal,
         );
     return {
-      'opened': 'new ${install.agentKind.name} session',
+      'opened': 'new ${install.agentId} session',
       'repository': repo.name,
       'environmentId': repo.path.environmentId,
     };
   }
 
   Future<Object?> _getUsage({String? cli, String? environmentId}) async {
-    final kind = _parseCli(cli) ?? AgentKind.claudeCode;
-    final install = _installFor(kind, environmentId);
+    final agentId = _parseCli(cli) ?? AgentIds.claudeCode;
+    final install = _installFor(agentId, environmentId);
     if (install == null) {
-      throw StateError('No ${kind.name} installation found.');
+      throw StateError('No $agentId installation found.');
     }
     final environments = _container
         .read(executionEnvironmentDaoProvider)
@@ -487,7 +488,7 @@ class LauncherControlServer {
     }
     final command = resumeCommandLine(
       agentExecutable: install.executable.path,
-      cli: session.cli.name,
+      cli: session.cli,
       externalId: session.externalId,
       environment: env,
       cwd: repo.path,
@@ -535,9 +536,9 @@ class LauncherControlServer {
       }
       final parts = [
         install.executable.path,
-        ...permissionArgsFor(session.cli.name, _permissionFor(session.cli)),
+        ...permissionArgsFor(session.cli, _permissionFor(session.cli)),
         ...switch (session.cli) {
-          AgentKind.codex => ['resume', session.externalId],
+          AgentIds.codex => ['resume', session.externalId],
           _ => ['--resume', session.externalId],
         },
       ];
@@ -592,10 +593,10 @@ class LauncherControlServer {
     return {'opened': windows.length, 'tmuxSession': sessionName};
   }
 
-  AgentInstallation? _installFor(AgentKind kind, String? environmentId) {
+  AgentInstallation? _installFor(String agentId, String? environmentId) {
     for (final install
         in _container.read(agentInstallationDaoProvider).getAll()) {
-      if (install.agentKind != kind) continue;
+      if (install.agentId != agentId) continue;
       if (environmentId != null && install.environmentId != environmentId) {
         continue;
       }
@@ -612,8 +613,8 @@ class LauncherControlServer {
     return null;
   }
 
-  PermissionMode _permissionFor(AgentKind kind) => _container
+  PermissionMode _permissionFor(String agentId) => _container
       .read(settingsControllerProvider)
-      .permissionsFor(kind)
+      .permissionsFor(agentId)
       .existingSessions;
 }

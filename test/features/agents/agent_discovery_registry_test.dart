@@ -1,7 +1,6 @@
 import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/features/agents/data/agent_discovery_service.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,7 +12,7 @@ CommandResult _ok(String stdout) =>
     CommandResult(exitCode: 0, stdout: stdout, stderr: '');
 const _notFound = CommandResult(exitCode: 1, stdout: '', stderr: 'not found');
 
-/// A registry-only agent: no adapter, so no [AgentKind].
+/// A registry-only agent: no adapter, so no `AgentKind`.
 const _kindless = AgentDescriptor(
   id: 'cursorAgent',
   displayName: 'Cursor Agent',
@@ -93,7 +92,7 @@ void main() {
     ); // located only, never asked for a version
   });
 
-  test('discover() drops descriptors that have no AgentKind', () async {
+  test('discover() persists descriptors that have no AgentKind', () async {
     final runner = FakeCommandRunner(responder: (_) => _ok(r'C:\bin\x.exe'));
     final registry = AgentRegistry([
       AgentRegistry.builtIn.byId('codex')!,
@@ -102,8 +101,8 @@ void main() {
 
     expect((await serviceWith(runner, registry).probeAll()).length, 2);
     expect(
-      (await serviceWith(runner, registry).discover()).map((i) => i.agentKind),
-      [AgentKind.codex],
+      (await serviceWith(runner, registry).discover()).map((i) => i.agentId),
+      ['codex', 'cursorAgent'],
     );
   });
 }

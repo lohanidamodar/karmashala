@@ -8,7 +8,7 @@ import '../agents/application/agent_installations_controller.dart';
 import '../agents/application/agent_providers.dart';
 import '../agents/domain/agent_adapter.dart';
 import '../agents/domain/agent_installation.dart';
-import '../agents/domain/agent_kind.dart';
+import '../agents/domain/agent_ids.dart';
 import '../environments/application/environment_providers.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
@@ -148,12 +148,10 @@ class LauncherChatController extends Notifier<LauncherChatState> {
         : null;
     final permission = ref
         .read(settingsControllerProvider)
-        .permissionsFor(AgentKind.claudeCode)
+        .permissionsFor(AgentIds.claudeCode)
         .existingSessions;
 
-    final adapter = ref.read(agentAdapterResolverProvider)(
-      AgentKind.claudeCode,
-    );
+    final adapter = ref.read(agentAdapterResolverProvider)(AgentIds.claudeCode);
     final session = adapter.start(
       AgentLaunch(
         workingDirectory: EnvironmentPath(
@@ -221,7 +219,7 @@ class LauncherChatController extends Notifier<LauncherChatState> {
     final installs = ref
         .read(agentInstallationDaoProvider)
         .getAll()
-        .where((i) => i.agentKind == AgentKind.claudeCode)
+        .where((i) => i.agentId == AgentIds.claudeCode)
         .toList();
     if (installs.isEmpty) return null;
 
@@ -229,7 +227,7 @@ class LauncherChatController extends Notifier<LauncherChatState> {
     final preferred = resolveDefaultInstallation(
       installs,
       defaultInstallationId: settings.defaultAgentInstallationId,
-      defaultKind: AgentKind.claudeCode,
+      defaultAgentId: AgentIds.claudeCode,
     );
     if (preferred != null &&
         settings.defaultAgentInstallationId == preferred.id) {

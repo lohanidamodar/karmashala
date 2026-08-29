@@ -2,13 +2,15 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/agent_installation.dart';
-import '../domain/agent_kind.dart';
 
 /// Data-access for [AgentInstallation] rows. Hand-written SQL, no codegen.
 ///
 /// The underlying table has a `UNIQUE(agent_kind, environment_id,
 /// executable_path)` constraint, enforcing that each `(agent, environment,
-/// executable)` is one independent installation.
+/// executable)` is one independent installation. `agent_kind` has always been a
+/// `TEXT` column holding the agent's descriptor id, so it is read straight
+/// through as [AgentInstallation.agentId] — an unrecognised agent loads rather
+/// than throwing.
 class AgentInstallationDao {
   AgentInstallationDao(this._db);
 
@@ -21,7 +23,7 @@ class AgentInstallationDao {
       'VALUES (?, ?, ?, ?, ?, ?);',
       [
         installation.id,
-        installation.agentKind.name,
+        installation.agentId,
         installation.executable.environmentId,
         installation.executable.path,
         installation.version,
@@ -37,17 +39,17 @@ class AgentInstallationDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  /// Finds an installation by its natural identity — `(agentKind, environmentId,
+  /// Finds an installation by its natural identity — `(agentId, environmentId,
   /// executablePath)` — which the table enforces as unique.
   AgentInstallation? getByIdentity(
-    AgentKind agentKind,
+    String agentId,
     String environmentId,
     String executablePath,
   ) {
     final rows = _db.query(
       'SELECT * FROM agent_installations WHERE agent_kind = ? '
       'AND environment_id = ? AND executable_path = ?;',
-      [agentKind.name, environmentId, executablePath],
+      [agentId, environmentId, executablePath],
     );
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
@@ -75,7 +77,7 @@ class AgentInstallationDao {
 
   AgentInstallation _fromRow(Map<String, Object?> row) => AgentInstallation(
     id: row['id']! as String,
-    agentKind: AgentKind.values.byName(row['agent_kind']! as String),
+    agentId: row['agent_kind']! as String,
     executable: EnvironmentPath(
       environmentId: row['environment_id']! as String,
       path: row['executable_path']! as String,

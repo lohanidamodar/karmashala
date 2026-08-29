@@ -1,6 +1,6 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
 import 'package:chitragupta/src/features/settings/data/settings_repository.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
@@ -14,34 +14,55 @@ void main() {
       const s = Settings();
       expect(s.defaultAgent, isNull);
       expect(
-        s.permissionsFor(AgentKind.claudeCode).newSessions,
+        s.permissionsFor(AgentIds.claudeCode).newSessions,
         PermissionMode.ask,
       );
       expect(
-        s.permissionsFor(AgentKind.claudeCode).existingSessions,
+        s.permissionsFor(AgentIds.claudeCode).existingSessions,
         PermissionMode.ask,
       );
     });
 
     test('JSON round-trip preserves default agent and permissions', () {
-      final s = const Settings(defaultAgent: AgentKind.codex).withPermissions(
-        AgentKind.claudeCode,
+      final s = const Settings(defaultAgent: AgentIds.codex).withPermissions(
+        AgentIds.claudeCode,
         const AgentPermissions(
           newSessions: PermissionMode.acceptEdits,
           existingSessions: PermissionMode.bypass,
         ),
       );
       final restored = Settings.fromJson(s.toJson());
-      expect(restored.defaultAgent, AgentKind.codex);
+      expect(restored.defaultAgent, AgentIds.codex);
       expect(
-        restored.permissionsFor(AgentKind.claudeCode).newSessions,
+        restored.permissionsFor(AgentIds.claudeCode).newSessions,
         PermissionMode.acceptEdits,
       );
       expect(
-        restored.permissionsFor(AgentKind.claudeCode).existingSessions,
+        restored.permissionsFor(AgentIds.claudeCode).existingSessions,
         PermissionMode.bypass,
       );
       expect(restored, s);
+    });
+
+    test('permissions for an agent with no AgentKind survive a round-trip', () {
+      final s = const Settings().withPermissions(
+        'roverCli',
+        const AgentPermissions(newSessions: PermissionMode.bypass),
+      );
+      final restored = Settings.fromJson(s.toJson());
+      expect(
+        restored.permissionsFor('roverCli').newSessions,
+        PermissionMode.bypass,
+      );
+      expect(
+        restored.permissionsFor('roverCli').existingSessions,
+        PermissionMode.ask,
+      );
+    });
+
+    test('an agent id with no AgentKind can be the default agent', () {
+      const s = Settings(defaultAgent: 'roverCli');
+      expect(Settings.fromJson(s.toJson()).defaultAgent, 'roverCli');
     });
 
     test('bypass is the only dangerous mode', () {
@@ -62,8 +83,8 @@ void main() {
 
     test('save then load round-trips', () {
       final repo = SettingsRepository(db);
-      repo.save(const Settings(defaultAgent: AgentKind.antigravity));
-      expect(repo.load().defaultAgent, AgentKind.antigravity);
+      repo.save(const Settings(defaultAgent: AgentIds.antigravity));
+      expect(repo.load().defaultAgent, AgentIds.antigravity);
     });
   });
 
@@ -84,30 +105,30 @@ void main() {
     test('setting the default agent persists', () {
       container
           .read(settingsControllerProvider.notifier)
-          .setDefaultAgent(AgentKind.codex);
+          .setDefaultAgent(AgentIds.codex);
       expect(
         container.read(settingsControllerProvider).defaultAgent,
-        AgentKind.codex,
+        AgentIds.codex,
       );
       // A fresh repository sees the persisted value.
-      expect(SettingsRepository(db).load().defaultAgent, AgentKind.codex);
+      expect(SettingsRepository(db).load().defaultAgent, AgentIds.codex);
     });
 
     test('setting a permission persists per agent and session kind', () {
       container.read(settingsControllerProvider.notifier)
-        ..setNewSessionPermission(AgentKind.claudeCode, PermissionMode.bypass)
+        ..setNewSessionPermission(AgentIds.claudeCode, PermissionMode.bypass)
         ..setExistingSessionPermission(
-          AgentKind.claudeCode,
+          AgentIds.claudeCode,
           PermissionMode.acceptEdits,
         );
 
       final loaded = SettingsRepository(db).load();
       expect(
-        loaded.permissionsFor(AgentKind.claudeCode).newSessions,
+        loaded.permissionsFor(AgentIds.claudeCode).newSessions,
         PermissionMode.bypass,
       );
       expect(
-        loaded.permissionsFor(AgentKind.claudeCode).existingSessions,
+        loaded.permissionsFor(AgentIds.claudeCode).existingSessions,
         PermissionMode.acceptEdits,
       );
     });

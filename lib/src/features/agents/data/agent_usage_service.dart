@@ -7,7 +7,8 @@ import '../../../core/util/clock.dart';
 import '../../cli_detection/application/cli_detection_service.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../domain/agent_installation.dart';
-import '../domain/agent_kind.dart';
+import '../domain/agent_ids.dart';
+import '../domain/agent_registry.dart';
 import '../domain/agent_usage.dart';
 
 /// Raised when a usage lookup cannot complete.
@@ -54,8 +55,14 @@ class AgentUsageService {
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
-    if (installation.agentKind == AgentKind.antigravity) {
-      throw UsageException('Usage is not available for Antigravity.');
+    // An allowlist: only the two agents whose usage endpoint we speak. Any
+    // other agent — including one we have never heard of — is told plainly.
+    final agentId = installation.agentId;
+    if (agentId != AgentIds.claudeCode && agentId != AgentIds.codex) {
+      throw UsageException(
+        'Usage is not available for '
+        '${AgentRegistry.builtIn.displayNameFor(agentId)}.',
+      );
     }
     final stores = await storeLocator.locate(environments);
     CliStore? store;
@@ -71,14 +78,9 @@ class AgentUsageService {
       );
     }
 
-    switch (installation.agentKind) {
-      case AgentKind.claudeCode:
-        return _fetchClaude(store);
-      case AgentKind.codex:
-        return _fetchCodex(store);
-      case AgentKind.antigravity:
-        throw UsageException('Usage is not available for Antigravity.');
-    }
+    return agentId == AgentIds.claudeCode
+        ? _fetchClaude(store)
+        : _fetchCodex(store);
   }
 
   Future<AgentUsage> _fetchClaude(CliStore store) async {

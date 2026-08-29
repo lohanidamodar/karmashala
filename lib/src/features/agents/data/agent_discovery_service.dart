@@ -9,7 +9,10 @@ import '../domain/agent_installation.dart';
 import '../domain/agent_kind.dart';
 import '../domain/agent_registry.dart';
 
-/// The executable base name probed for each agent kind, from the registry.
+/// The executable base name probed for one of the agents that has a protocol
+/// adapter, from the registry. Identity is the descriptor id everywhere else;
+/// this stays enum-keyed only for the callers that already had an [AgentKind]
+/// in hand.
 String agentExecutableName(AgentKind kind) =>
     AgentRegistry.builtIn.forKind(kind)!.binaries.windows.first;
 
@@ -96,22 +99,20 @@ class AgentDiscoveryService {
 
   /// Discovered agents as persistable installations.
   ///
-  /// Descriptors without an [AgentKind] are dropped: `AgentInstallation` is
-  /// still keyed by that enum, so a registry-only agent can be discovered and
-  /// status-detected but not yet stored. Widening the persisted key is the
-  /// follow-up recorded in the loop-28 design doc.
+  /// Every descriptor that was found becomes an installation, keyed by its
+  /// `AgentDescriptor.id`. An agent needs no `AgentKind` member to be stored —
+  /// only a registry entry.
   Future<List<AgentInstallation>> discover() async {
     final found = await probeAll();
     return [
       for (final agent in found)
-        if (agent.descriptor.kind != null)
-          AgentInstallation(
-            id: ids.newId(),
-            agentKind: agent.descriptor.kind!,
-            executable: agent.executable,
-            version: agent.version,
-            createdAt: clock.nowUtc(),
-          ),
+        AgentInstallation(
+          id: ids.newId(),
+          agentId: agent.descriptor.id,
+          executable: agent.executable,
+          version: agent.version,
+          createdAt: clock.nowUtc(),
+        ),
     ];
   }
 

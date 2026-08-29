@@ -1,4 +1,3 @@
-import '../../agents/domain/agent_kind.dart';
 import '../../environments/domain/environment_path.dart';
 
 /// A coding-agent session discovered on disk from a CLI's own store (Claude
@@ -16,8 +15,9 @@ class DetectedSession {
     this.entrypoint,
   });
 
-  /// Which CLI produced this session (`claudeCode` or `codex`).
-  final AgentKind cli;
+  /// The `AgentDescriptor.id` of the CLI that produced this session
+  /// (`claudeCode` or `codex`).
+  final String cli;
 
   /// The CLI's session identifier (Claude: file name; Codex: rollout id).
   final String sessionId;
@@ -73,5 +73,5 @@ class DetectedSession {
   int get hashCode => Object.hash(cli, sessionId, filePath);
 
   @override
-  String toString() => 'DetectedSession(${cli.name}, $sessionId, ${cwd.path})';
+  String toString() => 'DetectedSession($cli, $sessionId, ${cwd.path})';
 }

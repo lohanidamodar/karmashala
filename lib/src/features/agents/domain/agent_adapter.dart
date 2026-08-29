@@ -1,7 +1,6 @@
 import '../../environments/domain/environment_path.dart';
 import '../../settings/domain/permission_mode.dart';
 import 'agent_installation.dart';
-import 'agent_kind.dart';
 
 /// A normalized event emitted by an agent, before it is persisted.
 ///
@@ -75,8 +74,8 @@ abstract interface class AgentSession {
 /// traffic into normalized [AgentEvent]s (ADR 0003). Loop 6 ships only a fake;
 /// real adapters arrive in Loops 7 (Codex), 8 (Claude Code) and 10 (Antigravity).
 abstract interface class AgentAdapter {
-  /// The agent kind this adapter handles.
-  AgentKind get kind;
+  /// The `AgentDescriptor.id` of the agent this adapter handles.
+  String get agentId;
 
   /// Starts a run for [launch], returning a live [AgentSession].
   AgentSession start(AgentLaunch launch);

@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/application/detected_project_merger.dart';
 import 'package:chitragupta/src/features/cli_detection/domain/detected_session.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
@@ -10,7 +10,7 @@ void main() {
   final envById = {'windows': windowsEnv(), 'wsl:Ubuntu': wslEnv()};
 
   DetectedSession sess({
-    required AgentKind cli,
+    required String cli,
     required String env,
     required String path,
     String? entrypoint,
@@ -29,13 +29,13 @@ void main() {
   test('merges the same folder seen via Windows Claude and WSL Codex', () {
     final projects = mergeDetectedProjects([
       sess(
-        cli: AgentKind.claudeCode,
+        cli: AgentIds.claudeCode,
         env: 'windows',
         path: r'G:\dev\x',
         id: 'a',
       ),
       sess(
-        cli: AgentKind.codex,
+        cli: AgentIds.codex,
         env: 'wsl:Ubuntu',
         path: '/mnt/g/dev/x',
         id: 'b',
@@ -47,21 +47,21 @@ void main() {
       'a',
       'b',
     });
-    expect(projects.single.countFor(AgentKind.claudeCode), 1);
-    expect(projects.single.countFor(AgentKind.codex), 1);
+    expect(projects.single.countFor(AgentIds.claudeCode), 1);
+    expect(projects.single.countFor(AgentIds.codex), 1);
     expect(projects.single.environmentIds, {'windows', 'wsl:Ubuntu'});
   });
 
   test('SDK-spawned subagents are nested, not top-level', () {
     final projects = mergeDetectedProjects([
       sess(
-        cli: AgentKind.claudeCode,
+        cli: AgentIds.claudeCode,
         env: 'windows',
         path: r'G:\dev\x',
         id: 'real',
       ),
       sess(
-        cli: AgentKind.claudeCode,
+        cli: AgentIds.claudeCode,
         env: 'windows',
         path: r'G:\dev\x',
         id: 'sub',
@@ -77,17 +77,12 @@ void main() {
   test('WSL-native paths stay separate from Windows projects', () {
     final projects = mergeDetectedProjects([
       sess(
-        cli: AgentKind.claudeCode,
+        cli: AgentIds.claudeCode,
         env: 'windows',
         path: r'G:\dev\x',
         id: 'a',
       ),
-      sess(
-        cli: AgentKind.codex,
-        env: 'wsl:Ubuntu',
-        path: '/home/me/y',
-        id: 'b',
-      ),
+      sess(cli: AgentIds.codex, env: 'wsl:Ubuntu', path: '/home/me/y', id: 'b'),
     ], envById);
     expect(projects.length, 2);
   });

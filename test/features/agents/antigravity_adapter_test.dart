@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/antigravity_adapter.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_adapter.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_event_types.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,7 +77,7 @@ void main() {
       AgentLaunch(
         workingDirectory: repository().path,
         installation: agentInstallation(
-          kind: AgentKind.antigravity,
+          agentId: AgentIds.antigravity,
           path: r'C:\bin\antigravity.exe',
         ),
       ),

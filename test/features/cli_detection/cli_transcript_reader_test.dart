@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/data/cli_transcript_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,7 +25,7 @@ void main() {
       '{"type":"summary"}',
     ]);
 
-    final messages = await readCliTranscript(file.path, AgentKind.claudeCode);
+    final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
 
     expect(messages.map((m) => '${m.role}:${m.text}'), [
       'user:hi there',
@@ -43,7 +43,7 @@ void main() {
           '"content":[{"type":"output_text","text":"done"}]}}',
     ]);
 
-    final messages = await readCliTranscript(file.path, AgentKind.codex);
+    final messages = await readCliTranscript(file.path, AgentIds.codex);
 
     expect(messages.map((m) => '${m.role}:${m.text}'), [
       'user:do the thing',
@@ -54,7 +54,7 @@ void main() {
   test('returns empty for a missing file', () async {
     final messages = await readCliTranscript(
       '${dir.path}/nope.jsonl',
-      AgentKind.claudeCode,
+      AgentIds.claudeCode,
     );
     expect(messages, isEmpty);
   });

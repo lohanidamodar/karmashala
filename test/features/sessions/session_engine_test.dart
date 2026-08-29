@@ -4,7 +4,7 @@ import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/data/fake_agent_adapter.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_adapter.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:chitragupta/src/features/git/application/worktree_service.dart';
@@ -46,7 +46,7 @@ void main() {
       runnerFactory: FakeCommandRunnerFactory(),
       environmentDao: ExecutionEnvironmentDao(db),
     ),
-    resolveAdapter: resolver ?? (kind) => FakeAgentAdapter(kind: kind),
+    resolveAdapter: resolver ?? (agentId) => FakeAgentAdapter(agentId: agentId),
     clock: FixedClock(testTime),
     ids: SequentialIdGenerator(),
   );
@@ -176,7 +176,8 @@ void main() {
 
   test('a self-completing agent marks the session completed', () async {
     final engine = buildEngine(
-      resolver: (kind) => FakeAgentAdapter(kind: kind, autoComplete: true),
+      resolver: (agentId) =>
+          FakeAgentAdapter(agentId: agentId, autoComplete: true),
     );
     final session = await engine.start(
       repository: repository(),
@@ -196,7 +197,7 @@ class _CapturingAdapter implements AgentAdapter {
   AgentLaunch? captured;
 
   @override
-  AgentKind get kind => AgentKind.claudeCode;
+  String get agentId => AgentIds.claudeCode;
 
   @override
   AgentSession start(AgentLaunch launch) {

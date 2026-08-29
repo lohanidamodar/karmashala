@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../agents/domain/agent_kind.dart';
+import '../../agents/domain/agent_ids.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/detected_session.dart';
 
@@ -100,7 +100,7 @@ class ClaudeStoreReader {
     } catch (_) {}
 
     return DetectedSession(
-      cli: AgentKind.claudeCode,
+      cli: AgentIds.claudeCode,
       sessionId: p.basenameWithoutExtension(file.path),
       cwd: EnvironmentPath(environmentId: environmentId, path: cwd),
       filePath: file.path,

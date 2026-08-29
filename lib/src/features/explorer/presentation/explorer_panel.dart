@@ -9,7 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/desktop_dialog.dart';
-import '../../agents/domain/agent_kind.dart';
+import '../../agents/domain/agent_registry.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
@@ -832,7 +832,7 @@ class _ImportedSessionRow extends ConsumerWidget {
     final actions = ref.read(sessionActionsProvider);
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-    final cliLabel = session.cli == AgentKind.codex ? 'Codex' : 'Claude';
+    final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
 
     Future<void> onMenu(String action) async {
       switch (action) {

@@ -5,7 +5,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../app/widgets/desktop_menu.dart';
-import '../../agents/domain/agent_kind.dart';
+import '../../agents/domain/agent_ids.dart';
+import '../../agents/domain/agent_registry.dart';
 import '../application/cli_detection_providers.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
@@ -109,8 +110,8 @@ class _ProjectTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final claude = project.countFor(AgentKind.claudeCode);
-    final codex = project.countFor(AgentKind.codex);
+    final claude = project.countFor(AgentIds.claudeCode);
+    final codex = project.countFor(AgentIds.codex);
     return ExpansionTile(
       leading: const Icon(AppIcons.folder),
       title: Text(project.name),
@@ -154,13 +155,13 @@ class _SessionTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final controller = ref.read(detectedProjectsControllerProvider.notifier);
-    final cliLabel = session.cli == AgentKind.codex ? 'Codex' : 'Claude';
+    final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
     return ListTile(
       dense: true,
       leading: subagent
           ? const Icon(AppIcons.arrowBendDownRight, size: 16)
           : Icon(
-              session.cli == AgentKind.codex
+              session.cli == AgentIds.codex
                   ? AppIcons.terminal
                   : AppIcons.robot,
               size: 16,

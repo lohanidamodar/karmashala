@@ -6,7 +6,6 @@ import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_kind.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/detected_project_merger.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
@@ -62,7 +61,7 @@ class SessionActions {
         );
       }
       final detected = await _detectedSessionById(
-        installation.agentKind,
+        installation.agentId,
         externalId,
       );
       if (detected == null) {
@@ -117,11 +116,11 @@ class SessionActions {
     final installs = _ref
         .read(agentInstallationDaoProvider)
         .getByEnvironment(session.environmentId)
-        .where((i) => i.agentKind == session.cli)
+        .where((i) => i.agentId == session.cli)
         .toList();
     if (installs.isEmpty) {
       throw StateError(
-        'No ${session.cli.name} installation in ${session.environmentId}. '
+        'No ${session.cli} installation in ${session.environmentId}. '
         'Run "Discover agents" in Settings first.',
       );
     }
@@ -192,7 +191,7 @@ class SessionActions {
       }
       final permission = _ref
           .read(settingsControllerProvider)
-          .permissionsFor(installation.agentKind)
+          .permissionsFor(installation.agentId)
           .existingSessions;
       await engine.resume(
         session: session,
@@ -261,11 +260,18 @@ class SessionActions {
         permissionMode ??
         _ref
             .read(settingsControllerProvider)
-            .permissionsFor(installation.agentKind)
+            .permissionsFor(installation.agentId)
             .newSessions;
+    // Permission flags come from the agent's own registry entry, so an agent
+    // the app has no hardcoded knowledge of gets its declared flags — or none —
+    // rather than another agent's.
     final agentArgs = [
       exe,
-      ...permissionArgsFor(installation.agentKind.name, mode),
+      ...?_ref
+          .read(agentRegistryProvider)
+          .byId(installation.agentId)
+          ?.launch
+          .permissionArgumentsFor(mode),
     ];
     final command = env.wslDistribution != null
         ? [
@@ -294,14 +300,14 @@ class SessionActions {
     final installs = _ref
         .read(agentInstallationDaoProvider)
         .getByEnvironment(session.environmentId)
-        .where((i) => i.agentKind == session.cli)
+        .where((i) => i.agentId == session.cli)
         .toList();
     final exe = installs.isNotEmpty
         ? installs.first.executable.path
-        : session.cli.name;
+        : session.cli;
     return shellCommandLine(
       agentExecutable: exe,
-      cli: session.cli.name,
+      cli: session.cli,
       externalId: session.externalId,
       permissionMode: _ref
           .read(settingsControllerProvider)
@@ -327,11 +333,11 @@ class SessionActions {
     }
     return shellCommandLine(
       agentExecutable: installation.executable.path,
-      cli: installation.agentKind.name,
+      cli: installation.agentId,
       externalId: session.externalSessionId,
       permissionMode: _ref
           .read(settingsControllerProvider)
-          .permissionsFor(installation.agentKind)
+          .permissionsFor(installation.agentId)
           .existingSessions,
       cwd: (session.worktree ?? repo.path).path,
     );
@@ -359,15 +365,15 @@ class SessionActions {
         resolveDefaultInstallation(
           installs,
           defaultInstallationId: settings.defaultAgentInstallationId,
-          defaultKind: settings.defaultAgent,
+          defaultAgentId: settings.defaultAgent,
         ) ??
         installs.first;
     return shellCommandLine(
       agentExecutable: installation.executable.path,
-      cli: installation.agentKind.name,
+      cli: installation.agentId,
       permissionMode: _ref
           .read(settingsControllerProvider)
-          .permissionsFor(installation.agentKind)
+          .permissionsFor(installation.agentId)
           .newSessions,
       cwd: repo.path.path,
     );
@@ -399,7 +405,7 @@ class SessionActions {
         resolveDefaultInstallation(
           installs,
           defaultInstallationId: settings.defaultAgentInstallationId,
-          defaultKind: settings.defaultAgent,
+          defaultAgentId: settings.defaultAgent,
         ) ??
         installs.first;
     await startNewInSystemTerminal(
@@ -431,14 +437,14 @@ class SessionActions {
     final installs = _ref
         .read(agentInstallationDaoProvider)
         .getByEnvironment(session.environmentId)
-        .where((i) => i.agentKind == session.cli)
+        .where((i) => i.agentId == session.cli)
         .toList();
     final agentExecutable = installs.isNotEmpty
         ? installs.first.executable.path
-        : session.cli.name;
+        : session.cli;
     final command = resumeCommandLine(
       agentExecutable: agentExecutable,
-      cli: session.cli.name,
+      cli: session.cli,
       externalId: session.externalId,
       environment: env,
       cwd: repo.path,
@@ -497,13 +503,13 @@ class SessionActions {
     }
     final command = resumeCommandLine(
       agentExecutable: installation.executable.path,
-      cli: installation.agentKind.name,
+      cli: installation.agentId,
       externalId: externalId,
       environment: env,
       cwd: session.worktree ?? repo.path,
       permissionMode: _ref
           .read(settingsControllerProvider)
-          .permissionsFor(installation.agentKind)
+          .permissionsFor(installation.agentId)
           .existingSessions,
     );
     final cwd = env.wslDistribution == null
@@ -552,7 +558,7 @@ class SessionActions {
       if (project == null) return null;
 
       final candidates = [...project.sessions, ...project.subagentSessions]
-          .where((candidate) => candidate.cli == installation.agentKind)
+          .where((candidate) => candidate.cli == installation.agentId)
           .where(
             (candidate) =>
                 _ref
@@ -596,7 +602,7 @@ class SessionActions {
       value.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
 
   Future<DetectedSession?> _detectedSessionById(
-    AgentKind kind,
+    String agentId,
     String externalId,
   ) async {
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
@@ -612,7 +618,7 @@ class SessionActions {
         ...project.sessions,
         ...project.subagentSessions,
       ]) {
-        if (session.cli == kind && session.sessionId == externalId) {
+        if (session.cli == agentId && session.sessionId == externalId) {
           return session;
         }
       }

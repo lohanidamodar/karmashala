@@ -33,7 +33,7 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         agentAdapterResolverProvider.overrideWithValue(
-          (kind) => FakeAgentAdapter(kind: kind),
+          (agentId) => FakeAgentAdapter(agentId: agentId),
         ),
       ],
     );

@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/core/database/row_mapping.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -49,7 +50,35 @@ void main() {
   });
 
   test('a null version is preserved', () {
-    dao.insert(agentInstallation(kind: AgentKind.codex, version: null));
+    dao.insert(agentInstallation(agentId: AgentIds.codex, version: null));
     expect(dao.getById('a1')!.version, isNull);
+  });
+
+  test('reads back a row written before the agent-id migration', () {
+    db.execute(
+      'INSERT INTO agent_installations '
+      '(id, agent_kind, environment_id, executable_path, version, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?);',
+      [
+        'legacy',
+        'claudeCode',
+        'windows',
+        r'C:\bin\claude.exe',
+        '1.0.0',
+        isoFromDate(testTime),
+      ],
+    );
+    expect(dao.getById('legacy')!.agentId, AgentIds.claudeCode);
+  });
+
+  test('an agent with no AgentKind member persists and round-trips', () {
+    dao.insert(agentInstallation(id: 'rover', agentId: 'roverCli'));
+    expect(dao.getById('rover')!.agentId, 'roverCli');
+    expect(
+      dao
+          .getByIdentity('roverCli', 'windows', r'C:\Users\me\.bin\claude.exe')!
+          .id,
+      'rover',
+    );
   });
 }

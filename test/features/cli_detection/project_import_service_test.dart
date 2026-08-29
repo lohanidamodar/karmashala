@@ -1,5 +1,5 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:chitragupta/src/features/cli_detection/domain/detected_project.dart';
@@ -19,7 +19,7 @@ void main() {
   late ImportedSessionDao importedDao;
 
   DetectedSession session(String id, {String? entrypoint}) => DetectedSession(
-    cli: AgentKind.claudeCode,
+    cli: AgentIds.claudeCode,
     sessionId: id,
     cwd: const EnvironmentPath(environmentId: 'windows', path: r'C:\src\app'),
     filePath: 'C:\\store\\$id.jsonl',

@@ -1,4 +1,3 @@
-import '../../agents/domain/agent_kind.dart';
 import 'app_theme_mode.dart';
 import 'mini_position.dart';
 import 'permission_mode.dart';
@@ -79,17 +78,19 @@ class Settings {
     this.pinnedSessionIds = const [],
   });
 
-  /// The agent kind pre-selected when starting a new session, or `null` for
-  /// none. Kept in sync with [defaultAgentInstallationId].
-  final AgentKind? defaultAgent;
+  /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
+  /// session, or `null` for none. Kept in sync with
+  /// [defaultAgentInstallationId].
+  final String? defaultAgent;
 
   /// The specific installation chosen as default (e.g. Claude on WSL vs Claude
   /// on Windows), by installation id. Preferred over [defaultAgent] when the
   /// installation is still present; falls back to the kind otherwise.
   final String? defaultAgentInstallationId;
 
-  /// Per-agent permission preferences (defaults to "ask" when absent).
-  final Map<AgentKind, AgentPermissions> permissions;
+  /// Per-agent permission preferences, keyed by `AgentDescriptor.id` (defaults
+  /// to "ask" when absent).
+  final Map<String, AgentPermissions> permissions;
 
   /// The app theme preference.
   final AppThemeMode themeMode;
@@ -170,14 +171,14 @@ class Settings {
   bool isSessionPinned(String sessionId) =>
       pinnedSessionIds.contains(sessionId);
 
-  AgentPermissions permissionsFor(AgentKind kind) =>
-      permissions[kind] ?? const AgentPermissions();
+  AgentPermissions permissionsFor(String agentId) =>
+      permissions[agentId] ?? const AgentPermissions();
 
   Settings copyWith({
-    AgentKind? defaultAgent,
+    String? defaultAgent,
     bool clearDefaultAgent = false,
     String? defaultAgentInstallationId,
-    Map<AgentKind, AgentPermissions>? permissions,
+    Map<String, AgentPermissions>? permissions,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
     bool? keepAwake,
@@ -235,11 +236,11 @@ class Settings {
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
   );
 
-  Settings withPermissions(AgentKind kind, AgentPermissions value) =>
-      copyWith(permissions: {...permissions, kind: value});
+  Settings withPermissions(String agentId, AgentPermissions value) =>
+      copyWith(permissions: {...permissions, agentId: value});
 
   Map<String, dynamic> toJson() => {
-    if (defaultAgent != null) 'defaultAgent': defaultAgent!.name,
+    if (defaultAgent != null) 'defaultAgent': defaultAgent,
     if (defaultAgentInstallationId != null)
       'defaultAgentInstallationId': defaultAgentInstallationId,
     'themeMode': themeMode.name,
@@ -268,28 +269,29 @@ class Settings {
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'permissions': {
-      for (final entry in permissions.entries)
-        entry.key.name: entry.value.toJson(),
+      for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
   };
 
   static Settings fromJson(Map<String, dynamic> json) {
-    AgentKind? defaultAgent;
     final defaultName = json['defaultAgent'];
-    for (final k in AgentKind.values) {
-      if (k.name == defaultName) defaultAgent = k;
-    }
+    final defaultAgent = defaultName is String && defaultName.isNotEmpty
+        ? defaultName
+        : null;
     var themeMode = AppThemeMode.system;
     for (final m in AppThemeMode.values) {
       if (m.name == json['themeMode']) themeMode = m;
     }
-    final permissions = <AgentKind, AgentPermissions>{};
+    // Read whatever agent ids the file holds rather than a fixed list, so a
+    // newly registered agent's preferences survive a round-trip.
+    final permissions = <String, AgentPermissions>{};
     final perms = json['permissions'];
     if (perms is Map) {
-      for (final k in AgentKind.values) {
-        final raw = perms[k.name];
-        if (raw is Map<String, dynamic>) {
-          permissions[k] = AgentPermissions.fromJson(raw);
+      for (final entry in perms.entries) {
+        final key = entry.key;
+        final raw = entry.value;
+        if (key is String && raw is Map<String, dynamic>) {
+          permissions[key] = AgentPermissions.fromJson(raw);
         }
       }
     }
@@ -417,8 +419,8 @@ class Settings {
   }
 
   static bool _mapEquals(
-    Map<AgentKind, AgentPermissions> a,
-    Map<AgentKind, AgentPermissions> b,
+    Map<String, AgentPermissions> a,
+    Map<String, AgentPermissions> b,
   ) {
     if (a.length != b.length) return false;
     for (final entry in a.entries) {

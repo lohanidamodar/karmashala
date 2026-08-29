@@ -1,6 +1,5 @@
 import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
-import '../../agents/domain/agent_kind.dart';
 import '../domain/imported_session.dart';
 
 /// Data-access for imported CLI sessions. Hand-written SQL, no codegen.
@@ -22,7 +21,7 @@ class ImportedSessionDao {
       [
         session.id,
         session.repositoryId,
-        session.cli.name,
+        session.cli,
         session.externalId,
         session.environmentId,
         session.title,
@@ -44,10 +43,10 @@ class ImportedSessionDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  ImportedSession? getByExternal(AgentKind cli, String externalId) {
+  ImportedSession? getByExternal(String cli, String externalId) {
     final rows = _db.query(
       'SELECT * FROM imported_sessions WHERE source = ? AND external_id = ?;',
-      [cli.name, externalId],
+      [cli, externalId],
     );
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
@@ -83,7 +82,7 @@ class ImportedSessionDao {
   ImportedSession _fromRow(Map<String, Object?> row) => ImportedSession(
     id: row['id']! as String,
     repositoryId: row['repository_id']! as String,
-    cli: AgentKind.values.byName(row['source']! as String),
+    cli: row['source']! as String,
     externalId: row['external_id']! as String,
     environmentId: row['environment_id']! as String,
     title: row['title'] as String?,

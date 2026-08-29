@@ -12,7 +12,8 @@ import '../../agents/application/claude_accounts_controller.dart';
 import '../../agents/data/agent_usage_service.dart';
 import '../../agents/data/claude_auth_service.dart';
 import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_kind.dart';
+import '../../agents/domain/agent_ids.dart';
+import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_usage.dart';
 import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
@@ -204,7 +205,7 @@ class SettingsScreen extends ConsumerWidget {
                       DropdownMenuItem(
                         value: install.id,
                         child: Text(
-                          '${_agentLabel(install.agentKind)} · '
+                          '${_agentLabel(install.agentId)} · '
                           '${install.environmentId}',
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -215,7 +216,7 @@ class SettingsScreen extends ConsumerWidget {
                         ? null
                         : installations.firstWhere((i) => i.id == id);
                     controller.setDefaultAgentInstallation(
-                      install?.agentKind,
+                      install?.agentId,
                       install?.id,
                     );
                   },
@@ -245,7 +246,7 @@ class SettingsScreen extends ConsumerWidget {
                           dense: true,
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(AppIcons.robot, size: 18),
-                          title: Text(_agentLabel(i.agentKind)),
+                          title: Text(_agentLabel(i.agentId)),
                           subtitle: Text(
                             '${i.environmentId} · ${i.executable.path}'
                             '${i.version == null ? '' : ' · v${i.version}'}',
@@ -262,25 +263,34 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _ClaudeAccountsSection(
             installations: installations
-                .where((i) => i.agentKind == AgentKind.claudeCode)
+                .where((i) => i.agentId == AgentIds.claudeCode)
                 .toList(),
           ),
           _UsageSection(
+            // An allowlist, not a blocklist: an agent we have no usage
+            // endpoint for is simply not offered one.
             installations: installations
-                .where((i) => i.agentKind != AgentKind.antigravity)
+                .where(
+                  (i) =>
+                      i.agentId == AgentIds.claudeCode ||
+                      i.agentId == AgentIds.codex,
+                )
                 .toList(),
           ),
           _Section(
             title: 'PERMISSIONS',
             child: Column(
               children: [
-                for (final kind in AgentKind.values)
+                for (final descriptor in AgentRegistry.builtIn.descriptors)
                   _PermissionCard(
-                    kind: kind,
-                    permissions: settings.permissionsFor(kind),
-                    onNew: (m) => controller.setNewSessionPermission(kind, m),
-                    onExisting: (m) =>
-                        controller.setExistingSessionPermission(kind, m),
+                    agentId: descriptor.id,
+                    permissions: settings.permissionsFor(descriptor.id),
+                    onNew: (m) =>
+                        controller.setNewSessionPermission(descriptor.id, m),
+                    onExisting: (m) => controller.setExistingSessionPermission(
+                      descriptor.id,
+                      m,
+                    ),
                   ),
               ],
             ),
@@ -290,11 +300,8 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  static String _agentLabel(AgentKind kind) => switch (kind) {
-    AgentKind.claudeCode => 'Claude Code',
-    AgentKind.codex => 'Codex',
-    AgentKind.antigravity => 'Antigravity',
-  };
+  static String _agentLabel(String agentId) =>
+      AgentRegistry.builtIn.displayNameFor(agentId);
 }
 
 class _Section extends StatelessWidget {
@@ -327,13 +334,13 @@ class _Section extends StatelessWidget {
 
 class _PermissionCard extends StatelessWidget {
   const _PermissionCard({
-    required this.kind,
+    required this.agentId,
     required this.permissions,
     required this.onNew,
     required this.onExisting,
   });
 
-  final AgentKind kind;
+  final String agentId;
   final AgentPermissions permissions;
   final ValueChanged<PermissionMode> onNew;
   final ValueChanged<PermissionMode> onExisting;
@@ -352,7 +359,7 @@ class _PermissionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              SettingsScreen._agentLabel(kind),
+              SettingsScreen._agentLabel(agentId),
               style: theme.textTheme.titleSmall,
             ),
             const SizedBox(height: Insets.sm),
@@ -1049,7 +1056,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = SettingsScreen._agentLabel(widget.installation.agentKind);
+    final label = SettingsScreen._agentLabel(widget.installation.agentId);
     final usage = _usage;
     return Card(
       margin: const EdgeInsets.only(bottom: Insets.sm),

@@ -10,7 +10,7 @@ import '../../../core/util/json_object_splice.dart';
 import '../../cli_detection/application/cli_detection_service.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../domain/agent_installation.dart';
-import '../domain/agent_kind.dart';
+import '../domain/agent_ids.dart';
 import '../domain/claude_account.dart';
 import '../domain/claude_auth_snapshot.dart';
 
@@ -236,10 +236,10 @@ class ClaudeAuthService {
   }
 }
 
-/// Whether [installation] is a Claude Code installation (the only kind account
+/// Whether [installation] is a Claude Code installation (the only agent account
 /// switching supports for now).
 bool isClaudeInstallation(AgentInstallation installation) =>
-    installation.agentKind == AgentKind.claudeCode;
+    installation.agentId == AgentIds.claudeCode;
 
 /// Builds a [ClaudeAuthSnapshot] from decoded credential/config maps. Pure.
 ClaudeAuthSnapshot parseClaudeSnapshot({

@@ -6,7 +6,7 @@ import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
-import '../domain/agent_kind.dart';
+import '../domain/agent_ids.dart';
 import 'streaming_agent_session.dart';
 
 /// Builds the Antigravity CLI arguments for [launch] (compatibility; provisional).
@@ -85,7 +85,7 @@ class AntigravityAdapter implements AgentAdapter {
   final ExecutionEnvironmentDao environmentDao;
 
   @override
-  AgentKind get kind => AgentKind.antigravity;
+  String get agentId => AgentIds.antigravity;
 
   @override
   AgentSession start(AgentLaunch launch) {

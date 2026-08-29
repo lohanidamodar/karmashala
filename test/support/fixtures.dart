@@ -1,5 +1,5 @@
 import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
@@ -59,13 +59,13 @@ Repository repository({
 
 AgentInstallation agentInstallation({
   String id = 'a1',
-  AgentKind kind = AgentKind.claudeCode,
+  String agentId = AgentIds.claudeCode,
   String environmentId = 'windows',
   String path = r'C:\Users\me\.bin\claude.exe',
   String? version = '1.0.0',
 }) => AgentInstallation(
   id: id,
-  agentKind: kind,
+  agentId: agentId,
   executable: EnvironmentPath(environmentId: environmentId, path: path),
   version: version,
   createdAt: testTime,

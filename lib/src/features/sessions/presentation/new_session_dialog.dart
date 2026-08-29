@@ -96,7 +96,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             useWorktree: _useWorktree,
             permissionMode: ref
                 .read(settingsControllerProvider)
-                .permissionsFor(installation.agentKind)
+                .permissionsFor(installation.agentId)
                 .newSessions,
           );
       ref.read(sessionsRevisionProvider.notifier).bump();
@@ -155,7 +155,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           resolveDefaultInstallation(
             installations,
             defaultInstallationId: settings.defaultAgentInstallationId,
-            defaultKind: settings.defaultAgent,
+            defaultAgentId: settings.defaultAgent,
           ) ??
           installations.first;
     }
@@ -198,7 +198,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     DropdownMenuItem(
                       value: i,
                       child: Text(
-                        '${i.agentKind.name} · ${i.environmentId}'
+                        '${i.agentId} · ${i.environmentId}'
                         '${i.version == null ? '' : ' (${i.version})'}',
                       ),
                     ),

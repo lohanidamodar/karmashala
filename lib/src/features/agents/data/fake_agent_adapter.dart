@@ -2,7 +2,7 @@ import 'dart:async';
 
 import '../../sessions/domain/session_event_types.dart';
 import '../domain/agent_adapter.dart';
-import '../domain/agent_kind.dart';
+import '../domain/agent_ids.dart';
 
 /// A fake agent used to exercise the session engine end-to-end before any real
 /// protocol exists (Loop 6). It greets on start and echoes each message back.
@@ -11,13 +11,13 @@ import '../domain/agent_kind.dart';
 /// deterministically.
 class FakeAgentAdapter implements AgentAdapter {
   FakeAgentAdapter({
-    this.kind = AgentKind.claudeCode,
+    this.agentId = AgentIds.claudeCode,
     this.greeting = 'Fake agent ready.',
     this.autoComplete = false,
   });
 
   @override
-  final AgentKind kind;
+  final String agentId;
 
   final String greeting;
 

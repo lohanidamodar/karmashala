@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/data/claude_store_reader.dart';
 import 'package:chitragupta/src/features/cli_detection/data/codex_store_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +31,7 @@ void main() {
       );
       expect(sessions.length, 1);
       final s = sessions.single;
-      expect(s.cli, AgentKind.claudeCode);
+      expect(s.cli, AgentIds.claudeCode);
       expect(s.sessionId, 'abc');
       expect(s.title, 'My Title'); // custom-title beats ai-title
       expect(s.preview, 'hello world');
@@ -69,7 +69,7 @@ void main() {
       );
       expect(sessions.length, 1);
       final s = sessions.single;
-      expect(s.cli, AgentKind.codex);
+      expect(s.cli, AgentIds.codex);
       expect(s.sessionId, 'u1');
       expect(s.cwd.path, '/mnt/g/dev/x');
       expect(s.title, 'My Thread');

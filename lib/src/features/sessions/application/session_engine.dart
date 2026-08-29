@@ -5,7 +5,6 @@ import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
 import '../../agents/domain/agent_adapter.dart';
 import '../../agents/domain/agent_installation.dart';
-import '../../agents/domain/agent_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../git/application/worktree_service.dart';
 import '../../repositories/domain/repository.dart';
@@ -18,9 +17,9 @@ import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_status.dart';
 
-/// Resolves the [AgentAdapter] for an agent kind. Loop 6 returns a fake for every
-/// kind; real adapters are registered in later loops.
-typedef AdapterResolver = AgentAdapter Function(AgentKind kind);
+/// Resolves the [AgentAdapter] for an `AgentDescriptor.id`. Agents with a
+/// protocol adapter get theirs; anything else gets the generic one.
+typedef AdapterResolver = AgentAdapter Function(String agentId);
 
 /// Runs agent sessions: persists the normalized, append-only event log, manages
 /// session status, and supports multiple concurrent sessions.
@@ -160,7 +159,7 @@ class SessionEngine {
       'title': title,
     });
 
-    final agent = resolveAdapter(installation.agentKind).start(
+    final agent = resolveAdapter(installation.agentId).start(
       AgentLaunch(
         workingDirectory: workingDirectory,
         installation: installation,

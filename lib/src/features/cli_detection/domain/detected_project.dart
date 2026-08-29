@@ -1,4 +1,3 @@
-import '../../agents/domain/agent_kind.dart';
 import 'detected_session.dart';
 
 /// A project discovered from CLI session stores: one folder, merged across CLIs
@@ -32,7 +31,7 @@ class DetectedProject {
     return parts.isEmpty || parts.last.isEmpty ? cleaned : parts.last;
   }
 
-  int countFor(AgentKind cli) => sessions.where((s) => s.cli == cli).length;
+  int countFor(String cli) => sessions.where((s) => s.cli == cli).length;
 
   Set<String> get environmentIds => {
     for (final s in [...sessions, ...subagentSessions]) s.environmentId,

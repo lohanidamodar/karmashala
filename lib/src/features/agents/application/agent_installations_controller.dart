@@ -6,7 +6,6 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../data/agent_discovery_service.dart';
 import '../domain/agent_installation.dart';
-import '../domain/agent_kind.dart';
 import 'agent_providers.dart';
 
 /// Holds the known agent installations and can (re)discover them across every
@@ -40,7 +39,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
       for (final installation in found) {
         discovered.add(installation);
         final existing = dao.getByIdentity(
-          installation.agentKind,
+          installation.agentId,
           installation.environmentId,
           installation.executable.path,
         );
@@ -59,21 +58,21 @@ final agentInstallationsControllerProvider =
     );
 
 /// Resolves the default installation to use from [installs]: the specific one
-/// pinned by [defaultInstallationId] if still present, else the first matching
-/// [defaultKind], else `null`.
+/// pinned by [defaultInstallationId] if still present, else the first
+/// installation of [defaultAgentId], else `null`.
 AgentInstallation? resolveDefaultInstallation(
   List<AgentInstallation> installs, {
   String? defaultInstallationId,
-  AgentKind? defaultKind,
+  String? defaultAgentId,
 }) {
   if (defaultInstallationId != null) {
     for (final install in installs) {
       if (install.id == defaultInstallationId) return install;
     }
   }
-  if (defaultKind != null) {
+  if (defaultAgentId != null) {
     for (final install in installs) {
-      if (install.agentKind == defaultKind) return install;
+      if (install.agentId == defaultAgentId) return install;
     }
   }
   return null;

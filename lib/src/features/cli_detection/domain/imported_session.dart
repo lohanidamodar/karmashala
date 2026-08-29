@@ -1,5 +1,3 @@
-import '../../agents/domain/agent_kind.dart';
-
 /// A CLI session (Claude Code / Codex) imported into the workspace as read-only
 /// history, attached to one of our repositories.
 class ImportedSession {
@@ -21,8 +19,8 @@ class ImportedSession {
   final String id;
   final String repositoryId;
 
-  /// The originating CLI (`claudeCode` or `codex`).
-  final AgentKind cli;
+  /// The `AgentDescriptor.id` of the originating CLI.
+  final String cli;
 
   /// The CLI's own session id (used with [cli] to dedupe re-imports).
   final String externalId;

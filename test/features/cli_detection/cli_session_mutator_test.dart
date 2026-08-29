@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:chitragupta/src/features/cli_detection/domain/detected_session.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
@@ -20,7 +20,7 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync('{"type":"user","cwd":"/x"}\n');
     final session = DetectedSession(
-      cli: AgentKind.claudeCode,
+      cli: AgentIds.claudeCode,
       sessionId: 'abc',
       cwd: const EnvironmentPath(environmentId: 'windows', path: '/x'),
       filePath: file.path,
@@ -44,7 +44,7 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync('{}\n');
     final session = DetectedSession(
-      cli: AgentKind.codex,
+      cli: AgentIds.codex,
       sessionId: 'u1',
       cwd: const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/x'),
       filePath: rollout.path,
@@ -60,7 +60,7 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync('{}\n');
     final session = DetectedSession(
-      cli: AgentKind.claudeCode,
+      cli: AgentIds.claudeCode,
       sessionId: 'abc',
       cwd: const EnvironmentPath(environmentId: 'windows', path: '/x'),
       filePath: file.path,

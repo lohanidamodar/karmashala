@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
-import '../../agents/domain/agent_kind.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/mini_position.dart';
@@ -114,16 +113,19 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setDefaultAgent(AgentKind? kind) {
-    state = state.copyWith(defaultAgent: kind, clearDefaultAgent: kind == null);
+  void setDefaultAgent(String? agentId) {
+    state = state.copyWith(
+      defaultAgent: agentId,
+      clearDefaultAgent: agentId == null,
+    );
     _save();
   }
 
   /// Sets the default to a specific installation (or clears it). Keeps
-  /// [Settings.defaultAgent] in sync with the installation's kind.
-  void setDefaultAgentInstallation(AgentKind? kind, String? installationId) {
+  /// [Settings.defaultAgent] in sync with the installation's agent id.
+  void setDefaultAgentInstallation(String? agentId, String? installationId) {
     state = state.copyWith(
-      defaultAgent: kind,
+      defaultAgent: agentId,
       clearDefaultAgent: installationId == null,
       defaultAgentInstallationId: installationId,
     );
@@ -145,18 +147,18 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setNewSessionPermission(AgentKind kind, PermissionMode mode) {
+  void setNewSessionPermission(String agentId, PermissionMode mode) {
     state = state.withPermissions(
-      kind,
-      state.permissionsFor(kind).copyWith(newSessions: mode),
+      agentId,
+      state.permissionsFor(agentId).copyWith(newSessions: mode),
     );
     _save();
   }
 
-  void setExistingSessionPermission(AgentKind kind, PermissionMode mode) {
+  void setExistingSessionPermission(String agentId, PermissionMode mode) {
     state = state.withPermissions(
-      kind,
-      state.permissionsFor(kind).copyWith(existingSessions: mode),
+      agentId,
+      state.permissionsFor(agentId).copyWith(existingSessions: mode),
     );
     _save();
   }

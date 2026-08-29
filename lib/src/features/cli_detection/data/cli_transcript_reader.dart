@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../../agents/domain/agent_kind.dart';
+import '../../agents/domain/agent_ids.dart';
 
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
@@ -18,7 +18,7 @@ class TranscriptMessage {
 /// skipped and an unreadable file yields an empty list.
 Future<List<TranscriptMessage>> readCliTranscript(
   String filePath,
-  AgentKind cli,
+  String cli,
 ) async {
   final file = File(filePath);
   if (!await file.exists()) return const [];
@@ -38,12 +38,13 @@ Future<List<TranscriptMessage>> readCliTranscript(
         continue;
       }
       if (decoded is! Map<String, dynamic>) continue;
-      switch (cli) {
-        case AgentKind.claudeCode:
-        case AgentKind.antigravity:
-          _parseClaudeLine(decoded, messages);
-        case AgentKind.codex:
-          _parseCodexLine(decoded, messages);
+      // Claude's shape is the default: it is what `claudeCode` and
+      // `antigravity` both use today, and it is the least-wrong guess for an
+      // agent we have no reader for.
+      if (cli == AgentIds.codex) {
+        _parseCodexLine(decoded, messages);
+      } else {
+        _parseClaudeLine(decoded, messages);
       }
     }
   } catch (_) {

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../agents/domain/agent_kind.dart';
+import '../../agents/domain/agent_ids.dart';
 import '../domain/detected_session.dart';
 
 /// Renames and deletes detected CLI sessions on disk, matching what each CLI
@@ -22,13 +22,13 @@ class CliSessionMutator {
     if (title.isEmpty) {
       throw ArgumentError('Title cannot be empty');
     }
-    return session.cli == AgentKind.codex
+    return session.cli == AgentIds.codex
         ? _renameCodex(session, title)
         : _renameClaude(session, title);
   }
 
   Future<void> delete(DetectedSession session) {
-    return session.cli == AgentKind.codex
+    return session.cli == AgentIds.codex
         ? _deleteCodex(session)
         : _deleteClaude(session);
   }
