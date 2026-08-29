@@ -9,6 +9,21 @@ const int kVideoPid = 0x0100;
 /// Size of one MPEG-TS packet. Every packet is exactly this long.
 const int kTsPacketSize = 188;
 
+/// Largest value the 16-bit `PES_packet_length` field can hold.
+const int kMaxPesPacketLength = 0xFFFF;
+
+/// Bytes a PES header costs on top of the access unit: 6 for the start code,
+/// stream id and length, 3 for the flags and header length, 5 for the PTS.
+const int kPesOverhead = 14;
+
+/// How often PAT/PMT are repeated, in stream microseconds.
+///
+/// FFmpeg's own muxer repeats them every 100 ms. Repeating them only on
+/// keyframes is not enough: this emulator emits a keyframe roughly every 4 s
+/// even with `i-frame-interval=1`, so a demuxer that joins the stream (or loses
+/// the tables) waits seconds before it can name the program.
+const int kTablePeriodUs = 100000;
+
 /// CRC-32/MPEG-2: polynomial 0x04C11DB7, init 0xFFFFFFFF, MSB-first, no final
 /// XOR. Required by the PSI table format.
 int mpegCrc32(List<int> data) {
@@ -32,14 +47,37 @@ int mpegCrc32(List<int> data) {
 /// standard choice for low-latency streaming, and carries the per-frame PTS
 /// scrcpy gives us.
 ///
-/// One muxer instance owns the continuity counters for one output stream, so a
-/// new consumer must get a **new** muxer — replaying previously emitted packets
-/// to a second consumer duplicates continuity counters and the demuxer reports
-/// corrupt packets.
+/// One muxer instance owns the continuity counters and the timestamp base for
+/// one output stream, so a new consumer must get a **new** muxer — replaying
+/// previously emitted packets to a second consumer duplicates continuity
+/// counters and the demuxer reports corrupt packets.
 class TsMuxer {
+  TsMuxer({this.tablePeriodUs = kTablePeriodUs});
+
+  /// How often PAT/PMT are repeated, in stream microseconds.
+  final int tablePeriodUs;
+
   int _videoContinuity = 0;
   int _patContinuity = 0;
   int _pmtContinuity = 0;
+
+  /// PTS of the first frame muxed. Everything is emitted relative to it, so the
+  /// stream starts at zero and the 33-bit timestamp cannot wrap inside any
+  /// plausible session — scrcpy hands us the device's monotonic clock, which on
+  /// a device up for more than ~26 h would otherwise overflow mid-stream.
+  int? _basePtsUs;
+  int _lastPtsUs = 0;
+  int _lastTablesUs = 0;
+  bool _startedVideo = false;
+
+  /// Stream time of the most recently muxed frame, relative to the first.
+  int get streamTimeUs => _lastPtsUs;
+
+  /// PTS of the first frame muxed, or `null` before any frame.
+  ///
+  /// A caller measuring latency needs this: the player reports its position
+  /// relative to the start of the stream, and this is what that start was.
+  int? get basePtsUs => _basePtsUs;
 
   /// PAT + PMT. Emit before any frame so the demuxer can identify the program.
   Uint8List tables() {
@@ -115,16 +153,39 @@ class TsMuxer {
 
   /// Muxes one access unit (Annex-B) presented at [ptsUs].
   ///
-  /// PAT/PMT are repeated on every keyframe so a consumer joining mid-stream can
-  /// start decoding at the next keyframe.
+  /// PAT/PMT are repeated on every keyframe and at least every
+  /// [tablePeriodUs] so a consumer joining mid-stream can start quickly.
   Uint8List frame(Uint8List accessUnit, int ptsUs, {required bool keyframe}) {
-    final out = BytesBuilder(copy: false);
-    if (keyframe) out.add(tables());
+    final base = _basePtsUs ??= ptsUs;
+    // scrcpy's timestamps are monotonic in practice, but a backwards step would
+    // be read as a timestamp discontinuity and re-buffered, so clamp.
+    final relative = ptsUs - base;
+    final ptsRelUs = relative > _lastPtsUs ? relative : _lastPtsUs;
+    _lastPtsUs = ptsRelUs;
 
-    final pts90 = (ptsUs * 9) ~/ 100; // microseconds -> 90 kHz
+    final out = BytesBuilder(copy: false);
+    if (keyframe ||
+        !_startedVideo ||
+        ptsRelUs - _lastTablesUs >= tablePeriodUs) {
+      out.add(tables());
+      _lastTablesUs = ptsRelUs;
+    }
+
+    final pts90 = (ptsRelUs * 9) ~/ 100; // microseconds -> 90 kHz
+
+    // A **known** PES_packet_length is what makes this stream low latency.
+    // With the unbounded form (0) FFmpeg's MPEG-TS demuxer cannot tell a PES is
+    // finished until the *next* one starts, so every frame is held back by a
+    // whole inter-frame gap — 65 ms median and 267 ms at worst from this
+    // emulator. With the length set it emits the frame on its last byte.
+    final pesBodyLength = 3 + 5 + accessUnit.length;
+    final declaredLength = pesBodyLength <= kMaxPesPacketLength
+        ? pesBodyLength
+        : 0;
+
     final pes = <int>[
       0x00, 0x00, 0x01, 0xE0, // PES start code, stream_id = video
-      0x00, 0x00, // length 0 = unbounded, legal for video in TS
+      (declaredLength >> 8) & 0xFF, declaredLength & 0xFF,
       0x84, // marker bits + data_alignment_indicator
       0x80, // PTS present, no DTS
       0x05, // PES header data length
@@ -154,7 +215,13 @@ class TsMuxer {
         if (adaptation >= 2) {
           var written = 6;
           if (first && adaptation >= 8) {
-            packet[5] = (keyframe ? 0x40 : 0x00) | 0x10; // random access + PCR
+            // The very first video packet is flagged discontinuous so a demuxer
+            // that was reading an earlier stream on this PID does not fail its
+            // continuity check against our counter, which restarts at zero.
+            packet[5] =
+                (_startedVideo ? 0x00 : 0x80) | // discontinuity_indicator
+                (keyframe ? 0x40 : 0x00) | // random_access_indicator
+                0x10; // PCR present
             packet[6] = (pts90 >> 25) & 0xFF;
             packet[7] = (pts90 >> 17) & 0xFF;
             packet[8] = (pts90 >> 9) & 0xFF;
@@ -185,6 +252,7 @@ class TsMuxer {
       first = false;
       out.add(packet);
     }
+    _startedVideo = true;
     return out.toBytes();
   }
 }

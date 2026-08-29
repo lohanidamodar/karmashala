@@ -40,10 +40,13 @@ void main() {
       expect(pidAt(2), kVideoPid);
     });
 
-    test('does not repeat the tables on a delta frame', () {
-      final bytes = TsMuxer().frame(
+    test('does not repeat the tables on every delta frame', () {
+      final muxer = TsMuxer()
+        ..frame(Uint8List.fromList([1]), 0, keyframe: true);
+      // Well inside the table period, so this frame carries no tables.
+      final bytes = muxer.frame(
         Uint8List.fromList([1, 2, 3]),
-        0,
+        10000,
         keyframe: false,
       );
       final pid = ((bytes[1] & 0x1F) << 8) | bytes[2];
@@ -51,11 +54,13 @@ void main() {
     });
 
     test('increments the video continuity counter on every payload packet', () {
-      final muxer = TsMuxer();
-      // A payload large enough to need several packets.
+      final muxer = TsMuxer()
+        ..frame(Uint8List.fromList([1]), 0, keyframe: true);
+      // A payload large enough to need several packets, and close enough behind
+      // the previous frame that no tables are repeated in front of it.
       final bytes = muxer.frame(
         Uint8List.fromList(List.filled(1000, 0)),
-        0,
+        10000,
         keyframe: false,
       );
       final counters = <int>[];
@@ -72,9 +77,10 @@ void main() {
     });
 
     test('continuity continues across successive frames', () {
-      final muxer = TsMuxer();
-      final a = muxer.frame(Uint8List.fromList([1]), 0, keyframe: false);
-      final b = muxer.frame(Uint8List.fromList([2]), 1000, keyframe: false);
+      final muxer = TsMuxer()
+        ..frame(Uint8List.fromList([0]), 0, keyframe: true);
+      final a = muxer.frame(Uint8List.fromList([1]), 1000, keyframe: false);
+      final b = muxer.frame(Uint8List.fromList([2]), 2000, keyframe: false);
       final last = a[a.length - kTsPacketSize + 3] & 0x0F;
       final next = b[3] & 0x0F;
       expect(next, (last + 1) % 16);
@@ -121,9 +127,11 @@ void main() {
     });
 
     test('sets payload_unit_start only on the first packet of a frame', () {
-      final bytes = TsMuxer().frame(
+      final muxer = TsMuxer()
+        ..frame(Uint8List.fromList([1]), 0, keyframe: true);
+      final bytes = muxer.frame(
         Uint8List.fromList(List.filled(1000, 0)),
-        0,
+        10000,
         keyframe: false,
       );
       final starts = <bool>[];
