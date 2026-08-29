@@ -22,8 +22,13 @@ class AgentRegistry {
     return null;
   }
 
-  /// The descriptor for a legacy [AgentKind], or `null` if this registry has
-  /// no entry for it.
+  /// A human-readable name for [id], falling back to the raw id for an agent
+  /// this registry has never heard of (e.g. a stored installation whose
+  /// descriptor was removed).
+  String displayNameFor(String id) => byId(id)?.displayName ?? id;
+
+  /// The descriptor for the [AgentKind] of an agent that has a protocol
+  /// adapter, or `null` if this registry has no entry for it.
   AgentDescriptor? forKind(AgentKind kind) {
     for (final descriptor in descriptors) {
       if (descriptor.kind == kind) return descriptor;
