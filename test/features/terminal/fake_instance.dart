@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:flutter/widgets.dart';
@@ -58,6 +59,15 @@ ProviderContainer fakeTerminalContainer({AppDatabase? database}) {
   return ProviderContainer(
     overrides: [
       if (database != null) databaseProvider.overrideWithValue(database),
+      // A real periodic timer would outlive the widget tree and trip
+      // flutter_test's pending-timer check; tests drive saving explicitly.
+      scrollbackAutosaveFactoryProvider.overrideWithValue(
+        ({required onTick}) => ScrollbackAutosave(
+          onTick: onTick,
+          schedule: (interval, callback) => Object(),
+          cancel: (_) {},
+        ),
+      ),
       terminalInstanceFactoryProvider.overrideWithValue(
         ({
           required id,

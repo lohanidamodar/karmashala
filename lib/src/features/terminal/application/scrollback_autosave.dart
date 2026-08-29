@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 /// How often live panes are re-snapshotted.
 ///
 /// This is the trigger that actually matters: the app is a Windows desktop app
@@ -57,3 +59,16 @@ class ScrollbackAutosave {
 
   static void _defaultCancel(Object handle) => (handle as Timer).cancel();
 }
+
+/// Builds the autosave for the sessions controller.
+///
+/// Injected the same way the terminal instance factory is: a real
+/// `Timer.periodic` outlives the widget tree, which trips `flutter_test`'s
+/// "no pending timers" invariant, so widget tests override this with a
+/// scheduler that never fires.
+typedef ScrollbackAutosaveFactory =
+    ScrollbackAutosave Function({required void Function() onTick});
+
+final scrollbackAutosaveFactoryProvider = Provider<ScrollbackAutosaveFactory>(
+  (ref) => ({required onTick}) => ScrollbackAutosave(onTick: onTick),
+);
