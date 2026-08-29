@@ -143,7 +143,9 @@ class AgentUsageService {
         );
       }
       if (response.statusCode != 200) {
-        throw UsageException('Usage request failed (HTTP ${response.statusCode}).');
+        throw UsageException(
+          'Usage request failed (HTTP ${response.statusCode}).',
+        );
       }
       final decoded = jsonDecode(body);
       if (decoded is! Map<String, dynamic>) {

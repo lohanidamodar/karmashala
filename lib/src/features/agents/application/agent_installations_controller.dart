@@ -25,6 +25,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final dao = ref.read(agentInstallationDaoProvider);
     final ids = ref.read(idGeneratorProvider);
     final clock = ref.read(clockProvider);
+    final registry = ref.read(agentRegistryProvider);
 
     final discovered = <AgentInstallation>[];
     for (final environment in environments) {
@@ -34,6 +35,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
         environment: environment,
         ids: ids,
         clock: clock,
+        registry: registry,
       ).discover();
       for (final installation in found) {
         discovered.add(installation);
