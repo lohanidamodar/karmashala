@@ -62,13 +62,21 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       );
       final native = player.platform as NativePlayer;
       // libmpv defaults to buffering for smooth playback; these make it behave
-      // like a monitor. Measured lag behind live is still ~1.3s (see the spec).
+      // like a monitor. `setProperty` swallows libmpv's return code, so these
+      // were verified by reading them back: `profile=low-latency` really is
+      // applied (`cache-pause=no`, `video-latency-hacks=yes` and
+      // `stream-buffer-size=4096` are the profile's values, not the defaults).
       for (final entry in const {
         'profile': 'low-latency',
         'cache': 'no',
         'demuxer-readahead-secs': '0',
         'demuxer-lavf-analyzeduration': '0',
-        'demuxer-lavf-o': 'fflags=+nobuffer+flush_packets',
+        // Setting this replaces the whole list, and media_kit's protocol
+        // whitelist lives in it — so its entries are repeated here.
+        // `flush_packets` was dropped: it is a muxer flag and did nothing.
+        'demuxer-lavf-o':
+            'fflags=+nobuffer,seg_max_retry=5,strict=experimental,'
+            'allowed_extensions=ALL,protocol_whitelist=[file,tcp,http]',
         'untimed': 'yes',
         'vd-lavc-threads': '1',
         'audio': 'no',

@@ -33,6 +33,25 @@ int? parseForwardedPort(String output) {
   return null;
 }
 
+/// Timestamps of the newest frame in flight, so latency can be measured
+/// without instrumenting the socket from outside.
+///
+/// Everything here is microseconds. [ptsUs] is scrcpy's timestamp, which is the
+/// **device's** monotonic clock at capture; [arrivalUs] is the host wall clock
+/// when that frame finished arriving. [basePtsUs] is the timestamp the muxer
+/// rebased the stream onto — what the player calls position zero — so a
+/// player's reported position can be turned back into a device capture time.
+class LiveFrameMark {
+  int frames = 0;
+  int ptsUs = 0;
+  int arrivalUs = 0;
+  int? basePtsUs;
+
+  /// Host clock when the newest frame was handed to the HTTP response, i.e.
+  /// when it stopped being ours and became the player's problem.
+  int writtenUs = 0;
+}
+
 /// A running live view of one device.
 class DeviceStreamSession {
   DeviceStreamSession._({
@@ -40,9 +59,13 @@ class DeviceStreamSession {
     required this.url,
     required this.onStop,
     required this.videoSizeChanges,
+    required this.mark,
   });
 
   final String serial;
+
+  /// Newest frame seen and the timestamps needed to measure lag against it.
+  final LiveFrameMark mark;
 
   /// What the video player opens. An MPEG-TS stream over loopback HTTP.
   final Uri url;
@@ -139,11 +162,54 @@ class DeviceStreamService {
     return null;
   }
 
+  /// Capture geometry and rate for one class of device.
+  ///
+  /// The rate is the whole difference between a live view and a laggy one.
+  /// scrcpy asks the **encoder** to accept up to `max_fps`; when the encoder
+  /// cannot sustain that rate the surplus frames queue up inside the device and
+  /// every frame reaches us that much later. Asking for less than the encoder
+  /// can do is not free either — the player holds about three frames, so each
+  /// frame dropped from the rate costs three frame intervals of lag. The right
+  /// setting is therefore *just under* what the device's encoder sustains.
+  ///
+  /// Measured on `emulator-5554` (1080x2400, software encoder) under continuous
+  /// scrolling — device capture to host arrival, and the rate actually
+  /// achieved:
+  ///
+  /// | max_size | max_fps | sustained | arrival p50 | arrival p90 |
+  /// | --- | --- | --- | --- | --- |
+  /// | 1024 | 60 | 13.2 | 1256 ms | 1739 ms |
+  /// | 1024 | 15 | — | 895 ms | 1362 ms |
+  /// | 1024 | 10 | 10.0 | 70 ms | 219 ms |
+  /// | 640 | 60 | 20.0 | 706 ms | 1601 ms |
+  /// | 640 | 30 | 22.7 | 284 ms | 542 ms |
+  /// | 640 | 22 | 19.1 | 116 ms | 265 ms |
+  /// | **640** | **20** | **18.5** | **71 ms** | **176 ms** |
+  ///
+  /// A physical device encodes in hardware and keeps up at 60, so it queues
+  /// nothing and can have the full resolution.
+  static const ({int maxSize, int maxFps}) _hardwareEncoder = (
+    maxSize: 1024,
+    maxFps: 60,
+  );
+  static const ({int maxSize, int maxFps}) _softwareEncoder = (
+    maxSize: 640,
+    maxFps: 20,
+  );
+
+  /// Emulators run a software encoder; adb names them `emulator-<port>`.
+  static bool isEmulatorSerial(String serial) => serial.startsWith('emulator-');
+
   Future<DeviceStreamSession> start(
     String serial, {
-    int maxSize = 1024,
-    int maxFps = 60,
+    int? maxSize,
+    int? maxFps,
   }) async {
+    final profile = isEmulatorSerial(serial)
+        ? _softwareEncoder
+        : _hardwareEncoder;
+    final captureSize = maxSize ?? profile.maxSize;
+    final captureFps = maxFps ?? profile.maxFps;
     // 1. Put the server on the device.
     final jar = await serverBytes();
     final hostJar = File(
@@ -201,9 +267,9 @@ class DeviceStreamService {
           'cleanup=true',
           'send_device_meta=false',
           'send_dummy_byte=false',
-          'max_size=$maxSize',
+          'max_size=$captureSize',
           'video_codec=h264',
-          'max_fps=$maxFps',
+          'max_fps=$captureFps',
           // A keyframe every second. Without this the encoder may go a long
           // time between keyframes, and a viewer that connects in between has
           // nothing it can start decoding from.
@@ -225,6 +291,7 @@ class DeviceStreamService {
     final socket = connection.socket;
 
     // 5. Parse, mux, fan out.
+    final mark = LiveFrameMark();
     final sizes = StreamController<DeviceScreenSize>.broadcast();
     final frames = StreamController<ScrcpyFrame>.broadcast();
     final parser = ScrcpyStreamParser();
@@ -245,6 +312,10 @@ class DeviceStreamService {
               codecConfig = frame.data;
             } else {
               if (frame.isKeyFrame) lastKeyFrame = frame;
+              mark
+                ..frames += 1
+                ..ptsUs = frame.ptsUs
+                ..arrivalUs = DateTime.now().microsecondsSinceEpoch;
               frames.add(frame);
             }
         }
@@ -267,8 +338,9 @@ class DeviceStreamService {
     // 6. Serve MPEG-TS over loopback.
     final http = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     http.listen((request) async {
-      // A fresh muxer per consumer: continuity counters belong to one output
-      // stream, and replaying packets to a second consumer duplicates them.
+      // A fresh muxer per consumer: continuity counters and the timestamp base
+      // belong to one output stream, and replaying packets to a second consumer
+      // would duplicate them.
       final muxer = TsMuxer();
       request.response
         ..bufferOutput = false
@@ -285,13 +357,12 @@ class DeviceStreamService {
             : frame.data;
       }
 
-      // Start from the cached keyframe when there is one. Re-muxing it with
-      // this consumer's own muxer keeps continuity counters correct — replaying
-      // already-emitted packets would duplicate them and the demuxer would
-      // report corruption.
+      // Start from the cached keyframe when there is one, so a viewer does not
+      // wait for the next one.
       var started = false;
       final cached = lastKeyFrame;
       if (cached != null) {
+        mark.basePtsUs ??= cached.ptsUs;
         request.response.add(
           muxer.frame(accessUnitFor(cached), cached.ptsUs, keyframe: true),
         );
@@ -304,6 +375,7 @@ class DeviceStreamService {
           if (!frame.isKeyFrame) return;
           started = true;
         }
+        mark.basePtsUs ??= frame.ptsUs;
         try {
           request.response.add(
             muxer.frame(
@@ -312,6 +384,7 @@ class DeviceStreamService {
               keyframe: frame.isKeyFrame,
             ),
           );
+          mark.writtenUs = DateTime.now().microsecondsSinceEpoch;
           request.response.flush();
         } catch (_) {
           // Consumer went away mid-write.
@@ -340,6 +413,7 @@ class DeviceStreamService {
       url: Uri.parse('http://127.0.0.1:${http.port}/live.ts'),
       onStop: stop,
       videoSizeChanges: sizes.stream,
+      mark: mark,
     );
   }
 }
