@@ -83,6 +83,13 @@ class _Bridge {
     }
     try {
       final result = await _call(name, arguments);
+      // A tool that needs to return something other than text (an image, say)
+      // hands back `_mcpContent`: MCP content blocks to pass through verbatim.
+      // Everything else is JSON-encoded as text, as before.
+      if (result is Map && result['_mcpContent'] is List) {
+        _reply(id, {'content': result['_mcpContent']});
+        return;
+      }
       _reply(id, {
         'content': [
           {'type': 'text', 'text': const JsonEncoder.withIndent('  ').convert(result)},

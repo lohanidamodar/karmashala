@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app/chitragupta_app.dart';
@@ -25,6 +26,8 @@ import 'src/features/system/system_integration_service.dart';
 /// `ProviderScope` override so features depend on providers, not globals.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Loads libmpv, which decodes the device pane's H.264 live view.
+  MediaKit.ensureInitialized();
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');
 
