@@ -2,6 +2,7 @@ import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
+import '../../agents/domain/agent_registry.dart';
 import '../../settings/domain/permission_mode.dart';
 
 /// A standalone terminal emulator installed on the host that we can launch
@@ -186,27 +187,19 @@ class SystemTerminalService {
   String _quoteCmd(String value) => '"${value.replaceAll('"', '""')}"';
 }
 
-/// The agent CLI flags for a [permissionMode], matching the in-app adapters so
-/// terminal launches honour the same per-agent permission setting.
+/// The agent CLI flags for a [permissionMode], read from the agent registry so
+/// terminal launches honour the same per-agent permission setting as the in-app
+/// adapters.
+///
+/// An agent the registry does not know gets **no** permission flag, letting the
+/// agent apply its own default. Guessing one would mean passing a flag invented
+/// for a different CLI to a binary we know nothing about — it may not exist
+/// there, or may mean something else — which is the wrong side of `PRODUCT.md`
+/// principle 5, "dangerous permission-bypass options are never the default".
 List<String> permissionArgsFor(String cli, PermissionMode permissionMode) {
-  return switch (cli) {
-    'claudeCode' => switch (permissionMode) {
-      PermissionMode.ask => const <String>[],
-      PermissionMode.acceptEdits => const ['--permission-mode', 'acceptEdits'],
-      PermissionMode.bypass => const ['--permission-mode', 'bypassPermissions'],
-    },
-    'codex' => switch (permissionMode) {
-      PermissionMode.ask => const ['--ask-for-approval', 'on-request'],
-      PermissionMode.acceptEdits => const ['--ask-for-approval', 'on-failure'],
-      PermissionMode.bypass => const [
-        '--dangerously-bypass-approvals-and-sandbox',
-      ],
-    },
-    _ =>
-      permissionMode == PermissionMode.bypass
-          ? const ['--yolo']
-          : const <String>[],
-  };
+  final descriptor = AgentRegistry.builtIn.byId(cli);
+  return descriptor?.launch.permissionArgumentsFor(permissionMode) ??
+      const <String>[];
 }
 
 /// A single shell-pasteable command: `cd <cwd> && <agent> <flags> [resume]`.
