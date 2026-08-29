@@ -8,11 +8,11 @@ import 'agent_status.dart';
 /// This list is **data**: everything the app needs to find, launch and observe
 /// these agents is here rather than spread through discovery, store location
 /// and terminal code. The three entries also have protocol adapters, which is
-/// why each carries an [AgentKind]; a fourth agent can be added here without
-/// one and will still be discovered and status-detected.
+/// why each carries an [AgentKind]; a fourth agent added here without one is
+/// discovered, persisted, listed and openable just the same — it simply gets
+/// the generic adapter and no rich chat.
 ///
-/// Order matters: it is the order agents are probed and listed in, and matches
-/// `AgentKind.values`.
+/// Order matters: it is the order agents are probed and listed in.
 const List<AgentDescriptor> builtInAgentDescriptors = [
   _claudeCode,
   _codex,

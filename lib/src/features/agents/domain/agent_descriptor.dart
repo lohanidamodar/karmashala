@@ -109,10 +109,13 @@ enum AgentStatusStrategy { hooks, stateFile, terminalGrid, none }
 
 /// Everything Chitragupta needs to find, launch and observe one agent CLI.
 ///
-/// This is data, not code: adding an agent should mean adding a descriptor.
-/// [kind] is non-null only for the agents that additionally have a protocol
-/// adapter and a persisted `AgentKind`; see the loop-28 design doc for why that
-/// bridge still exists.
+/// This is data, not code: adding an agent means adding a descriptor. [id] is
+/// the agent's identity everywhere — discovery, persistence, settings, sessions
+/// and the MCP control server all key on it.
+///
+/// [kind] is non-null only for the agents that additionally have a hand-written
+/// protocol adapter, and is read only when choosing that adapter. A descriptor
+/// without one is a complete, usable agent.
 class AgentDescriptor {
   const AgentDescriptor({
     required this.id,
