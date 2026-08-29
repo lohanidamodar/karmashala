@@ -6,15 +6,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_installation.dart';
-import '../domain/agent_kind.dart';
 import '../domain/agent_registry.dart';
-
-/// The executable base name probed for one of the agents that has a protocol
-/// adapter, from the registry. Identity is the descriptor id everywhere else;
-/// this stays enum-keyed only for the callers that already had an [AgentKind]
-/// in hand.
-String agentExecutableName(AgentKind kind) =>
-    AgentRegistry.builtIn.forKind(kind)!.binaries.windows.first;
 
 /// The command that locates an executable by name in a given environment:
 /// `where` on Windows, `command -v` inside WSL.

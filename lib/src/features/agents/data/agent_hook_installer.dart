@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/util/json_object_splice.dart';
 import '../domain/agent_descriptor.dart';
-import 'agent_hook_server.dart';
+import '../domain/agent_hook_endpoint.dart';
 
 /// Marks the hook entries Chitragupta owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.

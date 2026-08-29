@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../data/agent_hook_installer.dart';
 import '../data/agent_hook_receiver.dart';
-import '../data/agent_hook_server.dart';
 import '../data/agent_status_service.dart';
 import 'agent_providers.dart';
 
@@ -20,14 +19,6 @@ final agentHookReceiverProvider = Provider<AgentHookReceiver>(
     clock: ref.watch(clockProvider),
   ),
 );
-
-/// Hosts the loopback endpoint agents' hooks call back into. Started by the
-/// app; disposing the provider closes the port.
-final agentHookServerProvider = Provider<AgentHookServer>((ref) {
-  final server = AgentHookServer(ref.watch(agentHookReceiverProvider));
-  ref.onDispose(server.stop);
-  return server;
-});
 
 final agentHookInstallerProvider = Provider<AgentHookInstaller>(
   (ref) => const AgentHookInstaller(),

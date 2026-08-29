@@ -1,7 +1,6 @@
 import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/features/agents/data/agent_discovery_service.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,12 +14,6 @@ const _notFound = CommandResult(exitCode: 1, stdout: '', stderr: 'not found');
 
 void main() {
   group('pure helpers', () {
-    test('agentExecutableName', () {
-      expect(agentExecutableName(AgentKind.claudeCode), 'claude');
-      expect(agentExecutableName(AgentKind.codex), 'codex');
-      expect(agentExecutableName(AgentKind.antigravity), 'antigravity');
-    });
-
     test('locateRequest uses where on Windows and a login shell in WSL', () {
       expect(
         locateRequest(EnvironmentKind.windowsNative, 'claude').executable,

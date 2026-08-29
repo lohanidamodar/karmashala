@@ -1,18 +1,6 @@
 import 'package:xterm/xterm.dart';
 
-/// Most scrollback lines kept per pane across a restart.
-///
-/// The live buffer holds 10 000. 2 000 is ~40 screens at 50 rows — far past what
-/// anyone scrolls back to *after a restart* — while keeping a whole workspace's
-/// snapshot small enough to write every few seconds.
-const int kScrollbackMaxLines = 2000;
-
-/// Hard ceiling on one pane's encoded scrollback.
-///
-/// A 200-column plain line is at most ~200 bytes, so 2 000 lines is typically
-/// ~80 KB; this leaves room for SGR-dense output without letting one pathological
-/// pane write megabytes into SQLite.
-const int kScrollbackMaxBytes = 256 * 1024;
+import '../domain/scrollback_limits.dart';
 
 /// Re-emits [terminal]'s scrollback as text plus SGR escape sequences, ready to
 /// be written back into a fresh `Terminal`.
@@ -29,8 +17,8 @@ const int kScrollbackMaxBytes = 256 * 1024;
 /// colour an earlier one set.
 String encodeScrollback(
   Terminal terminal, {
-  int maxLines = kScrollbackMaxLines,
-  int maxBytes = kScrollbackMaxBytes,
+  int maxLines = kDurableScrollbackMaxLines,
+  int maxBytes = kDurableScrollbackMaxBytes,
 }) {
   final buffer = terminal.mainBuffer;
   final lines = buffer.lines;

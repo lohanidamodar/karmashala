@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:chitragupta/src/features/agents/data/agent_hook_installer.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_server.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

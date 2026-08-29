@@ -1,39 +1,46 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chitragupta/src/core/util/clock_provider.dart';
+import 'package:chitragupta/src/features/agents/application/agent_status_providers.dart';
 import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_server.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
+import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
+/// The `/agent-hook` route on the launcher control server.
+///
+/// Loop 28 shipped this endpoint as a second `HttpServer` because
+/// `launcher_control_server.dart` belonged to another branch at the time; Loop
+/// 31 collapsed it onto the route it always wanted to be. These are the same
+/// assertions the standalone server had, retargeted.
 void main() {
   late Directory tmp;
+  late ProviderContainer container;
   late AgentHookReports reports;
-  late AgentHookServer server;
+  late LauncherControlServer server;
   late AgentHookEndpoint endpoint;
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('chitra_hooks_');
-    reports = AgentHookReports();
-    server = AgentHookServer(
-      AgentHookReceiver(
-        registry: AgentRegistry.builtIn,
-        reports: reports,
-        clock: FixedClock(testTime),
-      ),
+    container = ProviderContainer(
+      overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
     );
-    endpoint = await server.start(
-      handshakeFilePath: p.join(tmp.path, 'agent_hooks.json'),
-    );
+    reports = container.read(agentHookReportsProvider);
+    server = LauncherControlServer(container);
+    await server.start(bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'));
+    endpoint = server.hookEndpoint!;
   });
 
   tearDown(() async {
     await server.stop();
+    container.dispose();
     tmp.deleteSync(recursive: true);
   });
 
@@ -65,11 +72,15 @@ void main() {
     );
   });
 
-  test('writes a handshake file the hook command can read', () async {
-    final file = File(p.join(tmp.path, 'agent_hooks.json'));
+  test('the handshake file carries the hook token', () async {
+    final file = File(p.join(tmp.path, 'mcp_bridge.json'));
     final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
     expect(json['port'], endpoint.port);
-    expect(json['token'], endpoint.token);
+    expect(json['hookToken'], endpoint.token);
+    // The hook token is deliberately *not* the /rpc token: it is pasted into an
+    // agent's config file and shows up in process command lines, while /rpc can
+    // open sessions and drive devices.
+    expect(json['token'], isNot(endpoint.token));
   });
 
   test('an authenticated callback reaches the receiver', () async {
@@ -114,26 +125,31 @@ void main() {
     expect(response.statusCode, HttpStatus.unauthorized);
   });
 
-  test('the wrong path or method is a 404', () async {
-    final wrongPath = await post(
+  test('the hook token does not open /rpc', () async {
+    final response = await post(
       Uri.parse('http://127.0.0.1:${endpoint.port}/rpc'),
       token: endpoint.token,
+      body: jsonEncode({'tool': '__list_tools__'}),
     );
-    expect(wrongPath.statusCode, HttpStatus.notFound);
 
-    final wrongMethod = await post(
+    expect(response.statusCode, HttpStatus.unauthorized);
+  });
+
+  test('the wrong method on the hook route is a 404', () async {
+    final response = await post(
       endpoint.uriFor(agentId: 'claudeCode', event: 'Stop'),
       token: endpoint.token,
       method: 'GET',
     );
-    expect(wrongMethod.statusCode, HttpStatus.notFound);
+
+    expect(response.statusCode, HttpStatus.notFound);
   });
 
   test('stop() closes the port', () async {
     final port = endpoint.port;
     await server.stop();
 
-    expect(server.endpoint, isNull);
+    expect(server.hookEndpoint, isNull);
     await expectLater(
       post(Uri.parse('http://127.0.0.1:$port/agent-hook'), token: 'x'),
       throwsA(isA<SocketException>()),

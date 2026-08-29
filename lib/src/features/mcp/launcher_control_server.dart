@@ -10,7 +10,9 @@ import '../../core/logging/app_logger.dart';
 import '../../core/process/command_runner_providers.dart';
 import '../agents/application/agent_installations_controller.dart';
 import '../agents/application/agent_providers.dart';
+import '../agents/application/agent_status_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
+import '../agents/domain/agent_hook_endpoint.dart';
 import '../agents/domain/agent_installation.dart';
 import '../agents/domain/agent_ids.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
@@ -42,6 +44,12 @@ import 'tmux_orchestration.dart';
 /// server binds to 127.0.0.1 on an ephemeral port and requires a bearer token,
 /// both written to a `mcp_bridge.json` file only readable locally, so nothing
 /// on the network can reach it.
+///
+/// It also hosts `POST /agent-hook`, the callback endpoint agents' installed
+/// hooks post status events to. That route needs exactly this transport —
+/// loopback, ephemeral port, bearer token, handshake file — so it lives here
+/// rather than in a second [HttpServer] of its own. All of its decision-making
+/// stays in the transport-free [AgentHookReceiver].
 class LauncherControlServer {
   LauncherControlServer(this._container, {AppLogger? logger})
     : _logger = logger ?? AppLogger.named('mcp-control');
@@ -51,6 +59,12 @@ class LauncherControlServer {
 
   HttpServer? _server;
   String? _token;
+  AgentHookEndpoint? _hookEndpoint;
+
+  /// Where agents' installed hooks post to, once [start] has bound the port;
+  /// `null` before that. The hook installer writes this into the agent's own
+  /// config file.
+  AgentHookEndpoint? get hookEndpoint => _hookEndpoint;
 
   /// Where the bridge reads the port + token from.
   static Future<String> bridgeFilePath() async {
@@ -58,12 +72,23 @@ class LauncherControlServer {
     return p.join(dir.path, 'mcp_bridge.json');
   }
 
-  Future<void> start() async {
+  /// Binds the server and writes the handshake file. Pass [bridgeFilePath] to
+  /// control where that file goes (tests do); by default it is
+  /// `mcp_bridge.json` in the application-support directory.
+  Future<void> start({String? bridgeFilePath}) async {
     if (_server != null) return;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
     _token = _generateToken();
-    await _writeBridgeFile(server.port, _token!);
+    // A *separate* token for /agent-hook. It is pasted verbatim into a curl
+    // command in the agent's own config file, so it also shows up in process
+    // command lines; the /rpc token opens sessions and drives devices, and must
+    // not be exposed that widely.
+    _hookEndpoint = AgentHookEndpoint(
+      port: server.port,
+      token: _generateToken(),
+    );
+    await _writeBridgeFile(server.port, _token!, bridgeFilePath);
     server.listen(_handle, onError: (Object e) => _logger.warning('$e'));
     _logger.info('Launcher control server on 127.0.0.1:${server.port}.');
   }
@@ -71,12 +96,23 @@ class LauncherControlServer {
   Future<void> stop() async {
     await _server?.close(force: true);
     _server = null;
+    _token = null;
+    _hookEndpoint = null;
   }
 
-  Future<void> _writeBridgeFile(int port, String token) async {
-    final file = File(await bridgeFilePath());
+  Future<void> _writeBridgeFile(
+    int port,
+    String token,
+    String? overridePath,
+  ) async {
+    final file = File(overridePath ?? await bridgeFilePath());
     await file.writeAsString(
-      jsonEncode({'port': port, 'token': token, 'pid': pid}),
+      jsonEncode({
+        'port': port,
+        'token': token,
+        'pid': pid,
+        'hookToken': _hookEndpoint!.token,
+      }),
       flush: true,
     );
   }
@@ -88,6 +124,10 @@ class LauncherControlServer {
   }
 
   Future<void> _handle(HttpRequest request) async {
+    if (request.uri.path == '/agent-hook') {
+      await _handleAgentHook(request);
+      return;
+    }
     final response = request.response;
     try {
       if (request.headers.value('authorization') != 'Bearer $_token') {
@@ -113,6 +153,44 @@ class LauncherControlServer {
     } catch (e) {
       response.statusCode = HttpStatus.internalServerError;
       response.write(jsonEncode({'ok': false, 'error': '$e'}));
+      await response.close();
+    }
+  }
+
+  /// `POST /agent-hook?agent=<id>&event=<name>` — one callback from an agent's
+  /// installed hook, with the hook's own JSON payload as the body.
+  Future<void> _handleAgentHook(HttpRequest request) async {
+    final response = request.response;
+    final endpoint = _hookEndpoint;
+    try {
+      if (endpoint == null ||
+          request.headers.value(HttpHeaders.authorizationHeader) !=
+              'Bearer ${endpoint.token}') {
+        response.statusCode = HttpStatus.unauthorized;
+        await response.close();
+        return;
+      }
+      if (request.method != 'POST') {
+        response.statusCode = HttpStatus.notFound;
+        await response.close();
+        return;
+      }
+      final body = await utf8.decoder.bind(request).join();
+      final report = _container
+          .read(agentHookReceiverProvider)
+          .handle(
+            agentId: request.uri.queryParameters['agent'],
+            event: request.uri.queryParameters['event'],
+            body: body,
+          );
+      // Always 200 on an authenticated callback, even for an event we do not
+      // recognise: a hook must never block the agent that fired it.
+      response.headers.contentType = ContentType.json;
+      response.write(jsonEncode({'ok': true, 'status': report.status.name}));
+      await response.close();
+    } catch (error) {
+      _logger.warning('Agent hook callback failed: $error');
+      response.statusCode = HttpStatus.internalServerError;
       await response.close();
     }
   }
