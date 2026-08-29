@@ -1,9 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
+import '../data/terminal_workspace_dao.dart';
 import '../domain/pane_layout.dart';
 import '../domain/terminal_profile.dart';
+import 'scrollback_autosave.dart';
 
 /// The production factory: each pane is backed by a real ConPTY.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
@@ -48,25 +52,59 @@ class TerminalSessionsState {
   }
 }
 
-/// Manages open terminal tabs, the split tree inside each, and which pane has
-/// focus.
+/// Manages open terminal tabs, the split tree inside each, which pane has focus,
+/// and persisting the whole workspace so it survives a restart.
 ///
-/// Live instances are held here rather than in [state] so `onDispose` can tear
-/// them down without reading state, which Riverpod forbids.
+/// The tab list and live instances are the controller's **own fields**, with
+/// [state] published from them. Riverpod forbids reading `state` inside `build`
+/// and `onDispose`, and both restore (which runs during build) and the final
+/// snapshot (which runs during dispose) need the tabs.
 class TerminalSessionsController extends Notifier<TerminalSessionsState> {
+  final List<TerminalTab> _tabs = [];
+  String? _activeTabId;
+
   final Map<String, TerminalInstance> _instances = {};
+
+  /// Panes whose buffer changed since their last snapshot.
+  final Set<String> _dirty = {};
+
+  /// Per-pane buffer listeners, kept so they can be removed on close.
+  final Map<String, void Function()> _dirtyListeners = {};
+
+  late final ScrollbackAutosave _autosave = ScrollbackAutosave(
+    onTick: saveDirtyScrollback,
+  );
+
+  final _log = AppLogger.named('terminal');
 
   @override
   TerminalSessionsState build() {
-    ref.onDispose(_disposeAll);
-    return const TerminalSessionsState();
+    ref.onDispose(() {
+      _autosave.stop();
+      persistWorkspace();
+      _disposeAll();
+    });
+    _restoreWorkspace();
+    _autosave.start();
+    return _snapshot();
   }
 
+  TerminalSessionsState _snapshot() =>
+      TerminalSessionsState(tabs: List.of(_tabs), activeTabId: _activeTabId);
+
+  void _publish() => state = _snapshot();
+
   void _disposeAll() {
-    for (final instance in _instances.values) {
-      instance.dispose();
+    for (final entry in _instances.entries) {
+      final listener = _dirtyListeners[entry.key];
+      if (listener != null) entry.value.terminal.removeListener(listener);
+      entry.value.dispose();
     }
     _instances.clear();
+    _dirtyListeners.clear();
+    _dirty.clear();
+    _tabs.clear();
+    _activeTabId = null;
   }
 
   /// The live terminal behind [paneId], or `null` once it has been closed.
@@ -76,23 +114,22 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   String openTab(TerminalProfile profile, {String? workingDirectory}) {
     final tabId = _newId();
     final paneId = _createPane(profile, workingDirectory: workingDirectory);
-    state = TerminalSessionsState(
-      tabs: [
-        ...state.tabs,
-        TerminalTab(
-          id: tabId,
-          layout: PaneLayout.single(paneId),
-          focusedPaneId: paneId,
-        ),
-      ],
-      activeTabId: tabId,
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(paneId),
+        focusedPaneId: paneId,
+      ),
     );
+    _activeTabId = tabId;
+    _publish();
     return tabId;
   }
 
   void activateTab(String id) {
-    if (state.activeTabId == id) return;
-    state = TerminalSessionsState(tabs: state.tabs, activeTabId: id);
+    if (_activeTabId == id) return;
+    _activeTabId = id;
+    _publish();
     _focusActivePane();
   }
 
@@ -101,15 +138,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final tab = _tabById(id);
     if (tab == null) return;
     for (final paneId in tab.layout.panes) {
-      _instances.remove(paneId)?.dispose();
+      _releasePane(paneId);
     }
-
-    final tabs = [for (final t in state.tabs) if (t.id != id) t];
-    var activeTabId = state.activeTabId;
-    if (activeTabId == id) {
-      activeTabId = tabs.isEmpty ? null : tabs.last.id;
+    _tabs.removeWhere((t) => t.id == id);
+    if (_activeTabId == id) {
+      _activeTabId = _tabs.isEmpty ? null : _tabs.last.id;
     }
-    state = TerminalSessionsState(tabs: tabs, activeTabId: activeTabId);
+    _publish();
+    persistWorkspace();
   }
 
   /// Splits the active tab's focused pane along [axis], running [profile] in the
@@ -120,12 +156,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     TerminalProfile profile, {
     String? workingDirectory,
   }) {
-    final tab = state.activeTab;
+    final tab = _activeTab;
     if (tab == null) return null;
 
     final paneId = _createPane(profile, workingDirectory: workingDirectory);
-    final layout = tab.layout.split(tab.focusedPaneId, axis, paneId, _newId());
-    _replaceTab(tab.copyWith(layout: layout, focusedPaneId: paneId));
+    _replaceTab(
+      tab.copyWith(
+        layout: tab.layout.split(tab.focusedPaneId, axis, paneId, _newId()),
+        focusedPaneId: paneId,
+      ),
+    );
     _focusActivePane();
     return paneId;
   }
@@ -142,31 +182,31 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       return;
     }
 
-    _instances.remove(paneId)?.dispose();
-    final focused = layout.contains(tab.focusedPaneId)
-        ? tab.focusedPaneId
-        : layout.panes.first;
-    _replaceTab(tab.copyWith(layout: layout, focusedPaneId: focused));
+    _releasePane(paneId);
+    _replaceTab(
+      tab.copyWith(
+        layout: layout,
+        focusedPaneId: layout.contains(tab.focusedPaneId)
+            ? tab.focusedPaneId
+            : layout.panes.first,
+      ),
+    );
     _focusActivePane();
+    persistWorkspace();
   }
 
   /// Focuses [paneId], activating the tab that holds it.
   void focusPane(String paneId) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
-    state = TerminalSessionsState(
-      tabs: [
-        for (final t in state.tabs)
-          if (t.id == tab.id) t.copyWith(focusedPaneId: paneId) else t,
-      ],
-      activeTabId: tab.id,
-    );
+    _activeTabId = tab.id;
+    _replaceTab(tab.copyWith(focusedPaneId: paneId));
     _instances[paneId]?.focusNode.requestFocus();
   }
 
   /// Moves focus to the pane adjacent to the focused one in [direction].
   void movePaneFocus(PaneDirection direction) {
-    final tab = state.activeTab;
+    final tab = _activeTab;
     if (tab == null) return;
     final target = tab.layout.paneInDirection(tab.focusedPaneId, direction);
     if (target != null) focusPane(target);
@@ -186,9 +226,132 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return count > 1 ? '$title ($count)' : title;
   }
 
+  // --- persistence -----------------------------------------------------------
+
+  /// Writes the whole workspace — tabs, layouts and every pane's scrollback.
+  ///
+  /// Runs on pane/tab close and on teardown. Does nothing when no database is
+  /// wired up (tests, and any bootstrap that has not opened one).
+  void persistWorkspace() {
+    final dao = _dao();
+    if (dao == null) return;
+    try {
+      dao.saveWorkspace([
+        for (final tab in _tabs) _storedTab(tab),
+      ], activeTabId: _activeTabId);
+      _dirty.clear();
+    } catch (error, stack) {
+      _log.warning('Could not persist the terminal workspace.', error, stack);
+    }
+  }
+
+  /// Re-encodes only the panes whose buffers changed, returning the pane ids
+  /// written. This is the autosave tick.
+  List<String> saveDirtyScrollback() {
+    final dao = _dao();
+    if (dao == null || _dirty.isEmpty) return const [];
+
+    final written = <String>[];
+    try {
+      for (final paneId in _dirty.toList()) {
+        final instance = _instances[paneId];
+        if (instance == null) continue;
+        dao.saveScrollback(paneId, encodeScrollback(instance.terminal));
+        written.add(paneId);
+      }
+      _dirty.clear();
+    } catch (error, stack) {
+      _log.warning('Could not autosave terminal scrollback.', error, stack);
+    }
+    return written;
+  }
+
+  StoredTerminalTab _storedTab(TerminalTab tab) {
+    return StoredTerminalTab(
+      id: tab.id,
+      layout: tab.layout,
+      focusedPaneId: tab.focusedPaneId,
+      panes: [
+        for (final paneId in tab.layout.panes)
+          if (_instances[paneId] case final instance?)
+            StoredTerminalPane(
+              id: paneId,
+              tabId: tab.id,
+              profileId: instance.profileId,
+              title: instance.title,
+              workingDirectory: instance.workingDirectory,
+              scrollback: encodeScrollback(instance.terminal),
+            ),
+      ],
+    );
+  }
+
+  /// Recreates the stored workspace, spawning fresh shells with the previous
+  /// session's scrollback replayed above them.
+  ///
+  /// Defensive at every step: a layout that will not parse, a pane whose profile
+  /// no longer exists, a tab left with nothing in it — each is dropped rather
+  /// than thrown on, because a corrupt row must never make the terminal
+  /// unopenable. The worst case is an empty workspace, which is what a first run
+  /// looks like anyway.
+  void _restoreWorkspace() {
+    final dao = _dao();
+    if (dao == null) return;
+
+    try {
+      final stored = dao.loadWorkspace();
+      for (final storedTab in stored.tabs) {
+        final live = <String>{};
+        for (final pane in storedTab.panes) {
+          if (!storedTab.layout.contains(pane.id)) continue;
+          final profile = terminalProfileFromId(pane.profileId);
+          if (profile == null) continue;
+          _adopt(
+            pane.id,
+            ref.read(terminalInstanceFactoryProvider)(
+              id: pane.id,
+              profile: profile,
+              workingDirectory: pane.workingDirectory,
+              restoredScrollback: pane.scrollback,
+            ),
+          );
+          live.add(pane.id);
+        }
+
+        final layout = storedTab.layout.withoutMissing(live);
+        if (layout == null) continue;
+        final stayed = storedTab.focusedPaneId;
+        _tabs.add(
+          TerminalTab(
+            id: storedTab.id,
+            layout: layout,
+            focusedPaneId: (stayed != null && layout.contains(stayed))
+                ? stayed
+                : layout.panes.first,
+          ),
+        );
+        if (storedTab.id == stored.activeTabId) _activeTabId = storedTab.id;
+      }
+      _activeTabId ??= _tabs.isEmpty ? null : _tabs.last.id;
+    } catch (error, stack) {
+      _log.warning('Could not restore the terminal workspace.', error, stack);
+    }
+  }
+
+  /// The workspace DAO, or `null` when no database is wired up.
+  TerminalWorkspaceDao? _dao() {
+    try {
+      return ref.read(terminalWorkspaceDaoProvider);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // --- internals -------------------------------------------------------------
 
   String _newId() => ref.read(idGeneratorProvider).newId();
+
+  TerminalTab? get _activeTab => _tabById(_activeTabId);
 
   String _createPane(
     TerminalProfile profile, {
@@ -196,50 +359,71 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     String? restoredScrollback,
   }) {
     final paneId = _newId();
-    final factory = ref.read(terminalInstanceFactoryProvider);
-    _instances[paneId] = factory(
-      id: paneId,
-      profile: profile,
-      workingDirectory: workingDirectory,
-      restoredScrollback: restoredScrollback,
+    _adopt(
+      paneId,
+      ref.read(terminalInstanceFactoryProvider)(
+        id: paneId,
+        profile: profile,
+        workingDirectory: workingDirectory,
+        restoredScrollback: restoredScrollback,
+      ),
     );
     return paneId;
   }
 
-  TerminalTab? _tabById(String id) {
-    for (final tab in state.tabs) {
+  /// Takes ownership of [instance] and starts tracking whether it needs saving.
+  ///
+  /// The PTY coalescer already collapses output to one notification per frame,
+  /// so this costs one set insert per frame per pane — and stops a quiet pane
+  /// being re-encoded three times a minute for nothing.
+  void _adopt(String paneId, TerminalInstance instance) {
+    _instances[paneId] = instance;
+    void markDirty() => _dirty.add(paneId);
+    _dirtyListeners[paneId] = markDirty;
+    instance.terminal.addListener(markDirty);
+  }
+
+  /// Disposes the pane [paneId] owns and stops tracking it.
+  void _releasePane(String paneId) {
+    final instance = _instances.remove(paneId);
+    if (instance == null) return;
+    final listener = _dirtyListeners.remove(paneId);
+    if (listener != null) instance.terminal.removeListener(listener);
+    _dirty.remove(paneId);
+    instance.dispose();
+  }
+
+  TerminalTab? _tabById(String? id) {
+    if (id == null) return null;
+    for (final tab in _tabs) {
       if (tab.id == id) return tab;
     }
     return null;
   }
 
   TerminalTab? _tabContaining(String paneId) {
-    for (final tab in state.tabs) {
+    for (final tab in _tabs) {
       if (tab.layout.contains(paneId)) return tab;
     }
     return null;
   }
 
   void _replaceTab(TerminalTab updated) {
-    state = TerminalSessionsState(
-      tabs: [
-        for (final tab in state.tabs)
-          if (tab.id == updated.id) updated else tab,
-      ],
-      activeTabId: state.activeTabId,
-    );
+    final index = _tabs.indexWhere((tab) => tab.id == updated.id);
+    if (index < 0) return;
+    _tabs[index] = updated;
+    _publish();
   }
 
   void _stepTab(int by) {
-    if (state.tabs.length < 2) return;
-    final index = state.tabs.indexWhere((t) => t.id == state.activeTabId);
+    if (_tabs.length < 2) return;
+    final index = _tabs.indexWhere((tab) => tab.id == _activeTabId);
     if (index < 0) return;
-    final next = (index + by + state.tabs.length) % state.tabs.length;
-    activateTab(state.tabs[next].id);
+    activateTab(_tabs[(index + by + _tabs.length) % _tabs.length].id);
   }
 
   void _focusActivePane() {
-    final tab = state.activeTab;
+    final tab = _activeTab;
     if (tab == null) return;
     _instances[tab.focusedPaneId]?.focusNode.requestFocus();
   }

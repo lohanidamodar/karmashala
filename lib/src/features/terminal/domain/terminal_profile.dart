@@ -77,6 +77,30 @@ List<TerminalProfile> terminalProfilesFor(
   return profiles;
 }
 
+/// Rebuilds a profile from a stored [id] alone, or `null` when the id is not one
+/// this app writes.
+///
+/// Restoring a workspace deliberately does *not* consult the discovered
+/// environments: a WSL distro that has since been removed should come back as a
+/// pane that fails to launch and says so, not silently as PowerShell.
+TerminalProfile? terminalProfileFromId(String id) {
+  if (id == TerminalProfile.powerShellId) return TerminalProfile.powerShell;
+  if (id == TerminalProfile.commandPromptId) {
+    return TerminalProfile.commandPrompt;
+  }
+  if (id.startsWith('wsl:')) {
+    final distro = id.substring(4);
+    if (distro.isEmpty) return null;
+    return TerminalProfile(
+      id: id,
+      label: '$distro (WSL)',
+      shell: TerminalShell.wsl,
+      wslDistribution: distro,
+    );
+  }
+  return null;
+}
+
 /// Resolves [id] against [profiles], falling back to the first profile
 /// (PowerShell) when the stored preference is no longer available.
 TerminalProfile resolveTerminalProfile(
