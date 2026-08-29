@@ -1,5 +1,4 @@
 import 'agent_descriptor.dart';
-import 'agent_kind.dart';
 import 'built_in_agents.dart';
 
 /// The set of agents the app knows about, in probe/display order.
@@ -26,13 +25,4 @@ class AgentRegistry {
   /// this registry has never heard of (e.g. a stored installation whose
   /// descriptor was removed).
   String displayNameFor(String id) => byId(id)?.displayName ?? id;
-
-  /// The descriptor for the [AgentKind] of an agent that has a protocol
-  /// adapter, or `null` if this registry has no entry for it.
-  AgentDescriptor? forKind(AgentKind kind) {
-    for (final descriptor in descriptors) {
-      if (descriptor.kind == kind) return descriptor;
-    }
-    return null;
-  }
 }
