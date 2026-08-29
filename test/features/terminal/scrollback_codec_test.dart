@@ -1,4 +1,5 @@
 import 'package:chitragupta/src/features/terminal/data/scrollback_codec.dart';
+import 'package:chitragupta/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
@@ -69,6 +70,24 @@ void main() {
     final source = terminalWith('ab\x1b[6Gcd\r\n');
     final restored = blank()..write(encodeScrollback(source));
     expect(cellsOf(restored, 1, 40), cellsOf(source, 1, 40));
+  });
+
+  test('the default cap is the durable budget, not the live one', () {
+    expect(kDurableScrollbackMaxLines, 2000);
+    expect(kDurableScrollbackMaxBytes, 256 * 1024);
+    expect(kLiveScrollbackMaxLines, 10000);
+
+    // A pane holding more than the durable window still persists only the
+    // durable window: what is kept in RAM and what is written to SQLite are
+    // separate budgets, and the encoder answers to the second one.
+    final source = Terminal(maxLines: kLiveScrollbackMaxLines)
+      ..resize(40, 10)
+      ..write([for (var i = 0; i < 2500; i++) 'line$i\r\n'].join());
+    final encoded = encodeScrollback(source, maxBytes: 1 << 30);
+
+    expect('\n'.allMatches(encoded).length + 1, kDurableScrollbackMaxLines);
+    expect(encoded, contains('line2499'));
+    expect(encoded, isNot(contains('line499\x1b')));
   });
 
   test('maxLines keeps the newest lines and drops the oldest', () {

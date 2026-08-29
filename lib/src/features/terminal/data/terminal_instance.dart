@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
+import '../domain/scrollback_limits.dart';
 import '../domain/terminal_profile.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
@@ -62,7 +63,7 @@ class PtyTerminalInstance implements TerminalInstance {
     this.workingDirectory,
     String? restoredScrollback,
   }) {
-    terminal = Terminal(maxLines: 10000);
+    terminal = Terminal(maxLines: kLiveScrollbackMaxLines);
     // Replay the previous session's scrollback *before* the shell starts, so
     // restored history sits above the new process's first output.
     writeRestoredScrollback(terminal, restoredScrollback);
@@ -212,7 +213,7 @@ class ErrorTerminalInstance implements TerminalInstance {
     this.workingDirectory,
     String? restoredScrollback,
   }) {
-    terminal = Terminal(maxLines: 1000);
+    terminal = Terminal(maxLines: kErrorPaneScrollbackMaxLines);
     writeRestoredScrollback(terminal, restoredScrollback);
     terminal.write('\x1b[91m$message\x1b[0m\r\n');
   }
