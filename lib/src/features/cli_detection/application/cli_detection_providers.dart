@@ -4,6 +4,7 @@ import '../../../core/database/database_providers.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
@@ -19,7 +20,7 @@ import 'project_import_service.dart';
 import 'session_auto_import_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
-  (ref) => const CliDetectionService(),
+  (ref) => CliDetectionService(registry: ref.watch(agentRegistryProvider)),
 );
 
 final importedSessionDaoProvider = Provider<ImportedSessionDao>(
@@ -58,8 +59,10 @@ final autoImportRunnerProvider = Provider<AutoImportRunner>(
 );
 
 final cliStoreLocatorProvider = Provider<CliStoreLocator>(
-  (ref) =>
-      CliStoreLocator(runnerFactory: ref.watch(commandRunnerFactoryProvider)),
+  (ref) => CliStoreLocator(
+    runnerFactory: ref.watch(commandRunnerFactoryProvider),
+    registry: ref.watch(agentRegistryProvider),
+  ),
 );
 
 final cliSessionMutatorProvider = Provider<CliSessionMutator>(

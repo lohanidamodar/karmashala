@@ -4,15 +4,14 @@ import '../../../core/util/id_generator.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
+import '../domain/agent_descriptor.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_kind.dart';
+import '../domain/agent_registry.dart';
 
-/// The executable base name probed for each agent kind.
-String agentExecutableName(AgentKind kind) => switch (kind) {
-  AgentKind.claudeCode => 'claude',
-  AgentKind.codex => 'codex',
-  AgentKind.antigravity => 'antigravity',
-};
+/// The executable base name probed for each agent kind, from the registry.
+String agentExecutableName(AgentKind kind) =>
+    AgentRegistry.builtIn.forKind(kind)!.binaries.windows.first;
 
 /// The command that locates an executable by name in a given environment:
 /// `where` on Windows, `command -v` inside WSL.
@@ -52,60 +51,109 @@ String? parseAgentVersion(String output) {
   return firstNonEmptyLine(output);
 }
 
+/// One agent found in one environment, still described by its registry entry.
+class DiscoveredAgent {
+  const DiscoveredAgent({
+    required this.descriptor,
+    required this.executable,
+    this.version,
+  });
+
+  final AgentDescriptor descriptor;
+  final EnvironmentPath executable;
+  final String? version;
+}
+
 /// Detects which agent CLIs are installed in a single execution environment.
 ///
-/// Probing runs entirely through the supplied [runner] (constraint 6): it
-/// locates each agent's executable, then asks it for its version. Each result is
-/// an independent `(agent, environment)` [AgentInstallation].
+/// The agents probed and the names probed for come from the [registry], so
+/// supporting another agent is a descriptor, not a code change. Probing runs
+/// entirely through the supplied [runner] (constraint 6): it locates each
+/// agent's executable, then asks it for its version. Each result is an
+/// independent `(agent, environment)` installation.
 class AgentDiscoveryService {
   AgentDiscoveryService({
     required this.runner,
     required this.environment,
     required this.ids,
     required this.clock,
+    this.registry = AgentRegistry.builtIn,
   });
 
   final CommandRunner runner;
   final ExecutionEnvironment environment;
   final IdGenerator ids;
   final Clock clock;
+  final AgentRegistry registry;
 
-  Future<List<AgentInstallation>> discover() async {
+  /// Every registry agent found in this environment, descriptor included.
+  Future<List<DiscoveredAgent>> probeAll() async {
     // The probes are independent subprocesses. Run them concurrently so a
     // slow or missing CLI does not serially delay every other agent check.
-    final probed = await Future.wait(AgentKind.values.map(_probe));
-    return probed.whereType<AgentInstallation>().toList();
+    final probed = await Future.wait(registry.descriptors.map(_probe));
+    return probed.whereType<DiscoveredAgent>().toList();
   }
 
-  Future<AgentInstallation?> _probe(AgentKind kind) async {
-    final exeName = agentExecutableName(kind);
-    final CommandResult located;
-    try {
-      located = await runner.run(locateRequest(environment.kind, exeName));
-    } on CommandException {
-      return null; // Environment unavailable — treat as "not installed".
-    }
-    if (!located.ok) return null;
+  /// Discovered agents as persistable installations.
+  ///
+  /// Descriptors without an [AgentKind] are dropped: `AgentInstallation` is
+  /// still keyed by that enum, so a registry-only agent can be discovered and
+  /// status-detected but not yet stored. Widening the persisted key is the
+  /// follow-up recorded in the loop-28 design doc.
+  Future<List<AgentInstallation>> discover() async {
+    final found = await probeAll();
+    return [
+      for (final agent in found)
+        if (agent.descriptor.kind != null)
+          AgentInstallation(
+            id: ids.newId(),
+            agentKind: agent.descriptor.kind!,
+            executable: agent.executable,
+            version: agent.version,
+            createdAt: clock.nowUtc(),
+          ),
+    ];
+  }
 
-    final path = firstNonEmptyLine(located.stdout);
+  Future<DiscoveredAgent?> _probe(AgentDescriptor descriptor) async {
+    final path = await _locate(descriptor);
     if (path == null) return null;
 
     String? version;
-    try {
-      final versionResult = await runner.run(
-        CommandRequest(executable: path, arguments: const ['--version']),
-      );
-      if (versionResult.ok) version = parseAgentVersion(versionResult.stdout);
-    } on CommandException {
-      // Located but couldn't run --version; record it without a version.
+    if (descriptor.discovery.probeVersion) {
+      try {
+        final versionResult = await runner.run(
+          CommandRequest(
+            executable: path,
+            arguments: descriptor.discovery.versionArguments,
+          ),
+        );
+        if (versionResult.ok) version = parseAgentVersion(versionResult.stdout);
+      } on CommandException {
+        // Located but couldn't run --version; record it without a version.
+      }
     }
 
-    return AgentInstallation(
-      id: ids.newId(),
-      agentKind: kind,
+    return DiscoveredAgent(
+      descriptor: descriptor,
       executable: EnvironmentPath(environmentId: environment.id, path: path),
       version: version,
-      createdAt: clock.nowUtc(),
     );
+  }
+
+  /// Tries each declared binary name in order and returns the first hit.
+  Future<String?> _locate(AgentDescriptor descriptor) async {
+    for (final name in descriptor.binaries.forKind(environment.kind)) {
+      final CommandResult located;
+      try {
+        located = await runner.run(locateRequest(environment.kind, name));
+      } on CommandException {
+        return null; // Environment unavailable — treat as "not installed".
+      }
+      if (!located.ok) continue;
+      final path = firstNonEmptyLine(located.stdout);
+      if (path != null) return path;
+    }
+    return null;
   }
 }
