@@ -1,0 +1,22 @@
+# Vendored copy of xterm 4.0.0 — see VENDORED.md. Dev-dependencies and the
+# upstream example/ and test/ trees are intentionally not vendored.
+name: xterm
+description: xterm.dart is a fast and fully-featured terminal emulator for Flutter applications, with support for mobile and desktop platforms.
+version: 4.0.0
+homepage: https://github.com/TerminalStudio/xterm.dart
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  convert: ^3.0.0
+  meta: ^1.3.0
+  quiver: ^3.0.0
+  equatable: ^2.0.3
+  flutter:
+    sdk: flutter
+  zmodem: ^0.0.6
+
+flutter:
