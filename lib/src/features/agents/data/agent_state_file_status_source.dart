@@ -12,8 +12,8 @@ import '../domain/agent_status.dart';
 /// rather than re-parsing the whole file — a status poll must stay cheap.
 ///
 /// Classification is data, not code: each agent's [AgentStateFileRules] say
-/// which record shapes mean what. Anything unmatched is [
-/// AgentActivityStatus.unknown], never a guess.
+/// which record shapes mean what. Anything unmatched is `unknown`, never a
+/// guess.
 class AgentStateFileStatusSource {
   const AgentStateFileStatusSource({this.tailBytes = 65536});
 
@@ -81,8 +81,9 @@ class AgentStateFileStatusSource {
     if (failed != null) return (AgentActivityStatus.failed, failed);
 
     final approval = _firstMatch(rules.awaitingApproval, record);
-    if (approval != null)
+    if (approval != null) {
       return (AgentActivityStatus.awaitingApproval, approval);
+    }
 
     final idle = _firstMatch(rules.idle, record);
     if (idle != null) return (AgentActivityStatus.idle, idle);
