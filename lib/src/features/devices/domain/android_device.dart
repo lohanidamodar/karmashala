@@ -85,13 +85,16 @@ class Avd {
 
   @override
   bool operator ==(Object other) =>
-      other is Avd && other.name == name && other.runningSerial == runningSerial;
+      other is Avd &&
+      other.name == name &&
+      other.runningSerial == runningSerial;
 
   @override
   int get hashCode => Object.hash(name, runningSerial);
 
   @override
-  String toString() => 'Avd($name${isRunning ? ' running=$runningSerial' : ''})';
+  String toString() =>
+      'Avd($name${isRunning ? ' running=$runningSerial' : ''})';
 }
 
 /// A located Android SDK, with the tools we actually invoke.
@@ -100,11 +103,7 @@ class Avd {
 /// one installed inside WSL are different installations with different adb
 /// servers.
 class AndroidSdk {
-  const AndroidSdk({
-    required this.root,
-    required this.adb,
-    this.emulator,
-  });
+  const AndroidSdk({required this.root, required this.adb, this.emulator});
 
   /// SDK root (the directory holding `platform-tools/`).
   final EnvironmentPath root;

@@ -134,7 +134,9 @@ class LauncherChatController extends Notifier<LauncherChatState> {
 
     final installation = _resolveClaudeInstallation();
     if (installation == null) {
-      throw StateError('No Claude Code installation found. Run Discover first.');
+      throw StateError(
+        'No Claude Code installation found. Run Discover first.',
+      );
     }
     // The MCP bridge is a Windows executable and reaches the control server over
     // Windows loopback, so tools are only wired when the agent runs on Windows.
@@ -161,14 +163,21 @@ class LauncherChatController extends Notifier<LauncherChatState> {
         installation: installation,
         permissionMode: permission,
         mcpConfigPath: mcpConfigPath,
-        allowedTools: mcpConfigPath == null ? const [] : LauncherMcp.allowedTools,
-        appendSystemPrompt: mcpConfigPath == null ? null : _launcherSystemPrompt,
+        allowedTools: mcpConfigPath == null
+            ? const []
+            : LauncherMcp.allowedTools,
+        appendSystemPrompt: mcpConfigPath == null
+            ? null
+            : _launcherSystemPrompt,
       ),
     );
     _session = session;
-    _subscription = session.events.listen(_onEvent, onError: (Object e) {
-      _append(LauncherChatRole.error, '$e');
-    });
+    _subscription = session.events.listen(
+      _onEvent,
+      onError: (Object e) {
+        _append(LauncherChatRole.error, '$e');
+      },
+    );
     state = state.copyWith(
       status: LauncherChatStatus.ready,
       mcpEnabled: mcpConfigPath != null,
@@ -261,8 +270,9 @@ class LauncherChatVisible extends Notifier<bool> {
   void set(bool value) => state = value;
 }
 
-final launcherChatVisibleProvider =
-    NotifierProvider<LauncherChatVisible, bool>(LauncherChatVisible.new);
+final launcherChatVisibleProvider = NotifierProvider<LauncherChatVisible, bool>(
+  LauncherChatVisible.new,
+);
 
 /// A monotonically increasing tick bumped whenever the launcher wants to move
 /// focus to its active input (chat field or search field). Widgets watch it and

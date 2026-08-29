@@ -36,19 +36,21 @@ List of devices attached
       expect(parseAdbDevices(output, environmentId: 'windows'), isEmpty);
     });
 
-    test('records unauthorized and offline devices rather than dropping them',
-        () {
-      const output = '''
+    test(
+      'records unauthorized and offline devices rather than dropping them',
+      () {
+        const output = '''
 List of devices attached
 ABC123    unauthorized
 DEF456    offline
 ''';
-      final devices = parseAdbDevices(output, environmentId: 'windows');
-      expect(devices, hasLength(2));
-      expect(devices[0].state, DeviceConnectionState.unauthorized);
-      expect(devices[0].isReady, isFalse);
-      expect(devices[1].state, DeviceConnectionState.offline);
-    });
+        final devices = parseAdbDevices(output, environmentId: 'windows');
+        expect(devices, hasLength(2));
+        expect(devices[0].state, DeviceConnectionState.unauthorized);
+        expect(devices[0].isReady, isFalse);
+        expect(devices[1].state, DeviceConnectionState.offline);
+      },
+    );
 
     test('handles a short-form listing with no -l properties', () {
       const output = 'List of devices attached\nABC123\tdevice\n';

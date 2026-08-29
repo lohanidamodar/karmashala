@@ -95,18 +95,22 @@ CommandRequest envRequest(EnvironmentKind kind, String name) => switch (kind) {
   ),
 };
 
-/// Command that succeeds only when [path] is an executable file in [kind].
-CommandRequest executableProbeRequest(EnvironmentKind kind, String path) =>
-    switch (kind) {
-      EnvironmentKind.windowsNative => CommandRequest(
-        executable: 'cmd',
-        arguments: ['/c', 'if exist "$path" (exit 0) else (exit 1)'],
-      ),
-      EnvironmentKind.wsl => CommandRequest(
-        executable: 'bash',
-        arguments: ['-lc', 'test -x "$path"'],
-      ),
-    };
+/// Command that succeeds only when [path] is a runnable SDK tool.
+///
+/// The tool is **executed** (with a harmless version flag) rather than tested
+/// for existence. That is deliberate on two counts: it proves the binary
+/// actually runs rather than merely being present, and it avoids
+/// `cmd /c if exist "..."`, whose nested quotes are mangled by Windows argument
+/// escaping — that probe reported "missing" for an adb.exe that was really
+/// there.
+CommandRequest executableProbeRequest(String path, List<String> versionFlag) =>
+    CommandRequest(executable: path, arguments: versionFlag);
+
+/// Version flag that makes `adb` exit 0.
+const List<String> kAdbVersionFlag = ['--version'];
+
+/// Version flag that makes `emulator` exit 0.
+const List<String> kEmulatorVersionFlag = ['-version'];
 
 /// Command that locates `adb` on the PATH.
 CommandRequest adbOnPathRequest(EnvironmentKind kind) => switch (kind) {
@@ -141,7 +145,7 @@ class AndroidSdkDiscoveryService {
     final env = await _readEnvironmentVariables();
     for (final root in sdkCandidateRoots(kind: _kind, env: env)) {
       final adb = adbPathIn(root, _kind);
-      if (await _isExecutable(adb)) {
+      if (await _isRunnable(adb, kAdbVersionFlag)) {
         return _sdkAt(root, adb);
       }
     }
@@ -156,7 +160,7 @@ class AndroidSdkDiscoveryService {
 
   Future<AndroidSdk> _sdkAt(String root, String adbPath) async {
     final emulator = emulatorPathIn(root, _kind);
-    final hasEmulator = await _isExecutable(emulator);
+    final hasEmulator = await _isRunnable(emulator, kEmulatorVersionFlag);
     return AndroidSdk(
       root: EnvironmentPath(environmentId: environment.id, path: root),
       adb: EnvironmentPath(environmentId: environment.id, path: adbPath),
@@ -187,9 +191,13 @@ class AndroidSdkDiscoveryService {
     return env;
   }
 
-  Future<bool> _isExecutable(String path) async {
+  /// Whether [path] runs. A missing executable surfaces as a [CommandException]
+  /// from the runner, which reads as "not installed" rather than an error.
+  Future<bool> _isRunnable(String path, List<String> versionFlag) async {
     try {
-      final result = await runner.run(executableProbeRequest(_kind, path));
+      final result = await runner.run(
+        executableProbeRequest(path, versionFlag),
+      );
       return result.ok;
     } on CommandException {
       return false;

@@ -23,20 +23,22 @@ ExecutionEnvironment _wsl() => ExecutionEnvironment(
 
 void main() {
   group('sdkCandidateRoots', () {
-    test('prefers ANDROID_HOME, then ANDROID_SDK_ROOT, then well-known paths',
-        () {
-      final roots = sdkCandidateRoots(
-        kind: EnvironmentKind.windowsNative,
-        env: {
-          'ANDROID_HOME': r'C:\sdk-a',
-          'ANDROID_SDK_ROOT': r'C:\sdk-b',
-          'LOCALAPPDATA': r'C:\Users\d\AppData\Local',
-        },
-      );
-      expect(roots.first, r'C:\sdk-a');
-      expect(roots[1], r'C:\sdk-b');
-      expect(roots, contains(r'C:\Users\d\AppData\Local\Android\Sdk'));
-    });
+    test(
+      'prefers ANDROID_HOME, then ANDROID_SDK_ROOT, then well-known paths',
+      () {
+        final roots = sdkCandidateRoots(
+          kind: EnvironmentKind.windowsNative,
+          env: {
+            'ANDROID_HOME': r'C:\sdk-a',
+            'ANDROID_SDK_ROOT': r'C:\sdk-b',
+            'LOCALAPPDATA': r'C:\Users\d\AppData\Local',
+          },
+        );
+        expect(roots.first, r'C:\sdk-a');
+        expect(roots[1], r'C:\sdk-b');
+        expect(roots, contains(r'C:\Users\d\AppData\Local\Android\Sdk'));
+      },
+    );
 
     test('falls back to the well-known Windows location with no env vars', () {
       final roots = sdkCandidateRoots(
@@ -94,8 +96,8 @@ void main() {
               stderr: '',
             );
           }
-          // The existence probe succeeds only for the well-known adb.
-          if (joined.contains('adb.exe')) {
+          // The probe runs the tool itself; only the well-known adb runs.
+          if (request.executable.endsWith('adb.exe')) {
             return const CommandResult(exitCode: 0, stdout: 'OK', stderr: '');
           }
           return const CommandResult(exitCode: 1, stdout: '', stderr: '');
@@ -108,40 +110,47 @@ void main() {
       ).discover();
 
       expect(sdk, isNotNull);
-      expect(sdk!.adb.path, r'C:\Users\d\AppData\Local\Android\Sdk\platform-tools\adb.exe');
+      expect(
+        sdk!.adb.path,
+        r'C:\Users\d\AppData\Local\Android\Sdk\platform-tools\adb.exe',
+      );
       expect(sdk.adb.environmentId, 'windows');
       expect(sdk.root.path, r'C:\Users\d\AppData\Local\Android\Sdk');
     });
 
-    test('falls back to adb on PATH and derives the SDK root from it', () async {
-      final runner = FakeCommandRunner(
-        responder: (request) {
-          final joined = '${request.executable} ${request.arguments.join(' ')}';
-          if (request.executable == 'where' &&
-              request.arguments.contains('adb')) {
-            return const CommandResult(
-              exitCode: 0,
-              stdout: r'C:\tools\sdk\platform-tools\adb.exe',
-              stderr: '',
-            );
-          }
-          // No env vars, and no well-known path exists.
-          if (joined.contains('echo')) {
-            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-          }
-          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
-        },
-      );
+    test(
+      'falls back to adb on PATH and derives the SDK root from it',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (request) {
+            final joined =
+                '${request.executable} ${request.arguments.join(' ')}';
+            if (request.executable == 'where' &&
+                request.arguments.contains('adb')) {
+              return const CommandResult(
+                exitCode: 0,
+                stdout: r'C:\tools\sdk\platform-tools\adb.exe',
+                stderr: '',
+              );
+            }
+            // No env vars, and no well-known path exists.
+            if (joined.contains('echo')) {
+              return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+            }
+            return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+          },
+        );
 
-      final sdk = await AndroidSdkDiscoveryService(
-        runner: runner,
-        environment: _windows(),
-      ).discover();
+        final sdk = await AndroidSdkDiscoveryService(
+          runner: runner,
+          environment: _windows(),
+        ).discover();
 
-      expect(sdk, isNotNull);
-      expect(sdk!.adb.path, r'C:\tools\sdk\platform-tools\adb.exe');
-      expect(sdk.root.path, r'C:\tools\sdk');
-    });
+        expect(sdk, isNotNull);
+        expect(sdk!.adb.path, r'C:\tools\sdk\platform-tools\adb.exe');
+        expect(sdk.root.path, r'C:\tools\sdk');
+      },
+    );
 
     test('returns null when there is no SDK anywhere', () async {
       final runner = FakeCommandRunner(
@@ -177,7 +186,8 @@ void main() {
               stderr: '',
             );
           }
-          if (joined.contains('adb.exe') || joined.contains('emulator.exe')) {
+          if (request.executable.endsWith('adb.exe') ||
+              request.executable.endsWith('emulator.exe')) {
             return const CommandResult(exitCode: 0, stdout: 'OK', stderr: '');
           }
           return const CommandResult(exitCode: 1, stdout: '', stderr: '');

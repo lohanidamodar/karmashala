@@ -176,7 +176,11 @@ class TsMuxer {
 
       final start = 4 + adaptation;
       final count = kTsPacketSize - start;
-      packet.setRange(start, kTsPacketSize, pes.sublist(offset, offset + count));
+      packet.setRange(
+        start,
+        kTsPacketSize,
+        pes.sublist(offset, offset + count),
+      );
       offset += count;
       first = false;
       out.add(packet);

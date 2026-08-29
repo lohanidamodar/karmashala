@@ -90,7 +90,8 @@ void main() {
       expect(encoded[4] & 1, 1);
 
       // Reconstruct the 33-bit value from the encoded form.
-      final value = ((encoded[0] >> 1) & 0x07) << 30 |
+      final value =
+          ((encoded[0] >> 1) & 0x07) << 30 |
           encoded[1] << 22 |
           ((encoded[2] >> 1) & 0x7F) << 15 |
           encoded[3] << 7 |
@@ -106,10 +107,16 @@ void main() {
       );
       // Third packet is the first video packet (after PAT and PMT).
       const base = 2 * kTsPacketSize;
-      expect(bytes[base + 3] >> 4 & 0x3, 0x3,
-          reason: 'adaptation field + payload');
-      expect(bytes[base + 5] & 0x40, 0x40,
-          reason: 'random_access_indicator must be set on a keyframe');
+      expect(
+        bytes[base + 3] >> 4 & 0x3,
+        0x3,
+        reason: 'adaptation field + payload',
+      );
+      expect(
+        bytes[base + 5] & 0x40,
+        0x40,
+        reason: 'random_access_indicator must be set on a keyframe',
+      );
       expect(bytes[base + 5] & 0x10, 0x10, reason: 'PCR must be present');
     });
 

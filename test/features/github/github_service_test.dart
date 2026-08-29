@@ -45,16 +45,19 @@ void main() {
       expect(repo.defaultBranch, 'main');
     });
 
-    test('parseGhRepo tolerates missing description/branch and empty input', () {
-      final repo = parseGhRepo(
-        '{"nameWithOwner":"me/app","url":"u","isPrivate":true,'
-        '"stargazerCount":0}',
-      );
-      expect(repo!.description, isNull);
-      expect(repo.defaultBranch, isNull);
-      expect(repo.isPrivate, isTrue);
-      expect(parseGhRepo(''), isNull);
-    });
+    test(
+      'parseGhRepo tolerates missing description/branch and empty input',
+      () {
+        final repo = parseGhRepo(
+          '{"nameWithOwner":"me/app","url":"u","isPrivate":true,'
+          '"stargazerCount":0}',
+        );
+        expect(repo!.description, isNull);
+        expect(repo.defaultBranch, isNull);
+        expect(repo.isPrivate, isTrue);
+        expect(parseGhRepo(''), isNull);
+      },
+    );
   });
 
   group('GitHubService', () {

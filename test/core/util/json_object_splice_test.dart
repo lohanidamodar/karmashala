@@ -6,7 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('replaceTopLevelJsonValue', () {
     test('replaces an object value, preserving everything else verbatim', () {
-      const raw = '{\n'
+      const raw =
+          '{\n'
           '  "a": 1,\n'
           '  "oauthAccount": {"emailAddress": "old@x.com", "org": {"n": 1}},\n'
           '  "b": [1, 2, 3]\n'

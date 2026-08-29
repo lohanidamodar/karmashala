@@ -228,8 +228,7 @@ class Settings {
     defaultCodeEditorId: defaultCodeEditorId ?? this.defaultCodeEditorId,
     customEditorPath: customEditorPath ?? this.customEditorPath,
     launcherHotkeyJson: launcherHotkeyJson ?? this.launcherHotkeyJson,
-    launcherHotkeyEnabled:
-        launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
+    launcherHotkeyEnabled: launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
     chatToggleShortcutJson:
         chatToggleShortcutJson ?? this.chatToggleShortcutJson,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,

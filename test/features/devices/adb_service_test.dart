@@ -32,12 +32,15 @@ void main() {
       expect(encodeInputText('hello world'), 'hello%sworld');
     });
 
-    test('escapes shell metacharacters that would otherwise be interpreted', () {
-      expect(encodeInputText(r'a&b'), r'a\&b');
-      expect(encodeInputText('a"b'), r'a\"b');
-      expect(encodeInputText(r"it's"), r"it\'s");
-      expect(encodeInputText(r'$HOME'), r'\$HOME');
-    });
+    test(
+      'escapes shell metacharacters that would otherwise be interpreted',
+      () {
+        expect(encodeInputText(r'a&b'), r'a\&b');
+        expect(encodeInputText('a"b'), r'a\"b');
+        expect(encodeInputText(r"it's"), r"it\'s");
+        expect(encodeInputText(r'$HOME'), r'\$HOME');
+      },
+    );
 
     test('leaves ordinary text untouched', () {
       expect(encodeInputText('flutter123'), 'flutter123');
@@ -45,32 +48,34 @@ void main() {
   });
 
   group('listDevices', () {
-    test('asks adb for the long listing and binds results to the environment',
-        () async {
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 0,
-          stdout: 'List of devices attached\n'
-              'emulator-5554  device product:sdk model:Pixel transport_id:7\n',
-          stderr: '',
-        ),
-      );
-      final devices =
-          await AdbService(runner: runner, sdk: _sdk()).listDevices();
+    test(
+      'asks adb for the long listing and binds results to the environment',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (_) => const CommandResult(
+            exitCode: 0,
+            stdout:
+                'List of devices attached\n'
+                'emulator-5554  device product:sdk model:Pixel transport_id:7\n',
+            stderr: '',
+          ),
+        );
+        final devices = await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).listDevices();
 
-      expect(runner.requests.single.executable, _adbPath);
-      expect(_argv(runner, 0), ['devices', '-l']);
-      expect(devices.single.serial, 'emulator-5554');
-      expect(devices.single.environmentId, 'windows');
-    });
+        expect(runner.requests.single.executable, _adbPath);
+        expect(_argv(runner, 0), ['devices', '-l']);
+        expect(devices.single.serial, 'emulator-5554');
+        expect(devices.single.environmentId, 'windows');
+      },
+    );
 
     test('returns empty rather than throwing when adb fails', () async {
       final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'no devices',
-        ),
+        responder: (_) =>
+            const CommandResult(exitCode: 1, stdout: '', stderr: 'no devices'),
       );
       expect(
         await AdbService(runner: runner, sdk: _sdk()).listDevices(),
@@ -83,36 +88,68 @@ void main() {
     test('tap sends the exact adb argv', () async {
       final runner = FakeCommandRunner();
       await AdbService(runner: runner, sdk: _sdk()).tap('S1', 100, 250);
-      expect(_argv(runner, 0),
-          ['-s', 'S1', 'shell', 'input', 'tap', '100', '250']);
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'input',
+        'tap',
+        '100',
+        '250',
+      ]);
     });
 
     test('swipe passes the duration in milliseconds', () async {
       final runner = FakeCommandRunner();
       await AdbService(runner: runner, sdk: _sdk()).swipe(
         'S1',
-        fromX: 1, fromY: 2, toX: 3, toY: 4,
+        fromX: 1,
+        fromY: 2,
+        toX: 3,
+        toY: 4,
         duration: const Duration(milliseconds: 350),
       );
       expect(_argv(runner, 0), [
-        '-s', 'S1', 'shell', 'input', 'swipe', '1', '2', '3', '4', '350',
+        '-s',
+        'S1',
+        'shell',
+        'input',
+        'swipe',
+        '1',
+        '2',
+        '3',
+        '4',
+        '350',
       ]);
     });
 
     test('pressKey maps the enum to an Android keycode', () async {
       final runner = FakeCommandRunner();
-      await AdbService(runner: runner, sdk: _sdk())
-          .pressKey('S1', DeviceKey.recents);
-      expect(_argv(runner, 0),
-          ['-s', 'S1', 'shell', 'input', 'keyevent', 'KEYCODE_APP_SWITCH']);
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).pressKey('S1', DeviceKey.recents);
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'input',
+        'keyevent',
+        'KEYCODE_APP_SWITCH',
+      ]);
     });
 
     test('inputText encodes before sending', () async {
       final runner = FakeCommandRunner();
-      await AdbService(runner: runner, sdk: _sdk())
-          .inputText('S1', 'hi there');
-      expect(_argv(runner, 0),
-          ['-s', 'S1', 'shell', 'input', 'text', 'hi%sthere']);
+      await AdbService(runner: runner, sdk: _sdk()).inputText('S1', 'hi there');
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'input',
+        'text',
+        'hi%sthere',
+      ]);
     });
 
     test('sends nothing for empty text', () async {
@@ -146,27 +183,42 @@ void main() {
       ).screenshot('S1', hostPath: r'C:\tmp\shot.png');
 
       expect(_argv(runner, 0), [
-        '-s', 'S1', 'shell', 'screencap', '-p',
+        '-s',
+        'S1',
+        'shell',
+        'screencap',
+        '-p',
         '/data/local/tmp/chitragupta_screen.png',
       ]);
       expect(_argv(runner, 1), [
-        '-s', 'S1', 'pull',
-        '/data/local/tmp/chitragupta_screen.png', r'C:\tmp\shot.png',
+        '-s',
+        'S1',
+        'pull',
+        '/data/local/tmp/chitragupta_screen.png',
+        r'C:\tmp\shot.png',
       ]);
-      expect(_argv(runner, 2).sublist(2),
-          ['shell', 'rm', '-f', '/data/local/tmp/chitragupta_screen.png']);
+      expect(_argv(runner, 2).sublist(2), [
+        'shell',
+        'rm',
+        '-f',
+        '/data/local/tmp/chitragupta_screen.png',
+      ]);
       expect(bytes, [0x89, 0x50]);
     });
 
     test('reports a failed capture', () async {
       final runner = FakeCommandRunner(
         responder: (_) => const CommandResult(
-          exitCode: 1, stdout: '', stderr: 'permission denied',
+          exitCode: 1,
+          stdout: '',
+          stderr: 'permission denied',
         ),
       );
       expect(
-        () => AdbService(runner: runner, sdk: _sdk())
-            .screenshot('S1', hostPath: 'x.png'),
+        () => AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).screenshot('S1', hostPath: 'x.png'),
         throwsA(isA<StateError>()),
       );
     });
@@ -178,52 +230,78 @@ void main() {
         responder: (request) {
           if (request.arguments.contains('pidof')) {
             return const CommandResult(
-              exitCode: 0, stdout: '1234 5678', stderr: '',
+              exitCode: 0,
+              stdout: '1234 5678',
+              stderr: '',
             );
           }
           return const CommandResult(
             exitCode: 0,
-            stdout: '08-29 20:15:33.123  1234  5678 I MyTag   : hello\n'
+            stdout:
+                '08-29 20:15:33.123  1234  5678 I MyTag   : hello\n'
                 '08-29 20:15:34.000  1234  5678 D Other   : noise\n',
             stderr: '',
           );
         },
       );
-      final entries = await AdbService(runner: runner, sdk: _sdk())
-          .readLogcat('S1', packageName: 'com.example.app');
+      final entries = await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).readLogcat('S1', packageName: 'com.example.app');
 
-      expect(_argv(runner, 0).sublist(2), ['shell', 'pidof', 'com.example.app']);
-      expect(_argv(runner, 1), containsAllInOrder(
-          ['shell', 'logcat', '-d', '-v', 'threadtime']));
+      expect(_argv(runner, 0).sublist(2), [
+        'shell',
+        'pidof',
+        'com.example.app',
+      ]);
+      expect(
+        _argv(runner, 1),
+        containsAllInOrder(['shell', 'logcat', '-d', '-v', 'threadtime']),
+      );
       expect(_argv(runner, 1), containsAllInOrder(['--pid', '1234']));
       expect(entries, hasLength(2));
       expect(entries.first.tag, 'MyTag');
     });
 
-    test('returns empty when the package is not running, not the whole log',
-        () async {
-      final runner = FakeCommandRunner(
-        responder: (request) => request.arguments.contains('pidof')
-            ? const CommandResult(exitCode: 1, stdout: '', stderr: '')
-            : const CommandResult(exitCode: 0, stdout: 'lots of noise', stderr: ''),
-      );
-      final entries = await AdbService(runner: runner, sdk: _sdk())
-          .readLogcat('S1', packageName: 'com.absent.app');
-      expect(entries, isEmpty);
-      expect(runner.requests, hasLength(1), reason: 'must not run logcat at all');
-    });
+    test(
+      'returns empty when the package is not running, not the whole log',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (request) => request.arguments.contains('pidof')
+              ? const CommandResult(exitCode: 1, stdout: '', stderr: '')
+              : const CommandResult(
+                  exitCode: 0,
+                  stdout: 'lots of noise',
+                  stderr: '',
+                ),
+        );
+        final entries = await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).readLogcat('S1', packageName: 'com.absent.app');
+        expect(entries, isEmpty);
+        expect(
+          runner.requests,
+          hasLength(1),
+          reason: 'must not run logcat at all',
+        );
+      },
+    );
 
     test('applies the minimum level filter', () async {
       final runner = FakeCommandRunner(
         responder: (_) => const CommandResult(
           exitCode: 0,
-          stdout: '08-29 20:15:33.123  1  2 V A: verbose\n'
+          stdout:
+              '08-29 20:15:33.123  1  2 V A: verbose\n'
               '08-29 20:15:33.124  1  2 E B: error\n',
           stderr: '',
         ),
       );
-      final entries = await AdbService(runner: runner, sdk: _sdk())
-          .readLogcat('S1', minLevel: LogLevel.error);
+      final entries = await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).readLogcat('S1', minLevel: LogLevel.error);
       expect(entries, hasLength(1));
       expect(entries.single.level, LogLevel.error);
     });
@@ -235,7 +313,9 @@ void main() {
         responder: (request) {
           if (request.executable == _emulatorPath) {
             return const CommandResult(
-              exitCode: 0, stdout: 'Pixel_8_Pro\nsambandha_test\n', stderr: '',
+              exitCode: 0,
+              stdout: 'Pixel_8_Pro\nsambandha_test\n',
+              stderr: '',
             );
           }
           if (request.arguments.contains('devices')) {
@@ -247,7 +327,9 @@ void main() {
           }
           // `emu avd name` answers with the name then OK.
           return const CommandResult(
-            exitCode: 0, stdout: 'sambandha_test\nOK\n', stderr: '',
+            exitCode: 0,
+            stdout: 'sambandha_test\nOK\n',
+            stderr: '',
           );
         },
       );
@@ -259,16 +341,20 @@ void main() {
 
     test('returns no AVDs when the SDK has no emulator package', () async {
       final runner = FakeCommandRunner();
-      final avds = await AdbService(runner: runner, sdk: _sdk(withEmulator: false))
-          .listAvds();
+      final avds = await AdbService(
+        runner: runner,
+        sdk: _sdk(withEmulator: false),
+      ).listAvds();
       expect(avds, isEmpty);
       expect(runner.requests, isEmpty);
     });
 
     test('booting without an emulator package explains why', () async {
       expect(
-        () => AdbService(runner: FakeCommandRunner(), sdk: _sdk(withEmulator: false))
-            .bootAvd('X'),
+        () => AdbService(
+          runner: FakeCommandRunner(),
+          sdk: _sdk(withEmulator: false),
+        ).bootAvd('X'),
         throwsA(isA<StateError>()),
       );
     });
@@ -285,10 +371,15 @@ void main() {
     test('reads the device coordinate space', () async {
       final runner = FakeCommandRunner(
         responder: (_) => const CommandResult(
-          exitCode: 0, stdout: 'Physical size: 1080x2400', stderr: '',
+          exitCode: 0,
+          stdout: 'Physical size: 1080x2400',
+          stderr: '',
         ),
       );
-      final size = await AdbService(runner: runner, sdk: _sdk()).screenSize('S1');
+      final size = await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).screenSize('S1');
       expect(size, const DeviceScreenSize(width: 1080, height: 2400));
     });
   });

@@ -25,7 +25,10 @@ String encodeInputText(String text) {
     final ch = String.fromCharCode(rune);
     if (ch == ' ') {
       buffer.write('%s');
-    } else if (r'\"' r"'" r'&<>;|()$`*?[]#~'.contains(ch)) {
+    } else if (r'\"'
+            r"'"
+            r'&<>;|()$`*?[]#~'
+        .contains(ch)) {
       buffer.write('\\$ch');
     } else {
       buffer.write(ch);
@@ -83,7 +86,10 @@ class AdbService {
     final emulator = sdk.emulator;
     if (emulator == null) return const [];
     final result = await runner.run(
-      CommandRequest(executable: emulator.path, arguments: const ['-list-avds']),
+      CommandRequest(
+        executable: emulator.path,
+        arguments: const ['-list-avds'],
+      ),
     );
     if (!result.ok) return const [];
     final names = parseAvdNames(result.stdout);
@@ -129,7 +135,9 @@ class AdbService {
 
   /// The device's current screen size — the coordinate space taps use.
   Future<DeviceScreenSize?> screenSize(String serial) async {
-    final result = await runner.run(_forDevice(serial, const ['shell', 'wm', 'size']));
+    final result = await runner.run(
+      _forDevice(serial, const ['shell', 'wm', 'size']),
+    );
     if (!result.ok) return null;
     return parseScreenSize(result.stdout);
   }
@@ -148,7 +156,8 @@ class AdbService {
       throw StateError('screencap failed on $serial: ${capture.stderr.trim()}');
     }
     final destination =
-        hostPath ?? '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        hostPath ??
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
             'chitragupta_screen_$serial.png';
     final pull = await runner.run(
       _forDevice(serial, ['pull', devicePath, destination]),
@@ -256,7 +265,11 @@ class AdbService {
   );
 
   /// Pushes a file to the device.
-  Future<void> push(String serial, EnvironmentPath source, String devicePath) async {
+  Future<void> push(
+    String serial,
+    EnvironmentPath source,
+    String devicePath,
+  ) async {
     final result = await runner.run(
       _forDevice(serial, ['push', source.path, devicePath]),
     );
@@ -276,6 +289,8 @@ class AdbService {
   }
 
   Future<void> removeForward(String serial, int localPort) async {
-    await runner.run(_forDevice(serial, ['forward', '--remove', 'tcp:$localPort']));
+    await runner.run(
+      _forDevice(serial, ['forward', '--remove', 'tcp:$localPort']),
+    );
   }
 }

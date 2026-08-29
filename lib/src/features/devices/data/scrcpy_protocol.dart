@@ -20,7 +20,6 @@
 
 import 'dart:typed_data';
 
-
 const int _flagSession = 63;
 const int _flagConfig = 62;
 const int _flagKeyFrame = 61;
@@ -111,10 +110,7 @@ class ScrcpyStreamParser {
       if (_bit(ptsAndFlags, _flagSession)) {
         // Session meta: int32 flags | int32 width, then int32 height. No payload.
         packets.add(
-          ScrcpySessionMeta(
-            width: ptsAndFlags & 0xFFFFFFFF,
-            height: sizeField,
-          ),
+          ScrcpySessionMeta(width: ptsAndFlags & 0xFFFFFFFF, height: sizeField),
         );
         consumed += 12;
         continue;

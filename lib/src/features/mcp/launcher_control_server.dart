@@ -14,6 +14,11 @@ import '../agents/application/agent_usage_providers.dart';
 import '../agents/domain/agent_installation.dart';
 import '../agents/domain/agent_kind.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
+import '../devices/application/device_providers.dart';
+import '../devices/data/adb_service.dart';
+import '../devices/domain/android_device.dart';
+import '../devices/domain/device_input.dart';
+import '../devices/domain/logcat_entry.dart';
 import '../environments/application/environment_providers.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
@@ -141,6 +146,27 @@ class LauncherControlServer {
         );
       case 'open_session':
         return _openSession(args['id'] as String?);
+      case 'list_devices':
+        return _listDevices();
+      case 'device_screenshot':
+        return _deviceScreenshot(args['serial'] as String?);
+      case 'device_tap':
+        return _deviceTap(
+          args['serial'] as String?,
+          (args['x'] as num?)?.round(),
+          (args['y'] as num?)?.round(),
+        );
+      case 'device_type':
+        return _deviceType(args['serial'] as String?, args['text'] as String?);
+      case 'device_key':
+        return _deviceKey(args['serial'] as String?, args['key'] as String?);
+      case 'device_logcat':
+        return _deviceLogcat(
+          serial: args['serial'] as String?,
+          packageName: args['package'] as String?,
+          level: args['level'] as String?,
+          lines: (args['lines'] as num?)?.round(),
+        );
       case 'open_sessions_in_tmux':
         return _openSessionsInTmux(
           (args['ids'] as List?)?.whereType<String>().toList() ??
@@ -240,9 +266,114 @@ class LauncherControlServer {
       'inputSchema': {
         'type': 'object',
         'properties': {
-          'id': {'type': 'string', 'description': 'Session id from list_sessions.'},
+          'id': {
+            'type': 'string',
+            'description': 'Session id from list_sessions.',
+          },
         },
         'required': ['id'],
+      },
+    },
+    {
+      'name': 'list_devices',
+      'description':
+          'List connected Android devices and running emulators, with their '
+          'serial, model, and whether they are ready. Devices that are not '
+          'usable (unauthorized, offline) are included and marked so you can '
+          'explain the problem rather than reporting no devices.',
+      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
+    },
+    {
+      'name': 'device_screenshot',
+      'description':
+          'Capture the current screen of an Android device as a PNG image. '
+          'Use this to see what an app is actually showing. serial is optional '
+          'when exactly one device is connected.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'serial': {
+            'type': 'string',
+            'description': 'Device serial from list_devices.',
+          },
+        },
+      },
+    },
+    {
+      'name': 'device_tap',
+      'description':
+          'Tap the device screen at (x, y) in DEVICE pixel coordinates (the '
+          'coordinate space reported by list_devices as screen size, not the '
+          'size of any screenshot you scaled). Take a screenshot first to '
+          'decide where to tap.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'serial': {'type': 'string'},
+          'x': {'type': 'number', 'description': 'X in device pixels.'},
+          'y': {'type': 'number', 'description': 'Y in device pixels.'},
+        },
+        'required': ['x', 'y'],
+      },
+    },
+    {
+      'name': 'device_type',
+      'description':
+          'Type text into whatever field currently has focus on the device. '
+          'Tap the field first. Spaces and shell characters are escaped for you.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'serial': {'type': 'string'},
+          'text': {'type': 'string'},
+        },
+        'required': ['text'],
+      },
+    },
+    {
+      'name': 'device_key',
+      'description':
+          'Press a hardware button: back, home, recents, power, volumeUp, '
+          'volumeDown, enter, tab or delete.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'serial': {'type': 'string'},
+          'key': {
+            'type': 'string',
+            'description':
+                'back | home | recents | power | volumeUp | '
+                'volumeDown | enter | tab | delete',
+          },
+        },
+        'required': ['key'],
+      },
+    },
+    {
+      'name': 'device_logcat',
+      'description':
+          'Read recent logcat output, newest last. Filter to one app with '
+          'package (strongly recommended — the unfiltered system log is huge '
+          'and mostly noise), and raise level to see only warnings or errors. '
+          'Returns nothing if the package is not running.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'serial': {'type': 'string'},
+          'package': {
+            'type': 'string',
+            'description': 'Application id, e.g. com.example.app.',
+          },
+          'level': {
+            'type': 'string',
+            'description':
+                'Minimum level: verbose, debug, info, warning, error, fatal.',
+          },
+          'lines': {
+            'type': 'number',
+            'description': 'Max lines (default 200).',
+          },
+        },
       },
     },
     {
@@ -339,7 +470,8 @@ class LauncherControlServer {
 
   List<Map<String, dynamic>> _listAgents() {
     return [
-      for (final install in _container.read(agentInstallationDaoProvider).getAll())
+      for (final install
+          in _container.read(agentInstallationDaoProvider).getAll())
         {
           'agentInstallationId': install.id,
           'cli': install.agentKind.name,
@@ -357,7 +489,9 @@ class LauncherControlServer {
     String? repositoryId,
   }) async {
     if (projectId == null) throw ArgumentError('Missing projectId.');
-    final repos = _container.read(repositoryDaoProvider).getByProject(projectId);
+    final repos = _container
+        .read(repositoryDaoProvider)
+        .getByProject(projectId);
     if (repos.isEmpty) {
       throw StateError('This project has no repositories to run in.');
     }
@@ -399,7 +533,9 @@ class LauncherControlServer {
         }
       }
       if (install == null) {
-        throw StateError('$cli is not installed in ${repo.path.environmentId}.');
+        throw StateError(
+          '$cli is not installed in ${repo.path.environmentId}.',
+        );
       }
     } else {
       final settings = _container.read(settingsControllerProvider);
@@ -412,15 +548,19 @@ class LauncherControlServer {
           installs.first;
     }
 
-    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    final terminal = await _container.read(
+      defaultSystemTerminalProvider.future,
+    );
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
-    await _container.read(sessionActionsProvider).startNewInSystemTerminal(
-      repo: repo,
-      installation: install,
-      terminal: terminal,
-    );
+    await _container
+        .read(sessionActionsProvider)
+        .startNewInSystemTerminal(
+          repo: repo,
+          installation: install,
+          terminal: terminal,
+        );
     return {
       'opened': 'new ${install.agentKind.name} session',
       'repository': repo.name,
@@ -434,7 +574,9 @@ class LauncherControlServer {
     if (install == null) {
       throw StateError('No ${kind.name} installation found.');
     }
-    final environments = _container.read(executionEnvironmentDaoProvider).getAll();
+    final environments = _container
+        .read(executionEnvironmentDaoProvider)
+        .getAll();
     final usage = await _container
         .read(agentUsageServiceProvider)
         .fetch(install, environments);
@@ -455,17 +597,19 @@ class LauncherControlServer {
     if (id == null) throw ArgumentError('Missing session id.');
     final session = _container.read(importedSessionDaoProvider).getById(id);
     if (session == null) throw StateError('Session not found: $id');
-    final repo = _container.read(repositoryDaoProvider).getById(
-      session.repositoryId,
-    );
-    final env = _container.read(executionEnvironmentDaoProvider).getById(
-      session.environmentId,
-    );
+    final repo = _container
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId);
+    final env = _container
+        .read(executionEnvironmentDaoProvider)
+        .getById(session.environmentId);
     final install = _installFor(session.cli, session.environmentId);
     if (repo == null || env == null || install == null) {
       throw StateError('Session repository, environment, or agent is missing.');
     }
-    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    final terminal = await _container.read(
+      defaultSystemTerminalProvider.future,
+    );
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
@@ -477,11 +621,13 @@ class LauncherControlServer {
       cwd: repo.path,
       permissionMode: _permissionFor(session.cli),
     );
-    await _container.read(systemTerminalServiceProvider).launch(
-      terminal,
-      command: command,
-      workingDirectory: env.wslDistribution == null ? repo.path.path : null,
-    );
+    await _container
+        .read(systemTerminalServiceProvider)
+        .launch(
+          terminal,
+          command: command,
+          workingDirectory: env.wslDistribution == null ? repo.path.path : null,
+        );
     return {'opened': session.displayTitle, 'environmentId': env.id};
   }
 
@@ -552,26 +698,208 @@ class LauncherControlServer {
         .path;
     await File(uncPath).writeAsString(script, flush: true);
 
-    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    final terminal = await _container.read(
+      defaultSystemTerminalProvider.future,
+    );
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
-    await _container.read(systemTerminalServiceProvider).launch(
-      terminal,
-      command: [
-        'wsl.exe',
-        '-d',
-        env.wslDistribution!,
-        '--',
-        'bash',
-        scriptWslPath,
-      ],
-    );
+    await _container
+        .read(systemTerminalServiceProvider)
+        .launch(
+          terminal,
+          command: [
+            'wsl.exe',
+            '-d',
+            env.wslDistribution!,
+            '--',
+            'bash',
+            scriptWslPath,
+          ],
+        );
     return {'opened': windows.length, 'tmuxSession': sessionName};
   }
 
+  // ---------------------------------------------------------------------------
+  // Android devices
+  //
+  // These make the device pane usable by an agent: see the screen, touch it,
+  // read the log. Everything goes through the same AdbService the pane uses, so
+  // the agent and the human are driving exactly the same device.
+  // ---------------------------------------------------------------------------
+
+  AdbService _requireAdb() {
+    final adb = _container.read(adbServiceProvider);
+    if (adb == null) {
+      throw StateError(
+        'No Android SDK found. Set ANDROID_HOME or install the SDK to the '
+        r'default location (%LOCALAPPDATA%\Android\Sdk).',
+      );
+    }
+    return adb;
+  }
+
+  /// Resolves which device to act on. With exactly one ready device the serial
+  /// can be omitted, which is what a caller will want almost every time.
+  Future<AndroidDevice> _resolveDevice(String? serial) async {
+    final devices = await _requireAdb().listDevices();
+    if (devices.isEmpty) {
+      throw StateError('No Android devices are connected.');
+    }
+    if (serial != null) {
+      for (final device in devices) {
+        if (device.serial == serial) {
+          if (!device.isReady) {
+            throw StateError(
+              'Device $serial is ${device.state.name}, not ready. '
+              'If it is unauthorized, accept the USB debugging prompt on the '
+              'device.',
+            );
+          }
+          return device;
+        }
+      }
+      throw StateError('No device with serial $serial.');
+    }
+    final ready = devices.where((d) => d.isReady).toList();
+    if (ready.isEmpty) {
+      throw StateError(
+        'No device is ready: '
+        '${devices.map((d) => '${d.serial} (${d.state.name})').join(', ')}.',
+      );
+    }
+    if (ready.length > 1) {
+      throw StateError(
+        'Several devices are connected; pass serial. Options: '
+        '${ready.map((d) => d.serial).join(', ')}.',
+      );
+    }
+    return ready.single;
+  }
+
+  Future<Object?> _listDevices() async {
+    final adb = _requireAdb();
+    final devices = await adb.listDevices();
+    final avds = await adb.listAvds();
+    return {
+      'devices': [
+        for (final device in devices)
+          {
+            'serial': device.serial,
+            'name': device.displayName,
+            'state': device.state.name,
+            'ready': device.isReady,
+            'emulator': device.isEmulator,
+            'environmentId': device.environmentId,
+            if (device.isReady)
+              'screenSize': (await adb.screenSize(device.serial))?.toString(),
+          },
+      ],
+      'avds': [
+        for (final avd in avds) {'name': avd.name, 'running': avd.isRunning},
+      ],
+    };
+  }
+
+  Future<Object?> _deviceScreenshot(String? serial) async {
+    final device = await _resolveDevice(serial);
+    final adb = _requireAdb();
+    final bytes = await adb.screenshot(device.serial);
+    final size = await adb.screenSize(device.serial);
+    final file = File(
+      p.join(
+        Directory.systemTemp.path,
+        'chitragupta_${device.serial}_${DateTime.now().millisecondsSinceEpoch}.png',
+      ),
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    // Returned as MCP content blocks so the model actually sees the image
+    // instead of a wall of base64 in a JSON string.
+    return {
+      '_mcpContent': [
+        {'type': 'image', 'data': base64Encode(bytes), 'mimeType': 'image/png'},
+        {
+          'type': 'text',
+          'text':
+              'Screenshot of ${device.displayName} (${device.serial})'
+              '${size == null ? '' : ', screen $size device px'}. '
+              'Saved to ${file.path}. Tap coordinates are in device pixels.',
+        },
+      ],
+    };
+  }
+
+  Future<Object?> _deviceTap(String? serial, int? x, int? y) async {
+    if (x == null || y == null) throw ArgumentError('x and y are required.');
+    final device = await _resolveDevice(serial);
+    await _requireAdb().tap(device.serial, x, y);
+    return {'tapped': '($x, $y)', 'serial': device.serial};
+  }
+
+  Future<Object?> _deviceType(String? serial, String? text) async {
+    if (text == null) throw ArgumentError('text is required.');
+    final device = await _resolveDevice(serial);
+    await _requireAdb().inputText(device.serial, text);
+    return {'typed': text, 'serial': device.serial};
+  }
+
+  Future<Object?> _deviceKey(String? serial, String? key) async {
+    if (key == null) throw ArgumentError('key is required.');
+    final parsed = DeviceKey.parse(key);
+    if (parsed == null) {
+      throw ArgumentError(
+        'Unknown key "$key". Valid keys: '
+        '${DeviceKey.values.map((k) => k.name).join(', ')}.',
+      );
+    }
+    final device = await _resolveDevice(serial);
+    await _requireAdb().pressKey(device.serial, parsed);
+    return {'pressed': parsed.name, 'serial': device.serial};
+  }
+
+  Future<Object?> _deviceLogcat({
+    String? serial,
+    String? packageName,
+    String? level,
+    int? lines,
+  }) async {
+    final device = await _resolveDevice(serial);
+    final minLevel = _parseLogLevel(level) ?? LogLevel.verbose;
+    final entries = await _requireAdb().readLogcat(
+      device.serial,
+      packageName: packageName,
+      minLevel: minLevel,
+      maxLines: lines ?? 200,
+    );
+    if (entries.isEmpty && packageName != null) {
+      return {
+        'serial': device.serial,
+        'package': packageName,
+        'lines': <String>[],
+        'note': 'No output — $packageName does not appear to be running.',
+      };
+    }
+    return {
+      'serial': device.serial,
+      'package': ?packageName,
+      'lines': [for (final entry in entries) entry.toString()],
+    };
+  }
+
+  LogLevel? _parseLogLevel(String? level) {
+    if (level == null) return null;
+    final needle = level.trim().toLowerCase();
+    for (final value in LogLevel.values) {
+      if (value.name == needle || value.code.toLowerCase() == needle) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   AgentInstallation? _installFor(AgentKind kind, String? environmentId) {
-    for (final install in _container.read(agentInstallationDaoProvider).getAll()) {
+    for (final install
+        in _container.read(agentInstallationDaoProvider).getAll()) {
       if (install.agentKind != kind) continue;
       if (environmentId != null && install.environmentId != environmentId) {
         continue;
@@ -582,7 +910,8 @@ class LauncherControlServer {
   }
 
   ExecutionEnvironment? _windowsEnv() {
-    for (final env in _container.read(executionEnvironmentDaoProvider).getAll()) {
+    for (final env
+        in _container.read(executionEnvironmentDaoProvider).getAll()) {
       if (env.kind == EnvironmentKind.windowsNative) return env;
     }
     return null;

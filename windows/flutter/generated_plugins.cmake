@@ -5,6 +5,8 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_windows
   hotkey_manager_windows
+  media_kit_libs_windows_video
+  media_kit_video
   pasteboard
   screen_retriever_windows
   tray_manager

@@ -3,43 +3,49 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('buildTmuxScript', () {
-    test('is non-destructive: appends to an existing session, else creates', () {
-      final script = buildTmuxScript('appwrite', [
-        const TmuxWindow(
-          label: 'analytics',
-          cwd: '/home/x/appwrite',
-          command: '/home/x/.local/bin/claude --resume A',
-        ),
-        const TmuxWindow(
-          label: 'usage',
-          cwd: '/home/x/appwrite',
-          command: '/home/x/.local/bin/claude --resume B',
-        ),
-      ]);
+    test(
+      'is non-destructive: appends to an existing session, else creates',
+      () {
+        final script = buildTmuxScript('appwrite', [
+          const TmuxWindow(
+            label: 'analytics',
+            cwd: '/home/x/appwrite',
+            command: '/home/x/.local/bin/claude --resume A',
+          ),
+          const TmuxWindow(
+            label: 'usage',
+            cwd: '/home/x/appwrite',
+            command: '/home/x/.local/bin/claude --resume B',
+          ),
+        ]);
 
-      expect(script.split('\n').first, '#!/usr/bin/env bash');
-      // Never kills an existing session.
-      expect(script, isNot(contains('kill-session')));
-      // Branches on whether the session already exists.
-      expect(script, contains("if tmux has-session -t 'appwrite' 2>/dev/null"));
-      // Existing branch: append windows with -d (no focus steal).
-      expect(
-        script,
-        contains(
-          "tmux new-window -d -t 'appwrite' -n 'analytics' "
-          "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume A'",
-        ),
-      );
-      // New branch: first is a new-session, rest are new-window.
-      expect(
-        script,
-        contains(
-          "tmux new-session -d -s 'appwrite' -n 'analytics' "
-          "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume A'",
-        ),
-      );
-      expect(script.trim(), endsWith("tmux attach -t 'appwrite'"));
-    });
+        expect(script.split('\n').first, '#!/usr/bin/env bash');
+        // Never kills an existing session.
+        expect(script, isNot(contains('kill-session')));
+        // Branches on whether the session already exists.
+        expect(
+          script,
+          contains("if tmux has-session -t 'appwrite' 2>/dev/null"),
+        );
+        // Existing branch: append windows with -d (no focus steal).
+        expect(
+          script,
+          contains(
+            "tmux new-window -d -t 'appwrite' -n 'analytics' "
+            "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume A'",
+          ),
+        );
+        // New branch: first is a new-session, rest are new-window.
+        expect(
+          script,
+          contains(
+            "tmux new-session -d -s 'appwrite' -n 'analytics' "
+            "-c '/home/x/appwrite' '/home/x/.local/bin/claude --resume A'",
+          ),
+        );
+        expect(script.trim(), endsWith("tmux attach -t 'appwrite'"));
+      },
+    );
 
     test('escapes embedded single quotes', () {
       final script = buildTmuxScript("it's", [
