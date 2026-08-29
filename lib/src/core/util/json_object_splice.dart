@@ -11,7 +11,11 @@
 /// number, bool, or null) — it is inserted verbatim. If [key] is not present at
 /// the top level it is inserted as the first property. Throws [FormatException]
 /// if [rawJson] is not a JSON object or is malformed.
-String replaceTopLevelJsonValue(String rawJson, String key, String newValueJson) {
+String replaceTopLevelJsonValue(
+  String rawJson,
+  String key,
+  String newValueJson,
+) {
   final scanner = _Scanner(rawJson);
   final objectStart = scanner.skipWsFrom(0);
   if (objectStart >= rawJson.length || rawJson[objectStart] != '{') {
@@ -35,7 +39,9 @@ String replaceTopLevelJsonValue(String rawJson, String key, String newValueJson)
     final name = _decodeJsonString(rawJson.substring(i, nameEnd));
     var afterName = scanner.skipWsFrom(nameEnd);
     if (afterName >= rawJson.length || rawJson[afterName] != ':') {
-      throw FormatException('Expected ":" after property name at offset $afterName');
+      throw FormatException(
+        'Expected ":" after property name at offset $afterName',
+      );
     }
     final valueStart = scanner.skipWsFrom(afterName + 1);
     final valueEnd = scanner.endOfValue(valueStart);

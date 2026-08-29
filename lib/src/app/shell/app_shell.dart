@@ -72,36 +72,37 @@ class _AppShellState extends ConsumerState<AppShell> {
           key: _scaffoldKey,
           appBar: const _ShellAppBar(),
           endDrawer: const Drawer(
-          width: 420,
-          child: SafeArea(
-            child: Padding(
-              padding: EdgeInsets.all(4),
-              child: LauncherChatView(),
+            width: 420,
+            child: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.all(4),
+                child: LauncherChatView(),
+              ),
+            ),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth >=
+                            AppShell._mediumBreakpoint) {
+                          return _SplitLayout(shell: shell);
+                        }
+                        return _NarrowLayout(shell: shell);
+                      },
+                    ),
+                  ),
+                ),
+                if (terminalVisible)
+                  const SizedBox(height: 280, child: TerminalPanel()),
+              ],
             ),
           ),
         ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (constraints.maxWidth >= AppShell._mediumBreakpoint) {
-                        return _SplitLayout(shell: shell);
-                      }
-                      return _NarrowLayout(shell: shell);
-                    },
-                  ),
-                ),
-              ),
-              if (terminalVisible)
-                const SizedBox(height: 280, child: TerminalPanel()),
-            ],
-          ),
-        ),
-      ),
       ),
     );
   }

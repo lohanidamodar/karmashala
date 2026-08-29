@@ -240,7 +240,10 @@ class LauncherControlServer {
       'inputSchema': {
         'type': 'object',
         'properties': {
-          'id': {'type': 'string', 'description': 'Session id from list_sessions.'},
+          'id': {
+            'type': 'string',
+            'description': 'Session id from list_sessions.',
+          },
         },
         'required': ['id'],
       },
@@ -339,7 +342,8 @@ class LauncherControlServer {
 
   List<Map<String, dynamic>> _listAgents() {
     return [
-      for (final install in _container.read(agentInstallationDaoProvider).getAll())
+      for (final install
+          in _container.read(agentInstallationDaoProvider).getAll())
         {
           'agentInstallationId': install.id,
           'cli': install.agentKind.name,
@@ -357,7 +361,9 @@ class LauncherControlServer {
     String? repositoryId,
   }) async {
     if (projectId == null) throw ArgumentError('Missing projectId.');
-    final repos = _container.read(repositoryDaoProvider).getByProject(projectId);
+    final repos = _container
+        .read(repositoryDaoProvider)
+        .getByProject(projectId);
     if (repos.isEmpty) {
       throw StateError('This project has no repositories to run in.');
     }
@@ -399,7 +405,9 @@ class LauncherControlServer {
         }
       }
       if (install == null) {
-        throw StateError('$cli is not installed in ${repo.path.environmentId}.');
+        throw StateError(
+          '$cli is not installed in ${repo.path.environmentId}.',
+        );
       }
     } else {
       final settings = _container.read(settingsControllerProvider);
@@ -412,15 +420,19 @@ class LauncherControlServer {
           installs.first;
     }
 
-    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    final terminal = await _container.read(
+      defaultSystemTerminalProvider.future,
+    );
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
-    await _container.read(sessionActionsProvider).startNewInSystemTerminal(
-      repo: repo,
-      installation: install,
-      terminal: terminal,
-    );
+    await _container
+        .read(sessionActionsProvider)
+        .startNewInSystemTerminal(
+          repo: repo,
+          installation: install,
+          terminal: terminal,
+        );
     return {
       'opened': 'new ${install.agentKind.name} session',
       'repository': repo.name,
@@ -434,7 +446,9 @@ class LauncherControlServer {
     if (install == null) {
       throw StateError('No ${kind.name} installation found.');
     }
-    final environments = _container.read(executionEnvironmentDaoProvider).getAll();
+    final environments = _container
+        .read(executionEnvironmentDaoProvider)
+        .getAll();
     final usage = await _container
         .read(agentUsageServiceProvider)
         .fetch(install, environments);
@@ -455,17 +469,19 @@ class LauncherControlServer {
     if (id == null) throw ArgumentError('Missing session id.');
     final session = _container.read(importedSessionDaoProvider).getById(id);
     if (session == null) throw StateError('Session not found: $id');
-    final repo = _container.read(repositoryDaoProvider).getById(
-      session.repositoryId,
-    );
-    final env = _container.read(executionEnvironmentDaoProvider).getById(
-      session.environmentId,
-    );
+    final repo = _container
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId);
+    final env = _container
+        .read(executionEnvironmentDaoProvider)
+        .getById(session.environmentId);
     final install = _installFor(session.cli, session.environmentId);
     if (repo == null || env == null || install == null) {
       throw StateError('Session repository, environment, or agent is missing.');
     }
-    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    final terminal = await _container.read(
+      defaultSystemTerminalProvider.future,
+    );
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
@@ -477,11 +493,13 @@ class LauncherControlServer {
       cwd: repo.path,
       permissionMode: _permissionFor(session.cli),
     );
-    await _container.read(systemTerminalServiceProvider).launch(
-      terminal,
-      command: command,
-      workingDirectory: env.wslDistribution == null ? repo.path.path : null,
-    );
+    await _container
+        .read(systemTerminalServiceProvider)
+        .launch(
+          terminal,
+          command: command,
+          workingDirectory: env.wslDistribution == null ? repo.path.path : null,
+        );
     return {'opened': session.displayTitle, 'environmentId': env.id};
   }
 
@@ -552,26 +570,31 @@ class LauncherControlServer {
         .path;
     await File(uncPath).writeAsString(script, flush: true);
 
-    final terminal = await _container.read(defaultSystemTerminalProvider.future);
+    final terminal = await _container.read(
+      defaultSystemTerminalProvider.future,
+    );
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
-    await _container.read(systemTerminalServiceProvider).launch(
-      terminal,
-      command: [
-        'wsl.exe',
-        '-d',
-        env.wslDistribution!,
-        '--',
-        'bash',
-        scriptWslPath,
-      ],
-    );
+    await _container
+        .read(systemTerminalServiceProvider)
+        .launch(
+          terminal,
+          command: [
+            'wsl.exe',
+            '-d',
+            env.wslDistribution!,
+            '--',
+            'bash',
+            scriptWslPath,
+          ],
+        );
     return {'opened': windows.length, 'tmuxSession': sessionName};
   }
 
   AgentInstallation? _installFor(AgentKind kind, String? environmentId) {
-    for (final install in _container.read(agentInstallationDaoProvider).getAll()) {
+    for (final install
+        in _container.read(agentInstallationDaoProvider).getAll()) {
       if (install.agentKind != kind) continue;
       if (environmentId != null && install.environmentId != environmentId) {
         continue;
@@ -582,7 +605,8 @@ class LauncherControlServer {
   }
 
   ExecutionEnvironment? _windowsEnv() {
-    for (final env in _container.read(executionEnvironmentDaoProvider).getAll()) {
+    for (final env
+        in _container.read(executionEnvironmentDaoProvider).getAll()) {
       if (env.kind == EnvironmentKind.windowsNative) return env;
     }
     return null;
