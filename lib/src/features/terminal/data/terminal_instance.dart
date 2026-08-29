@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
 import '../domain/terminal_profile.dart';
 import 'pty_launch.dart';
+import 'pty_output_coalescer.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
 /// UI renders. Implementations own whatever backs the buffer (a real PTY in
@@ -61,10 +64,12 @@ class PtyTerminalInstance implements TerminalInstance {
       workingDirectory: workingDirectory,
     );
 
-    _pty.output
-        .cast<List<int>>()
-        .transform(const Utf8Decoder(allowMalformed: true))
-        .listen(terminal.write);
+    // Buffer the raw PTY bytes and hand them to the terminal once per frame.
+    // flutter_pty reads 1 KB at a time, so without this a busy shell costs
+    // hundreds of decodes, parses and notifyListeners() a second on the UI
+    // isolate — which is what the streaming stutter was.
+    _coalescer = PtyOutputCoalescer(onData: terminal.write);
+    _outputSubscription = _pty.output.listen(_coalescer.add);
 
     _pty.exitCode.then((code) {
       if (!_disposed) {
@@ -100,12 +105,16 @@ class PtyTerminalInstance implements TerminalInstance {
   final TerminalController controller = TerminalController();
 
   late final Pty _pty;
+  late final PtyOutputCoalescer _coalescer;
+  late final StreamSubscription<Uint8List> _outputSubscription;
   bool _disposed = false;
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    unawaited(_outputSubscription.cancel());
+    _coalescer.dispose();
     _pty.kill();
   }
 }
