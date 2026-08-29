@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
@@ -18,10 +19,20 @@ abstract class TerminalInstance {
   String get title;
   Terminal get terminal;
 
+  /// The [TerminalProfile] id this pane was launched from, and the directory it
+  /// started in — kept so the pane can be recreated after a restart.
+  String get profileId;
+  String? get workingDirectory;
+
   /// Drives selection/scroll for the view — read to copy the current selection.
   TerminalController get controller;
 
-  /// Tears down the backing process/streams.
+  /// Owned by the instance rather than the widget so the app can focus a pane
+  /// and scroll it to a search hit without reaching into the widget tree.
+  FocusNode get focusNode;
+  ScrollController get scrollController;
+
+  /// Tears down the backing process/streams. Safe to call more than once.
   void dispose();
 }
 
@@ -32,6 +43,7 @@ typedef TerminalInstanceFactory =
       required String id,
       required TerminalProfile profile,
       String? workingDirectory,
+      String? restoredScrollback,
     });
 
 /// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
@@ -45,9 +57,15 @@ class PtyTerminalInstance implements TerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
+    required this.profileId,
     required PtyLaunch launch,
+    this.workingDirectory,
+    String? restoredScrollback,
   }) {
     terminal = Terminal(maxLines: 10000);
+    // Replay the previous session's scrollback *before* the shell starts, so
+    // restored history sits above the new process's first output.
+    writeRestoredScrollback(terminal, restoredScrollback);
     // flutter_pty only forwards a tiny allowlist of env vars to the child; pass
     // the host environment so Windows shells get SystemRoot/WINDIR/etc. (without
     // them powershell.exe/cmd.exe and wsl.exe fail to start) — sanitized so a
@@ -100,9 +118,17 @@ class PtyTerminalInstance implements TerminalInstance {
   @override
   final String title;
   @override
+  final String profileId;
+  @override
+  final String? workingDirectory;
+  @override
   late final Terminal terminal;
   @override
   final TerminalController controller = TerminalController();
+  @override
+  final FocusNode focusNode = FocusNode();
+  @override
+  final ScrollController scrollController = ScrollController();
 
   late final Pty _pty;
   late final PtyOutputCoalescer _coalescer;
@@ -115,9 +141,29 @@ class PtyTerminalInstance implements TerminalInstance {
     _disposed = true;
     unawaited(_outputSubscription.cancel());
     _coalescer.dispose();
+    focusNode.dispose();
+    scrollController.dispose();
     _pty.kill();
   }
 }
+
+/// Writes [scrollback] into [terminal] followed by a dim marker, so the user can
+/// see where replayed history ends and the live process begins.
+///
+/// Does nothing when there is nothing to restore.
+void writeRestoredScrollback(Terminal terminal, String? scrollback) {
+  if (scrollback == null || scrollback.isEmpty) return;
+  final at = DateTime.now();
+  final stamp =
+      '${at.year}-${_two(at.month)}-${_two(at.day)} '
+      '${_two(at.hour)}:${_two(at.minute)}';
+  terminal
+    ..write(scrollback)
+    ..write('\r\n\x1b[90m\u2500\u2500 restored \u2500 $stamp '
+        '\u2500\u2500\x1b[0m\r\n');
+}
+
+String _two(int value) => value.toString().padLeft(2, '0');
 
 /// Builds the environment for a Windows PTY child.
 ///
@@ -159,9 +205,13 @@ class ErrorTerminalInstance implements TerminalInstance {
   ErrorTerminalInstance({
     required this.id,
     required this.title,
+    required this.profileId,
     required String message,
+    this.workingDirectory,
+    String? restoredScrollback,
   }) {
     terminal = Terminal(maxLines: 1000);
+    writeRestoredScrollback(terminal, restoredScrollback);
     terminal.write('\x1b[91m$message\x1b[0m\r\n');
   }
 
@@ -170,12 +220,27 @@ class ErrorTerminalInstance implements TerminalInstance {
   @override
   final String title;
   @override
+  final String profileId;
+  @override
+  final String? workingDirectory;
+  @override
   late final Terminal terminal;
   @override
   final TerminalController controller = TerminalController();
+  @override
+  final FocusNode focusNode = FocusNode();
+  @override
+  final ScrollController scrollController = ScrollController();
+
+  bool _disposed = false;
 
   @override
-  void dispose() {}
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    focusNode.dispose();
+    scrollController.dispose();
+  }
 }
 
 /// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the profile
@@ -185,6 +250,7 @@ TerminalInstance createPtyTerminalInstance({
   required String id,
   required TerminalProfile profile,
   String? workingDirectory,
+  String? restoredScrollback,
 }) {
   // The terminal profiles (PowerShell/cmd/WSL) assume a Windows host. When the
   // app itself runs on Linux/macOS (e.g. inside WSL), `wsl.exe`/`powershell.exe`
@@ -198,12 +264,22 @@ TerminalInstance createPtyTerminalInstance({
     launch = PtyLaunch(executable: shell, workingDirectory: workingDirectory);
   }
   try {
-    return PtyTerminalInstance(id: id, title: profile.label, launch: launch);
+    return PtyTerminalInstance(
+      id: id,
+      title: profile.label,
+      profileId: profile.id,
+      launch: launch,
+      workingDirectory: workingDirectory,
+      restoredScrollback: restoredScrollback,
+    );
   } catch (e) {
     final args = launch.arguments.join(' ');
     return ErrorTerminalInstance(
       id: id,
       title: profile.label,
+      profileId: profile.id,
+      workingDirectory: workingDirectory,
+      restoredScrollback: restoredScrollback,
       message:
           'Failed to start "${launch.executable} $args"'
           '${launch.workingDirectory == null ? '' : ' in ${launch.workingDirectory}'}: $e',
