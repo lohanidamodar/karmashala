@@ -159,8 +159,10 @@ void writeRestoredScrollback(Terminal terminal, String? scrollback) {
       '${_two(at.hour)}:${_two(at.minute)}';
   terminal
     ..write(scrollback)
-    ..write('\r\n\x1b[90m\u2500\u2500 restored \u2500 $stamp '
-        '\u2500\u2500\x1b[0m\r\n');
+    ..write(
+      '\r\n\x1b[90m\u2500\u2500 restored \u2500 $stamp '
+      '\u2500\u2500\x1b[0m\r\n',
+    );
 }
 
 String _two(int value) => value.toString().padLeft(2, '0');

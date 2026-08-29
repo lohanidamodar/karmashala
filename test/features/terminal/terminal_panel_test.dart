@@ -91,7 +91,11 @@ void main() {
 
     expect(find.byType(PaneDivider), findsOneWidget);
     expect(
-      container.read(terminalSessionsControllerProvider).activeTab!.layout.panes
+      container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
           .length,
       2,
     );
@@ -108,7 +112,11 @@ void main() {
     await tester.pump();
 
     expect(
-      container.read(terminalSessionsControllerProvider).activeTab!.layout.panes
+      container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
           .length,
       2,
     );

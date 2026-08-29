@@ -17,18 +17,18 @@ class PaintCounter extends SingleChildRenderObjectWidget {
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderPaintCounter(counts, name);
+      RenderPaintCounter(counts, name);
 
   @override
-  void updateRenderObject(BuildContext context, _RenderPaintCounter renderer) {
+  void updateRenderObject(BuildContext context, RenderPaintCounter renderer) {
     renderer
       ..counts = counts
       ..name = name;
   }
 }
 
-class _RenderPaintCounter extends RenderProxyBox {
-  _RenderPaintCounter(this.counts, this.name);
+class RenderPaintCounter extends RenderProxyBox {
+  RenderPaintCounter(this.counts, this.name);
 
   Map<String, int> counts;
   String name;

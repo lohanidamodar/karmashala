@@ -52,10 +52,8 @@ class ScrollbackAutosave {
     _cancel(handle);
   }
 
-  static Object _defaultSchedule(
-    Duration interval,
-    void Function() callback,
-  ) => Timer.periodic(interval, (_) => callback());
+  static Object _defaultSchedule(Duration interval, void Function() callback) =>
+      Timer.periodic(interval, (_) => callback());
 
   static void _defaultCancel(Object handle) => (handle as Timer).cancel();
 }
@@ -70,5 +68,6 @@ typedef ScrollbackAutosaveFactory =
     ScrollbackAutosave Function({required void Function() onTick});
 
 final scrollbackAutosaveFactoryProvider = Provider<ScrollbackAutosaveFactory>(
-  (ref) => ({required onTick}) => ScrollbackAutosave(onTick: onTick),
+  (ref) =>
+      ({required onTick}) => ScrollbackAutosave(onTick: onTick),
 );

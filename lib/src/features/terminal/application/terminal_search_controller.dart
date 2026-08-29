@@ -152,11 +152,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     final target = _target();
     if (target == null || state.query.isEmpty) {
       _matches = const [];
-      state = state.copyWith(
-        matchCount: 0,
-        currentIndex: 0,
-        truncated: false,
-      );
+      state = state.copyWith(matchCount: 0, currentIndex: 0, truncated: false);
       return;
     }
 

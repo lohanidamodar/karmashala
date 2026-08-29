@@ -59,8 +59,7 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
                 bindings: {
                   const SingleActivator(LogicalKeyboardKey.escape):
                       _search.close,
-                  const SingleActivator(LogicalKeyboardKey.enter):
-                      _search.next,
+                  const SingleActivator(LogicalKeyboardKey.enter): _search.next,
                   const SingleActivator(LogicalKeyboardKey.enter, shift: true):
                       _search.previous,
                 },

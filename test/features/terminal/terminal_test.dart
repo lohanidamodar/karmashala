@@ -201,20 +201,26 @@ void main() {
 
       controller.movePaneFocus(PaneDirection.left);
       expect(
-        container.read(terminalSessionsControllerProvider).activeTab!
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
             .focusedPaneId,
         left,
       );
       controller.movePaneFocus(PaneDirection.left);
       expect(
-        container.read(terminalSessionsControllerProvider).activeTab!
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
             .focusedPaneId,
         left,
         reason: 'already at the edge',
       );
       controller.movePaneFocus(PaneDirection.right);
       expect(
-        container.read(terminalSessionsControllerProvider).activeTab!
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
             .focusedPaneId,
         right,
       );

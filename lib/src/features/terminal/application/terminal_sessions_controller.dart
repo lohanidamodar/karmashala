@@ -71,8 +71,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Per-pane buffer listeners, kept so they can be removed on close.
   final Map<String, void Function()> _dirtyListeners = {};
 
-  late final ScrollbackAutosave _autosave = ref
-      .read(scrollbackAutosaveFactoryProvider)(onTick: saveDirtyScrollback);
+  late final ScrollbackAutosave _autosave = ref.read(
+    scrollbackAutosaveFactoryProvider,
+  )(onTick: saveDirtyScrollback);
 
   final _log = AppLogger.named('terminal');
 
@@ -199,9 +200,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void resizePane(String tabId, String splitId, int index, double delta) {
     final tab = _tabById(tabId);
     if (tab == null) return;
-    _replaceTab(
-      tab.copyWith(layout: tab.layout.resize(splitId, index, delta)),
-    );
+    _replaceTab(tab.copyWith(layout: tab.layout.resize(splitId, index, delta)));
   }
 
   /// Focuses [paneId], activating the tab that holds it.

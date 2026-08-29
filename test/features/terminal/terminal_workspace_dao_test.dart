@@ -120,10 +120,11 @@ void main() {
   });
 
   test('tabs and panes come back in the order they were saved', () {
-    dao.saveWorkspace(
-      [tab(id: 'a'), tab(id: 'b'), tab(id: 'c')],
-      activeTabId: 'b',
-    );
+    dao.saveWorkspace([
+      tab(id: 'a'),
+      tab(id: 'b'),
+      tab(id: 'c'),
+    ], activeTabId: 'b');
     final loaded = dao.loadWorkspace();
     expect(loaded.tabs.map((t) => t.id), ['a', 'b', 'c']);
     expect(loaded.tabs.first.panes.map((p) => p.id), ['a-p1', 'a-p2']);

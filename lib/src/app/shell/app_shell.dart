@@ -101,8 +101,8 @@ class _AppShellState extends ConsumerState<AppShell> {
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.all(4),
-                          child: constraints.maxWidth >=
-                                  AppShell._mediumBreakpoint
+                          child:
+                              constraints.maxWidth >= AppShell._mediumBreakpoint
                               ? _SplitLayout(shell: shell)
                               : _NarrowLayout(shell: shell),
                         ),

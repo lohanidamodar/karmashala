@@ -28,9 +28,10 @@ const int kScrollbackMaxBytes = 256 * 1024;
 /// it uses), so [maxBytes] can drop leading lines without a later line losing the
 /// colour an earlier one set.
 String encodeScrollback(
-  Terminal terminal,
-  {int maxLines = kScrollbackMaxLines,
-  int maxBytes = kScrollbackMaxBytes}) {
+  Terminal terminal, {
+  int maxLines = kScrollbackMaxLines,
+  int maxBytes = kScrollbackMaxBytes,
+}) {
   final buffer = terminal.mainBuffer;
   final lines = buffer.lines;
 
@@ -107,9 +108,7 @@ String _encodeLine(BufferLine line) {
       cell += advance;
     }
 
-    if (foreground != styleFg ||
-        background != styleBg ||
-        flags != styleFlags) {
+    if (foreground != styleFg || background != styleBg || flags != styleFlags) {
       out.write(_sgr(foreground, background, flags));
       styleFg = foreground;
       styleBg = background;
@@ -158,9 +157,7 @@ List<String> _colorCodes(int color, {required bool isForeground}) {
       // 0-7 map to 30-37 / 40-47; 8-15 to the bright ranges 90-97 / 100-107.
       final base = isForeground ? 30 : 40;
       final bright = isForeground ? 90 : 100;
-      return [
-        value < 8 ? '${base + value}' : '${bright + (value - 8)}',
-      ];
+      return [value < 8 ? '${base + value}' : '${bright + (value - 8)}'];
     case CellColor.palette:
       return [isForeground ? '38' : '48', '5', '$value'];
     case CellColor.rgb:

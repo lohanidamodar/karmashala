@@ -94,12 +94,15 @@ void main() {
     );
   });
 
-  test('lines are joined, so a restore does not gain a blank line each cycle', () {
-    final source = terminalWith('a\r\nb\r\nc\r\n');
-    final first = encodeScrollback(source);
-    final restored = blank()..write(first);
-    expect(encodeScrollback(restored), first);
-  });
+  test(
+    'lines are joined, so a restore does not gain a blank line each cycle',
+    () {
+      final source = terminalWith('a\r\nb\r\nc\r\n');
+      final first = encodeScrollback(source);
+      final restored = blank()..write(first);
+      expect(encodeScrollback(restored), first);
+    },
+  );
 
   test('the alt buffer is not scrollback and is never encoded', () {
     final source = terminalWith('main content\r\n');

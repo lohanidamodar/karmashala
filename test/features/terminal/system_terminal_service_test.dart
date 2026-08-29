@@ -172,8 +172,10 @@ void main() {
       // Antigravity keeps --yolo because its descriptor actually declares it,
       // not because it fell through a default arm.
       expect(permissionArgsFor('antigravity', PermissionMode.ask), isEmpty);
-      expect(permissionArgsFor('antigravity', PermissionMode.acceptEdits),
-          isEmpty);
+      expect(
+        permissionArgsFor('antigravity', PermissionMode.acceptEdits),
+        isEmpty,
+      );
       expect(permissionArgsFor('antigravity', PermissionMode.bypass), [
         '--yolo',
       ]);

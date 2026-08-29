@@ -77,11 +77,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
 
   void _split(SplitAxis axis, [TerminalProfile? profile]) {
     final chosen = profile ?? _defaultProfile();
-    _sessions.splitPane(
-      axis,
-      chosen,
-      workingDirectory: _workingDirFor(chosen),
-    );
+    _sessions.splitPane(axis, chosen, workingDirectory: _workingDirFor(chosen));
   }
 
   void _closeFocusedPane() {
@@ -243,10 +239,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
           focusNode: instance.focusNode,
           scrollController: instance.scrollController,
           theme: _terminalTheme(theme),
-          textStyle: const TerminalStyle(
-            fontSize: 13,
-            fontFamily: kMonoFamily,
-          ),
+          textStyle: const TerminalStyle(fontSize: 13, fontFamily: kMonoFamily),
           padding: const EdgeInsets.all(Insets.sm),
           autofocus: focused,
           // Desktop uses the physical keyboard; this also avoids xterm opening

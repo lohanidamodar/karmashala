@@ -43,7 +43,10 @@ class StoredTerminalTab {
 
 /// Everything needed to bring the terminal back as the user left it.
 class StoredTerminalWorkspace {
-  const StoredTerminalWorkspace({required this.tabs, required this.activeTabId});
+  const StoredTerminalWorkspace({
+    required this.tabs,
+    required this.activeTabId,
+  });
 
   static const empty = StoredTerminalWorkspace(tabs: [], activeTabId: null);
 

@@ -28,13 +28,9 @@ class ResizeHandle extends StatelessWidget {
           : SystemMouseCursors.resizeUpDown,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onHorizontalDragUpdate: horizontal
-            ? (d) => onDelta(d.delta.dx)
-            : null,
+        onHorizontalDragUpdate: horizontal ? (d) => onDelta(d.delta.dx) : null,
         onHorizontalDragEnd: horizontal ? (_) => onEnd?.call() : null,
-        onVerticalDragUpdate: horizontal
-            ? null
-            : (d) => onDelta(d.delta.dy),
+        onVerticalDragUpdate: horizontal ? null : (d) => onDelta(d.delta.dy),
         onVerticalDragEnd: horizontal ? null : (_) => onEnd?.call(),
         child: horizontal
             ? SizedBox(

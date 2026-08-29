@@ -63,8 +63,7 @@ class PaneRect {
   double get height => bottom - top;
 
   @override
-  String toString() =>
-      'PaneRect($left, $top, $right, $bottom)';
+  String toString() => 'PaneRect($left, $top, $right, $bottom)';
 }
 
 /// The immutable tree of panes inside one terminal tab, plus the operations the

@@ -46,11 +46,14 @@ void main() {
     expect(searchLines(lines, 'alpha').map((m) => m.line), [0, 2]);
   });
 
-  test('columns are cell columns, so a wide glyph before a match shifts it', () {
-    final matches = searchLines([lineOf('你hit')], 'hit');
-    expect(matches.single.startColumn, 2);
-    expect(matches.single.endColumn, 5);
-  });
+  test(
+    'columns are cell columns, so a wide glyph before a match shifts it',
+    () {
+      final matches = searchLines([lineOf('你hit')], 'hit');
+      expect(matches.single.startColumn, 2);
+      expect(matches.single.endColumn, 5);
+    },
+  );
 
   test('a match containing a wide glyph spans its full cell width', () {
     final matches = searchLines([lineOf('a你b')], '你b');

@@ -35,7 +35,10 @@ void main() {
       final controller = first.read(
         terminalSessionsControllerProvider.notifier,
       );
-      controller.openTab(TerminalProfile.powerShell, workingDirectory: r'C:\ws');
+      controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws',
+      );
       final second = controller.splitPane(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
@@ -84,34 +87,42 @@ void main() {
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
     });
 
-    test('a pane whose profile no longer resolves is dropped, tab survives', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
+    test(
+      'a pane whose profile no longer resolves is dropped, tab survives',
+      () {
+        final db = AppDatabase.memory();
+        addTearDown(db.close);
 
-      final first = fakeTerminalContainer(database: db);
-      final controller = first.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      controller.openTab(TerminalProfile.powerShell);
-      controller.splitPane(SplitAxis.horizontal, TerminalProfile.commandPrompt);
-      controller.persistWorkspace();
-      first.dispose();
+        final first = fakeTerminalContainer(database: db);
+        final controller = first.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        controller.openTab(TerminalProfile.powerShell);
+        controller.splitPane(
+          SplitAxis.horizontal,
+          TerminalProfile.commandPrompt,
+        );
+        controller.persistWorkspace();
+        first.dispose();
 
-      // Corrupt one pane's profile so it cannot be rebuilt.
-      final paneId =
-          db.query('SELECT id FROM terminal_panes ORDER BY ordinal;').last['id']
-              as String;
-      db.execute('UPDATE terminal_panes SET profile_id = ? WHERE id = ?;', [
-        'gone',
-        paneId,
-      ]);
+        // Corrupt one pane's profile so it cannot be rebuilt.
+        final paneId =
+            db
+                    .query('SELECT id FROM terminal_panes ORDER BY ordinal;')
+                    .last['id']
+                as String;
+        db.execute('UPDATE terminal_panes SET profile_id = ? WHERE id = ?;', [
+          'gone',
+          paneId,
+        ]);
 
-      final next = fakeTerminalContainer(database: db);
-      addTearDown(next.dispose);
-      final restored = next.read(terminalSessionsControllerProvider);
-      expect(restored.tabs.length, 1);
-      expect(restored.tabs.single.layout.panes.length, 1);
-    });
+        final next = fakeTerminalContainer(database: db);
+        addTearDown(next.dispose);
+        final restored = next.read(terminalSessionsControllerProvider);
+        expect(restored.tabs.length, 1);
+        expect(restored.tabs.single.layout.panes.length, 1);
+      },
+    );
 
     test('with no database at all the terminal still opens', () {
       final container = fakeTerminalContainer();
