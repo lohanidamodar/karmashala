@@ -5,7 +5,6 @@ import 'package:chitragupta/src/features/terminal/application/terminal_sessions_
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/pane_layout_view.dart';
-import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:chitragupta/src/features/terminal/presentation/terminal_search_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

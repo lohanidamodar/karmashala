@@ -477,8 +477,12 @@ class TerminalToolbar extends ConsumerWidget {
             tooltip:
                 '$backgroundCount session'
                 '${backgroundCount == 1 ? '' : 's'} running in the background',
+            // The accent, not Material's default error red: a session running
+            // without a tab is the app working as designed, not a fault.
             icon: Badge.count(
               count: backgroundCount,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              textColor: Theme.of(context).colorScheme.onPrimary,
               child: const Icon(AppIcons.pictureInpicture, size: 15),
             ),
             onPressed: () => actions.showBackgroundSessions(context),
@@ -629,10 +633,12 @@ class WorkbenchTabChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Selection is carried by the surface plus a top rule in the accent: an
-    // outline alone is invisible against a neutral ramp at this size.
+    // The active chip takes the colour of the ground it sits over, so the tab
+    // and its content read as one surface; selection is then carried by a top
+    // rule in the accent, because an outline alone is invisible against a
+    // neutral ramp at this size.
     final chip = Material(
-      color: selected ? scheme.surface : Colors.transparent,
+      color: selected ? scheme.surfaceContainerLowest : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         onSecondaryTapDown: onSecondaryTapDown,

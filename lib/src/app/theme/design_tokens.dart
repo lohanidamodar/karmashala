@@ -29,15 +29,15 @@ class AppColors {
   // Neutral surface ramp — dark
   // ---------------------------------------------------------------------
   static const darkLowest = Color(0xFF0E0E11);
-  static const darkSurface = Color(0xFF141417);
-  static const darkLow = Color(0xFF1A1A1E);
-  static const darkContainer = Color(0xFF1F1F24);
-  static const darkHigh = Color(0xFF26262C);
-  static const darkHighest = Color(0xFF2E2E35);
+  static const darkSurface = Color(0xFF17171B);
+  static const darkLow = Color(0xFF1F1F24);
+  static const darkContainer = Color(0xFF25252B);
+  static const darkHigh = Color(0xFF2C2C33);
+  static const darkHighest = Color(0xFF35353D);
   static const darkOn = Color(0xFFE4E4E9);
   static const darkOnVariant = Color(0xFF9E9EA9);
   static const darkOutline = Color(0xFF6A6A75);
-  static const darkOutlineVariant = Color(0xFF33333B);
+  static const darkOutlineVariant = Color(0xFF35353E);
 
   /// The one accent. Selection, focus, the primary action — nothing else.
   static const accentLight = Color(0xFF2F6FE0);

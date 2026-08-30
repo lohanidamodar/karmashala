@@ -171,8 +171,10 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _SidePanelHeader(surface: widget.surface),
-                    const Divider(height: 1),
+                    if (!widget.surface.drawsOwnHeader) ...[
+                      _SidePanelHeader(surface: widget.surface),
+                      const Divider(height: 1),
+                    ],
                     Expanded(child: _surfaceBody(widget.surface)),
                   ],
                 ),

@@ -7,16 +7,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// ended up behind one index. Naming them makes it obvious when something new is
 /// being added to a grab-bag instead of given its own home.
 enum SidePanelSurface {
-  changes('Changes'),
-  github('GitHub'),
-  files('Files'),
+  changes('Changes', drawsOwnHeader: true),
+  github('GitHub', drawsOwnHeader: true),
+  files('Files', drawsOwnHeader: true),
   device('Device'),
   browser('Browser'),
   info('Info');
 
-  const SidePanelSurface(this.label);
+  const SidePanelSurface(this.label, {this.drawsOwnHeader = false});
 
   final String label;
+
+  /// Whether the surface already titles itself. Three of them do, with their
+  /// own actions in the same row, and stacking the panel's header on top of
+  /// that was two rows of chrome saying one word.
+  final bool drawsOwnHeader;
 }
 
 /// Which side-panel surface is open, or `null` when the panel is collapsed.

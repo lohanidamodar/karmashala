@@ -6,7 +6,6 @@ import 'package:chitragupta/src/app/shell/side_panel_state.dart';
 import 'package:chitragupta/src/app/shell/status_bar.dart';
 import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
