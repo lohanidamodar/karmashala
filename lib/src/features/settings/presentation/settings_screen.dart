@@ -23,12 +23,16 @@ import '../../mcp/launcher_chat_controller.dart';
 import '../../mcp/launcher_mcp.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../environments/presentation/environments_section.dart';
+import '../../ssh/presentation/known_hosts_section.dart';
+import '../../ssh/presentation/ssh_hosts_section.dart';
 import '../../system/launcher_hotkey.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_theme_controller.dart';
 import '../../terminal/data/theme_discovery.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
+import 'settings_section.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/mini_position.dart';
 import '../domain/permission_mode.dart';
@@ -68,7 +72,7 @@ class SettingsScreen extends ConsumerWidget {
           vertical: Insets.lg,
         ),
         children: [
-          _Section(
+          SettingsSection(
             title: 'APPEARANCE',
             child: SegmentedButton<AppThemeMode>(
               segments: const [
@@ -92,7 +96,7 @@ class SettingsScreen extends ConsumerWidget {
               onSelectionChanged: (s) => controller.setThemeMode(s.first),
             ),
           ),
-          _Section(
+          SettingsSection(
             title: 'SYSTEM',
             child: Column(
               children: [
@@ -147,7 +151,7 @@ class SettingsScreen extends ConsumerWidget {
                 settings.defaultTerminalProfileId,
                 profiles,
               );
-              return _Section(
+              return SettingsSection(
                 title: 'DEFAULT TERMINAL',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,7 +198,7 @@ class SettingsScreen extends ConsumerWidget {
           const _MiniLauncherSection(),
           const _LauncherHotkeySection(),
           const _AgentLauncherSection(),
-          _Section(
+          SettingsSection(
             title: 'DEFAULT AGENT',
             child: Builder(
               builder: (_) {
@@ -245,43 +249,12 @@ class SettingsScreen extends ConsumerWidget {
               },
             ),
           ),
-          _Section(
-            title: 'IDENTIFIED AGENTS',
-            trailing: TextButton.icon(
-              onPressed: () => ref
-                  .read(agentInstallationsControllerProvider.notifier)
-                  .discoverAll(),
-              icon: const Icon(AppIcons.magnifyingGlass, size: 16),
-              label: const Text('Discover'),
-            ),
-            child: installations.isEmpty
-                ? Text(
-                    'No agents identified yet. Press Discover to scan your '
-                    'environments.',
-                    style: theme.textTheme.bodySmall,
-                  )
-                : Column(
-                    children: [
-                      for (final i in installations)
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(AppIcons.robot, size: 18),
-                          title: Text(_agentLabel(i.agentId)),
-                          subtitle: Text(
-                            '${i.environmentId} · ${i.executable.path}'
-                            '${i.version == null ? '' : ' · v${i.version}'}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: kMonoFamily,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-          ),
+          // Agents are listed under the environment they are installed in:
+          // the same CLI on the Windows host and on a build box are two
+          // independent installations, and the flat list said otherwise.
+          const EnvironmentsSection(),
+          const SshHostsSection(),
+          const KnownHostsSection(),
           _ClaudeAccountsSection(
             installations: installations
                 .where((i) => i.agentId == AgentIds.claudeCode)
@@ -298,7 +271,7 @@ class SettingsScreen extends ConsumerWidget {
                 )
                 .toList(),
           ),
-          _Section(
+          SettingsSection(
             title: 'PERMISSIONS',
             child: Column(
               children: [
@@ -323,34 +296,6 @@ class SettingsScreen extends ConsumerWidget {
 
   static String _agentLabel(String agentId) =>
       AgentRegistry.builtIn.displayNameFor(agentId);
-}
-
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child, this.trailing});
-  final String title;
-  final Widget child;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text(title, style: theme.textTheme.labelSmall)),
-              ?trailing,
-            ],
-          ),
-          const SizedBox(height: Insets.sm),
-          child,
-        ],
-      ),
-    );
-  }
 }
 
 class _PermissionCard extends StatelessWidget {
@@ -509,7 +454,7 @@ class _TerminalAppSectionState extends ConsumerState<_TerminalAppSection> {
         : (detected.isNotEmpty ? detected.first.id : 'custom');
     final isCustom = current == 'custom';
 
-    return _Section(
+    return SettingsSection(
       title: 'TERMINAL APP (resumes sessions)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -623,7 +568,7 @@ class _CodeEditorSectionState extends ConsumerState<_CodeEditorSection> {
         : (settings.defaultCodeEditorId ??
               (detected.isNotEmpty ? detected.first.id : 'custom'));
 
-    return _Section(
+    return SettingsSection(
       title: 'CODE EDITOR (open in editor)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -760,7 +705,7 @@ class _MiniLauncherSection extends ConsumerWidget {
       );
     }
 
-    return _Section(
+    return SettingsSection(
       title: 'MINI LAUNCHER',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -798,7 +743,7 @@ class _AgentLauncherSection extends ConsumerWidget {
         settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
       ),
     );
-    return _Section(
+    return SettingsSection(
       title: 'AGENT LAUNCHER (MCP)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -909,7 +854,7 @@ class _LauncherHotkeySection extends ConsumerWidget {
     final hotKey = decodeLauncherHotKey(settings.launcherHotkeyJson);
     final enabled = settings.launcherHotkeyEnabled;
 
-    return _Section(
+    return SettingsSection(
       title: 'LAUNCHER HOTKEY',
       trailing: Switch(
         value: enabled,
@@ -1023,7 +968,7 @@ class _UsageSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return _Section(
+    return SettingsSection(
       title: 'USAGE & LIMITS',
       child: installations.isEmpty
           ? Text(
@@ -1212,7 +1157,7 @@ class _ClaudeAccountsSection extends ConsumerWidget {
     final accounts = ref.watch(claudeAccountsControllerProvider);
     final controller = ref.read(claudeAccountsControllerProvider.notifier);
 
-    return _Section(
+    return SettingsSection(
       title: 'CLAUDE ACCOUNTS',
       child: installations.isEmpty
           ? Text(
@@ -1557,7 +1502,7 @@ class _TerminalThemeSection extends ConsumerWidget {
     final ids = discovered.map((t) => t.id).toSet();
     final value = selected != null && ids.contains(selected) ? selected : null;
 
-    return _Section(
+    return SettingsSection(
       title: 'TERMINAL THEME',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

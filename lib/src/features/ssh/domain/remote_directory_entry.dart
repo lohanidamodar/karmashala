@@ -43,3 +43,17 @@ String joinRemotePath(String directory, String name) {
       : directory;
   return '$base/$name';
 }
+
+/// The parent of a POSIX [directory], or null at the root.
+///
+/// Returning null rather than `/` for the root is what lets a browser disable
+/// "up" instead of offering a step that goes nowhere.
+String? parentRemotePath(String directory) {
+  if (directory.isEmpty || directory == '/') return null;
+  final trimmed = directory.endsWith('/')
+      ? directory.substring(0, directory.length - 1)
+      : directory;
+  final cut = trimmed.lastIndexOf('/');
+  if (cut < 0) return null;
+  return cut == 0 ? '/' : trimmed.substring(0, cut);
+}

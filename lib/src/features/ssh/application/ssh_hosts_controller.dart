@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/ssh_host.dart';
 import 'ssh_providers.dart';
@@ -18,7 +19,7 @@ class SshHostsController extends Notifier<List<SshHost>> {
   List<SshHost> build() => ref.watch(sshHostDaoProvider).getAll();
 
   /// Saves a new host and its `ssh:<id>` execution environment.
-  SshHost add({
+  Future<SshHost> add({
     required String name,
     required String host,
     required int port,
@@ -48,9 +49,20 @@ class SshHostsController extends Notifier<List<SshHost>> {
   }
 
   /// Inserts or updates [host] together with its environment row.
-  SshHost save(SshHost host) {
+  ///
+  /// Any open connection to it is dropped first. An edited address, port, user
+  /// or key must take effect on the next connection — a pooled session opened
+  /// under the old settings would otherwise keep answering, and the user would
+  /// be looking at a machine they thought they had stopped talking to.
+  Future<SshHost> save(SshHost host) async {
+    await ref.read(sshConnectionPoolProvider).evict(host.id);
     ref.read(sshHostDaoProvider).upsert(host);
     ref.read(executionEnvironmentDaoProvider).upsert(sshEnvironment(host));
+    // The environments list is built from the same table and would otherwise
+    // keep showing the world as it was before this host existed — a remote
+    // environment you have just created but cannot see is not created as far
+    // as the user is concerned.
+    ref.invalidate(environmentsControllerProvider);
     state = ref.read(sshHostDaoProvider).getAll();
     return host;
   }
@@ -64,6 +76,7 @@ class SshHostsController extends Notifier<List<SshHost>> {
     await ref.read(sshConnectionPoolProvider).evict(hostId);
     ref.read(executionEnvironmentDaoProvider).delete(sshEnvironmentId(hostId));
     ref.read(sshHostDaoProvider).delete(hostId);
+    ref.invalidate(environmentsControllerProvider);
     state = ref.read(sshHostDaoProvider).getAll();
   }
 }

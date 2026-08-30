@@ -21,6 +21,7 @@ class SshConnectionPool {
     this.onUnknownHostKey,
     this.passwordPrompt,
     this.passphrasePrompt,
+    this.keyReader = readLocalPrivateKey,
     this.clock = const SystemClock(),
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('ssh.pool');
@@ -34,6 +35,12 @@ class SshConnectionPool {
 
   final SshSecretPrompt? passwordPrompt;
   final SshSecretPrompt? passphrasePrompt;
+
+  /// How a private key file is read. The default opens it on the Windows host;
+  /// the app supplies one that also understands a key recorded in a WSL
+  /// distribution.
+  final PrivateKeyReader keyReader;
+
   final Clock clock;
   final AppLogger _logger;
 
@@ -76,6 +83,7 @@ class SshConnectionPool {
     ),
     passwordPrompt: passwordPrompt,
     passphrasePrompt: passphrasePrompt,
+    keyReader: keyReader,
   );
 
   /// Drops the cached connection for [hostId], closing it.
