@@ -7,6 +7,8 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'push_delivery.dart';
+
 /// Port the relay listens on when nothing says otherwise.
 const int kDefaultRelayPort = 8787;
 
@@ -29,6 +31,12 @@ const Duration kDefaultPingInterval = Duration(seconds: 30);
 /// Frames the first socket may send before its peer arrives.
 const int kMaxPendingFrames = 8;
 
+/// Push registrations held at once before `/v1/push/register` starts refusing.
+const int kDefaultMaxPushTokens = 10000;
+
+/// Longest base64url push payload accepted — FCM caps a data message at 4 KiB.
+const int kDefaultMaxPushPayloadBytes = 4096;
+
 /// Close codes the relay uses. WebSocket only lets an application send 1000 or
 /// 3000-4999, so every refusal is in the 4000s and mirrors its HTTP cousin.
 const int kClosePeerLeft = 1000;
@@ -41,6 +49,13 @@ const int kCloseImpatient = 4429;
 /// A rendezvous path: `v1/` and 32 lowercase hex characters.
 final RegExp _rendezvousPattern = RegExp(r'^v1/([0-9a-f]{32})$');
 
+/// A push tag: 32 lowercase hex characters. Opaque — the client derives it,
+/// and it is never a device id or a rendezvous.
+final RegExp _pushTagPattern = RegExp(r'^[0-9a-f]{32}$');
+
+/// What a base64url payload may contain.
+final RegExp _base64UrlPattern = RegExp(r'^[A-Za-z0-9_=-]+$');
+
 /// Knobs an operator can turn. None of them change what the relay can see.
 class RelayOptions {
   const RelayOptions({
@@ -49,6 +64,9 @@ class RelayOptions {
     this.connectionsPerMinute = kDefaultConnectionsPerMinute,
     this.maxRendezvous = kDefaultMaxRendezvous,
     this.pingInterval = kDefaultPingInterval,
+    this.delivery,
+    this.maxPushTokens = kDefaultMaxPushTokens,
+    this.maxPushPayloadBytes = kDefaultMaxPushPayloadBytes,
     this.onLog,
   });
 
@@ -59,6 +77,14 @@ class RelayOptions {
   final int connectionsPerMinute;
   final int maxRendezvous;
   final Duration pingInterval;
+
+  /// Where `/v1/push` hands an accepted request. Null — the default, and
+  /// every test — leaves push delivery unconfigured: registration still
+  /// works, push requests answer 503.
+  final PushDelivery? delivery;
+
+  final int maxPushTokens;
+  final int maxPushPayloadBytes;
 
   /// Lifecycle only — the relay never logs a rendezvous id or a frame.
   final void Function(String message)? onLog;
@@ -89,6 +115,11 @@ class RelayServer {
   late final HttpServer _server;
 
   final Map<String, _Rendezvous> _rendezvous = <String, _Rendezvous>{};
+
+  /// tag → what to deliver with. In memory only: a restart forgets them, and
+  /// the host re-registers when its next push answers `unknown tag`.
+  final Map<String, ({String token, String platform})> _pushTokens = {};
+
   final _RateLimiter _limiter = _RateLimiter();
   final DateTime _startedAt = DateTime.now();
 
@@ -97,6 +128,9 @@ class RelayServer {
 
   /// Rendezvous currently held, paired or waiting.
   int get rendezvousCount => _rendezvous.length;
+
+  /// Push registrations currently held.
+  int get pushTokenCount => _pushTokens.length;
 
   Future<void> close() async {
     for (final rendezvous in _rendezvous.values.toList()) {
@@ -108,6 +142,8 @@ class RelayServer {
 
   FutureOr<Response> _handle(Request request) {
     if (request.url.path == 'healthz') return _health();
+    if (request.url.path == 'v1/push/register') return _pushRegister(request);
+    if (request.url.path == 'v1/push') return _pushSend(request);
 
     final match = _rendezvousPattern.firstMatch(request.url.path);
     if (match == null) return Response.notFound('not found\n');
@@ -138,10 +174,117 @@ class RelayServer {
       'status': 'ok',
       'rendezvous': _rendezvous.length,
       'sockets': _rendezvous.values.fold<int>(0, (n, r) => n + r.socketCount),
+      'push_tokens': _pushTokens.length,
+      'push_delivery': options.delivery == null ? 'not configured' : 'ok',
       'uptime_s': DateTime.now().difference(_startedAt).inSeconds,
     }),
     headers: const {'content-type': 'application/json'},
   );
+
+  // --- Push ------------------------------------------------------------------
+
+  /// `POST /v1/push/register` `{tag, token, platform}` → 204. The tag is an
+  /// opaque client-derived label; the relay stores token-by-tag and nothing
+  /// else, and works whether or not delivery is configured.
+  Future<Response> _pushRegister(Request request) async {
+    final refused = await _readPushBody(request, 16 * 1024);
+    if (refused is Response) return refused;
+    final body = refused as Map<String, Object?>;
+    final tag = body['tag'];
+    final token = body['token'];
+    final platform = body['platform'];
+    if (tag is! String ||
+        !_pushTagPattern.hasMatch(tag) ||
+        token is! String ||
+        token.isEmpty ||
+        token.length > 4096 ||
+        platform is! String ||
+        (platform != 'android' && platform != 'ios')) {
+      return Response(400, body: 'bad request\n');
+    }
+    if (!_pushTokens.containsKey(tag) &&
+        _pushTokens.length >= options.maxPushTokens) {
+      return Response(503, body: 'relay full\n');
+    }
+    _pushTokens[tag] = (token: token, platform: platform);
+    _log('a push token registered (${_pushTokens.length} held)');
+    return Response(204);
+  }
+
+  /// `POST /v1/push` `{tag, payload}` — payload is opaque base64url
+  /// ciphertext, forwarded to the delivery boundary and never inspected.
+  Future<Response> _pushSend(Request request) async {
+    final refused = await _readPushBody(
+      request,
+      options.maxPushPayloadBytes + 1024,
+    );
+    if (refused is Response) return refused;
+    final body = refused as Map<String, Object?>;
+    final tag = body['tag'];
+    final payload = body['payload'];
+    if (tag is! String ||
+        !_pushTagPattern.hasMatch(tag) ||
+        payload is! String ||
+        payload.isEmpty ||
+        !_base64UrlPattern.hasMatch(payload)) {
+      return Response(400, body: 'bad request\n');
+    }
+    if (payload.length > options.maxPushPayloadBytes) {
+      return Response(413, body: 'payload too large\n');
+    }
+    final delivery = options.delivery;
+    if (delivery == null) {
+      _log('push refused: not configured');
+      return Response(503, body: 'push delivery not configured\n');
+    }
+    final registration = _pushTokens[tag];
+    if (registration == null) return Response(404, body: 'unknown tag\n');
+    try {
+      await delivery.deliver(
+        token: registration.token,
+        platform: registration.platform,
+        payload: payload,
+      );
+    } on PushTokenGoneException {
+      _pushTokens.remove(tag);
+      _log('a push token expired (${_pushTokens.length} held)');
+      return Response(410, body: 'token gone\n');
+    } on Object {
+      _log('a push failed');
+      return Response(502, body: 'delivery failed\n');
+    }
+    _log('a push forwarded');
+    return Response(202, body: 'accepted\n');
+  }
+
+  /// Common gate for the two push posts: method, rate limit, body size, JSON.
+  /// Returns the decoded map, or the refusal to send instead.
+  Future<Object> _readPushBody(Request request, int maxBytes) async {
+    if (request.method != 'POST') {
+      return Response(405, body: 'method not allowed\n');
+    }
+    if (!_limiter.allow(_clientIp(request), options.connectionsPerMinute)) {
+      _log('rate limited a client');
+      return Response(429, body: 'slow down\n');
+    }
+    final bytes = <int>[];
+    await for (final chunk in request.read()) {
+      bytes.addAll(chunk);
+      if (bytes.length > maxBytes) {
+        return Response(413, body: 'body too large\n');
+      }
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(utf8.decode(bytes));
+    } on FormatException {
+      return Response(400, body: 'bad request\n');
+    }
+    if (decoded is! Map<String, Object?>) {
+      return Response(400, body: 'bad request\n');
+    }
+    return decoded;
+  }
 
   void _join(String id, WebSocketChannel socket) {
     final existing = _rendezvous[id];

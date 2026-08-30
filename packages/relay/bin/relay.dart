@@ -23,10 +23,30 @@ Future<void> main(List<String> arguments) async {
     stderr.writeln('relay: ${error.message}');
     stderr.writeln(
       'usage: relay [--port N] [--address HOST] [--lone-timeout-s N] '
-      '[--connections-per-minute N] [--quiet]',
+      '[--connections-per-minute N] [--fcm-service-account PATH] [--quiet]',
     );
     exitCode = 64;
     return;
+  }
+
+  // Push delivery: configured only when the operator names a service-account
+  // file. Never fabricated — an unreadable file is a startup error.
+  FcmHttpV1Sender? delivery;
+  final fcmPath = _stringArg(
+    arguments,
+    '--fcm-service-account',
+    kServiceAccountEnvVar,
+  );
+  if (fcmPath != null) {
+    try {
+      delivery = FcmHttpV1Sender.fromServiceAccountJson(
+        File(fcmPath).readAsStringSync(),
+      );
+    } on Object catch (error) {
+      stderr.writeln('relay: could not load the FCM service account: $error');
+      exitCode = 64;
+      return;
+    }
   }
 
   final quiet =
@@ -51,11 +71,15 @@ Future<void> main(List<String> arguments) async {
       maxRendezvous:
           _intArg(arguments, '--max-rendezvous', 'RELAY_MAX_RENDEZVOUS') ??
           kDefaultMaxRendezvous,
+      delivery: delivery,
       onLog: quiet ? null : (message) => stdout.writeln('relay: $message'),
     ),
   );
 
   stdout.writeln('relay: listening on ${relay.address.address}:${relay.port}');
+  stdout.writeln(
+    'relay: push delivery ${delivery == null ? 'not configured' : 'via fcm'}',
+  );
 
   final done = Completer<void>();
   final signals = <StreamSubscription<ProcessSignal>>[];

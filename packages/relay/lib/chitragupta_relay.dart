@@ -6,6 +6,9 @@
 /// it carries — every frame is sealed end to end before it arrives.
 library;
 
+export 'src/fcm_sender.dart' show FcmHttpV1Sender, kServiceAccountEnvVar;
+export 'src/push_delivery.dart'
+    show PushDelivery, PushDeliveryException, PushTokenGoneException;
 export 'src/relay_server.dart'
     show
         RelayOptions,
@@ -19,6 +22,8 @@ export 'src/relay_server.dart'
         kDefaultConnectionsPerMinute,
         kDefaultLoneTimeout,
         kDefaultMaxFrameBytes,
+        kDefaultMaxPushPayloadBytes,
+        kDefaultMaxPushTokens,
         kDefaultMaxRendezvous,
         kDefaultPingInterval,
         kDefaultRelayPort,
