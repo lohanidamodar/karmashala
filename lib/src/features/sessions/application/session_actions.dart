@@ -21,6 +21,7 @@ import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session.dart';
 import '../domain/session_launch.dart';
+import '../domain/session_resume.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
@@ -112,10 +113,20 @@ class SessionActions {
   /// agent running, so the CLI store keeps listing a session whose process is
   /// very much alive — and resuming it started a second writer on the same
   /// transcript, which Codex refuses outright.
+  ///
+  /// Reattaching wins here for **every** agent, including one that would have
+  /// permitted a second process: this surface can reopen the pane, and doing so
+  /// is instant, keeps the scrollback and cannot fail. Whether the agent would
+  /// have allowed it only matters where reopening is not on offer — see
+  /// [openInSystemTerminal].
   Future<String> resumeImported(ImportedSession session) async {
     final launcher = _ref.read(sessionLauncherProvider);
+    final action = launcher.resumeActionForConversation(
+      agentId: session.cli,
+      externalSessionId: session.externalId,
+    );
     final running = launcher.runningSessionWithExternalId(session.externalId);
-    if (running != null) {
+    if (action == ResumeAction.reattach && running != null) {
       launcher.reveal(running.id);
       // Same replacement the launch path does: the imported row was only ever a
       // second record of a session we own, and we are now showing that one.
@@ -428,20 +439,23 @@ class SessionActions {
   /// starting in its repository and running the agent's resume command. Throws
   /// if the repository/environment is no longer available.
   ///
-  /// Refuses when we are already running that conversation: the external
-  /// terminal would be a second writer on it, which is not something reopening
-  /// a tab can stand in for, so the user is told rather than shown the CLI's
-  /// own JSON-RPC refusal.
+  /// Refuses when we are already running that conversation **and the agent will
+  /// not share it**: the external terminal would be a second writer, which is
+  /// not something reopening a tab can stand in for, so the user is told in
+  /// plain words rather than shown the CLI's own JSON-RPC refusal.
+  ///
+  /// For an agent that permits it — Claude Code — this is allowed and is the
+  /// point: a second terminal listening to the same conversation.
   Future<void> openInSystemTerminal(
     ImportedSession session,
     SystemTerminal terminal,
   ) async {
-    final running = _ref
+    _ref
         .read(sessionLauncherProvider)
-        .runningSessionWithExternalId(session.externalId);
-    if (running != null) {
-      throw SessionAlreadyRunning(sessionId: running.id, title: running.title);
-    }
+        .refuseIfForbidden(
+          agentId: session.cli,
+          externalSessionId: session.externalId,
+        );
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
       throw StateError(
@@ -484,8 +498,8 @@ class SessionActions {
   /// repository and running the agent there. Throws a clear error if the repo or
   /// agent installation is no longer available.
   ///
-  /// Refuses a session whose pane is still live, for the same reason
-  /// [openInSystemTerminal] does.
+  /// Refuses a session whose pane is still live **when its agent forbids a
+  /// second process**, for the same reason [openInSystemTerminal] does.
   Future<void> openSessionInSystemTerminal(
     String sessionId,
     SystemTerminal terminal,
@@ -494,9 +508,19 @@ class SessionActions {
     if (session == null) {
       throw StateError('This session no longer exists.');
     }
-    if (_ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null) {
-      throw SessionAlreadyRunning(sessionId: sessionId, title: session.title);
-    }
+    final installationForGuard = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    _ref
+        .read(sessionLauncherProvider)
+        .refuseIfForbidden(
+          // An installation we can no longer resolve resolves to no capability,
+          // which is `false` — the safe answer, and the same one an unknown
+          // agent gets.
+          agentId: installationForGuard?.agentId ?? '',
+          sessionId: sessionId,
+          externalSessionId: session.externalSessionId,
+        );
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
       throw StateError('The session\'s repository is no longer available.');

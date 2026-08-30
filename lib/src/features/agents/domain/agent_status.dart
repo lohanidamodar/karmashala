@@ -26,9 +26,10 @@ class AgentStatusReport {
     required this.agentId,
     required this.sessionId,
     required this.status,
-    required this.source,
     required this.observedAt,
+    required this.source,
     this.detail,
+    this.sourceModifiedAt,
   });
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -39,7 +40,26 @@ class AgentStatusReport {
 
   final AgentActivityStatus status;
   final AgentStatusSource source;
+
+  /// When **we** looked. Always now-ish, and therefore says nothing about how
+  /// current the answer is.
   final DateTime observedAt;
+
+  /// When the thing this status was read *from* was last written, for a source
+  /// that can tell — today, the transcript file's mtime. Null for the others.
+  final DateTime? sourceModifiedAt;
+
+  /// When the thing this status was read *from* was last written.
+  ///
+  /// The distinction is the whole point of showing an age. A poll timestamp is
+  /// always fresh and would make a three-day-old transcript look live; the
+  /// file's own modification time is the number that tells a reader how much to
+  /// trust the word beside it.
+  ///
+  /// Falls back to [observedAt] for sources that are live by construction — a
+  /// hook callback and a rendered terminal screen are both evidence produced at
+  /// the moment we read them.
+  DateTime get evidenceAt => sourceModifiedAt ?? observedAt;
 
   /// Why the source concluded this (hook event name, matched record value, …).
   final String? detail;

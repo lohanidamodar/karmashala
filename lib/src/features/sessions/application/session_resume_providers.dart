@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/data/resume_conflict_source.dart';
 import '../../agents/domain/agent_descriptor.dart';
+import '../../agents/domain/agent_status.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_resume.dart';
 import 'session_providers.dart';
+import 'session_status_providers.dart';
 import 'session_ui_providers.dart';
 
 /// The agent descriptor behind session [sessionId], or null.
@@ -36,12 +38,30 @@ final sessionWhereaboutsProvider = Provider.autoDispose
 
       final external = session.surface == SessionSurface.external;
       final paneId = session.paneId;
-      if (paneId == null) return SessionWhereabouts(external: external);
+      // When the newest real evidence about this conversation was *written*.
+      // Deliberately not "when we last polled": the poll is always fresh, and
+      // showing its age beside a status would make a week-old transcript look
+      // live. A source that could tell us nothing (`AgentStatusSource.none`)
+      // contributes no timestamp at all, which renders as no age rather than as
+      // a zero.
+      final report = ref
+          .watch(agentSessionStatusProvider(sessionId))
+          .asData
+          ?.value;
+      final lastSeen = report == null || report.source == AgentStatusSource.none
+          ? null
+          : report.evidenceAt;
+
+      if (paneId == null) {
+        return SessionWhereabouts(external: external, lastSeen: lastSeen);
+      }
 
       final instance = ref
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId);
-      if (instance == null) return SessionWhereabouts(external: external);
+      if (instance == null) {
+        return SessionWhereabouts(external: external, lastSeen: lastSeen);
+      }
       if (instance.liveness.value.isLive) {
         return const SessionWhereabouts(hostedLive: true);
       }
@@ -57,7 +77,11 @@ final sessionWhereaboutsProvider = Provider.autoDispose
           lines: descriptor?.launch.resumeConflict.scanLines ?? 30,
         ),
       );
-      return SessionWhereabouts(external: external, refusedResume: refused);
+      return SessionWhereabouts(
+        external: external,
+        refusedResume: refused,
+        lastSeen: lastSeen,
+      );
     });
 
 /// Whether the pane [paneId] is showing an agent's refusal to resume a
