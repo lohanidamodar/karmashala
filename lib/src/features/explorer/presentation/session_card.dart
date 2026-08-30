@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../sessions/domain/session_lineage.dart';
 import '../application/session_diff_stat.dart';
 
 /// A coarse age for a card's corner: `3m`, `22m`, `7h 59m`, `2d 4h`.
@@ -90,11 +91,15 @@ class SessionCard extends StatelessWidget {
     this.age,
     this.ageTooltip,
     this.branch,
+    this.subPath,
     this.whereabouts,
     this.whereaboutsTooltip,
     this.stat,
     this.worktree = false,
     this.pinned = false,
+    this.link,
+    this.parentTitle,
+    this.lineageBroken = false,
     super.key,
   });
 
@@ -123,6 +128,16 @@ class SessionCard extends StatelessWidget {
   /// Line three: the branch this session works on, when known.
   final String? branch;
 
+  /// Line three, first: **which sub-directory of the project** this agent is
+  /// actually working in, when it is not the project root.
+  ///
+  /// The owner's question, in their own words: *"if there are multiple
+  /// subfolders with multiple repositories, do we know which each session is
+  /// working on?"* On a hub — a project folder holding a dozen clones — the
+  /// repository name alone does not answer it, and it is the first thing on the
+  /// line because it is the fact that identifies the work.
+  final String? subPath;
+
   /// Line three: Loop 46's whereabouts clause — "opened in an external
   /// terminal", "open in another process", "last seen 2h ago".
   final String? whereabouts;
@@ -136,9 +151,35 @@ class SessionCard extends StatelessWidget {
   final bool worktree;
 
   final bool pinned;
+
+  /// Why this session names another as its parent, when it does.
+  final SessionLink? link;
+
+  /// The parent's title, when that session is drawn directly above this card.
+  /// Null means "it came from somewhere not on screen", and the glyph's tooltip
+  /// says exactly that rather than naming a session the user cannot see.
+  final String? parentTitle;
+
+  /// The parent chain could not be walked to a root.
+  ///
+  /// Loop 54's rule: a chain that loops, or is longer than the guard allows, is
+  /// **unknown** — drawing it as a tree with a plausible root would be the one
+  /// lie a lineage view must not tell. The card says so in words on line three
+  /// and sits at the top of its row rather than under a parent.
+  final bool lineageBroken;
+
   final VoidCallback onTap;
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
+
+  /// The glyph for a link kind. Three shapes for three genuinely different
+  /// facts: an agent delegated this, the user moved it to another provider, the
+  /// user branched it.
+  static IconData linkIcon(SessionLink link) => switch (link) {
+    SessionLink.spawn => AppIcons.arrowBendDownRight,
+    SessionLink.handoff => AppIcons.paperPlaneRight,
+    SessionLink.fork => AppIcons.gitMerge,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +195,10 @@ class SessionCard extends StatelessWidget {
       onSelected: onMenu,
       child: InkWell(
         onTap: onTap,
+        // Enter on a focused card does what a click does — Flutter's own
+        // activate action on the ink well — so the tree is navigable without
+        // the mouse. The focus tint is what makes that visible.
+        focusColor: scheme.primary.withValues(alpha: 0.12),
         child: Container(
           decoration: BoxDecoration(
             color: selected
@@ -181,6 +226,8 @@ class SessionCard extends StatelessWidget {
               // persisted fact, and it must not blink into existence.
               if (worktree ||
                   branch != null ||
+                  subPath != null ||
+                  lineageBroken ||
                   whereabouts != null ||
                   !(stat?.isEmpty ?? true)) ...[
                 const SizedBox(height: 3),
@@ -239,6 +286,32 @@ class SessionCard extends StatelessWidget {
 
   Widget _line2(ThemeData theme) => Row(
     children: [
+      if (lineageBroken) ...[
+        Tooltip(
+          message:
+              'Lineage cannot be established — this session names a parent '
+              'whose chain does not terminate, so it is drawn on its own '
+              'rather than under a tree we cannot vouch for.',
+          child: Icon(
+            AppIcons.question,
+            size: 11,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 4),
+      ] else if (link != null) ...[
+        Tooltip(
+          message: parentTitle == null
+              ? '${link!.phrase} a session that is not on this row'
+              : '${link!.phrase} "$parentTitle"',
+          child: Icon(
+            linkIcon(link!),
+            size: 11,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(width: 4),
+      ],
       if (pinned) ...[
         Icon(AppIcons.pushPinFill, size: 11, color: theme.colorScheme.primary),
         const SizedBox(width: 4),
@@ -270,11 +343,21 @@ class SessionCard extends StatelessWidget {
 
   Widget _line3(BuildContext context, TextStyle? muted) {
     final scheme = Theme.of(context).colorScheme;
-    final where = [?branch, ?whereabouts].join('  ·  ');
+    final where = [
+      ?subPath,
+      ?branch,
+      ?whereabouts,
+      if (lineageBroken) 'lineage cannot be established',
+    ].join('  ·  ');
+    // One glyph, for whichever fact leads. Two would crowd a line that is
+    // already the first thing to ellipsise at the pane's minimum width.
+    final leading = subPath != null
+        ? AppIcons.folder
+        : (branch != null ? AppIcons.gitBranch : null);
     return Row(
       children: [
-        if (branch != null) ...[
-          Icon(AppIcons.gitBranch, size: 11, color: scheme.onSurfaceVariant),
+        if (leading != null) ...[
+          Icon(leading, size: 11, color: scheme.onSurfaceVariant),
           const SizedBox(width: 4),
         ],
         // The left half is the only thing on the card allowed to be long, so it

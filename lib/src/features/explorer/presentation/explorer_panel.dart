@@ -10,37 +10,56 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../application/checkout.dart';
+import '../application/explorer_actions.dart';
+import '../application/project_tree.dart';
+import '../application/reveal_in_file_manager.dart';
 import '../application/session_diff_stat.dart';
+import '../application/session_forest.dart';
+import 'checkout_row.dart';
+import 'project_card.dart';
 import 'session_card.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
-import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../sessions/domain/session_lineage.dart';
 import '../../sessions/domain/session_resume.dart';
 import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 
-/// The unified left pane — an Explorer tree of projects, their repositories and
-/// the sessions (native + imported) within each. Selecting/expanding a project
-/// reveals its sessions; sessions can be renamed, deleted (and imported ones
-/// resumed) from a right-click context menu or the trailing menu button.
+/// The unified left pane: **Project → Repository → Worktree → Session**.
+///
+/// Until Loop 58 this was a flat Project → (Repository) → Sessions list, and it
+/// could not answer the question the owner actually asks of it — *which of these
+/// twelve clones is that agent working in?* The rows now come from
+/// [projectTreeViewProvider]: repositories that are really worktrees of another
+/// are folded underneath it, and every session is placed on the **deepest** row
+/// whose directory contains the one its agent is running in, including a folder
+/// the scanner has never recorded.
+///
+/// **What it costs to open a project.** One `git worktree list` per repository
+/// row, once, cached by Riverpod. No `git status` of its own: every row shares
+/// `checkoutStatProvider` with the cards beneath it, so twenty sessions in one
+/// repository still cost one `git status` — asserted, not assumed.
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
 
@@ -51,7 +70,19 @@ class ExplorerPanel extends ConsumerStatefulWidget {
 class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   String _query = '';
   final Set<String> _expandedProjects = {};
-  final Set<String> _expandedRepos = {};
+
+  /// Rows the user has explicitly opened or closed, by row key. Absent means
+  /// "whatever [_defaultOpen] says", so a repository that has sessions opens on
+  /// its own and one that does not stays quiet — without forgetting the user's
+  /// choice the moment a session is added.
+  final Map<String, bool> _rowOverrides = {};
+
+  bool _isOpen(String key, {required bool defaultOpen}) =>
+      _rowOverrides[key] ?? defaultOpen;
+
+  void _toggleRow(String key, {required bool defaultOpen}) => setState(
+    () => _rowOverrides[key] = !_isOpen(key, defaultOpen: defaultOpen),
+  );
 
   void _showDetected() {
     ref.read(detectedProjectsControllerProvider.notifier).detect();
@@ -66,28 +97,61 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     );
   }
 
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _syncProject(Project project) async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final result = await ref
           .read(projectsControllerProvider.notifier)
           .syncSessions(project.id);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            result.sessions == 0
-                ? 'Sessions are up to date.'
-                : 'Added ${result.sessions} CLI session${result.sessions == 1 ? '' : 's'}.',
-          ),
-        ),
+      _say(
+        result.sessions == 0
+            ? 'Sessions are up to date.'
+            : 'Added ${result.sessions} CLI session${result.sessions == 1 ? '' : 's'}.',
       );
     } catch (error) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('Could not refresh sessions: $error')),
-      );
+      _say('Could not refresh sessions: $error');
     }
+  }
+
+  /// Re-runs discovery over the project's folder, which is what turns a "not
+  /// scanned yet" row into a real repository row.
+  Future<void> _rescan(Project project) async {
+    try {
+      final added = await ref
+          .read(projectsControllerProvider.notifier)
+          .rediscover(project.id);
+      // The tree is rebuilt from the repositories table, so invalidating it is
+      // what makes a newly-found checkout appear without reopening the project.
+      ref.invalidate(projectTreeProvider(project.id));
+      _say(
+        added.isEmpty
+            ? 'No new repositories found in ${project.name}.'
+            : 'Found ${added.length} '
+                  'repositor${added.length == 1 ? 'y' : 'ies'}.',
+      );
+    } catch (error) {
+      _say(error is StateError ? error.message : 'Could not rescan: $error');
+    }
+  }
+
+  Future<void> _reveal(EnvironmentPath path) async {
+    _say('Opening ${path.path}…');
+    try {
+      await ref.read(revealInFileManagerProvider)(path);
+    } catch (error) {
+      _say('Could not open the folder: $error');
+    }
+  }
+
+  Future<void> _copyPath(EnvironmentPath path) async {
+    await Clipboard.setData(ClipboardData(text: path.path));
+    _say('Path copied to clipboard');
   }
 
   void _toggleProject(Project project) {
@@ -113,29 +177,36 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     }
   }
 
-  void _toggleRepo(Repository repo) {
-    setState(() {
-      if (_expandedRepos.remove(repo.id)) return;
-      _expandedRepos.add(repo.id);
-    });
-    ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
+  /// Starts a session in one click. [installation] is the "…with" choice; left
+  /// out, the configured default agent for that environment is used.
+  Future<void> _startSession({
+    required Repository repository,
+    EnvironmentPath? existingWorktree,
+    AgentInstallation? installation,
+  }) async {
+    final result = await ref
+        .read(explorerActionsProvider)
+        .startSession(
+          repository: repository,
+          existingWorktree: existingWorktree,
+          installation: installation,
+        );
+    final message = result.message;
+    if (message != null) _say(message);
   }
 
-  /// Starts a new session in [project]: selects it and its first repository,
-  /// then opens the New session dialog (or warns if there are no repositories).
-  void _newSessionInProject(Project project) {
+  /// The dialog path — a title, an agent, a worktree, an external terminal.
+  void _newSessionDialog(Project project, {Repository? repository}) {
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     setState(() => _expandedProjects.add(project.id));
-    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
-    if (repos.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This project has no Git repositories to run in.'),
-        ),
-      );
+    final repo =
+        repository ??
+        ref.read(repositoryDaoProvider).getByProject(project.id).firstOrNull;
+    if (repo == null) {
+      _say('This project has no Git repositories to run in.');
       return;
     }
-    ref.read(selectedRepositoryIdProvider.notifier).select(repos.first.id);
+    ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
     NewSessionDialog.show(context);
   }
 
@@ -152,7 +223,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     Project project, {
     bool chooseSubfolder = false,
   }) async {
-    final messenger = ScaffoldMessenger.of(context);
     final actions = ref.read(editorActionsProvider);
     String? subPath;
     if (chooseSubfolder) {
@@ -165,15 +235,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     }
     try {
       await actions.openProject(project.id, windowsSubPath: subPath);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Opening in editor…')),
-      );
+      _say('Opening in editor…');
     } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : '$e')),
-      );
+      _say(e is StateError ? e.message : '$e');
     }
   }
 
@@ -287,7 +351,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ),
         IconButton(
           tooltip: 'Detect CLI sessions',
-          icon: const Icon(AppIcons.globe, size: 18),
+          // Not `globe`, which is the Browser surface's glyph (Loop 56 found
+          // the collision and left it here). Finding conversations an agent
+          // already wrote is history, and the imported cards use this glyph for
+          // exactly that.
+          icon: const Icon(AppIcons.clockCounterClockwise, size: 18),
           onPressed: _showDetected,
         ),
         IconButton(
@@ -326,8 +394,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     );
   }
 
-  /// The rows for one project: its header, then (when expanded) its repositories
-  /// and sessions.
+  // --- rows ------------------------------------------------------------------
+
+  /// The rows for one project: its card, then (when expanded) its tree.
   List<Widget> _projectNodes(Project project) {
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
     final pinned = ref.watch(
@@ -340,32 +409,32 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     // per-checkout providers have already answered, so a header never starts a
     // second wave of git.
     final summary = ref.watch(projectSummaryProvider(project.id));
+
     final rows = <Widget>[
-      _TreeRow(
-        depth: 0,
+      ProjectCard(
+        name: project.name,
+        path: project.root.path,
+        expanded: expanded,
         selected: project.id == selectedProjectId,
-        leading: Icon(
-          expanded ? AppIcons.folderOpen : AppIcons.folder,
-          size: 18,
-          color: missing ? Theme.of(context).colorScheme.error : null,
-        ),
-        expandedState: expanded,
-        title: project.name,
-        subtitle: missing
-            ? 'Folder not found — ${project.root.path}'
-            : project.root.path,
+        missing: missing,
+        pinned: pinned,
+        summary: summary,
         onTap: () => _toggleProject(project),
+        onNewSession: () => _newSessionDialog(project),
+        onTogglePin: () => _togglePin(project),
         menuItems: [
           DesktopMenuItem(
             value: 'new-session',
-            label: 'New session',
+            label: 'New session…',
             icon: AppIcons.chatCircleDots,
           ),
+          ..._agentMenuItems(project.root.environmentId),
           DesktopMenuItem(
             value: 'copy-cmd',
             label: 'Copy new-session command',
             icon: AppIcons.copy,
           ),
+          const DesktopMenuDivider(),
           DesktopMenuItem(
             value: 'open-editor',
             label: 'Open in editor',
@@ -376,15 +445,22 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             label: 'Open sub-folder in editor…',
             icon: AppIcons.folderOpen,
           ),
+          ..._pathMenuItems(),
+          const DesktopMenuDivider(),
           DesktopMenuItem(
             value: 'pin',
             label: pinned ? 'Unpin' : 'Pin to top',
-            icon: pinned ? AppIcons.pushPin : AppIcons.pushPin,
+            icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
           ),
           DesktopMenuItem(
             value: 'refresh',
             label: 'Refresh CLI sessions',
             icon: AppIcons.arrowsClockwise,
+          ),
+          DesktopMenuItem(
+            value: 'rescan',
+            label: 'Rescan for repositories',
+            icon: AppIcons.magnifyingGlass,
           ),
           const DesktopMenuDivider(),
           DesktopMenuItem(
@@ -395,322 +471,486 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ),
         ],
         onMenu: (action) {
-          if (action == 'new-session') _newSessionInProject(project);
-          if (action == 'copy-cmd') {
-            copyCommandToClipboard(
-              context,
-              () => ref
-                  .read(sessionActionsProvider)
-                  .newSessionShellCommand(project.id),
-            );
+          final installation = _installationFromMenu(
+            action,
+            project.root.environmentId,
+          );
+          if (installation != null) {
+            final repo = ref
+                .read(repositoryDaoProvider)
+                .getByProject(project.id)
+                .firstOrNull;
+            if (repo == null) {
+              _say('This project has no Git repositories to run in.');
+            } else {
+              _startSession(repository: repo, installation: installation);
+            }
+            return;
           }
-          if (action == 'open-editor') _openProjectInEditor(project);
-          if (action == 'open-editor-subfolder') {
-            _openProjectInEditor(project, chooseSubfolder: true);
+          switch (action) {
+            case 'new-session':
+              _newSessionDialog(project);
+            case 'copy-cmd':
+              copyCommandToClipboard(
+                context,
+                () => ref
+                    .read(sessionActionsProvider)
+                    .newSessionShellCommand(project.id),
+              );
+            case 'open-editor':
+              _openProjectInEditor(project);
+            case 'open-editor-subfolder':
+              _openProjectInEditor(project, chooseSubfolder: true);
+            case 'reveal':
+              _reveal(project.root);
+            case 'copy-path':
+              _copyPath(project.root);
+            case 'pin':
+              _togglePin(project);
+            case 'refresh':
+              _syncProject(project);
+            case 'rescan':
+              _rescan(project);
+            case 'delete':
+              _confirmDeleteProject(project);
           }
-          if (action == 'pin') _togglePin(project);
-          if (action == 'refresh') _syncProject(project);
-          if (action == 'delete') _confirmDeleteProject(project);
         },
-        // MonoCode's project header carries the aggregate on the right, and it
-        // is the one number that says whether a project is worth opening.
-        aggregate: summary.label,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (missing)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Tooltip(
-                  message: 'Folder not found: ${project.root.path}',
-                  child: Icon(
-                    AppIcons.warningCircle,
-                    size: 15,
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ),
-            if (pinned)
-              IconButton(
-                tooltip: 'Unpin',
-                visualDensity: VisualDensity.compact,
-                iconSize: 15,
-                color: Theme.of(context).colorScheme.tertiary,
-                icon: const Icon(AppIcons.pushPin),
-                onPressed: () => _togglePin(project),
-              ),
-            IconButton(
-              tooltip: 'New session in this project',
-              visualDensity: VisualDensity.compact,
-              iconSize: 16,
-              icon: const Icon(AppIcons.plus),
-              onPressed: () => _newSessionInProject(project),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Project actions',
-              icon: const Icon(AppIcons.dotsThreeVertical, size: 16),
-              onSelected: (action) {
-                if (action == 'copy-cmd') {
-                  copyCommandToClipboard(
-                    context,
-                    () => ref
-                        .read(sessionActionsProvider)
-                        .newSessionShellCommand(project.id),
-                  );
-                }
-                if (action == 'open-editor') _openProjectInEditor(project);
-                if (action == 'open-editor-subfolder') {
-                  _openProjectInEditor(project, chooseSubfolder: true);
-                }
-                if (action == 'pin') _togglePin(project);
-                if (action == 'refresh') _syncProject(project);
-                if (action == 'delete') _confirmDeleteProject(project);
-              },
-              itemBuilder: (context) => [
-                DesktopMenuItem(
-                  value: 'copy-cmd',
-                  label: 'Copy new-session command',
-                  icon: AppIcons.copy,
-                ),
-                DesktopMenuItem(
-                  value: 'open-editor',
-                  label: 'Open in editor',
-                  icon: AppIcons.code,
-                ),
-                DesktopMenuItem(
-                  value: 'open-editor-subfolder',
-                  label: 'Open sub-folder in editor…',
-                  icon: AppIcons.folderOpen,
-                ),
-                DesktopMenuItem(
-                  value: 'pin',
-                  label: pinned ? 'Unpin' : 'Pin to top',
-                  icon: pinned ? AppIcons.pushPin : AppIcons.pushPin,
-                ),
-                DesktopMenuItem(
-                  value: 'refresh',
-                  label: 'Refresh CLI sessions',
-                  icon: AppIcons.arrowsClockwise,
-                ),
-                const DesktopMenuDivider(),
-                DesktopMenuItem(
-                  value: 'delete',
-                  label: 'Remove from workspace',
-                  icon: AppIcons.trash,
-                  destructive: true,
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     ];
     if (!expanded) return rows;
 
-    final repos = ref.read(repositoryDaoProvider).getByProject(project.id);
-    if (repos.isEmpty) {
+    // Asynchronous only in its worktrees: while git is answering, the
+    // repositories are drawn as peers with no worktrees, so expanding a project
+    // shows its contents immediately.
+    final view = ref.watch(projectTreeViewProvider(project.id));
+    final loading = ref.watch(projectTreeProvider(project.id)).isLoading;
+    final nodes = view.tree.repositories;
+    if (nodes.isEmpty) {
       rows.add(
-        const _TreeHint(depth: 1, message: 'No repositories in this project.'),
+        _TreeHint(
+          depth: 1,
+          message:
+              'No repositories in this project. Use ⋯ → Rescan for '
+              'repositories if one was cloned since.',
+        ),
       );
-    } else if (repos.length == 1) {
-      rows.addAll(_sessionNodes(repos.first, depth: 1));
-    } else {
-      for (final repo in repos) {
-        rows.addAll(_repoNodes(repo));
-      }
+      return rows;
+    }
+    // Path order, so a repository nested inside another is drawn immediately
+    // beneath it rather than wherever discovery happened to record it.
+    final ordered = [...nodes]
+      ..sort(
+        (a, b) => canonicalPathKey(
+          a.repository.path.path,
+        ).compareTo(canonicalPathKey(b.repository.path.path)),
+      );
+    for (final node in ordered) {
+      rows.addAll(
+        _repoNodes(
+          project,
+          node,
+          view.placement,
+          onlyRepository: ordered.length == 1,
+          worktreesLoading: loading,
+        ),
+      );
     }
     return rows;
   }
 
-  List<Widget> _repoNodes(Repository repo) {
+  List<Widget> _repoNodes(
+    Project project,
+    RepoNode node,
+    SessionPlacement placement, {
+    required bool onlyRepository,
+    required bool worktreesLoading,
+  }) {
+    final repository = node.repository;
+    final key = repoRowKey(repository);
+    final sessions = placement.at(key);
+    final folders = placement.under(key);
+    // A repository the user has work in opens itself; an empty one stays quiet.
+    // The single-repository project always opens, which is what makes tapping a
+    // project header show its sessions.
+    final open = _isOpen(
+      key,
+      defaultOpen:
+          onlyRepository ||
+          !sessions.isEmpty ||
+          folders.isNotEmpty ||
+          node.worktrees.isNotEmpty,
+    );
+    final stat = ref
+        .watch(checkoutStatProvider(Checkout(repository.path)))
+        .asData
+        ?.value;
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
-    final expanded = _expandedRepos.contains(repo.id);
+
     final rows = <Widget>[
-      _TreeRow(
+      CheckoutRow(
         depth: 1,
-        selected: repo.id == selectedRepoId,
-        leading: const Icon(AppIcons.gitBranch, size: 16),
-        expandedState: expanded,
-        title: repo.name,
-        onTap: () => _toggleRepo(repo),
+        icon: AppIcons.gitBranch,
+        title: repository.name,
+        subtitle: _subPathOf(project, repository.path, unless: repository.name),
+        expanded: open,
+        selected: repository.id == selectedRepoId,
+        stat: stat,
+        onTap: () {
+          ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
+          _toggleRow(
+            key,
+            defaultOpen:
+                onlyRepository ||
+                !sessions.isEmpty ||
+                folders.isNotEmpty ||
+                node.worktrees.isNotEmpty,
+          );
+        },
+        onNewSession: () => _startSession(repository: repository),
+        menuItems: [
+          DesktopMenuItem(
+            value: 'new-session',
+            label: 'New session…',
+            icon: AppIcons.chatCircleDots,
+          ),
+          ..._agentMenuItems(repository.path.environmentId),
+          ..._pathMenuItems(),
+        ],
+        onMenu: (action) {
+          final installation = _installationFromMenu(
+            action,
+            repository.path.environmentId,
+          );
+          if (installation != null) {
+            _startSession(repository: repository, installation: installation);
+            return;
+          }
+          switch (action) {
+            case 'new-session':
+              _newSessionDialog(project, repository: repository);
+            case 'reveal':
+              _reveal(repository.path);
+            case 'copy-path':
+              _copyPath(repository.path);
+          }
+        },
       ),
     ];
-    if (expanded) rows.addAll(_sessionNodes(repo, depth: 2));
+    if (!open) return rows;
+
+    for (final worktree in node.worktrees) {
+      rows.addAll(_worktreeNodes(project, node, worktree, placement));
+    }
+    // "We could not ask" is a different fact from "there are none", and only
+    // said once git has actually failed — never while it is still answering.
+    if (!node.worktreesKnown && !worktreesLoading) {
+      rows.add(
+        const _TreeHint(
+          depth: 2,
+          message: 'Worktrees could not be listed for this folder.',
+        ),
+      );
+    }
+    for (final folder in folders) {
+      rows.addAll(_folderNodes(project, folder, placement, depth: 2));
+    }
+    rows.addAll(_sessionCards(project, sessions, depth: 2));
+    if (sessions.isEmpty &&
+        folders.isEmpty &&
+        node.worktrees.isEmpty &&
+        node.worktreesKnown) {
+      rows.add(
+        const _TreeHint(
+          depth: 2,
+          message: 'No sessions yet — start one with the + on this row.',
+        ),
+      );
+    }
     return rows;
   }
 
-  List<Widget> _sessionNodes(Repository repo, {required int depth}) {
-    final native = ref.read(sessionDaoProvider).getByRepository(repo.id);
-    final imported = ref
-        .read(importedSessionDaoProvider)
-        .getByRepository(repo.id);
-    if (native.isEmpty && imported.isEmpty) {
-      return [
-        _TreeHint(
-          depth: depth,
-          message: 'No sessions yet — start one with the + above.',
+  List<Widget> _worktreeNodes(
+    Project project,
+    RepoNode node,
+    WorktreeNode worktree,
+    SessionPlacement placement,
+  ) {
+    final key = worktreeRowKey(worktree.path);
+    final sessions = placement.at(key);
+    final folders = placement.under(key);
+    final open = _isOpen(key, defaultOpen: true);
+    // Shared with every card inside, so a worktree with four sessions costs
+    // what an empty one does.
+    final stat = ref
+        .watch(
+          worktreeStatProvider((
+            repo: node.repository.path,
+            worktree: worktree.path,
+          )),
+        )
+        .asData
+        ?.value;
+    final name = _basename(worktree.path.path);
+
+    final rows = <Widget>[
+      CheckoutRow(
+        depth: 2,
+        icon: AppIcons.treeStructure,
+        title: name,
+        subtitle: _subPathOf(project, worktree.path, unless: name),
+        expanded: open,
+        stat: stat ?? SessionDiffStat(branch: worktree.branch),
+        onTap: () => _toggleRow(key, defaultOpen: true),
+        // Startable whatever the workspace has recorded: the owning repository
+        // supplies the id and `existingWorktree` supplies the directory, which
+        // is the pairing Loop 57 did not have and had to refuse.
+        onNewSession: () => _startSession(
+          repository: node.repository,
+          existingWorktree: worktree.path,
         ),
-      ];
+        newSessionTooltip: 'New session in this worktree',
+        menuItems: [
+          ..._agentMenuItems(worktree.path.environmentId),
+          ..._pathMenuItems(),
+        ],
+        onMenu: (action) {
+          final installation = _installationFromMenu(
+            action,
+            worktree.path.environmentId,
+          );
+          if (installation != null) {
+            _startSession(
+              repository: node.repository,
+              existingWorktree: worktree.path,
+              installation: installation,
+            );
+            return;
+          }
+          switch (action) {
+            case 'reveal':
+              _reveal(worktree.path);
+            case 'copy-path':
+              _copyPath(worktree.path);
+          }
+        },
+      ),
+    ];
+    if (!open) return rows;
+    for (final folder in folders) {
+      rows.addAll(_folderNodes(project, folder, placement, depth: 3));
     }
-    final pinned = ref
+    rows.addAll(_sessionCards(project, sessions, depth: 3));
+    return rows;
+  }
+
+  /// A directory an agent is working in that the workspace has no repository
+  /// row for. Rendered, never persisted — the row says what it is and offers the
+  /// rescan that would make it real.
+  List<Widget> _folderNodes(
+    Project project,
+    UnscannedNode folder,
+    SessionPlacement placement, {
+    required int depth,
+  }) {
+    final key = folderRowKey(folder.path);
+    final sessions = placement.at(key);
+    final open = _isOpen(key, defaultOpen: true);
+    final rows = <Widget>[
+      CheckoutRow(
+        depth: depth,
+        icon: AppIcons.folder,
+        title: folder.label,
+        expanded: open,
+        note: 'not scanned yet',
+        noteTooltip:
+            'An agent is working here, but the workspace has no repository '
+            'record for this folder. Rescan the project to add one.',
+        extraAction: IconButton(
+          tooltip: 'Rescan for repositories',
+          visualDensity: VisualDensity.compact,
+          iconSize: 14,
+          constraints: const BoxConstraints.tightFor(width: 22, height: 20),
+          padding: EdgeInsets.zero,
+          icon: const Icon(AppIcons.arrowsClockwise),
+          onPressed: () => _rescan(project),
+        ),
+        onTap: () => _toggleRow(key, defaultOpen: true),
+        menuItems: [
+          DesktopMenuItem(
+            value: 'rescan',
+            label: 'Rescan for repositories',
+            icon: AppIcons.arrowsClockwise,
+          ),
+          ..._pathMenuItems(),
+        ],
+        onMenu: (action) {
+          switch (action) {
+            case 'rescan':
+              _rescan(project);
+            case 'reveal':
+              _reveal(folder.path);
+            case 'copy-path':
+              _copyPath(folder.path);
+          }
+        },
+      ),
+    ];
+    if (open) rows.addAll(_sessionCards(project, sessions, depth: depth + 1));
+    return rows;
+  }
+
+  /// The cards on one row: native sessions arranged parent-and-child, imported
+  /// conversations interleaved by when they were last touched.
+  List<Widget> _sessionCards(
+    Project project,
+    CheckoutSessions sessions, {
+    required int depth,
+  }) {
+    if (sessions.isEmpty) return const [];
+    final pinnedIds = ref
         .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
         .toSet();
+    final forest = buildSessionForest(
+      sessions.native,
+      isPinned: pinnedIds.contains,
+    );
 
-    // Merge native + imported sessions and order them: pinned first, then most
-    // recently active. Native sessions sort by creation; imported by their CLI
-    // store's last-updated time.
+    // Pinned first, then most recently active — the ordering the flat list
+    // always had, now applied to the *top* of each lineage so a child never
+    // floats above the session it came from.
     final entries =
-        <({DateTime ts, bool pinned, Widget row})>[
-          for (final s in native)
+        <({DateTime ts, bool pinned, List<Widget> rows})>[
+          for (final node in forest)
             (
-              ts: s.createdAt,
-              pinned: pinned.contains(s.id),
-              row: _NativeSessionRow(
-                session: s,
-                repoId: repo.id,
-                depth: depth,
-                pinned: pinned.contains(s.id),
-              ),
+              ts: node.session.createdAt,
+              pinned: pinnedIds.contains(node.session.id),
+              rows: _lineageRows(project, node, depth: depth, parent: null),
             ),
-          for (final s in imported)
+          for (final imported in sessions.imported)
             (
-              ts: s.updatedAt ?? s.createdAt,
-              pinned: pinned.contains(s.id),
-              row: _ImportedSessionRow(
-                session: s,
-                repoId: repo.id,
-                depth: depth,
-                pinned: pinned.contains(s.id),
-              ),
+              ts: imported.updatedAt ?? imported.createdAt,
+              pinned: pinnedIds.contains(imported.id),
+              rows: [
+                _ImportedSessionRow(
+                  session: imported,
+                  depth: depth + (imported.isSubagent ? 1 : 0),
+                  subPath: _subPathForImported(project, imported),
+                  pinned: pinnedIds.contains(imported.id),
+                ),
+              ],
             ),
         ]..sort((a, b) {
           if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
           return b.ts.compareTo(a.ts);
         });
-    return [for (final e in entries) e.row];
+    return [for (final entry in entries) ...entry.rows];
+  }
+
+  List<Widget> _lineageRows(
+    Project project,
+    SessionNode node, {
+    required int depth,
+    required Session? parent,
+  }) => [
+    _NativeSessionRow(
+      session: node.session,
+      depth: depth,
+      subPath: _subPathForNative(project, node.session),
+      pinned: ref
+          .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
+          .contains(node.session.id),
+      link: node.link,
+      parentTitle: parent?.title,
+      lineageBroken: node.lineageBroken,
+    ),
+    for (final child in node.children)
+      ..._lineageRows(project, child, depth: depth + 1, parent: node.session),
+  ];
+
+  // --- shared menu fragments --------------------------------------------------
+
+  /// `New session with <agent>` for every agent installed where the row lives.
+  ///
+  /// Only offered when there is a choice to make: with one installation the `+`
+  /// already uses it, and a menu item that repeats a button teaches nothing.
+  List<PopupMenuEntry<String>> _agentMenuItems(String environmentId) {
+    final installations = ref
+        .read(agentInstallationDaoProvider)
+        .getByEnvironment(environmentId);
+    if (installations.length < 2) return const [];
+    return [
+      for (final installation in installations)
+        DesktopMenuItem(
+          value: 'new-with:${installation.id}',
+          label:
+              'New session with '
+              '${AgentRegistry.builtIn.displayNameFor(installation.agentId)}',
+          icon: AppIcons.robot,
+        ),
+    ];
+  }
+
+  AgentInstallation? _installationFromMenu(
+    String action,
+    String environmentId,
+  ) {
+    if (!action.startsWith('new-with:')) return null;
+    final id = action.substring('new-with:'.length);
+    return ref
+        .read(agentInstallationDaoProvider)
+        .getByEnvironment(environmentId)
+        .where((installation) => installation.id == id)
+        .firstOrNull;
+  }
+
+  /// The two items every folder row carries. "Copy path" works today; "Open in
+  /// File Explorer" goes through [revealInFileManagerProvider], whose default
+  /// does nothing until the shell's launcher is wired to it.
+  List<PopupMenuEntry<String>> _pathMenuItems() => [
+    const DesktopMenuDivider(),
+    DesktopMenuItem(
+      value: 'reveal',
+      label: 'Open in File Explorer',
+      icon: AppIcons.folderOpen,
+    ),
+    DesktopMenuItem(
+      value: 'copy-path',
+      label: 'Copy path',
+      icon: AppIcons.copySimple,
+    ),
+  ];
+
+  // --- paths ------------------------------------------------------------------
+
+  /// [path] written relative to the project, or null when it says nothing the
+  /// row's own name does not already say.
+  String? _subPathOf(Project project, EnvironmentPath path, {String? unless}) {
+    final relative = relativeSubPath(project.root, path);
+    if (relative == null || relative == unless) return null;
+    return relative;
+  }
+
+  String? _subPathForNative(Project project, Session session) {
+    final directory =
+        session.worktree ??
+        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+    return directory == null ? null : relativeSubPath(project.root, directory);
+  }
+
+  String? _subPathForImported(Project project, ImportedSession session) {
+    final path = ref
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId)
+        ?.path;
+    return path == null ? null : relativeSubPath(project.root, path);
   }
 }
 
-/// A single expandable/selectable row in the tree (project or repository).
-class _TreeRow extends StatelessWidget {
-  const _TreeRow({
-    required this.depth,
-    required this.selected,
-    required this.leading,
-    required this.title,
-    required this.onTap,
-    this.subtitle,
-    this.expandedState,
-    this.trailing,
-    this.aggregate,
-    this.menuItems,
-    this.onMenu,
-  });
-
-  /// A short right-hand summary — "6 sessions · 3 changed". Dropped entirely
-  /// below [_aggregateWidth]: a ListTile whose trailing eats the tile is an
-  /// assertion, and half a word of aggregate is worth less than the row.
-  final String? aggregate;
-
-  /// The narrowest pane that still has room for [aggregate] beside the row's
-  /// buttons. The Explorer clamps to 200px, so this is a real case.
-  static const _aggregateWidth = 260.0;
-
-  final int depth;
-  final bool selected;
-  final Widget leading;
-  final String title;
-  final String? subtitle;
-  final VoidCallback onTap;
-  final Widget? trailing;
-  final List<PopupMenuEntry<String>>? menuItems;
-  final ValueChanged<String>? onMenu;
-
-  /// When non-null, a disclosure chevron reflecting expansion state is shown.
-  final bool? expandedState;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) =>
-        _tile(context, wide: constraints.maxWidth >= _aggregateWidth),
-  );
-
-  Widget _tile(BuildContext context, {required bool wide}) {
-    final theme = Theme.of(context);
-    final label = wide ? aggregate : null;
-    final tile = ListTile(
-      dense: true,
-      selected: selected,
-      contentPadding: EdgeInsets.only(left: 8.0 + depth * 16, right: 4),
-      leading: SizedBox(
-        width: 36,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (expandedState != null)
-              Icon(
-                expandedState! ? AppIcons.caretDown : AppIcons.caretRight,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-              )
-            else
-              const SizedBox(width: 16),
-            const SizedBox(width: 2),
-            leading,
-          ],
-        ),
-      ),
-      title: Row(
-        children: [
-          Flexible(
-            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(width: 7),
-            Expanded(
-              child: Tooltip(
-                message: subtitle!,
-                child: Text(
-                  subtitle!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-      trailing: label == null
-          ? trailing
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 132),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                ?trailing,
-              ],
-            ),
-      onTap: onTap,
-    );
-    if (menuItems == null || onMenu == null) return tile;
-    return ContextMenuRegion(
-      menuItems: menuItems!,
-      onSelected: onMenu!,
-      child: tile,
-    );
-  }
+String _basename(String path) {
+  final parts = canonicalPathKey(
+    path,
+  ).split('/').where((part) => part.isNotEmpty).toList();
+  return parts.isEmpty ? path : parts.last;
 }
 
 /// A non-interactive hint shown under an expanded, empty node.
@@ -723,7 +963,7 @@ class _TreeHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(8.0 + depth * 16 + 36, 4, 8, 8),
+      padding: EdgeInsets.fromLTRB(8.0 + depth * 14 + 20, 4, 8, 8),
       child: Text(
         message,
         style: theme.textTheme.bodySmall?.copyWith(
@@ -737,15 +977,21 @@ class _TreeHint extends StatelessWidget {
 class _NativeSessionRow extends ConsumerWidget {
   const _NativeSessionRow({
     required this.session,
-    required this.repoId,
     required this.depth,
+    this.subPath,
     this.pinned = false,
+    this.link,
+    this.parentTitle,
+    this.lineageBroken = false,
   });
 
   final Session session;
-  final String repoId;
   final int depth;
+  final String? subPath;
   final bool pinned;
+  final SessionLink? link;
+  final String? parentTitle;
+  final bool lineageBroken;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -774,10 +1020,17 @@ class _NativeSessionRow extends ConsumerWidget {
       }
     }
 
-    void select() {
-      ref.read(selectedRepositoryIdProvider.notifier).select(repoId);
-      ref.read(selectedImportedSessionIdProvider.notifier).select(null);
-      ref.read(selectedSessionIdProvider.notifier).select(session.id);
+    // One click opens the session: a pane of ours that is still running comes
+    // back, a stopped conversation is resumed — in its own worktree when it has
+    // one — and an agent that will not share says so in plain words.
+    Future<void> open() async {
+      final messenger = ScaffoldMessenger.of(context);
+      final result = await ref
+          .read(explorerActionsProvider)
+          .openNative(session.id);
+      final message = result.message;
+      if (message == null) return;
+      messenger.showSnackBar(SnackBar(content: Text(message)));
     }
 
     // What we can honestly say about where this session's process is, before
@@ -824,11 +1077,15 @@ class _NativeSessionRow extends ConsumerWidget {
           'Created ${describeAge(now.difference(session.createdAt))}',
       title: session.title,
       branch: stat?.branch,
+      subPath: subPath,
       whereabouts: whereabouts.note,
       whereaboutsTooltip: whereabouts.explanation,
       stat: stat,
       worktree: session.useWorktree,
-      onTap: select,
+      link: link,
+      parentTitle: parentTitle,
+      lineageBroken: lineageBroken,
+      onTap: open,
       menuItems: [
         for (final terminal in terminals)
           DesktopMenuItem(
@@ -907,14 +1164,14 @@ class _NativeSessionRow extends ConsumerWidget {
 class _ImportedSessionRow extends ConsumerWidget {
   const _ImportedSessionRow({
     required this.session,
-    required this.repoId,
     required this.depth,
+    this.subPath,
     this.pinned = false,
   });
 
   final ImportedSession session;
-  final String repoId;
   final int depth;
+  final String? subPath;
   final bool pinned;
 
   @override
@@ -945,7 +1202,7 @@ class _ImportedSessionRow extends ConsumerWidget {
               .read(settingsControllerProvider.notifier)
               .togglePinnedSession(session.id);
         case 'resume':
-          await _resume(context, actions, session);
+          await _open(context, ref, session);
         case 'copy-cmd':
           copyCommandToClipboard(
             context,
@@ -965,16 +1222,13 @@ class _ImportedSessionRow extends ConsumerWidget {
       }
     }
 
-    void select() {
-      ref.read(selectedRepositoryIdProvider.notifier).select(repoId);
-      ref.read(selectedSessionIdProvider.notifier).select(null);
-      ref.read(selectedImportedSessionIdProvider.notifier).select(session.id);
-    }
-
-    final stat = ref.watch(repositoryDiffStatProvider(repoId)).asData?.value;
+    final stat = ref
+        .watch(repositoryDiffStatProvider(session.repositoryId))
+        .asData
+        ?.value;
 
     return SessionCard(
-      depth: depth + (session.isSubagent ? 1 : 0),
+      depth: depth,
       selected: selected,
       pinned: pinned,
       agentIcon: session.isSubagent
@@ -988,8 +1242,9 @@ class _ImportedSessionRow extends ConsumerWidget {
                 'whether a process still has it open.',
       title: session.displayTitle,
       branch: stat?.branch,
+      subPath: subPath,
       stat: stat,
-      onTap: select,
+      onTap: () => _open(context, ref, session),
       menuItems: [
         DesktopMenuItem(
           value: 'resume',
@@ -1032,6 +1287,19 @@ class _ImportedSessionRow extends ConsumerWidget {
   }
 }
 
+Future<void> _open(
+  BuildContext context,
+  WidgetRef ref,
+  ImportedSession session,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final result = await ref.read(explorerActionsProvider).openImported(session);
+  final message = result.message;
+  if (message != null) {
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
 Future<void> _openNativeInTerminal(
   BuildContext context,
   SessionActions actions,
@@ -1066,22 +1334,6 @@ Future<void> _openImportedInTerminal(
   } catch (error) {
     messenger.showSnackBar(
       SnackBar(content: Text(error is StateError ? error.message : '$error')),
-    );
-  }
-}
-
-Future<void> _resume(
-  BuildContext context,
-  SessionActions actions,
-  ImportedSession session,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  try {
-    await actions.resumeImported(session);
-    messenger.showSnackBar(const SnackBar(content: Text('Resuming session…')));
-  } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(content: Text(e is StateError ? e.message : '$e')),
     );
   }
 }

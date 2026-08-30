@@ -157,8 +157,12 @@ void main() {
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('feature/cards'), findsOneWidget);
-    expect(find.text('3 changed'), findsOneWidget);
+    // Twice, and that is the assertion: since Loop 58 the repository row states
+    // the branch and change count of the checkout, and the card under it states
+    // the same ones. They share `checkoutStatProvider`, so they cannot disagree
+    // — one of them differing would mean the family key had come apart again.
+    expect(find.textContaining('feature/cards'), findsNWidgets(2));
+    expect(find.text('3 changed'), findsNWidgets(2));
   });
 
   testWidgets('a repository git cannot answer for simply says nothing', (
