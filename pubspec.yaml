@@ -21,6 +21,9 @@ dependencies:
   flutter_markdown_plus: ^1.0.7
   flutter_pty: ^0.4.2
   flutter_riverpod: ^3.3.2
+  # Companion mode only: the pairing record (device key) at rest in the
+  # platform keystore — design §2 forbids plain preferences.
+  flutter_secure_storage: ^10.0.0
   highlight: ^0.7.0
   hotkey_manager: ^0.2.3
   launch_at_startup: ^0.5.1
