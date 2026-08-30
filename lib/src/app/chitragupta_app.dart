@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/settings/application/settings_controller.dart';
 import '../features/settings/domain/app_theme_mode.dart';
+import '../features/ssh/presentation/ssh_prompt_host.dart';
 import 'shell/app_mode.dart';
 import 'shell/app_shell.dart';
 import 'shell/mini_launcher.dart';
@@ -36,7 +37,13 @@ class ChitraguptaApp extends ConsumerWidget {
         AppThemeMode.light => ThemeMode.light,
         AppThemeMode.dark => ThemeMode.dark,
       },
-      home: mode == AppMode.mini ? const MiniLauncher() : const AppShell(),
+      // Wrapped in the SSH prompt host so a connection begun anywhere in the
+      // app can put a host key fingerprint in front of the user. It sits inside
+      // `home` rather than `builder` because it needs a Navigator above it to
+      // show a dialog on.
+      home: SshPromptHost(
+        child: mode == AppMode.mini ? const MiniLauncher() : const AppShell(),
+      ),
     );
   }
 }
