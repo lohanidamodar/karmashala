@@ -9,6 +9,7 @@ import 'package:chitragupta/src/features/environments/data/execution_environment
 import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -192,6 +193,57 @@ void main() {
     await chord(tester, LogicalKeyboardKey.keyC);
 
     expect(toShell, ['\x03']);
+  });
+
+  testWidgets('Ctrl+A reaches the shell — readline and tmux both want it', (
+    tester,
+  ) async {
+    // xterm's own shortcut manager bound this to select-all on Windows. It is
+    // readline's `beginning-of-line` and the most common alternate tmux
+    // prefix, and it is not in `shellChords`, so the app was taking it without
+    // saying so and Settings could not give it back.
+    final (_, toShell) = await pumpFocusedTerminal(tester);
+
+    await chord(tester, LogicalKeyboardKey.keyA);
+
+    expect(toShell, ['\x01']);
+  });
+
+  testWidgets('Ctrl+V reaches the shell — readline quoted-insert', (
+    tester,
+  ) async {
+    final (_, toShell) = await pumpFocusedTerminal(tester);
+
+    await chord(tester, LogicalKeyboardKey.keyV);
+
+    expect(toShell, ['\x16']);
+  });
+
+  testWidgets('Ctrl+Shift+V is paste, and types nothing at the prompt', (
+    tester,
+  ) async {
+    final (_, toShell) = await pumpFocusedTerminal(tester);
+
+    await chord(tester, LogicalKeyboardKey.keyV, shift: true);
+
+    expect(
+      toShell,
+      isEmpty,
+      reason: 'the pane claimed it for paste, so no control byte was sent',
+    );
+  });
+
+  test('the pane keeps only chords a terminal cannot encode', () {
+    // Everything the pane holds back from the shell has to be a
+    // Ctrl+Shift+<letter>, which has no control character and therefore costs
+    // the shell nothing.
+    for (final activator in terminalPaneShortcuts.keys) {
+      expect(
+        (activator as SingleActivator).shift,
+        isTrue,
+        reason: '$activator takes a real control character from the shell',
+      );
+    }
   });
 
   test('Ctrl+B is the one chord given back to the shell', () {

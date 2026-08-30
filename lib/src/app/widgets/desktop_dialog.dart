@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_icons.dart';
+import '../theme/design_tokens.dart';
 
 /// Consistent title row for desktop dialogs, including a visible close affordance.
 class DesktopDialogTitle extends StatelessWidget {
@@ -22,17 +23,25 @@ class DesktopDialogTitle extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
+          // 2px, and deliberately not an `Insets` step: this is optical
+          // alignment of the glyph's cap height to the title's, not spacing
+          // between two things. Putting it on the 4-pt scale would drop the
+          // icon visibly below the title.
           padding: const EdgeInsets.only(top: 2),
-          child: Icon(icon, size: 19, color: theme.colorScheme.tertiary),
+          child: Icon(
+            icon,
+            size: Chrome.iconTitle,
+            color: theme.colorScheme.tertiary,
+          ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: Insets.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: theme.textTheme.titleMedium),
               if (subtitle != null) ...[
-                const SizedBox(height: 2),
+                const SizedBox(height: Insets.xs),
                 Text(subtitle!, style: theme.textTheme.bodySmall),
               ],
             ],
@@ -40,7 +49,7 @@ class DesktopDialogTitle extends StatelessWidget {
         ),
         IconButton(
           tooltip: 'Close',
-          icon: const Icon(AppIcons.x, size: 16),
+          icon: const Icon(AppIcons.x, size: Chrome.icon),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ],
@@ -56,16 +65,16 @@ class DesktopErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(Insets.sm),
       decoration: BoxDecoration(
         color: scheme.errorContainer.withValues(alpha: 0.55),
         border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(Radii.sm),
       ),
       child: Row(
         children: [
-          Icon(AppIcons.warningCircle, size: 16, color: scheme.error),
-          const SizedBox(width: 8),
+          Icon(AppIcons.warningCircle, size: Chrome.icon, color: scheme.error),
+          const SizedBox(width: Insets.sm),
           Expanded(
             child: Text(
               message,

@@ -1,3 +1,5 @@
+import '../../agents/domain/agent_status.dart';
+import 'notification_policy.dart';
 import 'watched_session.dart';
 
 /// Why a session is holding the user up.
@@ -6,7 +8,23 @@ enum AttentionKind {
   needsInput,
 
   /// Ended in error.
-  failed,
+  failed;
+
+  /// What [status] is asking of the user *right now*, or `null` when it is
+  /// asking nothing.
+  ///
+  /// Derived from [AgentNotificationPolicy.reasonForStatus] rather than spelled
+  /// again: the tray's waiting list and the toast must agree about what an
+  /// agent's status means and disagree only about whether it is worth
+  /// interrupting for. A turn that merely *finished* is news, not a hold-up, so
+  /// it answers `null` here — that is the whole of the difference, and it is
+  /// visible in one place.
+  static AttentionKind? forStatus(AgentActivityStatus status) =>
+      switch (AgentNotificationPolicy.reasonForStatus(status)) {
+        NotificationReason.needsInput => AttentionKind.needsInput,
+        NotificationReason.failed => AttentionKind.failed,
+        _ => null,
+      };
 }
 
 /// One session currently waiting on the user, as listed in the tray menu.

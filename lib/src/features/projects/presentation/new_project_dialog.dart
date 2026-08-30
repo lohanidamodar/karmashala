@@ -80,6 +80,22 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     }
   }
 
+  /// How an environment is named in the dropdown.
+  ///
+  /// Exhaustive over [EnvironmentKind] on purpose. The previous
+  /// `windowsNative ? 'Windows' : 'WSL · …'` offered an SSH host as
+  /// `WSL · build-box`, and picking it got as far as `_create()` before
+  /// `PathTranslator` refused the translation and a raw exception string
+  /// landed in the error line. SSH rows are filtered out of the list above —
+  /// a project cannot be created in one — and this arm exists so a fourth
+  /// kind is a compile error rather than another mislabelled row.
+  static String _environmentLabel(ExecutionEnvironment env) =>
+      switch (env.kind) {
+        EnvironmentKind.windowsNative => 'Windows',
+        EnvironmentKind.wsl => 'WSL · ${env.wslDistribution ?? env.name}',
+        EnvironmentKind.ssh => 'SSH · ${env.name}',
+      };
+
   ExecutionEnvironment? _envById(List<ExecutionEnvironment> envs, String id) {
     for (final e in envs) {
       if (e.id == id) return e;
@@ -149,14 +165,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               decoration: const InputDecoration(labelText: 'Environment'),
               items: [
                 for (final env in environments)
-                  DropdownMenuItem(
-                    value: env.id,
-                    child: Text(
-                      env.kind == EnvironmentKind.windowsNative
-                          ? 'Windows'
-                          : 'WSL · ${env.wslDistribution ?? env.name}',
+                  if (env.kind != EnvironmentKind.ssh)
+                    DropdownMenuItem(
+                      value: env.id,
+                      child: Text(_environmentLabel(env)),
                     ),
-                  ),
               ],
               onChanged: (v) =>
                   setState(() => _targetId = v ?? localWindowsEnvironmentId),

@@ -124,8 +124,8 @@ class _ProjectTile extends StatelessWidget {
       trailing: Wrap(
         spacing: 6,
         children: [
-          if (claude > 0) _Badge(label: 'C $claude', color: Colors.deepOrange),
-          if (codex > 0) _Badge(label: 'c $codex', color: Colors.teal),
+          if (claude > 0) _Badge(agentId: AgentIds.claudeCode, count: claude),
+          if (codex > 0) _Badge(agentId: AgentIds.codex, count: codex),
         ],
       ),
       childrenPadding: const EdgeInsets.only(left: 8, bottom: 8),
@@ -262,20 +262,41 @@ class _SessionTile extends ConsumerWidget {
   }
 }
 
+/// How many sessions one CLI contributed to a project.
+///
+/// One accent for every agent, deliberately. These carried `Colors.deepOrange`
+/// and `Colors.teal` — a second and a third accent, in an app that has one —
+/// and leaned on hue alone to say which CLI a count belonged to, behind labels
+/// that were `C` and `c`. The agent's own name does that job, in words, at any
+/// contrast and for anyone who cannot tell the two hues apart.
 class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.color});
-  final String label;
-  final Color color;
+  const _Badge({required this.agentId, required this.count});
+
+  final String agentId;
+  final int count;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // "Claude Code" → "Claude", "Codex CLI" → "Codex": enough to name it, short
+    // enough for a trailing badge, and read from the registry so it cannot
+    // drift from what the rest of the app calls the agent.
+    final name = AgentRegistry.builtIn.displayNameFor(agentId).split(' ').first;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.xs,
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: Text(
+        '$name $count',
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: scheme.primary),
+      ),
     );
   }
 }

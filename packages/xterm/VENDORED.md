@@ -22,6 +22,10 @@ full analysis.
 ## What was NOT vendored
 
 - `example/` — a full multi-platform Flutter app, irrelevant here.
+- `bin/`, `script/` — upstream's own developer tooling; nothing in this app runs
+  them, and `bin/` would otherwise be an executable entry point on the package.
+- `media/` — README screenshots and GIFs; several MB of images that would ship
+  in the repository for nothing.
 - `test/` — contains mockito-generated `*.mocks.dart`; this project forbids code
   generation (ARCHITECTURE constraint 3). Our own coverage lives in
   `test/terminal/` and `test/features/terminal/`.
@@ -35,6 +39,11 @@ Runtime dependencies are unchanged (`convert`, `meta`, `quiver`, `equatable`,
 `zmodem`), so vendoring adds nothing new to the app's dependency graph.
 
 ## Files that diverge from upstream
+
+Three of the 77 `.dart` files under `lib/`, verified with `diff -rq` against the
+pub cache copy of the same version. Everything else is byte-identical; the only
+other differences are `pubspec.yaml` and `analysis_options.yaml` (packaging,
+above) and the five removed trees.
 
 | File | Divergence |
 | --- | --- |

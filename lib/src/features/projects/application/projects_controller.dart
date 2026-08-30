@@ -284,7 +284,8 @@ final selectedProjectIdProvider =
     );
 
 /// Projects ordered with pinned ones first (preserving their relative order),
-/// then the rest. Used by the Explorer and the mini launcher.
+/// then the rest. Read by the Explorer's tree and by Quick Open's project and
+/// file sources — the mini launcher it also named was removed in Loop 59.
 final sortedProjectsProvider = Provider<List<Project>>((ref) {
   final projects = ref.watch(projectsControllerProvider);
   final pinned = ref

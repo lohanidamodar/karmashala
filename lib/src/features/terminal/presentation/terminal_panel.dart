@@ -421,6 +421,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 // terminal.
                 hardwareKeyboardOnly: true,
                 onKeyEvent: _actions.onPaneKey,
+                // xterm's own shortcut manager runs after `onKeyEvent` and
+                // before `Terminal.keyInput`; its Windows defaults quietly took
+                // Ctrl+A and Ctrl+V from the shell. See `terminalPaneShortcuts`.
+                shortcuts: terminalPaneShortcuts,
                 // Right-click → copy selection / paste / end the session.
                 onSecondaryTapDown: (details, _) => _terminalMenu(
                   context,

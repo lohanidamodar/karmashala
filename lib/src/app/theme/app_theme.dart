@@ -133,7 +133,7 @@ class AppTheme {
         style: IconButton.styleFrom(
           minimumSize: const Size.square(26),
           maximumSize: const Size.square(30),
-          padding: const EdgeInsets.all(5),
+          padding: const EdgeInsets.all(Insets.xs),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm),
           ),
@@ -156,7 +156,7 @@ class AppTheme {
         ),
         minVerticalPadding: 2,
         minLeadingWidth: 20,
-        horizontalTitleGap: 8,
+        horizontalTitleGap: Insets.sm,
       ),
       inputDecorationTheme: InputDecorationTheme(
         isDense: true,
@@ -165,7 +165,10 @@ class AppTheme {
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
         focusedBorder: _inputBorder(scheme.primary, width: 1.5),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.sm,
+        ),
       ),
       chipTheme: ChipThemeData(
         shape: const RoundedRectangleBorder(
@@ -280,7 +283,7 @@ class AppTheme {
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size(0, 26)),
           padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 9),
+            EdgeInsets.symmetric(horizontal: Insets.sm),
           ),
           textStyle: WidgetStatePropertyAll(text.bodySmall),
           shape: WidgetStatePropertyAll(

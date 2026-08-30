@@ -137,7 +137,7 @@ class AgentNotificationPolicy {
         NotificationSuppression.lostTrack,
       );
     }
-    final reason = _classify(transition);
+    final reason = reasonForStatus(transition.to);
     if (reason == null) {
       return const NotificationDecision.suppress(
         NotificationSuppression.notWorthInterrupting,
@@ -238,15 +238,26 @@ class AgentNotificationPolicy {
     return NotificationDecision.notify(reason);
   }
 
-  /// Maps a transition onto the two things that plausibly matter: an agent
-  /// needs you, or an agent is done. `working` is never news — starting is not
-  /// an event anyone wants a toast for.
-  NotificationReason? _classify(AgentStatusTransition transition) =>
-      switch (transition.to) {
+  /// What an agent being in [status] means, with nothing in it about *when* it
+  /// got there: an agent needs you, or an agent is done. `working` is never
+  /// news — starting is not an event anyone wants a toast for.
+  ///
+  /// **The one table for agent status in this app.** [newsIn] adds the edge
+  /// conditions on top of it, and [AttentionKind.forStatus] reads the same
+  /// answer as a level ("who needs me now") rather than as an edge ("what just
+  /// changed"). That distinction is real and the two enums stay separate, but
+  /// the arms behind them are written once, so moving `failed` out of "worth
+  /// interrupting for" cannot leave it in the tray's waiting list.
+  ///
+  /// Static because the domain types beside it read it without a policy — a
+  /// classifier with no state should not need one.
+  static NotificationReason? reasonForStatus(AgentActivityStatus status) =>
+      switch (status) {
         AgentActivityStatus.awaitingApproval => NotificationReason.needsInput,
         AgentActivityStatus.failed => NotificationReason.failed,
-        // Any known state settling into idle is a turn ending. `from` can only
-        // be idle here when it equals `to`, which was already rejected.
+        // Any known state settling into idle is a turn ending. In [newsIn],
+        // `from` can only be idle here when it equals `to`, which was already
+        // rejected.
         AgentActivityStatus.idle => NotificationReason.finished,
         AgentActivityStatus.working => null,
         AgentActivityStatus.unknown => null,

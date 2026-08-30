@@ -283,12 +283,6 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
-  static const IconData pictureInpicture = IconData(
-    0xe64c,
-    fontFamily: 'PhosphorRegular',
-    fontPackage: 'picons',
-    matchTextDirection: true,
-  );
   static const IconData play = IconData(
     0xe3d0,
     fontFamily: 'PhosphorRegular',
@@ -441,6 +435,48 @@ abstract final class AppIcons {
   );
   static const IconData tray = IconData(
     0xe4aa,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData arrowCounterClockwise = IconData(
+    0xe038,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData handTap = IconData(
+    0xec90,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData linkBreak = IconData(
+    0xe2e4,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData pauseCircle = IconData(
+    0xe3a0,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData power = IconData(
+    0xe3da,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData square = IconData(
+    0xe45e,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData stop = IconData(
+    0xe46c,
     fontFamily: 'PhosphorRegular',
     fontPackage: 'picons',
     matchTextDirection: true,

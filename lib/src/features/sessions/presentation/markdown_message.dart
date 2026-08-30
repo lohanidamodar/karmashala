@@ -18,7 +18,13 @@ class MarkdownMessage extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    final codeBg = dark ? const Color(0xFF14111F) : const Color(0xFFF3F0E7);
+    // The retired ink-purple and parchment survived here as raw hex, which is
+    // why the by-name greps for the old palette missed them. Code sits one step
+    // *behind* the message it is in: lowest under a dark surface, low under a
+    // light one, which is where the scheme already puts a recessed panel.
+    final codeBg = dark
+        ? scheme.surfaceContainerLowest
+        : scheme.surfaceContainerLow;
 
     final sheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
       p: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
