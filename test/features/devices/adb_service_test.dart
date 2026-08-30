@@ -360,12 +360,192 @@ void main() {
       );
     });
 
-    test('boots an AVD as a long-lived process', () async {
+    test('boots an AVD as a long-lived process, headless by default', () async {
+      // The pane's live view is the screen; a second floating emulator window
+      // is in the way. `-no-window` is what makes that possible.
       final runner = FakeCommandRunner();
       await AdbService(runner: runner, sdk: _sdk()).bootAvd('Pixel_8_Pro');
       expect(runner.startRequests.single.executable, _emulatorPath);
-      expect(runner.startRequests.single.arguments, ['-avd', 'Pixel_8_Pro']);
+      expect(runner.startRequests.single.arguments, [
+        '-avd',
+        'Pixel_8_Pro',
+        '-no-window',
+        '-no-boot-anim',
+      ]);
     });
+
+    test('boots with a window when asked, for the extended controls', () async {
+      final runner = FakeCommandRunner();
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).bootAvd('Pixel_8_Pro', headless: false);
+      expect(runner.startRequests.single.arguments, [
+        '-avd',
+        'Pixel_8_Pro',
+        '-no-boot-anim',
+      ]);
+    });
+
+    test(
+      'drains the emulator output, which is what stops a boot wedging',
+      () async {
+        // Found by running it: the emulator is chatty during boot and its stdout
+        // is a pipe of a few kilobytes. With no reader it fills, the emulator
+        // blocks on write, and the boot silently stops part-way — indisting-
+        // uishable from a slow emulator.
+        final handle = FakeProcessHandle();
+        final runner = FakeCommandRunner(processFactory: (_) => handle);
+        final lines = <String>[];
+        await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).bootAvd('Pixel_8_Pro', onLog: lines.add);
+        handle.emitStdout('INFO | Boot completed in 12345 ms');
+        handle.emitStderr('WARNING | Netsim is gone');
+        await Future<void>.delayed(Duration.zero);
+        expect(lines, [
+          'INFO | Boot completed in 12345 ms',
+          'WARNING | Netsim is gone',
+        ]);
+      },
+    );
+
+    test('matches a booting emulator to its AVD by asking it, not by '
+        'diffing the device list', () async {
+      // Two emulators starting together make a before/after diff ambiguous,
+      // and a diff cannot recognise an AVD that was already running.
+      final runner = FakeCommandRunner(
+        responder: (request) => switch (request.arguments.join(' ')) {
+          'devices -l' => const CommandResult(
+            exitCode: 0,
+            stdout:
+                'List of devices attached\n'
+                'emulator-5554  device product:sdk model:A transport_id:1\n'
+                'emulator-5556  device product:sdk model:B transport_id:2\n',
+            stderr: '',
+          ),
+          '-s emulator-5554 emu avd name' => const CommandResult(
+            exitCode: 0,
+            stdout: 'Other_Avd\nOK\n',
+            stderr: '',
+          ),
+          '-s emulator-5556 emu avd name' => const CommandResult(
+            exitCode: 0,
+            stdout: 'Pixel_8_Pro\nOK\n',
+            stderr: '',
+          ),
+          _ => const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+        },
+      );
+      final adb = AdbService(runner: runner, sdk: _sdk());
+      expect(await adb.serialForAvd('Pixel_8_Pro'), 'emulator-5556');
+      expect(await adb.serialForAvd('Nothing_Like_This'), isNull);
+    });
+
+    test('boot completion is sys.boot_completed, not "adb answered"', () async {
+      // A device answers adb well before Android has booted. Headless there is
+      // nothing on screen to tell them apart.
+      final runner = FakeCommandRunner(
+        responder: (request) => CommandResult(
+          exitCode: 0,
+          stdout: request.arguments.contains('sys.boot_completed') ? '1\n' : '',
+          stderr: '',
+        ),
+      );
+      final adb = AdbService(runner: runner, sdk: _sdk());
+      expect(await adb.isBootCompleted('emulator-5554'), isTrue);
+      expect(_argv(runner, 0), [
+        '-s',
+        'emulator-5554',
+        'shell',
+        'getprop',
+        'sys.boot_completed',
+      ]);
+    });
+
+    test('a device that answers adb but has not booted is not ready', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 0, stdout: '\n', stderr: ''),
+      );
+      expect(
+        await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).isBootCompleted('emulator-5554'),
+        isFalse,
+      );
+    });
+
+    test(
+      'bootAvdAndWait returns the serial once it has really booted',
+      () async {
+        var booted = false;
+        final runner = FakeCommandRunner(
+          responder: (request) {
+            final args = request.arguments.join(' ');
+            if (args == 'devices -l') {
+              return const CommandResult(
+                exitCode: 0,
+                stdout:
+                    'List of devices attached\n'
+                    'emulator-5556  device product:sdk model:B transport_id:2\n',
+                stderr: '',
+              );
+            }
+            if (args.endsWith('emu avd name')) {
+              return const CommandResult(
+                exitCode: 0,
+                stdout: 'Pixel_8_Pro\nOK\n',
+                stderr: '',
+              );
+            }
+            if (args.contains('sys.boot_completed')) {
+              final answer = booted ? '1\n' : '0\n';
+              booted = true;
+              return CommandResult(exitCode: 0, stdout: answer, stderr: '');
+            }
+            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+          },
+        );
+        final serial = await AdbService(runner: runner, sdk: _sdk())
+            .bootAvdAndWait(
+              'Pixel_8_Pro',
+              pollInterval: Duration.zero,
+              timeout: const Duration(seconds: 5),
+            );
+        expect(serial, 'emulator-5556');
+        expect(runner.startRequests.single.arguments, contains('-no-window'));
+      },
+    );
+
+    test(
+      'an emulator that never boots fails instead of spinning forever',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (_) => const CommandResult(
+            exitCode: 0,
+            stdout: 'List of devices attached\n',
+            stderr: '',
+          ),
+        );
+        await expectLater(
+          AdbService(runner: runner, sdk: _sdk()).bootAvdAndWait(
+            'Pixel_8_Pro',
+            pollInterval: Duration.zero,
+            timeout: const Duration(milliseconds: 20),
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('did not become reachable'),
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group('screenSize', () {

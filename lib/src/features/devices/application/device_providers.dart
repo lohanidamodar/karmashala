@@ -107,6 +107,25 @@ final deviceScreenSizeProvider =
       return adb.screenSize(serial);
     });
 
+/// Whether AVDs are booted without a window of their own (`-no-window`).
+///
+/// Defaults to headless. This pane already shows the device, drives it and
+/// reads its accessibility tree, so a second floating emulator window is in the
+/// way rather than useful — which is exactly how Android Studio's embedded
+/// emulator behaves. It is a toggle rather than a constant because the
+/// emulator's extended controls (rotation, location, simulated calls) only
+/// exist in that window, and some tasks need them.
+final headlessEmulatorProvider = NotifierProvider<HeadlessEmulator, bool>(
+  HeadlessEmulator.new,
+);
+
+class HeadlessEmulator extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void update(bool headless) => state = headless;
+}
+
 /// Streaming service for the live view.
 final deviceStreamServiceProvider = Provider<DeviceStreamService?>((ref) {
   final adb = ref.watch(adbServiceProvider);
