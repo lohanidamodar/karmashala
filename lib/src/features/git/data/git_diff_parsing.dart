@@ -1,6 +1,8 @@
 import '../domain/diff_line.dart';
+import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
+import '../domain/working_tree_status.dart';
 
 /// Parses `git status --porcelain=v1` output into [FileChange]s.
 ///
@@ -124,4 +126,133 @@ List<FileChange> parseNameStatus(String output) {
     );
   }
   return changes;
+}
+
+/// Parses `git diff --numstat` output — `added<TAB>removed<TAB>path` per file.
+///
+/// A binary file reports `-` for both counts; it is counted as a file and as a
+/// binary file, and contributes no lines. Rename entries can carry NUL-separated
+/// paths under `-z`, which this deliberately does not ask for: the counts are
+/// the point, and the path is only used to know a row happened.
+DiffStat parseNumstat(String output) {
+  var added = 0;
+  var removed = 0;
+  var files = 0;
+  var binary = 0;
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    if (line.isEmpty) continue;
+    final parts = line.split('\t');
+    if (parts.length < 3) continue;
+    files++;
+    final a = int.tryParse(parts[0]);
+    final r = int.tryParse(parts[1]);
+    if (a == null || r == null) {
+      binary++;
+      continue;
+    }
+    added += a;
+    removed += r;
+  }
+  return DiffStat(
+    added: added,
+    removed: removed,
+    files: files,
+    binaryFiles: binary,
+  );
+}
+
+/// Parses `git rev-list --left-right --count <base>...HEAD` — two counts on one
+/// line, left (behind) then right (ahead).
+///
+/// Returns null for anything that is not two numbers, which is what an
+/// unresolvable base ref produces. "Could not tell" must never read as zero.
+AheadBehind? parseAheadBehind(String output) {
+  final parts = output.trim().split(RegExp(r'\s+'));
+  if (parts.length != 2) return null;
+  final behind = int.tryParse(parts[0]);
+  final ahead = int.tryParse(parts[1]);
+  if (behind == null || ahead == null) return null;
+  return AheadBehind(ahead: ahead, behind: behind);
+}
+
+/// Parses `git status --porcelain=v1 --branch`.
+///
+/// The first line is git's branch header and is **not** a file: reading it as
+/// one would add a change called `## work...origin/work` to every listing. The
+/// header carries the branch, its upstream and the divergence between them:
+///
+/// ```txt
+/// ## work...origin/work [ahead 2, behind 1]
+/// ## work                       (no upstream)
+/// ## HEAD (no branch)           (detached)
+/// ## No commits yet on main
+/// ## main...origin/main [gone]  (upstream deleted on the remote)
+/// ```
+WorkingTreeStatus parseGitStatusBranch(String porcelain) {
+  final lines = porcelain.split(RegExp(r'[\r\n]'));
+  final header = lines.firstWhere(
+    (line) => line.startsWith('## '),
+    orElse: () => '',
+  );
+  final body = [
+    for (final line in lines)
+      if (!line.startsWith('## ')) line,
+  ].join('\n');
+
+  if (header.isEmpty) {
+    return WorkingTreeStatus(changes: parseGitStatus(body));
+  }
+
+  var rest = header.substring(3).trim();
+  String? branch;
+  String? upstream;
+  int? ahead;
+  int? behind;
+
+  final bracket = rest.indexOf(' [');
+  var divergence = '';
+  if (bracket >= 0 && rest.endsWith(']')) {
+    divergence = rest.substring(bracket + 2, rest.length - 1);
+    rest = rest.substring(0, bracket);
+  }
+
+  if (rest == 'HEAD (no branch)') {
+    branch = null;
+  } else if (rest.startsWith('No commits yet on ')) {
+    branch = rest.substring('No commits yet on '.length).trim();
+  } else {
+    final split = rest.indexOf('...');
+    if (split < 0) {
+      branch = rest.trim();
+    } else {
+      branch = rest.substring(0, split).trim();
+      upstream = rest.substring(split + 3).trim();
+      // An upstream that still exists is level unless git says otherwise; an
+      // upstream reported `gone` has no distance to report at all.
+      ahead = 0;
+      behind = 0;
+    }
+  }
+
+  if (divergence == 'gone') {
+    ahead = null;
+    behind = null;
+  } else if (divergence.isNotEmpty) {
+    for (final part in divergence.split(',')) {
+      final words = part.trim().split(RegExp(r'\s+'));
+      if (words.length != 2) continue;
+      final count = int.tryParse(words[1]);
+      if (count == null) continue;
+      if (words[0] == 'ahead') ahead = count;
+      if (words[0] == 'behind') behind = count;
+    }
+  }
+
+  return WorkingTreeStatus(
+    branch: (branch?.isEmpty ?? true) ? null : branch,
+    upstream: (upstream?.isEmpty ?? true) ? null : upstream,
+    aheadOfUpstream: ahead,
+    behindUpstream: behind,
+    changes: parseGitStatus(body),
+  );
 }

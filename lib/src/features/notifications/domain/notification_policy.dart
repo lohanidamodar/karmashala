@@ -1,4 +1,7 @@
 import '../../agents/domain/agent_status.dart';
+import '../../github/domain/pull_request_snapshot.dart';
+import '../../sessions/domain/session_delivery.dart';
+import 'delivery_transition.dart';
 import 'agent_status_transition.dart';
 import 'notification_settings.dart';
 
@@ -12,6 +15,20 @@ enum NotificationReason {
 
   /// An agent ended in error.
   failed,
+
+  /// A pull request's checks went red.
+  checksFailed,
+
+  /// A reviewer asked for changes.
+  changesRequested,
+
+  /// A pull request is green, unblocked and waiting for someone to press
+  /// merge.
+  readyToMerge;
+
+  /// Whether this is about delivery rather than about the agent's turn.
+  bool get isDelivery =>
+      this == checksFailed || this == changesRequested || this == readyToMerge;
 }
 
 /// Why a status change was *not* delivered. Recorded rather than discarded so
@@ -134,6 +151,55 @@ class AgentNotificationPolicy {
     return NotificationDecision.notify(reason);
   }
 
+  /// The news in one session's delivery state — the same classifier, applied to
+  /// the other half of what a session can be waiting on.
+  ///
+  /// It lives here, beside [newsIn], for the reason [newsIn] was split out in
+  /// the first place: the inbox and the toast must agree about *what happened*
+  /// and disagree only about whether it is worth interrupting for. A second
+  /// classifier somewhere else would list things no toast ever mentioned.
+  ///
+  /// **One item per session at a time.** A pull request can be red, unreviewed
+  /// and unmergeable at once; reporting all three would turn a work list into a
+  /// log. [deliveryNewsIn] names the most actionable of them, and a change
+  /// between two of those is itself news.
+  NotificationDecision newsInDelivery(DeliveryTransition transition) {
+    final now = deliveryNewsIn(transition.to);
+    if (now == null) {
+      return const NotificationDecision.suppress(
+        NotificationSuppression.notWorthInterrupting,
+      );
+    }
+    // A missing previous snapshot counts as "was not true", so a check that
+    // went red while the app was closed is still news the first time it is
+    // seen. It cannot repeat: the same state next poll is not a change, and the
+    // inbox keys an item by its kind and session anyway.
+    if (deliveryNewsIn(transition.from) == now) {
+      return const NotificationDecision.suppress(
+        NotificationSuppression.notAChange,
+      );
+    }
+    return NotificationDecision.notify(now);
+  }
+
+  /// What, if anything, a session's delivery state is asking of the user.
+  ///
+  /// A failing build first: it is the most concrete and the one the agent can
+  /// act on without a human. Readiness comes last because it is good news, and
+  /// good news does not outrank a blocker.
+  NotificationReason? deliveryNewsIn(SessionDelivery? delivery) {
+    final pr = delivery?.pullRequest;
+    if (pr == null || !pr.isOpen) return null;
+    if (pr.checks.state == ChecksState.failing) {
+      return NotificationReason.checksFailed;
+    }
+    if (pr.reviewDecision == ReviewDecision.changesRequested) {
+      return NotificationReason.changesRequested;
+    }
+    if (pr.isReadyToMerge) return NotificationReason.readyToMerge;
+    return null;
+  }
+
   NotificationDecision decide(NotificationContext context) {
     final settings = context.settings;
     if (!settings.enabled) {
@@ -201,7 +267,12 @@ class AgentNotificationPolicy {
   bool _wanted(NotificationReason reason, NotificationSettings settings) =>
       switch (reason) {
         NotificationReason.finished => settings.notifyWhenFinished,
+        // Delivery news is all "something wants you" — the same switch the user
+        // already has, rather than a fourth setting nobody would find.
         NotificationReason.needsInput ||
-        NotificationReason.failed => settings.notifyWhenAttentionNeeded,
+        NotificationReason.failed ||
+        NotificationReason.checksFailed ||
+        NotificationReason.changesRequested ||
+        NotificationReason.readyToMerge => settings.notifyWhenAttentionNeeded,
       };
 }

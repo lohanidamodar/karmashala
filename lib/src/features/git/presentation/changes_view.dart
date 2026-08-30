@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/diff_annotations.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
+import 'remote_link.dart';
 import '../domain/diff_line.dart';
 import '../domain/file_change.dart';
 
@@ -38,6 +40,13 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
         .where((item) => item.repositoryId == repositoryId)
         .toList();
 
+    // What this repository's work is called on the forge, so a branch, a
+    // commit or a pull request in view is one click from the page that owns it.
+    final delivery = repositoryId == null
+        ? null
+        : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
+    final head = ref.watch(recentCommitsProvider).asData?.value.firstOrNull;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -50,11 +59,55 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
           ),
           child: Row(
             children: [
+              // Every part of the header line is flexible, so a long branch
+              // name in a narrow panel ellipsises rather than overflowing —
+              // this row sits in a side panel that can be dragged to 250px.
               Expanded(
-                child: Text(
-                  'Changes',
-                  style: theme.textTheme.labelSmall,
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Changes',
+                        style: theme.textTheme.labelSmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (delivery?.branch case final branch?) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: RemoteLink(
+                          text: branch,
+                          url: delivery!.remote?.branchUrl(branch),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                      ),
+                    ],
+                    if (head != null) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: RemoteLink(
+                          text: shortSha(head.sha),
+                          // Drawn plainly when there is no remote — a commit
+                          // without one is still a commit.
+                          url: delivery?.remote?.commitUrl(head.sha),
+                          style: theme.textTheme.labelSmall,
+                          tooltip: head.subject,
+                        ),
+                      ),
+                    ],
+                    if (delivery?.pullRequest case final pr?) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: RemoteLink(
+                          text: '#${pr.number}',
+                          url: pr.url,
+                          style: theme.textTheme.labelSmall,
+                          tooltip: pr.title.isEmpty ? pr.url : pr.title,
+                          icon: true,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               changes.maybeWhen(

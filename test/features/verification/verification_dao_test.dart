@@ -33,8 +33,8 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('schema v16 is the current version', () {
-    expect(db.schemaVersion, 16);
+  test('schema v17 is the current version', () {
+    expect(db.schemaVersion, 17);
   });
 
   test('a run round-trips with its target', () {

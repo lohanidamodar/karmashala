@@ -2,8 +2,10 @@ import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
 import '../data/git_service.dart';
+import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
+import '../domain/working_tree_status.dart';
 
 /// High-level access to a repository's working-tree changes and diffs, resolving
 /// the correct runner for the repository's environment. Read-only: Git is the
@@ -26,6 +28,15 @@ class ChangesService {
   Future<List<FileChange>> changes(EnvironmentPath repo) =>
       _gitFor(repo).status(repo);
 
+  /// The branch, its upstream, their divergence and the changed files, in one
+  /// process. What a delivery row reads.
+  Future<WorkingTreeStatus> statusWithBranch(EnvironmentPath repo) =>
+      _gitFor(repo).statusWithBranch(repo);
+
+  /// The default branch this clone recorded for `origin`, or `null`.
+  Future<String?> originHead(EnvironmentPath repo) =>
+      _gitFor(repo).originHead(repo);
+
   /// The current branch of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) =>
       _gitFor(repo).currentBranch(repo);
@@ -38,6 +49,21 @@ class ChangesService {
   /// git could not answer.
   Future<int?> commitsAhead(EnvironmentPath repo, {required String base}) =>
       _gitFor(repo).commitsAhead(repo, base: base);
+
+  /// Lines added and removed in [repo], against [base] when one is given.
+  Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) =>
+      _gitFor(repo).diffStat(repo, base: base);
+
+  /// How [repo] stands against [base] in both directions; `null` when git could
+  /// not answer.
+  Future<AheadBehind?> aheadBehind(
+    EnvironmentPath repo, {
+    required String base,
+  }) => _gitFor(repo).aheadBehind(repo, base: base);
+
+  /// The upstream of [branch] in [repo] (`origin/work`), or `null`.
+  Future<String?> upstreamOf(EnvironmentPath repo, String branch) =>
+      _gitFor(repo).upstreamOf(repo, branch);
 
   /// Unified diff for [repo], optionally limited to [path] / staged changes.
   Future<String> diff(

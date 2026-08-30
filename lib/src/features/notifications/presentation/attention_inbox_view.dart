@@ -139,6 +139,12 @@ class _InboxRow extends StatelessWidget {
       InboxItemKind.needsApproval => (AppIcons.question, semantic.attention),
       InboxItemKind.failed => (AppIcons.warningCircle, semantic.failure),
       InboxItemKind.finished => (AppIcons.checkCircle, semantic.idle),
+      InboxItemKind.checksFailed => (AppIcons.warningCircle, semantic.failure),
+      InboxItemKind.changesRequested => (
+        AppIcons.chatCircleDots,
+        semantic.attention,
+      ),
+      InboxItemKind.readyToMerge => (AppIcons.gitMerge, semantic.idle),
     };
     // Seen items stay in the list but stop shouting — an approval you have
     // read is still an approval you have not answered.

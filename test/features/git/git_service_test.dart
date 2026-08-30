@@ -2,6 +2,7 @@ import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/git/data/git_service.dart';
+import 'package:chitragupta/src/features/git/domain/diff_stat.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -205,6 +206,111 @@ bare
         'origin',
         'main',
       ]);
+    });
+
+    test('diffStat compares the working tree to HEAD by default', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '4\t1\tlib/a.dart\n',
+            stderr: '',
+          );
+        },
+      );
+      final stat = await GitService(runner).diffStat(repo(r'C:\app'));
+      expect(captured.arguments, [
+        '-C',
+        r'C:\app',
+        'diff',
+        '--numstat',
+        'HEAD',
+      ]);
+      expect(stat, const DiffStat(added: 4, removed: 1, files: 1));
+    });
+
+    test('diffStat against a base covers committed and uncommitted work in one '
+        'process', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      await GitService(runner).diffStat(repo(r'C:\app'), base: 'main');
+      expect(captured.arguments.last, 'main');
+    });
+
+    test('diffStat says "could not tell" rather than zero when git fails', () {
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 128, stdout: '', stderr: 'fatal'),
+      );
+      expect(GitService(runner).diffStat(repo(r'C:\app')), completion(isNull));
+    });
+
+    test('aheadBehind asks for both counts once', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '1\t4\n', stderr: '');
+        },
+      );
+      final result = await GitService(
+        runner,
+      ).aheadBehind(repo(r'C:\app'), base: 'origin/main');
+      expect(captured.arguments, [
+        '-C',
+        r'C:\app',
+        'rev-list',
+        '--left-right',
+        '--count',
+        'origin/main...HEAD',
+      ]);
+      expect(result, const AheadBehind(ahead: 4, behind: 1));
+    });
+
+    test(
+      'upstreamOf reads the branch ref, with no braces in the arguments',
+      () async {
+        late CommandRequest captured;
+        final runner = FakeCommandRunner(
+          responder: (req) {
+            captured = req;
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'origin/work\n',
+              stderr: '',
+            );
+          },
+        );
+        final upstream = await GitService(
+          runner,
+        ).upstreamOf(repo(r'C:\app'), 'work');
+        expect(captured.arguments, [
+          '-C',
+          r'C:\app',
+          'for-each-ref',
+          '--format=%(upstream:short)',
+          'refs/heads/work',
+        ]);
+        expect(upstream, 'origin/work');
+      },
+    );
+
+    test('upstreamOf is null for a branch that has never been pushed', () {
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 0, stdout: '\n', stderr: ''),
+      );
+      expect(
+        GitService(runner).upstreamOf(repo(r'C:\app'), 'work'),
+        completion(isNull),
+      );
     });
   });
 }

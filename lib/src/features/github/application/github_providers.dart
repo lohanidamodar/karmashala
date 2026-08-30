@@ -11,6 +11,7 @@ import '../data/github_service.dart';
 import '../domain/github_repo.dart';
 import '../domain/issue.dart';
 import '../domain/pull_request.dart';
+import '../domain/pull_request_snapshot.dart';
 
 /// Resolves the right [GitHubService] (and runner) for a repository's
 /// environment and exposes PR/issue queries.
@@ -39,6 +40,14 @@ class GitHubReviewService {
 
   Future<List<Issue>> issues(EnvironmentPath repo) =>
       _ghFor(repo).listIssues(repo);
+
+  /// The pull request for [branch] and its checks, or `null` when the branch
+  /// has none. Throws when `gh` could not answer at all — the caller decides
+  /// what "could not tell" means for it.
+  Future<PullRequestSnapshot?> pullRequestFor(
+    EnvironmentPath repo, {
+    required String branch,
+  }) => _ghFor(repo).pullRequestFor(repo, branch: branch);
 
   Future<String> createPullRequest(
     EnvironmentPath repo, {

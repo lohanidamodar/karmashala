@@ -114,5 +114,8 @@ class NotificationCoalescer {
     NotificationReason.finished => 'Agent finished',
     NotificationReason.needsInput => 'Agent needs your approval',
     NotificationReason.failed => 'Agent failed',
+    NotificationReason.checksFailed => 'Checks failed',
+    NotificationReason.changesRequested => 'Changes requested',
+    NotificationReason.readyToMerge => 'Ready to merge',
   };
 }

@@ -1,16 +1,33 @@
 import 'package:chitragupta/src/features/git/application/changes_providers.dart';
 import 'package:chitragupta/src/features/git/domain/file_change.dart';
+import 'package:chitragupta/src/features/git/domain/git_commit.dart';
+import 'package:chitragupta/src/features/git/domain/remote_repo.dart';
+import 'package:chitragupta/src/features/git/application/remote_links.dart';
+import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
 import 'package:chitragupta/src/features/git/presentation/changes_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  Future<void> pump(WidgetTester tester, {required List<FileChange> files}) {
+  Future<void> pump(
+    WidgetTester tester, {
+    required List<FileChange> files,
+    List<GitCommit> commits = const [],
+    SessionDelivery? delivery,
+  }) {
     return tester.pumpWidget(
       ProviderScope(
         overrides: [
           repositoryChangesProvider.overrideWith((ref) async => files),
+          recentCommitsProvider.overrideWith((ref) async => commits),
+          selectedRepositoryIdProvider.overrideWith(
+            () => _FixedRepository(delivery == null ? null : 'r1'),
+          ),
+          repositoryDeliveryProvider.overrideWith(
+            (ref, _) async => delivery ?? SessionDelivery.unknown,
+          ),
           fileDiffByPathProvider(
             'lib/main.dart',
           ).overrideWith((ref) async => '@@ -1 +1 @@\n-old line\n+new line\n'),
@@ -55,4 +72,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No working-tree changes.'), findsOneWidget);
   });
+
+  testWidgets('the header links the branch, the head commit and the PR', (
+    tester,
+  ) async {
+    final opened = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryChangesProvider.overrideWith((ref) async => const []),
+          recentCommitsProvider.overrideWith(
+            (ref) async => const [
+              GitCommit(
+                sha: 'abcdef1234567890',
+                author: 'me',
+                subject: 'the last commit',
+              ),
+            ],
+          ),
+          selectedRepositoryIdProvider.overrideWith(
+            () => _FixedRepository('r1'),
+          ),
+          repositoryDeliveryProvider.overrideWith(
+            (ref, _) async => const SessionDelivery(
+              branch: 'work',
+              hasRemote: true,
+              remote: RemoteRepo(host: 'github.com', slug: 'o/r'),
+            ),
+          ),
+          openExternalUrlProvider.overrideWithValue((url) async {
+            opened.add(url);
+            return true;
+          }),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: ChangesView(repositoryName: 'app')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('work'), findsOneWidget);
+    expect(find.text('abcdef1'), findsOneWidget);
+
+    await tester.tap(find.text('abcdef1'));
+    await tester.pumpAndSettle();
+    expect(opened, ['https://github.com/o/r/commit/abcdef1234567890']);
+
+    // The panel can be dragged narrow; the header must ellipsise rather than
+    // overflow, which would fail this pump on its own.
+    tester.view.physicalSize = const Size(250, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpAndSettle();
+    expect(find.text('Changes'), findsOneWidget);
+  });
+}
+
+/// A fixed selection, so the header has a repository to describe.
+class _FixedRepository extends SelectedRepositoryController {
+  _FixedRepository(this._id);
+  final String? _id;
+
+  @override
+  String? build() => _id;
 }

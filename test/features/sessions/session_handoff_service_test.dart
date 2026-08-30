@@ -13,12 +13,12 @@ import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/handoff_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_chat_source.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
 import 'package:chitragupta/src/features/sessions/application/session_lineage_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/handoff_action.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
 import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
@@ -93,11 +93,12 @@ typedef Harness = ({ProviderContainer container, AppDatabase db});
 
 Harness harness({
   String? transcriptPath,
-  HandoffRepoState? repoState = const HandoffRepoState(
+  SessionDelivery? repoState = const SessionDelivery(
     branch: 'feature/x',
     hasRemote: true,
+    baseBranch: 'origin/main',
     defaultBranch: 'main',
-    commitsAhead: 3,
+    aheadOfBase: 3,
   ),
   String gitStatus = ' M lib/a.dart\nA  lib/b.dart\n?? notes.txt\n',
 }) {
@@ -138,7 +139,9 @@ Harness harness({
       // Overridden rather than driven through `gh`: the packet's job is to say
       // what it was told, and what git state *reaches* it is the git feature's
       // test, not this one's.
-      sessionHandoffStateProvider.overrideWith((ref, id) async => repoState),
+      sessionDeliveryProvider.overrideWith(
+        (ref, id) async => repoState ?? SessionDelivery.unknown,
+      ),
     ],
   );
   return (container: container, db: db);

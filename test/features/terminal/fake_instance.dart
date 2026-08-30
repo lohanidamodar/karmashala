@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
+import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
@@ -102,6 +103,11 @@ fakeTerminalOverrides({
     // Off unless a test says otherwise; also keeps the terminal controller
     // from pulling in settings (and therefore a database) just to open a pane.
     shellIntegrationEnabledProvider.overrideWithValue(false),
+    // The delivery strip polls `gh` on a periodic timer, which would outlive
+    // the widget tree and trip the pending-timer check in every test that
+    // renders a session. Same reason as the autosave above; tests that care
+    // about polling drive it explicitly.
+    deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
     // [instanceFactory] replaces the default rather than adding a second
     // override: Riverpod refuses the same provider twice in one container, so a
     // test that needs a pane to fail has to substitute here.

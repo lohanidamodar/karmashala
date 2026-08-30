@@ -16,6 +16,7 @@ import '../domain/session.dart';
 import '../domain/session_fork.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_lineage.dart';
+import 'delivery_providers.dart';
 import 'handoff_providers.dart';
 import 'session_chat_source.dart';
 import 'session_launcher.dart';
@@ -186,9 +187,9 @@ class SessionHandoffService {
     final directory = sessionWorkingDirectory(_ref, sessionId);
     final recap = await _recapFor(session, agentId, sourceName, budget);
     final changes = directory == null ? null : await _changesIn(directory);
-    final repoState = directory == null
+    final delivery = directory == null
         ? null
-        : await _ref.read(sessionHandoffStateProvider(sessionId).future);
+        : await _ref.read(sessionDeliveryProvider(sessionId).future);
 
     return HandoffPacket(
       sourceAgentName: sourceName,
@@ -197,11 +198,9 @@ class SessionHandoffService {
       sourceSessionId: session.externalSessionId ?? session.id,
       instruction: instruction,
       workingDirectory: directory?.path,
-      branch: repoState?.branch,
-      commitsAhead: repoState?.commitsAhead,
-      baseBranch: repoState?.defaultBranch == null
-          ? null
-          : 'origin/${repoState!.defaultBranch}',
+      branch: delivery?.branch,
+      commitsAhead: delivery?.aheadOfBase,
+      baseBranch: delivery?.baseBranch,
       changes: changes,
       recap: recap.turns,
       omittedTurns: recap.omitted,

@@ -25,6 +25,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v11** — Loop 49: a session carries its own permission mode, so the
 ///   composer control has somewhere to write and the resolver has one place to
 ///   read.
+/// * **v17** — Loop 60: when a session's worktree was archived away. Nothing
+///   else about the session is removed with it.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -42,6 +44,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   14: _migrateToV14,
   15: _migrateToV15,
   16: _migrateToV16,
+  17: _migrateToV17,
 };
 
 void _migrateToV8(Database db) {
@@ -657,4 +660,22 @@ void _migrateToV16(Database db) {
     "UPDATE sessions SET parent_link_kind = 'spawn' "
     'WHERE parent_session_id IS NOT NULL AND parent_link_kind IS NULL;',
   );
+}
+
+void _migrateToV17(Database db) {
+  // When this session's worktree was archived away (Loop 60).
+  //
+  // Archiving removes **one directory** and nothing else. The transcript, the
+  // review notes, the checkpoints and the session row itself all stay exactly
+  // where they were, which is the whole point: a user who cleans up a finished
+  // task must not lose the record of how it was done. This column is the only
+  // thing that changes in the database, and it is a timestamp rather than a
+  // flag so the row also says *when*.
+  //
+  // Deliberately not a `SessionStatus` value. Status is what the agent process
+  // is doing — running, failed, cancelled — and an archived session keeps
+  // whichever of those it ended on; overloading the same column would destroy
+  // the record of how the work finished in order to record that its directory
+  // was tidied.
+  db.execute('ALTER TABLE sessions ADD COLUMN archived_at TEXT;');
 }
