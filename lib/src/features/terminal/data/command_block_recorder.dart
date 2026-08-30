@@ -83,8 +83,9 @@ class CommandBlockRecorder {
     if (start == null) return null;
     final startLine = start.line;
     final endLine = end.line;
-    if (startLine == null || endLine == null || endLine < startLine)
+    if (startLine == null || endLine == null || endLine < startLine) {
       return null;
+    }
 
     final buffer = StringBuffer();
     final lastLine = (startLine + kMaxCommandTextLines - 1) < endLine
