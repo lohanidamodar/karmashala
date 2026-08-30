@@ -30,6 +30,8 @@ import '../pairing/host_pairing.dart';
 import '../pairing/pairing_payload.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
+import '../push/push_fanout.dart';
+import '../push/relay_push_client.dart';
 import '../transport/key_schedule.dart';
 import '../transport/lan_beacon.dart';
 import '../transport/lan_transport.dart';
@@ -61,10 +63,13 @@ class RemoteHostService {
     this.transcriptPollInterval = const Duration(seconds: 2),
     DateTime Function()? now,
     RelayTransportFactory? relayFactory,
+    PushPost? pushPost,
     this.onDevicesChanged,
     this.onLog,
   }) : _now = now ?? DateTime.now,
-       _relayFactory = relayFactory ?? _defaultRelayFactory;
+       _relayFactory = relayFactory ?? _defaultRelayFactory,
+       // ignore: prefer_initializing_formals — private field, named for callers.
+       _pushPost = pushPost;
 
   static RemoteTransport _defaultRelayFactory(
     Uri relay,
@@ -90,6 +95,19 @@ class RemoteHostService {
 
   final DateTime Function() _now;
   final RelayTransportFactory _relayFactory;
+
+  /// Posts push JSON to the relay — a seam so tests never touch a network.
+  /// Null means the real HTTP poster.
+  final PushPost? _pushPost;
+
+  /// Sealed, best-effort push fan-out for devices with no live link.
+  late final PushFanout _pushFanout = PushFanout(
+    devices: devices.getActive,
+    hasLiveLink: hasLiveLink,
+    client: RelayPushClient(relay: relay, post: _pushPost, onLog: onLog),
+    now: _now,
+    onLog: onLog,
+  );
 
   /// Fired when the device list changed (paired, revoked, seen).
   final void Function()? onDevicesChanged;
@@ -251,6 +269,32 @@ class RemoteHostService {
     ]);
   }
 
+  /// Whether [deviceId]'s phone can hear events right now: a frame arrived on
+  /// its active link since the carrying transport last dropped. (The relay
+  /// closes the host's socket when the peer leaves, so a phone that walked
+  /// away is noticed.)
+  bool hasLiveLink(String deviceId) => _runtimes[deviceId]?.peerLive ?? false;
+
+  /// Attention news for the phones that are NOT connected: sealed per device
+  /// and posted to the relay's `/v1/push`. A connected phone hears the same
+  /// news as `session.changed` — never both. Best-effort; never throws.
+  Future<void> pushAttentionNews({
+    required String sessionId,
+    required String title,
+    required String kind,
+  }) async {
+    if (!_started) return;
+    try {
+      await _pushFanout.notifyAttention(
+        sessionId: sessionId,
+        title: title,
+        kind: kind,
+      );
+    } on Object catch (error) {
+      onLog?.call('push fan-out failed: ${error.runtimeType}');
+    }
+  }
+
   /// One transcript poll across every device, now. The periodic timer calls
   /// this; tests call it directly.
   Future<void> pollTranscriptsNow() async {
@@ -344,6 +388,13 @@ class _DeviceRuntime {
   _ActiveLink? _active;
   bool _closed = false;
 
+  /// Whether the phone is reachable right now: set on every frame it sends,
+  /// cleared when the transport carrying the active link drops.
+  bool peerLive = false;
+
+  RemoteTransport? _watchedTransport;
+  StreamSubscription<TransportState>? _liveWatch;
+
   /// Serialises everything for this device — frames, event pushes, seals — so
   /// `Envelope.seq` always matches the sealed sequence.
   Future<void> _chain = Future<void>.value();
@@ -424,6 +475,7 @@ class _DeviceRuntime {
 
     if (LinkHello.tryDecode(frame) != null) {
       await _activate(generation, transport, announce: true);
+      peerLive = true;
       return;
     }
     final active = _active?.generation == generation
@@ -443,8 +495,20 @@ class _DeviceRuntime {
       service.onLog?.call('refused an envelope: $error');
       return;
     }
+    peerLive = true;
     service.devices.updateLastSeen(device.id, service._now().toUtc());
     await active.api.handleEnvelope(envelope);
+  }
+
+  /// Tracks whether the transport carrying the active link is up. Only a
+  /// frame proves the *phone* is there; a drop proves it may not be.
+  void _watchLiveness(RemoteTransport transport) {
+    if (identical(_watchedTransport, transport)) return;
+    _liveWatch?.cancel();
+    _watchedTransport = transport;
+    _liveWatch = transport.states.listen((state) {
+      if (state != TransportState.connected) peerLive = false;
+    });
   }
 
   _ActiveLink _reattach(RemoteTransport transport) {
@@ -452,6 +516,7 @@ class _DeviceRuntime {
     // The phone redialled inside a generation: same channel, same sequences,
     // new socket — the conformance fixture's rule.
     active.transport = transport;
+    _watchLiveness(transport);
     return active;
   }
 
@@ -478,6 +543,7 @@ class _DeviceRuntime {
       created = _ActiveLink(generation, channel, api, transport);
       _active = created;
       active = created;
+      _watchLiveness(transport);
       if (generation != device.generation) {
         device = device.copyWith(generation: generation);
         service.devices.updateGeneration(device.id, generation);
@@ -487,6 +553,7 @@ class _DeviceRuntime {
       service.onDevicesChanged?.call();
     } else {
       active.transport = transport;
+      _watchLiveness(transport);
     }
     if (announce) await active.api.sendHostStatus();
     return active;
@@ -526,6 +593,10 @@ class _DeviceRuntime {
 
   Future<void> close() async {
     _closed = true;
+    peerLive = false;
+    await _liveWatch?.cancel();
+    _liveWatch = null;
+    _watchedTransport = null;
     for (final generation in _listeners.keys.toList()) {
       await _closeListener(generation);
     }

@@ -10,7 +10,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../notifications/domain/inbox_item.dart';
 import '../../notifications/domain/session_attention.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -153,6 +155,38 @@ class RemoteAccessController {
       unawaited(service.notifyApprovalRequested(attention.session.openId));
     }
   }
+
+  /// New attention-inbox items — the same finished / needs-you / failed
+  /// policy the tray reads — become sealed pushes for paired phones with no
+  /// live link. Connected phones already heard it as `session.changed`.
+  void onInboxChanged(AttentionInbox? previous, AttentionInbox next) {
+    final service = _service;
+    if (service == null) return;
+    final before = {
+      for (final item in previous?.items ?? const <InboxItem>[]) item.id,
+    };
+    for (final item in next.items) {
+      if (before.contains(item.id)) continue;
+      if (item.session.imported) continue;
+      final kind = switch (item.kind) {
+        InboxItemKind.finished => 'finished',
+        InboxItemKind.needsApproval => 'needs_approval',
+        InboxItemKind.failed => 'failed',
+        // Delivery news (checks, reviews, merges) stays on the desktop in v1.
+        InboxItemKind.checksFailed ||
+        InboxItemKind.changesRequested ||
+        InboxItemKind.readyToMerge => null,
+      };
+      if (kind == null) continue;
+      unawaited(
+        service.pushAttentionNews(
+          sessionId: item.session.openId,
+          title: item.session.label,
+          kind: kind,
+        ),
+      );
+    }
+  }
 }
 
 /// The one controller. Read it once at bootstrap so an enabled setting starts
@@ -164,6 +198,10 @@ final remoteAccessControllerProvider = Provider<RemoteAccessController>((ref) {
   ref.listen(
     sessionAttentionProvider,
     (previous, next) => controller.onAttention(previous, next),
+  );
+  ref.listen(
+    attentionInboxProvider,
+    (previous, next) => controller.onInboxChanged(previous, next),
   );
   ref.onDispose(() {
     unawaited(controller.shutdown());
