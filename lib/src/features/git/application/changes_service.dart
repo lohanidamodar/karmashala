@@ -59,4 +59,7 @@ class ChangesService {
 
   /// Pushes the current branch of [repo].
   Future<void> push(EnvironmentPath repo) => _gitFor(repo).push(repo);
+
+  Future<void> mergeBranch(EnvironmentPath repo, String branch) =>
+      _gitFor(repo).mergeBranch(repo, branch);
 }

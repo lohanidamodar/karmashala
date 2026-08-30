@@ -114,7 +114,9 @@ _server(FakeCommandRunner runner) async {
   final directory = await Directory.systemTemp.createTemp('cg_ui_tools');
   final bridgeFile = '${directory.path}${Platform.pathSeparator}bridge.json';
   final server = LauncherControlServer(container);
-  await server.start(bridgeFilePath: bridgeFile);
+  // This test intentionally exercises the portable HTTP fallback. The
+  // privileged production bridge uses the owner-only Windows named pipe.
+  await server.start(bridgeFilePath: bridgeFile, useNamedPipe: false);
   final handshake =
       jsonDecode(File(bridgeFile).readAsStringSync()) as Map<String, dynamic>;
   final port = handshake['port'] as int;

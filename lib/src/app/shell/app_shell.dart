@@ -8,6 +8,8 @@ import 'app_mode.dart';
 import 'resize_handle.dart';
 
 import '../../features/detail/presentation/detail_panel.dart';
+import '../../core/database/database_providers.dart';
+import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
@@ -49,6 +51,21 @@ class _AppShellState extends ConsumerState<AppShell> {
   /// a settings field owned by another branch this cycle, and a remembered pixel
   /// count is not worth a cross-branch schema edit.
   double _terminalHeight = 280;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final database = ref.read(databaseProvider);
+      if (database.readMetadata(MetadataKeys.environmentHealthOnboarding) !=
+          'pending') {
+        return;
+      }
+      database.writeMetadata(MetadataKeys.environmentHealthOnboarding, 'shown');
+      EnvironmentHealthDialog.show(context);
+    });
+  }
 
   void _toggleChat() {
     final state = _scaffoldKey.currentState;
@@ -110,6 +127,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                     if (terminalVisible && !maximized)
                       ResizeHandle(
                         axis: Axis.vertical,
+                        semanticLabel: 'Resize terminal height',
                         // Dragging up (negative dy) makes the dock taller.
                         onDelta: (dy) => setState(
                           () => _terminalHeight = (_terminalHeight - dy).clamp(
@@ -357,25 +375,31 @@ class _SplitLayoutState extends ConsumerState<_SplitLayout> {
     _width ??= ref.read(
       settingsControllerProvider.select((s) => s.explorerPaneWidth),
     );
-    final width = _width!;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.shell.explorerPaneVisible) ...[
-          SizedBox(
-            width: width.clamp(_min, _max),
-            child: const ExplorerPanel(),
-          ),
-          ResizeHandle(
-            onDelta: (dx) =>
-                setState(() => _width = (width + dx).clamp(_min, _max)),
-            onEnd: () => ref
-                .read(settingsControllerProvider.notifier)
-                .setExplorerPaneWidth(_width!.clamp(_min, _max)),
-          ),
-        ],
-        const Expanded(child: DetailPanel()),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A saved desktop width must not crush Detail when the window is later
+        // restored or resized smaller. Always reserve a useful work surface.
+        final responsiveMax = (constraints.maxWidth - 520).clamp(_min, _max);
+        final width = _width!.clamp(_min, responsiveMax);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.shell.explorerPaneVisible) ...[
+              SizedBox(width: width, child: const ExplorerPanel()),
+              ResizeHandle(
+                semanticLabel: 'Resize Explorer width',
+                onDelta: (dx) => setState(
+                  () => _width = (width + dx).clamp(_min, responsiveMax),
+                ),
+                onEnd: () => ref
+                    .read(settingsControllerProvider.notifier)
+                    .setExplorerPaneWidth(_width!.clamp(_min, _max)),
+              ),
+            ],
+            const Expanded(child: DetailPanel()),
+          ],
+        );
+      },
     );
   }
 }

@@ -8,3 +8,7 @@ publish_to: none
 
 environment:
   sdk: ^3.9.0
+
+dependencies:
+  chitragupta_local_ipc:
+    path: ../packages/local_ipc

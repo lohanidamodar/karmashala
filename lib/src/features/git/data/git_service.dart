@@ -209,6 +209,14 @@ class GitService {
     }
   }
 
+  /// Merges [branch] into the branch currently checked out in [repo].
+  Future<void> mergeBranch(EnvironmentPath repo, String branch) async {
+    final result = await _git(repo, ['merge', '--no-ff', branch]);
+    if (!result.ok) {
+      throw GitException('git merge failed: ${result.stderr.trim()}');
+    }
+  }
+
   /// Pushes the current branch (optionally to [remote], setting upstream).
   Future<void> push(
     EnvironmentPath repo, {

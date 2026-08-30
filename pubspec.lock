@@ -73,6 +73,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.4"
+  chitragupta_local_ipc:
+    dependency: "direct main"
+    description:
+      path: "packages/local_ipc"
+      relative: true
+    source: path
+    version: "0.1.0"
   cli_config:
     dependency: transitive
     description:

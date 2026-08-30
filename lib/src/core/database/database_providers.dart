@@ -26,6 +26,7 @@ class MetadataKeys {
   /// Absence means discovery has never run, which triggers a one-time probe on
   /// startup (see `main.dart`).
   static const agentsDiscoveredAt = 'agents_discovered_at';
+  static const environmentHealthOnboarding = 'environment_health_onboarding';
 }
 
 /// Records baseline application metadata on startup.
@@ -41,6 +42,7 @@ MetadataBootstrap bootstrapMetadata(AppDatabase db, {AppLogger? logger}) {
       MetadataKeys.firstRunAt,
       DateTime.now().toUtc().toIso8601String(),
     );
+    db.writeMetadata(MetadataKeys.environmentHealthOnboarding, 'pending');
   }
   db.writeMetadata(MetadataKeys.schemaVersion, db.schemaVersion.toString());
 

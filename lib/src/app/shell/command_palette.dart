@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
+import '../../features/environments/presentation/environment_health_dialog.dart';
+import '../../features/fanout/presentation/fanout_dialog.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/repositories/application/repository_providers.dart';
@@ -77,6 +79,14 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
           onSelect: () => run(() => NewSessionDialog.show(context)),
         ),
       );
+      entries.add(
+        _PaletteEntry(
+          label: 'Fan out prompt…',
+          sublabel: 'Run multiple agents in isolated worktrees',
+          icon: AppIcons.gitBranch,
+          onSelect: () => run(() => FanOutDialog.show(context)),
+        ),
+      );
     }
     entries.add(
       _PaletteEntry(
@@ -93,6 +103,14 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
         onSelect: () => run(
           () => ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
         ),
+      ),
+    );
+    entries.add(
+      _PaletteEntry(
+        label: 'Check environment health',
+        sublabel: 'Windows, WSL, SSH, Git and coding agents',
+        icon: AppIcons.checkCircle,
+        onSelect: () => run(() => EnvironmentHealthDialog.show(context)),
       ),
     );
     entries.add(

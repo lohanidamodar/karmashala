@@ -11,6 +11,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
+
 Future<void> main(List<String> args) async {
   final bridge = _Bridge();
   final lines = stdin.transform(utf8.decoder).transform(const LineSplitter());
@@ -111,6 +113,31 @@ class _Bridge {
   /// Forwards a tool call to the app's control server over loopback HTTP.
   Future<Object?> _call(String tool, Map<String, dynamic> arguments) async {
     final config = await _loadConfig();
+    final callerSessionId = Platform.environment['CHITRAGUPTA_SESSION_ID'];
+    final payload = jsonEncode({
+      'tool': tool,
+      'arguments': arguments,
+      if (callerSessionId != null && callerSessionId.isNotEmpty)
+        'callerSessionId': callerSessionId,
+    });
+    if (config.pipeName case final pipeName?) {
+      Object? raw;
+      try {
+        raw = NamedPipeRpcClient.call(pipeName, payload);
+      } on Object {
+        // The app may have restarted while this long-lived bridge stayed up.
+        // Re-read the handshake once so the new random pipe is picked up.
+        _config = null;
+        final fresh = await _loadConfig();
+        final freshPipe = fresh.pipeName;
+        if (freshPipe == null || freshPipe == pipeName) rethrow;
+        raw = NamedPipeRpcClient.call(freshPipe, payload);
+      }
+      final decoded = jsonDecode(raw as String);
+      if (decoded is Map && decoded['ok'] == true) return decoded['result'];
+      final error = decoded is Map ? decoded['error'] : 'unknown error';
+      throw StateError('$error');
+    }
     final client = HttpClient();
     try {
       final request = await client.postUrl(
@@ -128,15 +155,7 @@ class _Bridge {
       // may spawn agents — read off the real process tree rather than declared
       // by the caller, which could simply omit it. Absent for the launcher chat
       // and for a bridge started by hand, which are then treated as root.
-      final callerSessionId = Platform.environment['CHITRAGUPTA_SESSION_ID'];
-      request.write(
-        jsonEncode({
-          'tool': tool,
-          'arguments': arguments,
-          if (callerSessionId != null && callerSessionId.isNotEmpty)
-            'callerSessionId': callerSessionId,
-        }),
-      );
+      request.write(payload);
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       final decoded = jsonDecode(body);
@@ -168,6 +187,7 @@ class _Bridge {
     final config = _BridgeConfig(
       port: json['port'] as int,
       token: json['token'] as String,
+      pipeName: json['pipeName'] as String?,
     );
     _config = config;
     return config;
@@ -192,7 +212,8 @@ class _Bridge {
 }
 
 class _BridgeConfig {
-  _BridgeConfig({required this.port, required this.token});
+  _BridgeConfig({required this.port, required this.token, this.pipeName});
   final int port;
   final String token;
+  final String? pipeName;
 }

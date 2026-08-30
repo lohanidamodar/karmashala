@@ -49,6 +49,9 @@ void main() {
     // Pane headers render as tracked "ledger tab" labels (uppercased).
     expect(find.text('EXPLORER'), findsOneWidget);
     expect(find.text('DETAIL'), findsOneWidget);
+    // Workspace tools stay available before a project/repository is selected.
+    expect(find.text('Device'), findsOneWidget);
+    expect(find.text('Browser'), findsOneWidget);
   });
 
   testWidgets('narrow layout shows a single pane with a selector', (

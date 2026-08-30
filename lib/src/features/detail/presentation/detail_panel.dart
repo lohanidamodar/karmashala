@@ -46,7 +46,10 @@ class DetailPanel extends ConsumerWidget {
         ref.watch(shellControllerProvider).focusedPane == ShellPane.detail;
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final sidebarVisible = ref.watch(detailSidebarVisibleProvider);
-    final showSidebar = sidebarVisible && selectedRepoId != null;
+    // Device and Browser are workspace tools, not repository children. Keep the
+    // sidebar alive without a selection; repository-bound tabs own their own
+    // contextual empty states.
+    final showSidebar = sidebarVisible;
 
     return PaneScaffold(
       title: 'Detail',
@@ -62,12 +65,15 @@ class DetailPanel extends ConsumerWidget {
                 ref.read(detailSidebarVisibleProvider.notifier).toggle(),
           ),
       ],
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Expanded(child: _MainArea()),
-          if (showSidebar) const _ResizableSidebar(),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Expanded(child: _MainArea()),
+            if (showSidebar)
+              _ResizableSidebar(maxWidth: constraints.maxWidth * .5),
+          ],
+        ),
       ),
     );
   }
@@ -75,7 +81,9 @@ class DetailPanel extends ConsumerWidget {
 
 /// The detail right sidebar with a draggable left edge; its width is persisted.
 class _ResizableSidebar extends ConsumerStatefulWidget {
-  const _ResizableSidebar();
+  const _ResizableSidebar({required this.maxWidth});
+
+  final double maxWidth;
 
   @override
   ConsumerState<_ResizableSidebar> createState() => _ResizableSidebarState();
@@ -91,19 +99,23 @@ class _ResizableSidebarState extends ConsumerState<_ResizableSidebar> {
     _width ??= ref.read(
       settingsControllerProvider.select((s) => s.detailSidebarWidth),
     );
-    final width = _width!;
+    // Keep at least half of Detail available for the transcript. This also
+    // makes persisted widths safe when a window moves to a smaller display.
+    final responsiveMax = widget.maxWidth.clamp(_min, _max);
+    final width = _width!.clamp(_min, responsiveMax);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ResizeHandle(
+          semanticLabel: 'Resize detail sidebar width',
           // Dragging the left edge leftwards widens the sidebar.
           onDelta: (dx) =>
-              setState(() => _width = (width - dx).clamp(_min, _max)),
+              setState(() => _width = (width - dx).clamp(_min, responsiveMax)),
           onEnd: () => ref
               .read(settingsControllerProvider.notifier)
               .setDetailSidebarWidth(_width!.clamp(_min, _max)),
         ),
-        SizedBox(width: width.clamp(_min, _max), child: const _Sidebar()),
+        SizedBox(width: width, child: const _Sidebar()),
       ],
     );
   }
@@ -194,43 +206,57 @@ class _Sidebar extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              _SidebarTab(
-                selected: tab == 0,
-                icon: AppIcons.gitDiff,
-                label: 'Changes',
-                onTap: () => ref.read(repoReviewTabProvider.notifier).select(0),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _SidebarTab(
+                        selected: tab == 0,
+                        icon: AppIcons.gitDiff,
+                        label: 'Changes',
+                        onTap: () =>
+                            ref.read(repoReviewTabProvider.notifier).select(0),
+                      ),
+                      _SidebarTab(
+                        selected: tab == 1,
+                        icon: AppIcons.gitMerge,
+                        label: 'GitHub',
+                        onTap: () =>
+                            ref.read(repoReviewTabProvider.notifier).select(1),
+                      ),
+                      _SidebarTab(
+                        selected: tab == 3,
+                        icon: AppIcons.folder,
+                        label: 'Files',
+                        onTap: () =>
+                            ref.read(repoReviewTabProvider.notifier).select(3),
+                      ),
+                      _SidebarTab(
+                        selected: tab == 4,
+                        icon: Icons.smartphone,
+                        label: 'Device',
+                        onTap: () =>
+                            ref.read(repoReviewTabProvider.notifier).select(4),
+                      ),
+                      _SidebarTab(
+                        selected: tab == 5,
+                        icon: AppIcons.globe,
+                        label: 'Browser',
+                        onTap: () =>
+                            ref.read(repoReviewTabProvider.notifier).select(5),
+                      ),
+                      _SidebarTab(
+                        selected: tab == 2,
+                        icon: AppIcons.info,
+                        label: 'Info',
+                        onTap: () =>
+                            ref.read(repoReviewTabProvider.notifier).select(2),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              _SidebarTab(
-                selected: tab == 1,
-                icon: AppIcons.gitMerge,
-                label: 'GitHub',
-                onTap: () => ref.read(repoReviewTabProvider.notifier).select(1),
-              ),
-              _SidebarTab(
-                selected: tab == 3,
-                icon: AppIcons.folder,
-                label: 'Files',
-                onTap: () => ref.read(repoReviewTabProvider.notifier).select(3),
-              ),
-              _SidebarTab(
-                selected: tab == 4,
-                icon: Icons.smartphone,
-                label: 'Device',
-                onTap: () => ref.read(repoReviewTabProvider.notifier).select(4),
-              ),
-              _SidebarTab(
-                selected: tab == 5,
-                icon: AppIcons.globe,
-                label: 'Browser',
-                onTap: () => ref.read(repoReviewTabProvider.notifier).select(5),
-              ),
-              _SidebarTab(
-                selected: tab == 2,
-                icon: AppIcons.info,
-                label: 'Info',
-                onTap: () => ref.read(repoReviewTabProvider.notifier).select(2),
-              ),
-              const Spacer(),
               IconButton(
                 tooltip: 'Close sidebar',
                 icon: const Icon(AppIcons.x, size: 15),
@@ -275,32 +301,38 @@ class _SidebarTab extends StatelessWidget {
     final color = selected
         ? theme.colorScheme.primary
         : theme.colorScheme.onSurfaceVariant;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 38,
-        padding: const EdgeInsets.symmetric(horizontal: 9),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              width: 2,
-              color: selected ? theme.colorScheme.tertiary : Colors.transparent,
-            ),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: color,
-                letterSpacing: 0,
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                width: 2,
+                color: selected
+                    ? theme.colorScheme.tertiary
+                    : Colors.transparent,
               ),
             ),
-          ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: color,
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

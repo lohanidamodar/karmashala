@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/changes_providers.dart';
+import '../application/diff_annotations.dart';
+import '../../sessions/application/session_actions.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
 import '../domain/diff_line.dart';
 import '../domain/file_change.dart';
@@ -28,6 +31,12 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final changes = ref.watch(repositoryChangesProvider);
+    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final sessionId = ref.watch(selectedSessionIdProvider);
+    final annotations = ref
+        .watch(diffAnnotationsProvider)
+        .where((item) => item.repositoryId == repositoryId)
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,6 +77,29 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
                 icon: const Icon(AppIcons.arrowsClockwise, size: 16),
                 onPressed: () => ref.invalidate(repositoryChangesProvider),
               ),
+              if (annotations.isNotEmpty)
+                IconButton(
+                  tooltip: sessionId == null
+                      ? 'Select a session to send ${annotations.length} review comments'
+                      : 'Send ${annotations.length} review comments to agent',
+                  icon: Badge(
+                    label: Text('${annotations.length}'),
+                    child: const Icon(AppIcons.chatCircleDots, size: 16),
+                  ),
+                  onPressed: sessionId == null || repositoryId == null
+                      ? null
+                      : () async {
+                          await ref
+                              .read(sessionActionsProvider)
+                              .continueSession(
+                                sessionId,
+                                buildDiffFeedbackPrompt(annotations),
+                              );
+                          ref
+                              .read(diffAnnotationsProvider.notifier)
+                              .clearRepository(repositoryId);
+                        },
+                ),
             ],
           ),
         ),
@@ -229,8 +261,12 @@ class _InlineDiff extends ConsumerWidget {
           primary: false,
           padding: const EdgeInsets.symmetric(vertical: Insets.xs),
           itemCount: lines.length,
-          itemBuilder: (context, index) =>
-              _DiffLineTile(line: lines[index], wrap: wrap),
+          itemBuilder: (context, index) => _DiffLineTile(
+            path: path,
+            diffIndex: index,
+            line: lines[index],
+            wrap: wrap,
+          ),
         );
         if (wrap) return list;
         // Full-screen: let long code lines scroll horizontally.
@@ -308,13 +344,20 @@ class _DiffFullscreenDialog extends StatelessWidget {
   }
 }
 
-class _DiffLineTile extends StatelessWidget {
-  const _DiffLineTile({required this.line, this.wrap = false});
+class _DiffLineTile extends ConsumerWidget {
+  const _DiffLineTile({
+    required this.path,
+    required this.diffIndex,
+    required this.line,
+    this.wrap = false,
+  });
+  final String path;
+  final int diffIndex;
   final DiffLine line;
   final bool wrap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final (Color? bg, Color? fg, Color? accent) = switch (line.kind) {
       DiffLineKind.added => (
@@ -335,6 +378,16 @@ class _DiffLineTile extends StatelessWidget {
       DiffLineKind.meta => (null, scheme.onSurfaceVariant, null),
       DiffLineKind.context => (null, null, null),
     };
+    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final annotation = ref
+        .watch(diffAnnotationsProvider)
+        .where(
+          (item) =>
+              item.repositoryId == repositoryId &&
+              item.path == path &&
+              item.diffIndex == diffIndex,
+        )
+        .firstOrNull;
     return Container(
       color: bg,
       width: double.infinity,
@@ -357,9 +410,90 @@ class _DiffLineTile extends StatelessWidget {
               ),
             ),
           ),
+          if (line.kind == DiffLineKind.added ||
+              line.kind == DiffLineKind.removed ||
+              line.kind == DiffLineKind.context)
+            IconButton(
+              tooltip: annotation == null
+                  ? 'Add review comment'
+                  : annotation.comment,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              padding: EdgeInsets.zero,
+              icon: Icon(
+                annotation == null
+                    ? AppIcons.chatCircle
+                    : AppIcons.chatCircleDots,
+                size: 13,
+                color: annotation == null ? null : scheme.tertiary,
+              ),
+              onPressed: repositoryId == null
+                  ? null
+                  : () =>
+                        _editAnnotation(context, ref, repositoryId, annotation),
+            ),
         ],
       ),
     );
+  }
+
+  Future<void> _editAnnotation(
+    BuildContext context,
+    WidgetRef ref,
+    String repositoryId,
+    DiffAnnotation? existing,
+  ) async {
+    final controller = TextEditingController(text: existing?.comment);
+    final comment = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Review comment'),
+        content: SizedBox(
+          width: 520,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 8,
+            decoration: InputDecoration(
+              labelText: '$path · diff line ${diffIndex + 1}',
+              helperText: line.text,
+            ),
+          ),
+        ),
+        actions: [
+          if (existing != null)
+            TextButton(
+              onPressed: () => Navigator.pop(context, ''),
+              child: const Text('Remove'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (comment == null) return;
+    final notifier = ref.read(diffAnnotationsProvider.notifier);
+    if (comment.isEmpty) {
+      notifier.remove(repositoryId, path, diffIndex);
+    } else {
+      notifier.put(
+        DiffAnnotation(
+          repositoryId: repositoryId,
+          path: path,
+          diffIndex: diffIndex,
+          line: line,
+          comment: comment,
+        ),
+      );
+    }
   }
 }
 

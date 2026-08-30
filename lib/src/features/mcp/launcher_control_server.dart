@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -88,25 +89,19 @@ import 'tmux_orchestration.dart';
 ///   offers by running the same commands directly. Local-user isolation is not a
 ///   goal here and cannot be one.
 ///
-/// ## Why loopback TCP anyway
+/// ## Split transport
 ///
-/// dray uses a unix socket at `~/.dray/dray.sock`, where "nothing on the network
-/// can reach it at all, and access control is the containing directory's
-/// `0700`". That is strictly better: the kernel refuses the connection, so there
-/// is no auth attempt to get right and no secret to leak.
+/// On Windows, privileged `/rpc` calls use a message-mode named pipe created
+/// with a protected DACL granting access only to its owner. The standalone MCP
+/// bridge reads only the random pipe name from the restricted handshake file;
+/// `/rpc` is disabled on HTTP while that pipe is active. The pipe implementation
+/// runs blocking Win32 I/O in an isolate and sends decoded requests back to this
+/// container for dispatch.
 ///
-/// The Windows equivalent is a named pipe, whose DACL would be the boundary the
-/// same way. We do not use one because **`dart:io` has no named-pipe server
-/// API** — there is no `NamedPipeServer`, and `RawSocket`/`HttpServer` cannot
-/// bind `\\.\pipe\…`. Building one means an FFI layer over `CreateNamedPipe`
-/// plus a hand-rolled HTTP framing on top of it, in a process that must also
-/// keep the Flutter engine alive. That is native code and a new failure mode for
-/// what is, on a correctly permissioned handshake file, the same practical
-/// boundary. Noted as a possible future direction, with that caveat.
-///
-/// AF_UNIX sockets do exist on modern Windows, but `dart:io`'s
-/// `InternetAddress.unix` is not supported there either, so it is the same
-/// problem wearing a different hat.
+/// Agent hooks remain on loopback HTTP because third-party CLIs invoke them with
+/// `curl`. They retain a separate, low-privilege token and can only report
+/// status. Non-Windows platforms and tests may use the authenticated HTTP RPC
+/// fallback until an owner-only Unix-domain socket transport is added.
 class LauncherControlServer {
   LauncherControlServer(this._container, {AppLogger? logger})
     : _logger = logger ?? AppLogger.named('mcp-control');
@@ -115,8 +110,13 @@ class LauncherControlServer {
   final AppLogger _logger;
 
   HttpServer? _server;
+  NamedPipeRpcServer? _pipeServer;
+  bool _httpRpcEnabled = false;
   String? _token;
   AgentHookEndpoint? _hookEndpoint;
+  String? _publishedBridgePath;
+
+  static const _maxRequestBytes = 1024 * 1024;
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
   /// `null` before that. The hook installer writes this into the agent's own
@@ -132,7 +132,7 @@ class LauncherControlServer {
   /// Binds the server and writes the handshake file. Pass [bridgeFilePath] to
   /// control where that file goes (tests do); by default it is
   /// `mcp_bridge.json` in the application-support directory.
-  Future<void> start({String? bridgeFilePath}) async {
+  Future<void> start({String? bridgeFilePath, bool useNamedPipe = true}) async {
     if (_server != null) return;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
@@ -145,6 +145,17 @@ class LauncherControlServer {
       port: server.port,
       token: _generateToken(),
     );
+    _httpRpcEnabled = !Platform.isWindows || !useNamedPipe;
+    if (useNamedPipe && Platform.isWindows) {
+      final pipeName = r'\\.\pipe\chitragupta-' + _generateToken();
+      try {
+        _pipeServer = await NamedPipeRpcServer.start(pipeName, _handlePipeRpc);
+      } on Object catch (error, stack) {
+        // Fail closed: hooks still work, but privileged RPC is not silently
+        // downgraded to loopback when the owner-only transport cannot start.
+        _logger.warning('Owner-only RPC pipe failed to start.', error, stack);
+      }
+    }
     await _writeBridgeFile(server.port, _token!, bridgeFilePath);
     server.listen(_handle, onError: (Object e) => _logger.warning('$e'));
     _logger.info('Launcher control server on 127.0.0.1:${server.port}.');
@@ -152,9 +163,22 @@ class LauncherControlServer {
 
   Future<void> stop() async {
     await _server?.close(force: true);
+    await _pipeServer?.close();
+    final published = _publishedBridgePath;
+    if (published != null) {
+      try {
+        final file = File(published);
+        if (await file.exists()) await file.delete();
+      } on Object catch (error) {
+        _logger.warning('Could not remove stale bridge handshake: $error');
+      }
+    }
     _server = null;
+    _pipeServer = null;
     _token = null;
     _hookEndpoint = null;
+    _httpRpcEnabled = false;
+    _publishedBridgePath = null;
   }
 
   /// Publishes the port and tokens for the bridge to read.
@@ -170,6 +194,7 @@ class LauncherControlServer {
     String? overridePath,
   ) async {
     final file = File(overridePath ?? await bridgeFilePath());
+    _publishedBridgePath = file.path;
     await file.parent.create(recursive: true);
     try {
       if (file.existsSync()) await file.delete();
@@ -185,6 +210,7 @@ class LauncherControlServer {
         'token': token,
         'pid': pid,
         'hookToken': _hookEndpoint!.token,
+        if (_pipeServer case final pipe?) 'pipeName': pipe.pipeName,
       }),
       flush: true,
     );
@@ -211,7 +237,10 @@ class LauncherControlServer {
     }
     final response = request.response;
     try {
-      if (request.headers.value('authorization') != 'Bearer $_token') {
+      if (!_constantTimeEquals(
+        request.headers.value(HttpHeaders.authorizationHeader),
+        'Bearer $_token',
+      )) {
         response.statusCode = HttpStatus.unauthorized;
         await response.close();
         return;
@@ -221,7 +250,12 @@ class LauncherControlServer {
         await response.close();
         return;
       }
-      final body = await utf8.decoder.bind(request).join();
+      if (!_httpRpcEnabled) {
+        response.statusCode = HttpStatus.notFound;
+        await response.close();
+        return;
+      }
+      final body = await _readBoundedBody(request);
       final payload = jsonDecode(body) as Map<String, dynamic>;
       final tool = payload['tool'] as String?;
       final args =
@@ -246,6 +280,21 @@ class LauncherControlServer {
     }
   }
 
+  Future<String> _handlePipeRpc(String body) async {
+    try {
+      final payload = jsonDecode(body) as Map<String, dynamic>;
+      final tool = payload['tool'] as String?;
+      final args =
+          (payload['arguments'] as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{};
+      final callerSessionId = payload['callerSessionId'] as String?;
+      final result = await _dispatch(tool, args, callerSessionId);
+      return jsonEncode({'ok': true, 'result': result});
+    } on Object catch (error) {
+      return jsonEncode({'ok': false, 'error': '$error'});
+    }
+  }
+
   /// `POST /agent-hook?agent=<id>&event=<name>` — one callback from an agent's
   /// installed hook, with the hook's own JSON payload as the body.
   Future<void> _handleAgentHook(HttpRequest request) async {
@@ -253,8 +302,10 @@ class LauncherControlServer {
     final endpoint = _hookEndpoint;
     try {
       if (endpoint == null ||
-          request.headers.value(HttpHeaders.authorizationHeader) !=
-              'Bearer ${endpoint.token}') {
+          !_constantTimeEquals(
+            request.headers.value(HttpHeaders.authorizationHeader),
+            'Bearer ${endpoint.token}',
+          )) {
         response.statusCode = HttpStatus.unauthorized;
         await response.close();
         return;
@@ -264,7 +315,7 @@ class LauncherControlServer {
         await response.close();
         return;
       }
-      final body = await utf8.decoder.bind(request).join();
+      final body = await _readBoundedBody(request);
       final report = _container
           .read(agentHookReceiverProvider)
           .handle(
@@ -282,6 +333,34 @@ class LauncherControlServer {
       response.statusCode = HttpStatus.internalServerError;
       await response.close();
     }
+  }
+
+  Future<String> _readBoundedBody(HttpRequest request) async {
+    if (request.contentLength > _maxRequestBytes) {
+      throw const FormatException('Request body exceeds the 1 MiB limit.');
+    }
+    final bytes = <int>[];
+    await for (final chunk in request) {
+      bytes.addAll(chunk);
+      if (bytes.length > _maxRequestBytes) {
+        throw const FormatException('Request body exceeds the 1 MiB limit.');
+      }
+    }
+    return utf8.decode(bytes);
+  }
+
+  bool _constantTimeEquals(String? actual, String expected) {
+    if (actual == null) return false;
+    var difference = actual.length ^ expected.length;
+    final length = actual.length > expected.length
+        ? actual.length
+        : expected.length;
+    for (var i = 0; i < length; i++) {
+      final a = i < actual.length ? actual.codeUnitAt(i) : 0;
+      final b = i < expected.length ? expected.codeUnitAt(i) : 0;
+      difference |= a ^ b;
+    }
+    return difference == 0;
   }
 
   Future<Object?> _dispatch(
