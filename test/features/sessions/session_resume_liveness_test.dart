@@ -10,12 +10,14 @@ import 'package:chitragupta/src/features/cli_detection/domain/imported_session.d
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/repositories/domain/repository.dart';
 import 'package:chitragupta/src/features/sessions/application/session_actions.dart';
 import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
 import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:chitragupta/src/features/settings/domain/settings.dart';
@@ -43,19 +45,37 @@ const _codexish = AgentDescriptor(
   ),
 );
 
-({ProviderContainer container, AppDatabase db}) harness() {
+/// An agent that shares a conversation — Claude Code's behaviour. The refusal
+/// never fires for it, so it is the only way to reach the launcher's decisions
+/// *about a live row*.
+const _shareable = AgentDescriptor(
+  id: 'sharish',
+  displayName: 'Sharish',
+  binaries: AgentBinaries(windows: ['sharish'], posix: ['sharish']),
+  launch: AgentLaunchSpec(
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
+    },
+    interactiveResume: AgentResume.flag('--resume'),
+    allowsConcurrentResume: true,
+  ),
+);
+
+({ProviderContainer container, AppDatabase db}) harness({
+  AgentDescriptor descriptor = _codexish,
+}) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
   ProjectDao(db).insert(project());
   RepositoryDao(db).insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(agentId: 'codexish'));
+  AgentInstallationDao(db).insert(agentInstallation(agentId: descriptor.id));
 
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(const AgentRegistry([_codexish])),
+      agentRegistryProvider.overrideWithValue(AgentRegistry([descriptor])),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
@@ -73,13 +93,14 @@ Future<String> _startLiveSession(
   ProviderContainer container, {
   String externalId = 'ext-1',
   String title = 'Live work',
+  String agentId = 'codexish',
 }) async {
   final launched = await container
       .read(sessionLauncherProvider)
       .launch(
         SessionLaunchRequest(
           repository: repository(),
-          installation: agentInstallation(agentId: 'codexish'),
+          installation: agentInstallation(agentId: agentId),
           title: title,
           purpose: SessionPurpose.newSession,
         ),
@@ -175,27 +196,28 @@ void main() {
     expect(state.tabs, hasLength(1));
   });
 
-  test('a session whose process has ended is genuinely resumed', () async {
+  test('a session whose process has ended is genuinely resumed, in its own '
+      'row', () async {
     final h = harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
 
-    final liveId = await _startLiveSession(h.container);
-    final paneId = SessionDao(h.db).getById(liveId)!.paneId!;
-    h.container
-        .read(terminalSessionsControllerProvider.notifier)
-        .endSession(paneId);
+    final stoppedId = await _startDeadSession(h.container, title: 'Live work');
 
     final resumed = await h.container
         .read(sessionActionsProvider)
         .resumeImported(_imported());
 
-    // Nothing is running it any more, so a new agent is exactly right.
-    expect(resumed, isNot(liveId));
-    expect(SessionDao(h.db).getByRepository('r1'), hasLength(2));
+    // A new agent process is exactly right — nothing is running it any more —
+    // but it continues the row that already records this conversation rather
+    // than leaving the dead one behind and starting a second (A3).
+    expect(resumed, stoppedId);
+    expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+    final row = SessionDao(h.db).getById(resumed)!;
+    expect(row.status, SessionStatus.running);
     final launch = h.container
         .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(SessionDao(h.db).getById(resumed)!.paneId!)!
+        .instanceFor(row.paneId!)!
         .agentLaunch!;
     expect(launch.arguments, ['--ask', 'resume', 'ext-1']);
   });
@@ -259,6 +281,167 @@ void main() {
       );
     },
   );
+
+  group('a resume reuses the row it is resuming', () {
+    /// Resumes `ext-1` through the launcher, the way every native resume path
+    /// does (`explorer_actions`, `launcher_control_server`, `resumeImported`).
+    Future<SessionLaunchResult> resume(
+      ProviderContainer container, {
+      String title = 'Continue',
+      Repository? repository_,
+      String installationId = 'a1',
+    }) => container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository_ ?? repository(),
+            installation: agentInstallation(
+              id: installationId,
+              agentId: 'codexish',
+            ),
+            title: title,
+            purpose: SessionPurpose.existingSession,
+            resumeExternalSessionId: 'ext-1',
+          ),
+        );
+
+    test('resuming twice does not grow the table', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final originalId = await _startDeadSession(h.container);
+
+      for (var round = 0; round < 2; round++) {
+        final result = await resume(h.container);
+        expect(result.session.id, originalId);
+        expect(
+          SessionDao(h.db).getAllByExternalSessionId('ext-1'),
+          hasLength(1),
+        );
+        // Each round ends the pane again so the next one is a resume of a
+        // stopped session rather than a second writer.
+        h.container
+            .read(terminalSessionsControllerProvider.notifier)
+            .endSession(SessionDao(h.db).getById(originalId)!.paneId!);
+      }
+    });
+
+    test(
+      'reuse continues the session and never renames or re-dates it',
+      () async {
+        final h = harness();
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+
+        final originalId = await _startDeadSession(
+          h.container,
+          title: 'Refactor the parser',
+        );
+        final before = SessionDao(h.db).getById(originalId)!;
+
+        await resume(h.container, title: 'rollout-ext-1.jsonl');
+
+        final after = SessionDao(h.db).getById(originalId)!;
+        // The imported entry's CLI-derived title must not overwrite the name the
+        // user's session already has, and its identity must survive the resume.
+        expect(after.title, 'Refactor the parser');
+        expect(after.createdAt, before.createdAt);
+        expect(after.externalSessionId, 'ext-1');
+        expect(after.status, SessionStatus.running);
+        expect(after.paneId, isNot(before.paneId));
+        expect(after.permissionMode, PermissionMode.ask);
+      },
+    );
+
+    test('a resume onto a different repository writes its own row', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      RepositoryDao(h.db).insert(repository(id: 'r2', name: 'other'));
+      final originalId = await _startDeadSession(h.container);
+
+      final result = await resume(
+        h.container,
+        repository_: repository(id: 'r2', name: 'other'),
+      );
+
+      // Same conversation, different thing being run: reusing the row would
+      // leave it claiming a repository it is not in.
+      expect(result.session.id, isNot(originalId));
+      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+    });
+
+    test('a resume by a different installation writes its own row', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      AgentInstallationDao(h.db).insert(
+        agentInstallation(id: 'a2', agentId: 'codexish', path: r'C:\alt\c.exe'),
+      );
+      final originalId = await _startDeadSession(h.container);
+
+      final result = await resume(h.container, installationId: 'a2');
+
+      expect(result.session.id, isNot(originalId));
+      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+    });
+
+    test(
+      'an archived row is left archived, and a new one is written',
+      () async {
+        final h = harness();
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+
+        final originalId = await _startDeadSession(h.container);
+        // Its worktree is gone; pointing a live agent back at it would run in a
+        // directory that no longer exists.
+        SessionDao(h.db).markArchived(originalId, testTime);
+
+        final result = await resume(h.container);
+
+        expect(result.session.id, isNot(originalId));
+        expect(SessionDao(h.db).getById(originalId)!.isArchived, isTrue);
+      },
+    );
+
+    test('a live row is never reused, even where the agent shares the '
+        'conversation', () async {
+      // Claude Code permits a second process on one conversation, so the
+      // refusal does not fire and the reuse check is what stands between "a
+      // second session, as asked" and losing the pane the first one is in.
+      final h = harness(descriptor: _shareable);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await _startLiveSession(h.container, agentId: 'sharish');
+      final livePane = SessionDao(h.db).getById(liveId)!.paneId;
+
+      final second = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'sharish'),
+              title: 'Second window',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'ext-1',
+            ),
+          );
+
+      expect(second.session.id, isNot(liveId));
+      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+      // The first session still owns its own pane.
+      expect(SessionDao(h.db).getById(liveId)!.paneId, livePane);
+      expect(
+        h.container.read(sessionLauncherProvider).livePaneFor(liveId),
+        livePane,
+      );
+    });
+  });
 
   group('duplicate rows for one conversation', () {
     // The double-writer check is what stands between a Codex thread and a
