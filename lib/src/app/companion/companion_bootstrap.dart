@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -5,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/companion/client/companion_gateway.dart';
+import '../../features/companion/client/remote_companion_gateway.dart';
+import '../../features/companion/client/secure_companion_store.dart';
 import '../../features/companion/notifications/attention_notification.dart';
 import '../../features/companion/notifications/companion_notifier.dart';
 import '../../features/companion/presentation/session_view_screen.dart';
@@ -16,7 +19,19 @@ import 'companion_app.dart';
 Future<void> runCompanionApp() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final container = ProviderContainer();
+  // The real protocol client behind the gateway seam, its pairing record in
+  // the platform keystore. Only this bootstrap wires it, so tests — and the
+  // desktop build, which never runs this file — keep the fake and never
+  // touch secure storage.
+  final container = ProviderContainer(
+    overrides: [
+      companionGatewayProvider.overrideWith((ref) {
+        final gateway = RemoteCompanionGateway(store: SecureCompanionStore());
+        ref.onDispose(() => unawaited(gateway.close()));
+        return gateway;
+      }),
+    ],
+  );
   final navigatorKey = GlobalKey<NavigatorState>();
 
   // Attention events → local notifications; tapping one opens the session.
