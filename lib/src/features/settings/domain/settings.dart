@@ -72,6 +72,7 @@ class Settings {
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
+    this.terminalChordOverrides = const {},
     this.terminalThemeSource,
   });
 
@@ -143,6 +144,15 @@ class Settings {
   /// Whether the global launcher hotkey is registered at all.
   final bool launcherHotkeyEnabled;
 
+  /// Per-chord answers to "does a focused terminal pane give this key to the
+  /// app, or to the shell?", keyed by the chord's label (`Ctrl+K`). A chord
+  /// with no entry keeps the default declared in `shellChords`.
+  ///
+  /// A map rather than a list because the question has two directions: `Ctrl+B`
+  /// is the tmux prefix and ships going to the shell, and someone who does not
+  /// live in tmux may well want it back for the Explorer.
+  final Map<String, bool> terminalChordOverrides;
+
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
 
@@ -198,6 +208,7 @@ class Settings {
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
+    Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
   }) => Settings(
@@ -230,6 +241,8 @@ class Settings {
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
+    terminalChordOverrides:
+        terminalChordOverrides ?? this.terminalChordOverrides,
     terminalThemeSource: clearTerminalThemeSource
         ? null
         : (terminalThemeSource ?? this.terminalThemeSource),
@@ -263,6 +276,8 @@ class Settings {
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
+    if (terminalChordOverrides.isNotEmpty)
+      'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
@@ -336,6 +351,12 @@ class Settings {
           ? (json['pinnedSessionIds'] as List).whereType<String>().toList()
           : const [],
       shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
+      terminalChordOverrides: {
+        if (json['terminalChordOverrides'] is Map)
+          for (final entry in (json['terminalChordOverrides'] as Map).entries)
+            if (entry.key is String && entry.value is bool)
+              entry.key as String: entry.value as bool,
+      },
       terminalThemeSource: json['terminalThemeSource'] is String
           ? json['terminalThemeSource'] as String
           : null,
@@ -364,6 +385,7 @@ class Settings {
       other.launcherHotkeyJson == launcherHotkeyJson &&
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
+      _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
@@ -398,12 +420,23 @@ class Settings {
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
     ),
+    Object.hashAllUnordered(
+      terminalChordOverrides.entries.map((e) => Object.hash(e.key, e.value)),
+    ),
   );
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  static bool _boolMapEquals(Map<String, bool> a, Map<String, bool> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
     }
     return true;
   }

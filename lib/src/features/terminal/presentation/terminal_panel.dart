@@ -257,7 +257,15 @@ class TerminalActions {
       // Claimed for the app, or passed to the process. There is no third
       // answer: reporting `ignored` for a chord the shell owns would let
       // xterm's fallback type it as a control character.
-      return handleAppChordFromTerminal(context, event)
+      return handleAppChordFromTerminal(
+            context,
+            event,
+            // Whose chord this is, is the user's call: the declared skip-list
+            // is a default and Settings can flip any of it.
+            overrides: ref
+                .read(settingsControllerProvider)
+                .terminalChordOverrides,
+          )
           ? KeyEventResult.handled
           : KeyEventResult.ignored;
     }
