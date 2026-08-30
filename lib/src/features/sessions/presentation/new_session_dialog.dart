@@ -124,10 +124,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           padding: const EdgeInsets.only(top: 12),
           child: DropdownButtonFormField<SystemTerminal>(
             initialValue: list.contains(_terminal) ? _terminal : list.first,
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Terminal'),
             items: [
               for (final t in list)
-                DropdownMenuItem(value: t, child: Text(t.label)),
+                DropdownMenuItem(
+                  value: t,
+                  child: Text(t.label, overflow: TextOverflow.ellipsis),
+                ),
             ],
             onChanged: (v) => setState(() => _terminal = v),
           ),
@@ -153,6 +157,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
 
     return AlertDialog(
+      scrollable: true,
       title: const DesktopDialogTitle(
         icon: AppIcons.chatCircleDots,
         title: 'New session',
@@ -184,6 +189,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             else
               DropdownButtonFormField<AgentInstallation>(
                 initialValue: _installation,
+                // Expanded and ellipsised: the label carries an id, an
+                // environment and a version, which is wider than the field once
+                // the user scales text up.
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Agent'),
                 items: [
                   for (final i in installations)
@@ -192,6 +201,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                       child: Text(
                         '${i.agentId} · ${i.environmentId}'
                         '${i.version == null ? '' : ' (${i.version})'}',
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],
