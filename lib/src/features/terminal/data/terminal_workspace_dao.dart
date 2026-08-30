@@ -27,18 +27,26 @@ class StoredTerminalPane {
 }
 
 /// One persisted tab: its pane tree plus the panes the tree references.
+///
+/// A **detached** session — one the user closed the tab of while it kept
+/// running — is stored the same way, as a single-pane row with [detached] set.
+/// It is not a tab and never comes back as one; sharing the table just means its
+/// scrollback is preserved by exactly the same code path, rather than being the
+/// one kind of session that silently loses its history on quit.
 class StoredTerminalTab {
   const StoredTerminalTab({
     required this.id,
     required this.layout,
     required this.focusedPaneId,
     required this.panes,
+    this.detached = false,
   });
 
   final String id;
   final PaneLayout layout;
   final String? focusedPaneId;
   final List<StoredTerminalPane> panes;
+  final bool detached;
 }
 
 /// Everything needed to bring the terminal back as the user left it.
@@ -46,11 +54,17 @@ class StoredTerminalWorkspace {
   const StoredTerminalWorkspace({
     required this.tabs,
     required this.activeTabId,
+    this.detached = const [],
   });
 
   static const empty = StoredTerminalWorkspace(tabs: [], activeTabId: null);
 
   final List<StoredTerminalTab> tabs;
+
+  /// Sessions that had no tab when the app last exited, in the order they were
+  /// detached.
+  final List<StoredTerminalTab> detached;
+
   final String? activeTabId;
 }
 
@@ -74,13 +88,14 @@ class TerminalWorkspaceDao {
         final tab = tabs[i];
         _db.execute(
           'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
-          'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
+          'is_active, detached, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);',
           [
             tab.id,
             i,
             jsonEncode(tab.layout.toJson()),
             tab.focusedPaneId,
-            intFromBool(tab.id == activeTabId),
+            intFromBool(!tab.detached && tab.id == activeTabId),
+            intFromBool(tab.detached),
             now,
           ],
         );
@@ -117,27 +132,30 @@ class TerminalWorkspaceDao {
 
   StoredTerminalWorkspace loadWorkspace() {
     final tabRows = _db.query(
-      'SELECT id, layout, focused_pane_id, is_active FROM terminal_tabs '
-      'ORDER BY ordinal;',
+      'SELECT id, layout, focused_pane_id, is_active, detached '
+      'FROM terminal_tabs ORDER BY ordinal;',
     );
     if (tabRows.isEmpty) return StoredTerminalWorkspace.empty;
 
     final tabs = <StoredTerminalTab>[];
+    final detached = <StoredTerminalTab>[];
     String? activeTabId;
     for (final row in tabRows) {
       final id = row['id']! as String;
       final layout = _layoutFrom(row['layout'] as String?);
       if (layout == null) continue;
+      final isDetached = boolFromInt(row['detached']);
 
       final paneRows = _db.query(
         'SELECT id, profile_id, title, working_directory, scrollback '
         'FROM terminal_panes WHERE tab_id = ? ORDER BY ordinal;',
         [id],
       );
-      tabs.add(
+      (isDetached ? detached : tabs).add(
         StoredTerminalTab(
           id: id,
           layout: layout,
+          detached: isDetached,
           focusedPaneId: row['focused_pane_id'] as String?,
           panes: [
             for (final pane in paneRows)
@@ -152,10 +170,14 @@ class TerminalWorkspaceDao {
           ],
         ),
       );
-      if (boolFromInt(row['is_active'])) activeTabId = id;
+      if (!isDetached && boolFromInt(row['is_active'])) activeTabId = id;
     }
 
-    return StoredTerminalWorkspace(tabs: tabs, activeTabId: activeTabId);
+    return StoredTerminalWorkspace(
+      tabs: tabs,
+      detached: detached,
+      activeTabId: activeTabId,
+    );
   }
 
   void clear() => _db.execute('DELETE FROM terminal_tabs;');

@@ -20,9 +20,11 @@ import '../data/theme_discovery.dart';
 import '../domain/command_blocks.dart';
 import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
+import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
 import 'command_history_sheet.dart';
 import 'pane_layout_view.dart';
+import 'session_status.dart';
 import 'terminal_search_bar.dart';
 
 /// The terminal panel: a bar of tabs, each holding a tree of split panes, over
@@ -160,6 +162,32 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     );
   }
 
+  /// Shows what is still running with no tab, and lets the user bring one back
+  /// or end it.
+  Future<void> _showBackgroundSessions() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          final state = ref.watch(terminalSessionsControllerProvider);
+          return BackgroundSessionsDialog(
+            sessions: state.detached,
+            livenessOf: state.livenessOf,
+            onAttach: (paneId) {
+              _sessions.reattachSession(paneId);
+              Navigator.of(context).pop();
+            },
+            onEnd: _sessions.endSession,
+            onEndAll: () {
+              _sessions.endAllDetached();
+              Navigator.of(context).pop();
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _showCommands() async {
     final instance = _focusedInstance();
     if (instance == null) return;
@@ -251,12 +279,16 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
             tabs: state.tabs,
             activeTabId: state.activeTabId,
             titleFor: _sessions.titleForTab,
+            livenessFor: _sessions.livenessForTab,
             profiles: _profiles(),
             onSelect: _sessions.activateTab,
             onClose: _sessions.closeTab,
+            onEnd: (tabId) => _sessions.closeTab(tabId, detach: false),
             onOpen: _open,
             onSplit: _split,
             onFind: _openSearch,
+            backgroundCount: state.detached.length,
+            onBackgroundSessions: _showBackgroundSessions,
             onCommands: _focusedBlocks().isEmpty ? null : _showCommands,
             maximized: ref.watch(terminalMaximizedProvider),
             onToggleMaximize: () =>
@@ -287,6 +319,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                                 paneId == tab.focusedPaneId &&
                                 tab.id == state.activeTabId,
                             showFocusRing: tab.layout.panes.length > 1,
+                            liveness: state.livenessOf(paneId),
                           ),
                         ),
                     ],
@@ -309,6 +342,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     String paneId, {
     required bool focused,
     required bool showFocusRing,
+    required PaneLiveness liveness,
   }) {
     final theme = Theme.of(context);
     final instance = _sessions.instanceFor(paneId);
@@ -327,23 +361,48 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                 )
               : null,
         ),
-        child: TerminalView(
-          instance.terminal,
-          controller: instance.controller,
-          focusNode: instance.focusNode,
-          scrollController: instance.scrollController,
-          theme: _terminalTheme(theme, _importedPalette()),
-          textStyle: const TerminalStyle(fontSize: 13, fontFamily: kMonoFamily),
-          padding: const EdgeInsets.all(Insets.sm),
-          autofocus: focused,
-          // Desktop uses the physical keyboard; this also avoids xterm opening
-          // a software text-input client, which on Windows fails with "Could
-          // not set client, view ID is null" and blanks the terminal.
-          hardwareKeyboardOnly: true,
-          onKeyEvent: _onPaneKey,
-          // Right-click → copy selection / paste.
-          onSecondaryTapDown: (details, _) =>
-              _terminalMenu(context, details.globalPosition, instance),
+        child: Column(
+          children: [
+            // A pane with no process behind it says so, rather than presenting
+            // an old prompt as a live one.
+            if (!liveness.isLive)
+              PaneStatusBar(
+                liveness: liveness,
+                workingDirectory: instance.workingDirectory,
+                onStart: () => _sessions.startPane(paneId),
+              ),
+            Expanded(
+              child: TerminalView(
+                instance.terminal,
+                // Starting a pane swaps its instance in place; without a key
+                // the element would be reused and keep the disposed focus node.
+                key: ObjectKey(instance),
+                controller: instance.controller,
+                focusNode: instance.focusNode,
+                scrollController: instance.scrollController,
+                theme: _terminalTheme(theme, _importedPalette()),
+                textStyle: const TerminalStyle(
+                  fontSize: 13,
+                  fontFamily: kMonoFamily,
+                ),
+                padding: const EdgeInsets.all(Insets.sm),
+                autofocus: focused,
+                // Desktop uses the physical keyboard; this also avoids xterm
+                // opening a software text-input client, which on Windows fails
+                // with "Could not set client, view ID is null" and blanks the
+                // terminal.
+                hardwareKeyboardOnly: true,
+                onKeyEvent: _onPaneKey,
+                // Right-click → copy selection / paste / end the session.
+                onSecondaryTapDown: (details, _) => _terminalMenu(
+                  context,
+                  details.globalPosition,
+                  paneId,
+                  instance,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -352,6 +411,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
   Future<void> _terminalMenu(
     BuildContext context,
     Offset position,
+    String paneId,
     TerminalInstance session,
   ) async {
     final overlay =
@@ -373,6 +433,9 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         ),
         const PopupMenuItem(value: 'paste', child: Text('Paste')),
         const PopupMenuItem(value: 'find', child: Text('Find…')),
+        const PopupMenuDivider(),
+        // Closing the tab only detaches; this is how a session actually ends.
+        const PopupMenuItem(value: 'end', child: Text('End session')),
       ],
     );
     switch (choice) {
@@ -387,6 +450,8 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         if (text != null && text.isNotEmpty) session.terminal.paste(text);
       case 'find':
         _openSearch();
+      case 'end':
+        _sessions.endSession(paneId);
     }
   }
 }
@@ -396,12 +461,16 @@ class _TabBar extends StatelessWidget {
     required this.tabs,
     required this.activeTabId,
     required this.titleFor,
+    required this.livenessFor,
     required this.profiles,
     required this.onSelect,
     required this.onClose,
+    required this.onEnd,
     required this.onOpen,
     required this.onSplit,
     required this.onFind,
+    required this.backgroundCount,
+    required this.onBackgroundSessions,
     required this.onCommands,
     required this.maximized,
     required this.onToggleMaximize,
@@ -411,12 +480,18 @@ class _TabBar extends StatelessWidget {
   final List<TerminalTab> tabs;
   final String? activeTabId;
   final String Function(String tabId) titleFor;
+  final PaneLiveness Function(String tabId) livenessFor;
   final List<TerminalProfile> profiles;
   final ValueChanged<String> onSelect;
   final ValueChanged<String> onClose;
+  final ValueChanged<String> onEnd;
   final ValueChanged<TerminalProfile> onOpen;
   final void Function(SplitAxis axis) onSplit;
   final VoidCallback onFind;
+
+  /// How many sessions are running with no tab. Zero hides the button entirely.
+  final int backgroundCount;
+  final VoidCallback onBackgroundSessions;
 
   /// Null when the focused pane reported no commands, which is also the case
   /// for any shell without integration — the button simply is not there.
@@ -442,13 +517,26 @@ class _TabBar extends StatelessWidget {
                 for (final tab in tabs)
                   _Tab(
                     title: titleFor(tab.id),
+                    liveness: livenessFor(tab.id),
                     selected: tab.id == activeTabId,
                     onTap: () => onSelect(tab.id),
                     onClose: () => onClose(tab.id),
+                    onEnd: () => onEnd(tab.id),
                   ),
               ],
             ),
           ),
+          if (backgroundCount > 0)
+            IconButton(
+              tooltip:
+                  '$backgroundCount session'
+                  '${backgroundCount == 1 ? '' : 's'} running in the background',
+              icon: Badge.count(
+                count: backgroundCount,
+                child: const Icon(AppIcons.pictureInpicture, size: 16),
+              ),
+              onPressed: onBackgroundSessions,
+            ),
           if (onCommands != null)
             IconButton(
               tooltip: 'Commands',
@@ -515,15 +603,24 @@ class _TabBar extends StatelessWidget {
 class _Tab extends StatelessWidget {
   const _Tab({
     required this.title,
+    required this.liveness,
     required this.selected,
     required this.onTap,
     required this.onClose,
+    required this.onEnd,
   });
 
   final String title;
+  final PaneLiveness liveness;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Closes the tab, leaving anything running in the background.
   final VoidCallback onClose;
+
+  /// Ends the tab's sessions outright. Only ever reached deliberately, from the
+  /// tab's context menu — the X is not a kill switch.
+  final VoidCallback onEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -536,11 +633,14 @@ class _Tab extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(Radii.sm),
           onTap: onTap,
+          onSecondaryTapDown: (details) =>
+              _menu(context, details.globalPosition),
           child: Padding(
             padding: const EdgeInsets.only(left: Insets.sm, right: 2),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                TabLivenessDot(liveness: liveness),
                 Text(
                   title,
                   style: TextStyle(
@@ -552,7 +652,9 @@ class _Tab extends StatelessWidget {
                 ),
                 const SizedBox(width: 2),
                 IconButton(
-                  tooltip: 'Close tab',
+                  tooltip: liveness.isLive
+                      ? 'Close tab (the session keeps running)'
+                      : 'Close tab',
                   iconSize: 14,
                   visualDensity: VisualDensity.compact,
                   constraints: const BoxConstraints(
@@ -569,6 +671,32 @@ class _Tab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _menu(BuildContext context, Offset position) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        position & const Size(40, 40),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: 'close',
+          child: Text('Close tab, keep running'),
+        ),
+        const PopupMenuItem(value: 'end', child: Text('End session')),
+      ],
+    );
+    switch (choice) {
+      case 'close':
+        onClose();
+      case 'end':
+        onEnd();
+    }
   }
 }
 

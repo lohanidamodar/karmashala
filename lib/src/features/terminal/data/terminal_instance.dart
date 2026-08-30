@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
 import '../domain/mouse_wheel_reporter.dart';
+import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/terminal_profile.dart';
 import 'command_block_recorder.dart';
@@ -27,6 +28,11 @@ abstract class TerminalInstance {
   /// started in — kept so the pane can be recreated after a restart.
   String get profileId;
   String? get workingDirectory;
+
+  /// Whether a process is running behind [terminal], and why not when there is
+  /// none. Listenable so a pane stops advertising itself as live the moment its
+  /// process exits, without the controller polling for it.
+  ValueListenable<PaneLiveness> get liveness;
 
   /// Drives selection/scroll for the view — read to copy the current selection.
   TerminalController get controller;
@@ -109,12 +115,17 @@ class PtyTerminalInstance implements TerminalInstance {
     _coalescer = PtyOutputCoalescer(onData: terminal.write);
     _outputSubscription = _pty.output.listen(_coalescer.add);
 
+    // Captured while the process is certainly alive: `pid` is only safe to act
+    // on before the OS can recycle the number.
+    _pid = _pty.pid;
+
     _pty.exitCode.then((code) {
-      if (!_disposed) {
-        terminal.write(
-          '\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n',
-        );
-      }
+      _exited = true;
+      if (_disposed) return;
+      terminal.write('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
+      // The buffer stays on screen, but the pane is no longer a terminal you
+      // can type into — say so, so the UI can stop drawing it as one.
+      _liveness.value = PaneLiveness.exited;
     });
 
     terminal.onOutput = (data) {
@@ -152,15 +163,25 @@ class PtyTerminalInstance implements TerminalInstance {
   @override
   CommandBlockRecorder? commandBlocks;
 
+  @override
+  ValueListenable<PaneLiveness> get liveness => _liveness;
+  final _liveness = ValueNotifier(PaneLiveness.live);
+
   late final Pty _pty;
   late final PtyOutputCoalescer _coalescer;
   late final StreamSubscription<Uint8List> _outputSubscription;
+  late final int _pid;
   bool _disposed = false;
+  bool _exited = false;
 
   @override
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    // Set before disposing: a listener still attached deserves the final state,
+    // and a ValueNotifier throws if written to after disposal.
+    _liveness.value = PaneLiveness.exited;
+    _liveness.dispose();
     unawaited(_outputSubscription.cancel());
     _coalescer.dispose();
     focusNode.dispose();
@@ -169,7 +190,14 @@ class PtyTerminalInstance implements TerminalInstance {
     // anything long-running — a build, a dev server, an ssh session, a database
     // client mid-write — because the process never gets to flush or run its
     // exit handlers. This runs on app quit as well as tab close.
-    unawaited(shutdownProcess(kill: _pty.kill, exitCode: _pty.exitCode));
+    unawaited(
+      shutdownProcess(
+        kill: _pty.kill,
+        exitCode: _pty.exitCode,
+        // The whole tree, not just the pid: see killWindowsProcessTree.
+        pid: _exited ? null : _pid,
+      ),
+    );
   }
 }
 
@@ -263,6 +291,95 @@ class ErrorTerminalInstance implements TerminalInstance {
   /// An error pane never runs a shell, so it never has command boundaries.
   @override
   CommandBlockRecorder? get commandBlocks => null;
+
+  /// Nothing is running: the spawn failed. The pane therefore offers the same
+  /// "start it" affordance a restored pane does, which doubles as a retry.
+  @override
+  final ValueListenable<PaneLiveness> liveness = const _Constant(
+    PaneLiveness.exited,
+  );
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    focusNode.dispose();
+    scrollController.dispose();
+  }
+}
+
+/// A [ValueListenable] whose value never changes, so a pane with no process
+/// does not have to own (and tear down) a notifier that can never fire.
+class _Constant<T> implements ValueListenable<T> {
+  const _Constant(this.value);
+
+  @override
+  final T value;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+/// A [TerminalInstance] rebuilt from a stored record with **no process behind
+/// it**: the pane the user left, replayed, waiting to be started again.
+///
+/// This is the restore path's whole point. Spawning a shell for every stored
+/// pane at launch would make dead history indistinguishable from a live
+/// terminal, and — once a pane records a launch command rather than just a
+/// profile — would re-execute it. A dormant pane re-executes nothing; the user
+/// starts it, or does not.
+class DormantTerminalInstance implements TerminalInstance {
+  DormantTerminalInstance({
+    required this.id,
+    required this.title,
+    required this.profileId,
+    required this.restoredScrollback,
+    this.workingDirectory,
+  }) {
+    terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
+      ..mouseHandler = const ChitraguptaMouseHandler();
+    if (restoredScrollback.isNotEmpty) terminal.write(restoredScrollback);
+  }
+
+  @override
+  final String id;
+  @override
+  final String title;
+  @override
+  final String profileId;
+  @override
+  final String? workingDirectory;
+
+  /// The stored scrollback exactly as it was read back.
+  ///
+  /// Kept as the original string rather than re-encoded from [terminal] so that
+  /// starting the pane replays precisely what was restored, with no second
+  /// round-trip through the codec and no duplicated restore marker.
+  final String restoredScrollback;
+
+  @override
+  late final Terminal terminal;
+  @override
+  final TerminalController controller = TerminalController();
+  @override
+  final FocusNode focusNode = FocusNode();
+  @override
+  final ScrollController scrollController = ScrollController();
+
+  /// No process ever ran here, so there are no command boundaries — the stored
+  /// scrollback is text, not a record of what produced it.
+  @override
+  CommandBlockRecorder? get commandBlocks => null;
+
+  @override
+  final ValueListenable<PaneLiveness> liveness = const _Constant(
+    PaneLiveness.restored,
+  );
 
   bool _disposed = false;
 

@@ -1,12 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
 import '../domain/pane_layout.dart';
+import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
 import 'scrollback_autosave.dart';
 
@@ -45,14 +47,51 @@ class TerminalTab {
   }
 }
 
-/// Open terminal tabs and which one is active.
+/// A session whose view was closed but whose process was left running.
+///
+/// This is what separates session lifetime from view lifetime: closing a tab
+/// removes the *view*, and the build, dev server or agent inside carries on in
+/// the background until the user ends it or the app quits.
+class DetachedSession {
+  const DetachedSession({
+    required this.paneId,
+    required this.title,
+    required this.workingDirectory,
+    required this.detachedAt,
+  });
+
+  final String paneId;
+  final String title;
+  final String? workingDirectory;
+  final DateTime detachedAt;
+}
+
+/// Open terminal tabs, which one is active, the sessions running with no tab,
+/// and whether each pane actually has a process behind it.
 class TerminalSessionsState {
-  const TerminalSessionsState({this.tabs = const [], this.activeTabId});
+  const TerminalSessionsState({
+    this.tabs = const [],
+    this.activeTabId,
+    this.detached = const [],
+    this.liveness = const {},
+  });
 
   final List<TerminalTab> tabs;
   final String? activeTabId;
 
+  /// Sessions kept running with no tab showing them, newest last.
+  final List<DetachedSession> detached;
+
+  /// Per-pane liveness, republished whenever a process exits — so a pane that
+  /// died while its tab was in the background still repaints as dead.
+  final Map<String, PaneLiveness> liveness;
+
   bool get isEmpty => tabs.isEmpty;
+
+  /// Liveness of [paneId]. An unknown pane is treated as not running: the
+  /// safe answer, since the only way to be live is to be tracked.
+  PaneLiveness livenessOf(String paneId) =>
+      liveness[paneId] ?? PaneLiveness.exited;
 
   TerminalTab? get activeTab {
     for (final tab in tabs) {
@@ -75,11 +114,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   final Map<String, TerminalInstance> _instances = {};
 
+  /// Sessions with a running process and no tab, oldest first.
+  final List<DetachedSession> _detached = [];
+
   /// Panes whose buffer changed since their last snapshot.
   final Set<String> _dirty = {};
 
   /// Per-pane buffer listeners, kept so they can be removed on close.
   final Map<String, void Function()> _dirtyListeners = {};
+
+  /// Per-pane liveness listeners, kept for the same reason.
+  final Map<String, void Function()> _livenessListeners = {};
 
   late final ScrollbackAutosave _autosave = ref.read(
     scrollbackAutosaveFactoryProvider,
@@ -99,21 +144,29 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return _snapshot();
   }
 
-  TerminalSessionsState _snapshot() =>
-      TerminalSessionsState(tabs: List.of(_tabs), activeTabId: _activeTabId);
+  TerminalSessionsState _snapshot() => TerminalSessionsState(
+    tabs: List.of(_tabs),
+    activeTabId: _activeTabId,
+    detached: List.of(_detached),
+    liveness: {
+      for (final entry in _instances.entries)
+        entry.key: entry.value.liveness.value,
+    },
+  );
 
   void _publish() => state = _snapshot();
 
   void _disposeAll() {
     for (final entry in _instances.entries) {
-      final listener = _dirtyListeners[entry.key];
-      if (listener != null) entry.value.terminal.removeListener(listener);
+      _unlisten(entry.key, entry.value);
       entry.value.dispose();
     }
     _instances.clear();
     _dirtyListeners.clear();
+    _livenessListeners.clear();
     _dirty.clear();
     _tabs.clear();
+    _detached.clear();
     _activeTabId = null;
   }
 
@@ -133,6 +186,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     );
     _activeTabId = tabId;
     _publish();
+    persistWorkspace();
     return tabId;
   }
 
@@ -143,12 +197,22 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _focusActivePane();
   }
 
-  /// Closes tab [id], disposing every pane in it.
-  void closeTab(String id) {
+  /// Closes tab [id].
+  ///
+  /// Closing a tab is a *view* action, so by default every pane in it that still
+  /// has a running process is detached rather than killed — the whole point of
+  /// keep-alive. Panes with nothing running behind them are simply dropped;
+  /// there is no session there to keep. Pass `detach: false` to end them for
+  /// real, which is what "End session" does.
+  void closeTab(String id, {bool detach = true}) {
     final tab = _tabById(id);
     if (tab == null) return;
     for (final paneId in tab.layout.panes) {
-      _releasePane(paneId);
+      if (detach) {
+        _detachOrRelease(paneId);
+      } else {
+        _releasePane(paneId);
+      }
     }
     _tabs.removeWhere((t) => t.id == id);
     if (_activeTabId == id) {
@@ -177,22 +241,30 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       ),
     );
     _focusActivePane();
+    persistWorkspace();
     return paneId;
   }
 
   /// Closes [paneId], collapsing its split. Closes the tab if it was the last
   /// pane in it.
-  void closePane(String paneId) {
+  ///
+  /// Like [closeTab], this detaches a running process instead of killing it
+  /// unless [detach] is false.
+  void closePane(String paneId, {bool detach = true}) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
 
     final layout = tab.layout.close(paneId);
     if (layout == null) {
-      closeTab(tab.id);
+      closeTab(tab.id, detach: detach);
       return;
     }
 
-    _releasePane(paneId);
+    if (detach) {
+      _detachOrRelease(paneId);
+    } else {
+      _releasePane(paneId);
+    }
     _replaceTab(
       tab.copyWith(
         layout: layout,
@@ -244,18 +316,137 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return count > 1 ? '$title ($count)' : title;
   }
 
+  /// The strongest liveness among tab [tabId]'s panes.
+  ///
+  /// A tab is only "not running" when nothing in it is, so a split with one live
+  /// pane and one restored pane still reads as a working terminal.
+  PaneLiveness livenessForTab(String tabId) {
+    final tab = _tabById(tabId);
+    if (tab == null) return PaneLiveness.exited;
+    var result = PaneLiveness.exited;
+    for (final paneId in tab.layout.panes) {
+      final liveness = _instances[paneId]?.liveness.value;
+      if (liveness == PaneLiveness.live) return PaneLiveness.live;
+      if (liveness == PaneLiveness.restored) result = PaneLiveness.restored;
+    }
+    return result;
+  }
+
+  // --- session lifetime ------------------------------------------------------
+
+  /// Brings a detached session back as a new tab and focuses it.
+  ///
+  /// Returns the new tab's id, or `null` if nothing was detached under
+  /// [paneId]. The instance is the *same object* that was running all along, so
+  /// re-attaching is instantaneous and loses nothing — this is a view being
+  /// reopened, not a session being recreated.
+  String? reattachSession(String paneId) {
+    final index = _detached.indexWhere((s) => s.paneId == paneId);
+    if (index < 0) return null;
+    _detached.removeAt(index);
+
+    final tabId = _newId();
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(paneId),
+        focusedPaneId: paneId,
+      ),
+    );
+    _activeTabId = tabId;
+    _publish();
+    persistWorkspace();
+    _focusActivePane();
+    return tabId;
+  }
+
+  /// Ends session [paneId] for real — the deliberate counterpart to closing its
+  /// tab.
+  ///
+  /// The process is asked to exit and then killed if it will not (Loop 32's
+  /// escalation, via the instance's `dispose`). Works whether the pane is in a
+  /// tab or detached.
+  void endSession(String paneId) {
+    if (_tabContaining(paneId) != null) {
+      closePane(paneId, detach: false);
+      return;
+    }
+    _detached.removeWhere((s) => s.paneId == paneId);
+    _releasePane(paneId);
+    _publish();
+    persistWorkspace();
+  }
+
+  /// Ends every detached session at once — the "I am done with all of these"
+  /// escape hatch, so background sessions can never quietly pile up.
+  void endAllDetached() {
+    if (_detached.isEmpty) return;
+    for (final session in List.of(_detached)) {
+      _releasePane(session.paneId);
+    }
+    _detached.clear();
+    _publish();
+    persistWorkspace();
+  }
+
+  /// Starts a process in [paneId], replaying whatever is already in its buffer
+  /// above the new one.
+  ///
+  /// This is the *only* way a restored pane gets a process: nothing runs at
+  /// launch, so restarting the app can never re-execute a build or an agent
+  /// behind the user's back. Also the retry path for a pane whose process
+  /// exited or failed to spawn.
+  ///
+  /// Does nothing for a pane that is already live.
+  void startPane(String paneId) {
+    final existing = _instances[paneId];
+    if (existing == null || existing.liveness.value.isLive) return;
+    final profile = terminalProfileFromId(existing.profileId);
+    if (profile == null) return;
+
+    // A dormant pane hands back exactly what was restored; a pane whose process
+    // exited has to be re-encoded, because its buffer has moved on since.
+    final scrollback = existing is DormantTerminalInstance
+        ? existing.restoredScrollback
+        : encodeScrollback(existing.terminal);
+    final workingDirectory = existing.workingDirectory;
+
+    _releasePane(paneId);
+    _adopt(
+      paneId,
+      ref.read(terminalInstanceFactoryProvider)(
+        id: paneId,
+        profile: profile,
+        workingDirectory: workingDirectory,
+        restoredScrollback: scrollback,
+        shellIntegration: _shellIntegrationEnabled,
+      ),
+    );
+    _publish();
+    persistWorkspace();
+    _instances[paneId]?.focusNode.requestFocus();
+  }
+
   // --- persistence -----------------------------------------------------------
 
-  /// Writes the whole workspace — tabs, layouts and every pane's scrollback.
+  /// Writes the whole workspace — tabs, layouts, detached sessions and every
+  /// pane's scrollback.
   ///
-  /// Runs on pane/tab close and on teardown. Does nothing when no database is
-  /// wired up (tests, and any bootstrap that has not opened one).
+  /// Runs on every structural change (open, split, close, detach, end, start)
+  /// and on teardown, because on Windows "quit" means `windowManager.destroy()`
+  /// and the provider container is never disposed: anything not written by the
+  /// time the user quits is simply gone. The 20 s autosave covers scrollback
+  /// between those points.
+  ///
+  /// Does nothing when no database is wired up (tests, and any bootstrap that
+  /// has not opened one).
   void persistWorkspace() {
     final dao = _dao();
     if (dao == null) return;
     try {
       dao.saveWorkspace([
         for (final tab in _tabs) _storedTab(tab),
+        for (final session in _detached) ?_storedDetached(session),
       ], activeTabId: _activeTabId);
       _dirty.clear();
     } catch (error, stack) {
@@ -304,8 +495,39 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     );
   }
 
-  /// Recreates the stored workspace, spawning fresh shells with the previous
-  /// session's scrollback replayed above them.
+  /// A detached session as a single-pane, tab-less row.
+  ///
+  /// Its id is derived from the pane so repeated saves overwrite rather than
+  /// accumulate. Returns null if the instance has gone since it was detached.
+  StoredTerminalTab? _storedDetached(DetachedSession session) {
+    final instance = _instances[session.paneId];
+    if (instance == null) return null;
+    return StoredTerminalTab(
+      id: 'detached:${session.paneId}',
+      layout: PaneLayout.single(session.paneId),
+      focusedPaneId: session.paneId,
+      detached: true,
+      panes: [
+        StoredTerminalPane(
+          id: session.paneId,
+          tabId: 'detached:${session.paneId}',
+          profileId: instance.profileId,
+          title: instance.title,
+          workingDirectory: instance.workingDirectory,
+          scrollback: encodeScrollback(instance.terminal),
+        ),
+      ],
+    );
+  }
+
+  /// Recreates the stored workspace: the tabs, the splits inside them, and each
+  /// pane's scrollback replayed into a **dormant** buffer.
+  ///
+  /// No process is started. A reboot ends every process regardless, so a stored
+  /// pane is a record, not a session — and spawning something for each one at
+  /// launch would both re-execute work the user never asked to repeat and make
+  /// week-old history indistinguishable from a live shell. Each pane instead
+  /// comes back marked as restored, with an explicit start.
   ///
   /// Defensive at every step: a layout that will not parse, a pane whose profile
   /// no longer exists, a tab left with nothing in it — each is dropped rather
@@ -319,25 +541,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     try {
       final stored = dao.loadWorkspace();
       for (final storedTab in stored.tabs) {
-        final live = <String>{};
+        final rebuilt = <String>{};
         for (final pane in storedTab.panes) {
           if (!storedTab.layout.contains(pane.id)) continue;
-          final profile = terminalProfileFromId(pane.profileId);
-          if (profile == null) continue;
-          _adopt(
-            pane.id,
-            ref.read(terminalInstanceFactoryProvider)(
-              id: pane.id,
-              profile: profile,
-              workingDirectory: pane.workingDirectory,
-              restoredScrollback: pane.scrollback,
-              shellIntegration: _shellIntegrationEnabled,
-            ),
-          );
-          live.add(pane.id);
+          if (_adoptDormant(pane)) rebuilt.add(pane.id);
         }
 
-        final layout = storedTab.layout.withoutMissing(live);
+        final layout = storedTab.layout.withoutMissing(rebuilt);
         if (layout == null) continue;
         final stayed = storedTab.focusedPaneId;
         _tabs.add(
@@ -351,10 +561,46 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         );
         if (storedTab.id == stored.activeTabId) _activeTabId = storedTab.id;
       }
+
+      // Sessions that had no tab last time stay tab-less: they come back in the
+      // background list, where the user reopens the ones still worth having.
+      for (final storedTab in stored.detached) {
+        for (final pane in storedTab.panes) {
+          if (!_adoptDormant(pane)) continue;
+          _detached.add(
+            DetachedSession(
+              paneId: pane.id,
+              title: pane.title,
+              workingDirectory: pane.workingDirectory,
+              detachedAt: ref.read(clockProvider).nowUtc(),
+            ),
+          );
+        }
+      }
+
       _activeTabId ??= _tabs.isEmpty ? null : _tabs.last.id;
     } catch (error, stack) {
       _log.warning('Could not restore the terminal workspace.', error, stack);
     }
+  }
+
+  /// Rebuilds [pane] as a process-free buffer holding its stored scrollback.
+  ///
+  /// Returns false when the pane's profile no longer resolves — a WSL distro
+  /// that has been removed, say — since there would be nothing to start it with.
+  bool _adoptDormant(StoredTerminalPane pane) {
+    if (terminalProfileFromId(pane.profileId) == null) return false;
+    _adopt(
+      pane.id,
+      DormantTerminalInstance(
+        id: pane.id,
+        title: pane.title,
+        profileId: pane.profileId,
+        workingDirectory: pane.workingDirectory,
+        restoredScrollback: pane.scrollback,
+      ),
+    );
+    return true;
   }
 
   /// The workspace DAO, or `null` when no database is wired up.
@@ -406,16 +652,53 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     void markDirty() => _dirty.add(paneId);
     _dirtyListeners[paneId] = markDirty;
     instance.terminal.addListener(markDirty);
+    // Republish when the process exits so the pane (and its tab, and the
+    // background-session list) stops presenting itself as live. One rebuild per
+    // process death — not per frame — so this costs nothing.
+    void onLiveness() => _publish();
+    _livenessListeners[paneId] = onLiveness;
+    instance.liveness.addListener(onLiveness);
+  }
+
+  /// Detaches [paneId] if a process is still running behind it, and releases it
+  /// otherwise.
+  ///
+  /// The asymmetry is the whole policy: keep-alive exists to protect running
+  /// work, and a pane whose shell already exited has none to protect. Without
+  /// this, every closed tab would leave a dead entry in the background list.
+  void _detachOrRelease(String paneId) {
+    final instance = _instances[paneId];
+    if (instance == null) return;
+    if (!instance.liveness.value.isLive) {
+      _releasePane(paneId);
+      return;
+    }
+    _detached.add(
+      DetachedSession(
+        paneId: paneId,
+        title: instance.title,
+        workingDirectory: instance.workingDirectory,
+        detachedAt: ref.read(clockProvider).nowUtc(),
+      ),
+    );
   }
 
   /// Disposes the pane [paneId] owns and stops tracking it.
   void _releasePane(String paneId) {
     final instance = _instances.remove(paneId);
     if (instance == null) return;
-    final listener = _dirtyListeners.remove(paneId);
-    if (listener != null) instance.terminal.removeListener(listener);
+    _unlisten(paneId, instance);
     _dirty.remove(paneId);
     instance.dispose();
+  }
+
+  /// Drops the listeners [_adopt] attached, so a disposed instance can never
+  /// call back into the controller.
+  void _unlisten(String paneId, TerminalInstance instance) {
+    final dirty = _dirtyListeners.remove(paneId);
+    if (dirty != null) instance.terminal.removeListener(dirty);
+    final liveness = _livenessListeners.remove(paneId);
+    if (liveness != null) instance.liveness.removeListener(liveness);
   }
 
   TerminalTab? _tabById(String? id) {

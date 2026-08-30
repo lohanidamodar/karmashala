@@ -73,7 +73,9 @@ void main() {
     expect(find.text('PowerShell'), findsOneWidget);
     expect(find.text('Command Prompt'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Close tab').last);
+    await tester.tap(
+      find.byTooltip('Close tab (the session keeps running)').last,
+    );
     await tester.pump();
 
     expect(container.read(terminalSessionsControllerProvider).tabs.length, 1);

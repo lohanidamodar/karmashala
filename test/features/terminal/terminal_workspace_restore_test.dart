@@ -1,6 +1,8 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -61,11 +63,16 @@ void main() {
       final panes = restored.tabs.single.layout.panes;
       final replayed = [
         for (final pane in panes)
-          (restoredController.instanceFor(pane)! as FakeTerminalInstance)
-                  .restored ??
-              '',
+          (restoredController.instanceFor(pane)! as DormantTerminalInstance)
+              .restoredScrollback,
       ];
       expect(replayed.join(), contains('hello from the past'));
+
+      // Nothing was started: a restored pane is a record, and re-running what
+      // was in it is the user's call, not the app's.
+      for (final pane in panes) {
+        expect(restored.livenessOf(pane), PaneLiveness.restored);
+      }
 
       // The relaunch data survives too, or the pane would come back wrong.
       final firstPane = restoredController.instanceFor(panes.first)!;
@@ -150,8 +157,17 @@ void main() {
       controller.persistWorkspace();
       expect(db.query('SELECT id FROM terminal_tabs;'), isNotEmpty);
 
+      // Closing the tab detaches the session, so it is still stored — as a
+      // background session rather than a tab.
       controller.closeTab(tabId);
       controller.persistWorkspace();
+      expect(
+        db.query('SELECT detached FROM terminal_tabs;').single['detached'],
+        1,
+      );
+
+      // Ending it is what actually clears the workspace.
+      controller.endAllDetached();
       expect(db.query('SELECT id FROM terminal_tabs;'), isEmpty);
     });
 
