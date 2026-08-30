@@ -23,6 +23,7 @@ class WatchedSessionLoader {
     required this.hookReports,
     required this.clock,
     this.activeWindow = const Duration(minutes: 30),
+    this.coldRecheck = const Duration(minutes: 1),
     this.limit = 60,
   });
 
@@ -36,10 +37,21 @@ class WatchedSessionLoader {
   /// live. Anything colder is history, and history does not raise toasts.
   final Duration activeWindow;
 
+  /// How long a transcript already found cold is left alone before it is
+  /// checked again. Without this a workspace with hundreds of imported sessions
+  /// pays a full filesystem sweep every poll for files that have not changed in
+  /// weeks. The cost is up to this much latency before a revived session starts
+  /// being watched — and only when hooks are not installed, since a hook report
+  /// skips the check entirely.
+  final Duration coldRecheck;
+
   /// Upper bound on sessions watched per poll, newest first. A workspace with
   /// thousands of imported sessions must not turn a 5-second tick into a
   /// filesystem sweep.
   final int limit;
+
+  /// Cold transcripts, and the instant each becomes worth checking again.
+  final Map<String, DateTime> _coldUntil = {};
 
   List<WatchedSession> load() {
     final now = clock.nowUtc();
@@ -71,11 +83,18 @@ class WatchedSessionLoader {
 
     for (final session in importedSessionDao.getAll()) {
       final key = AgentSessionKey(session.cli, session.externalId);
+      // A hook report is proof the session is live, and costs a map lookup, so
+      // it is checked before anything touches the disk.
+      final hooked = hookReports.latest(key.agentId, key.sessionId) != null;
+      if (!hooked && _stillCold(session.filePath, now)) continue;
+
       final modified = _lastModified(session.filePath);
-      final live =
-          hookReports.latest(key.agentId, key.sessionId) != null ||
-          (modified != null && now.difference(modified) <= activeWindow);
-      if (!live) continue;
+      final warm = modified != null && now.difference(modified) <= activeWindow;
+      if (!hooked && !warm) {
+        _coldUntil[session.filePath] = now.add(coldRecheck);
+        continue;
+      }
+      _coldUntil.remove(session.filePath);
       candidates.add((
         WatchedSession(
           key: key,
@@ -90,6 +109,11 @@ class WatchedSessionLoader {
 
     candidates.sort((a, b) => b.$2.compareTo(a.$2));
     return [for (final candidate in candidates.take(limit)) candidate.$1];
+  }
+
+  bool _stillCold(String path, DateTime now) {
+    final until = _coldUntil[path];
+    return until != null && now.isBefore(until);
   }
 
   /// A workspace session in a terminal state can no longer produce status.

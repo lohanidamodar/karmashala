@@ -12,7 +12,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/notification_presenter.dart';
 import '../data/notification_settings_repository.dart';
-import '../data/windows_notification_presenter.dart';
+import '../data/desktop_notification_presenter.dart';
 import '../domain/notification_settings.dart';
 import '../domain/session_attention.dart';
 import 'agent_status_watcher.dart';
@@ -110,15 +110,16 @@ final windowRaiseRequestProvider =
 
 /// Where a notification is actually delivered.
 ///
-/// Windows gets real toasts; every other platform gets silence, on purpose —
-/// see `docs/loop-reports/loop-42.md`. Constructing the Windows presenter is
-/// cheap and safe anywhere: it does not touch its native library until the
-/// first [NotificationPresenter.show].
+/// Windows is the platform this was verified on; macOS and Linux go down the
+/// same code path but were not exercised (see `docs/loop-reports/loop-42.md`).
+/// Anywhere else falls back to silence. Constructing the presenter is cheap and
+/// safe: it does not touch the platform channel until the first
+/// [NotificationPresenter.show].
 final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
-  if (!WindowsNotificationPresenter.isSupportedHere) {
+  if (!DesktopNotificationPresenter.isSupportedHere) {
     return const NoopNotificationPresenter();
   }
-  final presenter = WindowsNotificationPresenter(
+  final presenter = DesktopNotificationPresenter(
     onActivated: (payload) {
       focusWatchedSession(
         ref.container,

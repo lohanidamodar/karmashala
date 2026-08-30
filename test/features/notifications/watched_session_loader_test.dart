@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/util/clock.dart';
 import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
@@ -18,6 +19,14 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+
+/// A clock the test moves forward, for the cold-recheck window.
+class _MovableClock implements Clock {
+  _MovableClock(this.now);
+  DateTime now;
+  @override
+  DateTime nowUtc() => now.toUtc();
+}
 
 void main() {
   late AppDatabase db;
@@ -173,6 +182,32 @@ void main() {
     }
 
     expect(loader().load(), isEmpty);
+  });
+
+  test('a cold transcript is left alone until the recheck window passes', () {
+    // The saving that keeps a 5-second poll off a workspace with hundreds of
+    // archived sessions; the cost is this much latency waking one back up.
+    final clock = _MovableClock(testTime);
+    final loader = WatchedSessionLoader(
+      sessionDao: sessions,
+      importedSessionDao: imported,
+      installationDao: installations,
+      hookReports: reports,
+      clock: clock,
+      coldRecheck: const Duration(minutes: 1),
+    );
+    final path = transcript('a', age: const Duration(hours: 6));
+    addImported('i1', externalId: 'cli-1', filePath: path);
+
+    expect(loader.load(), isEmpty);
+
+    // The agent wakes up and writes, but we are inside the recheck window.
+    File(path).setLastModifiedSync(clock.now);
+    expect(loader.load(), isEmpty);
+
+    clock.now = testTime.add(const Duration(minutes: 2));
+    File(path).setLastModifiedSync(clock.now);
+    expect(loader.load(), hasLength(1));
   });
 
   test('the newest sessions win when the cap bites', () {
