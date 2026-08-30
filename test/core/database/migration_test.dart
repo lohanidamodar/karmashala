@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 11);
+    expect(db.schemaVersion, 12);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 11);
+    expect(version, 12);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -58,7 +58,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 11);
+    expect(db.schemaVersion, 12);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
@@ -93,6 +93,17 @@ void main() {
     // null — "we never recorded it" — and the resolver falls back to the agent
     // setting. `NOT NULL DEFAULT 'ask'` would instead have every old session
     // claim it ran under the safe mode, which plenty of them did not.
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
+  });
+
+  test('v12 gives sessions a nullable parent link kind', () {
+    final column = db
+        .query('PRAGMA table_info(sessions);')
+        .firstWhere((r) => r['name'] == 'parent_link_kind');
+
+    // Nullable and undefaulted, like permission_mode: a root session has no
+    // relationship to name, so a default of any kind would be inventing one.
     expect(column['notnull'], 0);
     expect(column['dflt_value'], isNull);
   });

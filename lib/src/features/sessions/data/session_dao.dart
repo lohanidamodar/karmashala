@@ -3,6 +3,7 @@ import '../../../core/database/row_mapping.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/session.dart';
 import '../domain/session_launch.dart';
+import '../domain/session_lineage.dart';
 import '../domain/session_status.dart';
 import '../../settings/domain/permission_mode.dart';
 
@@ -17,9 +18,9 @@ class SessionDao {
       'INSERT INTO sessions '
       '(id, repository_id, agent_installation_id, title, use_worktree, '
       'worktree_environment_id, worktree_path, status, created_at, '
-      'external_session_id, parent_session_id, pane_id, surface, view, '
-      'permission_mode) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'external_session_id, parent_session_id, parent_link_kind, pane_id, '
+      'surface, view, permission_mode) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -32,6 +33,7 @@ class SessionDao {
         isoFromDate(session.createdAt),
         session.externalSessionId,
         session.parentSessionId,
+        session.parentLink?.name,
         session.paneId,
         session.surface.name,
         session.view.name,
@@ -105,7 +107,9 @@ class SessionDao {
     return rows.isEmpty ? null : rows.first['parent_session_id'] as String?;
   }
 
-  /// Sessions spawned directly by [id], newest last.
+  /// Sessions naming [id] as their parent, oldest first — spawned, handed off
+  /// and forked alike. The caller reads [Session.parentLink] to tell them apart;
+  /// filtering here would need one query per kind for no benefit.
   List<Session> childrenOf(String id) {
     final rows = _db.query(
       'SELECT * FROM sessions WHERE parent_session_id = ? '
@@ -195,6 +199,7 @@ class SessionDao {
       createdAt: dateFromIso(row['created_at']),
       externalSessionId: row['external_session_id'] as String?,
       parentSessionId: row['parent_session_id'] as String?,
+      parentLink: SessionLink.parse(row['parent_link_kind'] as String?),
       paneId: row['pane_id'] as String?,
       // Parsed by name with a fallback rather than `values.byName`, which throws
       // on anything it does not recognise — the failure mode that used to make a

@@ -5,6 +5,7 @@ import 'package:chitragupta/src/features/environments/domain/environment_path.da
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -70,5 +71,44 @@ void main() {
     dao.insert(session());
     RepositoryDao(db).delete('r1');
     expect(dao.getById('s1'), isNull);
+  });
+
+  test('round-trips why a session has a parent', () {
+    dao.insert(session(id: 'parent'));
+    for (final link in SessionLink.values) {
+      dao.insert(
+        session(id: 'child-${link.name}').copyWith(
+          parentSessionId: 'parent',
+          parentLink: link,
+        ),
+      );
+      expect(dao.getById('child-${link.name}')!.parentLink, link);
+    }
+  });
+
+  test('a root session stores no link at all', () {
+    dao.insert(session());
+    expect(dao.getById('s1')!.parentLink, isNull);
+    expect(dao.getById('s1')!.parentSessionId, isNull);
+  });
+
+  test('childrenOf returns every kind of child, oldest first', () {
+    dao.insert(session(id: 'parent'));
+    dao.insert(
+      session(id: 'a').copyWith(
+        parentSessionId: 'parent',
+        parentLink: SessionLink.handoff,
+      ),
+    );
+    dao.insert(
+      session(id: 'b').copyWith(
+        parentSessionId: 'parent',
+        parentLink: SessionLink.fork,
+      ),
+    );
+    expect(
+      dao.childrenOf('parent').map((s) => s.parentLink).toList(),
+      [SessionLink.handoff, SessionLink.fork],
+    );
   });
 }

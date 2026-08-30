@@ -25,6 +25,9 @@ typedef MigrationStep = void Function(Database db);
 /// * **v11** — Loop 49: a session carries its own permission mode, so the
 ///   composer control has somewhere to write and the resolver has one place to
 ///   read.
+/// * **v12** — Loop 54: a session records *why* it has a parent — spawned,
+///   handed off to another provider, or forked — so lineage can be drawn
+///   without inferring the relationship from the two rows.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -37,6 +40,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   9: _migrateToV9,
   10: _migrateToV10,
   11: _migrateToV11,
+  12: _migrateToV12,
 };
 
 void _migrateToV8(Database db) {
@@ -389,4 +393,33 @@ void _migrateToV11(Database db) {
   // `NOT NULL DEFAULT 'ask'` would have been a lie for the old rows, half of
   // which were launched under a different mode entirely.
   db.execute('ALTER TABLE sessions ADD COLUMN permission_mode TEXT;');
+}
+
+void _migrateToV12(Database db) {
+  // Why a session has a parent (Loop 54).
+  //
+  // `parent_session_id` arrived in v10 with exactly one way to acquire one: an
+  // agent calling `open_new_session` over MCP. Handoff and fork are two more,
+  // and they are not the same relationship — "an agent delegated this", "the
+  // user moved this to another provider" and "the user branched this" read
+  // completely differently in a sidebar, and the rows themselves cannot be told
+  // apart afterwards. Two sessions in one repository with one naming the other
+  // look identical whichever of the three produced them.
+  //
+  // Nullable, and null is a real answer for a *pre-v12* row: "we did not record
+  // it". Unlike depth, this is not derivable from the chain, so there is no
+  // second source of truth to disagree with — a link kind is a fact about the
+  // moment of creation, and nothing else keeps it.
+  db.execute('ALTER TABLE sessions ADD COLUMN parent_link_kind TEXT;');
+
+  // Backfilled, unusually for this schema, and only because the backfill is a
+  // *fact* rather than a default. Every existing parented row was written by
+  // `LauncherControlServer._openNewSession` — the sole writer of
+  // `parent_session_id` in the app before this migration — so `spawn` is what
+  // those rows actually are, not the safest guess about them. Rows with no
+  // parent are left null, because there is no relationship to name.
+  db.execute(
+    "UPDATE sessions SET parent_link_kind = 'spawn' "
+    'WHERE parent_session_id IS NOT NULL AND parent_link_kind IS NULL;',
+  );
 }
