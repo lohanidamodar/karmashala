@@ -38,9 +38,11 @@ class VerificationArtifactStore {
     required List<int> bytes,
     int? stepOrdinal,
     DateTime? at,
+    bool overwrite = false,
   }) async {
     final dir = await createDirectory(runId);
-    final fileName = _uniqueName(dir, '${_slug(name)}.${kind.extension}');
+    final wanted = '${_slug(name)}.${kind.extension}';
+    final fileName = overwrite ? wanted : _uniqueName(dir, wanted);
     final file = File(p.join(dir.path, fileName));
     await file.writeAsBytes(bytes, flush: true);
     return VerificationArtifact(
@@ -63,6 +65,7 @@ class VerificationArtifactStore {
     required String text,
     int? stepOrdinal,
     DateTime? at,
+    bool overwrite = false,
   }) => write(
     runId: runId,
     kind: kind,
@@ -71,6 +74,7 @@ class VerificationArtifactStore {
     bytes: utf8.encode(text),
     stepOrdinal: stepOrdinal,
     at: at,
+    overwrite: overwrite,
   );
 
   /// The bytes of an artifact, or null when the file has gone. A missing file

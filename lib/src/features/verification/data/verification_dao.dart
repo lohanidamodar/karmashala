@@ -99,6 +99,21 @@ class VerificationDao {
     return rows.isEmpty ? null : _runFromRow(rows.first);
   }
 
+  /// Runs whose id starts with [prefix], newest first.
+  ///
+  /// A full UUID is a lot to ask a caller to retype, so `verification_get`
+  /// accepts a short prefix the way git accepts a short hash — and this is what
+  /// lets it say "that prefix matches three runs" instead of guessing.
+  List<VerificationRun> findByPrefix(String prefix) {
+    if (prefix.trim().isEmpty) return const [];
+    final rows = _db.query(
+      "SELECT * FROM verification_runs WHERE id LIKE ? ESCAPE '\\' "
+      'ORDER BY started_at DESC, id DESC LIMIT 20;',
+      ['${prefix.replaceAll('%', r'\%').replaceAll('_', r'\_')}%'],
+    );
+    return rows.map(_runFromRow).toList();
+  }
+
   void deleteRun(String id) {
     _db.execute('DELETE FROM verification_runs WHERE id = ?;', [id]);
   }
