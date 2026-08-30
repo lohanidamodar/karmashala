@@ -59,10 +59,7 @@ void main() {
         'b': (parent: 'a', link: SessionLink.spawn),
         'c': (parent: 'b', link: SessionLink.fork),
       })!;
-      expect(
-        lineage.ancestors.map((n) => n.sessionId).toList(),
-        ['a', 'b'],
-      );
+      expect(lineage.ancestors.map((n) => n.sessionId).toList(), ['a', 'b']);
       expect(lineage.parent!.sessionId, 'b');
       // The link belongs to the *child*: c was forked from b, and b was
       // spawned by a. Reading it off the parent would attribute each
@@ -77,10 +74,10 @@ void main() {
         'b': (parent: 'a', link: SessionLink.handoff),
         'c': (parent: 'a', link: SessionLink.fork),
       })!;
-      expect(
-        lineage.children.map((n) => n.link).toList(),
-        [SessionLink.handoff, SessionLink.fork],
-      );
+      expect(lineage.children.map((n) => n.link).toList(), [
+        SessionLink.handoff,
+        SessionLink.fork,
+      ]);
     });
 
     test('an orphan stops the walk without calling the chain broken', () {

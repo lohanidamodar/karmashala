@@ -27,14 +27,22 @@ void _seedSession(
     'INSERT INTO sessions (id, repository_id, agent_installation_id, title, '
     'use_worktree, status, created_at, parent_session_id) '
     'VALUES (?, ?, ?, ?, 0, ?, ?, ?);',
-    [id, repository, 'install-1', 'Session $id', 'running', '2026-08-01', parent],
+    [
+      id,
+      repository,
+      'install-1',
+      'Session $id',
+      'running',
+      '2026-08-01',
+      parent,
+    ],
   );
 }
 
 void main() {
   test('v12 backfills spawn for rows that already had a parent', () {
     final db = _migratedTo(11);
-    addTearDown(db.dispose);
+    addTearDown(db.close);
     // Foreign keys would refuse a session with no repository row; the migration
     // is what is under test, not referential integrity.
     db.execute('PRAGMA foreign_keys = OFF;');
@@ -43,9 +51,10 @@ void main() {
 
     schemaMigrations[12]!(db);
 
-    Object? linkOf(String id) => db
-        .select('SELECT parent_link_kind FROM sessions WHERE id = ?;', [id])
-        .first['parent_link_kind'];
+    Object? linkOf(String id) => db.select(
+      'SELECT parent_link_kind FROM sessions WHERE id = ?;',
+      [id],
+    ).first['parent_link_kind'];
 
     // The backfill is a *fact*, not a default: before v12 the only writer of
     // parent_session_id in the app was the MCP spawn path, so every parented
@@ -62,7 +71,7 @@ void main() {
     // `PRAGMA user_version`. What must hold is that a database already at v12
     // is left alone by the loop, which is what this asserts.
     final db = _migratedTo(12);
-    addTearDown(db.dispose);
+    addTearDown(db.close);
     expect(
       db.select('PRAGMA user_version;').first.values.first,
       greaterThanOrEqualTo(12),

@@ -77,10 +77,9 @@ void main() {
     dao.insert(session(id: 'parent'));
     for (final link in SessionLink.values) {
       dao.insert(
-        session(id: 'child-${link.name}').copyWith(
-          parentSessionId: 'parent',
-          parentLink: link,
-        ),
+        session(
+          id: 'child-${link.name}',
+        ).copyWith(parentSessionId: 'parent', parentLink: link),
       );
       expect(dao.getById('child-${link.name}')!.parentLink, link);
     }
@@ -95,20 +94,18 @@ void main() {
   test('childrenOf returns every kind of child, oldest first', () {
     dao.insert(session(id: 'parent'));
     dao.insert(
-      session(id: 'a').copyWith(
-        parentSessionId: 'parent',
-        parentLink: SessionLink.handoff,
-      ),
+      session(
+        id: 'a',
+      ).copyWith(parentSessionId: 'parent', parentLink: SessionLink.handoff),
     );
     dao.insert(
-      session(id: 'b').copyWith(
-        parentSessionId: 'parent',
-        parentLink: SessionLink.fork,
-      ),
+      session(
+        id: 'b',
+      ).copyWith(parentSessionId: 'parent', parentLink: SessionLink.fork),
     );
-    expect(
-      dao.childrenOf('parent').map((s) => s.parentLink).toList(),
-      [SessionLink.handoff, SessionLink.fork],
-    );
+    expect(dao.childrenOf('parent').map((s) => s.parentLink).toList(), [
+      SessionLink.handoff,
+      SessionLink.fork,
+    ]);
   });
 }

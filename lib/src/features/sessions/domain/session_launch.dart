@@ -1,8 +1,10 @@
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../repositories/domain/repository.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../../terminal/data/system_terminal_service.dart';
+import 'session_lineage.dart';
 
 /// Where a session's process actually lives.
 ///
@@ -83,10 +85,13 @@ class SessionLaunchRequest {
     required this.purpose,
     this.surface = SessionSurface.pane,
     this.useWorktree = false,
+    this.existingWorktree,
     this.additionalRepositories = const [],
     this.resumeExternalSessionId,
     this.firstMessage,
     this.parentSessionId,
+    this.parentLink,
+    this.forkExternalSessionId,
     this.permissionOverride,
     this.view,
     this.externalTerminal,
@@ -100,7 +105,20 @@ class SessionLaunchRequest {
   final SessionPurpose purpose;
 
   final SessionSurface surface;
+
+  /// Create a **new** worktree for this session.
   final bool useWorktree;
+
+  /// Run in a worktree that already exists, rather than creating one.
+  ///
+  /// This is what "the handoff continues in the same worktree and on the same
+  /// branch" needs, and it could not be said before: [useWorktree] means
+  /// *create one*, and leaving it false put the new session in the repository
+  /// root — a different directory on a different branch from the work being
+  /// handed over, which is the one thing a handoff must not do.
+  ///
+  /// Mutually exclusive with [useWorktree]; the launcher refuses both.
+  final EnvironmentPath? existingWorktree;
   final List<Repository> additionalRepositories;
 
   /// The CLI's own session id to resume, when continuing one it already wrote.
@@ -109,9 +127,25 @@ class SessionLaunchRequest {
   /// Sent as soon as the session is up. One code path, guarded once.
   final String? firstMessage;
 
-  /// The session that asked for this one, when an agent did. Never supplied by
+  /// The session this one came from, when it came from one. Never supplied by
   /// the model directly — see `SessionDepth`.
   final String? parentSessionId;
+
+  /// Why [parentSessionId] is set. Defaults to null and is read as
+  /// [SessionLink.spawn] by the launcher when a parent is named without one,
+  /// which keeps the MCP spawn path — the only caller that predates this field
+  /// — meaning exactly what it always meant.
+  final SessionLink? parentLink;
+
+  /// The CLI's own id for a conversation to **fork**, when the agent forks
+  /// natively.
+  ///
+  /// Separate from [resumeExternalSessionId] because the two produce different
+  /// command lines and must never both be honoured: `codex fork <id>` and
+  /// `codex resume <id>` are two subcommands, and Claude's fork is its resume
+  /// plus a flag. A request carrying both would be asking for one conversation
+  /// to be continued and branched at once, which is not a thing.
+  final String? forkExternalSessionId;
 
   /// Escape hatch for a caller that genuinely knows better than the setting.
   /// Unused by any in-app path; kept so "the setting decides" stays true by
