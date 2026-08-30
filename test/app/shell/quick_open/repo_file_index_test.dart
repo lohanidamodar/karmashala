@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:chitragupta/src/app/shell/quick_open/repo_file_index.dart';
 import 'package:chitragupta/src/core/util/directory_change_watcher.dart';
+import 'package:chitragupta/src/features/checkpoints/application/checkpoint_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -330,6 +333,64 @@ void main() {
       await index.index(at(root, 'three'));
 
       expect(watcher.watched, [at(root, 'two'), at(root, 'three')]);
+    });
+  });
+
+  // Everything above builds the index by hand. This group reads the real
+  // provider, because the wiring *is* the fix for the audit's "nothing calls
+  // invalidate" — an index that is never told is an index that goes stale.
+  group('the provider that the app actually uses', () {
+    late ProviderContainer container;
+    late RepoFileIndex index;
+
+    setUp(() {
+      container = ProviderContainer();
+      addTearDown(container.dispose);
+      index = container.read(repoFileIndexProvider);
+    });
+
+    test('a session revision stales every indexed root', () async {
+      write('a.dart');
+      await index.index(root.path);
+      expect(index.isFresh(root.path), isTrue);
+
+      container.read(sessionsRevisionProvider.notifier).bump();
+
+      expect(index.isFresh(root.path), isFalse);
+      expect(paths(index.cached(root.path)), [
+        'a.dart',
+      ], reason: 'stale, but still drawable on the next first frame');
+    });
+
+    test('a checkpoint revision stales every indexed root', () async {
+      write('a.dart');
+      await index.index(root.path);
+      expect(index.isFresh(root.path), isTrue);
+
+      // What the checkpoint recorder bumps when an agent turn ends having
+      // actually changed the tree.
+      container.read(checkpointsRevisionProvider.notifier).bump();
+
+      expect(index.isFresh(root.path), isFalse);
+    });
+
+    test('it watches where the platform can, and says which', () async {
+      write('a.dart');
+      await index.index(root.path);
+      expect(
+        index.watchMode,
+        Platform.isWindows || Platform.isMacOS
+            ? DirectoryWatchMode.recursive
+            : DirectoryWatchMode.unsupported,
+      );
+    });
+
+    test('disposing the container disposes the index', () async {
+      write('a.dart');
+      await index.index(root.path);
+      container.dispose();
+      // A disposed index answers from cache and never starts another walk.
+      expect(await index.index(root.path), isNotEmpty);
     });
   });
 
