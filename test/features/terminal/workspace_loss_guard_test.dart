@@ -215,6 +215,26 @@ void main() {
       expect(db.readMetadata(kTerminalWorkspaceBackupAtKey), isNull);
     });
 
+    test('is taken when a save shrinks a workspace nobody closed', () {
+      dao.saveWorkspace([tab('a'), tab('b')], activeTabId: 'a');
+      // One tab where two were stored, and nothing the user did explains it.
+      dao.saveWorkspace([tab('c')], activeTabId: 'c');
+
+      final backup = dao.loadBackup();
+      expect(backup.tabs.map((t) => t.id), ['a', 'b']);
+      expect(dao.loadWorkspace().tabs.single.id, 'c');
+    });
+
+    test('is not taken when the user is the one closing tabs', () {
+      dao.saveWorkspace([tab('a'), tab('b')], activeTabId: 'a');
+      dao.saveWorkspace([tab('a')], activeTabId: 'a', userClosed: true);
+      expect(
+        dao.loadBackup().tabs,
+        isEmpty,
+        reason: 'closing a tab must stay as cheap as it was',
+      );
+    });
+
     test('holds only the most recent emptying', () {
       dao.saveWorkspace([tab('a')], activeTabId: 'a');
       dao.saveWorkspace(const []);

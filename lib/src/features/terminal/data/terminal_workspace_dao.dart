@@ -104,15 +104,32 @@ class TerminalWorkspaceDao {
 
   /// Replaces the stored workspace with [tabs].
   ///
-  /// When [tabs] is empty and the store is not, the outgoing workspace is copied
-  /// into the backup tables first, inside the same transaction. The controller
-  /// already refuses an empty save it cannot attribute to the user; this is the
-  /// layer below that, for the emptying that *is* attributable — and for any
-  /// future caller that has no such flag to consult.
-  void saveWorkspace(List<StoredTerminalTab> tabs, {String? activeTabId}) {
+  /// A copy of the outgoing workspace is taken first, inside the same
+  /// transaction, when this save **loses** something:
+  ///
+  /// * it empties a store that was not empty — the Loop 48 shape, whether or not
+  ///   the user asked for it; or
+  /// * it stores fewer tabs than were there and [userClosed] is false, so
+  ///   nothing the user did accounts for the shrink. Observed for real: a
+  ///   workspace whose panes could no longer be rebuilt restored as zero tabs,
+  ///   the terminal opened one for the user, and that one-tab save replaced
+  ///   eight stored ones. The controller's guard does not cover it because the
+  ///   save is not empty — but it is still a loss, and a loss with a copy behind
+  ///   it is a bug rather than a bereavement.
+  ///
+  /// A save the user's own closes account for costs nothing extra, which is what
+  /// keeps closing a tab as cheap as it was.
+  void saveWorkspace(
+    List<StoredTerminalTab> tabs, {
+    String? activeTabId,
+    bool userClosed = false,
+  }) {
     final now = isoFromDate(DateTime.now());
     _db.transaction(() {
-      if (tabs.isEmpty) _backupWorkspace(now);
+      final stored = storedTabCount();
+      if (tabs.isEmpty || (!userClosed && tabs.length < stored)) {
+        _backupWorkspace(now);
+      }
       // Panes cascade with their tab.
       _db.execute('DELETE FROM terminal_tabs;');
       for (var i = 0; i < tabs.length; i++) {

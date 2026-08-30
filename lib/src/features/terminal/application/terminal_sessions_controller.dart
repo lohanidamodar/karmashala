@@ -540,7 +540,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           return;
         }
       }
-      dao.saveWorkspace(rows, activeTabId: _activeTabId);
+      dao.saveWorkspace(
+        rows,
+        activeTabId: _activeTabId,
+        userClosed: _userClosedSinceRestore,
+      );
     } catch (error, stack) {
       _log.warning('Could not persist the terminal workspace.', error, stack);
     }
