@@ -120,6 +120,56 @@ void main() {
       completes,
     );
   });
+
+  group('the Windows path', () {
+    test('kills the whole tree before the direct kill', () async {
+      final killed = <int>[];
+      final signals = <ProcessSignal>[];
+
+      await shutdownProcess(
+        kill: (signal) {
+          signals.add(signal);
+          return true;
+        },
+        exitCode: Completer<int>().future,
+        pid: 4242,
+        supportsGracefulSignal: false,
+        killTree: (pid) async => killed.add(pid),
+      );
+
+      // Terminating a Windows process orphans its children, and the pid the PTY
+      // reports is a wrapper around the shell the user types into — so the tree
+      // is the only thing worth killing.
+      expect(killed, [4242]);
+      expect(signals, [ProcessSignal.sigterm]);
+    });
+
+    test('skips the tree when the pid may already be recycled', () async {
+      var treeKills = 0;
+      await shutdownProcess(
+        kill: (_) => true,
+        exitCode: Future.value(0),
+        supportsGracefulSignal: false,
+        killTree: (_) async => treeKills++,
+      );
+      expect(treeKills, 0);
+    });
+
+    test('a tree kill that fails does not stop the direct kill', () async {
+      final signals = <ProcessSignal>[];
+      await shutdownProcess(
+        kill: (signal) {
+          signals.add(signal);
+          return true;
+        },
+        exitCode: Completer<int>().future,
+        pid: 7,
+        supportsGracefulSignal: false,
+        killTree: (_) async => throw const ProcessException('taskkill', []),
+      );
+      expect(signals, [ProcessSignal.sigterm]);
+    });
+  });
 }
 
 /// Runs [body] against a fresh fake process.

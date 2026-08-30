@@ -115,7 +115,12 @@ class PtyTerminalInstance implements TerminalInstance {
     _coalescer = PtyOutputCoalescer(onData: terminal.write);
     _outputSubscription = _pty.output.listen(_coalescer.add);
 
+    // Captured while the process is certainly alive: `pid` is only safe to act
+    // on before the OS can recycle the number.
+    _pid = _pty.pid;
+
     _pty.exitCode.then((code) {
+      _exited = true;
       if (_disposed) return;
       terminal.write('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
       // The buffer stays on screen, but the pane is no longer a terminal you
@@ -165,7 +170,9 @@ class PtyTerminalInstance implements TerminalInstance {
   late final Pty _pty;
   late final PtyOutputCoalescer _coalescer;
   late final StreamSubscription<Uint8List> _outputSubscription;
+  late final int _pid;
   bool _disposed = false;
+  bool _exited = false;
 
   @override
   void dispose() {
@@ -183,7 +190,14 @@ class PtyTerminalInstance implements TerminalInstance {
     // anything long-running — a build, a dev server, an ssh session, a database
     // client mid-write — because the process never gets to flush or run its
     // exit handlers. This runs on app quit as well as tab close.
-    unawaited(shutdownProcess(kill: _pty.kill, exitCode: _pty.exitCode));
+    unawaited(
+      shutdownProcess(
+        kill: _pty.kill,
+        exitCode: _pty.exitCode,
+        // The whole tree, not just the pid: see killWindowsProcessTree.
+        pid: _exited ? null : _pid,
+      ),
+    );
   }
 }
 

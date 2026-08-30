@@ -3,7 +3,9 @@ import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/session_status.dart';
+import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
@@ -194,6 +196,43 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(terminalSessionsControllerProvider).detached, []);
+    });
+
+    testWidgets('unmounting the whole panel leaves every session running', (
+      tester,
+    ) async {
+      final container = panelContainer();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final pane = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+
+      await pumpPanel(tester, container);
+      // Hiding the terminal, and closing the window to the tray, both come down
+      // to the view going away while the app keeps running. The instances
+      // belong to the controller, not the widget, so neither touches them.
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(TerminalPanel), findsNothing);
+      final instance = controller.instanceFor(pane);
+      expect(instance, isNotNull);
+      expect((instance! as FakeTerminalInstance).disposed, isFalse);
+      expect(
+        container.read(terminalSessionsControllerProvider).livenessOf(pane),
+        PaneLiveness.live,
+      );
     });
 
     testWidgets('splitting keeps each pane independently marked', (
