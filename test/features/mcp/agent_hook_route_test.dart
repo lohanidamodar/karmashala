@@ -34,7 +34,10 @@ void main() {
     );
     reports = container.read(agentHookReportsProvider);
     server = LauncherControlServer(container);
-    await server.start(bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'));
+    await server.start(
+      bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
+      useLocalSocket: false,
+    );
     endpoint = server.hookEndpoint!;
   });
 
