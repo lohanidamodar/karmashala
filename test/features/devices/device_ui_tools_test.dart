@@ -116,7 +116,7 @@ _server(FakeCommandRunner runner) async {
   final server = LauncherControlServer(container);
   // This test intentionally exercises the portable HTTP fallback. The
   // privileged production bridge uses the owner-only Windows named pipe.
-  await server.start(bridgeFilePath: bridgeFile, useNamedPipe: false);
+  await server.start(bridgeFilePath: bridgeFile, useLocalSocket: false);
   final handshake =
       jsonDecode(File(bridgeFile).readAsStringSync()) as Map<String, dynamic>;
   final port = handshake['port'] as int;

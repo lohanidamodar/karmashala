@@ -90,17 +90,30 @@ import 'tmux_orchestration.dart';
 ///
 /// ## Split transport
 ///
-/// On Windows, privileged `/rpc` calls use a message-mode named pipe created
-/// with a protected DACL granting access only to its owner. The standalone MCP
-/// bridge reads only the random pipe name from the restricted handshake file;
-/// `/rpc` is disabled on HTTP while that pipe is active. The pipe implementation
-/// runs blocking Win32 I/O in an isolate and sends decoded requests back to this
-/// container for dispatch.
+/// Privileged `/rpc` calls use a **unix domain socket**, on all three
+/// platforms, living in a directory restricted to the current user
+/// ([restrictDirectoryToCurrentUser]). Unlike loopback TCP that is a real
+/// access-control decision: a process running as another unprivileged user
+/// cannot traverse to the socket at all, so it never gets as far as presenting
+/// a token. `/rpc` over HTTP is disabled whenever the socket is up, and stays
+/// disabled if the socket could not be bound — failing closed rather than
+/// silently downgrading privileged RPC to a transport every local process can
+/// reach.
 ///
-/// Agent hooks remain on loopback HTTP because third-party CLIs invoke them with
-/// `curl`. They retain a separate, low-privilege token and can only report
-/// status. Non-Windows platforms and tests may use the authenticated HTTP RPC
-/// fallback until an owner-only Unix-domain socket transport is added.
+/// This replaced a Windows-only named pipe. The pipe's DACL gave the same
+/// boundary, but it left Linux and macOS on loopback TCP, and its blocking-FFI
+/// serving isolate could not be shut down: Loop 48 measured a build with the
+/// pipe running failing to exit at all on quit (>120 s), against 322 ms for the
+/// same build without it.
+///
+/// Agent hooks remain on loopback HTTP, deliberately. The hook command is
+/// `curl -sS -m 2 -X POST … http://127.0.0.1:<port>/agent-hook`, written into
+/// third-party agents' own config files and run by whatever `curl` those agents
+/// find — including agents running in WSL or over SSH, for which a Windows
+/// socket path is not a reachable name at all. Their token is separate and
+/// low-privilege (status reports only), and is already public to anything that
+/// can list process command lines; that is the threat model above, and moving
+/// the route would not improve it.
 class LauncherControlServer {
   LauncherControlServer(this._container, {AppLogger? logger})
     : _logger = logger ?? AppLogger.named('mcp-control');
@@ -109,7 +122,7 @@ class LauncherControlServer {
   final AppLogger _logger;
 
   HttpServer? _server;
-  NamedPipeRpcServer? _pipeServer;
+  LocalRpcServer? _socketServer;
   bool _httpRpcEnabled = false;
   String? _token;
   AgentHookEndpoint? _hookEndpoint;
@@ -131,7 +144,14 @@ class LauncherControlServer {
   /// Binds the server and writes the handshake file. Pass [bridgeFilePath] to
   /// control where that file goes (tests do); by default it is
   /// `mcp_bridge.json` in the application-support directory.
-  Future<void> start({String? bridgeFilePath, bool useNamedPipe = true}) async {
+  ///
+  /// [useLocalSocket] is the owner-only `/rpc` transport. Tests turn it off to
+  /// exercise the HTTP fallback; nothing in the app does.
+  Future<void> start({
+    String? bridgeFilePath,
+    bool useLocalSocket = true,
+    String? socketDirectory,
+  }) async {
     if (_server != null) return;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
@@ -144,15 +164,14 @@ class LauncherControlServer {
       port: server.port,
       token: _generateToken(),
     );
-    _httpRpcEnabled = !Platform.isWindows || !useNamedPipe;
-    if (useNamedPipe && Platform.isWindows) {
-      final pipeName = r'\\.\pipe\chitragupta-' + _generateToken();
+    _httpRpcEnabled = !useLocalSocket;
+    if (useLocalSocket) {
       try {
-        _pipeServer = await NamedPipeRpcServer.start(pipeName, _handlePipeRpc);
+        _socketServer = await _bindLocalSocket(socketDirectory);
       } on Object catch (error, stack) {
         // Fail closed: hooks still work, but privileged RPC is not silently
         // downgraded to loopback when the owner-only transport cannot start.
-        _logger.warning('Owner-only RPC pipe failed to start.', error, stack);
+        _logger.warning('Owner-only RPC socket failed to start.', error, stack);
       }
     }
     await _writeBridgeFile(server.port, _token!, bridgeFilePath);
@@ -160,9 +179,26 @@ class LauncherControlServer {
     _logger.info('Launcher control server on 127.0.0.1:${server.port}.');
   }
 
+  /// Creates the owner-only directory and binds the RPC socket inside it.
+  ///
+  /// The directory is restricted **before** the socket is created, so there is
+  /// no window in which the socket exists under a permissive ACL.
+  Future<LocalRpcServer> _bindLocalSocket(String? overrideDirectory) async {
+    final dirPath =
+        overrideDirectory ??
+        p.join((await getApplicationSupportDirectory()).path, 'ipc');
+    final dir = Directory(dirPath);
+    await dir.create(recursive: true);
+    await restrictDirectoryToCurrentUser(dir, logger: _logger);
+    final socketPath = p.join(dir.path, 'rpc.sock');
+    final socket = await LocalRpcServer.bind(socketPath, _handleSocketRpc);
+    _logger.info('Owner-only RPC socket at $socketPath.');
+    return socket;
+  }
+
   Future<void> stop() async {
     await _server?.close(force: true);
-    await _pipeServer?.close();
+    await _socketServer?.close();
     final published = _publishedBridgePath;
     if (published != null) {
       try {
@@ -173,7 +209,7 @@ class LauncherControlServer {
       }
     }
     _server = null;
-    _pipeServer = null;
+    _socketServer = null;
     _token = null;
     _hookEndpoint = null;
     _httpRpcEnabled = false;
@@ -209,7 +245,7 @@ class LauncherControlServer {
         'token': token,
         'pid': pid,
         'hookToken': _hookEndpoint!.token,
-        if (_pipeServer case final pipe?) 'pipeName': pipe.pipeName,
+        if (_socketServer case final socket?) 'socketPath': socket.path,
       }),
       flush: true,
     );
@@ -279,9 +315,19 @@ class LauncherControlServer {
     }
   }
 
-  Future<String> _handlePipeRpc(String body) async {
+  /// One `/rpc` call arriving over the owner-only socket.
+  ///
+  /// The directory ACL is the boundary, and the token is the second lock behind
+  /// it: it costs a caller nothing that already reads the restricted handshake
+  /// file, and it means a directory whose permissions were never applied — an
+  /// `icacls` that failed, a filesystem that does not carry them — is not
+  /// instantly an open door.
+  Future<String> _handleSocketRpc(String body) async {
     try {
       final payload = jsonDecode(body) as Map<String, dynamic>;
+      if (!_constantTimeEquals(payload['token'] as String?, _token ?? '')) {
+        return jsonEncode({'ok': false, 'error': 'Unauthorized.'});
+      }
       final tool = payload['tool'] as String?;
       final args =
           (payload['arguments'] as Map?)?.cast<String, dynamic>() ??

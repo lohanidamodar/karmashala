@@ -61,36 +61,81 @@ Future<bool> restrictHandshakeFileToCurrentUser(
   }
 }
 
-Future<bool> _restrictWindows(File file, AppLogger? logger) async {
+/// Restricts the directory [dir] so no other user on the machine can enter it.
+///
+/// This is the boundary for the local RPC **socket**, which carries no
+/// permissions of its own: a unix domain socket is reachable by anyone who can
+/// traverse to it, so "who may call the app's privileged RPC" is decided here
+/// and nowhere else. It is the same `0700` model dray uses, asserted rather
+/// than inherited for exactly the reasons [restrictHandshakeFileToCurrentUser]
+/// documents.
+///
+/// The Windows grant is `(OI)(CI)` — object- and container-inherit — so the
+/// socket node created inside the directory is covered too, rather than
+/// depending on whatever the socket file is born with.
+///
+/// Returns whether the restriction was applied.
+Future<bool> restrictDirectoryToCurrentUser(
+  Directory dir, {
+  AppLogger? logger,
+}) async {
+  try {
+    if (Platform.isWindows) {
+      return await _restrictWindows(dir, logger, inheritToChildren: true);
+    }
+    final result = await Process.run('chmod', ['700', dir.path]);
+    if (result.exitCode != 0) {
+      logger?.warning('chmod 700 on ${dir.path} failed: ${result.stderr}');
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger?.warning('Could not restrict ${dir.path}: $error');
+    return false;
+  }
+}
+
+Future<bool> _restrictWindows(
+  FileSystemEntity entity,
+  AppLogger? logger, {
+  bool inheritToChildren = false,
+}) async {
   final principal = _currentWindowsPrincipal();
   if (principal == null) {
     logger?.warning(
-      'USERNAME is not set; leaving ${file.path} on its inherited ACL.',
+      'USERNAME is not set; leaving ${entity.path} on its inherited ACL.',
     );
     return false;
   }
 
+  // `(OI)(CI)` makes the ACE apply to what is created inside a directory. On a
+  // file the flags are meaningless, so they are only added where they mean
+  // something.
+  final flags = inheritToChildren ? '(OI)(CI)(F)' : '(F)';
+
   // Grant *first*, strip inheritance *second*. `/inheritance:r` deletes
   // inherited ACEs outright rather than converting them to explicit ones, so
-  // stripping before granting would leave a file its own owner cannot open.
+  // stripping before granting would leave an entity its own owner cannot open.
   final granted = await Process.run('icacls', [
-    file.path,
+    entity.path,
     '/grant:r',
     // Well-known SIDs, not names: `Administrators` is localised, `S-1-5-32-544`
     // is not.
-    '*S-1-5-18:(F)', // NT AUTHORITY\SYSTEM
-    '*S-1-5-32-544:(F)', // BUILTIN\Administrators
-    '$principal:(F)',
+    '*S-1-5-18:$flags', // NT AUTHORITY\SYSTEM
+    '*S-1-5-32-544:$flags', // BUILTIN\Administrators
+    '$principal:$flags',
   ]);
   if (granted.exitCode != 0) {
-    logger?.warning('icacls /grant on ${file.path} failed: ${granted.stderr}');
+    logger?.warning(
+      'icacls /grant on ${entity.path} failed: ${granted.stderr}',
+    );
     return false;
   }
 
-  final stripped = await Process.run('icacls', [file.path, '/inheritance:r']);
+  final stripped = await Process.run('icacls', [entity.path, '/inheritance:r']);
   if (stripped.exitCode != 0) {
     logger?.warning(
-      'icacls /inheritance:r on ${file.path} failed: ${stripped.stderr}',
+      'icacls /inheritance:r on ${entity.path} failed: ${stripped.stderr}',
     );
     return false;
   }

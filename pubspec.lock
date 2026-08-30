@@ -79,7 +79,7 @@ packages:
       path: "packages/local_ipc"
       relative: true
     source: path
-    version: "0.1.0"
+    version: "0.2.0"
   cli_config:
     dependency: transitive
     description:

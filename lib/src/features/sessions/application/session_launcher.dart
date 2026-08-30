@@ -19,6 +19,7 @@ import '../domain/session.dart';
 import '../domain/session_attribution.dart';
 import '../domain/session_depth.dart';
 import '../domain/session_launch.dart';
+import '../domain/session_naming.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'session_providers.dart';
@@ -340,8 +341,8 @@ class SessionLauncher {
           .read(worktreeServiceProvider)
           .createForSession(
             repo: request.repository.path,
-            worktreeName: id.substring(0, 8),
-            branch: 'session/${id.substring(0, 8)}',
+            worktreeName: sessionWorktreeName(id),
+            branch: sessionBranchName(id),
           );
       workingDirectory = created.path;
       worktree = created.path;
