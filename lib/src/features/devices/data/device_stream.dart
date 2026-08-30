@@ -220,6 +220,11 @@ class DeviceStreamService {
   /// servers were alive at once because killing the host-side `adb shell` does
   /// **not** kill the `app_process` it started on the device. Neither is
   /// self-correcting, so every start begins by clearing them.
+  ///
+  /// A tidy [DeviceStreamSession.stop] is not enough on its own, either: the
+  /// pane's `dispose` cannot await it, so closing the app leaves whatever the
+  /// teardown had not finished. Reaping on the way *in* is the only cleanup
+  /// that always gets to run.
   Future<int> reapOrphans(String serial) async {
     var reaped = 0;
     final pids = parseOwnedScrcpyPids(
@@ -375,7 +380,9 @@ class DeviceStreamService {
     // 0. Clear anything a previous run left running or registered.
     await reapOrphans(serial);
 
-    // 1. Put the server on the device.
+    // 1. Put the server on the device — every time, not only when it is
+    //    missing: scrcpy-server deletes its own jar at startup (`unlinkSelf`),
+    //    so the file is never there on the second run.
     final jar = await serverBytes();
     final hostJar = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}'
