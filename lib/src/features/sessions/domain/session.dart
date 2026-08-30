@@ -1,6 +1,7 @@
 import '../../environments/domain/environment_path.dart';
 import '../../settings/domain/permission_mode.dart';
 import 'session_launch.dart';
+import 'session_lineage.dart';
 import 'session_status.dart';
 
 /// A unit of work targeting one repository, run by one agent installation.
@@ -22,6 +23,7 @@ class Session {
     this.worktree,
     this.externalSessionId,
     this.parentSessionId,
+    this.parentLink,
     this.paneId,
     this.surface = SessionSurface.pane,
     this.view = SessionView.terminal,
@@ -47,11 +49,22 @@ class Session {
   /// one. External terminals must resume this id, never the app database id.
   final String? externalSessionId;
 
-  /// The session that asked for this one, when an agent did.
+  /// The session this one came from, when it came from one.
   ///
   /// The **only** record of spawn depth — see `SessionDepth` for why the depth
   /// itself is walked from this and never stored beside it.
   final String? parentSessionId;
+
+  /// Why [parentSessionId] is set: an agent delegated the work, the user moved
+  /// it to another provider, or the user branched the conversation.
+  ///
+  /// Null in two different situations, and they are told apart by
+  /// [parentSessionId]: null-with-no-parent is a root session, and there is no
+  /// relationship to name. Null-*with*-a-parent is a row written before schema
+  /// v13 whose kind was never recorded — every one of which is in fact a
+  /// [SessionLink.spawn], and the v13 migration backfills them, so this shape
+  /// should not survive a migrated database.
+  final SessionLink? parentLink;
 
   /// The terminal pane this session runs in, for a [SessionSurface.pane]
   /// session. Null for one launched into a terminal we do not own.
@@ -90,6 +103,7 @@ class Session {
     DateTime? createdAt,
     String? externalSessionId,
     String? parentSessionId,
+    SessionLink? parentLink,
     String? paneId,
     SessionSurface? surface,
     SessionView? view,
@@ -105,6 +119,7 @@ class Session {
     createdAt: createdAt ?? this.createdAt,
     externalSessionId: externalSessionId ?? this.externalSessionId,
     parentSessionId: parentSessionId ?? this.parentSessionId,
+    parentLink: parentLink ?? this.parentLink,
     paneId: paneId ?? this.paneId,
     surface: surface ?? this.surface,
     view: view ?? this.view,
@@ -124,6 +139,7 @@ class Session {
       other.createdAt == createdAt &&
       other.externalSessionId == externalSessionId &&
       other.parentSessionId == parentSessionId &&
+      other.parentLink == parentLink &&
       other.paneId == paneId &&
       other.surface == surface &&
       other.view == view &&
@@ -141,6 +157,7 @@ class Session {
     createdAt,
     externalSessionId,
     parentSessionId,
+    parentLink,
     paneId,
     surface,
     view,

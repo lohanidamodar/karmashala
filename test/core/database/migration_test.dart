@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 15);
+    expect(db.schemaVersion, 16);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 15);
+    expect(version, 16);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -60,7 +60,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 15);
+    expect(db.schemaVersion, 16);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
@@ -97,5 +97,30 @@ void main() {
     // claim it ran under the safe mode, which plenty of them did not.
     expect(column['notnull'], 0);
     expect(column['dflt_value'], isNull);
+  });
+
+  test('v13 gives sessions a nullable parent link kind', () {
+    final column = db
+        .query('PRAGMA table_info(sessions);')
+        .firstWhere((r) => r['name'] == 'parent_link_kind');
+
+    // Nullable and undefaulted, like permission_mode: a root session has no
+    // relationship to name, so a default of any kind would be inventing one.
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
+  });
+
+  test('a gap in the migration keys is migrated through, not refused', () {
+    // The old runner asked for `current + 1` and threw `Missing migration step`
+    // on a gap, refusing to open a database it could have migrated perfectly
+    // well. The whole `sessions` table arriving proves the steps either side of
+    // the gap both ran.
+    expect(tableNames(), contains('sessions'));
+    final columns = db
+        .query('PRAGMA table_info(sessions);')
+        .map((r) => r['name']! as String)
+        .toList();
+    expect(columns, contains('permission_mode'));
+    expect(columns, contains('parent_link_kind'));
   });
 }

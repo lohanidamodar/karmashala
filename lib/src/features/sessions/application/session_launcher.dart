@@ -20,6 +20,7 @@ import '../domain/session.dart';
 import '../domain/session_attribution.dart';
 import '../domain/session_depth.dart';
 import '../domain/session_launch.dart';
+import '../domain/session_lineage.dart';
 import '../domain/session_naming.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
@@ -376,6 +377,16 @@ class SessionLauncher {
       externalSessionId: request.resumeExternalSessionId,
     );
 
+    // A request cannot both continue and branch one conversation: the two
+    // produce different command lines (a resume convention vs a fork one) and
+    // honouring either silently would give the user the other thing.
+    if (request.resumeExternalSessionId != null &&
+        request.forkExternalSessionId != null) {
+      throw ArgumentError(
+        'A launch cannot both resume and fork a conversation.',
+      );
+    }
+
     final depth = depthForChildOf(request.parentSessionId);
     if (!depth.isAllowed) throw SessionDepthRefused(depth);
 
@@ -388,9 +399,22 @@ class SessionLauncher {
 
     final id = _ref.read(idGeneratorProvider).newId();
 
+    if (request.useWorktree && request.existingWorktree != null) {
+      throw ArgumentError(
+        'A launch cannot both create a worktree and join an existing one.',
+      );
+    }
+
     var workingDirectory = request.repository.path;
     EnvironmentPath? worktree;
-    if (request.useWorktree) {
+    if (request.existingWorktree != null) {
+      // Joining, not creating. A handoff and a same-worktree fork continue the
+      // work *where it is*, on the branch it is on, so the receiving agent sees
+      // the tree the recap describes rather than a clean checkout of the
+      // repository root.
+      workingDirectory = request.existingWorktree!;
+      worktree = request.existingWorktree;
+    } else if (request.useWorktree) {
       final created = await _ref
           .read(worktreeServiceProvider)
           .createForSession(
@@ -407,8 +431,17 @@ class SessionLauncher {
     // `--session-id` wants — so the transcript that backs the chat view is
     // locatable at launch instead of guessed at afterwards. Agents that cannot
     // be told (Codex) keep a null id until something discovers it.
+    //
+    // A **fork** is a create, not a resume: the CLI is told to start a new
+    // conversation seeded from an old one, so it will mint its own id — which
+    // is the entire meaning of Claude's `--fork-session`, "create a new session
+    // ID instead of reusing the original". So the fork's source id is never
+    // recorded as this session's own, and we do not offer ours either: passing
+    // `--session-id` alongside `--fork-session` would ask the CLI for a new id
+    // and then name the one it must not reuse.
     final assignsOwnId =
         request.resumeExternalSessionId == null &&
+        request.forkExternalSessionId == null &&
         (descriptor?.launch.sessionIdAssignment.isSupported ?? false);
     final externalSessionId =
         request.resumeExternalSessionId ?? (assignsOwnId ? id : null);
@@ -427,12 +460,20 @@ class SessionLauncher {
       repositoryId: request.repository.id,
       agentInstallationId: request.installation.id,
       title: request.title.trim().isEmpty ? 'Session' : request.title.trim(),
-      useWorktree: request.useWorktree,
+      // True for a joined worktree as well as a created one: the row says
+      // where this session runs, and it does run in a worktree.
+      useWorktree: request.useWorktree || worktree != null,
       worktree: worktree,
       status: SessionStatus.running,
       createdAt: _ref.read(clockProvider).nowUtc(),
       externalSessionId: externalSessionId,
       parentSessionId: request.parentSessionId,
+      // A parent with no stated reason is a spawn — the only way a session
+      // could acquire one before schema v13, and what the MCP path still means
+      // when it names a caller without saying more.
+      parentLink: request.parentSessionId == null
+          ? null
+          : (request.parentLink ?? SessionLink.spawn),
       surface: request.surface,
       view: request.view ?? defaultViewFor(descriptor),
       // Stamped, not left null. The mode was already resolved above and then
@@ -507,6 +548,7 @@ class SessionLauncher {
         permissionMode,
         sessionId: assignsOwnId ? session.id : null,
         resumeSessionId: request.resumeExternalSessionId,
+        forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
       ),
       workingDirectory: workingDirectory.path,
@@ -554,6 +596,7 @@ class SessionLauncher {
         permissionMode,
         sessionId: assignsOwnId ? session.id : null,
         resumeSessionId: request.resumeExternalSessionId,
+        forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
       ),
     ];
@@ -659,20 +702,28 @@ class SessionLauncher {
 /// the session-id flag, then the resume convention (which for Codex is a
 /// *subcommand* and must follow the globals), then the prompt as a positional
 /// argument.
+/// [forkSessionId] **replaces** the resume convention rather than adding to it:
+/// Codex forks with a `fork` subcommand *instead of* `resume`, and emitting
+/// both would put two subcommands on one command line. Claude's fork is its own
+/// resume plus `--fork-session`, which its [AgentForkSupport] states, so both
+/// shapes come out of one call.
 List<String> agentPaneArguments(
   AgentDescriptor? descriptor,
   PermissionMode permissionMode, {
   String? sessionId,
   String? resumeSessionId,
+  String? forkSessionId,
   String? prompt,
 }) {
   final launch = descriptor?.launch;
   final trimmedPrompt = prompt?.trim();
+  final forking = forkSessionId != null && forkSessionId.isNotEmpty;
   return [
     ...?launch?.permissionArgumentsFor(permissionMode),
-    if (sessionId != null && resumeSessionId == null)
+    if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
-    if (resumeSessionId != null && resumeSessionId.isNotEmpty)
+    if (forking) ...?launch?.fork.argumentsFor(forkSessionId),
+    if (!forking && resumeSessionId != null && resumeSessionId.isNotEmpty)
       ...?launch?.interactiveResume.argumentsFor(resumeSessionId),
     if (trimmedPrompt != null &&
         trimmedPrompt.isNotEmpty &&

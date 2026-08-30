@@ -41,6 +41,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   13: _migrateToV13,
   14: _migrateToV14,
   15: _migrateToV15,
+  16: _migrateToV16,
 };
 
 void _migrateToV8(Database db) {
@@ -626,5 +627,34 @@ void _migrateToV15(Database db) {
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_verification_artifacts_run '
     'ON verification_artifacts (run_id);',
+  );
+}
+
+void _migrateToV16(Database db) {
+  // Why a session has a parent (Loop 54).
+  //
+  // `parent_session_id` arrived in v10 with exactly one way to acquire one: an
+  // agent calling `open_new_session` over MCP. Handoff and fork are two more,
+  // and they are not the same relationship — "an agent delegated this", "the
+  // user moved this to another provider" and "the user branched this" read
+  // completely differently in a sidebar, and the rows themselves cannot be told
+  // apart afterwards. Two sessions in one repository with one naming the other
+  // look identical whichever of the three produced them.
+  //
+  // Nullable, and null is a real answer for a *pre-v16* row: "we did not record
+  // it". Unlike depth, this is not derivable from the chain, so there is no
+  // second source of truth to disagree with — a link kind is a fact about the
+  // moment of creation, and nothing else keeps it.
+  db.execute('ALTER TABLE sessions ADD COLUMN parent_link_kind TEXT;');
+
+  // Backfilled, unusually for this schema, and only because the backfill is a
+  // *fact* rather than a default. Every existing parented row was written by
+  // `LauncherControlServer._openNewSession` — the sole writer of
+  // `parent_session_id` in the app before this migration — so `spawn` is what
+  // those rows actually are, not the safest guess about them. Rows with no
+  // parent are left null, because there is no relationship to name.
+  db.execute(
+    "UPDATE sessions SET parent_link_kind = 'spawn' "
+    'WHERE parent_session_id IS NOT NULL AND parent_link_kind IS NULL;',
   );
 }

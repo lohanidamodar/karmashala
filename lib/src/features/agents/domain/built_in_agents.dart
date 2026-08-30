@@ -82,6 +82,19 @@ const _claudeCode = AgentDescriptor(
     // on this machine (started 4s ago) already has Remote Control for this
     // conversation". Nothing about the session itself was refused.
     allowsConcurrentResume: true,
+    // `--fork-session` is a *modifier on a resume*, not a mode of its own, so
+    // the arguments are `--resume <id> --fork-session`. The forked process
+    // loads the original's history and writes its own session id from the first
+    // turn on, which is precisely what "shares history up to now, then
+    // diverges" has to mean for the original to be left alone.
+    fork: AgentForkSupport.native(
+      resume: AgentResume.flag('--resume'),
+      extraArguments: ['--fork-session'],
+      evidence:
+          'claude 2.1.251 --help: "--fork-session  When resuming, create a new '
+          'session ID instead of reusing the original (use with --resume or '
+          '--continue)"',
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -162,25 +175,38 @@ const _codex = AgentDescriptor(
       // *sandbox* decides what may be written, an *approval policy* decides
       // what must be asked — so the nearest thing takes one flag from each:
       // `workspace-write` lets it edit files in the working tree without
-      // asking, and `untrusted` still escalates any command outside its own
-      // read-only trusted set.
+      // asking, and the approval policy still escalates commands.
       //
-      // This replaced `--ask-for-approval on-failure`, which **the real CLI
-      // rejects**. Verified against codex-cli 0.145.0:
+      // **This value has now been wrong twice, on two different CLI versions,
+      // and both times the symptom was the agent refusing to launch.** Loop 49
+      // replaced `on-failure` (rejected by 0.145.0) with `untrusted`; 0.151.0
+      // has since removed `untrusted` too:
       //
-      //   $ codex --ask-for-approval on-failure exec 'hi'
-      //   error: invalid value 'on-failure' for '--ask-for-approval <APPROVAL_POLICY>'
-      //     [possible values: untrusted, on-request, never]
+      //   $ codex --sandbox workspace-write --ask-for-approval untrusted \
+      //       exec 'reply with the single word PONG'
+      //   error: invalid value 'untrusted' for '--ask-for-approval <APPROVAL_POLICY>'
+      //     [possible values: on-request, never]
       //
-      // So choosing "Accept edits" for Codex did not weaken a policy — it made
-      // the agent refuse to start. No unit test could catch that: the flag was
-      // asserted against a string literal that was itself the mistake.
+      // `on-request` is the only remaining value that is not *more* permissive
+      // than accept-edits (`never` asks for nothing at all, which is the wrong
+      // direction for a mode the user picked to stay in control of commands).
+      // Verified to launch on 0.151.0:
+      //
+      //   $ codex --sandbox workspace-write --ask-for-approval on-request \
+      //       exec --skip-git-repo-check 'reply with the single word PONG'
+      //   sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+      //   codex
+      //   PONG
+      //
+      // The lesson Loop 49 drew still holds and is worth restating: no unit
+      // test can catch this, because the flag is asserted against a string
+      // literal that is itself the mistake. Only running the CLI can.
       PermissionMode.acceptEdits: PermissionModeMapping.approximate(
-        ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
+        ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
         note:
             'Codex has no accept-edits mode. The nearest lets it write inside '
-            'the working tree without asking, and still escalates any command '
-            'outside its trusted read-only set.',
+            'the working tree without asking, and leaves commands under the '
+            'same on-request approval policy as "Ask every time".',
       ),
       PermissionMode.bypass: PermissionModeMapping.exact([
         '--dangerously-bypass-approvals-and-sandbox',
@@ -204,6 +230,26 @@ const _codex = AgentDescriptor(
     // JSONL, so the newest behaviour is the one recorded.
     resumeConflict: AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],
+    ),
+    // **Codex can fork**, contrary to the assumption this feature was designed
+    // under. 0.151.0 has a `fork` subcommand alongside `resume`, taking the
+    // same `[SESSION_ID] [PROMPT]` arguments, so the fork is expressed exactly
+    // like the interactive resume with one word changed.
+    //
+    // The picker forms (`--last`, no argument) are deliberately not used: they
+    // choose a session by recency within a working directory, which is a guess
+    // about which conversation the user meant, and the app already knows the
+    // id whenever it has one. When it does *not* — a native Codex row whose
+    // thread id was never discovered, which Loop 46 §6 leaves as an open gap —
+    // there is nothing truthful to pass, and `SessionForkPlan` degrades that
+    // session to a handoff rather than letting a picker guess.
+    fork: AgentForkSupport.native(
+      resume: AgentResume.subcommand('fork'),
+      evidence:
+          'codex-cli 0.151.0 --help: "fork  Fork a previous interactive '
+          'session (picker by default; use --last to fork the most recent)"; '
+          'codex fork --help: "Usage: codex fork [OPTIONS] [SESSION_ID] '
+          '[PROMPT]"',
     ),
   ),
   store: AgentStoreSpec(
@@ -269,6 +315,11 @@ const _antigravity = AgentDescriptor(
       PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
     },
     resume: AgentResume.flag('--resume'),
+    // `fork` is left at the default (unsupported), and for Antigravity that is
+    // not merely caution. A fork needs a conversation to fork *from*, and
+    // Antigravity has no readable store (`store` is null below), so there is
+    // neither a CLI mechanism to invoke nor a transcript to build a handoff
+    // packet out of. Both fork routes are genuinely closed, not untested.
   ),
   // No documented session store, hook config, or resume convention yet.
   statusStrategy: AgentStatusStrategy.none,

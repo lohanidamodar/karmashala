@@ -34,6 +34,7 @@ import '../environments/domain/execution_environment.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
+import '../sessions/application/session_handoff_service.dart';
 import '../sessions/application/session_launcher.dart';
 import '../checkpoints/application/checkpoint_providers.dart';
 import '../checkpoints/application/checkpoint_service.dart';
@@ -43,6 +44,7 @@ import '../git/data/hunk_patch.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session.dart';
 import '../sessions/domain/session_launch.dart';
+import '../sessions/domain/session_lineage.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/data/system_terminal_service.dart';
@@ -496,6 +498,25 @@ class LauncherControlServer {
         );
       case 'fanout_get':
         return _fanOutGet(args['id'] as String?);
+      case 'session_handoff':
+        return _sessionHandoff(
+          sessionId: args['sessionId'] as String?,
+          cli: args['cli'] as String?,
+          agentInstallationId: args['agentInstallationId'] as String?,
+          instruction: args['instruction'] as String?,
+          unresolvedTasks: (args['unresolved'] as List?)
+              ?.whereType<String>()
+              .toList(),
+          newWorktree: args['newWorktree'] == true,
+          preview: args['preview'] == true,
+        );
+      case 'session_fork':
+        return _sessionFork(
+          sessionId: args['sessionId'] as String?,
+          instruction: args['instruction'] as String?,
+          newWorktree: args['newWorktree'] == true,
+          preview: args['preview'] == true,
+        );
       case 'list_devices':
         return _listDevices();
       case 'device_screenshot':
@@ -806,6 +827,101 @@ class LauncherControlServer {
           },
         },
         'required': ['id'],
+      },
+    },
+    {
+      'name': 'session_handoff',
+      'description':
+          'Continue an existing session in a different agent. Builds a handoff '
+          'packet from that session — a quoted recap of its conversation, the '
+          'files changed in the working tree, the current branch, anything '
+          'listed as unresolved, and your instruction — and starts a new '
+          'session with the packet as its first message, in the SAME worktree '
+          'and on the SAME branch by default. The packet states its '
+          'provenance: the new agent is told the conversation is not its own. '
+          'The original session is left running and untouched; ending it is '
+          'the user\'s decision. Use preview:true to read the packet without '
+          'starting anything.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'sessionId': {
+            'type': 'string',
+            'description': 'Session id from list_sessions (kind "native").',
+          },
+          'cli': {
+            'type': 'string',
+            'description':
+                'Agent to continue in: "claude" or "codex". Ignored when '
+                'agentInstallationId is given.',
+          },
+          'agentInstallationId': {
+            'type': 'string',
+            'description': 'Specific installation id from list_agents.',
+          },
+          'instruction': {
+            'type': 'string',
+            'description':
+                'What the receiving agent should do. Required: the packet '
+                'carries the conversation, this is the part it cannot infer.',
+          },
+          'unresolved': {
+            'type': 'array',
+            'items': {'type': 'string'},
+            'description': 'Work still open, listed for the new agent.',
+          },
+          'newWorktree': {
+            'type': 'boolean',
+            'description':
+                'Start in a fresh Git worktree instead of continuing in the '
+                'same one. Default false, which is what a handoff usually '
+                'wants.',
+          },
+          'preview': {
+            'type': 'boolean',
+            'description':
+                'Return the packet without starting anything. Read it before '
+                'handing over work you care about.',
+          },
+        },
+        'required': ['sessionId', 'instruction'],
+      },
+    },
+    {
+      'name': 'session_fork',
+      'description':
+          'Branch a session into a new one that shares its history up to now '
+          'and then diverges. Runs the SAME agent — a fork is a branch of one '
+          'conversation, not a change of provider. Uses the CLI\'s own fork '
+          'when it has one and Chitragupta knows the conversation id; '
+          'otherwise it falls back to a handoff packet, and the result says '
+          'which happened. The original session is untouched. Use preview:true '
+          'to see which route would be taken before committing to it.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'sessionId': {
+            'type': 'string',
+            'description': 'Session id from list_sessions (kind "native").',
+          },
+          'instruction': {
+            'type': 'string',
+            'description':
+                'Optional opening message for the branch. Leave it out to fork '
+                'and wait.',
+          },
+          'newWorktree': {
+            'type': 'boolean',
+            'description':
+                'Fork into a fresh Git worktree so the two branches do not '
+                'edit the same files. Default false.',
+          },
+          'preview': {
+            'type': 'boolean',
+            'description': 'Report the plan without starting anything.',
+          },
+        },
+        'required': ['sessionId'],
       },
     },
     {
@@ -1391,6 +1507,145 @@ class LauncherControlServer {
       // error it might reasonably retry.
       throw StateError(refused.depth.refusal);
     }
+  }
+
+  /// Continues [sessionId] in another agent.
+  ///
+  /// The tool is deliberately thin: every decision — which targets exist,
+  /// whether one can be told anything, what the permission mode becomes, what
+  /// the packet says — belongs to `SessionHandoffService`, so an agent asking
+  /// for a handoff and a user clicking one get the same answer. What is added
+  /// here is `preview`, because a model that cannot see the dialog needs some
+  /// way to read the packet before spending another agent's first turn on it.
+  Future<Object?> _sessionHandoff({
+    String? sessionId,
+    String? cli,
+    String? agentInstallationId,
+    String? instruction,
+    List<String>? unresolvedTasks,
+    bool newWorktree = false,
+    bool preview = false,
+  }) async {
+    if (sessionId == null) throw ArgumentError('Missing sessionId.');
+    if (instruction == null || instruction.trim().isEmpty) {
+      throw ArgumentError(
+        'Missing instruction. The packet carries the conversation; the '
+        'instruction is the part it cannot infer.',
+      );
+    }
+    final service = _container.read(sessionHandoffServiceProvider);
+    final targets = service.targetsFor(sessionId);
+    if (targets.isEmpty) {
+      throw StateError(
+        'No agent is installed in that session\'s environment, or the session '
+        'no longer exists.',
+      );
+    }
+    final target = _handoffTarget(targets, cli, agentInstallationId);
+    if (!target.canReceive) throw StateError(target.refusal!);
+
+    if (preview) {
+      final packet = await service.buildPacket(
+        sessionId: sessionId,
+        targetAgentName: target.agentName,
+        instruction: instruction,
+        unresolvedTasks: unresolvedTasks ?? const [],
+      );
+      return {
+        'preview': true,
+        'target': target.agentName,
+        'permissionMode': target.permission.mode.name,
+        'permission': target.permission.summary,
+        'packet': packet.render(),
+      };
+    }
+
+    final launched = await service.handoffTo(
+      sessionId: sessionId,
+      targetInstallationId: target.installation.id,
+      instruction: instruction,
+      unresolvedTasks: unresolvedTasks ?? const [],
+      intoNewWorktree: newWorktree,
+    );
+    return {
+      'sessionId': launched.session.id,
+      'title': launched.session.title,
+      'target': target.agentName,
+      'parentSessionId': sessionId,
+      'link': SessionLink.handoff.name,
+      'permissionMode': target.permission.mode.name,
+      'permission': target.permission.summary,
+      if (launched.session.worktree != null)
+        'worktree': launched.session.worktree!.path,
+    };
+  }
+
+  /// Picks the target the caller named, preferring an explicit installation id
+  /// over a CLI name. Never falls back to "some other agent": a handoff aimed
+  /// at the wrong provider is not a smaller version of the right one.
+  HandoffTarget _handoffTarget(
+    List<HandoffTarget> targets,
+    String? cli,
+    String? agentInstallationId,
+  ) {
+    if (agentInstallationId != null) {
+      for (final target in targets) {
+        if (target.installation.id == agentInstallationId) return target;
+      }
+      throw StateError(
+        'That agent installation is not available for this session.',
+      );
+    }
+    if (cli != null) {
+      final agentId = _parseCli(cli);
+      for (final target in targets) {
+        if (target.installation.agentId == agentId) return target;
+      }
+      throw StateError('$cli is not installed in that session\'s environment.');
+    }
+    // No preference stated: the first agent that is *not* the one already
+    // running it, because "continue with another agent" is what was asked for.
+    for (final target in targets) {
+      if (!target.isSameAgent && target.canReceive) return target;
+    }
+    return targets.first;
+  }
+
+  Future<Object?> _sessionFork({
+    String? sessionId,
+    String? instruction,
+    bool newWorktree = false,
+    bool preview = false,
+  }) async {
+    if (sessionId == null) throw ArgumentError('Missing sessionId.');
+    final service = _container.read(sessionHandoffServiceProvider);
+    final plan = service.forkPlanFor(sessionId);
+    if (preview) {
+      return {
+        'preview': true,
+        'route': plan.kind.name,
+        'explanation': plan.explanation,
+      };
+    }
+    if (plan.isRefused) throw StateError(plan.explanation);
+
+    final launched = await service.forkSession(
+      sessionId: sessionId,
+      instruction: instruction ?? '',
+      intoNewWorktree: newWorktree,
+    );
+    return {
+      'sessionId': launched.session.id,
+      'title': launched.session.title,
+      'parentSessionId': sessionId,
+      'link': SessionLink.fork.name,
+      // Said plainly, because the two are not equivalent: a native fork shares
+      // the agent's own record, a handoff carries a written recap of it.
+      'route': plan.kind.name,
+      'explanation': plan.explanation,
+      if (launched.session.worktree != null)
+        'worktree': launched.session.worktree!.path,
+    };
   }
 
   Future<Object?> _getUsage({String? cli, String? environmentId}) async {
