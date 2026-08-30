@@ -233,9 +233,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
   void _saveTerminalWorkspace() {
     try {
       if (!_container.exists(terminalSessionsControllerProvider)) return;
-      _container.read(terminalSessionsControllerProvider.notifier)
-        ..saveDirtyScrollback()
-        ..persistWorkspace();
+      // persistWorkspace re-encodes every pane, so it covers the autosave too.
+      _container
+          .read(terminalSessionsControllerProvider.notifier)
+          .persistWorkspace();
     } catch (_) {
       // Never block quitting on persistence.
     }
