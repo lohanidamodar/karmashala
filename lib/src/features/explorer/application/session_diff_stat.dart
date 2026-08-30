@@ -1,10 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../environments/domain/environment_path.dart';
-import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/domain/session_delivery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../sessions/domain/session_status.dart';
@@ -12,13 +13,13 @@ import 'checkout.dart';
 
 /// How much work a session has produced, in the terms a row can show.
 ///
-/// **The line counts are a declared seam, not an oversight.** MonoCode's cards
-/// read `+949 −10` and that is the shape this type is built for; what the app
-/// can answer *today* from `git status` is how many files changed, and from
-/// `git rev-list` how many commits are ahead. [added] and [removed] stay null
-/// until something computes a numstat — the delivery-lifecycle work in backlog
-/// item 2 owns `git/`, and filling these two fields is all it has to do. The
-/// card already lays out for them, so nothing moves when they arrive.
+/// **A projection of [SessionDelivery], not a second measurement.** Until Loop
+/// 67 this type had its own providers running their own `git status`, and its
+/// [added]/[removed] were never filled — so MonoCode's `+949 −10`, which is the
+/// shape the card was built for, could not render outside a widget test while
+/// [SessionDelivery.lines] held exactly that number a provider away. There is
+/// now one producer of a checkout's local git facts (`checkoutDeliveryProvider`
+/// and friends) and this is the narrow view of it a tree row draws.
 class SessionDiffStat {
   const SessionDiffStat({
     this.branch,
@@ -27,6 +28,25 @@ class SessionDiffStat {
     this.added,
     this.removed,
   });
+
+  /// What a row shows of [delivery].
+  ///
+  /// An **empty** numstat is dropped rather than shown as `+0 −0`: git's
+  /// `--numstat` sees no untracked file, so a checkout whose only change is a
+  /// new file reports zero lines over zero files, and the card's "N changed"
+  /// fallback is the truer sentence for it. Same rule as
+  /// [SessionDelivery.lineLabel].
+  factory SessionDiffStat.from(SessionDelivery delivery) {
+    final lines = delivery.lines;
+    final counted = lines != null && !lines.isEmpty;
+    return SessionDiffStat(
+      branch: delivery.branch,
+      changedFiles: delivery.dirtyFiles,
+      commitsAhead: delivery.aheadOfBase,
+      added: counted ? lines.added : null,
+      removed: counted ? lines.removed : null,
+    );
+  }
 
   /// Nothing is known — git could not answer, or there is no checkout.
   static const unknown = SessionDiffStat();
@@ -37,12 +57,13 @@ class SessionDiffStat {
   /// Files with working-tree changes.
   final int? changedFiles;
 
-  /// Commits this checkout has that the repository's branch does not. Only
-  /// meaningful for a session in its own worktree; null otherwise, because a
-  /// checkout is never ahead of itself.
+  /// Commits this checkout has that its base does not — `origin/HEAD` when the
+  /// clone recorded one, otherwise the branch the owning repository has checked
+  /// out. Null when git could not say, or there is nothing to measure against.
   final int? commitsAhead;
 
-  /// Lines added / removed. See the class comment: nothing sets these yet.
+  /// Lines added / removed against the same base, committed and uncommitted
+  /// alike. Null when the numstat was empty or could not be read.
   final int? added;
   final int? removed;
 
@@ -100,27 +121,18 @@ class SessionDiffStat {
 /// ways — see [Checkout]. Since Loop 57 a repository row, its worktree row and
 /// every card under either share one answer whichever spelling arrived first.
 ///
-/// Never throws: a folder that is not a repository, or a git that is not
-/// installed, is a row with nothing to say — not an error banner in a tree.
+/// Since Loop 67 the measurement itself is [checkoutDeliveryProvider]'s, on the
+/// same key: one producer, so a row and the strip beside it cannot disagree.
+/// Never throws — that provider folds every failure into "nothing to say".
 final checkoutStatProvider = FutureProvider.autoDispose
-    .family<SessionDiffStat, Checkout>((ref, checkout) async {
-      // Recomputed when the workspace mutates, which is the same signal the
-      // rest of the Explorer rebuilds on. No polling: a status that is only as
-      // fresh as the last workspace change is honest, and cheap.
-      ref.watch(sessionsRevisionProvider);
-      final changes = ref.read(changesServiceProvider);
-      final dir = checkout.path;
-      try {
-        final files = await changes.changes(dir);
-        final branch = await changes.currentBranch(dir);
-        return SessionDiffStat(branch: branch, changedFiles: files.length);
-      } catch (_) {
-        return SessionDiffStat.unknown;
-      }
-    });
+    .family<SessionDiffStat, Checkout>(
+      (ref, checkout) async => SessionDiffStat.from(
+        await ref.watch(checkoutDeliveryProvider(checkout).future),
+      ),
+    );
 
 /// What one worktree of [repo] has: its own branch and change count, plus how
-/// far ahead it is of what the repository itself has checked out.
+/// far ahead it is of its base.
 ///
 /// Shared by a worktree *row* and by every session card inside it, so a
 /// worktree with four sessions costs the same as a worktree with none.
@@ -128,67 +140,34 @@ final worktreeStatProvider = FutureProvider.autoDispose
     .family<
       SessionDiffStat,
       ({EnvironmentPath repo, EnvironmentPath worktree})
-    >((ref, key) async {
-      // Both watches are taken before the first await: `ref.watch` after an
-      // await is a documented Riverpod hazard, and taking them together also
-      // runs the two checkouts' `git status` concurrently rather than in
-      // series.
-      final own = ref.watch(
-        checkoutStatProvider(Checkout(key.worktree)).future,
-      );
-      final base = ref.watch(checkoutStatProvider(Checkout(key.repo)).future);
-      final stat = await own;
-      final baseBranch = (await base).branch;
-      if (baseBranch == null || baseBranch == stat.branch) return stat;
-
-      // Ahead of what the repository itself has checked out — a local
-      // question with a local answer. Comparing against `origin/<default>`
-      // would mean a network call per row, which a tree cannot afford.
-      try {
-        final ahead = await ref
-            .read(changesServiceProvider)
-            .commitsAhead(key.worktree, base: baseBranch);
-        return stat.copyWith(commitsAhead: ahead);
-      } catch (_) {
-        return stat;
-      }
-    });
+    >(
+      (ref, key) async => SessionDiffStat.from(
+        await ref.watch(worktreeDeliveryProvider(key).future),
+      ),
+    );
 
 /// The stat for a native session: its worktree's when it has one, otherwise the
 /// repository's. Both cases delegate, so a card never asks git anything a row
 /// above it has not already asked.
+///
+/// [sessionLocalDeliveryProvider] rather than `sessionDeliveryProvider`: a tree
+/// row wants the local facts, and the full provider would add a `gh` process
+/// per visible checkout.
 final sessionDiffStatProvider = FutureProvider.autoDispose
-    .family<SessionDiffStat, String>((ref, sessionId) async {
-      ref.watch(sessionsRevisionProvider);
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
-      if (session == null) return SessionDiffStat.unknown;
-      final repository = ref
-          .read(repositoryDaoProvider)
-          .getById(session.repositoryId);
-      if (repository == null) return SessionDiffStat.unknown;
-
-      final worktree = session.worktree;
-      if (worktree == null) {
-        return ref.watch(
-          checkoutStatProvider(Checkout(repository.path)).future,
-        );
-      }
-      return ref.watch(
-        worktreeStatProvider((
-          repo: repository.path,
-          worktree: worktree,
-        )).future,
-      );
-    });
+    .family<SessionDiffStat, String>(
+      (ref, sessionId) async => SessionDiffStat.from(
+        await ref.watch(sessionLocalDeliveryProvider(sessionId).future),
+      ),
+    );
 
 /// The stat for a repository — what an imported session's row shows, since an
 /// imported conversation has no checkout of its own.
 final repositoryDiffStatProvider = FutureProvider.autoDispose
-    .family<SessionDiffStat, String>((ref, repositoryId) async {
-      final repository = ref.read(repositoryDaoProvider).getById(repositoryId);
-      if (repository == null) return SessionDiffStat.unknown;
-      return ref.watch(checkoutStatProvider(Checkout(repository.path)).future);
-    });
+    .family<SessionDiffStat, String>(
+      (ref, repositoryId) async => SessionDiffStat.from(
+        await ref.watch(repositoryDeliveryProvider(repositoryId).future),
+      ),
+    );
 
 /// What a project header reports on its right-hand side.
 class ProjectSummary {

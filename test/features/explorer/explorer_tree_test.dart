@@ -618,10 +618,16 @@ void main() {
 /// Three changed files and a branch, for whatever directory is asked about.
 CommandResult _defaultGit(CommandRequest request) {
   final args = request.arguments;
+  final dir = args.length > 1 ? args[1] : '';
   if (args.contains('status')) {
-    return const CommandResult(
+    // `--porcelain=v1 --branch` puts git's `## <branch>` header first, and
+    // since Loop 67 that header is where every row reads its branch from.
+    final header = args.contains('--branch')
+        ? '## ${dir.contains('wt-side') ? 'feature/side' : 'main'}\n'
+        : '';
+    return CommandResult(
       exitCode: 0,
-      stdout: ' M lib/a.dart\n?? lib/b.dart\n M lib/c.dart\n',
+      stdout: '$header M lib/a.dart\n?? lib/b.dart\n M lib/c.dart\n',
       stderr: '',
     );
   }

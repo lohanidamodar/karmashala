@@ -184,11 +184,14 @@ final checkoutPullRequestProvider = FutureProvider.autoDispose
       );
     });
 
-/// Everything one session's row and strip need: the local git facts of the
-/// place it works, its pull request, and what the database knows.
+/// The **local** delivery state of the place one session works: its branch, its
+/// change count, `+N −M`, and how far it stands from its base. No `gh`.
 ///
-/// This is the provider the Explorer's rows and the session view both read.
-final sessionDeliveryProvider = FutureProvider.autoDispose
+/// Split out of [sessionDeliveryProvider] because the Explorer draws one of
+/// these per visible row. The full provider adds the pull request, and a `gh`
+/// process per checkout is a price a tree cannot pay; a strip, which exists for
+/// one session at a time, can.
+final sessionLocalDeliveryProvider = FutureProvider.autoDispose
     .family<SessionDelivery, String>((ref, sessionId) async {
       ref.watch(sessionsRevisionProvider);
       final session = ref.read(sessionDaoProvider).getById(sessionId);
@@ -206,7 +209,6 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
         // at the same path.
         return SessionDelivery(hasWorktree: worktree != null, archived: true);
       }
-      final directory = worktree ?? repository.path;
       final local = worktree == null
           ? ref.watch(
               checkoutDeliveryProvider(Checkout(repository.path)).future,
@@ -217,16 +219,38 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
                 worktree: worktree,
               )).future,
             );
+      return (await local).copyWith(hasWorktree: worktree != null);
+    });
+
+/// Everything one session's strip needs: [sessionLocalDeliveryProvider] plus
+/// the pull request, whether an agent is live, and the attention it files.
+///
+/// This is what the session view reads. The Explorer's rows read the local
+/// provider above, so opening a project never starts a `gh` per row.
+final sessionDeliveryProvider = FutureProvider.autoDispose
+    .family<SessionDelivery, String>((ref, sessionId) async {
+      // Every watch before the first await, and the local half started before
+      // the pull request so the two run together rather than in series.
+      final local = ref.watch(sessionLocalDeliveryProvider(sessionId).future);
+      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final repository = session == null
+          ? null
+          : ref.read(repositoryDaoProvider).getById(session.repositoryId);
+      // Nothing to ask `gh` about and nothing to file: no session, no
+      // repository, or a session whose directory has been archived away. The
+      // local provider has already made the same three decisions.
+      if (session == null || repository == null || session.isArchived) {
+        return await local;
+      }
+      final directory = session.worktree ?? repository.path;
       final pullRequest = ref.watch(
         checkoutPullRequestProvider(Checkout(directory)).future,
       );
 
       final delivery = (await local).copyWith(
         pullRequest: await pullRequest,
-        hasWorktree: worktree != null,
         agentRunning:
             ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
-        archived: session.isArchived,
       );
 
       // Attention is filed from the readings a row already paid for, so nothing

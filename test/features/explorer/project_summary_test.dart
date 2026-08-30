@@ -46,9 +46,12 @@ void main() {
       responder: (request) {
         final args = request.arguments;
         if (args.contains('status')) {
+          // The `## <branch>` header of `--porcelain=v1 --branch`: since Loop
+          // 67 a row's branch comes out of the same process as its file list.
           return const CommandResult(
             exitCode: 0,
-            stdout: ' M lib/a.dart\n?? lib/b.dart\n M lib/c.dart\n',
+            stdout:
+                '## feature/cards\n M lib/a.dart\n?? lib/b.dart\n M lib/c.dart\n',
             stderr: '',
           );
         }
@@ -165,6 +168,77 @@ void main() {
     expect(find.text('3 changed'), findsNWidgets(2));
   });
 
+  testWidgets('the card draws +N −M, from one numstat for the checkout', (
+    tester,
+  ) async {
+    // Loop 67: `SessionDiffStat.added/removed` had no producer at all, so the
+    // card's `+949 −10` branch — the shape MonoCode's design is built on —
+    // could only render in a widget test that hand-built the type. It now
+    // projects `SessionDelivery.lines`, which is a `git diff --numstat` the
+    // delivery strip was already paying for.
+    git.responder = (request) {
+      final args = request.arguments;
+      if (args.contains('status')) {
+        return const CommandResult(
+          exitCode: 0,
+          stdout: '## feature/cards\n M lib/a.dart\n',
+          stderr: '',
+        );
+      }
+      if (args.contains('--numstat')) {
+        return const CommandResult(
+          exitCode: 0,
+          stdout: '949\t10\tlib/a.dart\n',
+          stderr: '',
+        );
+      }
+      return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+    };
+    addSession('s1', 'Counted');
+    await pump(tester);
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+
+    // The repository row and the card under it, from one answer — and the
+    // line counts replace the file count, which is what the design asks for.
+    expect(find.text('+949'), findsNWidgets(2));
+    expect(find.text('−10'), findsNWidgets(2));
+    expect(find.text('1 changed'), findsNothing);
+    // The cost rule Loop 50 set, restated for the probe that replaced it:
+    // however many rows describe this working tree, it is measured once.
+    expect(
+      git.requests.where((r) => r.arguments.contains('--numstat')).length,
+      1,
+      reason: 'one working tree, one `git diff --numstat`',
+    );
+    expect(
+      git.requests.where((r) => r.arguments.contains('status')).length,
+      1,
+      reason: 'one working tree, one `git status`',
+    );
+  });
+
+  testWidgets('an empty numstat leaves the file count standing', (
+    tester,
+  ) async {
+    // A checkout whose only change is an untracked file: `git diff --numstat`
+    // sees nothing, and `+0 −0` would be a lie where "1 changed" is true.
+    git.responder = (request) => request.arguments.contains('status')
+        ? const CommandResult(
+            exitCode: 0,
+            stdout: '## feature/cards\n?? new.dart\n',
+            stderr: '',
+          )
+        : const CommandResult(exitCode: 0, stdout: '', stderr: '');
+    addSession('s1', 'Untracked only');
+    await pump(tester);
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 changed'), findsNWidgets(2));
+    expect(find.textContaining('+0'), findsNothing);
+  });
+
   testWidgets('a repository git cannot answer for simply says nothing', (
     tester,
   ) async {
@@ -221,7 +295,9 @@ void main() {
       if (args.contains('status')) {
         return CommandResult(
           exitCode: 0,
-          stdout: inWorktree ? ' M lib/a.dart\n' : ' M lib/a.dart\n?? b.dart\n',
+          stdout: inWorktree
+              ? '## feature/side\n M lib/a.dart\n'
+              : '## main\n M lib/a.dart\n?? b.dart\n',
           stderr: '',
         );
       }
@@ -233,7 +309,9 @@ void main() {
         );
       }
       if (args.contains('rev-list')) {
-        return const CommandResult(exitCode: 0, stdout: '4\n', stderr: '');
+        // `--left-right --count` answers both directions on one line: behind,
+        // then ahead. Four commits ahead of what the repository has out.
+        return const CommandResult(exitCode: 0, stdout: '0\t4\n', stderr: '');
       }
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
     };
