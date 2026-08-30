@@ -1461,7 +1461,7 @@ class LauncherControlServer {
       }
     } else {
       // The launcher's resolution, so "the default agent" means the same thing
-      // here as it does in the New-session dialog and the mini launcher.
+      // here as it does in the New-session dialog.
       install =
           _container
               .read(sessionLauncherProvider)

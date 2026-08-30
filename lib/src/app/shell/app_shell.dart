@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/desktop_dialog.dart';
-import 'app_mode.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
 import 'side_panel_state.dart';
@@ -18,9 +17,6 @@ import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/git/application/changes_providers.dart';
-import '../../features/mcp/launcher_chat_controller.dart';
-import '../../features/mcp/launcher_chat_view.dart';
-import '../../features/system/launcher_hotkey.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -71,8 +67,6 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
-
   @override
   void initState() {
     super.initState();
@@ -88,17 +82,6 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
-  void _toggleChat() {
-    final state = _scaffoldKey.currentState;
-    if (state == null) return;
-    if (state.isEndDrawerOpen) {
-      state.closeEndDrawer();
-    } else {
-      state.openEndDrawer();
-      ref.read(launcherFocusRequestProvider.notifier).bump();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final shell = ref.watch(shellControllerProvider);
@@ -106,62 +89,48 @@ class _AppShellState extends ConsumerState<AppShell> {
     // "maximize the dock" flag, which is the same intent now that the dock is
     // gone — everything but the work gets out of the way.
     final zen = ref.watch(terminalMaximizedProvider);
-    final toggleActivator = chatToggleActivator(
-      decodeChatToggleHotKey(
-        ref.watch(
-          settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
-        ),
-      ),
-    );
-    return CallbackShortcuts(
-      bindings: {toggleActivator: _toggleChat},
-      child: ShellShortcuts(
-        child: Scaffold(
-          key: _scaffoldKey,
-          appBar: const _ShellTitleBar(),
-          endDrawer: const Drawer(
-            width: 420,
-            child: SafeArea(
-              child: Padding(
-                padding: EdgeInsets.all(4),
-                child: LauncherChatView(),
-              ),
-            ),
-          ),
-          body: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = ShellWidth.of(constraints.maxWidth);
-                // At compact widths the Explorer and the workbench take turns
-                // in the same column; the side panel keeps only its rail.
-                final showExplorer = width.isCompact
-                    ? shell.focusedPane == ShellPane.explorer
-                    : shell.explorerPaneVisible;
-                return Column(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (!zen && showExplorer)
-                            width.isCompact
-                                ? const Expanded(child: ExplorerPanel())
-                                : _ExplorerColumn(
-                                    available: constraints.maxWidth,
-                                  ),
-                          if (!width.isCompact || !showExplorer)
-                            const Expanded(child: WorkbenchView()),
-                          if (!zen) const SidePanel(),
-                        ],
-                      ),
+    // The global hotkey summons the window with quick open already up; the
+    // service that registers it lives outside the tree, so it bumps a counter
+    // and the shell — which has a Navigator above it — opens the dialog.
+    ref.listen(quickOpenRequestProvider, (_, _) {
+      if (mounted) QuickOpen.show(context);
+    });
+    return ShellShortcuts(
+      child: Scaffold(
+        appBar: const _ShellTitleBar(),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = ShellWidth.of(constraints.maxWidth);
+              // At compact widths the Explorer and the workbench take turns
+              // in the same column; the side panel keeps only its rail.
+              final showExplorer = width.isCompact
+                  ? shell.focusedPane == ShellPane.explorer
+                  : shell.explorerPaneVisible;
+              return Column(
+                children: [
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!zen && showExplorer)
+                          width.isCompact
+                              ? const Expanded(child: ExplorerPanel())
+                              : _ExplorerColumn(
+                                  available: constraints.maxWidth,
+                                ),
+                        if (!width.isCompact || !showExplorer)
+                          const Expanded(child: WorkbenchView()),
+                        if (!zen) const SidePanel(),
+                      ],
                     ),
-                    if (width.isCompact && !zen)
-                      _CompactPaneSelector(shell: shell),
-                    const ShellStatusBar(),
-                  ],
-                );
-              },
-            ),
+                  ),
+                  if (width.isCompact && !zen)
+                    _CompactPaneSelector(shell: shell),
+                  const ShellStatusBar(),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -277,19 +246,6 @@ class _ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        Builder(
-          builder: (context) => IconButton(
-            tooltip:
-                'Chat with agent  ·  ${launcherHotKeyLabel(decodeChatToggleHotKey(ref.watch(settingsControllerProvider.select((s) => s.chatToggleShortcutJson))))}',
-            icon: const Icon(AppIcons.chatCircleDots),
-            onPressed: () => Scaffold.of(context).openEndDrawer(),
-          ),
-        ),
-        IconButton(
-          tooltip: 'Mini launcher',
-          icon: const Icon(AppIcons.pictureInpicture),
-          onPressed: () => ref.read(appModeProvider.notifier).enterMini(),
-        ),
         IconButton(
           tooltip: 'Settings',
           icon: const Icon(AppIcons.gearSix),

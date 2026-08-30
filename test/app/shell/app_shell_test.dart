@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/app/chitragupta_app.dart';
 import 'package:chitragupta/src/app/shell/app_shell.dart';
+import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
 import 'package:chitragupta/src/app/shell/shell_state.dart';
 import 'package:chitragupta/src/app/shell/side_panel.dart';
 import 'package:chitragupta/src/app/shell/side_panel_state.dart';
@@ -168,5 +169,21 @@ void main() {
     expect(ShellWidth.of(760), ShellWidth.medium);
     expect(ShellWidth.of(1179), ShellWidth.medium);
     expect(ShellWidth.of(1440), ShellWidth.expanded);
+  });
+
+  testWidgets('a summon request from outside the tree opens quick open', (
+    tester,
+  ) async {
+    // What the global hotkey now does. `SystemIntegrationService` has no
+    // BuildContext — it registers the hotkey from outside the widget tree —
+    // so it bumps this counter and the shell, which has a Navigator above it,
+    // puts the palette up. Before this the same hotkey opened a second window.
+    final container = await pumpApp(tester, size: const Size(1440, 900));
+    expect(find.byType(QuickOpen), findsNothing);
+
+    container.read(quickOpenRequestProvider.notifier).bump();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QuickOpen), findsOneWidget);
   });
 }

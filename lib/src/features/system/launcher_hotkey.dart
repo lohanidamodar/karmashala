@@ -1,11 +1,11 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 /// The built-in default launcher hotkey: Ctrl+Alt+Space — non-conflicting on
-/// Windows and easy to reach one-handed.
+/// Windows and easy to reach one-handed. It summons the window with quick open
+/// already up, and puts it away again when the window is already in front.
 HotKey defaultLauncherHotKey() => HotKey(
   key: LogicalKeyboardKey.space,
   modifiers: const [HotKeyModifier.control, HotKeyModifier.alt],
@@ -60,37 +60,4 @@ String _keyLabel(LogicalKeyboardKey key) {
   final label = key.keyLabel.trim();
   if (label.isNotEmpty) return label;
   return key.debugName ?? 'Key';
-}
-
-// --- In-app "toggle chat" shortcut (a Flutter SingleActivator, not global) ---
-
-/// Default app shortcut that toggles the agent chat: Ctrl+L.
-HotKey defaultChatToggleHotKey() => HotKey(
-  key: LogicalKeyboardKey.keyL,
-  modifiers: const [HotKeyModifier.control],
-  scope: HotKeyScope.inapp,
-);
-
-/// Rebuilds the chat-toggle [HotKey] from persisted [json], or the default.
-HotKey decodeChatToggleHotKey(String? json) {
-  if (json == null) return defaultChatToggleHotKey();
-  try {
-    final decoded = jsonDecode(json);
-    if (decoded is! Map<String, dynamic>) return defaultChatToggleHotKey();
-    return HotKey.fromJson(decoded);
-  } catch (_) {
-    return defaultChatToggleHotKey();
-  }
-}
-
-/// Converts a [HotKey] into a Flutter [SingleActivator] for in-app shortcuts.
-SingleActivator chatToggleActivator(HotKey hotKey) {
-  final modifiers = hotKey.modifiers ?? const <HotKeyModifier>[];
-  return SingleActivator(
-    hotKey.logicalKey,
-    control: modifiers.contains(HotKeyModifier.control),
-    alt: modifiers.contains(HotKeyModifier.alt),
-    shift: modifiers.contains(HotKeyModifier.shift),
-    meta: modifiers.contains(HotKeyModifier.meta),
-  );
 }

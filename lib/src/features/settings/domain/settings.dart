@@ -1,5 +1,4 @@
 import 'app_theme_mode.dart';
-import 'mini_position.dart';
 import 'permission_mode.dart';
 
 /// Per-agent permission preferences for new vs. existing sessions.
@@ -64,16 +63,12 @@ class Settings {
     this.compactDensity = true,
     this.windowWidth,
     this.windowHeight,
-    this.miniWidth,
-    this.miniHeight,
-    this.miniPosition = MiniPosition.bottomRight,
     this.defaultSystemTerminalId,
     this.customTerminalPath,
     this.defaultCodeEditorId,
     this.customEditorPath,
     this.launcherHotkeyJson,
     this.launcherHotkeyEnabled = true,
-    this.chatToggleShortcutJson,
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
@@ -121,15 +116,8 @@ class Settings {
   final double? windowWidth;
   final double? windowHeight;
 
-  /// Last mini-launcher window size (resizable), null until first saved.
-  final double? miniWidth;
-  final double? miniHeight;
-
-  /// Where the mini launcher window is placed on screen.
-  final MiniPosition miniPosition;
-
-  /// The external terminal app used to resume sessions (mini mode / "open in
-  /// terminal"): a detected terminal id (`windowsTerminal`, …), the sentinel
+  /// The external terminal app used to resume sessions ("open in terminal"):
+  /// a detected terminal id (`windowsTerminal`, …), the sentinel
   /// `custom`, or `null` to use the first detected one.
   final String? defaultSystemTerminalId;
 
@@ -146,19 +134,14 @@ class Settings {
   /// `custom`.
   final String? customEditorPath;
 
-  /// The global hotkey that summons the mini launcher, as the encoded JSON of a
-  /// `hotkey_manager` HotKey. `null` means use the built-in default
+  /// The global hotkey that summons the window with quick open up, as the
+  /// encoded JSON of a `hotkey_manager` HotKey. `null` means the built-in default
   /// (Ctrl+Alt+Space). Stored as an opaque string so this domain stays free of
   /// the hotkey package.
   final String? launcherHotkeyJson;
 
   /// Whether the global launcher hotkey is registered at all.
   final bool launcherHotkeyEnabled;
-
-  /// The in-app shortcut that toggles the agent chat (mini: chat↔list; full:
-  /// chat drawer), as an encoded HotKey. `null` means the default (Ctrl+L).
-  /// This is an app shortcut, not a global one.
-  final String? chatToggleShortcutJson;
 
   /// Project ids the user has pinned (shown first), most-recent pin last.
   final List<String> pinnedProjectIds;
@@ -206,16 +189,12 @@ class Settings {
     bool? compactDensity,
     double? windowWidth,
     double? windowHeight,
-    double? miniWidth,
-    double? miniHeight,
-    MiniPosition? miniPosition,
     String? defaultSystemTerminalId,
     String? customTerminalPath,
     String? defaultCodeEditorId,
     String? customEditorPath,
     String? launcherHotkeyJson,
     bool? launcherHotkeyEnabled,
-    String? chatToggleShortcutJson,
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
@@ -240,9 +219,6 @@ class Settings {
     compactDensity: compactDensity ?? this.compactDensity,
     windowWidth: windowWidth ?? this.windowWidth,
     windowHeight: windowHeight ?? this.windowHeight,
-    miniWidth: miniWidth ?? this.miniWidth,
-    miniHeight: miniHeight ?? this.miniHeight,
-    miniPosition: miniPosition ?? this.miniPosition,
     defaultSystemTerminalId:
         defaultSystemTerminalId ?? this.defaultSystemTerminalId,
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
@@ -250,8 +226,6 @@ class Settings {
     customEditorPath: customEditorPath ?? this.customEditorPath,
     launcherHotkeyJson: launcherHotkeyJson ?? this.launcherHotkeyJson,
     launcherHotkeyEnabled: launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
-    chatToggleShortcutJson:
-        chatToggleShortcutJson ?? this.chatToggleShortcutJson,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
     shellIntegrationEnabled:
@@ -279,9 +253,6 @@ class Settings {
     'compactDensity': compactDensity,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
-    if (miniWidth != null) 'miniWidth': miniWidth,
-    if (miniHeight != null) 'miniHeight': miniHeight,
-    'miniPosition': miniPosition.name,
     if (defaultSystemTerminalId != null)
       'defaultSystemTerminalId': defaultSystemTerminalId,
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
@@ -289,8 +260,6 @@ class Settings {
     if (customEditorPath != null) 'customEditorPath': customEditorPath,
     if (launcherHotkeyJson != null) 'launcherHotkeyJson': launcherHotkeyJson,
     'launcherHotkeyEnabled': launcherHotkeyEnabled,
-    if (chatToggleShortcutJson != null)
-      'chatToggleShortcutJson': chatToggleShortcutJson,
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
@@ -342,9 +311,6 @@ class Settings {
           : true,
       windowWidth: toDouble(json['windowWidth']),
       windowHeight: toDouble(json['windowHeight']),
-      miniWidth: toDouble(json['miniWidth']),
-      miniHeight: toDouble(json['miniHeight']),
-      miniPosition: MiniPosition.fromName(json['miniPosition']),
       defaultSystemTerminalId: json['defaultSystemTerminalId'] is String
           ? json['defaultSystemTerminalId'] as String
           : null,
@@ -363,9 +329,6 @@ class Settings {
       launcherHotkeyEnabled: json['launcherHotkeyEnabled'] is bool
           ? json['launcherHotkeyEnabled'] as bool
           : true,
-      chatToggleShortcutJson: json['chatToggleShortcutJson'] is String
-          ? json['chatToggleShortcutJson'] as String
-          : null,
       pinnedProjectIds: json['pinnedProjectIds'] is List
           ? (json['pinnedProjectIds'] as List).whereType<String>().toList()
           : const [],
@@ -394,16 +357,12 @@ class Settings {
       other.compactDensity == compactDensity &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
-      other.miniWidth == miniWidth &&
-      other.miniHeight == miniHeight &&
-      other.miniPosition == miniPosition &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
       other.customTerminalPath == customTerminalPath &&
       other.defaultCodeEditorId == defaultCodeEditorId &&
       other.customEditorPath == customEditorPath &&
       other.launcherHotkeyJson == launcherHotkeyJson &&
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
-      other.chatToggleShortcutJson == chatToggleShortcutJson &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.terminalThemeSource == terminalThemeSource &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
@@ -423,9 +382,6 @@ class Settings {
     compactDensity,
     windowWidth,
     windowHeight,
-    miniWidth,
-    miniHeight,
-    miniPosition,
     defaultSystemTerminalId,
     customTerminalPath,
     defaultCodeEditorId,
@@ -436,7 +392,6 @@ class Settings {
       launcherHotkeyJson,
       launcherHotkeyEnabled,
       defaultAgentInstallationId,
-      chatToggleShortcutJson,
       shellIntegrationEnabled,
       terminalThemeSource,
     ),

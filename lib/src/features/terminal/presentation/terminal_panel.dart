@@ -507,7 +507,6 @@ class TerminalToolbar extends ConsumerWidget {
               count: backgroundCount,
               backgroundColor: Theme.of(context).colorScheme.primary,
               textColor: Theme.of(context).colorScheme.onPrimary,
-              // Not `pictureInPicture` — that is the mini launcher.
               child: const Icon(AppIcons.terminalWindow, size: Chrome.icon),
             ),
             onPressed: () => actions.showBackgroundSessions(context),
