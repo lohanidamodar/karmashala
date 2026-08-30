@@ -576,4 +576,135 @@ void main() {
       );
     });
   });
+
+  group('stopEmulator', () {
+    test('asks the emulator console to quit, and waits for it to go', () async {
+      var calls = 0;
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          if (request.arguments.contains('devices')) {
+            calls += 1;
+            // Present on the first poll, gone on the second — the console
+            // answers OK long before the process has actually exited.
+            return CommandResult(
+              exitCode: 0,
+              stdout: calls == 1
+                  ? 'List of devices attached\nemulator-5554 device\n'
+                  : 'List of devices attached\n',
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 0, stdout: 'OK\n', stderr: '');
+        },
+      );
+      final stopped = await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).stopEmulator('emulator-5554', pollInterval: Duration.zero);
+
+      expect(stopped, isTrue);
+      expect(_argv(runner, 0), ['-s', 'emulator-5554', 'emu', 'kill']);
+      expect(calls, 2);
+    });
+
+    test(
+      'reports failure rather than assuming the row can be removed',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (request) => request.arguments.contains('devices')
+              ? const CommandResult(
+                  exitCode: 0,
+                  stdout: 'List of devices attached\nemulator-5554 device\n',
+                  stderr: '',
+                )
+              : const CommandResult(exitCode: 0, stdout: 'OK\n', stderr: ''),
+        );
+        final stopped = await AdbService(runner: runner, sdk: _sdk())
+            .stopEmulator(
+              'emulator-5554',
+              timeout: const Duration(milliseconds: 10),
+              pollInterval: Duration.zero,
+            );
+        expect(stopped, isFalse);
+      },
+    );
+
+    test('a refused kill surfaces what the console said', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) => request.arguments.contains('devices')
+            ? const CommandResult(
+                exitCode: 0,
+                stdout: 'List of devices attached\nemulator-5554 device\n',
+                stderr: '',
+              )
+            : const CommandResult(
+                exitCode: 1,
+                stdout: '',
+                stderr: 'could not connect to TCP port 5554',
+              ),
+      );
+      await expectLater(
+        AdbService(runner: runner, sdk: _sdk()).stopEmulator(
+          'emulator-5554',
+          timeout: const Duration(milliseconds: 10),
+          pollInterval: Duration.zero,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('could not connect'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('process and forward housekeeping', () {
+    test('processList asks for pids with full command lines', () async {
+      final runner = FakeCommandRunner();
+      await AdbService(runner: runner, sdk: _sdk()).processList('serial-1');
+      expect(_argv(runner, 0), [
+        '-s',
+        'serial-1',
+        'shell',
+        'ps',
+        '-A',
+        '-o',
+        'PID,ARGS',
+      ]);
+    });
+
+    test('killPids sends one SIGKILL for the whole set', () async {
+      final runner = FakeCommandRunner();
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).killPids('serial-1', [11026, 11028]);
+      expect(_argv(runner, 0), [
+        '-s',
+        'serial-1',
+        'shell',
+        'kill',
+        '-9',
+        '11026',
+        '11028',
+      ]);
+    });
+
+    test('killPids with nothing to kill runs no command', () async {
+      final runner = FakeCommandRunner();
+      await AdbService(runner: runner, sdk: _sdk()).killPids('serial-1', []);
+      expect(runner.requests, isEmpty);
+    });
+
+    test(
+      'listForwards does not pass -s, because adb ignores it there',
+      () async {
+        final runner = FakeCommandRunner();
+        await AdbService(runner: runner, sdk: _sdk()).listForwards();
+        expect(_argv(runner, 0), ['forward', '--list']);
+      },
+    );
+  });
 }

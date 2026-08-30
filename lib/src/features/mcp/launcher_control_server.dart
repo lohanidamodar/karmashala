@@ -340,6 +340,8 @@ class LauncherControlServer {
           query: _uiQuery(args),
           index: (args['index'] as num?)?.round(),
         );
+      case 'device_stop_emulator':
+        return _deviceStopEmulator(args['serial'] as String?);
       case 'open_sessions_in_tmux':
         return _openSessionsInTmux(
           (args['ids'] as List?)?.whereType<String>().toList() ??
@@ -547,6 +549,23 @@ class LauncherControlServer {
             'description': 'Max lines (default 200).',
           },
         },
+      },
+    },
+    {
+      'name': 'device_stop_emulator',
+      'description':
+          'Shut a running Android emulator down, freeing its memory and CPU. '
+          'Emulators only — a physical device cannot be stopped this way. '
+          'Anything the emulator has not written to a snapshot is lost.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'serial': {
+            'type': 'string',
+            'description': 'Emulator serial, e.g. emulator-5554.',
+          },
+        },
+        'required': ['serial'],
       },
     },
     {
@@ -1301,6 +1320,35 @@ class LauncherControlServer {
       '',
       rendered.listing,
     ]);
+  }
+
+  /// Shuts a running emulator down.
+  ///
+  /// The serial is required rather than inferred: every other device tool
+  /// defaults to "the only ready device", and silently defaulting a destructive
+  /// action is a different thing entirely.
+  Future<Object?> _deviceStopEmulator(String? serial) async {
+    if (serial == null || serial.trim().isEmpty) {
+      throw ArgumentError('serial is required for device_stop_emulator.');
+    }
+    final adb = _requireAdb();
+    final devices = await adb.listDevices();
+    final device = devices.where((d) => d.serial == serial).firstOrNull;
+    if (device == null) {
+      throw StateError('No device with serial $serial.');
+    }
+    if (!device.isEmulator) {
+      throw StateError(
+        '$serial is a physical device. Only emulators can be stopped.',
+      );
+    }
+    final stopped = await adb.stopEmulator(serial);
+    if (!stopped) {
+      throw StateError(
+        '$serial did not exit. It may be busy; try again, or close its window.',
+      );
+    }
+    return {'serial': serial, 'stopped': true};
   }
 
   Future<Object?> _deviceTapElement({

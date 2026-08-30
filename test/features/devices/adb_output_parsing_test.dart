@@ -132,4 +132,72 @@ sambandha_test
       expect(parsePidsFromPidof(''), isEmpty);
     });
   });
+
+  group('parseScrcpyForwards', () {
+    const output =
+        'F6IZLV6LMFT4U4ZT tcp:56213 localabstract:scrcpy_57037a47\n'
+        'emulator-5554 tcp:57521 localabstract:scrcpy_12a9795f\n'
+        'emulator-5554 tcp:5037 tcp:9000\n';
+
+    test('finds this device scrcpy forwards and nothing else', () {
+      // The list is global — `adb forward --list` ignores `-s` — so filtering
+      // by serial here is what stops one device tearing down another tunnel.
+      expect(parseScrcpyForwards(output, serial: 'emulator-5554'), [57521]);
+      expect(parseScrcpyForwards(output, serial: 'F6IZLV6LMFT4U4ZT'), [56213]);
+    });
+
+    test('ignores forwards that are not scrcpy', () {
+      expect(
+        parseScrcpyForwards(
+          'emulator-5554 tcp:5037 tcp:9000\n',
+          serial: 'emulator-5554',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('an empty or unknown listing is empty, not an error', () {
+      expect(parseScrcpyForwards('', serial: 'x'), isEmpty);
+      expect(parseScrcpyForwards('nonsense', serial: 'x'), isEmpty);
+      expect(parseScrcpyForwards(output, serial: 'other'), isEmpty);
+    });
+  });
+
+  group('parseOwnedScrcpyPids', () {
+    // Real `ps -A -o PID,ARGS` output. The jar path only ever appears on the
+    // wrapping `sh -c` line — `CLASSPATH` is an environment assignment, not an
+    // argument — so the app_process child has to be found by its scid.
+    const ps =
+        '   PID ARGS\n'
+        '     1 init second_stage\n'
+        '  8357 sh -c CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process '
+        '/ com.genymobile.scrcpy.Server 4.1 scid=0a1b2c3d log_level=info\n'
+        '  8359 app_process / com.genymobile.scrcpy.Server 4.1 '
+        'scid=0a1b2c3d log_level=info\n'
+        ' 11026 sh -c CLASSPATH=/data/local/tmp/chitragupta-scrcpy-server.jar '
+        'app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef\n'
+        ' 11028 app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef\n';
+    const ours = '/data/local/tmp/chitragupta-scrcpy-server.jar';
+
+    test('finds both the shell and the app_process it started', () {
+      expect(parseOwnedScrcpyPids(ps, jarPath: ours), [11026, 11028]);
+    });
+
+    test('leaves a scrcpy the developer is running alone', () {
+      // Matching on the class name would have killed 8357/8359 too, and with
+      // them whatever the developer was looking at.
+      final pids = parseOwnedScrcpyPids(ps, jarPath: ours);
+      expect(pids, isNot(contains(8357)));
+      expect(pids, isNot(contains(8359)));
+    });
+
+    test('an empty process table yields nothing', () {
+      expect(parseOwnedScrcpyPids('', jarPath: ours), isEmpty);
+      expect(parseOwnedScrcpyPids('   PID ARGS\n', jarPath: ours), isEmpty);
+    });
+
+    test('never returns init', () {
+      expect(parseOwnedScrcpyPids('1 $ours scid=1\n', jarPath: ours), isEmpty);
+    });
+  });
 }

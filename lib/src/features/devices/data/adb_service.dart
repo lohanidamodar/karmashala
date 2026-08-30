@@ -382,12 +382,7 @@ class AdbService {
   Future<void> killPids(String serial, List<int> pids) async {
     if (pids.isEmpty) return;
     await runner.run(
-      _forDevice(serial, [
-        'shell',
-        'kill',
-        '-9',
-        ...pids.map((pid) => '$pid'),
-      ]),
+      _forDevice(serial, ['shell', 'kill', '-9', ...pids.map((pid) => '$pid')]),
     );
   }
 

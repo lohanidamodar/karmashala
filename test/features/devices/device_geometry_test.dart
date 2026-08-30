@@ -120,4 +120,68 @@ void main() {
       );
     });
   });
+
+  group('widgetPointToFraction', () {
+    // Gestures are carried as fractions because the two transports want the
+    // same touch in different spaces: `adb shell input` in device pixels,
+    // scrcpy's control socket in *video* pixels. Converting once, late, keeps
+    // one mapping rather than two.
+    test('the corners are 0 and 1 whatever the box size', () {
+      const box = Size(405, 900);
+      expect(widgetPointToFraction(local: Offset.zero, box: box), (x: 0, y: 0));
+      expect(widgetPointToFraction(local: const Offset(405, 900), box: box), (
+        x: 1.0,
+        y: 1.0,
+      ));
+    });
+
+    test('clamps a pointer dragged outside the picture', () {
+      const box = Size(405, 900);
+      final out = widgetPointToFraction(
+        local: const Offset(-40, 1400),
+        box: box,
+      );
+      expect(out.x, 0.0);
+      expect(out.y, 1.0);
+    });
+
+    test('is safe on a zero-sized box during the first layout', () {
+      expect(
+        widgetPointToFraction(local: const Offset(10, 10), box: Size.zero),
+        (x: 0, y: 0),
+      );
+    });
+  });
+
+  group('fractionToDevice', () {
+    const video = DeviceScreenSize(width: 472, height: 1024);
+
+    test('scales into whichever space it is handed', () {
+      // 472x1024 is a real video size: scrcpy scaled a 1080x2340 phone down to
+      // max_size=1024. Sending device pixels with that video size declared is
+      // the mistake that makes touches silently vanish.
+      expect(fractionToDevice(fx: 0.5, fy: 0.25, screen: video), (
+        x: 236,
+        y: 256,
+      ));
+    });
+
+    test('never lands one pixel past the edge', () {
+      expect(fractionToDevice(fx: 1.0, fy: 1.0, screen: video), (
+        x: 471,
+        y: 1023,
+      ));
+    });
+
+    test('survives an empty screen without dividing by anything', () {
+      expect(
+        fractionToDevice(
+          fx: 0.5,
+          fy: 0.5,
+          screen: const DeviceScreenSize(width: 0, height: 0),
+        ),
+        (x: 0, y: 0),
+      );
+    });
+  });
 }

@@ -1,0 +1,143 @@
+import 'dart:typed_data';
+
+import 'package:chitragupta/src/features/devices/data/scrcpy_control.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+/// The expected encoding, spelled out independently of the implementation.
+///
+/// Every offset below comes from disassembling the scrcpy-server jar this app
+/// deploys — `ControlMessageReader.parseInjectTouchEvent` reads, in order, an
+/// unsigned byte, a long, a `Position` (int, int, unsigned short, unsigned
+/// short), a short, an int and an int. A field in the wrong place does not
+/// fail loudly: the server reads a plausible-looking value from the wrong
+/// bytes and the touch lands somewhere else, or vanishes.
+int _u8(Uint8List b, int i) => ByteData.sublistView(b).getUint8(i);
+int _u16(Uint8List b, int i) => ByteData.sublistView(b).getUint16(i);
+int _i32(Uint8List b, int i) => ByteData.sublistView(b).getInt32(i);
+int _u64(Uint8List b, int i) => ByteData.sublistView(b).getUint64(i);
+
+void main() {
+  group('encodePressure', () {
+    test('1.0 is 0xFFFF exactly, not 0x10000 truncated', () {
+      // `Binary.u16FixedPointToFloat` special-cases 0xFFFF as 1.0 and divides
+      // everything else by 0x10000, so the top of the range is not linear.
+      expect(encodePressure(1.0), 0xFFFF);
+    });
+
+    test('0.0 is zero, which is what a release reports', () {
+      expect(encodePressure(0.0), 0);
+    });
+
+    test('a middling pressure round-trips through the fixed point', () {
+      expect(encodePressure(0.5), 0x8000);
+      expect(0x8000 / 0x10000, 0.5);
+    });
+
+    test('out-of-range values are clamped rather than wrapped', () {
+      expect(encodePressure(3.5), 0xFFFF);
+      expect(encodePressure(-1), 0);
+      expect(encodePressure(double.nan), 0);
+    });
+  });
+
+  group('INJECT_TOUCH_EVENT', () {
+    const event = ScrcpyTouchEvent(
+      action: AndroidMotionAction.move,
+      pointerId: 3,
+      x: 200,
+      y: 900,
+      videoWidth: 472,
+      videoHeight: 1024,
+      pressure: 1.0,
+    );
+
+    test('is exactly 32 bytes', () {
+      expect(event.encode().length, kScrcpyTouchMessageLength);
+      expect(kScrcpyTouchMessageLength, 32);
+    });
+
+    test('lays every field at the offset the server reads it from', () {
+      final bytes = event.encode();
+      expect(_u8(bytes, 0), 2, reason: 'TYPE_INJECT_TOUCH_EVENT');
+      expect(_u8(bytes, 1), AndroidMotionAction.move);
+      expect(_u64(bytes, 2), 3, reason: 'pointer id is a long');
+      expect(_i32(bytes, 10), 200);
+      expect(_i32(bytes, 14), 900);
+      expect(_u16(bytes, 18), 472);
+      expect(_u16(bytes, 20), 1024);
+      expect(_u16(bytes, 22), 0xFFFF);
+      expect(_i32(bytes, 24), 0, reason: 'action button');
+      expect(_i32(bytes, 28), 0, reason: 'buttons');
+    });
+
+    test('leaves the buttons clear so the event is a finger, not a mouse', () {
+      // `Controller.injectTouch` picks SOURCE_MOUSE when any non-primary button
+      // is set, and a mouse source does not feed Android velocity tracker the
+      // way a touchscreen does — no fling.
+      final bytes = event.encode();
+      expect(_i32(bytes, 24), 0);
+      expect(_i32(bytes, 28), 0);
+    });
+
+    test('the four actions are the AOSP MotionEvent values', () {
+      expect(AndroidMotionAction.down, 0);
+      expect(AndroidMotionAction.up, 1);
+      expect(AndroidMotionAction.move, 2);
+      expect(AndroidMotionAction.cancel, 3);
+    });
+
+    test('the message type ids match the server switch', () {
+      expect(ScrcpyControlType.injectKeycode, 0);
+      expect(ScrcpyControlType.injectText, 1);
+      expect(ScrcpyControlType.injectTouchEvent, 2);
+      expect(ScrcpyControlType.injectScrollEvent, 3);
+      expect(ScrcpyControlType.backOrScreenOn, 4);
+    });
+
+    test('a negative coordinate survives as a signed int', () {
+      // A pointer dragged past the edge legitimately reports one, and reading
+      // it as unsigned would put the touch two billion pixels away.
+      final bytes = const ScrcpyTouchEvent(
+        action: AndroidMotionAction.move,
+        pointerId: 0,
+        x: -5,
+        y: -1,
+        videoWidth: 100,
+        videoHeight: 200,
+      ).encode();
+      expect(_i32(bytes, 10), -5);
+      expect(_i32(bytes, 14), -1);
+    });
+
+    test('distinct pointer ids are what make multi-touch work', () {
+      // The server derives ACTION_POINTER_DOWN/UP and the pointer index itself
+      // from its PointersState; the client only ever varies this field.
+      final a = const ScrcpyTouchEvent(
+        action: AndroidMotionAction.down,
+        pointerId: 0,
+        x: 1,
+        y: 1,
+        videoWidth: 10,
+        videoHeight: 10,
+      ).encode();
+      final b = const ScrcpyTouchEvent(
+        action: AndroidMotionAction.down,
+        pointerId: 1,
+        x: 1,
+        y: 1,
+        videoWidth: 10,
+        videoHeight: 10,
+      ).encode();
+      expect(_u8(a, 1), _u8(b, 1), reason: 'both are a plain ACTION_DOWN');
+      expect(_u64(a, 2), 0);
+      expect(_u64(b, 2), 1);
+    });
+
+    test('the ids scrcpy reserves are documented so we can avoid them', () {
+      expect(ScrcpyPointerId.mouse, -1);
+      expect(ScrcpyPointerId.genericFinger, -2);
+      expect(ScrcpyPointerId.virtualMouse, -3);
+      expect(ScrcpyPointerId.virtualFinger, -4);
+    });
+  });
+}

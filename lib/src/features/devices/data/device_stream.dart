@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner.dart';
+import '../../../core/process/process_handle.dart';
 import '../domain/device_input.dart';
 import 'adb_output_parsing.dart';
 import 'adb_service.dart';
@@ -158,6 +159,27 @@ class _ServingConnection {
   final StreamSubscription<Uint8List> subscription;
 }
 
+/// Everything one successful tunnel attempt produced.
+class _Tunnel {
+  _Tunnel({
+    required this.scid,
+    required this.port,
+    required this.server,
+    required this.serverLog,
+    required this.video,
+    required this.control,
+  });
+
+  final String scid;
+  final int port;
+  final ProcessHandle server;
+
+  /// The last few lines the server wrote to stderr, newest last.
+  final List<String> serverLog;
+  final _ServingConnection video;
+  final ScrcpyControlConnection? control;
+}
+
 /// Deploys scrcpy-server to a device and republishes its H.264 output as an
 /// MPEG-TS stream on loopback HTTP.
 ///
@@ -220,16 +242,30 @@ class DeviceStreamService {
     return reaped;
   }
 
-  /// Connects to the tunnel, retrying until the server is really streaming.
+  /// Connects the tunnel's sockets, retrying until the server is really
+  /// streaming.
   ///
-  /// This is subtler than it looks: `adb forward` accepts the host-side TCP
-  /// connection **before** the device-side socket exists, then closes it
-  /// immediately. A naive "did connect() succeed?" check therefore latches onto
-  /// a dead socket and the stream silently never starts. The only reliable
-  /// signal is bytes actually arriving, so each attempt waits for the first
-  /// chunk and retries if the socket closes empty.
-  Future<_ServingConnection?> _connectWhenServing(
+  /// Two hazards, and the order below is the only one that clears both.
+  ///
+  /// **`adb forward` accepts the host-side TCP connection before the
+  /// device-side socket exists**, then closes it. A successful `connect()`
+  /// therefore proves nothing; only bytes do.
+  ///
+  /// **With `control=true` the server sends no video until the control socket
+  /// is also connected.** `DesktopConnection.open` accepts video, then audio,
+  /// then control, and only *then* returns and lets the encoder start. Waiting
+  /// for video bytes before opening the control socket deadlocks: the client
+  /// waits for a byte the server will not send until the client connects again.
+  /// That is not a hypothetical — it is what this loop's first run on a
+  /// physical device did, retrying for ten seconds and reporting the server had
+  /// never started.
+  ///
+  /// So: open both sockets, *then* wait for bytes. Video arriving proves the
+  /// whole handshake, control socket included.
+  Future<({_ServingConnection video, ScrcpyControlConnection? control})?>
+  _connectSockets(
     int port, {
+    required bool withControl,
     int attempts = 20,
   }) async {
     for (var attempt = 0; attempt < attempts; attempt++) {
@@ -241,6 +277,19 @@ class DeviceStreamService {
         continue; // Tunnel not up yet.
       }
       candidate.setOption(SocketOption.tcpNoDelay, true);
+
+      ScrcpyControlConnection? control;
+      if (withControl) {
+        try {
+          control = ScrcpyControlConnection(
+            await Socket.connect('127.0.0.1', port),
+            logger: _logger,
+          );
+        } on SocketException {
+          candidate.destroy();
+          continue;
+        }
+      }
 
       final first = Completer<Uint8List?>();
       final subscription = candidate.listen(
@@ -255,16 +304,20 @@ class DeviceStreamService {
         },
       );
       final chunk = await first.future.timeout(
-        const Duration(seconds: 2),
+        const Duration(seconds: 3),
         onTimeout: () => null,
       );
       subscription.pause();
 
       if (chunk != null && chunk.isNotEmpty) {
-        return _ServingConnection(candidate, chunk, subscription);
+        return (
+          video: _ServingConnection(candidate, chunk, subscription),
+          control: control,
+        );
       }
       await subscription.cancel();
       candidate.destroy();
+      await control?.close();
     }
     return null;
   }
@@ -311,6 +364,7 @@ class DeviceStreamService {
     String serial, {
     int? maxSize,
     int? maxFps,
+    bool useControlSocket = true,
   }) async {
     final profile = isEmulatorSerial(serial)
         ? _softwareEncoder
@@ -338,100 +392,44 @@ class DeviceStreamService {
       throw StateError('Could not deploy scrcpy-server: ${push.stderr.trim()}');
     }
 
-    // 2. Tunnel. adb picks the port so we never collide with a reserved range.
-    final scid = (Random().nextInt(
-      0x7FFFFFFF,
-    )).toRadixString(16).padLeft(8, '0');
-    final socketName = 'localabstract:scrcpy_$scid';
-    final forward = await runner.run(
-      CommandRequest(
-        executable: adb.sdk.adb.path,
-        arguments: ['-s', serial, 'forward', 'tcp:0', socketName],
-      ),
-    );
-    final localPort = parseForwardedPort(forward.stdout);
-    if (!forward.ok || localPort == null) {
+    // 2–4. Tunnel, server, sockets. Attempted with the control socket first and
+    // then without it, because enabling control changes the *video* handshake:
+    // a server started with `control=true` streams nothing at all until a
+    // control socket connects. If that cannot be established — an older server,
+    // a device that refuses the second connection — the whole live view would
+    // be lost for the sake of an input upgrade. Falling back to `control=false`
+    // keeps exactly the Loop 27 behaviour, with `adb shell input` for gestures.
+    _Tunnel? tunnel;
+    var attemptedWithoutControl = false;
+    for (final wantControl
+        in useControlSocket ? const [true, false] : const [false]) {
+      tunnel = await _openTunnel(
+        serial: serial,
+        captureSize: captureSize,
+        captureFps: captureFps,
+        withControl: wantControl,
+      );
+      if (tunnel != null) break;
+      attemptedWithoutControl = !wantControl;
+    }
+    if (tunnel == null) {
       throw StateError(
-        'Could not open an adb tunnel: ${forward.stderr.trim()}',
+        'scrcpy-server did not start streaming'
+        '${attemptedWithoutControl ? ' (tried with and without the control socket)' : ''}.',
       );
     }
-
-    // 3. Start the server. raw_stream stays OFF: we want scrcpy's per-frame
-    //    timestamps and keyframe flags for the MPEG-TS mux.
-    final server = await runner.start(
-      CommandRequest(
-        executable: adb.sdk.adb.path,
-        arguments: [
-          '-s',
-          serial,
-          'shell',
-          'CLASSPATH=$_devicePath',
-          'app_process',
-          '/',
-          'com.genymobile.scrcpy.Server',
-          kScrcpyVersion,
-          'scid=$scid',
-          'log_level=warn',
-          'tunnel_forward=true',
-          'audio=false',
-          // Loop 36: the control socket. The server accepts connections in the
-          // order video, audio, control, so with audio off it is the second
-          // connection to the same tunnel.
-          'control=true',
-          'cleanup=true',
-          'send_device_meta=false',
-          'send_dummy_byte=false',
-          'max_size=$captureSize',
-          'video_codec=h264',
-          'max_fps=$captureFps',
-          // A keyframe every second. Without this the encoder may go a long
-          // time between keyframes, and a viewer that connects in between has
-          // nothing it can start decoding from.
-          'video_codec_options=i-frame-interval=1',
-        ],
-      ),
-    );
-    // Keep what the server says. When it dies it normally explains itself on
-    // stderr, and that explanation used to go only to a log nobody reads — the
-    // pane now shows it, because "the live view stopped" on its own is not a
-    // report anyone can act on.
-    final serverLog = <String>[];
-    unawaited(
-      server.stderrLines.forEach((line) {
-        _logger.warning('scrcpy: $line');
-        serverLog.add(line);
-        if (serverLog.length > 20) serverLog.removeAt(0);
-      }),
-    );
-
-    // 4. Connect, once the server is actually serving.
-    final connection = await _connectWhenServing(localPort);
-    if (connection == null) {
-      await server.kill();
-      await _killDeviceServers(serial, scid);
-      await adb.removeForward(serial, localPort);
-      throw StateError(
-        'scrcpy-server did not start streaming.'
-        '${serverLog.isEmpty ? '' : ' Server said: ${serverLog.join(' / ')}'}',
-      );
-    }
-    final socket = connection.socket;
-
-    // 4b. The control socket, on the same tunnel.
-    //
-    // The server accepts video, then audio, then control; audio is off, so this
-    // second connection is the control one. Loop 27's hazard — `adb forward`
-    // accepts the host side *before* the device socket exists — cannot bite
-    // here in the same way, because the video socket has already proved the
-    // device-side listener is up. What it can still do is close on us, so the
-    // connection is only accepted if it survives a short grace period, and every
-    // later write checks the socket rather than assuming it.
-    final control = await _connectControl(localPort);
+    final scid = tunnel.scid;
+    final localPort = tunnel.port;
+    final server = tunnel.server;
+    final serverLog = tunnel.serverLog;
+    final connection = tunnel.video;
+    final control = tunnel.control;
     if (control == null) {
       _logger.warning(
         'Device $serial: no control socket; input falls back to adb input.',
       );
     }
+    final socket = connection.socket;
 
     // 5. Parse, mux, fan out.
     final mark = LiveFrameMark();
@@ -450,10 +448,20 @@ class DeviceStreamService {
     var lastByteUs = DateTime.now().microsecondsSinceEpoch;
     final healthController = StreamController<DeviceStreamHealth>.broadcast();
     var lastState = DeviceStreamState.live;
+    var lastDetail = '';
 
     void report(DeviceStreamState state, String detail) {
-      if (state == lastState && state != DeviceStreamState.ended) return;
+      // The state machine only ever moves forwards. A stream that has ended
+      // cannot go back to being live, and the watchdog would otherwise call it
+      // healthy again for the second between the socket closing and the frame
+      // clock running out.
+      if (lastState == DeviceStreamState.ended &&
+          state != DeviceStreamState.ended) {
+        return;
+      }
+      if (state == lastState && detail == lastDetail) return;
       lastState = state;
+      lastDetail = detail;
       if (healthController.isClosed) return;
       healthController.add(
         DeviceStreamHealth(
@@ -516,14 +524,16 @@ class DeviceStreamService {
     // The server exiting is the failure that used to be invisible: the socket
     // may stay in a state where nothing arrives and nothing complains.
     unawaited(
-      server.exitCode.then((code) {
-        _logger.warning('Device $serial scrcpy-server exited with $code.');
-        report(
-          DeviceStreamState.ended,
-          'scrcpy-server exited (code $code).'
-          '${serverLog.isEmpty ? '' : ' ${serverLog.last}'}',
-        );
-      }).catchError((Object _) {}),
+      server.exitCode
+          .then((code) {
+            _logger.warning('Device $serial scrcpy-server exited with $code.');
+            report(
+              DeviceStreamState.ended,
+              'scrcpy-server exited (code $code).'
+              '${serverLog.isEmpty ? '' : ' ${serverLog.last}'}',
+            );
+          })
+          .catchError((Object _) {}),
     );
 
     // The watchdog. A frozen picture is otherwise indistinguishable from a
@@ -642,29 +652,105 @@ class DeviceStreamService {
     return session;
   }
 
-  /// Opens the control socket and gives it a moment to prove it survives.
-  ///
-  /// There is no positive handshake to wait for — the server says nothing on
-  /// this socket until asked — so the test is the negative one: a connection
-  /// that adb accepted but the device never did closes almost immediately.
-  Future<ScrcpyControlConnection?> _connectControl(
-    int port, {
-    int attempts = 5,
-    Duration grace = const Duration(milliseconds: 250),
+  /// One attempt at forward → server → sockets, torn down completely if any
+  /// step fails so a retry does not leak a server or a forward.
+  Future<_Tunnel?> _openTunnel({
+    required String serial,
+    required int captureSize,
+    required int captureFps,
+    required bool withControl,
   }) async {
-    for (var attempt = 0; attempt < attempts; attempt++) {
-      Socket candidate;
-      try {
-        candidate = await Socket.connect('127.0.0.1', port);
-      } on SocketException {
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-        continue;
-      }
-      final connection = ScrcpyControlConnection(candidate, logger: _logger);
-      await Future<void>.delayed(grace);
-      if (connection.isOpen) return connection;
-      await connection.close();
+    // adb picks the port, so we never collide with a reserved range — scrcpy's
+    // default 27183 was already unavailable on this machine.
+    //
+    // The scid must fit a signed 32-bit int: `Options.parse` runs it through
+    // `Integer.parseInt`, and anything larger aborts the server with a
+    // `NumberFormatException` before it prints anything else.
+    final scid = Random().nextInt(0x7FFFFFFF).toRadixString(16).padLeft(8, '0');
+    final forward = await runner.run(
+      CommandRequest(
+        executable: adb.sdk.adb.path,
+        arguments: [
+          '-s',
+          serial,
+          'forward',
+          'tcp:0',
+          'localabstract:scrcpy_$scid',
+        ],
+      ),
+    );
+    final port = parseForwardedPort(forward.stdout);
+    if (!forward.ok || port == null) {
+      throw StateError(
+        'Could not open an adb tunnel: ${forward.stderr.trim()}',
+      );
     }
+
+    // raw_stream stays OFF: we want scrcpy's per-frame timestamps and keyframe
+    // flags for the MPEG-TS mux.
+    final server = await runner.start(
+      CommandRequest(
+        executable: adb.sdk.adb.path,
+        arguments: [
+          '-s',
+          serial,
+          'shell',
+          'CLASSPATH=$_devicePath',
+          'app_process',
+          '/',
+          'com.genymobile.scrcpy.Server',
+          kScrcpyVersion,
+          'scid=$scid',
+          'log_level=warn',
+          'tunnel_forward=true',
+          'audio=false',
+          // Loop 36: the control socket. Note this also changes the video
+          // handshake — see [_connectSockets].
+          'control=${withControl ? 'true' : 'false'}',
+          'cleanup=true',
+          'send_device_meta=false',
+          'send_dummy_byte=false',
+          'max_size=$captureSize',
+          'video_codec=h264',
+          'max_fps=$captureFps',
+          // A keyframe every second. Without this the encoder may go a long
+          // time between keyframes, and a viewer that connects in between has
+          // nothing it can start decoding from.
+          'video_codec_options=i-frame-interval=1',
+        ],
+      ),
+    );
+    // Keep what the server says. When it dies it normally explains itself on
+    // stderr, and that explanation used to go only to a log nobody reads — the
+    // pane now shows it, because "the live view stopped" on its own is not a
+    // report anyone can act on.
+    final serverLog = <String>[];
+    unawaited(
+      server.stderrLines.forEach((line) {
+        _logger.warning('scrcpy: $line');
+        serverLog.add(line);
+        if (serverLog.length > 20) serverLog.removeAt(0);
+      }),
+    );
+
+    final sockets = await _connectSockets(port, withControl: withControl);
+    if (sockets != null) {
+      return _Tunnel(
+        scid: scid,
+        port: port,
+        server: server,
+        serverLog: serverLog,
+        video: sockets.video,
+        control: sockets.control,
+      );
+    }
+    _logger.warning(
+      'Device $serial: scrcpy did not stream with control='
+      '$withControl.${serverLog.isEmpty ? '' : ' ${serverLog.join(' / ')}'}',
+    );
+    await server.kill();
+    await _killDeviceServers(serial, scid);
+    await adb.removeForward(serial, port);
     return null;
   }
 

@@ -484,4 +484,80 @@ void main() {
       );
     });
   });
+
+  group('device_stop_emulator', () {
+    test('is advertised alongside the other device tools', () {
+      final names = [
+        for (final schema in LauncherControlServer.toolSchemas)
+          schema['name'] as String,
+      ];
+      expect(names, contains('device_stop_emulator'));
+    });
+
+    test('requires a serial rather than guessing the only device', () async {
+      // Every other device tool defaults to "the only ready device". Silently
+      // defaulting a destructive action is a different thing entirely.
+      final server = await _server(_adbRunner());
+      addTearDown(server.dispose);
+      expect(
+        _error(await server.call('device_stop_emulator')),
+        contains('serial is required'),
+      );
+    });
+
+    test(
+      'refuses a physical device, which cannot be stopped this way',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (request) => request.arguments.contains('devices')
+              ? const CommandResult(
+                  exitCode: 0,
+                  stdout:
+                      'List of devices attached\n'
+                      'F6IZLV6LMFT4U4ZT device product:CPH1989 model:CPH1989\n',
+                  stderr: '',
+                )
+              : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+        );
+        final server = await _server(runner);
+        addTearDown(server.dispose);
+        final error = _error(
+          await server.call('device_stop_emulator', {
+            'serial': 'F6IZLV6LMFT4U4ZT',
+          }),
+        );
+        expect(error, contains('physical device'));
+      },
+    );
+
+    test('kills the emulator and confirms it really went', () async {
+      var polls = 0;
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          if (request.arguments.contains('devices')) {
+            polls += 1;
+            return CommandResult(
+              exitCode: 0,
+              stdout: polls <= 1
+                  ? 'List of devices attached\nemulator-5554 device\n'
+                  : 'List of devices attached\n',
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 0, stdout: 'OK\n', stderr: '');
+        },
+      );
+      final server = await _server(runner);
+      addTearDown(server.dispose);
+      final reply = await server.call('device_stop_emulator', {
+        'serial': 'emulator-5554',
+      });
+      expect(reply['ok'], isTrue, reason: '${reply['error']}');
+      expect((reply['result'] as Map)['stopped'], isTrue);
+      expect(
+        runner.requests.map((r) => r.arguments),
+        contains(equals(['-s', 'emulator-5554', 'emu', 'kill'])),
+      );
+    });
+  });
 }
