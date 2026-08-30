@@ -33,6 +33,7 @@ dependencies:
   # Vendored fork — see packages/xterm/VENDORED.md.
   xterm:
     path: packages/xterm
+  yaml: ^3.1.4
 
 dev_dependencies:
   flutter_test:

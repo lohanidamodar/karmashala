@@ -1,0 +1,11 @@
+name: Cyber Wave
+accent:
+  left: "#007972"
+  right: "#7b008f"
+background:
+  top: "#002633"
+  bottom: "#000000"
+foreground: '#e0e0e0'
+terminal_colors:
+  normal: { black: '#0a0a0a', red: '#ff5f5f', green: '#5fff5f', yellow: '#ffff5f', blue: '#5f5fff', magenta: '#ff5fff', cyan: '#5fffff', white: '#e0e0e0' }
+  bright: { black: '#3a3a3a', red: '#ff8787', green: '#87ff87', yellow: '#ffff87', blue: '#8787ff', magenta: '#ff87ff', cyan: '#87ffff', white: '#ffffff' }
