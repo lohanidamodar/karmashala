@@ -3,7 +3,7 @@
 // Drives a real Chrome end to end and checks that what we capture is really
 // what was picked. Run it from the repo root with a Chrome installed:
 //
-//   dart run test/features/browser/real_chrome_smoke.dart
+//   dart run tool/verification/real_chrome_smoke.dart
 //
 // It spawns its own Chrome on port 9333 with a throwaway profile, exercises
 // navigate / evaluate / screenshot / element picking (driven by synthetic CDP

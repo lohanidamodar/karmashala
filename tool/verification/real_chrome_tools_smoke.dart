@@ -6,12 +6,12 @@
 // catches — a click that lands on the wrong element, key events a page ignores,
 // a screenshot that is not of what it says.
 //
-//   dart run test/features/browser/real_chrome_tools_smoke.dart
+//   dart run tool/verification/real_chrome_tools_smoke.dart
 //
 // Pass a URL to also measure what each tool costs on a real site, which is the
 // only honest way to quote a token cost:
 //
-//   dart run test/features/browser/real_chrome_tools_smoke.dart https://…
+//   dart run tool/verification/real_chrome_tools_smoke.dart https://…
 //
 // It spawns its own Chrome on port 9334 with a throwaway profile, and kills the
 // browser and deletes both temp directories at the end. Exit code 0 means every

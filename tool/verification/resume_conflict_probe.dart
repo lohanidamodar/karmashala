@@ -13,8 +13,27 @@ import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+/// Manual diagnostic — NOT part of `flutter test`'s default run, and not a
+/// test. It lived in `integration_test/` until Loop 63; being there overstated
+/// what is actually covered.
+///
+/// Run it explicitly, on a Windows desktop device, with WSL plus a logged-in
+/// `codex` and/or `claude` inside the distro:
+///
+///   flutter test -d windows tool/verification/resume_conflict_probe.dart
+///
 /// EXPERIMENT: does resuming a conversation that another process is already
 /// holding work, and how does each agent refuse?
+///
+/// **It answers that question by printing, not by asserting.** The codex case
+/// asserts only that pane A produced a rollout file — nothing about the second
+/// resume, which is the behaviour the name promises. The claude case asserts
+/// nothing at all. Both lean on fixed 15–35 second sleeps, on installed CLIs
+/// and live accounts, and on whatever mutable session state the host already
+/// has. Read the `TRACE`/`SCREEN` dumps; do not read a pass as evidence.
+///
+/// See `tool/verification/README.md` for what a real regression test of this
+/// behaviour would need.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
