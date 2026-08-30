@@ -268,7 +268,21 @@ Future<List<MatrixFinding>> _focusFindings(
   }
 
   for (final rect in rects) {
-    if (rect == null || rect.isEmpty) continue;
+    if (rect == null) {
+      // Not "skip it": a stop with nothing on screen to measure is a control
+      // the user can tab to and cannot see, which is the bug this harness is
+      // for. It used to disappear into a broad catch and produce no finding.
+      findings.add(
+        MatrixFinding(
+          cell,
+          'focus',
+          'a focus stop has no laid-out render object to measure — it can be '
+              'tabbed to but not seen',
+        ),
+      );
+      continue;
+    }
+    if (rect.isEmpty) continue;
     if (!window.overlaps(rect)) {
       findings.add(
         MatrixFinding(
@@ -347,6 +361,10 @@ SemanticsNode? _rootSemantics(WidgetTester tester) {
 /// Settle, but do not require the tree to go quiet: a surface showing a
 /// progress indicator animates forever, and `pumpAndSettle` would time the
 /// whole matrix out rather than measure the layout in front of it.
+///
+/// Only that timeout is tolerated. Catching every [FlutterError] also swallowed
+/// whatever a widget threw while settling, which is exactly the kind of finding
+/// the matrix is supposed to report.
 Future<void> _settle(WidgetTester tester) async {
   try {
     await tester.pumpAndSettle(
@@ -354,16 +372,24 @@ Future<void> _settle(WidgetTester tester) async {
       EnginePhase.sendSemanticsUpdate,
       const Duration(seconds: 2),
     );
-  } on FlutterError {
+  } on FlutterError catch (error) {
+    if (!error.message.contains('pumpAndSettle timed out')) rethrow;
     await tester.pump(const Duration(milliseconds: 100));
   }
 }
 
-/// A focus stop's global rect, or null when it has no render object to measure.
+/// A focus stop's global rect, or null when there is nothing to measure.
+///
+/// Null is a finding, not a skip — see [_focusFindings]. Two things produce it:
+/// a node focused without ever being built (no render object), and one whose
+/// render object has not been laid out (the framework asserts on
+/// `semanticBounds`). The catch covers only the second; anything else the
+/// widget threw is a real error and is allowed out.
 Rect? _rectOf(FocusNode node) {
+  if (node.context?.findRenderObject() == null) return null;
   try {
     return node.rect;
-  } on Object {
+  } on AssertionError {
     return null;
   }
 }
