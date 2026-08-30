@@ -56,6 +56,9 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        // A page header, not a chrome row: `Chrome.titleBar` is the shell's
+        // 30px strip and a back button plus a title does not sit in it.
+        toolbarHeight: 44,
         leading: const BackButton(),
         title: Row(
           children: [
