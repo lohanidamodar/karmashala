@@ -236,7 +236,14 @@ class SessionActions {
       }
       final permission = _ref
           .read(sessionLauncherProvider)
-          .permissionFor(installation.agentId, SessionPurpose.existingSession);
+          .permissionFor(
+            installation.agentId,
+            SessionPurpose.existingSession,
+            // The session's own mode, when it has one: a resume runs under what
+            // this session carries, not under whatever the global default has
+            // become since it started.
+            sessionMode: session.permissionMode,
+          );
       await engine.resume(
         session: session,
         workingDirectory: session.worktree ?? repo.path,
@@ -365,7 +372,14 @@ class SessionActions {
       externalId: session.externalSessionId,
       permissionMode: _ref
           .read(sessionLauncherProvider)
-          .permissionFor(installation.agentId, SessionPurpose.existingSession),
+          .permissionFor(
+            installation.agentId,
+            SessionPurpose.existingSession,
+            // The session's own mode, when it has one: a resume runs under what
+            // this session carries, not under whatever the global default has
+            // become since it started.
+            sessionMode: session.permissionMode,
+          ),
       cwd: (session.worktree ?? repo.path).path,
     );
   }
@@ -558,7 +572,14 @@ class SessionActions {
       cwd: session.worktree ?? repo.path,
       permissionMode: _ref
           .read(sessionLauncherProvider)
-          .permissionFor(installation.agentId, SessionPurpose.existingSession),
+          .permissionFor(
+            installation.agentId,
+            SessionPurpose.existingSession,
+            // The session's own mode, when it has one: a resume runs under what
+            // this session carries, not under whatever the global default has
+            // become since it started.
+            sessionMode: session.permissionMode,
+          ),
     );
     final cwd = env.wslDistribution == null
         ? (session.worktree ?? repo.path).path
