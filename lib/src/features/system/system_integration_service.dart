@@ -3,13 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/quick_open/quick_open.dart';
+import '../../core/logging/app_logger.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import '../notifications/domain/inbox_item.dart';
@@ -18,6 +16,8 @@ import '../settings/application/settings_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../settings/domain/settings.dart';
 import 'launcher_hotkey.dart';
+import 'native_adapters.dart';
+import 'native_status.dart';
 
 const _kMenuShow = 'show';
 const _kMenuHide = 'hide';
@@ -37,23 +37,73 @@ const _kAttentionTrayIcon = 'assets/tray_icon_attention.ico';
 /// A tray menu is a glance, not a list view.
 const _kMaxAttentionItems = 5;
 
+/// How many times one desired native value is attempted before the service
+/// stops retrying it on its own.
+///
+/// Bounded because the common failure — another application already owns the
+/// chord — does not resolve on its own, and a service that kept asking would
+/// spend a platform call on every window focus for the rest of the session.
+/// Changing the setting resets the budget, which is the case that *does*
+/// resolve: the user picks a chord nobody else holds.
+const _kMaxNativeAttempts = 4;
+
+Future<void> _noShutdown() async {}
+
 /// Wires the desktop OS integrations to the user [Settings]: a system tray icon
 /// and menu, close-to-tray, keep-the-system-awake, and launch-at-login.
 ///
-/// Lives outside the widget tree and is created only from `main()` on desktop —
-/// every native call is guarded so a headless/unsupported host degrades quietly.
+/// Lives outside the widget tree and is created only from the app lifecycle
+/// owner on desktop. Every platform call goes through [NativeAdapters], so a
+/// test can make any of them fail; before Loop 61 they were direct singleton
+/// calls wrapped in `catch (_) {}`, which meant a failed hotkey registration
+/// was indistinguishable from a successful one — to the user *and* to the
+/// suite.
+///
+/// ## Desired versus applied
+///
+/// Settings say what the user wants; the OS says what it did. The two are kept
+/// apart deliberately. An applied marker is written **only after the platform
+/// call returns**, so a transient failure leaves the desired value outstanding
+/// and it is tried again — on the next settings change, and on the next window
+/// focus, up to [_kMaxNativeAttempts]. The bug this replaces set the applied
+/// marker *before* registering, so one failure disabled the launcher hotkey for
+/// the lifetime of the process.
 class SystemIntegrationService with TrayListener, WindowListener {
-  SystemIntegrationService(this._container);
+  SystemIntegrationService(
+    this._container, {
+    NativeAdapters? adapters,
+    AppLogger? logger,
+    Future<void> Function()? onQuitRequested,
+  }) : _native = adapters ?? NativeAdapters.platform(),
+       _logger = logger ?? AppLogger.named('system'),
+       _onQuitRequested = onQuitRequested ?? _noShutdown;
 
   final ProviderContainer _container;
+  final NativeAdapters _native;
+  final AppLogger _logger;
+
+  /// Runs before the window is destroyed, so the lifecycle owner can shut the
+  /// rest of the app down in order. A no-op outside the app (tests, tools).
+  final Future<void> Function() _onQuitRequested;
 
   bool _closeToTray = false;
-  bool _autoStartConfigured = false;
+  bool _disposed = false;
 
-  /// The last hotkey config applied, so [apply] only re-registers when it
-  /// actually changes (re-registering on every settings change is wasteful and
-  /// can briefly drop the global binding).
+  /// What the user asked for, kept separately from what the OS confirmed.
+  bool? _desiredKeepAwake;
+  bool? _appliedKeepAwake;
+  bool? _desiredPreventClose;
+  bool? _appliedPreventClose;
+  bool? _desiredAutoStart;
+  bool? _appliedAutoStart;
+
+  /// The hotkey config the user wants, and the one actually registered. These
+  /// are only equal once [HotkeyAdapter.register] has returned.
+  String? _desiredHotkeySignature;
   String? _appliedHotkeySignature;
+
+  /// Attempts spent on the current desired value, per setting.
+  final Map<NativeSetting, int> _attempts = {};
 
   /// What the attention inbox has that the user has not seen, as the tray
   /// shows it.
@@ -78,35 +128,51 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Initializes the tray and window integration, applies the current settings,
   /// and starts listening for setting changes.
+  ///
+  /// Each step is independent: a tray that will not accept an icon must not
+  /// stop the hotkey from registering, and neither must stop the listeners
+  /// being attached. What failed is recorded rather than swallowed.
   Future<void> init() async {
     if (!isSupported) return;
 
     try {
-      launchAtStartup.setup(
+      _native.autoStart.setup(
         appName: 'Chitragupta',
         appPath: Platform.resolvedExecutable,
       );
-    } catch (_) {}
+    } on Object catch (error, stack) {
+      _logger.warning(
+        'system: launch-at-startup setup failed reason=$error',
+        error,
+        stack,
+      );
+    }
 
-    windowManager.addListener(this);
-    trayManager.addListener(this);
+    _native.window.addListener(this);
+    _native.tray.addListener(this);
 
     // Clear any stale system hotkeys left registered by a previous run/crash
     // before we register ours (recommended by hotkey_manager).
     try {
-      await hotKeyManager.unregisterAll();
-    } catch (_) {}
+      await _native.hotkey.unregisterAll();
+    } on Object catch (error, stack) {
+      _logger.warning(
+        'system: clearing stale hotkeys failed reason=$error',
+        error,
+        stack,
+      );
+    }
 
-    try {
-      await trayManager.setIcon(_kIdleTrayIcon);
-      await trayManager.setToolTip('Chitragupta');
-    } catch (_) {}
+    await _run(NativeSetting.trayIcon, () async {
+      await _native.tray.setIcon(_kIdleTrayIcon);
+      await _native.tray.setToolTip('Chitragupta');
+    });
 
     await apply(_settings);
 
     _container.listen<Settings>(
       settingsControllerProvider,
-      (_, next) => apply(next),
+      (_, next) => unawaited(apply(next)),
     );
 
     // Agent status → tray. The icon and menu are ambient state, so they follow
@@ -132,41 +198,150 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Applies [settings] to the OS: keep-awake, close-to-tray, launch-at-login,
   /// and refreshes the tray menu.
   Future<void> apply(Settings settings) async {
+    if (_disposed) return;
     _closeToTray = settings.closeToTray;
+    _want(NativeSetting.keepAwake, settings.keepAwake, _desiredKeepAwake);
+    _desiredKeepAwake = settings.keepAwake;
+    _want(
+      NativeSetting.closeToTray,
+      settings.closeToTray,
+      _desiredPreventClose,
+    );
+    _desiredPreventClose = settings.closeToTray;
+    _want(NativeSetting.autoStart, settings.autoStart, _desiredAutoStart);
+    _desiredAutoStart = settings.autoStart;
 
-    try {
-      await WakelockPlus.toggle(enable: settings.keepAwake);
-    } catch (_) {}
-
-    try {
-      await windowManager.setPreventClose(settings.closeToTray);
-    } catch (_) {}
-
-    await _applyAutoStart(settings.autoStart);
-    await _applyLauncherHotkey(settings);
-    await _refreshMenu(settings);
-  }
-
-  /// Registers (or clears) the global launcher hotkey to match [settings],
-  /// re-registering only when the hotkey or its enabled state changed.
-  Future<void> _applyLauncherHotkey(Settings settings) async {
     final signature = settings.launcherHotkeyEnabled
         ? (settings.launcherHotkeyJson ?? 'default')
         : 'disabled';
-    if (signature == _appliedHotkeySignature) return;
-    _appliedHotkeySignature = signature;
+    _want(NativeSetting.launcherHotkey, signature, _desiredHotkeySignature);
+    _desiredHotkeySignature = signature;
 
-    try {
-      await hotKeyManager.unregisterAll();
-      if (!settings.launcherHotkeyEnabled) return;
-      await hotKeyManager.register(
-        decodeLauncherHotKey(settings.launcherHotkeyJson),
-        keyDownHandler: (_) => _summonLauncher(),
-      );
-    } catch (_) {
-      // Registration can fail if the combo is already held by another app;
-      // leave the launcher reachable via the tray/app-bar buttons.
+    await _reconcile(settings);
+    await _refreshMenu(settings);
+  }
+
+  /// A new desired value resets that setting's retry budget: the reason the old
+  /// one kept failing may be exactly what the user just changed.
+  void _want(NativeSetting setting, Object? next, Object? previous) {
+    if (next != previous) _attempts.remove(setting);
+  }
+
+  /// Brings the OS in line with the desired values, skipping whatever already
+  /// matches and whatever has spent its retry budget.
+  Future<void> _reconcile(Settings settings) async {
+    if (_desiredKeepAwake != _appliedKeepAwake &&
+        _hasBudget(NativeSetting.keepAwake)) {
+      final want = _desiredKeepAwake!;
+      if (await _run(
+        NativeSetting.keepAwake,
+        () => _native.wakelock.toggle(enable: want),
+      )) {
+        _appliedKeepAwake = want;
+      }
     }
+
+    if (_desiredPreventClose != _appliedPreventClose &&
+        _hasBudget(NativeSetting.closeToTray)) {
+      final want = _desiredPreventClose!;
+      if (await _run(
+        NativeSetting.closeToTray,
+        () => _native.window.setPreventClose(want),
+      )) {
+        _appliedPreventClose = want;
+      }
+    }
+
+    if (_desiredAutoStart != _appliedAutoStart &&
+        _hasBudget(NativeSetting.autoStart)) {
+      await _applyAutoStart(_desiredAutoStart!);
+    }
+
+    if (_desiredHotkeySignature != _appliedHotkeySignature &&
+        _hasBudget(NativeSetting.launcherHotkey)) {
+      await _applyLauncherHotkey(settings);
+    }
+  }
+
+  /// Retries whatever the OS has not confirmed yet.
+  ///
+  /// Window focus is the cheap, well-timed signal for this: the user has just
+  /// come back to the app, and the conditions that make these calls fail —
+  /// another application holding the chord, a machine still waking up, a tray
+  /// that was not ready — are exactly the ones that change while it is in the
+  /// background.
+  Future<void> retryOutstanding() async {
+    if (_disposed || !isSupported) return;
+    await _reconcile(_settings);
+  }
+
+  bool _hasBudget(NativeSetting setting) =>
+      (_attempts[setting] ?? 0) < _kMaxNativeAttempts;
+
+  /// Runs one platform call, records what happened, and never throws.
+  Future<bool> _run(
+    NativeSetting setting,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+      _attempts.remove(setting);
+      _record(setting, const NativeSettingStatus.applied());
+      return true;
+    } on Object catch (error, stack) {
+      final attempts = (_attempts[setting] ?? 0) + 1;
+      _attempts[setting] = attempts;
+      final exhausted = attempts >= _kMaxNativeAttempts;
+      _logger.warning(
+        'system: ${setting.name} failed attempt=$attempts '
+        'exhausted=$exhausted reason=$error',
+        error,
+        stack,
+      );
+      _record(
+        setting,
+        NativeSettingStatus.failed(
+          '$error',
+          attempts: attempts,
+          exhausted: exhausted,
+        ),
+      );
+      return false;
+    }
+  }
+
+  /// Publishes one setting's native state.
+  ///
+  /// A platform call that was still in flight when the app started shutting
+  /// down would otherwise land on a disposed container — a crash on the way
+  /// out, in the code whose whole job is to make failures visible.
+  void _record(NativeSetting setting, NativeSettingStatus status) {
+    if (_disposed) return;
+    try {
+      _container
+          .read(nativeIntegrationStatusProvider.notifier)
+          .record(setting, status);
+    } on Object catch (error) {
+      _logger.warning('system: could not publish native status: $error');
+    }
+  }
+
+  /// Registers (or clears) the global launcher hotkey to match [settings].
+  ///
+  /// [_appliedHotkeySignature] is written **after** the registration returns,
+  /// so a chord another application is holding is retried rather than recorded
+  /// as done.
+  Future<void> _applyLauncherHotkey(Settings settings) async {
+    final signature = _desiredHotkeySignature;
+    final ok = await _run(NativeSetting.launcherHotkey, () async {
+      await _native.hotkey.unregisterAll();
+      if (!settings.launcherHotkeyEnabled) return;
+      await _native.hotkey.register(
+        decodeLauncherHotKey(settings.launcherHotkeyJson),
+        (_) => _summonLauncher(),
+      );
+    });
+    if (ok) _appliedHotkeySignature = signature;
   }
 
   /// Global-hotkey handler: a summon/dismiss toggle for the whole app.
@@ -179,35 +354,39 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// and puts it away again when it is already in front.
   Future<void> _summonLauncher() async {
     try {
-      if (await windowManager.isVisible() && await windowManager.isFocused()) {
-        await windowManager.hide();
+      if (await _native.window.isVisible() &&
+          await _native.window.isFocused()) {
+        await _native.window.hide();
         return;
       }
-    } catch (_) {
+    } on Object catch (error) {
       // An unavailable window manager must not swallow the hotkey; fall
       // through and try to show.
+      _logger.warning('system: window state unreadable reason=$error');
     }
     await _showWindow();
     _container.read(quickOpenRequestProvider.notifier).bump();
   }
 
   Future<void> _applyAutoStart(bool enabled) async {
-    // Avoid redundant registry writes once configured the same way.
-    if (_autoStartConfigured && enabled == await _isAutoStartEnabled()) return;
-    try {
-      if (enabled) {
-        await launchAtStartup.enable();
-      } else {
-        await launchAtStartup.disable();
-      }
-      _autoStartConfigured = true;
-    } catch (_) {}
+    // Avoid a redundant registry write when the OS already agrees.
+    if (_appliedAutoStart != null && enabled == await _isAutoStartEnabled()) {
+      _appliedAutoStart = enabled;
+      _record(NativeSetting.autoStart, const NativeSettingStatus.applied());
+      return;
+    }
+    final ok = await _run(
+      NativeSetting.autoStart,
+      () => enabled ? _native.autoStart.enable() : _native.autoStart.disable(),
+    );
+    if (ok) _appliedAutoStart = enabled;
   }
 
   Future<bool> _isAutoStartEnabled() async {
     try {
-      return await launchAtStartup.isEnabled();
-    } catch (_) {
+      return await _native.autoStart.isEnabled();
+    } on Object catch (error) {
+      _logger.warning('system: reading launch-at-login failed reason=$error');
       return false;
     }
   }
@@ -215,20 +394,21 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Reflects the current attention set in the tray: a badged icon, a tooltip
   /// that says how many, and the menu section that lists them.
   Future<void> _applyAttention(AttentionInbox inbox) async {
+    if (_disposed) return;
     _pending = inbox.pending;
     final count = inbox.unseen;
     if (count != _appliedAttentionCount) {
       final wasBadged = _appliedAttentionCount > 0;
       final isBadged = count > 0;
       _appliedAttentionCount = count;
-      try {
+      await _run(NativeSetting.trayIcon, () async {
         if (wasBadged != isBadged) {
-          await trayManager.setIcon(
+          await _native.tray.setIcon(
             isBadged ? _kAttentionTrayIcon : _kIdleTrayIcon,
           );
         }
-        await trayManager.setToolTip(_toolTip(count));
-      } catch (_) {}
+        await _native.tray.setToolTip(_toolTip(count));
+      });
     }
     await _refreshMenu(_settings);
   }
@@ -240,11 +420,13 @@ class SystemIntegrationService with TrayListener, WindowListener {
   };
 
   Future<void> _refreshMenu(Settings settings) async {
+    if (_disposed) return;
     final notifications = _container.read(
       notificationSettingsControllerProvider,
     );
-    try {
-      await trayManager.setContextMenu(
+    await _run(
+      NativeSetting.trayMenu,
+      () => _native.tray.setContextMenu(
         Menu(
           items: [
             ..._attentionMenuItems(),
@@ -272,8 +454,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
             MenuItem(key: _kMenuQuit, label: 'Quit'),
           ],
         ),
-      );
-    } catch (_) {}
+      ),
+    );
   }
 
   /// The "needs you" section: one clickable item per waiting session, or a
@@ -314,42 +496,64 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   Future<void> _showWindow() async {
     try {
-      await windowManager.show();
-      await windowManager.focus();
-    } catch (_) {}
+      await _native.window.show();
+      await _native.window.focus();
+    } on Object catch (error) {
+      _logger.warning('system: showing the window failed reason=$error');
+    }
   }
 
   /// Toggles window visibility: hide when it's already up front, otherwise bring
   /// it back. Used by the tray icon click.
   Future<void> _toggleWindow() async {
     try {
-      final visible = await windowManager.isVisible();
-      final focused = visible && await windowManager.isFocused();
+      final visible = await _native.window.isVisible();
+      final focused = visible && await _native.window.isFocused();
       if (visible && focused) {
-        await windowManager.hide();
+        await _native.window.hide();
       } else {
-        await windowManager.show();
-        await windowManager.focus();
+        await _native.window.show();
+        await _native.window.focus();
       }
-    } catch (_) {}
+    } on Object catch (error) {
+      _logger.warning('system: toggling the window failed reason=$error');
+    }
   }
+
+  /// Quits the application.
+  ///
+  /// The workspace snapshot goes first and synchronously, then the lifecycle
+  /// owner gets its ordered shutdown, and only then is the window destroyed —
+  /// `destroy()` ends the process, so anything after it does not happen.
+  @visibleForTesting
+  Future<void> quit() => _quit();
 
   Future<void> _quit() async {
     _saveTerminalWorkspace();
     try {
-      await windowManager.setPreventClose(false);
-      await windowManager.destroy();
-    } catch (_) {
+      await _onQuitRequested();
+    } on Object catch (error, stack) {
+      // A shutdown step that fails must not strand the user in an app that
+      // will not close.
+      _logger.warning('system: shutdown before quit failed.', error, stack);
+    }
+    try {
+      await _native.window.setPreventCloseAndDestroy();
+    } on Object catch (error) {
+      _logger.warning('system: window destroy failed reason=$error');
       exit(0);
     }
   }
 
   /// Snapshots the terminal workspace on the way out.
   ///
-  /// `windowManager.destroy()` ends the process without disposing the provider
-  /// container, so the controller's own teardown hook never runs — without this
-  /// the last thing the user did before quitting is the one thing that does not
-  /// come back.
+  /// First, and synchronously, before anything else in the quit sequence gets a
+  /// chance to fail or time out. Loop 38 and Loop 53 both landed here: without
+  /// this call the last thing the user did before quitting is the one thing
+  /// that does not come back. The lifecycle owner does now dispose the
+  /// container, which would run the controller's own teardown — but that
+  /// happens inside a bounded budget, several steps later, and the workspace is
+  /// not something to leave to a step that is allowed to be abandoned.
   ///
   /// Guarded by [ProviderContainer.exists] so quitting never *creates* the
   /// terminal controller: building it would restore a workspace only to write
@@ -361,18 +565,52 @@ class SystemIntegrationService with TrayListener, WindowListener {
       _container
           .read(terminalSessionsControllerProvider.notifier)
           .persistWorkspace();
-    } catch (_) {
+    } on Object catch (error) {
       // Never block quitting on persistence.
+      _logger.warning('system: persisting the workspace failed reason=$error');
+    }
+  }
+
+  /// Detaches from the OS: listeners off, hotkeys released, tray icon removed.
+  ///
+  /// Ordered so the app stops *receiving* events before it stops being able to
+  /// answer them. Idempotent, and every step is independent — one platform call
+  /// that hangs or throws must not leave the rest attached.
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    if (!isSupported) return;
+
+    try {
+      _native.window.removeListener(this);
+    } on Object catch (error) {
+      _logger.warning('system: detaching the window listener failed: $error');
+    }
+    try {
+      _native.tray.removeListener(this);
+    } on Object catch (error) {
+      _logger.warning('system: detaching the tray listener failed: $error');
+    }
+
+    try {
+      await _native.hotkey.unregisterAll();
+    } on Object catch (error) {
+      _logger.warning('system: releasing hotkeys failed reason=$error');
+    }
+    try {
+      await _native.tray.destroy();
+    } on Object catch (error) {
+      _logger.warning('system: removing the tray icon failed reason=$error');
     }
   }
 
   // --- TrayListener ---
 
   @override
-  void onTrayIconMouseDown() => _toggleWindow();
+  void onTrayIconMouseDown() => unawaited(_toggleWindow());
 
   @override
-  void onTrayIconRightMouseDown() => trayManager.popUpContextMenu();
+  void onTrayIconRightMouseDown() => unawaited(_native.tray.popUpContextMenu());
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
@@ -384,9 +622,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
     switch (key) {
       case _kMenuShow:
-        _showWindow();
+        unawaited(_showWindow());
       case _kMenuHide:
-        windowManager.hide();
+        unawaited(_native.window.hide());
       case _kMenuKeepAwake:
         _controller.setKeepAwake(!_settings.keepAwake);
       case _kMenuNotifications:
@@ -406,7 +644,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
               .onlyWhenUnfocused,
         );
       case _kMenuQuit:
-        _quit();
+        unawaited(_quit());
     }
   }
 
@@ -415,15 +653,18 @@ class SystemIntegrationService with TrayListener, WindowListener {
   @override
   void onWindowClose() {
     if (_closeToTray) {
-      windowManager.hide();
+      unawaited(_native.window.hide());
     } else {
-      _quit();
+      unawaited(_quit());
     }
   }
 
   @override
-  void onWindowFocus() =>
-      _container.read(windowFocusedProvider.notifier).set(true);
+  void onWindowFocus() {
+    _container.read(windowFocusedProvider.notifier).set(true);
+    // The retry tick. See [retryOutstanding].
+    unawaited(retryOutstanding());
+  }
 
   @override
   void onWindowBlur() {
@@ -433,13 +674,15 @@ class SystemIntegrationService with TrayListener, WindowListener {
   }
 
   @override
-  void onWindowResized() => _saveWindowSize();
+  void onWindowResized() => unawaited(_saveWindowSize());
 
   Future<void> _saveWindowSize() async {
     try {
-      final size = await windowManager.getSize();
+      final size = await _native.window.getSize();
       if (size.width < 200 || size.height < 200) return;
       _controller.setWindowSize(size.width, size.height);
-    } catch (_) {}
+    } on Object catch (error) {
+      _logger.warning('system: reading the window size failed reason=$error');
+    }
   }
 }

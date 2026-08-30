@@ -19,6 +19,9 @@ import '../../agents/domain/agent_usage.dart';
 import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../mcp/control_server_status.dart';
+import '../../system/native_status.dart';
+import 'native_setting_status_line.dart';
 import '../../mcp/launcher_control_server.dart';
 import '../../mcp/launcher_mcp.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -112,6 +115,10 @@ class SettingsScreen extends ConsumerWidget {
                     'Chitragupta is running.',
                   ),
                 ),
+                NativeSettingStatusLine(
+                  NativeSetting.keepAwake,
+                  enabled: settings.keepAwake,
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.closeToTray,
@@ -122,6 +129,10 @@ class SettingsScreen extends ConsumerWidget {
                     'instead of quitting.',
                   ),
                 ),
+                NativeSettingStatusLine(
+                  NativeSetting.closeToTray,
+                  enabled: settings.closeToTray,
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.autoStart,
@@ -130,6 +141,10 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: const Text(
                     'Launch Chitragupta automatically when you sign in.',
                   ),
+                ),
+                NativeSettingStatusLine(
+                  NativeSetting.autoStart,
+                  enabled: settings.autoStart,
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -773,6 +788,7 @@ class _AgentLauncherSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final bridge = const LauncherMcp().bridgeExecutable();
     final available = bridge != null;
+    final control = ref.watch(controlServerStatusProvider);
     return SettingsSection(
       title: 'MCP BRIDGE',
       child: Column(
@@ -825,6 +841,42 @@ class _AgentLauncherSection extends ConsumerWidget {
               ),
             ],
           ),
+          // The other half of "can an agent drive this app": the bridge being
+          // installed says nothing about whether the app is willing to answer
+          // it. When hardening fails the server withholds privileged RPC
+          // deliberately, and the tools above simply stop working — silently,
+          // unless this says so.
+          if (control.failedClosed) ...[
+            const SizedBox(height: Insets.xs),
+            Row(
+              children: [
+                Icon(
+                  AppIcons.warningCircle,
+                  size: 16,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: Insets.xs),
+                Expanded(
+                  child: Text(
+                    control.message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (control.failureDetail case final detail?)
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.xs, left: 20),
+                child: Text(
+                  detail,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -896,6 +948,14 @@ class _LauncherHotkeySection extends ConsumerWidget {
                 ),
               ],
             ),
+          ),
+          // A chord another application already holds registers as a failure
+          // and nothing else; without this the switch says on and the shortcut
+          // does nothing. Changing the chord resets the retry budget, so this
+          // line is also the instruction for clearing it.
+          NativeSettingStatusLine(
+            NativeSetting.launcherHotkey,
+            enabled: enabled,
           ),
         ],
       ),

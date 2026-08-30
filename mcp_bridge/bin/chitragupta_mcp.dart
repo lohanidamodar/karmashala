@@ -201,9 +201,21 @@ class _Bridge {
       );
     }
     final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    final token = json['token'] as String?;
+    if (token == null) {
+      // The app is running, but it withheld privileged RPC: it could not lock
+      // the owner-only socket directory or the handshake file to this account,
+      // so it published neither a transport nor a credential. Say that, rather
+      // than failing on a cast.
+      throw StateError(
+        'Chitragupta is running but its agent tools are switched off: the '
+        'owner-only channel could not be secured. Open Settings → MCP Bridge '
+        'for the reason.',
+      );
+    }
     final config = _BridgeConfig(
       port: json['port'] as int,
-      token: json['token'] as String,
+      token: token,
       socketPath: json['socketPath'] as String?,
     );
     _config = config;
