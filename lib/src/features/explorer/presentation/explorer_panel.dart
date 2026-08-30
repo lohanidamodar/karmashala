@@ -20,11 +20,14 @@ import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
+import '../../sessions/domain/session_resume.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
@@ -731,6 +734,24 @@ class _NativeSessionRow extends ConsumerWidget {
       ref.read(selectedSessionIdProvider.notifier).select(session.id);
     }
 
+    // What we can honestly say about where this session's process is, before
+    // the user clicks anything. Three separately-weighted facts, none of which
+    // is allowed to become a confident "active": see [SessionWhereabouts].
+    final whereabouts = ref.watch(sessionWhereaboutsProvider(session.id));
+    final subtitle = [
+      session.status.name,
+      if (session.useWorktree) 'worktree',
+      // "running here" is left out: the row already says `running` and carries a
+      // live badge, so repeating it would spend the row's width on the one fact
+      // the user can already see. The other two are things nothing else says.
+      if (whereabouts.external) 'opened in an external terminal',
+      if (whereabouts.refusedResume) 'open in another process',
+    ];
+    final lastSeen = whereabouts.lastSeenLabel(
+      ref.read(clockProvider).nowUtc(),
+    );
+    if (lastSeen != null) subtitle.add(lastSeen);
+
     return _SessionRow(
       depth: depth,
       selected: selected,
@@ -742,9 +763,8 @@ class _NativeSessionRow extends ConsumerWidget {
       // the subtitle is the session's own lifecycle. A session can be `running`
       // and its agent idle, waiting for you to type.
       badge: AgentStatusBadge(sessionId: session.id),
-      subtitle:
-          '${session.status.name}'
-          '${session.useWorktree ? ' · worktree' : ''}',
+      subtitle: subtitle.join(' · '),
+      subtitleTooltip: whereabouts.explanation,
       onTap: select,
       menuItems: [
         for (final terminal in terminals)
@@ -839,6 +859,14 @@ class _ImportedSessionRow extends ConsumerWidget {
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
     final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
+    // The CLI store file's own mtime — the strongest "last seen" anywhere in the
+    // app, because it is the agent's own writing rather than anything we
+    // inferred. Aged rather than stated, so a row can never claim to be live.
+    final updatedAt = session.updatedAt;
+    final lastSeen = updatedAt == null
+        ? null
+        : 'last seen '
+              '${describeAge(ref.read(clockProvider).nowUtc().difference(updatedAt))}';
 
     Future<void> onMenu(String action) async {
       switch (action) {
@@ -890,7 +918,11 @@ class _ImportedSessionRow extends ConsumerWidget {
         size: 16,
       ),
       title: session.displayTitle,
-      subtitle: '$cliLabel · imported',
+      subtitle: [cliLabel, 'imported', ?lastSeen].join(' · '),
+      subtitleTooltip: lastSeen == null
+          ? null
+          : 'The agent last wrote to this conversation then. We cannot see '
+                'whether a process still has it open.',
       onTap: select,
       menuItems: [
         DesktopMenuItem(
@@ -948,6 +980,7 @@ class _SessionRow extends StatelessWidget {
     required this.onMenu,
     this.pinned = false,
     this.badge,
+    this.subtitleTooltip,
   });
 
   final int depth;
@@ -955,6 +988,11 @@ class _SessionRow extends StatelessWidget {
   final Widget leading;
   final String title;
   final String subtitle;
+
+  /// The longer form of what [subtitle] says, when the short form had to leave
+  /// something out — chiefly *how sure we are*. Falls back to the subtitle
+  /// itself, which is also what makes an ellipsised row readable.
+  final String? subtitleTooltip;
 
   /// Live agent status, for rows that have one. Sits between the title and the
   /// lifecycle text so "what is it doing right now" reads before "what happened
@@ -975,31 +1013,50 @@ class _SessionRow extends StatelessWidget {
         selected: selected,
         contentPadding: EdgeInsets.only(left: 8.0 + depth * 16 + 36, right: 0),
         leading: leading,
-        title: Row(
-          children: [
-            if (pinned) ...[
-              Icon(
-                AppIcons.pushPinFill,
-                size: 11,
-                color: Theme.of(context).colorScheme.tertiary,
+        // The subtitle grew in Loop 46 — it now carries what we know about
+        // where the session's process is — so it has to be capped rather than
+        // laid out at its natural width. Half the row, ellipsised, with the
+        // title taking the rest: the alternative is a row that overflows at the
+        // pane widths people actually use.
+        title: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              if (pinned) ...[
+                Icon(
+                  AppIcons.pushPinFill,
+                  size: 11,
+                  color: Theme.of(context).colorScheme.tertiary,
+                ),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const SizedBox(width: 4),
+              if (badge != null) ...[const SizedBox(width: 6), badge!],
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                child: Tooltip(
+                  message: subtitleTooltip == null
+                      ? subtitle
+                      : '$subtitle\n$subtitleTooltip',
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(fontSize: 10),
+                  ),
+                ),
+              ),
             ],
-            Expanded(
-              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ),
-            if (badge != null) ...[const SizedBox(width: 6), badge!],
-            const SizedBox(width: 6),
-            Tooltip(
-              message: subtitle,
-              child: Text(
-                subtitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(fontSize: 10),
-              ),
-            ),
-          ],
+          ),
         ),
         trailing: PopupMenuButton<String>(
           tooltip: 'Session actions',

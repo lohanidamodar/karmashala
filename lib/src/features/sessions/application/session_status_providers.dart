@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_status_providers.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../domain/session.dart';
+import 'session_chat_source.dart';
 import 'session_providers.dart';
 
 /// How often a PTY-hosted session's screen is re-read for status.
@@ -38,7 +40,34 @@ final agentSessionStatusProvider = StreamProvider.autoDispose
       if (agentId == null) return;
 
       final service = ref.read(agentStatusServiceProvider);
+      final locator = ref.read(sessionTranscriptLocatorProvider);
+      final clock = ref.read(clockProvider);
+      String? statePath;
+      DateTime? nextSearch;
+
       while (true) {
+        // Re-read the row each tick: an agent that would not accept a session id
+        // announces one later, and the transcript only becomes findable then.
+        final current = ref.read(sessionDaoProvider).getById(sessionId);
+        final externalId = current?.externalSessionId;
+        final now = clock.nowUtc();
+
+        // Native sessions used to pass no [stateFilePath] at all, so they read
+        // `unknown` forever while imported ones — which carry the path from CLI
+        // detection — did not. Same store, same file; the only difference was
+        // that nobody had looked it up. The search is a full store scan, so it
+        // runs on its own slow interval and stops for good once it succeeds.
+        if (statePath == null &&
+            externalId != null &&
+            externalId.isNotEmpty &&
+            (nextSearch == null || !now.isBefore(nextSearch))) {
+          nextSearch = now.add(kNativeTranscriptSearchInterval);
+          statePath = await locator.locate(
+            agentId: agentId,
+            externalSessionId: externalId,
+          );
+        }
+
         yield await service.statusFor(
           AgentStatusQuery(
             agentId: agentId,
@@ -46,13 +75,22 @@ final agentSessionStatusProvider = StreamProvider.autoDispose
             // share. Falling back to our own id keeps the query well-formed for
             // an agent that never announced one; it simply will not match a hook
             // report, which is the truth.
-            sessionId: session.externalSessionId ?? session.id,
-            terminalTailLines: sessionTerminalTail(ref, session),
+            sessionId: externalId ?? sessionId,
+            stateFilePath: statePath,
+            terminalTailLines: sessionTerminalTail(ref, current ?? session),
           ),
         );
         await Future<void>.delayed(kAgentStatusPollInterval);
       }
     });
+
+/// How long between attempts to find a native session's transcript on disk.
+///
+/// Much slower than the status poll because finding it costs a scan of every
+/// CLI store, and because the thing being waited for is the agent writing its
+/// first turn — which happens once, seconds-to-minutes after launch, and never
+/// again.
+const Duration kNativeTranscriptSearchInterval = Duration(seconds: 10);
 
 /// The bottom rows of the pane [session] runs in, or nothing.
 ///

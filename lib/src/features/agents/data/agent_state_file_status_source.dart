@@ -53,6 +53,9 @@ class AgentStateFileStatusSource {
       status: status,
       source: AgentStatusSource.stateFile,
       observedAt: now,
+      // The file's own mtime, not the poll's: a transcript nothing has touched
+      // for a day must not read as a fresh observation.
+      sourceModifiedAt: modified,
       detail: detail,
     );
   }
