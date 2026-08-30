@@ -60,6 +60,16 @@ class ProjectCard extends StatelessWidget {
   /// word of aggregate is worth less than the row it would squeeze.
   static const aggregateWidth = 260.0;
 
+  /// And the narrowest that has room for the semantic badges *as well*.
+  ///
+  /// Two thresholds rather than one because the name is the row's only flexible
+  /// child: everything to its right is measured, so the facts have to be dropped
+  /// by the layout rather than squeezed by it. With the aggregate, the badges
+  /// and three buttons all drawn, a 294px pane overflowed by 60px — the same
+  /// failure Loop 50 §7 found by looking at the running app, and the reason
+  /// there is a widget test at this exact width now.
+  static const badgeWidth = 350.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -91,12 +101,18 @@ class ProjectCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 5, 4, 5),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final wide = constraints.maxWidth >= aggregateWidth;
+              final width = constraints.maxWidth;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _line1(context, muted, semantic, wide: wide),
+                  _line1(
+                    context,
+                    muted,
+                    semantic,
+                    wide: width >= aggregateWidth,
+                    roomy: width >= badgeWidth,
+                  ),
                   const SizedBox(height: 1),
                   _line2(context, muted),
                 ],
@@ -113,6 +129,7 @@ class ProjectCard extends StatelessWidget {
     TextStyle? muted,
     SemanticColors semantic, {
     required bool wide,
+    required bool roomy,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -131,9 +148,12 @@ class ProjectCard extends StatelessWidget {
           color: missing ? scheme.error : scheme.onSurfaceVariant,
         ),
         const SizedBox(width: 6),
-        // The name is the only thing on the line allowed to be long, so it is
-        // the only thing that gives way.
+        // Two measured children sharing the row, so neither can push the other
+        // off the end: the name gives way first and the aggregate ellipsises
+        // rather than overflowing. Fixed-width facts beside an `Expanded` name
+        // is what overflowed a 294px pane by 60 — see [badgeWidth].
         Expanded(
+          flex: 2,
           child: Text(
             name,
             maxLines: 1,
@@ -143,7 +163,7 @@ class ProjectCard extends StatelessWidget {
             ),
           ),
         ),
-        if (wide && summary.running > 0) ...[
+        if (roomy && summary.running > 0) ...[
           const SizedBox(width: 6),
           Tooltip(
             message: summary.running == 1
@@ -164,24 +184,13 @@ class ProjectCard extends StatelessWidget {
         ],
         if (aggregate != null) ...[
           const SizedBox(width: 6),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 132),
-            child: Text(
-              aggregate,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: muted,
-            ),
-          ),
-        ],
-        if (wide && summary.needsAttention > 0) ...[
-          if (aggregate != null) Text('  ·  ', style: muted),
-          Text(
-            summary.attentionLabel!,
-            maxLines: 1,
-            style: muted?.copyWith(
-              color: semantic.attention,
-              fontWeight: FontWeight.w600,
+          Expanded(
+            flex: 3,
+            // Right-aligned so it sits against the buttons rather than leaving
+            // a gap when it is shorter than its share.
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _aggregate(aggregate, muted, semantic),
             ),
           ),
         ],
@@ -218,6 +227,38 @@ class ProjectCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  /// The aggregate and the attention clause as **one** run of text.
+  ///
+  /// One widget, two colours: the neutral counts stay grey and "1 needs you" is
+  /// drawn in the attention colour, because a count that means something must
+  /// not read like a word. Keeping it as a single [Text] also means it
+  /// ellipsises as a unit instead of the clause after it falling off the row —
+  /// and that the app's one attention phrase appears here as part of a longer
+  /// sentence rather than as a second widget saying exactly what the status bar
+  /// says.
+  Widget _aggregate(String label, TextStyle? muted, SemanticColors semantic) {
+    final attention = summary.attentionLabel;
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: label),
+          if (attention != null)
+            TextSpan(
+              text: '  ·  $attention',
+              style: TextStyle(
+                color: semantic.attention,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.right,
+      style: muted,
     );
   }
 

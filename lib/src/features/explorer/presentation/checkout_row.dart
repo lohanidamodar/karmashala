@@ -77,13 +77,18 @@ class CheckoutRow extends StatelessWidget {
 
   /// Below this the right-hand facts are dropped rather than squeezed: the
   /// Explorer clamps to 200px and the buttons alone already fill it.
-  static const _statWidth = 260.0;
+  ///
+  /// Depth is part of the budget because indentation is: a worktree row two
+  /// levels in has 28px less to spend than the repository above it, and the
+  /// branch and change count are measured children that the layout cannot
+  /// shrink.
+  static const _statWidth = 300.0;
 
   @override
   Widget build(BuildContext context) {
     final row = LayoutBuilder(
       builder: (context, constraints) =>
-          _row(context, wide: constraints.maxWidth >= _statWidth),
+          _row(context, wide: constraints.maxWidth >= _statWidth + depth * 14),
     );
     final onMenu = this.onMenu;
     if (menuItems.isEmpty || onMenu == null) return row;
@@ -170,7 +175,7 @@ class CheckoutRow extends StatelessWidget {
             if (wide && branch != null) ...[
               const SizedBox(width: 6),
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 110),
+                constraints: const BoxConstraints(maxWidth: 90),
                 child: Text(
                   branch,
                   maxLines: 1,

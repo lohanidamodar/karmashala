@@ -479,6 +479,29 @@ void main() {
       expect(find.textContaining('1 session'), findsNothing);
     });
 
+    testWidgets('the header does not overflow between its two breakpoints', (
+      tester,
+    ) async {
+      // 294px overflowed by 60: wide enough for the aggregate, not wide enough
+      // for the aggregate *and* the badges *and* three buttons. The name is the
+      // row's only flexible child, so the facts have to be dropped rather than
+      // squeezed — and this is the width that proves it.
+      addSession('s1', repositoryId: 'r1', title: 'Running');
+      await pump(tester, size: const Size(294, 900));
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('1 session'), findsOneWidget);
+      expect(find.byTooltip('1 session is running'), findsNothing);
+    });
+
+    testWidgets('a wide pane shows the running badge as well', (tester) async {
+      addSession('s1', repositoryId: 'r1', title: 'Running');
+      await pump(tester, size: const Size(520, 900));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byTooltip('1 session is running'), findsOneWidget);
+    });
+
     testWidgets('a long repository name truncates rather than overflowing', (
       tester,
     ) async {
