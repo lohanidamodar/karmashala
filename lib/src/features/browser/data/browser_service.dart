@@ -156,28 +156,34 @@ class BrowserService {
     await session.dispose();
   }
 
+  // Every verb below is `async` on purpose: a missing or dead session must
+  // come back as a failed future, not as a synchronous throw that skips past
+  // the caller's error handling.
+
   /// Navigates the attached page and waits for it to load.
   Future<void> navigate(
     String url, {
     Duration timeout = const Duration(seconds: 30),
-  }) => _require().page.navigate(url, timeout: timeout);
+  }) async => _require().page.navigate(url, timeout: timeout);
 
   /// Evaluates JavaScript in the attached page and returns its value.
-  Future<Object?> evaluate(String expression, {bool awaitPromise = false}) =>
-      _require().page.evaluate(expression, awaitPromise: awaitPromise);
+  Future<Object?> evaluate(
+    String expression, {
+    bool awaitPromise = false,
+  }) async => _require().page.evaluate(expression, awaitPromise: awaitPromise);
 
   /// How many elements match [selector] in the attached page.
-  Future<int> countMatches(String selector) =>
+  Future<int> countMatches(String selector) async =>
       _require().page.countMatches(selector);
 
   /// Captures HTML, computed CSS and a cropped screenshot for [selector].
-  Future<ElementCapture> capture(String selector) =>
+  Future<ElementCapture> capture(String selector) async =>
       _require().page.captureSelector(selector);
 
   /// Lets the user point at an element, and captures it.
   Future<ElementCapture> pickElement({
     Duration timeout = const Duration(minutes: 2),
-  }) => _require().picker.pick(timeout: timeout);
+  }) async => _require().picker.pick(timeout: timeout);
 
   /// Abandons a pick in progress.
   void cancelPick() => _session?.picker.cancel();
@@ -194,11 +200,11 @@ class BrowserService {
   }
 
   /// Every debuggable target the browser reports.
-  Future<List<BrowserTarget>> listTargets() =>
+  Future<List<BrowserTarget>> listTargets() async =>
       _require().endpoint.http.listTargets();
 
   /// Opens a new tab; the session keeps driving its current page.
-  Future<BrowserTarget> openTab(String url) =>
+  Future<BrowserTarget> openTab(String url) async =>
       _require().endpoint.http.openTab(url);
 
   BrowserSession _require() {
