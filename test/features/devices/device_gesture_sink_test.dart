@@ -6,7 +6,6 @@ import 'package:chitragupta/src/features/devices/data/adb_service.dart';
 import 'package:chitragupta/src/features/devices/data/device_gesture_sink.dart';
 import 'package:chitragupta/src/features/devices/data/scrcpy_control.dart';
 import 'package:chitragupta/src/features/devices/domain/android_device.dart';
-import 'package:chitragupta/src/features/devices/domain/device_geometry.dart';
 import 'package:chitragupta/src/features/devices/domain/device_input.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -235,7 +234,9 @@ void main() {
         '1170',
         '540',
         '1170',
-        '${kLongPressHoldDuration.inMilliseconds}',
+        // Same reason as the swipe floor below: 700 ms is the argument adb
+        // receives, and it has to clear Android's own 500 ms threshold.
+        '700',
       ]);
     });
 
@@ -254,8 +255,10 @@ void main() {
       sink.pointerDown(0, 0.5, 0.8);
       sink.pointerUp(0, 0.5, 0.2, const Duration(milliseconds: 5));
       await settle();
-      // Floored: below this Android reads an implausible velocity.
-      expect(argv().last, '${kMinSwipeDuration.inMilliseconds}');
+      // Floored: below this Android reads an implausible velocity. The literal
+      // is the point — it is the argument `input swipe` is actually given, and
+      // asserting it against `kMinSwipeDuration` would survive a change to it.
+      expect(argv().last, '60');
     });
 
     test(
