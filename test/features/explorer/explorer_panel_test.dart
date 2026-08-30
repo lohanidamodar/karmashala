@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
 import 'package:chitragupta/src/core/util/id_generator_provider.dart';
 import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -15,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -39,6 +41,12 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          // Every session card asks git what its checkout has changed. A
+          // widget test must never spawn `git`, so the runner is a fake and
+          // the cards render the "nothing changed" answer.
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(),
+          ),
           repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
           clockProvider.overrideWithValue(FixedClock(testTime)),

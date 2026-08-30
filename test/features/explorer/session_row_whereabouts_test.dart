@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
@@ -23,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
@@ -32,6 +34,12 @@ import '../../support/fixtures.dart';
 /// opened in a terminal we do not own) and it may **date** an observation, but
 /// it may never assert that something is active. A badge that is confidently
 /// wrong once is a badge nobody reads again.
+/// A [Tooltip] whose message contains [text] — where the card keeps the long
+/// form of what its corner says in two characters.
+Finder tooltipSaying(String text) => find.byWidgetPredicate(
+  (widget) => widget is Tooltip && (widget.message?.contains(text) ?? false),
+);
+
 void main() {
   late AppDatabase db;
 
@@ -58,6 +66,12 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+          // Every session card asks git what its checkout has changed. A
+          // widget test must never spawn `git`, so the runner is a fake and
+          // the cards render the "nothing changed" answer.
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(),
+          ),
           clockProvider.overrideWithValue(FixedClock(testTime)),
           // Every session row offers "Open in <terminal>", and detecting them
           // shells out to `where.exe` — a real process, which a widget test's
@@ -112,12 +126,16 @@ void main() {
       find.textContaining('opened in an external terminal'),
       findsOneWidget,
     );
-    // …and it is dated, not asserted. "running" is the row's own lifecycle;
-    // nothing here claims the process is alive.
-    expect(find.textContaining('last seen 2h ago'), findsOneWidget);
+    // …and it is dated, not asserted. The card's corner carries the age as a
+    // number and the tooltip carries what the number means, which is where
+    // Loop 46's exact wording lives now that the row is three lines.
+    expect(find.text('2h'), findsOneWidget);
+    expect(tooltipSaying('last seen 2h ago'), findsOneWidget);
   });
 
-  testWidgets('a session with no evidence is given no age', (tester) async {
+  testWidgets('a session with no evidence never claims to have been seen', (
+    tester,
+  ) async {
     SessionDao(db).insert(
       Session(
         id: 's1',
@@ -137,9 +155,11 @@ void main() {
       find.textContaining('opened in an external terminal'),
       findsOneWidget,
     );
-    // No source could tell us anything, so there is no age to show — and a "0m"
-    // would have been a lie.
+    // No source could tell us anything. The corner still dates the row — from
+    // when the session was *created*, which is a fact we own — but nothing
+    // anywhere says "last seen", because we have not seen it.
     expect(find.textContaining('last seen'), findsNothing);
+    expect(tooltipSaying('Created'), findsOneWidget);
   });
 
   testWidgets('an imported row is dated from the agent\'s own file', (
@@ -165,7 +185,10 @@ void main() {
     await pump(tester);
 
     expect(find.text('Yesterday'), findsOneWidget);
-    expect(find.textContaining('last seen 1d ago'), findsOneWidget);
+    expect(find.text('1d'), findsOneWidget);
+    // The file's own mtime is the strongest evidence anywhere in the app, and
+    // the tooltip is where we admit what it cannot tell us.
+    expect(tooltipSaying('last wrote to this conversation'), findsOneWidget);
   });
 
   testWidgets('an imported row with no timestamp shows no age', (tester) async {
@@ -189,5 +212,6 @@ void main() {
 
     expect(find.text('Undated'), findsOneWidget);
     expect(find.textContaining('last seen'), findsNothing);
+    expect(tooltipSaying('last wrote to this conversation'), findsNothing);
   });
 }
