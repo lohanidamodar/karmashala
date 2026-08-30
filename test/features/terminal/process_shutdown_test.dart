@@ -32,7 +32,7 @@ const _fast = Duration(milliseconds: 60);
 
 void main() {
   test('a process that exits on the polite signal is never force-killed', () {
-    return fakeAsyncShutdown((process) async {
+    return _withFakeProcess((process) async {
       await shutdownProcess(
         kill: process.kill,
         exitCode: process.exitCode,
@@ -50,7 +50,7 @@ void main() {
 
   test('a process that ignores the polite signal is force-killed after the '
       'grace period', () {
-    return fakeAsyncShutdown((process) async {
+    return _withFakeProcess((process) async {
       await shutdownProcess(
         kill: process.kill,
         exitCode: process.exitCode,
@@ -63,7 +63,7 @@ void main() {
 
   test('a process that exits on its own during the grace period is left '
       'alone', () {
-    return fakeAsyncShutdown((process) async {
+    return _withFakeProcess((process) async {
       final done = shutdownProcess(
         kill: process.kill,
         exitCode: process.exitCode,
@@ -79,7 +79,7 @@ void main() {
   test('a platform with no graceful signal terminates once, immediately', () {
     // Windows has no gentler primitive than TerminateProcess, so pretending
     // otherwise would only add a pointless delay to every tab close.
-    return fakeAsyncShutdown((process) async {
+    return _withFakeProcess((process) async {
       final started = DateTime.now();
       await shutdownProcess(
         kill: process.kill,
@@ -123,7 +123,7 @@ void main() {
 }
 
 /// Runs [body] against a fresh fake process.
-Future<void> fakeAsyncShutdown(
+Future<void> _withFakeProcess(
   Future<void> Function(_FakeProcess) body, {
   required bool gracefulWorks,
 }) async {
