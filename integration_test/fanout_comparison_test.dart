@@ -21,6 +21,8 @@ import 'package:chitragupta/src/features/repositories/domain/repository.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/scrollback_codec.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -137,6 +139,23 @@ void main() {
     expect(finder, findsWidgets);
   }
 
+  /// The same idea for state that is not on screen: pumps until [ready] holds,
+  /// answering false if it never does. Everything this file used to sleep for
+  /// has an observable, and this is how it is watched.
+  Future<bool> waitUntil(
+    WidgetTester tester,
+    bool Function() ready, {
+    Duration within = const Duration(seconds: 30),
+  }) async {
+    final deadline = DateTime.now().add(within);
+    while (DateTime.now().isBefore(deadline)) {
+      if (ready()) return true;
+      await tester.pump(const Duration(milliseconds: 120));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return ready();
+  }
+
   testWidgets('a comparison survives a restart, a merge and a discard', (
     tester,
   ) async {
@@ -241,18 +260,51 @@ void main() {
       reason: 'one session branch per agent',
     );
 
-    // Give the CLIs a moment to actually be running, then stop them: nothing
-    // may be removed while a pane is live, and that is the next step.
-    await tester.pump(const Duration(seconds: 1));
-    await Future<void>.delayed(const Duration(seconds: 6));
+    // The CLIs have to actually be running before they can be stopped, and
+    // nothing may be removed while a pane is live — which is the next step. Both
+    // waits watch the state that decides it rather than guessing at six seconds
+    // and two: a pane per session with its terminal producing output, and then
+    // every one of those panes no longer live.
     final terminals = container.read(
       terminalSessionsControllerProvider.notifier,
     );
-    for (final result in launched.started) {
-      final paneId = SessionDao(db).getById(result.session.id)!.paneId;
-      if (paneId != null) terminals.endSession(paneId);
+    List<String> panes() => [
+      for (final result in launched.started)
+        ?SessionDao(db).getById(result.session.id)?.paneId,
+    ];
+
+    expect(
+      await waitUntil(tester, () {
+        final ids = panes();
+        return ids.length == launched.started.length &&
+            ids.every((pane) {
+              final instance = terminals.instanceFor(pane);
+              return instance != null &&
+                  encodeScrollback(instance.terminal).trim().isNotEmpty;
+            });
+      }),
+      isTrue,
+      reason: 'the agent panes never produced any output',
+    );
+
+    final started = panes();
+    for (final pane in started) {
+      terminals.endSession(pane);
     }
-    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(
+      await waitUntil(
+        tester,
+        () => started.every(
+          (pane) =>
+              container
+                  .read(terminalSessionsControllerProvider)
+                  .livenessOf(pane) !=
+              PaneLiveness.live,
+        ),
+      ),
+      isTrue,
+      reason: 'a pane was still live, and nothing may be removed while one is',
+    );
 
     // --- Real work in each worktree, so there is something to compare -------
     for (var i = 0; i < launched.started.length; i++) {

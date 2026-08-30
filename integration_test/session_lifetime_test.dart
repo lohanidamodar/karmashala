@@ -70,6 +70,27 @@ void main() {
       ? file.readAsLinesSync().where((l) => l.isNotEmpty).length
       : 0;
 
+  /// The interval the heartbeat shell below writes at.
+  const beatInterval = Duration(milliseconds: 200);
+
+  /// Waits until [file] has stopped growing for two whole beats, or gives up.
+  ///
+  /// The observable for "the process is dead" — polled, because ending a
+  /// session is a `taskkill` round trip whose latency is not a fixed number of
+  /// seconds on a loaded machine.
+  Future<bool> waitUntilStopped(
+    File file, {
+    Duration within = const Duration(seconds: 20),
+  }) async {
+    final deadline = DateTime.now().add(within);
+    while (DateTime.now().isBefore(deadline)) {
+      final before = beats(file);
+      await Future<void>.delayed(beatInterval * 2);
+      if (beats(file) == before) return true;
+    }
+    return false;
+  }
+
   testWidgets('closing a tab leaves the process running and re-attachable', (
     tester,
   ) async {
@@ -132,13 +153,20 @@ void main() {
 
     // Ending it is what actually stops the work.
     controller.endSession(pane);
-    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(
+      await waitUntilStopped(heartbeat),
+      isTrue,
+      reason: 'ending the session did not stop the process',
+    );
+    // And it stays stopped. Proving a negative needs a window rather than a
+    // poll, but five beats is enough of one, and it starts from a file that has
+    // already been observed to be still.
     final atEnd = beats(heartbeat);
-    await Future<void>.delayed(const Duration(seconds: 2));
+    await Future<void>.delayed(beatInterval * 5);
     expect(
       beats(heartbeat),
       atEnd,
-      reason: 'ending the session did not stop the process',
+      reason: 'the killed process started writing again',
     );
   }, timeout: const Timeout(Duration(seconds: 120)));
 
