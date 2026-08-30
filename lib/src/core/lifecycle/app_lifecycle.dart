@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
+import '../../features/sessions/application/session_engine_provider.dart';
+import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
+import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../logging/app_logger.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
@@ -15,16 +18,17 @@ import '../logging/app_logger.dart';
 /// Quitting is measured, not assumed: Loop 55 timed a graceful quit at
 /// 225–396 ms end to end, and Loop 48 found a build that would not exit at all
 /// because one component could not be shut down. Cleanup that is worth doing is
-/// worth doing quickly; cleanup that hangs is worth abandoning. Everything in
-/// the sequence is either an in-memory teardown or a single file delete, so this
-/// is generous — it exists to bound the pathological case, not the normal one.
+/// worth doing quickly; cleanup that hangs is worth abandoning. **This is the
+/// pathological ceiling, not the expected cost** — every step here completes in
+/// microseconds when nothing is wrong, and the normal quit stays where Loop 55
+/// measured it.
 ///
 /// It is the sum of the per-step caps below, deliberately: a **shared** budget
 /// let the first step starve every later one, which meant one hung hook rewrite
 /// took the handshake deletion with it — the single step this owner exists for.
 /// Each step gets its own slice instead, so a hang costs that step and nothing
-/// else.
-const kShutdownBudget = Duration(milliseconds: 450);
+/// else. [kShutdownStepBudgets] is that sum, itemised.
+const kShutdownBudget = Duration(milliseconds: 2200);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -33,6 +37,32 @@ const _kStepBudget = Duration(milliseconds: 100);
 /// application's files, and the only one where being cut off is worse than
 /// being slow.
 const _kHookStepBudget = Duration(milliseconds: 150);
+
+/// Reaping the panes' processes gets the longest slice.
+///
+/// Every other step is an in-memory teardown or a single file delete. This one
+/// spawns `taskkill /PID <pid> /T /F` per live pane (see
+/// `killWindowsProcessTree`) — an external process each, run concurrently — and
+/// the cost of cutting it short is the thing it exists to prevent: a dev server
+/// still holding a port, or a build still holding a file lock, after the app
+/// has gone. It is a ceiling, not a wait: the reaps normally land in tens of
+/// milliseconds.
+const _kTerminalStepBudget = Duration(milliseconds: 1500);
+
+/// What the teardowns that disposing the container *starts* get: one SSH socket
+/// close per pooled connection, and one agent child process stop per active run.
+const _kContainerStepBudget = Duration(milliseconds: 250);
+
+/// Every step's slice, in order — the arithmetic behind [kShutdownBudget],
+/// written down so a change to one of them cannot silently widen the deadline.
+const kShutdownStepBudgets = <String, Duration>{
+  'agent hook installation': _kHookStepBudget,
+  'background watchers': _kStepBudget,
+  'control server': _kStepBudget,
+  'system integration': _kStepBudget,
+  'terminal processes': _kTerminalStepBudget,
+  'provider teardown': _kContainerStepBudget,
+};
 
 /// The single owner of everything bootstrap creates.
 ///
@@ -54,18 +84,36 @@ const _kHookStepBudget = Duration(milliseconds: 150);
 ///    starts up against a dead port. This is the step the app never had.
 /// 4. **System integration** — hotkeys released, tray icon removed, listeners
 ///    detached.
-/// 5. **The provider container** — last, because every step above reads from it.
+/// 5. **Terminal processes** — the panes' process *trees*, killed and waited
+///    for. After the OS integration, because a tray icon that outlives the
+///    window is cosmetic and an orphaned dev server is not.
+/// 6. **The provider container** — last, because every step above reads from
+///    it. Its `dispose()` is synchronous and runs unconditionally, but the
+///    teardowns it *starts* are not: `ref.onDispose` takes a callback, not a
+///    future, so an SSH socket close and an agent child process were begun and
+///    dropped. Those are started here, where the wait for them is budgeted.
 ///
 /// Each step is bounded and independent: one that throws or hangs is logged and
 /// the next one still runs.
 class AppLifecycle {
-  AppLifecycle(this._container, {AppLogger? logger, Duration? shutdownBudget})
-    : _logger = logger ?? AppLogger.named('lifecycle'),
-      _shutdownBudget = shutdownBudget ?? kShutdownBudget;
+  /// [stopwatch] is the seam the budget is measured through. Injected so a test
+  /// can spend the budget on a clock it controls instead of waiting out real
+  /// milliseconds — a shutdown deadline measured against the wall clock is a
+  /// flake looking for a busy machine.
+  AppLifecycle(
+    this._container, {
+    AppLogger? logger,
+    Duration? shutdownBudget,
+    Stopwatch? stopwatch,
+  }) : _logger = logger ?? AppLogger.named('lifecycle'),
+       _shutdownBudget = shutdownBudget ?? kShutdownBudget,
+       // ignore: prefer_initializing_formals — named for the doc above.
+       _stopwatch = stopwatch;
 
   final ProviderContainer _container;
   final AppLogger _logger;
   final Duration _shutdownBudget;
+  final Stopwatch? _stopwatch;
 
   SystemIntegrationService? _systemIntegration;
   LauncherControlServer? _controlServer;
@@ -169,7 +217,7 @@ class AppLifecycle {
   Future<void> shutdown() => _shutdown ??= _runShutdown();
 
   Future<void> _runShutdown() async {
-    final watch = Stopwatch()..start();
+    final watch = (_stopwatch ?? Stopwatch())..start();
 
     // 1. A hook rewrite in flight gets a short grace period; it writes another
     //    application's config file, and half of one is worse than none.
@@ -202,18 +250,74 @@ class AppLifecycle {
       () => _systemIntegration?.dispose() ?? Future<void>.value(),
     );
 
-    // 5. The container, unconditionally and outside the budget: it is
-    //    synchronous, it cannot hang, and every provider's own teardown hangs
-    //    off it.
+    // 5. The panes' process trees. Killing them is `taskkill /T` per pane, so
+    //    this is the one step whose work is another process rather than a
+    //    field being nulled — and the only one where not waiting means leaving
+    //    something of the user's running.
+    await _step(
+      'terminal processes',
+      watch,
+      () => _container.exists(terminalSessionsControllerProvider)
+          ? _container
+                .read(terminalSessionsControllerProvider.notifier)
+                .shutdownProcesses()
+          : Future<void>.value(),
+      cap: _kTerminalStepBudget,
+    );
+
+    // 6. The container. Its own `dispose()` is synchronous and cannot hang, so
+    //    it runs unconditionally — even with the budget spent, because every
+    //    provider's teardown hangs off it. What is *not* synchronous is the
+    //    work that teardown starts, and Riverpod cannot wait for it:
+    //    `ref.onDispose` takes a callback, so the SSH pool's socket closes and
+    //    the session engine's agent processes were started and dropped. Both
+    //    are idempotent, so starting them here — where the wait is budgeted —
+    //    leaves the providers' own hooks as no-ops.
+    final pending = _startContainerTeardowns();
     try {
       _container.dispose();
     } on Object catch (error, stack) {
       _logger.warning('Disposing the provider container failed.', error, stack);
     }
+    await _step(
+      'provider teardown',
+      watch,
+      () => Future.wait(pending),
+      cap: _kContainerStepBudget,
+    );
 
     watch.stop();
     lastShutdownDuration = watch.elapsed;
     _logger.info('lifecycle: shutdown in ${watch.elapsedMilliseconds} ms.');
+  }
+
+  /// Starts the teardowns that container disposal would otherwise fire and
+  /// forget, returning their futures so the caller can wait for them.
+  ///
+  /// Read *before* `dispose()`, because a disposed container cannot be read
+  /// from; started before it too, so a provider's own `onDispose` finds the
+  /// work already done rather than doing it a second time.
+  List<Future<void>> _startContainerTeardowns() {
+    final pending = <Future<void>>[];
+    for (final start in <Future<void> Function()>[
+      () => _container.exists(sessionEngineProvider)
+          ? _container.read(sessionEngineProvider).dispose()
+          : Future<void>.value(),
+      () => _container.exists(sshConnectionPoolProvider)
+          ? _container.read(sshConnectionPoolProvider).closeAll()
+          : Future<void>.value(),
+    ]) {
+      try {
+        pending.add(start());
+      } on Object catch (error, stack) {
+        _logger.warning(
+          'lifecycle: a container teardown failed.',
+          error,
+          stack,
+        );
+      }
+    }
+    return pending;
   }
 
   /// One shutdown step, bounded by its own slice and by the overall deadline.

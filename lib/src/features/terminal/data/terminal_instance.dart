@@ -61,6 +61,26 @@ abstract class TerminalInstance {
   void dispose();
 }
 
+/// A [TerminalInstance] whose teardown outlives its `dispose()`.
+///
+/// Deliberately a second, narrower interface: most panes have nothing to reap —
+/// an error pane never spawned anything and a dormant pane is replayed history,
+/// not a process — and only the ones that do should make a caller wait.
+///
+/// [dispose] stays synchronous because panes are closed from build callbacks,
+/// but ending a real pane on Windows means spawning `taskkill /PID <pid> /T /F`
+/// (see `killWindowsProcessTree`). Dropping that future is fine when a tab is
+/// closed and the app keeps running; on quit it meant `windowManager.destroy()`
+/// ended the process while the kill was still in flight, orphaning the dev
+/// server, build or ssh session the user had running inside the pane.
+abstract interface class ReapableTerminalInstance {
+  /// Completes once the process tree behind this pane is gone.
+  ///
+  /// A future that is already complete before [TerminalInstance.dispose] is
+  /// called, so awaiting it is always safe.
+  Future<void> get reaped;
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -80,7 +100,8 @@ typedef TerminalInstanceFactory =
 /// This is the one deliberate exception to the `CommandRunner` rule
 /// (architecture constraint 6): an interactive terminal needs a pseudo-terminal,
 /// which the run-to-completion/stream abstraction does not model.
-class PtyTerminalInstance implements TerminalInstance {
+class PtyTerminalInstance
+    implements TerminalInstance, ReapableTerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
@@ -186,6 +207,10 @@ class PtyTerminalInstance implements TerminalInstance {
   late final int _pid;
   bool _disposed = false;
   bool _exited = false;
+  Future<void>? _reap;
+
+  @override
+  Future<void> get reaped => _reap ?? Future<void>.value();
 
   @override
   void dispose() {
@@ -203,13 +228,14 @@ class PtyTerminalInstance implements TerminalInstance {
     // anything long-running — a build, a dev server, an ssh session, a database
     // client mid-write — because the process never gets to flush or run its
     // exit handlers. This runs on app quit as well as tab close.
-    unawaited(
-      shutdownProcess(
-        kill: _pty.kill,
-        exitCode: _pty.exitCode,
-        // The whole tree, not just the pid: see killWindowsProcessTree.
-        pid: _exited ? null : _pid,
-      ),
+    //
+    // Kept rather than dropped: closing a tab does not have to wait for the
+    // kill, but quitting does — see [reaped].
+    _reap = shutdownProcess(
+      kill: _pty.kill,
+      exitCode: _pty.exitCode,
+      // The whole tree, not just the pid: see killWindowsProcessTree.
+      pid: _exited ? null : _pid,
     );
   }
 }

@@ -71,6 +71,11 @@ final sshConnectionPoolProvider = Provider<SshConnectionPool>((ref) {
     keyReader: ref.watch(sshPrivateKeyReaderProvider).read,
     clock: ref.watch(clockProvider),
   );
+  // `onDispose` takes a callback, not a future, so this close was started and
+  // dropped — on quit the process ended before the sockets did. The lifecycle
+  // owner starts it itself and awaits it inside the shutdown budget; this hook
+  // stays for every other way the container goes away, and is a no-op by the
+  // time it runs on quit ([SshConnectionPool.closeAll] empties the pool first).
   ref.onDispose(pool.closeAll);
   return pool;
 });

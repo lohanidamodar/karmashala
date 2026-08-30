@@ -161,16 +161,43 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   final _log = AppLogger.named('terminal');
 
+  /// Whether [shutdownProcesses] has already run.
+  ///
+  /// It empties [_tabs], so the container's own teardown must not persist
+  /// afterwards: it would write that emptiness over the workspace the user
+  /// expects back.
+  bool _processesShutDown = false;
+
   @override
   TerminalSessionsState build() {
     ref.onDispose(() {
       _autosave.stop();
+      if (_processesShutDown) return;
       persistWorkspace();
       _disposeAll();
     });
     _restoreWorkspace();
     _autosave.start();
     return _snapshot();
+  }
+
+  /// Ends every pane's process and completes when the kills have landed.
+  ///
+  /// The teardown `ref.onDispose` runs is synchronous: it asks each pane to
+  /// dispose and moves on. On Windows disposing a pane spawns a
+  /// `taskkill /PID <pid> /T /F`, so on quit those spawns were still in flight
+  /// when `windowManager.destroy()` ended the process — and everything running
+  /// inside the panes (a dev server holding a port, a build holding a file
+  /// lock) was orphaned. This is the same teardown, awaitable, so the shutdown
+  /// sequence can wait for it inside its budget.
+  ///
+  /// Idempotent, and the container's own teardown stands down once it has run.
+  Future<void> shutdownProcesses() async {
+    if (_processesShutDown) return;
+    _processesShutDown = true;
+    _autosave.stop();
+    persistWorkspace();
+    await Future.wait(_disposeAll());
   }
 
   TerminalSessionsState _snapshot() => TerminalSessionsState(
@@ -185,10 +212,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   void _publish() => state = _snapshot();
 
-  void _disposeAll() {
+  /// Disposes every pane, returning the reaps still in flight — one per pane
+  /// that owns a process. Callers that can wait should; `ref.onDispose` cannot.
+  List<Future<void>> _disposeAll() {
+    final reaping = <Future<void>>[];
     for (final entry in _instances.entries) {
       _unlisten(entry.key, entry.value);
       entry.value.dispose();
+      if (entry.value case final ReapableTerminalInstance reapable) {
+        reaping.add(reapable.reaped);
+      }
     }
     _instances.clear();
     _dirtyListeners.clear();
@@ -198,6 +231,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabs.clear();
     _detached.clear();
     _activeTabId = null;
+    return reaping;
   }
 
   /// The live terminal behind [paneId], or `null` once it has been closed.
@@ -507,10 +541,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// pane's scrollback.
   ///
   /// Runs on every structural change (open, split, close, detach, end, start)
-  /// and on teardown, because on Windows "quit" means `windowManager.destroy()`
-  /// and the provider container is never disposed: anything not written by the
-  /// time the user quits is simply gone. The 20 s autosave covers scrollback
-  /// between those points.
+  /// and on teardown. The container *is* disposed on quit now (Loop 61's
+  /// lifecycle owner), but that happens inside a bounded budget several steps
+  /// in, and `windowManager.destroy()` ends the process the moment the sequence
+  /// returns — so anything not already written when the user quits is still
+  /// simply gone. The 20 s autosave covers scrollback between those points.
   ///
   /// Does nothing when no database is wired up (tests, and any bootstrap that
   /// has not opened one).

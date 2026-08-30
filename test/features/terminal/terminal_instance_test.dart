@@ -91,6 +91,15 @@ void main() {
       expect(dormantPane().commandBlocks, isNull);
     });
 
+    test('neither pane is something the quit sequence has to wait for', () {
+      // The shutdown reaps by collecting a future per pane that owns a process.
+      // These two own none, and saying otherwise would put an always-complete
+      // future in a wait that exists to be slow — or worse, invite a caller to
+      // treat "disposed" as "the process is gone".
+      expect(errorPane(), isNot(isA<ReapableTerminalInstance>()));
+      expect(dormantPane(), isNot(isA<ReapableTerminalInstance>()));
+    });
+
     test('identity survives disposal', () {
       final instance = errorPane()..dispose();
       expect(instance.profileId, 'powershell');
