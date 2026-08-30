@@ -403,6 +403,48 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData bookBookmark = IconData(
+    0xe0e4,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData deviceMobile = IconData(
+    0xe1e0,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData listMagnifyingGlass = IconData(
+    0xebe0,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData squareSplitHorizontal = IconData(
+    0xe870,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData squareSplitVertical = IconData(
+    0xe874,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData terminalWindow = IconData(
+    0xeae8,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData tray = IconData(
+    0xe4aa,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData pushPinFill = IconData(
     0xe3e2,
     fontFamily: 'PhosphorFill',

@@ -143,14 +143,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       _selected = 0;
       _rerank();
     });
-    _revealSelected();
+    _revealSelectedAfterLayout();
   }
 
-  void _move(int delta) {
+  void _move(int delta) => _selectRow(_selected + delta);
+
+  /// Moves the highlight to [index], clamped. Deliberately does **not** wrap:
+  /// a list that jumps from its last row to its first on one more press is a
+  /// list you cannot hold the arrow key down on.
+  void _selectRow(int index) {
     if (_flat.isEmpty) return;
-    setState(() {
-      _selected = (_selected + delta).clamp(0, _flat.length - 1);
-    });
+    setState(() => _selected = index.clamp(0, _flat.length - 1));
     _revealSelected();
   }
 
@@ -168,6 +171,18 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       }
     }
     return offset;
+  }
+
+  /// Scrolls the highlighted row into view.
+  ///
+  /// Deferred to after the frame when the list itself has just changed: the
+  /// scroll position's extents still describe the *previous* list until it has
+  /// been laid out, and clamping a target against those is how a keyboard-
+  /// driven list ends up scrolled somewhere nobody asked for.
+  void _revealSelectedAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _revealSelected();
+    });
   }
 
   void _revealSelected() {
@@ -213,6 +228,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     }
     if (key == LogicalKeyboardKey.pageUp) {
       _move(-8);
+      return KeyEventResult.handled;
+    }
+    // Home/End drive the list, not the caret. The query is a short phrase in a
+    // single-line box — there is nothing in it worth jumping to — and the ends
+    // of a result list are somewhere people genuinely want to reach.
+    if (key == LogicalKeyboardKey.home) {
+      _selectRow(0);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.end) {
+      _selectRow(_flat.length - 1);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.enter ||
@@ -292,6 +318,69 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 }
 
+/// The mouse's way in to [QuickOpen] — a search field that is really a button,
+/// sitting beside the menu bar the way a desktop app's command centre does.
+///
+/// Loop 50 shipped quick open with **no** mouse affordance: no button, no menu
+/// item, nothing to click. A keyboard-only entrance to the app's main way of
+/// finding things is an entrance most people never find.
+class QuickOpenButton extends StatelessWidget {
+  const QuickOpenButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = scheme.onSurfaceVariant;
+    return Tooltip(
+      message: 'Search sessions, files, branches and commands  ·  Ctrl+K',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Material(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(Radii.sm),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () => QuickOpen.show(context),
+            child: Container(
+              height: 24,
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.sm),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(AppIcons.magnifyingGlass, size: 13, color: muted),
+                  const SizedBox(width: Insets.sm),
+                  Flexible(
+                    child: Text(
+                      'Go to…',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                    ),
+                  ),
+                  const SizedBox(width: Insets.md),
+                  Text(
+                    'Ctrl+K',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: muted,
+                      fontFamily: kMonoFamily,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SearchField extends StatelessWidget {
   const _SearchField({required this.controller, required this.onChanged});
 
@@ -355,61 +444,65 @@ class _ResultRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final item = result.item;
     final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: _rowHeight,
-        // Selection is a wash plus a rule, not a filled bar: the row has to
-        // stay readable and the accent is the only colour in the palette.
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.10)
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: selected ? scheme.primary : Colors.transparent,
-              width: 2,
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: _rowHeight,
+          // Selection is a wash plus a rule, not a filled bar: the row has to
+          // stay readable and the accent is the only colour in the palette.
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.10)
+                : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: selected ? scheme.primary : Colors.transparent,
+                width: 2,
+              ),
             ),
           ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-        child: Row(
-          children: [
-            Icon(item.icon, size: Chrome.icon, color: foreground),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Highlighted(
-                    text: item.title,
-                    positions: result.titlePositions,
-                    style: theme.textTheme.bodyMedium!,
-                    accent: scheme.primary,
-                  ),
-                  if (item.subtitle != null)
-                    Text(
-                      item.subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (item.detail != null) ...[
+          padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          child: Row(
+            children: [
+              Icon(item.icon, size: Chrome.icon, color: foreground),
               const SizedBox(width: Insets.sm),
-              Text(
-                item.detail!,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Highlighted(
+                      text: item.title,
+                      positions: result.titlePositions,
+                      style: theme.textTheme.bodyMedium!,
+                      accent: scheme.primary,
+                    ),
+                    if (item.subtitle != null)
+                      Text(
+                        item.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              if (item.detail != null) ...[
+                const SizedBox(width: Insets.sm),
+                Text(
+                  item.detail!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -22,6 +22,7 @@ import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
+import '../../../app/shell/shell_shortcuts.dart';
 import 'command_history_sheet.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
@@ -191,8 +192,19 @@ class TerminalActions {
   /// the widget consults *before* its own shortcut manager and before
   /// `Terminal.keyInput`.
   ///
-  /// All are `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`, `Ctrl+F` and `Ctrl+W`
-  /// are live control characters a shell expects to receive.
+  /// The pane's own verbs are all `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`,
+  /// `Ctrl+F` and `Ctrl+W` are live control characters a shell expects to
+  /// receive.
+  ///
+  /// **This is also the only hook the app's own chords have.** Key events reach
+  /// the focused node first and bubble *upward*, so no wrapper above
+  /// `TerminalView` can see a key before it does — and xterm reports every key
+  /// as handled, turning an unclaimed `Ctrl+B` into a literal `^B` and leaving
+  /// the shell's ambient [Shortcuts] permanently unreachable from the app's
+  /// primary surface. So the pane asks [handleAppChordFromTerminal] — the
+  /// declared skip-list, derived from the one shortcut map — and dispatches
+  /// what it finds through the same [Actions] the rest of the app uses. One
+  /// implementation of "toggle the side panel", reached two ways.
   KeyEventResult onPaneKey(FocusNode node, KeyEvent event) {
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed) return KeyEventResult.ignored;
@@ -236,7 +248,19 @@ class TerminalActions {
       }
     }
 
-    if (action == null) return KeyEventResult.ignored;
+    // The pane's own verbs win; then the app's skip-list. Nothing overlaps
+    // today, and ordering it this way keeps it that way — a chord the pane
+    // owns cannot be taken from it by a later addition to the shell map.
+    if (action == null) {
+      final context = node.context;
+      if (context == null) return KeyEventResult.ignored;
+      // Claimed for the app, or passed to the process. There is no third
+      // answer: reporting `ignored` for a chord the shell owns would let
+      // xterm's fallback type it as a control character.
+      return handleAppChordFromTerminal(context, event)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
+    }
     // Act once, on the down event, but swallow the matching up/repeat too so a
     // consumed combo cannot leak a character through xterm's fallback.
     if (event is KeyDownEvent) action();
@@ -483,37 +507,38 @@ class TerminalToolbar extends ConsumerWidget {
               count: backgroundCount,
               backgroundColor: Theme.of(context).colorScheme.primary,
               textColor: Theme.of(context).colorScheme.onPrimary,
-              child: const Icon(AppIcons.pictureInpicture, size: 15),
+              // Not `pictureInPicture` — that is the mini launcher.
+              child: const Icon(AppIcons.terminalWindow, size: Chrome.icon),
             ),
             onPressed: () => actions.showBackgroundSessions(context),
           ),
         if (hasCommands)
           IconButton(
             tooltip: 'Commands',
-            icon: const Icon(AppIcons.clockCounterClockwise, size: 14),
+            icon: const Icon(AppIcons.clockCounterClockwise, size: Chrome.icon),
             onPressed: () => actions.showCommands(context),
           ),
         IconButton(
           tooltip: 'Find in scrollback (Ctrl+Shift+F)',
-          icon: const Icon(AppIcons.magnifyingGlass, size: 15),
+          icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
         IconButton(
           tooltip: 'Split right (Ctrl+Shift+D)',
-          icon: const Icon(AppIcons.sidebarSimple, size: 15),
+          // `sidebarSimple` means the side panel everywhere else in the
+          // chrome; a split is its own shape, and the vertical one no longer
+          // needs a RotatedBox to be drawn.
+          icon: const Icon(AppIcons.squareSplitHorizontal, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
         ),
         IconButton(
           tooltip: 'Split down (Ctrl+Shift+E)',
-          icon: const RotatedBox(
-            quarterTurns: 1,
-            child: Icon(AppIcons.sidebarSimple, size: 15),
-          ),
+          icon: const Icon(AppIcons.squareSplitVertical, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
         ),
         PopupMenuButton<TerminalProfile>(
           tooltip: 'New terminal tab',
-          icon: const Icon(AppIcons.plus, size: 16),
+          icon: const Icon(AppIcons.plus, size: Chrome.icon),
           onSelected: actions.open,
           itemBuilder: (context) => [
             for (final profile in actions.profiles())
@@ -522,7 +547,7 @@ class TerminalToolbar extends ConsumerWidget {
                 height: 32,
                 child: Row(
                   children: [
-                    const Icon(AppIcons.terminal, size: 15),
+                    const Icon(AppIcons.terminal, size: Chrome.icon),
                     const SizedBox(width: 10),
                     Text(profile.label),
                   ],
