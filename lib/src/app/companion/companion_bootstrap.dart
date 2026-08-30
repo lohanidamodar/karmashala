@@ -13,6 +13,8 @@ import '../../features/companion/notifications/attention_notification.dart';
 import '../../features/companion/notifications/companion_notifier.dart';
 import '../../features/companion/presentation/session_view_screen.dart';
 import 'companion_app.dart';
+import 'companion_lifecycle.dart';
+import 'multicast_lock_channel.dart';
 
 /// Boots the companion build. Deliberately none of the desktop bootstrap: no
 /// database, no PTYs, no environment discovery, no control server, no tray,
@@ -28,13 +30,17 @@ Future<void> runCompanionApp() async {
     overrides: [
       companionGatewayProvider.overrideWith((ref) {
         // The LAN scout dials the desktop directly when its beacon is heard,
-        // relay otherwise. The multicast lock is the no-op default until the
-        // device-acceptance pass wires a real Android holder; on networks
-        // that drop multicast the scout stays inert and the relay carries
-        // everything — best effort by design.
+        // relay otherwise. Android drops multicast without a real
+        // WifiManager.MulticastLock, held via the runner's own channel; on
+        // networks that still drop it the scout stays inert and the relay
+        // carries everything — best effort by design.
         final gateway = RemoteCompanionGateway(
           store: SecureCompanionStore(),
-          lan: LanPathScout(),
+          lan: LanPathScout(
+            lock: !kIsWeb && Platform.isAndroid
+                ? ChannelMulticastLock()
+                : const NoopMulticastLock(),
+          ),
         );
         ref.onDispose(() => unawaited(gateway.close()));
         return gateway;
@@ -66,6 +72,12 @@ Future<void> runCompanionApp() async {
       // Notifications are a convenience; the app must still run without them.
     }
   }
+
+  // On resume with the link down, re-dial immediately; in the background the
+  // link simply rests — an FCM wake is the design's background answer.
+  CompanionLifecycleReconnector(
+    container.read(companionGatewayProvider),
+  ).attach();
 
   runApp(
     UncontrolledProviderScope(

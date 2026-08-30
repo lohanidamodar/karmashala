@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- Attention notifications (Android 13+ runtime permission). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Hearing the desktop's LAN discovery beacon needs the multicast lock
+         MainActivity holds over its MethodChannel. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
         android:label="Chitragupta"
         android:name="${applicationName}"
