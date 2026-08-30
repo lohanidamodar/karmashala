@@ -140,6 +140,38 @@ void main() {
       );
     });
 
+    test(
+      'a failed request is one fault, not a console error as well',
+      () async {
+        final browser = FakeBrowser();
+        await browser.connect();
+        await browser.service.startObserving();
+
+        // Chrome reports the same failure on both channels. Real Chrome, a host
+        // that does not resolve: this is what listing it twice looked like.
+        browser.socket.emitEvent('Network.requestWillBeSent', {
+          'requestId': 'R7',
+          'request': {'method': 'POST', 'url': 'https://nope.invalid/save'},
+        });
+        browser.socket.emitEvent('Network.loadingFailed', {
+          'requestId': 'R7',
+          'errorText': 'net::ERR_NAME_NOT_RESOLVED',
+        });
+        browser.socket.emitEvent('Log.entryAdded', {
+          'entry': {
+            'source': 'network',
+            'level': 'error',
+            'text': 'Failed to load resource: net::ERR_NAME_NOT_RESOLVED',
+            'url': 'https://nope.invalid/save',
+          },
+        });
+        await settle();
+
+        expect(browser.service.observer!.networkFailures, hasLength(1));
+        expect(browser.service.observer!.consoleMessages, isEmpty);
+      },
+    );
+
     test('a cancelled request is not evidence of anything', () async {
       final browser = FakeBrowser();
       await browser.connect();

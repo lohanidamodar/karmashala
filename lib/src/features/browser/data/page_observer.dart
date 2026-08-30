@@ -143,6 +143,11 @@ class PageObserver {
     if (entry is! Map) return;
     final level = entry['level'];
     if (level != 'error' && level != 'warning') return;
+    // A failed request arrives here *and* on Network.loadingFailed. Keeping
+    // both listed one fault twice, in two files, which reads as two bugs —
+    // caught by driving a real page against a host that does not resolve.
+    // Network failures belong to the network record; this one is the console.
+    if (entry['source'] == 'network') return;
     final text = entry['text'];
     if (text is! String || text.isEmpty) return;
     final url = entry['url'];
