@@ -25,10 +25,25 @@ final Map<int, MigrationStep> schemaMigrations = {
   5: _migrateToV5,
   6: _migrateToV6,
   7: _migrateToV7,
-  8: _migrateToV8,
+  8: _reservedForSshEnvironments,
+  9: _migrateToV9,
 };
 
-void _migrateToV8(Database db) {
+/// Placeholder for the SSH loop's v8 (`ssh_hosts`, `ssh_known_hosts`, and
+/// `execution_environments.ssh_host_id`), which landed on `main` after this
+/// branch was cut.
+///
+/// It does nothing. It exists only because [AppDatabase] derives its schema
+/// version from `schemaMigrations.length` and refuses to run with a hole in the
+/// list, so a branch that skips straight from 7 to 9 cannot open a database at
+/// all.
+///
+/// **At merge, replace this entry with the real `8: _migrateToV8` from `main`
+/// and keep [_migrateToV9] at 9.** Taking both sides of the conflict on these
+/// two lines is the correct resolution; this placeholder must not survive.
+void _reservedForSshEnvironments(Database db) {}
+
+void _migrateToV9(Database db) {
   // Keep-alive (Loop 38): closing a tab no longer kills the process behind it,
   // so a session can be running with no tab showing it. Those are stored in the
   // same table as a single-pane row with `detached = 1`, which keeps their

@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 8);
+    expect(db.schemaVersion, 9);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 8);
+    expect(version, 9);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -39,7 +39,7 @@ void main() {
     );
   });
 
-  test('v8 gives terminal_tabs the detached flag, defaulted off', () {
+  test('v9 gives terminal_tabs the detached flag, defaulted off', () {
     final columns = db
         .query('PRAGMA table_info(terminal_tabs);')
         .map((r) => r['name']! as String)
@@ -68,7 +68,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 8);
+    expect(db.schemaVersion, 9);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
