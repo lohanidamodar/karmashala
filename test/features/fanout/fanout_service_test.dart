@@ -40,9 +40,9 @@ const _rover = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: [],
-    permissionArguments: {
-      PermissionMode.ask: ['--careful'],
-      PermissionMode.bypass: ['--trust-me'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
     acceptsPromptArgument: true,
   ),
@@ -54,9 +54,9 @@ const _flaky = AgentDescriptor(
   binaries: AgentBinaries(windows: ['flaky'], posix: ['flaky']),
   launch: AgentLaunchSpec(
     baseArguments: [],
-    permissionArguments: {
-      PermissionMode.ask: ['--careful'],
-      PermissionMode.bypass: ['--trust-me'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
     acceptsPromptArgument: true,
   ),
