@@ -22,16 +22,19 @@ import 'package:tray_manager/tray_manager.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  PendingNotification event(String id, String label, NotificationReason reason) =>
-      PendingNotification(
-        session: WatchedSession(
-          key: AgentSessionKey('claudeCode', id),
-          label: label,
-          openId: 'row-$id',
-          imported: true,
-        ),
-        reason: reason,
-      );
+  PendingNotification event(
+    String id,
+    String label,
+    NotificationReason reason,
+  ) => PendingNotification(
+    session: WatchedSession(
+      key: AgentSessionKey('claudeCode', id),
+      label: label,
+      openId: 'row-$id',
+      imported: true,
+    ),
+    reason: reason,
+  );
 
   testWidgets('a coalesced notification reaches the OS', (tester) async {
     await tester.runAsync(() async {
@@ -41,7 +44,11 @@ void main() {
 
       // One agent finishing: the ordinary case.
       final single = const NotificationCoalescer().summarize([
-        event('cli-1', 'Loop 42 — tray notifications', NotificationReason.finished),
+        event(
+          'cli-1',
+          'Loop 42 — tray notifications',
+          NotificationReason.finished,
+        ),
       ])!;
       await presenter.show(single);
       await Future<void>.delayed(const Duration(seconds: 6));
