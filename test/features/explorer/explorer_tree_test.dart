@@ -479,6 +479,26 @@ void main() {
       expect(find.textContaining('1 session'), findsNothing);
     });
 
+    testWidgets('a repository row keeps its change count at the default width', (
+      tester,
+    ) async {
+      // 304px is what the Explorer opens at. A single width gate above it left
+      // every repository row with nothing at all on its right — no branch, no
+      // count — which only showed up when the app was actually run. With no
+      // sessions in the fixture, the three counts here are the three rows'.
+      await pump(tester, size: const Size(304, 900));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('3 changed'), findsNWidgets(3));
+    });
+
+    testWidgets('and gains the branch when the pane is dragged wider', (
+      tester,
+    ) async {
+      await pump(tester, size: const Size(460, 900));
+      expect(find.text('main'), findsNWidgets(3));
+    });
+
     testWidgets('the header does not overflow between its two breakpoints', (
       tester,
     ) async {

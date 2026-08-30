@@ -75,20 +75,30 @@ class CheckoutRow extends StatelessWidget {
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String>? onMenu;
 
-  /// Below this the right-hand facts are dropped rather than squeezed: the
-  /// Explorer clamps to 200px and the buttons alone already fill it.
+  /// The measured facts are dropped in order of value as the pane narrows,
+  /// rather than all at once: the change count answers "is there work here",
+  /// which is what the row is scanned for, and the branch is on every card
+  /// beneath it anyway.
   ///
-  /// Depth is part of the budget because indentation is: a worktree row two
-  /// levels in has 28px less to spend than the repository above it, and the
-  /// branch and change count are measured children that the layout cannot
-  /// shrink.
-  static const _statWidth = 300.0;
+  /// **The Explorer opens at 304px** and clamps to 200, so a single threshold
+  /// above 304 means the default pane shows a repository row with nothing on
+  /// its right at all — which is what driving the app found. Depth counts
+  /// against the budget because indentation does: a worktree row two levels in
+  /// has 28px less to spend than the repository above it.
+  static const _statWidth = 200.0;
+  static const _branchWidth = 300.0;
 
   @override
   Widget build(BuildContext context) {
     final row = LayoutBuilder(
-      builder: (context, constraints) =>
-          _row(context, wide: constraints.maxWidth >= _statWidth + depth * 14),
+      builder: (context, constraints) {
+        final width = constraints.maxWidth - depth * 14;
+        return _row(
+          context,
+          showStat: width >= _statWidth,
+          showBranch: width >= _branchWidth,
+        );
+      },
     );
     final onMenu = this.onMenu;
     if (menuItems.isEmpty || onMenu == null) return row;
@@ -99,7 +109,11 @@ class CheckoutRow extends StatelessWidget {
     );
   }
 
-  Widget _row(BuildContext context, {required bool wide}) {
+  Widget _row(
+    BuildContext context, {
+    required bool showStat,
+    required bool showBranch,
+  }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted = theme.textTheme.labelSmall?.copyWith(
@@ -142,7 +156,11 @@ class CheckoutRow extends StatelessWidget {
               color: iconColor ?? scheme.onSurfaceVariant,
             ),
             const SizedBox(width: 6),
+            // The name gets the larger share: it is what the eye is scanning
+            // for, and the path beneath it is context. Both are flexible, so
+            // neither can push the right-hand facts off the row.
             Flexible(
+              flex: 2,
               child: Text(
                 title,
                 maxLines: 1,
@@ -152,8 +170,6 @@ class CheckoutRow extends StatelessWidget {
             ),
             if (subtitle != null) ...[
               const SizedBox(width: 6),
-              // The relative path is the half that gives way: the name is what
-              // the eye is scanning for and the path is context for it.
               Expanded(
                 child: Tooltip(
                   message: subtitle!,
@@ -168,11 +184,11 @@ class CheckoutRow extends StatelessWidget {
               ),
             ] else
               const Spacer(),
-            if (wide && note != null) ...[
+            if (showStat && note != null) ...[
               const SizedBox(width: 6),
               _note(context, muted),
             ],
-            if (wide && branch != null) ...[
+            if (showBranch && branch != null) ...[
               const SizedBox(width: 6),
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 90),
@@ -184,7 +200,7 @@ class CheckoutRow extends StatelessWidget {
                 ),
               ),
             ],
-            if (wide && stat != null && !stat!.isEmpty) ...[
+            if (showStat && stat != null && !stat!.isEmpty) ...[
               const SizedBox(width: 8),
               DiffStatLabel(stat: stat!),
             ],
