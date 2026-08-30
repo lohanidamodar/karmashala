@@ -14,6 +14,7 @@ import '../../git/domain/git_commit.dart';
 import '../../git/domain/git_worktree.dart';
 import '../../git/presentation/changes_view.dart';
 import '../../github/application/github_providers.dart';
+import '../../browser/presentation/browser_pane.dart';
 import '../../devices/presentation/device_pane.dart';
 import '../../github/presentation/github_view.dart';
 import '../../projects/application/projects_controller.dart';
@@ -218,6 +219,12 @@ class _Sidebar extends ConsumerWidget {
                 onTap: () => ref.read(repoReviewTabProvider.notifier).select(4),
               ),
               _SidebarTab(
+                selected: tab == 5,
+                icon: AppIcons.globe,
+                label: 'Browser',
+                onTap: () => ref.read(repoReviewTabProvider.notifier).select(5),
+              ),
+              _SidebarTab(
                 selected: tab == 2,
                 icon: AppIcons.info,
                 label: 'Info',
@@ -240,6 +247,7 @@ class _Sidebar extends ConsumerWidget {
             1 => const GitHubView(),
             3 => const FileExplorerView(),
             4 => const DevicePane(),
+            5 => const BrowserPane(),
             _ => _InfoView(repo: repo),
           },
         ),
