@@ -15,6 +15,7 @@ enum SidePanelSurface {
   files('Files', drawsOwnHeader: true),
   device('Device'),
   browser('Browser'),
+  verification('Verification'),
 
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
   /// the branch and worktree list nobody could find lives in here.

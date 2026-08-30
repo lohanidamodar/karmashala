@@ -8,6 +8,7 @@ import 'side_panel_state.dart';
 
 import '../../features/browser/presentation/browser_pane.dart';
 import '../../features/detail/presentation/repository_info_view.dart';
+import '../../features/detail/presentation/verification_view.dart';
 import '../../features/devices/presentation/device_pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
@@ -42,6 +43,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.files => AppIcons.folder,
     SidePanelSurface.device => AppIcons.deviceMobile,
     SidePanelSurface.browser => AppIcons.globe,
+    SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => AppIcons.bookBookmark,
   };
 
