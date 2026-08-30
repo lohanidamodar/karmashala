@@ -246,13 +246,27 @@ class SessionLauncher {
   /// The external id is the join: an imported CLI entry and one of our rows are
   /// two records of the same conversation, and resuming the imported one while
   /// our own process holds it is exactly the double-writer case.
+  ///
+  /// **Every** row with that id is examined, not the first one the database
+  /// hands back. `external_session_id` has no `UNIQUE` constraint and a resume
+  /// used to mint a second row for a conversation that already had one, so a
+  /// single-row read answered with whichever the engine felt like — and a dead
+  /// duplicate answers "nothing is running this" while a pane is still writing
+  /// to it. That is the answer this method exists to never give: it gates the
+  /// refusal that keeps a second writer off a Codex thread.
+  ///
+  /// Newest-first (see `SessionDao.getAllByExternalSessionId`), so when an agent
+  /// permits two live processes on one conversation the one just started is the
+  /// one named.
   Session? runningSessionWithExternalId(String? externalSessionId) {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
-    final session = _ref
-        .read(sessionDaoProvider)
-        .getByExternalSessionId(externalSessionId);
-    if (session == null) return null;
-    return livePaneFor(session.id) == null ? null : session;
+    for (final candidate
+        in _ref
+            .read(sessionDaoProvider)
+            .getAllByExternalSessionId(externalSessionId)) {
+      if (livePaneFor(candidate.id) != null) return candidate;
+    }
+    return null;
   }
 
   /// Brings the pane [sessionId] is already running in back into view and
@@ -397,7 +411,15 @@ class SessionLauncher {
         request.permissionOverride ??
         permissionFor(request.installation.agentId, request.purpose);
 
-    final id = _ref.read(idGeneratorProvider).newId();
+    // A resume continues a conversation we may already have a row for. Until
+    // Loop 66 it minted a second one every time, so resuming a stopped session
+    // left the dead row *and* a new one, both drawn in the tree and both
+    // answering to the same CLI id — which is what made the double-writer check
+    // above have to choose between rows at all. Reusing is what the imported
+    // path has always done by deleting its own record afterwards; the native
+    // path had no equivalent.
+    final reused = _reusableRowForResume(request);
+    final id = reused?.id ?? _ref.read(idGeneratorProvider).newId();
 
     if (request.useWorktree && request.existingWorktree != null) {
       throw ArgumentError(
@@ -455,37 +477,54 @@ class SessionLauncher {
         ? request.firstMessage
         : attribution.render(request.firstMessage!);
 
-    final session = Session(
-      id: id,
-      repositoryId: request.repository.id,
-      agentInstallationId: request.installation.id,
-      title: request.title.trim().isEmpty ? 'Session' : request.title.trim(),
-      // True for a joined worktree as well as a created one: the row says
-      // where this session runs, and it does run in a worktree.
-      useWorktree: request.useWorktree || worktree != null,
-      worktree: worktree,
-      status: SessionStatus.running,
-      createdAt: _ref.read(clockProvider).nowUtc(),
-      externalSessionId: externalSessionId,
-      parentSessionId: request.parentSessionId,
-      // A parent with no stated reason is a spawn — the only way a session
-      // could acquire one before schema v13, and what the MCP path still means
-      // when it names a caller without saying more.
-      parentLink: request.parentSessionId == null
-          ? null
-          : (request.parentLink ?? SessionLink.spawn),
-      surface: request.surface,
-      view: request.view ?? defaultViewFor(descriptor),
-      // Stamped, not left null. The mode was already resolved above and then
-      // died with the local that held it, so nothing could say what a running
-      // session was running under — the exact question a control showing the
-      // *effective* mode has to answer. Recording it here also means a later
-      // resume runs under the session's own mode rather than re-reading a
-      // global default that may have changed since.
-      permissionMode: permissionMode,
-    );
+    // Reusing keeps the row's own identity — title, creation time, lineage,
+    // worktree — and changes only what a resume actually changes. Rebuilding it
+    // from the request would let "continue this session" quietly rename it (the
+    // imported path passes the CLI's title) or re-date it.
+    final session =
+        reused?.copyWith(
+          status: SessionStatus.running,
+          permissionMode: permissionMode,
+        ) ??
+        Session(
+          id: id,
+          repositoryId: request.repository.id,
+          agentInstallationId: request.installation.id,
+          title: request.title.trim().isEmpty
+              ? 'Session'
+              : request.title.trim(),
+          // True for a joined worktree as well as a created one: the row says
+          // where this session runs, and it does run in a worktree.
+          useWorktree: request.useWorktree || worktree != null,
+          worktree: worktree,
+          status: SessionStatus.running,
+          createdAt: _ref.read(clockProvider).nowUtc(),
+          externalSessionId: externalSessionId,
+          parentSessionId: request.parentSessionId,
+          // A parent with no stated reason is a spawn — the only way a session
+          // could acquire one before schema v13, and what the MCP path still means
+          // when it names a caller without saying more.
+          parentLink: request.parentSessionId == null
+              ? null
+              : (request.parentLink ?? SessionLink.spawn),
+          surface: request.surface,
+          view: request.view ?? defaultViewFor(descriptor),
+          // Stamped, not left null. The mode was already resolved above and then
+          // died with the local that held it, so nothing could say what a running
+          // session was running under — the exact question a control showing the
+          // *effective* mode has to answer. Recording it here also means a later
+          // resume runs under the session's own mode rather than re-reading a
+          // global default that may have changed since.
+          permissionMode: permissionMode,
+        );
     final dao = _ref.read(sessionDaoProvider);
-    dao.insert(session);
+    if (reused == null) {
+      dao.insert(session);
+    } else {
+      dao
+        ..updateStatus(id, SessionStatus.running)
+        ..updatePermissionMode(id, permissionMode);
+    }
     final repositoryDao = _ref.read(sessionRepositoryDaoProvider)
       ..link(id, request.repository.id, role: SessionRepositoryRole.primary);
     for (final extra in request.additionalRepositories) {
@@ -523,6 +562,45 @@ class SessionLauncher {
       _bump();
       rethrow;
     }
+  }
+
+  /// The row [request] should continue rather than duplicate, or `null` when
+  /// this launch genuinely creates a session.
+  ///
+  /// Narrow on purpose — every condition below is a case where two rows is the
+  /// honest answer:
+  ///
+  /// * **Not a resume.** A create is a create; a fork is a create too (the CLI
+  ///   mints a new conversation id, so it cannot collide with an existing row).
+  /// * **A new worktree.** The row records *where* a session runs, so moving the
+  ///   conversation into a fresh checkout earns its own row.
+  /// * **A stated parent.** A parented launch is asserting a new relationship,
+  ///   and reuse would silently drop it.
+  /// * **A live candidate.** `refuseIfForbidden` has already let this through,
+  ///   which for an agent that permits concurrent resume means a second process
+  ///   on the conversation was the point. That is a second session, not a
+  ///   re-entry into the first — and overwriting a live row's pane id would lose
+  ///   the process we are still holding.
+  /// * **A different repository, installation or surface.** Same conversation,
+  ///   different thing being run; the row would stop describing its own session.
+  /// * **Archived.** Its worktree is gone; reviving it would point a live agent
+  ///   at a directory that no longer exists.
+  Session? _reusableRowForResume(SessionLaunchRequest request) {
+    final externalId = request.resumeExternalSessionId;
+    if (externalId == null || externalId.isEmpty) return null;
+    if (request.useWorktree || request.parentSessionId != null) return null;
+    for (final candidate
+        in _ref
+            .read(sessionDaoProvider)
+            .getAllByExternalSessionId(externalId)) {
+      if (candidate.isArchived) continue;
+      if (candidate.repositoryId != request.repository.id) continue;
+      if (candidate.agentInstallationId != request.installation.id) continue;
+      if (candidate.surface != request.surface) continue;
+      if (livePaneFor(candidate.id) != null) continue;
+      return candidate;
+    }
+    return null;
   }
 
   SessionLaunchResult _startInPane(

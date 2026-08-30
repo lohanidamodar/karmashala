@@ -145,9 +145,35 @@ class SessionDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  /// Every row recording the CLI conversation [externalSessionId], **newest
+  /// first**.
+  ///
+  /// The column is a plain `TEXT` with no `UNIQUE` constraint
+  /// (`migrations.dart:171`), unlike `imported_sessions`, so more than one row
+  /// can name the same conversation — and one did, every time a stopped session
+  /// was resumed. A caller that has to choose between them must be able to
+  /// choose the same one twice, hence the total order: most recently started
+  /// wins, and rows minted in the same instant fall back to the id so a fixed
+  /// clock cannot make the answer arbitrary either.
+  List<Session> getAllByExternalSessionId(String externalSessionId) {
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE external_session_id = ? '
+      'ORDER BY created_at DESC, id DESC;',
+      [externalSessionId],
+    );
+    return rows.map(_fromRow).toList();
+  }
+
+  /// The most recently started row for [externalSessionId], or `null`.
+  ///
+  /// Ordered rather than `LIMIT 1` on an unordered scan: see
+  /// [getAllByExternalSessionId]. Callers that care whether the conversation is
+  /// *running* must scan all of them — one row of several may be the live one —
+  /// which is what `SessionLauncher.runningSessionWithExternalId` does.
   Session? getByExternalSessionId(String externalSessionId) {
     final rows = _db.query(
-      'SELECT * FROM sessions WHERE external_session_id = ? LIMIT 1;',
+      'SELECT * FROM sessions WHERE external_session_id = ? '
+      'ORDER BY created_at DESC, id DESC LIMIT 1;',
       [externalSessionId],
     );
     return rows.isEmpty ? null : _fromRow(rows.first);

@@ -211,10 +211,11 @@ void main() {
           .openNative('old');
 
       expect(result.outcome, ExplorerOutcome.resumed);
-      final resumed = h.container
-          .read(sessionDaoProvider)
-          .getAll()
-          .firstWhere((s) => s.id != 'old');
+      // Loop 66: the resume continues the row it was asked to continue rather
+      // than minting a second one for the same conversation.
+      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
+      final resumed = SessionDao(h.db).getById('old')!;
+      expect(resumed.status, SessionStatus.running);
       expect(resumed.worktree, worktree);
       expect(resumed.useWorktree, isTrue);
       expect(
@@ -234,10 +235,8 @@ void main() {
 
       await h.container.read(explorerActionsProvider).openNative('old');
 
-      final resumed = h.container
-          .read(sessionDaoProvider)
-          .getAll()
-          .firstWhere((s) => s.id != 'old');
+      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
+      final resumed = SessionDao(h.db).getById('old')!;
       expect(resumed.worktree, isNull);
       expect(paneCwd(h, resumed.id), repository().path.path);
     });
@@ -258,14 +257,17 @@ void main() {
       expect(h.container.read(sessionDaoProvider).getAll().length, 1);
     });
 
-    test('clicking the older row of a resumed conversation reveals the live '
+    test('clicking the older row of a duplicated conversation reveals the live '
         'one instead of stacking a third', () async {
+      // A resume no longer *creates* this shape (Loop 66 reuses the row), but
+      // every database written before it holds duplicate pairs, and the older
+      // card is still there to click. `_liveTwinOf` is what keeps that click
+      // honest: two rows, one conversation, one process.
       final h = harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       SessionDao(h.db).insert(stopped());
-      // The first click resumes and leaves two rows for one conversation.
-      await h.container.read(explorerActionsProvider).openNative('old');
+      await launchLive(h, externalId: 'ext-1');
       final after = h.container.read(sessionDaoProvider).getAll().length;
       expect(after, 2);
 
