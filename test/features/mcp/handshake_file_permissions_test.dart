@@ -20,14 +20,28 @@ void main() {
   /// DACL: Everyone, BUILTIN\Users, Authenticated Users, INTERACTIVE.
   const broadPrincipals = ['WD', 'BU', 'AU', 'IU'];
 
+  /// The DACL as SDDL, via `icacls /save` — which writes the SDDL string
+  /// itself, with SIDs rather than localised names. Not PowerShell's
+  /// `Get-Acl`: a PowerShell start-up hang on this machine wedged every run
+  /// of this file, and `icacls` is what the code under test uses anyway.
   Future<String> sddlOf(String path) async {
-    final result = await Process.run('powershell.exe', [
-      '-NoProfile',
-      '-Command',
-      "(Get-Acl -LiteralPath '$path').Sddl",
-    ]);
-    expect(result.exitCode, 0, reason: 'Get-Acl failed: ${result.stderr}');
-    return (result.stdout as String).trim();
+    final out = File(
+      '${Directory.systemTemp.path}\\chitra_sddl_'
+      '${DateTime.now().microsecondsSinceEpoch}.acl',
+    );
+    final result = await Process.run('icacls', [path, '/save', out.path, '/q']);
+    expect(result.exitCode, 0, reason: 'icacls /save failed: ${result.stderr}');
+    try {
+      // icacls writes UTF-16LE: a line with the file name, then its SDDL.
+      final bytes = out.readAsBytesSync();
+      final text = String.fromCharCodes(
+        bytes.buffer.asUint16List(0, bytes.length ~/ 2),
+      ).replaceFirst('\uFEFF', '');
+      final lines = text.split(RegExp(r'\r?\n')).where((l) => l.isNotEmpty);
+      return lines.firstWhere((l) => l.startsWith('D:'), orElse: () => '');
+    } finally {
+      if (out.existsSync()) out.deleteSync();
+    }
   }
 
   group('restrictHandshakeFileToCurrentUser', () {
