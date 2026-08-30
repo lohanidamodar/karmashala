@@ -1,0 +1,393 @@
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/process/command_runner.dart';
+import 'package:chitragupta/src/core/util/clock_provider.dart';
+import 'package:chitragupta/src/core/util/id_generator_provider.dart';
+import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
+import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/projects/data/project_dao.dart';
+import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/sessions/application/session_actions.dart';
+import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
+import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
+import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_resume.dart';
+import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
+import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:chitragupta/src/features/settings/domain/settings.dart';
+import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+import '../terminal/fake_instance.dart';
+
+/// Stand-ins for the two verified behaviours, so the tests exercise the
+/// *capability* rather than a hard-coded agent id.
+///
+/// Claude Code 2.1.251 permits a second process on one conversation; Codex 0.151
+/// refuses with an flock on `~/.codex/thread-writer-locks/<thread>.lock`. Which
+/// CLI is which is data in the registry, and these two rows are that data.
+const _sharing = AgentDescriptor(
+  id: 'sharing',
+  displayName: 'Sharing Agent',
+  binaries: AgentBinaries(windows: ['sharing'], posix: ['sharing']),
+  launch: AgentLaunchSpec(
+    permissionArguments: {
+      PermissionMode.ask: ['--ask'],
+    },
+    interactiveResume: AgentResume.flag('--resume'),
+    allowsConcurrentResume: true,
+  ),
+);
+
+const _exclusive = AgentDescriptor(
+  id: 'exclusive',
+  displayName: 'Exclusive Agent',
+  binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
+  launch: AgentLaunchSpec(
+    permissionArguments: {
+      PermissionMode.ask: ['--ask'],
+    },
+    interactiveResume: AgentResume.subcommand('resume'),
+    // Left at the default — the point of the default.
+  ),
+);
+
+/// Records what would have been handed to an external terminal, so a test can
+/// tell "refused" from "launched" without spawning anything.
+class _RecordingTerminals extends SystemTerminalService {
+  _RecordingTerminals() : super(_DeadRunner());
+
+  final launches = <List<String>>[];
+
+  @override
+  Future<void> launch(
+    SystemTerminal terminal, {
+    required List<String> command,
+    String? workingDirectory,
+  }) async {
+    launches.add(command);
+  }
+}
+
+class _DeadRunner implements CommandRunner {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('no process should be started');
+}
+
+class _StaticSettings extends SettingsController {
+  @override
+  Settings build() => const Settings();
+}
+
+const _terminal = SystemTerminal(
+  kind: SystemTerminalKind.windowsTerminal,
+  label: 'Windows Terminal',
+  executable: 'wt.exe',
+);
+
+typedef Harness = ({
+  ProviderContainer container,
+  AppDatabase db,
+  _RecordingTerminals terminals,
+});
+
+Harness harness(AgentDescriptor agent) {
+  final db = AppDatabase.memory();
+  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  ProjectDao(db).insert(project());
+  RepositoryDao(db).insert(repository());
+  AgentInstallationDao(db).insert(agentInstallation(agentId: agent.id));
+
+  final terminals = _RecordingTerminals();
+  final container = ProviderContainer(
+    overrides: [
+      ...fakeTerminalOverrides(database: db),
+      clockProvider.overrideWithValue(FixedClock(testTime)),
+      idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
+      agentRegistryProvider.overrideWithValue(AgentRegistry([agent])),
+      settingsControllerProvider.overrideWith(_StaticSettings.new),
+      systemTerminalServiceProvider.overrideWithValue(terminals),
+    ],
+  );
+  return (container: container, db: db, terminals: terminals);
+}
+
+/// Starts a session in a pane and pins its CLI id — the join between an imported
+/// entry and one of our rows.
+Future<String> startLive(
+  Harness h,
+  AgentDescriptor agent, {
+  String? externalId = 'ext-1',
+}) async {
+  final launched = await h.container
+      .read(sessionLauncherProvider)
+      .launch(
+        SessionLaunchRequest(
+          repository: repository(),
+          installation: agentInstallation(agentId: agent.id),
+          title: 'Live work',
+          purpose: SessionPurpose.newSession,
+        ),
+      );
+  if (externalId != null) {
+    h.container
+        .read(sessionDaoProvider)
+        .updateExternalSessionId(launched.session.id, externalId);
+  }
+  return launched.session.id;
+}
+
+ImportedSession imported(AgentDescriptor agent) => ImportedSession(
+  id: 'i1',
+  repositoryId: 'r1',
+  cli: agent.id,
+  externalId: 'ext-1',
+  environmentId: 'windows',
+  filePath: '/store/rollout-ext-1.jsonl',
+  storeHome: '/store',
+  isSubagent: false,
+  preview: 'earlier work',
+  createdAt: testTime,
+);
+
+void main() {
+  group('the launcher answers the capability question once', () {
+    test('for every agent it knows, and false for one it does not', () {
+      final h = harness(_sharing);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final launcher = h.container.read(sessionLauncherProvider);
+
+      expect(launcher.allowsConcurrentResume('sharing'), isTrue);
+      expect(launcher.allowsConcurrentResume('never-heard-of-it'), isFalse);
+      expect(launcher.agentDisplayName('sharing'), 'Sharing Agent');
+      // An unrecognised agent still gets a name to put in a sentence.
+      expect(
+        launcher.agentDisplayName('never-heard-of-it'),
+        'never-heard-of-it',
+      );
+    });
+
+    test('knowing we host it by either of the session\'s two names', () async {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await startLive(h, _exclusive);
+      final launcher = h.container.read(sessionLauncherProvider);
+
+      expect(launcher.hostedLive(sessionId: liveId), isTrue);
+      expect(launcher.hostedLive(externalSessionId: 'ext-1'), isTrue);
+      expect(launcher.hostedLive(externalSessionId: 'someone-else'), isFalse);
+      expect(launcher.hostedLive(), isFalse);
+    });
+  });
+
+  group('reattaching wins wherever it is on offer', () {
+    for (final agent in [_sharing, _exclusive]) {
+      test('${agent.id}: resuming a session we host reopens it', () async {
+        final h = harness(agent);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+
+        final liveId = await startLive(h, agent);
+        final action = h.container
+            .read(sessionLauncherProvider)
+            .resumeActionForConversation(
+              agentId: agent.id,
+              externalSessionId: 'ext-1',
+            );
+        expect(action, ResumeAction.reattach);
+
+        final resumed = await h.container
+            .read(sessionActionsProvider)
+            .resumeImported(imported(agent));
+
+        // Instant, keeps the scrollback, cannot fail — better than a second
+        // process even where a second process is allowed.
+        expect(resumed, liveId);
+        expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+      });
+    }
+  });
+
+  group('handing a live conversation to a terminal we do not own', () {
+    test('is allowed when the agent permits it — the Claude case', () async {
+      final h = harness(_sharing);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await startLive(h, _sharing);
+      final actions = h.container.read(sessionActionsProvider);
+
+      // Two terminals listening to one conversation is exactly the thing that
+      // is being enabled here, so neither call may throw.
+      await actions.openSessionInSystemTerminal(liveId, _terminal);
+      await actions.openInSystemTerminal(imported(_sharing), _terminal);
+
+      // Both were handed to the terminal rather than refused. (The command
+      // itself is `resumeCommandLine`'s business and is covered there; what
+      // matters here is that two launches happened and neither threw.)
+      expect(h.terminals.launches, hasLength(2));
+      for (final command in h.terminals.launches) {
+        expect(command.first, endsWith('claude.exe'));
+      }
+    });
+
+    test('is refused when the agent forbids it — the Codex case', () async {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await startLive(h, _exclusive);
+      final actions = h.container.read(sessionActionsProvider);
+
+      await expectLater(
+        actions.openSessionInSystemTerminal(liveId, _terminal),
+        throwsA(
+          isA<SessionAlreadyRunning>()
+              .having((e) => e.sessionId, 'sessionId', liveId)
+              .having((e) => e.title, 'title', 'Live work')
+              .having(
+                (e) => e.toString(),
+                'message',
+                allOf(
+                  contains('Live work'),
+                  contains('Exclusive Agent'),
+                  contains('start a new session'),
+                  // Never the CLI's own words.
+                  isNot(contains('-32600')),
+                  isNot(contains('JSON')),
+                ),
+              ),
+        ),
+      );
+      await expectLater(
+        actions.openInSystemTerminal(imported(_exclusive), _terminal),
+        throwsA(isA<SessionAlreadyRunning>()),
+      );
+
+      // The decisive property: nothing was spawned to die on the user's screen.
+      expect(h.terminals.launches, isEmpty);
+    });
+
+    test('is refused for a native session with no CLI id yet', () async {
+      // Codex will not accept a session id, so our row carries none until one is
+      // discovered. A guard that only joined on the external id let every native
+      // Codex session straight through.
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await startLive(h, _exclusive, externalId: null);
+      expect(SessionDao(h.db).getById(liveId)!.externalSessionId, isNull);
+
+      await expectLater(
+        h.container
+            .read(sessionActionsProvider)
+            .openSessionInSystemTerminal(liveId, _terminal),
+        throwsA(isA<SessionAlreadyRunning>()),
+      );
+      expect(h.terminals.launches, isEmpty);
+    });
+
+    test('is allowed once nothing of ours is running it', () async {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await startLive(h, _exclusive);
+      h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .endSession(SessionDao(h.db).getById(liveId)!.paneId!);
+
+      await h.container
+          .read(sessionActionsProvider)
+          .openSessionInSystemTerminal(liveId, _terminal);
+      expect(h.terminals.launches, hasLength(1));
+    });
+  });
+
+  group('the launcher backstop', () {
+    test('lets a permitted second process through, and records it', () async {
+      final h = harness(_sharing);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await startLive(h, _sharing);
+      final second = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'sharing'),
+              title: 'Second listener',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'ext-1',
+            ),
+          );
+
+      // Two of our rows on one conversation, which is what the agent allows.
+      expect(SessionDao(h.db).getByRepository('r1'), hasLength(2));
+      expect(second.session.externalSessionId, 'ext-1');
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(second.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, ['--ask', '--resume', 'ext-1']);
+    });
+
+    test('refuses a forbidden one before anything is written', () async {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await startLive(h, _exclusive);
+      await expectLater(
+        h.container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: agentInstallation(agentId: 'exclusive'),
+                title: 'Second writer',
+                purpose: SessionPurpose.existingSession,
+                resumeExternalSessionId: 'ext-1',
+              ),
+            ),
+        throwsA(isA<SessionAlreadyRunning>()),
+      );
+      expect(SessionDao(h.db).getByRepository('r1'), hasLength(1));
+    });
+
+    test('does not stand in the way of an unrelated conversation', () async {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await startLive(h, _exclusive);
+      final other = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'exclusive'),
+              title: 'Different thread',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'ext-2',
+            ),
+          );
+      expect(other.session.externalSessionId, 'ext-2');
+    });
+  });
+}

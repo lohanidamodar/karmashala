@@ -22,23 +22,37 @@ enum ResumeAction {
 
 /// Chooses between them.
 ///
-/// Deliberately a pure function of three booleans rather than a method on a
+/// Deliberately a pure function of four booleans rather than a method on a
 /// session: the same decision is made for a native session, an imported CLI
 /// session and an MCP `open_session` call, and it must come out the same way in
 /// all three.
 ///
-/// Order matters. [weHostItLive] wins over everything, including an agent that
-/// would have permitted a second process, because reattaching is strictly
-/// better than spawning: it is instant, it keeps the scrollback, and it cannot
-/// fail.
+/// Order matters.
+///
+/// * [weHostItLive] wins over everything a caller that *can* reattach could do,
+///   including for an agent that would have permitted a second process, because
+///   reattaching is strictly better than spawning: it is instant, it keeps the
+///   scrollback, and it cannot fail.
+/// * [canReattach] is false for a caller handing the conversation somewhere we
+///   do not own — an external terminal window. Reopening our own tab is not what
+///   was asked for there, so a pane of ours becomes just another holder and the
+///   agent's capability decides. This is the case the owner cares about: a
+///   second Windows Terminal on a live Claude Code conversation is allowed,
+///   the same thing on Codex is not.
+/// * [allowsConcurrentResume] then settles it. It is false by default for
+///   agents nobody has tested, so an unknown agent is treated as single-writer.
+/// * [heldByAnotherProcess] is only ever *certain* knowledge — an agent's own
+///   refusal, seen on its screen. It is never inferred from a record.
 ResumeAction resumeActionFor({
   required bool weHostItLive,
   required bool allowsConcurrentResume,
   required bool heldByAnotherProcess,
+  bool canReattach = true,
 }) {
-  if (weHostItLive) return ResumeAction.reattach;
+  if (weHostItLive && canReattach) return ResumeAction.reattach;
   if (allowsConcurrentResume) return ResumeAction.resume;
-  return heldByAnotherProcess ? ResumeAction.blocked : ResumeAction.resume;
+  if (weHostItLive || heldByAnotherProcess) return ResumeAction.blocked;
+  return ResumeAction.resume;
 }
 
 /// What we can honestly say about where a session's process is.
@@ -63,6 +77,7 @@ class SessionWhereabouts {
     this.hostedLive = false,
     this.external = false,
     this.refusedResume = false,
+    this.lastSeen,
   });
 
   /// A pane of ours is running it right now.
@@ -75,6 +90,15 @@ class SessionWhereabouts {
   /// An agent refused to resume it because another process holds the
   /// conversation, and we saw the refusal on the pane's own screen.
   final bool refusedResume;
+
+  /// When the newest evidence about this session was **produced** — not when we
+  /// last looked. Today that is the modification time of the agent's own
+  /// transcript, which is the only timestamp that means anything once our pane
+  /// has gone.
+  ///
+  /// Null when we have no such evidence at all, which is a real answer and is
+  /// rendered as one: an age we cannot compute is never rendered as "0m".
+  final DateTime? lastSeen;
 
   /// Whether a second process is *known* to hold the conversation.
   ///
@@ -89,7 +113,7 @@ class SessionWhereabouts {
   String? get note {
     if (hostedLive) return 'running here';
     if (refusedResume) return 'open in another process';
-    if (external) return 'external terminal';
+    if (external) return 'opened in an external terminal';
     return null;
   }
 
@@ -106,6 +130,30 @@ class SessionWhereabouts {
     }
     return null;
   }
+
+  /// The "last seen" clause, aged against [now], or null when we have no
+  /// evidence to age.
+  ///
+  /// Never rendered for [hostedLive]: we can see that process, so "running
+  /// here" is a stronger and more honest thing to say than a timestamp.
+  String? lastSeenLabel(DateTime now) {
+    if (hostedLive) return null;
+    final at = lastSeen;
+    return at == null ? null : 'last seen ${describeAge(now.difference(at))}';
+  }
+}
+
+/// A coarse, deliberately unexciting rendering of an age.
+///
+/// Rounded down and capped at days, because the point of the number is to tell
+/// the user how much to trust the claim beside it, not to be a clock. "just now"
+/// covers the first minute rather than counting seconds, which would make a
+/// static row look live.
+String describeAge(Duration age) {
+  if (age.isNegative || age.inMinutes < 1) return 'just now';
+  if (age.inHours < 1) return '${age.inMinutes}m ago';
+  if (age.inDays < 1) return '${age.inHours}h ago';
+  return '${age.inDays}d ago';
 }
 
 /// The plain-words refusal shown instead of the agent's own JSON-RPC error.

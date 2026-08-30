@@ -19,6 +19,7 @@ import '../domain/session.dart';
 import '../domain/session_attribution.dart';
 import '../domain/session_depth.dart';
 import '../domain/session_launch.dart';
+import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
@@ -45,7 +46,7 @@ class SessionDepthRefused implements Exception {
 }
 
 /// Raised when a resume would start a **second** agent on a conversation whose
-/// first one is still running.
+/// first one is still running, **and that agent will not share it**.
 ///
 /// Loop 38 separated session lifetime from view lifetime: closing a tab detaches
 /// the view and leaves the process running. So "resume this session" stopped
@@ -56,25 +57,46 @@ class SessionDepthRefused implements Exception {
 /// thread/resume failed: thread <id> already has an active writer (code -32600)
 /// ```
 ///
-/// which reaches the user as a raw JSON-RPC failure during TUI bootstrap.
+/// which reaches the user as a raw JSON-RPC failure during TUI bootstrap. That
+/// string never reaches the user from here: [toString] is the plain-words
+/// version, and it is what the UI shows.
 ///
-/// Every in-app surface answers this by *reopening the view* instead, so this
-/// type is only thrown where reopening is not what was asked for — handing the
-/// session to an external terminal — and by [SessionLauncher.launch] itself, as
-/// the backstop no future caller can forget. Its message is the user-facing one:
-/// the UI shows `toString()` directly.
+/// **Only thrown for an agent that forbids it.** Loop 46 made that conditional:
+/// this used to fire for every agent, which refused the case Claude Code
+/// actually supports — a second terminal listening to the same conversation.
+/// See [AgentLaunchSpec.allowsConcurrentResume] and [resumeActionFor].
+///
+/// In-app surfaces that *can* reopen the running view do so instead and never
+/// get here, so this is thrown where reopening is not what was asked for —
+/// handing the session to an external terminal — and by [SessionLauncher.launch]
+/// itself, as the backstop no future caller can forget.
 class SessionAlreadyRunning implements Exception {
-  const SessionAlreadyRunning({required this.sessionId, required this.title});
+  const SessionAlreadyRunning({
+    required this.agentName,
+    this.sessionId,
+    this.title,
+  });
 
-  /// The session already running it — the one to reveal.
-  final String sessionId;
-  final String title;
+  /// The session already running it — the one to reveal. Null when the holder is
+  /// a process we do not own, which we only ever learn from the agent's own
+  /// refusal.
+  final String? sessionId;
+
+  /// That session's title, when it is one of ours.
+  final String? title;
+
+  /// The agent's display name, so the refusal says *who* is refusing. Naming it
+  /// is what makes "start a new session instead" read as a property of this CLI
+  /// rather than a limitation of Chitragupta.
+  final String agentName;
 
   @override
-  String toString() =>
-      '"$title" is already running in Chitragupta. Open it from the terminal, '
-      'or end it first: resuming it now would start a second agent on the same '
-      'conversation, which the CLI refuses.';
+  String toString() {
+    final where = title == null
+        ? 'That conversation is already open in another process.'
+        : '"$title" is already running in Chitragupta.';
+    return '$where ${resumeBlockedMessage(agentName)}';
+  }
 }
 
 /// **The** way a session comes into existence.
@@ -196,18 +218,108 @@ class SessionLauncher {
     return true;
   }
 
+  // --- may a second process have it? -----------------------------------------
+
+  /// Whether [agentId] permits a second process on a conversation another one is
+  /// already holding.
+  ///
+  /// The single read of [AgentLaunchSpec.allowsConcurrentResume] in the app, so
+  /// "Claude can, Codex cannot" is answered from the registry rather than
+  /// re-derived per call site. An agent we do not recognise answers `false`,
+  /// which is the same safe default the field itself carries.
+  bool allowsConcurrentResume(String agentId) =>
+      _ref
+          .read(agentRegistryProvider)
+          .byId(agentId)
+          ?.launch
+          .allowsConcurrentResume ??
+      false;
+
+  /// What to show the user when we name the agent in a refusal.
+  String agentDisplayName(String agentId) =>
+      _ref.read(agentRegistryProvider).byId(agentId)?.displayName ?? agentId;
+
+  /// **The** resume decision, for every surface.
+  ///
+  /// [canReattach] is the caller saying whether reopening our own pane would
+  /// satisfy the request. It is false for a handoff to a terminal window we do
+  /// not own: there, a live pane of ours is just another process holding the
+  /// conversation, and only the agent's capability decides.
+  ///
+  /// [heldByAnotherProcess] is for callers that have *certain* knowledge of a
+  /// holder we do not own — an agent's own refusal, read off its screen (see
+  /// `SessionWhereabouts.knownHeldElsewhere`). It is never inferred here.
+  ResumeAction resumeActionForConversation({
+    required String agentId,
+    String? sessionId,
+    String? externalSessionId,
+    bool canReattach = true,
+    bool heldByAnotherProcess = false,
+  }) => resumeActionFor(
+    weHostItLive: hostedLive(
+      sessionId: sessionId,
+      externalSessionId: externalSessionId,
+    ),
+    allowsConcurrentResume: allowsConcurrentResume(agentId),
+    heldByAnotherProcess: heldByAnotherProcess,
+    canReattach: canReattach,
+  );
+
+  /// Whether **we** are running this conversation right now, by either name it
+  /// has: one of our session rows, or the CLI's own id.
+  ///
+  /// Both are needed and neither is enough. An imported entry only knows the CLI
+  /// id; a native Codex row often has no CLI id at all, because Codex will not
+  /// accept one and it is only discovered afterwards — so a check that used only
+  /// the external id silently passed every native Codex session.
+  bool hostedLive({String? sessionId, String? externalSessionId}) =>
+      livePaneFor(sessionId) != null ||
+      runningSessionWithExternalId(externalSessionId) != null;
+
+  /// Throws the plain-words refusal for a handoff the agent forbids, or returns
+  /// normally. Shared by the paths that cannot reattach so their message, and
+  /// the moment they give up, cannot drift apart.
+  void refuseIfForbidden({
+    required String agentId,
+    String? sessionId,
+    String? externalSessionId,
+    bool heldByAnotherProcess = false,
+  }) {
+    final action = resumeActionForConversation(
+      agentId: agentId,
+      sessionId: sessionId,
+      externalSessionId: externalSessionId,
+      canReattach: false,
+      heldByAnotherProcess: heldByAnotherProcess,
+    );
+    if (action != ResumeAction.blocked) return;
+    final running =
+        runningSessionWithExternalId(externalSessionId) ??
+        (livePaneFor(sessionId) == null
+            ? null
+            : _ref.read(sessionDaoProvider).getById(sessionId!));
+    throw SessionAlreadyRunning(
+      agentName: agentDisplayName(agentId),
+      sessionId: running?.id,
+      title: running?.title,
+    );
+  }
+
   /// Creates the session row and starts it on the requested surface.
   Future<SessionLaunchResult> launch(SessionLaunchRequest request) async {
     // Before anything is written: a resume of a conversation we are still
-    // running would be a second agent on it. Callers that can reopen the
-    // running view do so and never get here; this is the backstop for the ones
-    // that cannot, and for whatever is added next.
-    final running = runningSessionWithExternalId(
-      request.resumeExternalSessionId,
+    // running would be a second agent on it. Callers that can reopen the running
+    // view do so and never get here; this is the backstop for the ones that
+    // cannot, and for whatever is added next.
+    //
+    // It asks the agent rather than refusing outright. Launching is a *create*,
+    // so it can never reattach — but for an agent that permits concurrent
+    // resume (Claude Code) a second process is exactly what was asked for, and
+    // blocking it here refused the one case the user wanted to keep.
+    refuseIfForbidden(
+      agentId: request.installation.agentId,
+      externalSessionId: request.resumeExternalSessionId,
     );
-    if (running != null) {
-      throw SessionAlreadyRunning(sessionId: running.id, title: running.title);
-    }
 
     final depth = depthForChildOf(request.parentSessionId);
     if (!depth.isAllowed) throw SessionDepthRefused(depth);
