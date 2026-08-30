@@ -21,6 +21,7 @@ import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_actions.dart';
+import '../../sessions/presentation/agent_status_badge.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
@@ -736,6 +737,11 @@ class _NativeSessionRow extends ConsumerWidget {
       pinned: pinned,
       leading: _statusIcon(session.status, context),
       title: session.title,
+      // Two different things, deliberately both shown: the badge is what the
+      // agent is doing *now* (from a hook, its transcript, or its screen) and
+      // the subtitle is the session's own lifecycle. A session can be `running`
+      // and its agent idle, waiting for you to type.
+      badge: AgentStatusBadge(sessionId: session.id),
       subtitle:
           '${session.status.name}'
           '${session.useWorktree ? ' · worktree' : ''}',
@@ -941,6 +947,7 @@ class _SessionRow extends StatelessWidget {
     required this.menuItems,
     required this.onMenu,
     this.pinned = false,
+    this.badge,
   });
 
   final int depth;
@@ -948,6 +955,11 @@ class _SessionRow extends StatelessWidget {
   final Widget leading;
   final String title;
   final String subtitle;
+
+  /// Live agent status, for rows that have one. Sits between the title and the
+  /// lifecycle text so "what is it doing right now" reads before "what happened
+  /// to it".
+  final Widget? badge;
   final VoidCallback onTap;
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
@@ -976,6 +988,7 @@ class _SessionRow extends StatelessWidget {
             Expanded(
               child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
+            if (badge != null) ...[const SizedBox(width: 6), badge!],
             const SizedBox(width: 6),
             Tooltip(
               message: subtitle,

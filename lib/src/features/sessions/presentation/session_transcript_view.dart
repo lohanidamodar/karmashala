@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
 import '../application/session_engine_provider.dart';
+import '../application/session_providers.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
+import '../domain/session_launch.dart';
+import 'agent_status_badge.dart';
 import 'chat_transcript.dart';
 import 'handoff_actions_row.dart';
 import 'message_composer.dart';
@@ -56,6 +61,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               Expanded(
                 child: Text('Transcript', style: theme.textTheme.titleSmall),
               ),
+              AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
+              const SizedBox(width: 8),
+              _ShowTerminalButton(sessionId: widget.sessionId),
               _OpenInTerminalButton(sessionId: widget.sessionId),
               if (active)
                 IconButton(
@@ -193,4 +201,61 @@ class _OpenInTerminalButton extends ConsumerWidget {
       orElse: () => const SizedBox.shrink(),
     );
   }
+}
+
+/// Switches this session to its terminal view.
+///
+/// Chat and terminal are two renderings of **one** session — same row, same PTY,
+/// same lifecycle — so this starts and stops nothing. It reveals the pane the
+/// agent is already running in and records the preference, and the session is
+/// entirely unaffected either way.
+///
+/// Absent for a session with no pane of ours (an external terminal, or a session
+/// from before this existed), because there would be nothing to show.
+class _ShowTerminalButton extends ConsumerWidget {
+  const _ShowTerminalButton({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(sessionsRevisionProvider);
+    final session = ref.read(sessionDaoProvider).getById(sessionId);
+    final paneId = session?.paneId;
+    if (paneId == null) return const SizedBox.shrink();
+
+    return IconButton(
+      tooltip: 'Show the terminal this session is running in',
+      icon: const Icon(AppIcons.terminal, size: 18),
+      onPressed: () {
+        final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+        // A detached pane comes back as a tab; one already in a tab is simply
+        // focused. Neither recreates anything.
+        terminals
+          ..reattachSession(paneId)
+          ..focusPane(paneId);
+        ref.read(terminalVisibleProvider.notifier).set(true);
+        ref
+            .read(sessionDaoProvider)
+            .updateView(sessionId, SessionView.terminal);
+        ref.read(sessionsRevisionProvider.notifier).bump();
+      },
+    );
+  }
+}
+
+/// Whether a chat view can be built for the agent behind [sessionId].
+///
+/// A capability question about the *agent*, answered from the registry — not a
+/// question about which runtime the session uses, because every in-app session
+/// uses the same one.
+bool sessionHasChatView(WidgetRef ref, String sessionId) {
+  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  if (session == null) return false;
+  final agentId = ref
+      .read(agentInstallationDaoProvider)
+      .getById(session.agentInstallationId)
+      ?.agentId;
+  if (agentId == null) return false;
+  return agentSupportsChatView(ref.read(agentRegistryProvider).byId(agentId));
 }

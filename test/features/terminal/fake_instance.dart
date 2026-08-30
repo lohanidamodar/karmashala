@@ -74,39 +74,46 @@ class FakeTerminalInstance implements TerminalInstance {
 
 /// A container whose terminals are fakes, optionally over a real in-memory
 /// database so persistence can be exercised.
-ProviderContainer fakeTerminalContainer({AppDatabase? database}) {
-  return ProviderContainer(
-    overrides: [
-      if (database != null) databaseProvider.overrideWithValue(database),
-      // A real periodic timer would outlive the widget tree and trip
-      // flutter_test's pending-timer check; tests drive saving explicitly.
-      scrollbackAutosaveFactoryProvider.overrideWithValue(
-        ({required onTick}) => ScrollbackAutosave(
-          onTick: onTick,
-          schedule: (interval, callback) => Object(),
-          cancel: (_) {},
-        ),
+ProviderContainer fakeTerminalContainer({AppDatabase? database}) =>
+    ProviderContainer(overrides: fakeTerminalOverrides(database: database));
+
+/// The overrides behind [fakeTerminalContainer], so a test that needs more of
+/// them can spread this list rather than reproduce a second, friendlier fake.
+///
+/// The return type is inferred on purpose: Riverpod's `Override` is a sealed
+/// type its public library does not export, so it cannot be written down here.
+// ignore: strict_top_level_inference
+fakeTerminalOverrides({AppDatabase? database}) {
+  return [
+    if (database != null) databaseProvider.overrideWithValue(database),
+    // A real periodic timer would outlive the widget tree and trip
+    // flutter_test's pending-timer check; tests drive saving explicitly.
+    scrollbackAutosaveFactoryProvider.overrideWithValue(
+      ({required onTick}) => ScrollbackAutosave(
+        onTick: onTick,
+        schedule: (interval, callback) => Object(),
+        cancel: (_) {},
       ),
-      // Off unless a test says otherwise; also keeps the terminal controller
-      // from pulling in settings (and therefore a database) just to open a pane.
-      shellIntegrationEnabledProvider.overrideWithValue(false),
-      terminalInstanceFactoryProvider.overrideWithValue(
-        ({
-          required id,
-          required profile,
-          workingDirectory,
-          restoredScrollback,
-          shellIntegration = false,
-          agentLaunch,
-        }) => FakeTerminalInstance(
-          id: id,
-          title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
-          profileId: agentLaunch?.profileId ?? profile.id,
-          workingDirectory: workingDirectory,
-          restored: restoredScrollback,
-          agentLaunch: agentLaunch,
-        ),
+    ),
+    // Off unless a test says otherwise; also keeps the terminal controller
+    // from pulling in settings (and therefore a database) just to open a pane.
+    shellIntegrationEnabledProvider.overrideWithValue(false),
+    terminalInstanceFactoryProvider.overrideWithValue(
+      ({
+        required id,
+        required profile,
+        workingDirectory,
+        restoredScrollback,
+        shellIntegration = false,
+        agentLaunch,
+      }) => FakeTerminalInstance(
+        id: id,
+        title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
+        profileId: agentLaunch?.profileId ?? profile.id,
+        workingDirectory: workingDirectory,
+        restored: restoredScrollback,
+        agentLaunch: agentLaunch,
       ),
-    ],
-  );
+    ),
+  ];
 }

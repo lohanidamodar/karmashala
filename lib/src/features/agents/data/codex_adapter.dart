@@ -63,7 +63,7 @@ AgentEvent? parseCodexMessage(String line) {
         'state': message['state'],
       });
     case 'tool_call':
-      return AgentEvent('tool.call', {
+      return AgentEvent(SessionEventTypes.toolCall, {
         'name': message['name'],
         'arguments': message['arguments'],
       });
