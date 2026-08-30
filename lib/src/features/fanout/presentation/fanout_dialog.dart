@@ -21,7 +21,7 @@ class FanOutDialog extends ConsumerStatefulWidget {
 class _FanOutDialogState extends ConsumerState<FanOutDialog> {
   final _prompt = TextEditingController();
   final _selected = <String>{};
-  List<FanOutResult>? _results;
+  FanOutLaunch? _launched;
   bool _busy = false;
   String? _error;
 
@@ -51,7 +51,7 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
                 .toList(),
             prompt: _prompt.text,
           );
-      if (mounted) setState(() => _results = results);
+      if (mounted) setState(() => _launched = results);
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
@@ -77,9 +77,9 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
         height: 760,
         child: Padding(
           padding: const EdgeInsets.all(Insets.lg),
-          child: _results == null
+          child: _launched == null
               ? _setup(repo?.name, installs)
-              : _comparison(_results!),
+              : _comparison(_launched!),
         ),
       ),
     );
@@ -156,41 +156,59 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
     ],
   );
 
-  Widget _comparison(List<FanOutResult> results) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Compare results',
-              style: Theme.of(context).textTheme.titleLarge,
+  Widget _comparison(FanOutLaunch launched) {
+    final results = launched.started;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Compare results',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: 'Close',
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close),
+            IconButton(
+              tooltip: 'Close',
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        // A partial launch is still a launch: the agents that did start are
+        // below, and the ones that did not are named here rather than lost.
+        if (launched.partialSummary case final summary?) ...[
+          const SizedBox(height: Insets.xs),
+          Text(
+            '$summary '
+            '${launched.failures.map((f) => '${f.agentId}: ${f.error}').join(' · ')}',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
-      ),
-      const SizedBox(height: Insets.md),
-      Expanded(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var i = 0; i < results.length; i++) ...[
-                if (i > 0) const VerticalDivider(width: 1),
-                SizedBox(width: 400, child: _ResultColumn(result: results[i])),
-              ],
-            ],
-          ),
+        const SizedBox(height: Insets.md),
+        Expanded(
+          child: results.isEmpty
+              ? const Center(child: Text('No agent started.'))
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < results.length; i++) ...[
+                        if (i > 0) const VerticalDivider(width: 1),
+                        SizedBox(
+                          width: 400,
+                          child: _ResultColumn(result: results[i]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _ResultColumn extends ConsumerStatefulWidget {

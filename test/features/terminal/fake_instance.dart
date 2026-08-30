@@ -6,6 +6,7 @@ import 'package:chitragupta/src/features/terminal/data/command_block_recorder.da
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,7 +84,10 @@ ProviderContainer fakeTerminalContainer({AppDatabase? database}) =>
 /// The return type is inferred on purpose: Riverpod's `Override` is a sealed
 /// type its public library does not export, so it cannot be written down here.
 // ignore: strict_top_level_inference
-fakeTerminalOverrides({AppDatabase? database}) {
+fakeTerminalOverrides({
+  AppDatabase? database,
+  TerminalInstanceFactory? instanceFactory,
+}) {
   return [
     if (database != null) databaseProvider.overrideWithValue(database),
     // A real periodic timer would outlive the widget tree and trip
@@ -98,22 +102,29 @@ fakeTerminalOverrides({AppDatabase? database}) {
     // Off unless a test says otherwise; also keeps the terminal controller
     // from pulling in settings (and therefore a database) just to open a pane.
     shellIntegrationEnabledProvider.overrideWithValue(false),
+    // [instanceFactory] replaces the default rather than adding a second
+    // override: Riverpod refuses the same provider twice in one container, so a
+    // test that needs a pane to fail has to substitute here.
     terminalInstanceFactoryProvider.overrideWithValue(
-      ({
-        required id,
-        required profile,
-        workingDirectory,
-        restoredScrollback,
-        shellIntegration = false,
-        agentLaunch,
-      }) => FakeTerminalInstance(
-        id: id,
-        title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
-        profileId: agentLaunch?.profileId ?? profile.id,
-        workingDirectory: workingDirectory,
-        restored: restoredScrollback,
-        agentLaunch: agentLaunch,
-      ),
+      instanceFactory ?? defaultFakeInstanceFactory,
     ),
   ];
 }
+
+/// The factory behind [fakeTerminalOverrides]: a process-free pane for whatever
+/// it is asked to build.
+TerminalInstance defaultFakeInstanceFactory({
+  required String id,
+  required TerminalProfile profile,
+  String? workingDirectory,
+  String? restoredScrollback,
+  bool shellIntegration = false,
+  AgentPaneLaunch? agentLaunch,
+}) => FakeTerminalInstance(
+  id: id,
+  title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
+  profileId: agentLaunch?.profileId ?? profile.id,
+  workingDirectory: workingDirectory,
+  restored: restoredScrollback,
+  agentLaunch: agentLaunch,
+);
