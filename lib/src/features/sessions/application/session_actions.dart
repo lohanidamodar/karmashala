@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -15,7 +14,6 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
-import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
@@ -353,13 +351,10 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    final settings = _ref.read(settingsControllerProvider);
     final installation =
-        resolveDefaultInstallation(
-          installs,
-          defaultInstallationId: settings.defaultAgentInstallationId,
-          defaultAgentId: settings.defaultAgent,
-        ) ??
+        _ref
+            .read(sessionLauncherProvider)
+            .defaultInstallationIn(repo.path.environmentId) ??
         installs.first;
     return shellCommandLine(
       agentExecutable: installation.executable.path,

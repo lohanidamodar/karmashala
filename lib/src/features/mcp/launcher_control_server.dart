@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/logging/app_logger.dart';
 import '../../core/process/command_runner_providers.dart';
-import '../agents/application/agent_installations_controller.dart';
 import '../agents/application/agent_providers.dart';
 import '../agents/application/agent_status_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
@@ -37,7 +36,6 @@ import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session.dart';
 import '../sessions/domain/session_launch.dart';
-import '../settings/application/settings_controller.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
@@ -947,13 +945,12 @@ class LauncherControlServer {
         );
       }
     } else {
-      final settings = _container.read(settingsControllerProvider);
+      // The launcher's resolution, so "the default agent" means the same thing
+      // here as it does in the New-session dialog and the mini launcher.
       install =
-          resolveDefaultInstallation(
-            installs,
-            defaultInstallationId: settings.defaultAgentInstallationId,
-            defaultAgentId: settings.defaultAgent,
-          ) ??
+          _container
+              .read(sessionLauncherProvider)
+              .defaultInstallationIn(repo.path.environmentId) ??
           installs.first;
     }
 
