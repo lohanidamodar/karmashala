@@ -33,11 +33,19 @@ void main() {
     recorder.endRecording().dispose();
   });
 
+  // `buildTerminal` defaults to these, so asserting a terminal's size against
+  // them cannot fail. What can fail is the corpus being shrunk — which would
+  // quietly make every budget in `draw_ops_test.dart` easier to meet — so the
+  // viewport those budgets are stated against is pinned to its literal size
+  // here instead.
+  test('the perf viewport the budgets are stated against is 200x50', () {
+    expect(kPerfColumns, 200);
+    expect(kPerfRows, 50);
+  });
+
   for (final corpus in PerfCorpus.values) {
     test('$corpus fills a ${kPerfColumns}x$kPerfRows buffer', () {
       final terminal = buildTerminal(corpus);
-      expect(terminal.viewWidth, kPerfColumns);
-      expect(terminal.viewHeight, kPerfRows);
       expect(terminal.buffer.lines.length, greaterThanOrEqualTo(kPerfRows));
       // Every visible line has content — an empty corpus would make the
       // draw-op budget meaningless.

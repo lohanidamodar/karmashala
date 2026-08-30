@@ -91,6 +91,14 @@ void main() {
   });
 
   group('swipeDurationFor', () {
+    // The clamping below is written against the same constants it clamps to, so
+    // widening one of them would move the code and the test together. These pin
+    // the millisecond values that actually reach `adb shell input swipe`.
+    test('the bounds are the millisecond values adb is handed', () {
+      expect(kMinSwipeDuration, const Duration(milliseconds: 60));
+      expect(kMaxSwipeDuration, const Duration(milliseconds: 1500));
+    });
+
     test('passes an ordinary gesture through unchanged', () {
       // `input swipe` interpolates over the duration it is given, so the
       // duration IS the gesture's velocity: a fixed value would make a flick
@@ -118,6 +126,7 @@ void main() {
         kLongPressHoldDuration,
         greaterThan(const Duration(milliseconds: 500)),
       );
+      expect(kLongPressHoldDuration, const Duration(milliseconds: 700));
     });
   });
 

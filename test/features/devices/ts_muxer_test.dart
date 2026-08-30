@@ -4,6 +4,22 @@ import 'package:chitragupta/src/features/devices/data/ts_muxer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // The muxer's own constants are what every structural assertion in this file
+  // and in `ts_stream_validator.dart` is written against, so a change to one of
+  // them would move the test and the code together and nothing would fail. Pin
+  // the three that are fixed by the wire format rather than by us — the same
+  // shape as `scrcpy_control_test.dart`'s 32-byte pin.
+  group('the wire constants are the ones the format fixes', () {
+    test('a transport packet is 188 bytes (ISO 13818-1)', () {
+      expect(kTsPacketSize, 188);
+    });
+
+    test('the PMT and video PIDs are the ones the PAT advertises', () {
+      expect(kPmtPid, 0x1000);
+      expect(kVideoPid, 0x0100);
+    });
+  });
+
   group('mpegCrc32', () {
     test('matches the standard CRC-32/MPEG-2 check value', () {
       // The published check value for CRC-32/MPEG-2 over ASCII "123456789".

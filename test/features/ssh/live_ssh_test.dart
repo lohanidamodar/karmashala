@@ -6,12 +6,9 @@ import 'dart:io';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/core/process/ssh_command_runner.dart';
-import 'package:chitragupta/src/core/process/windows_command_runner.dart';
-import 'package:chitragupta/src/core/process/wsl_command_runner.dart';
 import 'package:chitragupta/src/core/util/clock.dart';
 import 'package:chitragupta/src/features/agents/data/agent_discovery_service.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/environments/data/environment_discovery_service.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
@@ -38,6 +35,11 @@ import '../../support/fixtures.dart';
 /// A WSL distribution running `sshd` on a spare port is a good target: it is a
 /// genuinely different machine as far as sockets, filesystems and PATH are
 /// concerned.
+///
+/// The latency measurements that used to live at the bottom of this file are
+/// now `tool/benchmark/ssh_latency_bench.dart`. They asserted only that the
+/// numbers they printed were greater than zero, which is not a test; they take
+/// the same environment variables and run on demand.
 String? _env(String name) {
   final value = Platform.environment[name];
   return value == null || value.isEmpty ? null : value;
@@ -463,156 +465,5 @@ void main() {
         throwsA(isA<RemoteBrowseException>()),
       );
     });
-  });
-
-  group('latency', () {
-    test('SSH round trips versus the same work locally', () async {
-      final connection = await trusted();
-      final ssh = SshCommandRunner(
-        environmentId: environment.id,
-        connection: connection,
-      );
-
-      // The local comparison runs the identical commands in a WSL distribution
-      // through WslCommandRunner: same shell, same binaries, only the transport
-      // differs.
-      final locals = await EnvironmentDiscoveryService(
-        host: const WindowsCommandRunner(),
-        clock: const SystemClock(),
-      ).discover();
-      final distro = locals
-          .where((e) => e.kind == EnvironmentKind.wsl)
-          .map((e) => e.wslDistribution!)
-          .firstOrNull;
-      final wsl = distro == null
-          ? null
-          : WslCommandRunner(
-              environmentId: 'wsl:$distro',
-              distribution: distro,
-            );
-
-      Future<double> timeMedian(
-        CommandRunner runner,
-        Future<void> Function(CommandRunner) work, {
-        int samples = 7,
-      }) async {
-        final timings = <int>[];
-        for (var i = 0; i < samples; i++) {
-          final watch = Stopwatch()..start();
-          await work(runner);
-          timings.add(watch.elapsedMicroseconds);
-        }
-        timings.sort();
-        return timings[timings.length ~/ 2] / 1000;
-      }
-
-      Future<void> trivial(CommandRunner r) async {
-        await r.run(const CommandRequest(executable: 'true'));
-      }
-
-      Future<void> discovery(CommandRunner r) async {
-        await AgentDiscoveryService(
-          runner: r,
-          environment: environment,
-          ids: SequentialIdGenerator(),
-          clock: const SystemClock(),
-        ).probeAll();
-      }
-
-      Future<void> gitStatus(CommandRunner r) async {
-        await r.run(
-          const CommandRequest(
-            executable: 'git',
-            arguments: ['status', '--porcelain'],
-            workingDirectory: EnvironmentPath(
-              environmentId: 'ssh:live',
-              path: '/tmp',
-            ),
-          ),
-        );
-      }
-
-      final cold = Stopwatch()..start();
-      final fresh = connect(onUnknownHostKey: (_) => true);
-      await fresh.client();
-      cold.stop();
-
-      final results = <String, List<double?>>{
-        'one trivial command': [
-          await timeMedian(ssh, trivial),
-          wsl == null ? null : await timeMedian(wsl, trivial),
-        ],
-        'agent discovery (3 agents)': [
-          await timeMedian(ssh, discovery, samples: 5),
-          wsl == null ? null : await timeMedian(wsl, discovery, samples: 5),
-        ],
-        'git status': [
-          await timeMedian(ssh, gitStatus, samples: 5),
-          wsl == null ? null : await timeMedian(wsl, gitStatus, samples: 5),
-        ],
-      };
-
-      // ignore: avoid_print
-      print(
-        '  cold connect (TCP + kex + auth): '
-        '${cold.elapsedMilliseconds} ms',
-      );
-      // ignore: avoid_print
-      print(
-        '  ${'work'.padRight(28)} ${'ssh'.padLeft(9)} '
-        '${'local'.padLeft(9)}  ratio',
-      );
-      results.forEach((label, values) {
-        final remote = values[0]!;
-        final local = values[1];
-        final ratio = local == null || local == 0
-            ? 'n/a'
-            : '${(remote / local).toStringAsFixed(1)}x';
-        // ignore: avoid_print
-        print(
-          '  ${label.padRight(28)} '
-          '${remote.toStringAsFixed(1).padLeft(6)} ms '
-          '${(local?.toStringAsFixed(1) ?? '-').padLeft(6)} ms  $ratio',
-        );
-      });
-
-      // Is the per-command cost round trips or client-side crypto? Ten
-      // commands run one after another versus all at once answers it: if the
-      // concurrent batch is far cheaper, the cost is latency and batching or
-      // parallelism is the fix; if it is not, the cost is CPU in the client.
-      Future<int> sequential(int n) async {
-        final watch = Stopwatch()..start();
-        for (var i = 0; i < n; i++) {
-          await ssh.run(const CommandRequest(executable: 'true'));
-        }
-        return watch.elapsedMilliseconds;
-      }
-
-      Future<int> concurrent(int n) async {
-        final watch = Stopwatch()..start();
-        await Future.wait([
-          for (var i = 0; i < n; i++)
-            ssh.run(const CommandRequest(executable: 'true')),
-        ]);
-        return watch.elapsedMilliseconds;
-      }
-
-      final serial = await sequential(10);
-      final parallel = await concurrent(10);
-      // ignore: avoid_print
-      print(
-        '  10 commands sequentially:   $serial ms '
-        '(${(serial / 10).toStringAsFixed(1)} ms each)',
-      );
-      // ignore: avoid_print
-      print(
-        '  10 commands concurrently:   $parallel ms '
-        '(${(parallel / 10).toStringAsFixed(1)} ms each)',
-      );
-
-      // Not a performance assertion — the numbers are the point, and they go
-      // in the loop report. This only pins that the work actually happened.
-      expect(results.values.every((v) => v[0]! > 0), isTrue);
-    }, timeout: const Timeout(Duration(minutes: 3)));
   });
 }

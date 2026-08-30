@@ -291,6 +291,15 @@ void main() {
   });
 
   testWidgets('the remote filesystem can be browsed over SFTP', (tester) async {
+    if (browseDir == null) {
+      // `testWidgets` takes only a bool for `skip`, which is why this used to
+      // be the one skip in the repo with no reason attached to it.
+      markTestSkipped(
+        'Set CHITRAGUPTA_SSH_BROWSE_DIR to a directory on the host that '
+        'contains a file, a dotfile and a "nested" subdirectory.',
+      );
+      return;
+    }
     await pump(tester, const SshHostsSection());
     await openAddDialog(tester);
     await fillHostForm(tester, directory: browseDir);
@@ -342,8 +351,7 @@ void main() {
       () => find.text('hello.txt').evaluate().isNotEmpty,
       what: 'the parent listing',
     );
-    // ignore: avoid_redundant_argument_values
-  }, skip: browseDir == null);
+  });
 
   testWidgets('the agents installed on the remote host are listed', (
     tester,
