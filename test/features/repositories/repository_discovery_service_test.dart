@@ -33,17 +33,27 @@ void main() {
     expect(found.map((r) => r.name), ['wt']);
   });
 
-  test(
-    'finds multiple sibling and nested repos but does not descend into one',
-    () async {
-      makeRepoDir('a');
-      makeRepoDir(p.join('group', 'b'));
-      // A directory *inside* a repo must not be reported even if it looks like one.
-      makeRepoDir(p.join('a', 'vendored'));
-      final found = await service.discover(rootAt(tmp.path));
-      expect(found.map((r) => r.name), ['a', 'b']);
-    },
-  );
+  test('finds sibling and nested repos, including inside a repo', () async {
+    makeRepoDir('a');
+    makeRepoDir(p.join('group', 'b'));
+    // A repository inside a repository is still a repository. A hub repo whose
+    // folder holds a dozen clones used to report exactly one row, leaving every
+    // session in a sub-folder with nowhere to hang but the hub's own.
+    makeRepoDir(p.join('a', 'nested'));
+    final found = await service.discover(rootAt(tmp.path));
+    // Sorted by path: `a`, then `a/nested`, then `group/b`.
+    expect(found.map((r) => r.name).toList(), ['a', 'nested', 'b']);
+  });
+
+  test('does not walk into node_modules and friends', () async {
+    // The cost of descending into repositories, paid back: the folders that
+    // make a scan unaffordable are the ones nobody wants a row for anyway.
+    makeRepoDir(p.join('app', 'node_modules', 'left-pad'));
+    makeRepoDir(p.join('app', 'build', 'staged'));
+    makeRepoDir('app');
+    final found = await service.discover(rootAt(tmp.path));
+    expect(found.map((r) => r.name), ['app']);
+  });
 
   test('respects maxDepth', () async {
     makeRepoDir(p.join('one', 'two', 'three', 'deep'));

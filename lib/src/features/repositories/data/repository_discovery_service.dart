@@ -14,6 +14,20 @@ class RepositoryDiscoveryException implements Exception {
   String toString() => 'RepositoryDiscoveryException: $message';
 }
 
+/// Directory names never worth walking into. Not a correctness filter — a repo
+/// inside `node_modules` is somebody else's — but the thing that makes scanning
+/// *into* a repository affordable at all.
+const _skippedDirectories = {
+  'node_modules',
+  'build',
+  'target',
+  'vendor',
+  'dist',
+  'out',
+  'Pods',
+  '__pycache__',
+};
+
 /// Discovers Git repositories within a folder.
 ///
 /// Read-only: it inspects the filesystem only. It does **not** run `git` or any
@@ -64,8 +78,14 @@ class LocalRepositoryDiscoveryService implements RepositoryDiscoveryService {
           path: EnvironmentPath(environmentId: environmentId, path: dir.path),
         ),
       );
-      // Do not descend into a repository (nested checkouts are handled by Git).
-      return;
+      // …and keep going. Until Loop 57 this returned here, on the reasoning
+      // that "nested checkouts are handled by Git". They are not: a hub
+      // repository whose folder holds a dozen cloned projects — which is the
+      // shape of the workspace this app is built in — reported exactly one
+      // repository, and every session in a sub-folder had nowhere to hang but
+      // the hub's own row. A folder with a `.git` in it is a repository whether
+      // or not one of its ancestors is, and the tree needs to be able to say so.
+      // The cost is bounded by [maxDepth] and by [_skippedDirectories].
     }
 
     if (depth >= maxDepth) return;
@@ -85,6 +105,7 @@ class LocalRepositoryDiscoveryService implements RepositoryDiscoveryService {
       final name = p.basename(child.path);
       // Skip dot-directories (e.g. .git, .dart_tool) — none are project repos.
       if (name.startsWith('.')) continue;
+      if (_skippedDirectories.contains(name)) continue;
       await _scan(child, environmentId, depth + 1, maxDepth, found);
     }
   }
