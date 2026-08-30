@@ -1,0 +1,104 @@
+import 'dart:collection';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:local_notifier/local_notifier.dart';
+
+import '../../../core/logging/app_logger.dart';
+import '../domain/notification_request.dart';
+import 'notification_presenter.dart';
+
+/// Desktop OS notifications, via `local_notifier` — the same leanflutter family
+/// as the `tray_manager` and `window_manager` this app already builds on.
+///
+/// Platform reality, which is not uniform (see `docs/loop-reports/loop-42.md`):
+///
+/// * **Windows** — real toasts through WinToast. An unpackaged app has to own a
+///   Start Menu shortcut carrying its AUMID before Windows will accept a toast
+///   from it, so [ShortcutPolicy.requireCreate] creates one on first use.
+/// * **macOS / Linux** — the package implements both (`UNUserNotification` and
+///   libnotify), and the code path is identical, but neither was exercised in
+///   this loop. Treat them as untested, not as promised.
+///
+/// Every call is best-effort. A host where the plugin is missing or setup is
+/// refused degrades to silence, logged once, rather than taking the app down.
+class DesktopNotificationPresenter implements NotificationPresenter {
+  DesktopNotificationPresenter({this.onActivated, AppLogger? logger})
+    : _logger = logger ?? AppLogger.named('notifications');
+
+  /// How many delivered notifications to keep alive. `local_notifier` registers
+  /// every [LocalNotification] as a listener and never drops it, so a
+  /// long-running app has to retire them itself.
+  static const _keepAlive = 8;
+
+  static bool get isSupportedHere =>
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+
+  /// Called with the payload of a clicked notification, if it carried one.
+  final void Function(NotificationPayload payload)? onActivated;
+
+  final AppLogger _logger;
+  final Queue<LocalNotification> _delivered = Queue();
+
+  bool _ready = false;
+  bool _unavailable = false;
+
+  @override
+  bool get isSupported => isSupportedHere && !_unavailable;
+
+  Future<bool> _ensureReady() async {
+    if (_ready) return true;
+    if (_unavailable || !isSupportedHere) return false;
+    try {
+      await localNotifier.setup(appName: 'Chitragupta');
+      _ready = true;
+      return true;
+    } catch (error, stack) {
+      _unavailable = true;
+      _logger.warning('Desktop notifications unavailable.', error, stack);
+      return false;
+    }
+  }
+
+  @override
+  Future<void> show(NotificationRequest request) async {
+    if (!await _ensureReady()) return;
+    try {
+      final payload = NotificationPayload.decode(request.payload);
+      final notification = LocalNotification(
+        title: request.title,
+        body: request.body,
+      );
+      if (payload != null && onActivated != null) {
+        notification.onClick = () => onActivated!(payload);
+      }
+      await notification.show();
+      _retire(notification);
+    } catch (error, stack) {
+      _logger.warning('Could not show a notification.', error, stack);
+    }
+  }
+
+  /// Tracks [shown] and releases the oldest once the window is full, which both
+  /// unregisters its listener and dismisses a notification long since replaced.
+  void _retire(LocalNotification shown) {
+    _delivered.addLast(shown);
+    while (_delivered.length > _keepAlive) {
+      final oldest = _delivered.removeFirst();
+      try {
+        oldest.destroy();
+      } catch (_) {}
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final notification in _delivered) {
+      try {
+        localNotifier.removeListener(notification);
+      } catch (_) {}
+    }
+    _delivered.clear();
+    _ready = false;
+  }
+}
