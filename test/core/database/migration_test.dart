@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 7);
+    expect(db.schemaVersion, 8);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 7);
+    expect(version, 8);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -35,8 +35,18 @@ void main() {
         'claude_accounts',
         'terminal_tabs',
         'terminal_panes',
+        'ssh_hosts',
+        'ssh_known_hosts',
       ]),
     );
+  });
+
+  test('execution_environments carries the ssh host link', () {
+    final columns = db
+        .query('PRAGMA table_info(execution_environments);')
+        .map((r) => r['name']! as String)
+        .toList();
+    expect(columns, contains('ssh_host_id'));
   });
 
   test('metadata key/value store still works after migration', () {
@@ -48,7 +58,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 7);
+    expect(db.schemaVersion, 8);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });

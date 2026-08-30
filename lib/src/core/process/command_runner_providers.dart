@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/ssh/application/ssh_providers.dart';
 import 'command_runner.dart';
 import 'command_runner_factory.dart';
 import 'path_translator.dart';
@@ -19,6 +20,12 @@ final pathTranslatorProvider = Provider<PathTranslator>(
 
 /// Provides the [CommandRunnerFactory] mapping an environment to a runner.
 /// Overridden in tests to hand out a `FakeCommandRunner`.
+///
+/// The SSH connection pool is read lazily, inside [CommandRunnerFactory], so
+/// composing the factory never opens a database or a socket — only actually
+/// asking for a remote runner does.
 final commandRunnerFactoryProvider = Provider<CommandRunnerFactory>(
-  (ref) => const CommandRunnerFactory(),
+  (ref) => CommandRunnerFactory(
+    sshConnections: () => ref.read(sshConnectionPoolProvider),
+  ),
 );

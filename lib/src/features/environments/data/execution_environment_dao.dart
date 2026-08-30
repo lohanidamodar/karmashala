@@ -13,15 +13,18 @@ class ExecutionEnvironmentDao {
   void upsert(ExecutionEnvironment env) {
     _db.execute(
       'INSERT INTO execution_environments '
-      '(id, kind, name, wsl_distribution, created_at) VALUES (?, ?, ?, ?, ?) '
+      '(id, kind, name, wsl_distribution, ssh_host_id, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?) '
       'ON CONFLICT(id) DO UPDATE SET '
       'kind = excluded.kind, name = excluded.name, '
-      'wsl_distribution = excluded.wsl_distribution;',
+      'wsl_distribution = excluded.wsl_distribution, '
+      'ssh_host_id = excluded.ssh_host_id;',
       [
         env.id,
         env.kind.name,
         env.name,
         env.wslDistribution,
+        env.sshHostId,
         isoFromDate(env.createdAt),
       ],
     );
@@ -52,6 +55,7 @@ class ExecutionEnvironmentDao {
         kind: EnvironmentKind.values.byName(row['kind']! as String),
         name: row['name']! as String,
         wslDistribution: row['wsl_distribution'] as String?,
+        sshHostId: row['ssh_host_id'] as String?,
         createdAt: dateFromIso(row['created_at']),
       );
 }

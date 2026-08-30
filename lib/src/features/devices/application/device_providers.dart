@@ -123,6 +123,9 @@ String? deviceUnavailableReason({
       EnvironmentKind.wsl =>
         r'No Android SDK found in this WSL distribution. Set ANDROID_HOME '
             'or install it to ~/Android/Sdk.',
+      EnvironmentKind.ssh =>
+        r'No Android SDK found on this remote host. Set ANDROID_HOME there, '
+            'or install it to ~/Android/Sdk.',
     };
   }
   if (devices.isEmpty) {
