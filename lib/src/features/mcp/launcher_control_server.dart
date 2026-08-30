@@ -46,6 +46,9 @@ import '../sessions/domain/session_launch.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/data/system_terminal_service.dart';
+import '../verification/application/verification_providers.dart';
+import '../verification/application/verification_tool_schemas.dart';
+import '../verification/application/verification_tools.dart';
 import 'handshake_file_permissions.dart';
 import 'tmux_orchestration.dart';
 
@@ -547,6 +550,15 @@ class LauncherControlServer {
       case final String name when BrowserTools.handles(name):
         return BrowserTools(
           _container.read(browserServiceProvider),
+        ).call(name, args);
+      // Verification runs record what the browser and device tools above do,
+      // so they share those same services rather than driving anything of their
+      // own. The artifact root is resolved here because it is the first thing
+      // that needs it and the app may not have asked for it yet.
+      case final String name when VerificationTools.handles(name):
+        await resolveVerificationRoot();
+        return VerificationTools(
+          _container.read(verificationServiceProvider),
         ).call(name, args);
       default:
         throw ArgumentError('Unknown tool: $tool');
@@ -1055,6 +1067,7 @@ class LauncherControlServer {
       },
     },
     ...browserToolSchemas,
+    ...verificationToolSchemas,
   ];
 
   List<Map<String, dynamic>> _listProjects() {

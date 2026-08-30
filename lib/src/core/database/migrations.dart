@@ -40,6 +40,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   12: _migrateToV12,
   13: _migrateToV13,
   14: _migrateToV14,
+  15: _migrateToV15,
 };
 
 void _migrateToV8(Database db) {
@@ -556,4 +557,74 @@ void _migrateToV14(Database db) {
         ON DELETE CASCADE
     );
   ''');
+}
+
+void _migrateToV15(Database db) {
+  // Verification runs (Loop 51): a recorded attempt to prove a change works,
+  // against a page or a device, with a verdict an agent can hand to a human.
+  //
+  // `session_id` is deliberately **not** a foreign key. Evidence has to outlive
+  // the session that produced it — archiving or deleting a session must not
+  // delete the proof that its change worked — and `sessions` belongs to another
+  // part of the app, so this stays a plain reference resolved by lookup.
+  //
+  // `artifact_directory` is where the run's files are. **No image or log bytes
+  // are stored in SQLite**; every artifact row points at a file under that
+  // directory, which is what keeps the database small and the exported report's
+  // relative links working when the folder is copied somewhere else.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS verification_runs (
+      id                 TEXT PRIMARY KEY,
+      title              TEXT NOT NULL,
+      target_kind        TEXT NOT NULL,
+      target_url         TEXT,
+      target_serial      TEXT,
+      target_package     TEXT,
+      session_id         TEXT,
+      started_at         TEXT NOT NULL,
+      finished_at        TEXT,
+      verdict            TEXT,
+      reason             TEXT,
+      artifact_directory TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_verification_runs_session '
+    'ON verification_runs (session_id);',
+  );
+
+  // The actions taken, in order. `ordinal` is the run-local sequence number and
+  // the step's identity, so an artifact can point back at the action that
+  // produced it without a second surrogate key.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS verification_steps (
+      run_id  TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      kind    TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      detail  TEXT,
+      ok      INTEGER NOT NULL,
+      at      TEXT NOT NULL,
+      PRIMARY KEY (run_id, ordinal),
+      FOREIGN KEY (run_id) REFERENCES verification_runs (id) ON DELETE CASCADE
+    );
+  ''');
+
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS verification_artifacts (
+      id            TEXT PRIMARY KEY,
+      run_id        TEXT NOT NULL,
+      step_ordinal  INTEGER,
+      kind          TEXT NOT NULL,
+      label         TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      byte_size     INTEGER NOT NULL,
+      at            TEXT NOT NULL,
+      FOREIGN KEY (run_id) REFERENCES verification_runs (id) ON DELETE CASCADE
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_verification_artifacts_run '
+    'ON verification_artifacts (run_id);',
+  );
 }
