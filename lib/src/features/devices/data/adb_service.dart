@@ -7,7 +7,9 @@ import '../../environments/domain/environment_path.dart';
 import '../domain/android_device.dart';
 import '../domain/device_input.dart';
 import '../domain/logcat_entry.dart';
+import '../domain/ui_node.dart';
 import 'adb_output_parsing.dart';
+import 'uiautomator_parsing.dart';
 
 /// Reads a file from the host that adb runs on. Injectable so tests never touch
 /// the filesystem.
@@ -50,6 +52,7 @@ class AdbService {
     required this.sdk,
     HostFileReader? readHostFile,
     this.deviceTempDirectory = '/data/local/tmp',
+    this.uiDumpRetryDelay = const Duration(milliseconds: 400),
   }) : _readHostFile = readHostFile ?? _defaultReadHostFile;
 
   final CommandRunner runner;
@@ -60,6 +63,10 @@ class AdbService {
   /// the shell user on every supported Android version, unlike `/sdcard` on
   /// devices with scoped storage.
   final String deviceTempDirectory;
+
+  /// How long to wait before retrying a `uiautomator dump` that failed because
+  /// the screen was still animating. Tests set it to zero.
+  final Duration uiDumpRetryDelay;
 
   static Future<Uint8List> _defaultReadHostFile(String path) =>
       File(path).readAsBytes();
@@ -167,6 +174,65 @@ class AdbService {
     }
     await runner.run(_forDevice(serial, ['shell', 'rm', '-f', devicePath]));
     return _readHostFile(destination);
+  }
+
+  /// Dumps the current accessibility (view) hierarchy.
+  ///
+  /// Goes device-file → `shell cat` rather than `uiautomator dump /dev/tty`:
+  /// `/dev/tty` interleaves uiautomator's own log line with the XML, and older
+  /// devices do not accept it at all. `cat` is safe here in a way it is not for
+  /// screenshots — the payload is text, so the runner decoding stdout as text
+  /// costs nothing.
+  ///
+  /// Retries while the failure is retryable. The common one is
+  /// `ERROR: could not get idle state.`, which means the screen was animating;
+  /// it is transient by definition, and uiautomator reports it with **exit code
+  /// 0**, so the retry decision cannot be made from the exit status.
+  Future<UiHierarchy> dumpUiHierarchy(String serial, {int attempts = 3}) async {
+    final devicePath = '$deviceTempDirectory/chitragupta_ui_dump.xml';
+    UiDumpFailure? failure;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0 && uiDumpRetryDelay > Duration.zero) {
+        await Future<void>.delayed(uiDumpRetryDelay);
+      }
+      final dump = await runner.run(
+        _forDevice(serial, ['shell', 'uiautomator', 'dump', devicePath]),
+      );
+      failure = uiDumpFailure('${dump.stdout}\n${dump.stderr}', ok: dump.ok);
+      if (failure != null) {
+        if (!failure.retryable) break;
+        continue;
+      }
+      final read = await runner.run(
+        _forDevice(serial, ['shell', 'cat', devicePath]),
+      );
+      if (!read.ok) {
+        failure = UiDumpFailure(
+          message: 'Could not read the dump back: ${read.stderr.trim()}',
+          retryable: false,
+        );
+        break;
+      }
+      final hierarchy = parseUiAutomatorXml(read.stdout);
+      if (hierarchy.isEmpty) {
+        // A syntactically fine dump with no nodes in it. Seen mid-transition;
+        // trying again usually catches the settled screen.
+        failure = const UiDumpFailure(
+          message:
+              'The dump contained no nodes. The screen was probably '
+              'mid-transition.',
+          retryable: true,
+        );
+        continue;
+      }
+      await runner.run(_forDevice(serial, ['shell', 'rm', '-f', devicePath]));
+      return hierarchy;
+    }
+    throw UiDumpException(
+      failure?.message ?? 'uiautomator dump produced nothing usable.',
+      serial: serial,
+      attempts: attempts,
+    );
   }
 
   Future<void> tap(String serial, int x, int y) async {

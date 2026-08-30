@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/features/devices/data/adb_service.dart';
+import 'package:chitragupta/src/features/devices/data/uiautomator_parsing.dart';
 import 'package:chitragupta/src/features/devices/domain/android_device.dart';
 import 'package:chitragupta/src/features/devices/domain/device_input.dart';
 import 'package:chitragupta/src/features/devices/domain/logcat_entry.dart';
@@ -381,6 +382,198 @@ void main() {
         sdk: _sdk(),
       ).screenSize('S1');
       expect(size, const DeviceScreenSize(width: 1080, height: 2400));
+    });
+  });
+
+  group('dumpUiHierarchy', () {
+    // uiautomator's own reply on success. The typo is upstream's.
+    const dumped =
+        'UI hierchary dumped to: '
+        '/data/local/tmp/chitragupta_ui_dump.xml';
+    const xml =
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<hierarchy rotation="0">'
+        '<node index="0" text="Sign in" class="android.widget.Button" '
+        'package="com.example" content-desc="" clickable="true" enabled="true" '
+        'bounds="[100,200][300,400]" />'
+        '</hierarchy>';
+
+    /// Answers the dump/cat/rm sequence, with [dumpOutput] scripted per attempt.
+    FakeCommandRunner runnerFor(List<String> dumpOutputs, {String body = xml}) {
+      var dumps = 0;
+      return FakeCommandRunner(
+        responder: (request) {
+          final args = request.arguments;
+          if (args.contains('uiautomator')) {
+            final index = dumps < dumpOutputs.length
+                ? dumps
+                : dumpOutputs.length - 1;
+            dumps++;
+            return CommandResult(
+              exitCode: 0,
+              stdout: dumpOutputs[index],
+              stderr: '',
+            );
+          }
+          if (args.contains('cat')) {
+            return CommandResult(exitCode: 0, stdout: body, stderr: '');
+          }
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+    }
+
+    AdbService service(FakeCommandRunner runner) => AdbService(
+      runner: runner,
+      sdk: _sdk(),
+      uiDumpRetryDelay: Duration.zero,
+    );
+
+    test('dumps to a device file and reads it back with cat', () async {
+      final runner = runnerFor([dumped]);
+      final tree = await service(runner).dumpUiHierarchy('S1');
+
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'uiautomator',
+        'dump',
+        '/data/local/tmp/chitragupta_ui_dump.xml',
+      ]);
+      expect(_argv(runner, 1), [
+        '-s',
+        'S1',
+        'shell',
+        'cat',
+        '/data/local/tmp/chitragupta_ui_dump.xml',
+      ]);
+      expect(_argv(runner, 2), [
+        '-s',
+        'S1',
+        'shell',
+        'rm',
+        '-f',
+        '/data/local/tmp/chitragupta_ui_dump.xml',
+      ]);
+      expect(tree.nodeCount, 1);
+      expect(tree.roots.single.text, 'Sign in');
+    });
+
+    test(
+      'retries an idle-state failure, which exits 0 while failing',
+      () async {
+        final runner = runnerFor(['ERROR: could not get idle state.', dumped]);
+        final tree = await service(runner).dumpUiHierarchy('S1');
+        expect(tree.nodeCount, 1);
+        final dumpCalls = runner.requests
+            .where((r) => r.arguments.contains('uiautomator'))
+            .length;
+        expect(dumpCalls, 2);
+      },
+    );
+
+    test('gives up after the attempt budget and says why', () async {
+      final runner = runnerFor(['ERROR: could not get idle state.']);
+      await expectLater(
+        service(runner).dumpUiHierarchy('S1', attempts: 3),
+        throwsA(
+          isA<UiDumpException>()
+              .having((e) => e.serial, 'serial', 'S1')
+              .having((e) => e.attempts, 'attempts', 3)
+              .having((e) => e.message, 'message', contains('idle')),
+        ),
+      );
+      expect(
+        runner.requests
+            .where((r) => r.arguments.contains('uiautomator'))
+            .length,
+        3,
+      );
+    });
+
+    test('does not retry a failure that will not fix itself', () async {
+      final runner = runnerFor(['ERROR: could not create file /nope/x.xml']);
+      await expectLater(
+        service(runner).dumpUiHierarchy('S1', attempts: 3),
+        throwsA(isA<UiDumpException>()),
+      );
+      expect(
+        runner.requests
+            .where((r) => r.arguments.contains('uiautomator'))
+            .length,
+        1,
+      );
+    });
+
+    test('retries an empty hierarchy, which means mid-transition', () async {
+      var attempt = 0;
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          final args = request.arguments;
+          if (args.contains('uiautomator')) {
+            attempt++;
+            return const CommandResult(exitCode: 0, stdout: dumped, stderr: '');
+          }
+          if (args.contains('cat')) {
+            return CommandResult(
+              exitCode: 0,
+              stdout: attempt == 1 ? '<hierarchy rotation="0" />' : xml,
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      final tree = await service(runner).dumpUiHierarchy('S1');
+      expect(tree.nodeCount, 1);
+      expect(attempt, 2);
+    });
+
+    test('reports a cat failure without retrying', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) => request.arguments.contains('cat')
+            ? const CommandResult(
+                exitCode: 1,
+                stdout: '',
+                stderr: 'No such file or directory',
+              )
+            : const CommandResult(exitCode: 0, stdout: dumped, stderr: ''),
+      );
+      await expectLater(
+        service(runner).dumpUiHierarchy('S1'),
+        throwsA(
+          isA<UiDumpException>().having(
+            (e) => e.message,
+            'message',
+            contains('No such file'),
+          ),
+        ),
+      );
+    });
+
+    test('reads the failure off stderr too', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) => request.arguments.contains('uiautomator')
+            ? const CommandResult(
+                exitCode: 0,
+                stdout: '',
+                stderr:
+                    'ERROR: null root node returned by '
+                    'UiTestAutomationBridge.',
+              )
+            : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+      );
+      await expectLater(
+        service(runner).dumpUiHierarchy('S1', attempts: 1),
+        throwsA(
+          isA<UiDumpException>().having(
+            (e) => e.message,
+            'message',
+            contains('screen is'),
+          ),
+        ),
+      );
     });
   });
 }
