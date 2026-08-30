@@ -537,7 +537,13 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         ),
         if (paneDevice != null) ...[
           const Divider(height: 1),
-          _HardwareKeys(device: paneDevice),
+          // Deliberately [live], not [paneDevice]: a hardware key is *input*,
+          // and input follows the running session rather than the selection.
+          // Stopping the live view used to leave these driving whichever device
+          // happened to be selected — the user believed they had disconnected
+          // and had not. The row stays on screen, disabled, because a control
+          // that vanishes reads as a fault while an inert one says why.
+          _HardwareKeys(device: live),
         ],
       ],
     );
@@ -766,38 +772,42 @@ class _LiveView extends ConsumerWidget {
   }
 }
 
+/// Back / Home / Recents for the device the live view is running on.
+///
+/// [device] is the **live** device, and `null` means no live view — in which
+/// case every button is disabled and nothing can reach a phone. The gate is
+/// here as well as in the caller because a control that is merely hidden is one
+/// refactor away from being effective again, and "silently drives a device the
+/// user thinks is disconnected" is the failure this widget must not have.
 class _HardwareKeys extends ConsumerWidget {
   const _HardwareKeys({required this.device});
 
-  final AndroidDevice device;
+  final AndroidDevice? device;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final target = device;
     Future<void> press(DeviceKey key) async {
+      if (target == null) return;
       final adb = ref.read(adbServiceProvider);
-      await adb?.pressKey(device.serial, key);
+      await adb?.pressKey(target.serial, key);
     }
+
+    const idle = 'Start the live view to use the hardware keys';
+    Widget button(String label, IconData icon, DeviceKey key) => IconButton(
+      tooltip: target == null ? idle : '$label — ${target.displayName}',
+      icon: Icon(icon),
+      onPressed: target == null ? null : () => press(key),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(
-            tooltip: 'Back',
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => press(DeviceKey.back),
-          ),
-          IconButton(
-            tooltip: 'Home',
-            icon: const Icon(Icons.circle_outlined),
-            onPressed: () => press(DeviceKey.home),
-          ),
-          IconButton(
-            tooltip: 'Recents',
-            icon: const Icon(Icons.crop_square),
-            onPressed: () => press(DeviceKey.recents),
-          ),
+          button('Back', Icons.arrow_back, DeviceKey.back),
+          button('Home', Icons.circle_outlined, DeviceKey.home),
+          button('Recents', Icons.crop_square, DeviceKey.recents),
         ],
       ),
     );

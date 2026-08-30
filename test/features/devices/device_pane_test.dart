@@ -18,6 +18,9 @@ const _desktop = Size(1440, 900);
 const _emulator = 'emulator-5554';
 const _phoneSerial = 'F6IZLV6LMFT4U4ZT';
 
+/// The tooltip a hardware key wears while nothing is running behind it.
+const _idleKeys = 'Start the live view to use the hardware keys';
+
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'windows', path: r'C:\sdk'),
   adb: EnvironmentPath(
@@ -161,15 +164,34 @@ void main() {
     ) async {
       await _pump(tester, sdk: _sdk(), devices: const []);
       expect(find.byTooltip('Back'), findsNothing);
+      expect(find.byTooltip(_idleKeys), findsNothing);
     });
 
-    testWidgets('shows back, home and recents once a device is selected', (
+    testWidgets('the hardware keys cannot reach a device with no live view', (
       tester,
     ) async {
-      await _pump(tester, sdk: _sdk(), devices: [_device()]);
-      expect(find.byTooltip('Back'), findsOneWidget);
-      expect(find.byTooltip('Home'), findsOneWidget);
-      expect(find.byTooltip('Recents'), findsOneWidget);
+      final runner = FakeCommandRunner();
+      await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
+
+      // Present — so the row does not appear from nowhere when the live view
+      // starts — but inert, and saying so.
+      final idle = find.byTooltip(_idleKeys);
+      expect(idle, findsNWidgets(3));
+      for (final button in tester.widgetList<IconButton>(
+        find.descendant(of: idle, matching: find.byType(IconButton)),
+      )) {
+        expect(button.onPressed, isNull);
+      }
+
+      // The real assertion: nothing reaches the phone. This is the bug —
+      // stopping the live view left Home and Back driving the device the user
+      // believed they had disconnected from.
+      await tester.tap(idle.first, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(
+        runner.requests.where((r) => r.arguments.contains('keyevent')),
+        isEmpty,
+      );
     });
   });
 
