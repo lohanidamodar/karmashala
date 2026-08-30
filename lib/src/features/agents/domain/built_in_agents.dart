@@ -46,6 +46,14 @@ const _claudeCode = AgentDescriptor(
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
     // `claude [prompt]` — verified against v2.1.251.
     acceptsPromptArgument: true,
+    // Verified, not assumed: two panes were given `--resume` on the same
+    // session id with the first still live (`integration_test/
+    // resume_conflict_test.dart`). The second opened on the same conversation,
+    // history and all, and stayed usable. The only thing it declined was its
+    // remote control, which it says in a line of its own — "another Claude Code
+    // on this machine (started 4s ago) already has Remote Control for this
+    // conversation". Nothing about the session itself was refused.
+    allowsConcurrentResume: true,
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -106,6 +114,20 @@ const _codex = AgentDescriptor(
     interactiveResume: AgentResume.subcommand('resume'),
     // `codex [OPTIONS] [PROMPT]` — verified against 0.146.
     acceptsPromptArgument: true,
+    // Left at the default (false): Codex enforces **one writer per thread**.
+    // The lock is real and inspectable — a live Codex holds an flock on
+    // `~/.codex/thread-writer-locks/<thread-id>.lock` — and a second resume of
+    // a held thread exits with
+    // `thread <id> already has an active writer (code -32600)`.
+    //
+    // Version-dependent, and the safe answer wins: 0.151 enforces it, 0.145 has
+    // no such lock and lets a second resume through (both observed, see the
+    // loop report). We do not model per-version behaviour, and being wrong here
+    // in the permissive direction means two processes appending to one rollout
+    // JSONL, so the newest behaviour is the one recorded.
+    resumeConflict: AgentResumeConflictRules(
+      markers: [GridMatcher('already has an active writer')],
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.codex',

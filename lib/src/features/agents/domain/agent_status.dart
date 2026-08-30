@@ -188,3 +188,32 @@ class AgentGridRules {
       idle.isEmpty &&
       failed.isEmpty;
 }
+
+/// What an agent prints when it refuses to resume a conversation another process
+/// is already writing to.
+///
+/// Read off the screen for the same reason status is (see [AgentGridRules]):
+/// an interactive CLI has no second stream to ask, so its own terminal is the
+/// only place its answer exists.
+///
+/// [markers] are matched against the screen with **all whitespace removed from
+/// both sides**, not line by line. A refusal is one long sentence — Codex's is
+/// over 150 characters — so it hard-wraps at the pane width, and the wrap can
+/// fall anywhere, including inside a word. Matching per line would work at some
+/// terminal widths and silently stop at others.
+class AgentResumeConflictRules {
+  const AgentResumeConflictRules({
+    this.markers = const [],
+    this.scanLines = 30,
+  });
+
+  final List<GridMatcher> markers;
+
+  /// How many rows up from the bottom to read. Larger than [AgentGridRules]'s
+  /// window because this is a *post-mortem*: the agent has exited, left the
+  /// alternate screen, and its last words may sit above whatever the shell
+  /// printed afterwards.
+  final int scanLines;
+
+  bool get isEmpty => markers.isEmpty;
+}

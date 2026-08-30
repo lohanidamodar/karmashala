@@ -72,12 +72,41 @@ class AgentLaunchSpec {
     this.interactiveResume = const AgentResume.unsupported(),
     this.sessionIdAssignment = const AgentSessionIdAssignment.unsupported(),
     this.acceptsPromptArgument = false,
+    this.allowsConcurrentResume = false,
+    this.resumeConflict = const AgentResumeConflictRules(),
   });
 
   final List<String> baseArguments;
   final Map<PermissionMode, List<String>> permissionArguments;
   final AgentResume resume;
   final AgentResume interactiveResume;
+
+  /// Whether a second process may resume a conversation another process is
+  /// already holding.
+  ///
+  /// This models **whether** concurrent resume is permitted, which is a
+  /// different question from [resume]/[interactiveResume]'s *how*, and the
+  /// agents differ on it:
+  ///
+  /// * **Codex refuses.** A thread has one writer, enforced with an flock on
+  ///   `~/.codex/thread-writer-locks/<thread>.lock`; a second `codex resume`
+  ///   exits with `thread <id> already has an active writer (code -32600)`.
+  ///   That is protection for the rollout JSONL — two writers would interleave
+  ///   into one transcript — and is not something to work around.
+  /// * **Claude Code permits it.** A second `claude --resume <id>` opens on the
+  ///   same conversation with its history and stays usable; only its remote
+  ///   control declines, in a line it prints itself.
+  ///
+  /// **False by default**, because the failure modes are asymmetric: refusing a
+  /// resume that would have worked costs a click, while attempting one the agent
+  /// forbids can corrupt the user's transcript. An agent nobody has tested is
+  /// therefore treated as single-writer.
+  final bool allowsConcurrentResume;
+
+  /// What this agent prints when it refuses such a resume. Empty for an agent
+  /// whose refusal we have never seen — which resolves to "no explanation",
+  /// never to a guessed one.
+  final AgentResumeConflictRules resumeConflict;
 
   /// Whether this agent will accept a session id we choose. See
   /// [AgentSessionIdAssignment].

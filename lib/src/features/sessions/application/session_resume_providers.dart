@@ -1,0 +1,84 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../agents/application/agent_providers.dart';
+import '../../agents/data/resume_conflict_source.dart';
+import '../../agents/domain/agent_descriptor.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/data/terminal_grid_text.dart';
+import '../domain/session_launch.dart';
+import '../domain/session_resume.dart';
+import 'session_providers.dart';
+import 'session_ui_providers.dart';
+
+/// The agent descriptor behind session [sessionId], or null.
+AgentDescriptor? sessionDescriptor(Ref ref, String agentInstallationId) {
+  final agentId = ref
+      .read(agentInstallationDaoProvider)
+      .getById(agentInstallationId)
+      ?.agentId;
+  return agentId == null ? null : ref.read(agentRegistryProvider).byId(agentId);
+}
+
+/// What we can honestly say about where session [sessionId]'s process is.
+///
+/// Recomputed rather than polled. The two things it reads change on events we
+/// already publish — the sessions revision and the terminal controller's
+/// liveness map, which is republished exactly once when a process exits — and a
+/// refusal appears at the moment of that exit. A poll would cost a screen read
+/// per session per tick to learn nothing new.
+final sessionWhereaboutsProvider = Provider.autoDispose
+    .family<SessionWhereabouts, String>((ref, sessionId) {
+      ref.watch(sessionsRevisionProvider);
+      ref.watch(terminalSessionsControllerProvider);
+
+      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      if (session == null) return const SessionWhereabouts();
+
+      final external = session.surface == SessionSurface.external;
+      final paneId = session.paneId;
+      if (paneId == null) return SessionWhereabouts(external: external);
+
+      final instance = ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId);
+      if (instance == null) return SessionWhereabouts(external: external);
+      if (instance.liveness.value.isLive) {
+        return const SessionWhereabouts(hostedLive: true);
+      }
+
+      // The pane is dead. Its last words are still in the buffer, and for a
+      // launch that was a resume they may be the agent explaining that somebody
+      // else holds the conversation.
+      final descriptor = sessionDescriptor(ref, session.agentInstallationId);
+      final refused = showsResumeConflict(
+        descriptor,
+        terminalTailLines(
+          instance.terminal,
+          lines: descriptor?.launch.resumeConflict.scanLines ?? 30,
+        ),
+      );
+      return SessionWhereabouts(external: external, refusedResume: refused);
+    });
+
+/// Whether the pane [paneId] is showing an agent's refusal to resume a
+/// conversation another process holds.
+///
+/// Separate from [sessionWhereaboutsProvider] because the terminal panel draws
+/// panes, not sessions: a pane knows its own launch and needs no session row to
+/// explain itself.
+bool paneShowsResumeConflict(Ref ref, String paneId) {
+  final instance = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .instanceFor(paneId);
+  final agentId = instance?.agentLaunch?.agentId;
+  if (instance == null || agentId == null) return false;
+  if (instance.liveness.value.isLive) return false;
+  final descriptor = ref.read(agentRegistryProvider).byId(agentId);
+  return showsResumeConflict(
+    descriptor,
+    terminalTailLines(
+      instance.terminal,
+      lines: descriptor?.launch.resumeConflict.scanLines ?? 30,
+    ),
+  );
+}
