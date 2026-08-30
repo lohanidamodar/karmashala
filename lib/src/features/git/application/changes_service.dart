@@ -34,6 +34,11 @@ class ChangesService {
   Future<String?> remoteUrl(EnvironmentPath repo) =>
       _gitFor(repo).remoteUrl(repo);
 
+  /// Commits on [repo]'s current branch that [base] does not have; `null` when
+  /// git could not answer.
+  Future<int?> commitsAhead(EnvironmentPath repo, {required String base}) =>
+      _gitFor(repo).commitsAhead(repo, base: base);
+
   /// Unified diff for [repo], optionally limited to [path] / staged changes.
   Future<String> diff(
     EnvironmentPath repo, {

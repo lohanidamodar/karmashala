@@ -127,6 +127,23 @@ class GitService {
     return url.isEmpty ? null : url;
   }
 
+  /// How many commits the current branch has that [base] does not, or `null`
+  /// when git could not answer — typically because [base] (e.g.
+  /// `origin/main`) is not fetched locally. `null` means "could not tell", not
+  /// "zero"; callers must not collapse the two.
+  Future<int?> commitsAhead(
+    EnvironmentPath repo, {
+    required String base,
+  }) async {
+    try {
+      final result = await _git(repo, ['rev-list', '--count', '$base..HEAD']);
+      if (!result.ok) return null;
+      return int.tryParse(result.stdout.trim());
+    } on CommandException {
+      return null;
+    }
+  }
+
   /// Working-tree changes in [repo] (the review surface; Git is authoritative).
   Future<List<FileChange>> status(EnvironmentPath repo) async {
     final result = await _git(repo, ['status', '--porcelain=v1']);

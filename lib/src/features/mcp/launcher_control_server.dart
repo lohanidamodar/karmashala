@@ -33,6 +33,7 @@ import '../settings/application/settings_controller.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/data/system_terminal_service.dart';
+import 'handshake_file_permissions.dart';
 import 'tmux_orchestration.dart';
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
@@ -40,16 +41,65 @@ import 'tmux_orchestration.dart';
 ///
 /// The bridge process (spawned by the agent CLI) is a thin translator with no
 /// database or plugin dependencies; it forwards each MCP `tools/call` here as a
-/// `POST /rpc` and the real work runs against the live Riverpod container. The
-/// server binds to 127.0.0.1 on an ephemeral port and requires a bearer token,
-/// both written to a `mcp_bridge.json` file only readable locally, so nothing
-/// on the network can reach it.
+/// `POST /rpc` and the real work runs against the live Riverpod container.
 ///
 /// It also hosts `POST /agent-hook`, the callback endpoint agents' installed
 /// hooks post status events to. That route needs exactly this transport —
 /// loopback, ephemeral port, bearer token, handshake file — so it lives here
 /// rather than in a second [HttpServer] of its own. All of its decision-making
 /// stays in the transport-free [AgentHookReceiver].
+///
+/// ## Threat model
+///
+/// **What the boundary actually is: the bearer tokens, and the file permissions
+/// on the handshake file that publishes them.** Nothing else.
+///
+/// The server binds `127.0.0.1` on an ephemeral port. That keeps it off the
+/// network — no other *machine* can reach it — but it is worth being precise
+/// about what loopback does *not* buy, because it is easy to read "127.0.0.1"
+/// as if it were an access-control decision:
+///
+/// * **Any local process may connect.** Loopback TCP has no peer credentials and
+///   no owner. Every process on the machine, running as any user, can open a
+///   socket to the port and attempt auth. The ephemeral port is not a secret
+///   either — `netstat -ano` lists it, along with the owning pid.
+/// * **So the tokens are the whole boundary**, and the handshake file
+///   (`mcp_bridge.json`, in the application-support directory) is the only thing
+///   keeping them from any account on the box. That file is explicitly restricted
+///   at write time — see [restrictHandshakeFileToCurrentUser], which also records
+///   what the audited default ACL was and why an inherited one was not enough.
+/// * **The `/agent-hook` token is deliberately weaker, and is not confidential
+///   against local processes.** It is pasted verbatim into a `curl` command in
+///   the agent's own config file, so it appears in that file *and* in the command
+///   line of every hook invocation — readable by anything that can enumerate
+///   processes. That is why it is a second, separate token: `/agent-hook` can
+///   only report status, while the `/rpc` token opens sessions, launches
+///   terminals and drives attached devices. Treat the hook token as public to
+///   anything running as this user; treat the `/rpc` token as a real secret.
+/// * **A process running as this user is inside the boundary, by construction.**
+///   It can read the handshake file, and it could already do everything the API
+///   offers by running the same commands directly. Local-user isolation is not a
+///   goal here and cannot be one.
+///
+/// ## Why loopback TCP anyway
+///
+/// dray uses a unix socket at `~/.dray/dray.sock`, where "nothing on the network
+/// can reach it at all, and access control is the containing directory's
+/// `0700`". That is strictly better: the kernel refuses the connection, so there
+/// is no auth attempt to get right and no secret to leak.
+///
+/// The Windows equivalent is a named pipe, whose DACL would be the boundary the
+/// same way. We do not use one because **`dart:io` has no named-pipe server
+/// API** — there is no `NamedPipeServer`, and `RawSocket`/`HttpServer` cannot
+/// bind `\\.\pipe\…`. Building one means an FFI layer over `CreateNamedPipe`
+/// plus a hand-rolled HTTP framing on top of it, in a process that must also
+/// keep the Flutter engine alive. That is native code and a new failure mode for
+/// what is, on a correctly permissioned handshake file, the same practical
+/// boundary. Noted as a possible future direction, with that caveat.
+///
+/// AF_UNIX sockets do exist on modern Windows, but `dart:io`'s
+/// `InternetAddress.unix` is not supported there either, so it is the same
+/// problem wearing a different hat.
 class LauncherControlServer {
   LauncherControlServer(this._container, {AppLogger? logger})
     : _logger = logger ?? AppLogger.named('mcp-control');
@@ -100,12 +150,28 @@ class LauncherControlServer {
     _hookEndpoint = null;
   }
 
+  /// Publishes the port and tokens for the bridge to read.
+  ///
+  /// The file is created **empty**, restricted, and only then written to, so the
+  /// tokens never touch the disk under a permissive ACL — not even for the
+  /// instant between `writeAsString` and a follow-up `icacls`. Any pre-existing
+  /// file is removed first rather than overwritten, because a write preserves
+  /// the DACL a file already carries.
   Future<void> _writeBridgeFile(
     int port,
     String token,
     String? overridePath,
   ) async {
     final file = File(overridePath ?? await bridgeFilePath());
+    await file.parent.create(recursive: true);
+    try {
+      if (file.existsSync()) await file.delete();
+    } catch (error) {
+      // A bridge still holding it open; the restriction below covers us.
+      _logger.warning('Could not replace the handshake file: $error');
+    }
+    await file.create();
+    await restrictHandshakeFileToCurrentUser(file, logger: _logger);
     await file.writeAsString(
       jsonEncode({
         'port': port,
@@ -117,6 +183,14 @@ class LauncherControlServer {
     );
   }
 
+  /// 24 bytes (192 bits) from the platform CSPRNG, base64url-encoded.
+  ///
+  /// [Random.secure] and not [Random]: these are the entire access-control
+  /// boundary (see the class doc), and a predictable token would let any local
+  /// process skip needing to read the handshake file at all. 192 bits is far
+  /// past what an unauthenticated attacker could search against a local HTTP
+  /// server, and leaves room to spare against the birthday bound over the
+  /// lifetime of a machine.
   String _generateToken() {
     final random = Random.secure();
     final bytes = List<int>.generate(24, (_) => random.nextInt(256));
