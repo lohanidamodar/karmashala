@@ -24,9 +24,60 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:path/path.dart' as p;
 
-const _adb =
-    r'C:\Users\dlohani\AppData\Local\Android\Sdk\platform-tools\adb.exe';
+/// Where `adb` is on **this** host, or null if it is nowhere.
+///
+/// This used to be a `const` pointing at one developer's home directory, which
+/// made the whole file unrunnable by anybody else and — because `setUpAll`
+/// shelled out before any guard — turned a missing SDK into an error out of
+/// setup rather than a skip.
+String? _findAdb() {
+  final exe = Platform.isWindows ? 'adb.exe' : 'adb';
+
+  // The SDK location, however this machine spells it.
+  for (final variable in const [
+    'ANDROID_HOME',
+    'ANDROID_SDK_ROOT',
+    'ANDROID_SDK_HOME',
+  ]) {
+    final root = Platform.environment[variable];
+    if (root == null || root.isEmpty) continue;
+    final candidate = File(p.join(root, 'platform-tools', exe));
+    if (candidate.existsSync()) return candidate.path;
+  }
+
+  // PATH, for the many machines that put platform-tools on it.
+  try {
+    final lookup = Platform.isWindows ? 'where.exe' : 'which';
+    final result = Process.runSync(lookup, [exe]);
+    if (result.exitCode == 0) {
+      final first = (result.stdout as String)
+          .split(RegExp(r'[\r\n]+'))
+          .map((line) => line.trim())
+          .firstWhere((line) => line.isNotEmpty, orElse: () => '');
+      if (first.isNotEmpty && File(first).existsSync()) return first;
+    }
+  } on ProcessException {
+    // No `where`/`which` on this host; fall through to the default location.
+  }
+
+  // The default per-user install, which is where Android Studio puts it.
+  final home =
+      Platform.environment['LOCALAPPDATA'] ??
+      Platform.environment['HOME'] ??
+      '';
+  if (home.isNotEmpty) {
+    final candidate = File(
+      p.join(home, 'Android', 'Sdk', 'platform-tools', exe),
+    );
+    if (candidate.existsSync()) return candidate.path;
+  }
+  return null;
+}
+
+/// The resolved `adb`, set once [main] has confirmed there is one.
+late final String _adb;
 
 /// Everything this run observed, written where it can be read afterwards: the
 /// test binding does not forward the app's stdout to the reporter.
@@ -200,6 +251,20 @@ Finder _bannerTextContaining(String needle) => find.descendant(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+
+  final adb = _findAdb();
+  if (adb == null) {
+    // `testWidgets` only takes a bool for `skip`, so the reason is recorded the
+    // way the reporter shows it: with `markTestSkipped`.
+    testWidgets('the device pane suite needs adb', (tester) async {
+      markTestSkipped(
+        'adb was not found. Set ANDROID_HOME (or ANDROID_SDK_ROOT) to the '
+        'Android SDK, or put platform-tools on PATH.',
+      );
+    });
+    return;
+  }
+  _adb = adb;
 
   late String phone;
   late String emulator;

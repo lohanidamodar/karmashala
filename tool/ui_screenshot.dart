@@ -43,6 +43,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../test/features/terminal/fake_instance.dart';
 import '../test/support/fake_command_runner.dart';
@@ -51,11 +52,40 @@ import '../test/support/fixtures.dart';
 
 const _outDir = 'build/ui-screenshots';
 
-const _fontDir = r'C:\Users\dlohani\flutter\bin\cache\artifacts\material_fonts';
+/// The Flutter SDK's bundled fonts on **this** machine, or null if they are not
+/// where the SDK says they should be.
+///
+/// This used to be a hard-coded path into one developer's home directory, which
+/// made the program silently useless anywhere else — `FontLoader` throws on a
+/// missing file, out of `setUpAll`, before a single screenshot is taken.
+/// `FLUTTER_ROOT` is set by the `flutter` tool for the processes it starts, and
+/// this program is only ever run through `flutter test`.
+String? _findFontDir() {
+  final root = Platform.environment['FLUTTER_ROOT'];
+  if (root == null || root.isEmpty) return null;
+  final dir = Directory(
+    p.join(root, 'bin', 'cache', 'artifacts', 'material_fonts'),
+  );
+  return dir.existsSync() ? dir.path : null;
+}
+
+/// A monospace face to stand in for the terminal's. Optional: without it the
+/// terminal panes render in the default face, which is worth less but is not
+/// worth failing over.
+String? _findMonoFont() {
+  for (final candidate in [
+    r'C:\Windows\Fonts\consola.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf',
+    '/System/Library/Fonts/Menlo.ttc',
+  ]) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  return null;
+}
 
 /// flutter_test draws every glyph as a filled box unless real fonts are loaded,
 /// which makes a screenshot useless for judging type and density.
-Future<void> _loadFonts() async {
+Future<void> _loadFonts(String fontDir) async {
   Future<void> load(String family, Map<String, String> faces) async {
     final loader = FontLoader(family);
     for (final entry in faces.entries) {
@@ -67,21 +97,38 @@ Future<void> _loadFonts() async {
   }
 
   await load('Roboto', {
-    'regular': '$_fontDir/roboto-regular.ttf',
-    'medium': '$_fontDir/roboto-medium.ttf',
-    'bold': '$_fontDir/roboto-bold.ttf',
+    'regular': '$fontDir/roboto-regular.ttf',
+    'medium': '$fontDir/roboto-medium.ttf',
+    'bold': '$fontDir/roboto-bold.ttf',
   });
   await load('MaterialIcons', {
-    'regular': '$_fontDir/materialicons-regular.otf',
+    'regular': '$fontDir/materialicons-regular.otf',
   });
-  await load('monospace', {'regular': r'C:\Windows\Fonts\consola.ttf'});
+  final mono = _findMonoFont();
+  if (mono != null) await load('monospace', {'regular': mono});
 }
 
 void main() {
+  final fontDir = _findFontDir();
+  if (fontDir == null) {
+    testWidgets('the screenshot harness needs the Flutter SDK fonts', (
+      tester,
+    ) async {
+      // `testWidgets` takes only a bool for `skip`, so the reason is recorded
+      // the way the reporter shows it.
+      markTestSkipped(
+        'FLUTTER_ROOT is unset or its bin/cache/artifacts/material_fonts is '
+        'missing. Run this through `flutter test tool/ui_screenshot.dart`, '
+        'which sets FLUTTER_ROOT.',
+      );
+    });
+    return;
+  }
+
   late AppDatabase db;
   late ProviderContainer container;
 
-  setUpAll(_loadFonts);
+  setUpAll(() => _loadFonts(fontDir));
 
   setUp(() {
     db = AppDatabase.memory();

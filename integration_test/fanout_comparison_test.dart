@@ -84,6 +84,17 @@ void main() {
     return null;
   }
 
+  /// Whether `git` answers at all. Every step below shells out to it, and it
+  /// was the one prerequisite this file never checked: the agent CLIs were
+  /// guarded and then `git init` threw straight out of the test.
+  bool hasGit() {
+    try {
+      return Process.runSync('git', ['--version']).exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   ProcessResult git(String cwd, List<String> args) {
     final result = Process.runSync('git', args, workingDirectory: cwd);
     if (result.exitCode != 0) {
@@ -133,6 +144,10 @@ void main() {
     final codex = whereIs('codex');
     if (claude == null || codex == null) {
       markTestSkipped('claude and codex are not both on PATH.');
+      return;
+    }
+    if (!hasGit()) {
+      markTestSkipped('git is not on PATH, and every step below needs it.');
       return;
     }
 
