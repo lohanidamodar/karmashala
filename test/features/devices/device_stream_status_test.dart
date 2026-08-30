@@ -150,5 +150,20 @@ void main() {
       await _pump(tester, const TransportBanner(transport: null));
       expect(find.text('Input unavailable'), findsOneWidget);
     });
+
+    testWidgets('names the device whose picture is on screen', (tester) async {
+      // A picture of a phone is anonymous. The pane could show one device while
+      // the toolbar named another, so what you are looking at is now stated
+      // where you are looking.
+      await _pump(
+        tester,
+        const TransportBanner(
+          transport: DeviceGestureTransport.scrcpyControl,
+          deviceLabel: 'Pixel (emulator-5554)',
+        ),
+      );
+      expect(find.textContaining('Pixel (emulator-5554)'), findsOneWidget);
+      expect(find.textContaining('Control socket'), findsOneWidget);
+    });
   });
 }

@@ -85,26 +85,36 @@ class StreamStalledOverlay extends StatelessWidget {
   }
 }
 
-/// Says which transport the live view's gestures are using.
+/// Says which device the live view is showing, and which transport its
+/// gestures are using.
 ///
-/// Not a debug detail: on the control socket a drag tracks the finger, and on
-/// `adb shell input` nothing moves until release. Someone wondering why the
-/// pane feels different today deserves to be able to see why.
+/// Neither is a debug detail. The transport changes how the pane feels — on the
+/// control socket a drag tracks the finger, on `adb shell input` nothing moves
+/// until release. The device name is here because a picture of a phone is
+/// anonymous: the pane used to be able to show one device while the rest of the
+/// UI named another, and stating it under the picture is what makes that
+/// impossible to miss.
 class TransportBanner extends StatelessWidget {
-  const TransportBanner({super.key, required this.transport});
+  const TransportBanner({super.key, required this.transport, this.deviceLabel});
 
   final DeviceGestureTransport? transport;
+
+  /// The device on screen, e.g. `Pixel (emulator-5554)`. Named first, so it is
+  /// the part that survives when the line is too narrow.
+  final String? deviceLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final text = switch (transport) {
+    final transportText = switch (transport) {
       null => 'Input unavailable',
       DeviceGestureTransport.scrcpyControl =>
         'Control socket — continuous touch. $kPinchHint.',
       DeviceGestureTransport.adbInput =>
         'adb input fallback — gestures apply on release, no pinch.',
     };
+    final label = deviceLabel;
+    final text = label == null ? transportText : '$label · $transportText';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(

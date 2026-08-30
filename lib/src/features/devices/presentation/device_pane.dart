@@ -26,6 +26,45 @@ const List<Duration> kStreamReconnectBackoff = [
   Duration(seconds: 15),
 ];
 
+/// What the live view must do when the user's chosen device changes.
+enum LiveViewSelectionAction {
+  /// Nothing: the live view is off, or it is already on the chosen device.
+  none,
+
+  /// Turn the live view off. Nothing is chosen, or what is chosen cannot be
+  /// shown — and the previous device's picture must not stay up regardless.
+  stop,
+
+  /// Move the live view to the newly chosen device.
+  moveTo,
+}
+
+/// The rule that keeps the picture and the device picker talking about the same
+/// device.
+///
+/// Pure and public on purpose: it is the whole of the fix for "switching
+/// devices leaves the live view on the old device", and the pane it lives in
+/// cannot be driven in a widget test — the live view needs a real media_kit
+/// `Player`, which needs libmpv.
+({LiveViewSelectionAction action, AndroidDevice? device}) liveViewSelection({
+  required String? liveSerial,
+  required String? selectedSerial,
+  required List<AndroidDevice> devices,
+}) {
+  if (liveSerial == null || selectedSerial == liveSerial) {
+    return (action: LiveViewSelectionAction.none, device: null);
+  }
+  final device = selectedSerial == null
+      ? null
+      : devices
+            .where((candidate) => candidate.serial == selectedSerial)
+            .firstOrNull;
+  if (device == null || !device.isReady) {
+    return (action: LiveViewSelectionAction.stop, device: null);
+  }
+  return (action: LiveViewSelectionAction.moveTo, device: device);
+}
+
 /// The device pane: pick a device or emulator, watch it live, and drive it.
 class DevicePane extends ConsumerStatefulWidget {
   const DevicePane({super.key});
@@ -38,9 +77,27 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   Player? _player;
   VideoController? _video;
   DeviceStreamSession? _session;
-  String? _streamingSerial;
   String? _streamError;
   bool _starting = false;
+
+  /// The device the live view is for: whose picture is on screen, whose
+  /// coordinate space gestures are mapped through, and whose keys the hardware
+  /// buttons press. `null` when the live view is off.
+  ///
+  /// There used to be two answers to "which device is this pane about" — this
+  /// field and [selectedDeviceSerialProvider] — and nothing kept them equal, so
+  /// switching devices left the picture on the old one and taps were mapped
+  /// through the new one's resolution. The provider is now the source of truth
+  /// and this is only ever a *reflection* of it, maintained in exactly one
+  /// place: [_onSelectionChanged].
+  String? _liveSerial;
+
+  /// Distinguishes an in-flight start from a newer one that has overtaken it.
+  ///
+  /// Switching device while the first stream is still starting is an ordinary
+  /// thing to do, so a start cannot simply refuse to be interrupted; instead
+  /// the loser notices it has been superseded and tears its own session down.
+  int _startToken = 0;
 
   /// The stream's own opinion of itself. `null` before the first report.
   DeviceStreamHealth? _health;
@@ -60,11 +117,13 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   @override
   void dispose() {
     _reconnectTimer?.cancel();
-    _stopStream();
+    _disposeSession();
     super.dispose();
   }
 
-  Future<void> _stopStream() async {
+  /// Tears the running session down. Leaves [_liveSerial] alone: this is what a
+  /// restart or a device switch uses, and both are still "the live view is on".
+  Future<void> _disposeSession() async {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     final session = _session;
@@ -76,10 +135,46 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     _video = null;
     _sink = null;
     _health = null;
-    _streamingSerial = null;
     await health?.cancel();
     await session?.stop();
     await player?.dispose();
+  }
+
+  /// Turns the live view off entirely: no session, and no device it is for.
+  Future<void> _stopStream() async {
+    _liveSerial = null;
+    await _disposeSession();
+  }
+
+  /// Keeps the live view on whatever device the user has chosen.
+  ///
+  /// This is the whole of the fix for "switching devices leaves the live view
+  /// on the old device". It deliberately listens to
+  /// [selectedDeviceSerialProvider] — the *explicit* choice — and not to the
+  /// derived [selectedDeviceProvider], whose "default to the only ready device"
+  /// convenience would otherwise move the stream to a different phone by itself
+  /// when the streamed emulator died.
+  void _onSelectionChanged(String? serial) {
+    if (!mounted) return;
+    final next = liveViewSelection(
+      liveSerial: _liveSerial,
+      selectedSerial: serial,
+      devices: ref.read(devicesProvider).asData?.value ?? const [],
+    );
+    switch (next.action) {
+      case LiveViewSelectionAction.none:
+        return;
+      case LiveViewSelectionAction.stop:
+        unawaited(_stopAndRebuild());
+      case LiveViewSelectionAction.moveTo:
+        _reconnectAttempt = 0;
+        unawaited(_startStream(next.device!));
+    }
+  }
+
+  Future<void> _stopAndRebuild() async {
+    await _stopStream();
+    if (mounted) setState(() {});
   }
 
   /// Restarts the live view for the device it is already showing.
@@ -87,7 +182,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// Distinct from refreshing the device list, which is what the toolbar's
   /// other button does and what people reached for when the picture froze.
   Future<void> _restartStream({bool manual = true}) async {
-    final serial = _streamingSerial ?? ref.read(selectedDeviceProvider)?.serial;
+    final serial = _liveSerial ?? ref.read(selectedDeviceProvider)?.serial;
     final device = ref
         .read(devicesProvider)
         .asData
@@ -119,14 +214,29 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
 
   Future<void> _startStream(AndroidDevice device) async {
     final service = ref.read(deviceStreamServiceProvider);
-    if (service == null || _starting) return;
+    if (service == null || !device.isReady) return;
+    // A second press for the device already being started is a no-op; a press
+    // for a different one is a switch and must go through.
+    if (_starting && _liveSerial == device.serial) return;
+    final token = ++_startToken;
+    // Set before selecting, so the resulting notification sees the pane already
+    // pointed at this device and does not restart what it just started.
+    _liveSerial = device.serial;
+    // Starting the live view *is* choosing a device. Pinning it here means the
+    // toolbar, the picture, the gestures and the hardware keys cannot disagree
+    // about which device the pane is about.
+    ref.read(selectedDeviceSerialProvider.notifier).select(device.serial);
     setState(() {
       _starting = true;
       _streamError = null;
     });
-    await _stopStream();
+    await _disposeSession();
     try {
       final session = await service.start(device.serial);
+      if (!mounted || token != _startToken) {
+        await session.stop();
+        return;
+      }
       final player = Player(
         configuration: const PlayerConfiguration(
           // A live view wants the newest frame, not a smooth buffer.
@@ -160,7 +270,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       }
       final controller = VideoController(player);
       await player.open(Media(session.url.toString()));
-      if (!mounted) {
+      if (!mounted || token != _startToken) {
         await session.stop();
         await player.dispose();
         return;
@@ -171,7 +281,6 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         _session = session;
         _player = player;
         _video = controller;
-        _streamingSerial = device.serial;
         _starting = false;
         _health = null;
         _sink = sink;
@@ -181,9 +290,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       // delays gestures rather than the picture.
       if (sink == null) unawaited(_useAdbSink(session.serial));
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || token != _startToken) return;
       setState(() {
         _starting = false;
+        _liveSerial = null;
         _streamError = '$error';
       });
     }
@@ -223,7 +333,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     final screen = size;
     if (screen == null || !mounted) return;
     // The stream may have moved to another device while we were asking.
-    if (_streamingSerial != serial || _session?.serial != serial) return;
+    if (_liveSerial != serial || _session?.serial != serial) return;
     setState(
       () => _sink = AdbGestureSink(adb: adb, serial: serial, screen: screen),
     );
@@ -231,7 +341,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
 
   /// The control socket went away mid-session. Fall back rather than going mute.
   void _onControlDropped() {
-    final serial = _streamingSerial;
+    final serial = _liveSerial;
     if (!mounted || serial == null || _sink is AdbGestureSink) return;
     unawaited(_useAdbSink(serial));
   }
@@ -267,7 +377,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     // Take the stream down first: killing the emulator underneath a live view
     // produces exactly the frozen picture Loop 36 set out to fix, and it would
     // look like a new fault rather than the shutdown the user asked for.
-    if (_streamingSerial == serial) await _stopStream();
+    if (_liveSerial == serial) await _stopStream();
     String? failure;
     try {
       final stopped = await adb.stopEmulator(serial);
@@ -296,6 +406,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(
+      selectedDeviceSerialProvider,
+      (_, serial) => _onSelectionChanged(serial),
+    );
     final sdk = ref.watch(androidSdkProvider);
     final devices = ref.watch(devicesProvider).asData?.value ?? const [];
     final selected = ref.watch(selectedDeviceProvider);
@@ -307,40 +421,39 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     );
 
     // Stop streaming a device that went away.
-    if (_streamingSerial != null &&
-        !devices.any((d) => d.serial == _streamingSerial && d.isReady)) {
+    if (_liveSerial != null &&
+        !devices.any((d) => d.serial == _liveSerial && d.isReady)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _stopStream().then((_) {
-            if (mounted) setState(() {});
-          });
-        }
+        if (mounted) unawaited(_stopAndRebuild());
       });
     }
+
+    // The device the pane is about. While the live view is running it is the
+    // device that view is for; the two are the same by construction, and
+    // reading it from one place is what keeps them that way.
+    final live = _liveSerial == null
+        ? null
+        : devices.where((d) => d.serial == _liveSerial).firstOrNull;
+    final paneDevice = live ?? selected;
 
     return Column(
       children: [
         _DeviceToolbar(
           devices: devices,
           selected: selected,
-          streaming: _streamingSerial != null,
+          streaming: _liveSerial != null,
           starting: _starting,
           stoppingEmulator:
               selected != null && _stopping.contains(selected.serial),
           onStart: selected == null ? null : () => _startStream(selected),
-          onRestart: _streamingSerial == null ? null : _restartStream,
+          onRestart: _liveSerial == null ? null : _restartStream,
           onStopEmulator: selected != null && selected.isEmulator
               ? () => _stopEmulator(
                   serial: selected.serial,
                   label: selected.displayName,
                 )
               : null,
-          onStop: _streamingSerial == null
-              ? null
-              : () async {
-                  await _stopStream();
-                  if (mounted) setState(() {});
-                },
+          onStop: _liveSerial == null ? null : _stopAndRebuild,
         ),
         const Divider(height: 1),
         Expanded(
@@ -360,7 +473,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                 )
               : _LiveView(
                   video: _video,
-                  device: selected,
+                  device: live,
                   starting: _starting,
                   sink: _sink,
                   health: _health,
@@ -372,9 +485,9 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                   onStopEmulator: _stopEmulator,
                 ),
         ),
-        if (selected != null) ...[
+        if (paneDevice != null) ...[
           const Divider(height: 1),
-          _HardwareKeys(device: selected),
+          _HardwareKeys(device: paneDevice),
         ],
       ],
     );
@@ -428,6 +541,9 @@ class _DeviceToolbar extends ConsumerWidget {
                       ),
                     ),
                 ],
+                // Picking a device here moves the live view with it: the pane is
+                // about one device at a time, and the picture follows the picker
+                // rather than staying on whatever was streaming first.
                 onChanged: (serial) => ref
                     .read(selectedDeviceSerialProvider.notifier)
                     .select(serial),
@@ -510,6 +626,8 @@ class _LiveView extends ConsumerWidget {
   });
 
   final VideoController? video;
+
+  /// The device this picture is of — never merely the selected one.
   final AndroidDevice? device;
   final bool starting;
   final DeviceGestureSink? sink;
@@ -578,7 +696,12 @@ class _LiveView extends ConsumerWidget {
             ),
           ),
         ),
-        TransportBanner(transport: sink?.transport),
+        TransportBanner(
+          transport: sink?.transport,
+          // Naming the device on the picture itself: whatever else drifts, what
+          // you are looking at is stated where you are looking.
+          deviceLabel: '${currentDevice.displayName} (${currentDevice.serial})',
+        ),
       ],
     );
   }

@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/core/process/command_runner.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/features/devices/application/device_providers.dart';
 import 'package:chitragupta/src/features/devices/domain/android_device.dart';
 import 'package:chitragupta/src/features/devices/domain/device_input.dart';
@@ -369,6 +369,77 @@ void main() {
       );
       expect(find.text('CPH1989'), findsNothing);
       expect(find.text('Stop'), findsNothing);
+    });
+  });
+
+  // Bug 2: "on live view when i switch to another device, live view still
+  // showing old device". `_streamingSerial` won once streaming started and
+  // nothing watched the selection, so the picture stayed put.
+  group('liveViewSelection', () {
+    final emulator = _device();
+    final phone = _device(serial: _phoneSerial, model: 'CPH1989');
+    final offline = _device(
+      serial: 'offline-1',
+      state: DeviceConnectionState.offline,
+    );
+    final devices = [emulator, phone, offline];
+
+    test('does nothing while the live view is off', () {
+      // Picking a device in the toolbar is not a request to start streaming it.
+      final next = liveViewSelection(
+        liveSerial: null,
+        selectedSerial: _phoneSerial,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.none);
+    });
+
+    test('does nothing when the choice is already the device on screen', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: _emulator,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.none);
+    });
+
+    test('moves the live view to the newly chosen device', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: _phoneSerial,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.moveTo);
+      expect(next.device, phone);
+    });
+
+    test('stops the live view when the choice is cleared', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: null,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.stop);
+    });
+
+    test('stops rather than leave a stale picture up when the chosen device '
+        'is not ready', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: 'offline-1',
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.stop);
+      expect(next.device, isNull);
+    });
+
+    test('stops when the chosen device is not in the list at all', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: 'ghost',
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.stop);
     });
   });
 
