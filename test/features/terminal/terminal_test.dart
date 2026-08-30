@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -85,7 +86,7 @@ void main() {
       );
     });
 
-    test('closing the active tab disposes its panes and activates another', () {
+    test('closing the active tab detaches its panes and activates another', () {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);
       final controller = container.read(
@@ -105,10 +106,13 @@ void main() {
       controller.closeTab(second);
 
       final state = container.read(terminalSessionsControllerProvider);
-      expect(instance.disposed, isTrue);
+      // The view is gone; the process is not.
       expect(state.tabs.length, 1);
       expect(state.activeTabId, first);
-      expect(controller.instanceFor(pane), isNull);
+      expect(instance.disposed, isFalse);
+      expect(controller.instanceFor(pane), same(instance));
+      expect(state.detached.map((s) => s.paneId), [pane]);
+      expect(state.livenessOf(pane), PaneLiveness.live);
     });
 
     test('splitting adds a pane to the active tab and focuses it', () {
@@ -156,8 +160,10 @@ void main() {
 
       controller.closePane(second);
 
-      final tab = container.read(terminalSessionsControllerProvider).activeTab!;
-      expect(instance.disposed, isTrue);
+      final state = container.read(terminalSessionsControllerProvider);
+      final tab = state.activeTab!;
+      expect(instance.disposed, isFalse, reason: 'closing a pane detaches it');
+      expect(state.detached.map((s) => s.paneId), [second]);
       expect(tab.layout.panes.length, 1);
       expect(tab.focusedPaneId, tab.layout.panes.single);
     });

@@ -4,6 +4,8 @@ import 'package:chitragupta/src/features/terminal/application/scrollback_autosav
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
@@ -47,12 +49,20 @@ class FakeTerminalInstance implements TerminalInstance {
   @override
   CommandBlockRecorder? get commandBlocks => null;
 
+  /// Live until disposed, so the fake exercises the same detach/end paths a
+  /// real PTY does.
+  @override
+  ValueListenable<PaneLiveness> get liveness => livenessNotifier;
+  final livenessNotifier = ValueNotifier(PaneLiveness.live);
+
   bool disposed = false;
 
   @override
   void dispose() {
     if (disposed) return;
     disposed = true;
+    livenessNotifier.value = PaneLiveness.exited;
+    livenessNotifier.dispose();
     focusNode.dispose();
     scrollController.dispose();
   }

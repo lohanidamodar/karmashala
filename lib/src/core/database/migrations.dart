@@ -25,7 +25,22 @@ final Map<int, MigrationStep> schemaMigrations = {
   5: _migrateToV5,
   6: _migrateToV6,
   7: _migrateToV7,
+  8: _migrateToV8,
 };
+
+void _migrateToV8(Database db) {
+  // Keep-alive (Loop 38): closing a tab no longer kills the process behind it,
+  // so a session can be running with no tab showing it. Those are stored in the
+  // same table as a single-pane row with `detached = 1`, which keeps their
+  // scrollback on exactly the same persistence path as a tab's — the alternative
+  // was the one kind of session whose history quietly vanished on quit.
+  //
+  // They never come back *as* tabs: on load they are listed as background
+  // sessions the user can reopen or end.
+  db.execute(
+    'ALTER TABLE terminal_tabs ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;',
+  );
+}
 
 void _migrateToV7(Database db) {
   // The terminal workspace (Loop 29): which tabs were open, how each tab's panes

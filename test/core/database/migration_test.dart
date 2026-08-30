@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 7);
+    expect(db.schemaVersion, 8);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 7);
+    expect(version, 8);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -39,6 +39,26 @@ void main() {
     );
   });
 
+  test('v8 gives terminal_tabs the detached flag, defaulted off', () {
+    final columns = db
+        .query('PRAGMA table_info(terminal_tabs);')
+        .map((r) => r['name']! as String)
+        .toList();
+    expect(columns, contains('detached'));
+
+    // An old row written without the column must read back as "a real tab",
+    // never as a background session that vanishes from the tab bar.
+    db.execute(
+      'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
+      'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
+      ['t', 0, '{"type":"leaf","id":"p"}', 'p', 1, '2026-01-01T00:00:00.000Z'],
+    );
+    expect(
+      db.query('SELECT detached FROM terminal_tabs;').single['detached'],
+      0,
+    );
+  });
+
   test('metadata key/value store still works after migration', () {
     db.writeMetadata('color', 'indigo');
     expect(db.readMetadata('color'), 'indigo');
@@ -48,7 +68,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 7);
+    expect(db.schemaVersion, 8);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
