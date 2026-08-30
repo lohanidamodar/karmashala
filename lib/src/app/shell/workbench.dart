@@ -10,6 +10,7 @@ import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/sessions/presentation/agent_status_badge.dart';
+import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 
@@ -228,6 +229,12 @@ class _TabStrip extends ConsumerWidget {
               ],
             ),
           ),
+          // The permission mode belongs to the session, not to one of its two
+          // renderings. It was on the chat composer only, so the same control
+          // was readable on one view and invisible on the other; this is the
+          // same widget reading the same `effectivePermissionFor`, so the two
+          // views cannot disagree.
+          if (onTerminal) _PanePermissionChip(terminals: terminals),
           if (session?.paneId != null)
             _ViewToggle(
               onTerminal: onTerminal,
@@ -240,6 +247,34 @@ class _TabStrip extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// The permission chip for the agent pane the terminal view is showing.
+///
+/// Keyed off the *pane on screen*, not off the Explorer's selection: switching
+/// terminal tabs changes which agent you are looking at, and a chip that
+/// followed the tree selection would name a different session than the one
+/// under it. A shell tab has no session row pointing at it and draws nothing.
+class _PanePermissionChip extends ConsumerWidget {
+  const _PanePermissionChip({required this.terminals});
+
+  final TerminalSessionsState terminals;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final paneId = terminals.activeTab?.focusedPaneId;
+    if (paneId == null) return const SizedBox.shrink();
+    // Adopting a pane, or launching into one, rewrites `paneId` on the row.
+    ref.watch(sessionsRevisionProvider);
+    for (final record in ref.read(sessionDaoProvider).getAll()) {
+      if (record.paneId != paneId) continue;
+      return Padding(
+        padding: const EdgeInsets.only(right: Insets.sm),
+        child: PermissionModeChip(sessionId: record.id),
+      );
+    }
+    return const SizedBox.shrink();
   }
 }
 

@@ -10,6 +10,7 @@ import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:chitragupta/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/core/process/command_runner_providers.dart';
@@ -189,5 +190,50 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  testWidgets('an agent pane carries its permission chip on the strip', (
+    tester,
+  ) async {
+    // No selection: this is the terminal view on its own, which is where the
+    // chip did not exist. The mode was readable only from the chat composer,
+    // so the one control the user needs before letting an agent run was
+    // invisible on the surface they were watching it on.
+    seedSessionInAPane();
+    await pump(tester);
+
+    expect(find.byType(PermissionModeChip), findsOneWidget);
+
+    // A plain shell tab has no agent and no mode, so it draws nothing.
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PermissionModeChip), findsNothing);
+  });
+
+  testWidgets('both views name the same session, so they cannot disagree', (
+    tester,
+  ) async {
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+    await tester.tap(find.byTooltip('Terminal view'));
+    await tester.pumpAndSettle();
+
+    String shownSessionId() => tester
+        .widget<PermissionModeChip>(find.byType(PermissionModeChip))
+        .sessionId;
+
+    // One chip is showing on either surface, and it is the same session on
+    // both: the strip's while the terminal is up, the composer's while the
+    // conversation is. Two controls over one record, never two records.
+    expect(shownSessionId(), 's1');
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+
+    expect(shownSessionId(), 's1');
   });
 }
