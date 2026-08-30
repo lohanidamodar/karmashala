@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../application/device_providers.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_stream.dart';
@@ -612,7 +613,7 @@ class _DeviceToolbar extends ConsumerWidget {
             // is what people pressed when the picture froze — and it refreshed
             // the list, not the stream, so nothing happened.
             tooltip: 'Refresh device list',
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(AppIcons.arrowsClockwise),
             onPressed: () {
               ref.invalidate(devicesProvider);
               ref.invalidate(avdsProvider);
@@ -621,7 +622,7 @@ class _DeviceToolbar extends ConsumerWidget {
           if (onRestart != null)
             IconButton(
               tooltip: 'Restart live view',
-              icon: const Icon(Icons.restart_alt),
+              icon: const Icon(AppIcons.arrowCounterClockwise),
               onPressed: onRestart,
             ),
           if (onStopEmulator != null)
@@ -633,7 +634,7 @@ class _DeviceToolbar extends ConsumerWidget {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.power_settings_new),
+                  : const Icon(AppIcons.power),
               onPressed: stoppingEmulator ? null : onStopEmulator,
             ),
           if (starting)
@@ -648,13 +649,13 @@ class _DeviceToolbar extends ConsumerWidget {
           else if (streaming)
             TextButton.icon(
               onPressed: onStop,
-              icon: const Icon(Icons.stop),
+              icon: const Icon(AppIcons.stop),
               label: const Text('Stop'),
             )
           else
             TextButton.icon(
               onPressed: onStart,
-              icon: const Icon(Icons.play_arrow),
+              icon: const Icon(AppIcons.play),
               label: const Text('Live view'),
             ),
         ],
@@ -805,9 +806,9 @@ class _HardwareKeys extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          button('Back', Icons.arrow_back, DeviceKey.back),
-          button('Home', Icons.circle_outlined, DeviceKey.home),
-          button('Recents', Icons.crop_square, DeviceKey.recents),
+          button('Back', AppIcons.arrowLeft, DeviceKey.back),
+          button('Home', AppIcons.circle, DeviceKey.home),
+          button('Recents', AppIcons.square, DeviceKey.recents),
         ],
       ),
     );
@@ -842,7 +843,7 @@ class _DeviceEmptyState extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.smartphone,
+                AppIcons.deviceMobile,
                 size: 40,
                 color: Theme.of(context).colorScheme.outline,
               ),

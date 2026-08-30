@@ -159,6 +159,9 @@ class _CheckpointDiff extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // `Colors.green.shade700` / `.red.shade700` were the last `.shadeNNN` in
+    // `lib/`, and brightness-blind: both stayed dark-on-dark on the dark ramp.
+    final semantic = SemanticColors.of(context);
     return FutureBuilder<String>(
       future: ref.read(checkpointServiceProvider).diffOf(checkpoint),
       builder: (context, snapshot) {
@@ -197,8 +200,8 @@ class _CheckpointDiff extends ConsumerWidget {
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: 'monospace',
                         color: switch (line.kind) {
-                          DiffLineKind.added => Colors.green.shade700,
-                          DiffLineKind.removed => Colors.red.shade700,
+                          DiffLineKind.added => semantic.diffAdded,
+                          DiffLineKind.removed => semantic.diffRemoved,
                           DiffLineKind.meta || DiffLineKind.hunk =>
                             theme.colorScheme.onSurfaceVariant,
                           DiffLineKind.context => null,

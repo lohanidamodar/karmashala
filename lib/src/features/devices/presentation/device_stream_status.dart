@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_stream.dart';
 import 'device_touch_surface.dart';
@@ -30,7 +31,7 @@ class StreamStalledOverlay extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                ended ? Icons.link_off : Icons.pause_circle_outline,
+                ended ? AppIcons.linkBreak : AppIcons.pauseCircle,
                 color: theme.colorScheme.onInverseSurface,
               ),
               const SizedBox(height: 8),
@@ -65,7 +66,7 @@ class StreamStalledOverlay extends StatelessWidget {
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: onRestart,
-                icon: const Icon(Icons.restart_alt),
+                icon: const Icon(AppIcons.arrowCounterClockwise),
                 label: const Text('Restart live view'),
               ),
               if (!exhausted) ...[
@@ -121,9 +122,7 @@ class TransportBanner extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            transport?.isContinuous ?? false
-                ? Icons.touch_app
-                : Icons.info_outline,
+            transport?.isContinuous ?? false ? AppIcons.handTap : AppIcons.info,
             size: 14,
             color: theme.colorScheme.outline,
           ),

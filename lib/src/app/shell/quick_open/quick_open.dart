@@ -58,7 +58,9 @@ class QuickOpen extends ConsumerStatefulWidget {
   static Future<void> show(BuildContext context, {String initialQuery = ''}) =>
       showDialog<void>(
         context: context,
-        barrierColor: Colors.black.withValues(alpha: 0.35),
+        barrierColor: Theme.of(
+          context,
+        ).colorScheme.scrim.withValues(alpha: 0.35),
         builder: (_) => QuickOpen(initialQuery: initialQuery),
       );
 

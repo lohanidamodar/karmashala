@@ -200,9 +200,12 @@ class Chrome {
   /// A dense list row (explorer tree, palette results).
   static const row = 26.0;
 
-  /// Icon sizes: [icon] in toolbars, [iconSmall] inline with text.
+  /// Icon sizes: [icon] in toolbars, [iconSmall] inline with text,
+  /// [iconTitle] in a dialog's title row, where it sits against `titleMedium`
+  /// rather than body text and a toolbar glyph reads as an afterthought.
   static const icon = 16.0;
   static const iconSmall = 13.0;
+  static const iconTitle = 18.0;
 }
 
 /// A monospace stack for the "ledger hand" — paths, ids, event types, diffs.
