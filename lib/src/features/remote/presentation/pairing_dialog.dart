@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
@@ -32,6 +33,8 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
   HostPairingSession? _session;
   PairedDevice? _paired;
   String? _error;
+  bool _copied = false;
+  bool _showCode = false;
 
   @override
   void initState() {
@@ -54,6 +57,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
       _session = null;
       _paired = null;
       _error = null;
+      _copied = false;
     });
     try {
       final session = await _access.beginPairing(
@@ -205,7 +209,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
       children: [
         // The QR stays black-on-white in both themes: scanners want contrast.
         CustomPaint(
-          size: const Size.square(240),
+          size: const Size.square(320),
           painter: QrPainter(session.payload.encode()),
         ),
         const SizedBox(height: Insets.sm),
@@ -216,6 +220,48 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        const SizedBox(height: Insets.sm),
+        // The same payload, for when a camera won't cooperate: reveal it here
+        // and type it into the phone's "Paste the code instead" screen (or
+        // copy it for a device that can receive a paste).
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton(
+              onPressed: () => setState(() => _showCode = !_showCode),
+              child: Text(_showCode ? 'Hide code' : 'Show pairing code'),
+            ),
+            OutlinedButton.icon(
+              icon: Icon(
+                _copied ? AppIcons.checkCircle : AppIcons.copy,
+                size: 16,
+              ),
+              label: Text(_copied ? 'Copied' : 'Copy'),
+              onPressed: () async {
+                await Clipboard.setData(
+                  ClipboardData(text: session.payload.encode()),
+                );
+                if (mounted) setState(() => _copied = true);
+              },
+            ),
+          ],
+        ),
+        if (_showCode) ...[
+          const SizedBox(height: Insets.xs),
+          Container(
+            padding: const EdgeInsets.all(Insets.sm),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+            child: SelectableText(
+              session.payload.encode(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: kMonoFamily,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

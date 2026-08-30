@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/design_tokens.dart';
 import '../../client/companion_gateway.dart';
 
-/// The QR fallback: type the 8-character code the desktop shows.
+/// The QR fallback: paste the pairing code copied from the desktop.
 class ShortCodeScreen extends ConsumerStatefulWidget {
   const ShortCodeScreen({super.key});
 
@@ -56,8 +56,8 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'The desktop shows an 8-character code beside its QR code. '
-                'Codes expire after five minutes.',
+                'On the desktop\'s pairing dialog, press "Copy pairing '
+                'code" and paste it here. Codes expire after five minutes.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -67,17 +67,14 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 controller: _code,
                 autofocus: true,
                 enabled: !_busy,
-                maxLength: 8,
-                textCapitalization: TextCapitalization.characters,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _pair(),
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
-                  letterSpacing: 4,
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  hintText: 'ABCD1234',
+                  hintText: 'Paste the pairing code',
                   counterText: '',
                   errorText: _error,
                   errorMaxLines: 4,

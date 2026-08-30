@@ -182,13 +182,15 @@ class RemoteCompanionGateway implements CompanionGateway {
       payload = PairingPayload.decode(qrPayload.trim());
     } on ProtocolException {
       throw const PairingException(
-        'That is not a Chitragupta pairing code. Show the QR code from the '
-        "desktop's Remote access settings and scan it again.",
+        'That is not a Chitragupta pairing code. Scan the QR from the '
+        "desktop's Remote access settings, or copy its pairing code and "
+        'paste it here.',
       );
     } on ArgumentError {
       throw const PairingException(
-        'That is not a Chitragupta pairing code. Show the QR code from the '
-        "desktop's Remote access settings and scan it again.",
+        'That is not a Chitragupta pairing code. Scan the QR from the '
+        "desktop's Remote access settings, or copy its pairing code and "
+        'paste it here.',
       );
     }
     // Re-pairing replaces the old host: drop the old link first so the new
@@ -219,15 +221,11 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   @override
-  Future<CompanionPairing> pairWithCode(String shortCode) async {
-    // Loop 70 shipped QR-only: no maintained pure-Dart SPAKE2 with RFC
-    // vectors exists, and a low-entropy code without a PAKE would hand the
-    // relay a brute-forceable secret. Say so instead of pretending.
-    throw const PairingException(
-      'This desktop offers QR pairing only. Open Remote access in its '
-      'settings and scan the QR code it shows.',
-    );
-  }
+  Future<CompanionPairing> pairWithCode(String shortCode) =>
+      // The desktop's copyable pairing code IS the QR payload (full-entropy,
+      // so no PAKE is needed the way a short code would). SPAKE2 short codes
+      // remain descoped: no maintained pure-Dart SPAKE2 with RFC vectors.
+      pairWithQr(shortCode);
 
   @override
   Future<void> unpair() async {

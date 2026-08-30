@@ -19,7 +19,7 @@ void main() {
     expect(find.text('Pair with your desktop'), findsOneWidget);
     expect(find.text('Scan the QR code'), findsOneWidget);
 
-    await tester.tap(find.text('Type the code instead'));
+    await tester.tap(find.text('Paste the code instead'));
     await tester.pumpAndSettle();
     expect(find.byType(ShortCodeScreen), findsOneWidget);
   });

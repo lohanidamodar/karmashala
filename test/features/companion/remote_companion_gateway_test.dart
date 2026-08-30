@@ -365,7 +365,7 @@ void main() {
           isA<PairingException>().having(
             (e) => e.message,
             'message',
-            contains('QR pairing only'),
+            contains('not a Chitragupta pairing code'),
           ),
         ),
       );

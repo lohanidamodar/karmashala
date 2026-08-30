@@ -40,8 +40,8 @@ class PairingScreen extends StatelessWidget {
                   Text(
                     'This phone is a remote for the sessions your desktop '
                     'holds. On the desktop, open Settings → Remote access '
-                    'and choose "Pair a device" — it shows a QR code and a '
-                    'short code.',
+                    'and choose "Pair a device" — scan its QR code, or copy '
+                    'its pairing code and paste it here.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
@@ -64,7 +64,7 @@ class PairingScreen extends StatelessWidget {
                         builder: (_) => const ShortCodeScreen(),
                       ),
                     ),
-                    child: const Text('Type the code instead'),
+                    child: const Text('Paste the code instead'),
                   ),
                 ],
               ),
