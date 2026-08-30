@@ -97,6 +97,10 @@ void main() {
         'sessionId': 'loop-51-demo-session',
       });
       stdout.writeln(textOf(started));
+      stdout.writeln(
+        '--- verification_start: ${textOf(started).length} chars ≈ '
+        '${tokens(textOf(started))} tokens',
+      );
       expect(browser.isConnected, isTrue);
 
       banner('driving it, the way an agent would');
@@ -126,6 +130,10 @@ void main() {
       });
       final finishText = textOf(finished);
       stdout.writeln(finishText);
+      stdout.writeln(
+        '--- verification_finish: ${finishText.length} chars ≈ '
+        '${tokens(finishText)} tokens',
+      );
 
       final run = service.list().single;
       expect(run.verdict.toString(), contains('fail'));
