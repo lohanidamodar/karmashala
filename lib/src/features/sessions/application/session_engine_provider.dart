@@ -51,8 +51,8 @@ final agentAdapterResolverProvider = Provider<AdapterResolver>((ref) {
 });
 
 /// Provides the singleton [SessionEngine] for the app.
-final sessionEngineProvider = Provider<SessionEngine>(
-  (ref) => SessionEngine(
+final sessionEngineProvider = Provider<SessionEngine>((ref) {
+  final engine = SessionEngine(
     sessionDao: ref.watch(sessionDaoProvider),
     eventDao: ref.watch(sessionEventDaoProvider),
     sessionRepositoryDao: ref.watch(sessionRepositoryDaoProvider),
@@ -60,5 +60,12 @@ final sessionEngineProvider = Provider<SessionEngine>(
     resolveAdapter: ref.watch(agentAdapterResolverProvider),
     clock: ref.watch(clockProvider),
     ids: ref.watch(idGeneratorProvider),
-  ),
-);
+  );
+  // The engine holds an agent child process and a stream subscription per
+  // active run, and until Loop 65 nothing ended them: container disposal tore
+  // down neither, so quitting left the agent CLIs running. `onDispose` takes a
+  // callback rather than a future, so the lifecycle owner starts this itself
+  // and awaits it — see `AppLifecycle`.
+  ref.onDispose(engine.dispose);
+  return engine;
+});

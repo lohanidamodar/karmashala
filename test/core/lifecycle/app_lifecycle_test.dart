@@ -6,11 +6,16 @@ import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/core/lifecycle/app_lifecycle.dart';
 import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:chitragupta/src/features/notifications/application/notification_providers.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../features/system/fake_native_adapters.dart';
+import '../../features/terminal/fake_instance.dart';
 
 /// The application lifecycle owner.
 ///
@@ -132,7 +137,140 @@ void main() {
     });
   });
 
+  group('the panes it reaps', () {
+    /// A container whose panes are fakes with a reap the test controls.
+    (ProviderContainer, List<_ReapingInstance>) reapingContainer(
+      Future<void> reaped,
+    ) {
+      final built = <_ReapingInstance>[];
+      final container = ProviderContainer(
+        overrides: fakeTerminalOverrides(
+          database: db,
+          instanceFactory:
+              ({
+                required String id,
+                required TerminalProfile profile,
+                String? workingDirectory,
+                String? restoredScrollback,
+                bool shellIntegration = false,
+                AgentPaneLaunch? agentLaunch,
+              }) {
+                final instance = _ReapingInstance(
+                  id: id,
+                  title: profile.label,
+                  profileId: profile.id,
+                  reaped: reaped,
+                );
+                built.add(instance);
+                return instance;
+              },
+        ),
+      );
+      return (container, built);
+    }
+
+    test('shutdown waits for the kill, then closes', () async {
+      // A2: `dispose()` fired the `taskkill /T` and dropped the future, so
+      // `windowManager.destroy()` raced it. With a live pane the sequence must
+      // not finish while the kill is still in flight.
+      final killed = Completer<void>();
+      final (container, panes) = reapingContainer(killed.future);
+      final lifecycle = AppLifecycle(container);
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+
+      var finished = false;
+      final shutdown = lifecycle.shutdown().whenComplete(() => finished = true);
+      await pumpEventQueue();
+
+      expect(panes.single.disposed, isTrue, reason: 'the kill was started');
+      expect(
+        finished,
+        isFalse,
+        reason: 'the app must not close while a child process is still dying',
+      );
+      expect(isDisposed(container), isFalse);
+
+      killed.complete();
+      await shutdown;
+
+      expect(finished, isTrue);
+      expect(isDisposed(container), isTrue);
+      // The whole sequence, with a pane in it, inside Loop 55's envelope.
+      expect(
+        lifecycle.lastShutdownDuration,
+        lessThan(const Duration(milliseconds: 500)),
+      );
+    });
+
+    test('a kill that never lands does not hold the app open', () async {
+      final (container, panes) = reapingContainer(Completer<void>().future);
+      // Injected: the property is that the step is abandoned, and proving it
+      // against the shipped 1.5 s cap would cost 1.5 s of wall clock per run.
+      final lifecycle = AppLifecycle(
+        container,
+        shutdownBudget: const Duration(milliseconds: 60),
+      );
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+
+      await lifecycle.shutdown();
+
+      expect(panes.single.disposed, isTrue);
+      expect(
+        isDisposed(container),
+        isTrue,
+        reason: 'the container goes even when the budget is spent',
+      );
+    });
+  });
+
   group('the budget', () {
+    test('is the itemised sum of the steps, and both are pinned', () {
+      // Pinned to literals on purpose. The two bounds this replaces were
+      // written against `kShutdownBudget` itself, so widening the constant —
+      // the exact regression they existed to catch — kept them green.
+      expect(kShutdownBudget, const Duration(milliseconds: 2200));
+      expect(
+        kShutdownStepBudgets.values.reduce((a, b) => a + b),
+        kShutdownBudget,
+        reason: 'a shared budget lets the first step starve every later one',
+      );
+      expect(
+        kShutdownStepBudgets['terminal processes'],
+        const Duration(milliseconds: 1500),
+      );
+      expect(kShutdownStepBudgets, hasLength(6));
+    });
+
+    test('a spent budget skips every step but still disposes', () async {
+      // The accounting, on a clock the test owns: no real milliseconds pass,
+      // and the answer does not depend on how busy the machine is.
+      final lifecycle = AppLifecycle(
+        container,
+        stopwatch: _FrozenStopwatch(const Duration(seconds: 5)),
+      );
+      final natives = FakeNatives();
+      await lifecycle.startSystemIntegration(adapters: natives.adapters);
+      lifecycle.adopt(hookInstallation: Completer<void>().future);
+
+      await lifecycle.shutdown();
+
+      expect(
+        natives.tray.destroyed,
+        isFalse,
+        reason: 'every step is skipped once the budget is gone',
+      );
+      expect(
+        isDisposed(container),
+        isTrue,
+        reason: 'the container is disposed regardless — nothing else can',
+      );
+      expect(lifecycle.lastShutdownDuration, const Duration(seconds: 5));
+    });
+
     test('a step that hangs does not starve the ones after it', () async {
       // The first draft shared one budget across the sequence, so a hook
       // rewrite that never returned spent all of it and the control server —
@@ -154,33 +292,43 @@ void main() {
         hookInstallation: Completer<void>().future,
       );
 
-      final watch = Stopwatch()..start();
       await lifecycle.shutdown();
-      watch.stop();
 
-      expect(watch.elapsed, lessThan(kShutdownBudget + kShutdownBudget));
+      // A literal, and a tight one: the hook step's own 150 ms cap is the whole
+      // cost here. Bounding this by `kShutdownBudget` instead meant a step that
+      // helped itself to the shared budget still passed.
+      expect(
+        lifecycle.lastShutdownDuration,
+        lessThan(const Duration(milliseconds: 800)),
+      );
       expect(File(bridge).existsSync(), isFalse, reason: 'handshake removed');
       expect(natives.tray.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
-      expect(lifecycle.lastShutdownDuration, isNotNull);
     });
 
     test('every step hanging still finishes inside the deadline', () async {
-      final lifecycle = AppLifecycle(container);
+      // 60 ms rather than the shipped 2.2 s: the property is that the deadline
+      // is enforced, and waiting out the real one is 2.2 s of wall clock per
+      // run for the same answer.
+      final lifecycle = AppLifecycle(
+        container,
+        shutdownBudget: const Duration(milliseconds: 60),
+      );
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(adapters: natives.adapters);
       lifecycle.adopt(hookInstallation: Completer<void>().future);
       natives.tray.destroyDelay = const Duration(seconds: 30);
 
-      final watch = Stopwatch()..start();
       await lifecycle.shutdown();
-      watch.stop();
 
-      expect(watch.elapsed, lessThan(const Duration(milliseconds: 900)));
+      expect(
+        lifecycle.lastShutdownDuration,
+        lessThan(const Duration(seconds: 2)),
+      );
       expect(isDisposed(container), isTrue);
     });
 
-    test('a clean shutdown is far inside the budget', () async {
+    test('a clean shutdown is far inside Loop 55\'s envelope', () async {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(adapters: natives.adapters);
@@ -193,7 +341,13 @@ void main() {
 
       await lifecycle.shutdown();
 
-      expect(lifecycle.lastShutdownDuration, lessThan(kShutdownBudget));
+      // The literal is Loop 55's measured envelope (225–396 ms end to end), not
+      // the constant: a shutdown that got slower would still be "inside the
+      // budget" the moment someone widened the budget.
+      expect(
+        lifecycle.lastShutdownDuration,
+        lessThan(const Duration(milliseconds: 500)),
+      );
     });
   });
 
@@ -236,7 +390,84 @@ void main() {
       expect(natives.window.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
     });
+
+    test('closing the window runs the whole sequence too', () async {
+      // The X is the default way out, and it used to run none of this:
+      // prevent-close was derived from close-to-tray (off by default), so
+      // `WM_CLOSE` fell through to `DefWindowProc` and destroyed the window
+      // before the `close` event reached Dart. The first expectation below is
+      // the whole fix; the rest is what it buys.
+      final lifecycle = AppLifecycle(container);
+      final natives = FakeNatives();
+      final service = await lifecycle.startSystemIntegration(
+        adapters: natives.adapters,
+      );
+      final server = LauncherControlServer(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      lifecycle.adopt(controlServer: server);
+
+      expect(
+        natives.window.preventClose,
+        isTrue,
+        reason: 'without this the window is gone before onWindowClose runs',
+      );
+
+      service.onWindowClose();
+      // The same sequence, awaited: `shutdown` is idempotent, so this is the
+      // future the window's close path started, not a second one.
+      await lifecycle.shutdown();
+      await pumpEventQueue();
+
+      expect(File(bridge).existsSync(), isFalse);
+      expect(natives.window.destroyed, isTrue);
+      expect(isDisposed(container), isTrue);
+    });
   });
+}
+
+/// A pane whose process teardown outlives `dispose()`, the way a real one's
+/// `taskkill /T` does — with the test holding the future.
+class _ReapingInstance extends FakeTerminalInstance
+    implements ReapableTerminalInstance {
+  _ReapingInstance({
+    required super.id,
+    required super.title,
+    required super.profileId,
+    required this.reaped,
+  });
+
+  @override
+  final Future<void> reaped;
+}
+
+/// A [Stopwatch] that always reports the same elapsed time, so the shutdown
+/// budget can be spent (or not) without a single real millisecond passing.
+class _FrozenStopwatch implements Stopwatch {
+  _FrozenStopwatch(this.elapsed);
+
+  @override
+  final Duration elapsed;
+
+  @override
+  int get elapsedMicroseconds => elapsed.inMicroseconds;
+  @override
+  int get elapsedMilliseconds => elapsed.inMilliseconds;
+  @override
+  int get elapsedTicks => elapsed.inMicroseconds;
+  @override
+  int get frequency => Duration.microsecondsPerSecond;
+  @override
+  bool get isRunning => true;
+  @override
+  void start() {}
+  @override
+  void stop() {}
+  @override
+  void reset() {}
 }
 
 /// A control server that records when it was stopped, without binding a port.

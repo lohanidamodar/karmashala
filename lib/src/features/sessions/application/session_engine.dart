@@ -235,6 +235,40 @@ class SessionEngine {
     if (!runtime.done.isCompleted) runtime.done.complete();
   }
 
+  /// Ends every active run and releases what it holds.
+  ///
+  /// Nothing else does: [_finish] is driven by the agent's own stream closing,
+  /// and on quit that never happens — the app goes away first, leaving an
+  /// [AgentSession] child process and a [StreamSubscription] per active run.
+  ///
+  /// Deliberately not [_finish]: this is the app closing, not the sessions
+  /// ending, so no status is written and no lifecycle event is appended. A run
+  /// that was `running` stays `running`, which is what a resume needs to see.
+  ///
+  /// Idempotent; the returned future completes once every agent has stopped.
+  Future<void> dispose() => _disposal ??= _stopAll();
+
+  Future<void>? _disposal;
+
+  Future<void> _stopAll() async {
+    final runtimes = _runtimes.values.toList();
+    _runtimes.clear();
+    final stopping = <Future<void>>[];
+    for (final runtime in runtimes) {
+      // Cancelled before the agent is stopped: stopping closes its stream, and
+      // the `onDone` that would fire is the status write we are avoiding.
+      unawaited(runtime.subscription?.cancel());
+      runtime.subscription = null;
+      final agent = runtime.agent;
+      if (agent != null) {
+        stopping.add(agent.stop().catchError((Object _) {}));
+      }
+      if (!runtime.controller.isClosed) unawaited(runtime.controller.close());
+      if (!runtime.done.isCompleted) runtime.done.complete();
+    }
+    await Future.wait(stopping);
+  }
+
   String _lifecycleType(SessionStatus status) => switch (status) {
     SessionStatus.completed => SessionEventTypes.sessionCompleted,
     SessionStatus.failed => SessionEventTypes.sessionFailed,

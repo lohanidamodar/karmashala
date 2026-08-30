@@ -68,7 +68,10 @@ void main() {
         expect(natives.autoStart.setupCalled, isTrue);
         // Defaults: keep-awake off, close-to-tray off, hotkey on.
         expect(natives.wakelock.enabled, isFalse);
-        expect(natives.window.preventClose, isFalse);
+        // Prevent-close is not a setting: without it `WM_CLOSE` destroys the
+        // window before `onWindowClose` is dispatched, so the ordered shutdown
+        // would only ever run from the tray's Quit.
+        expect(natives.window.preventClose, isTrue);
         expect(natives.hotkey.registered, hasLength(1));
         expect(
           launcherHotKeyLabel(natives.hotkey.registered.single),
@@ -129,14 +132,12 @@ void main() {
       expect(container.read(settingsControllerProvider).keepAwake, isTrue);
     });
 
-    test('close to tray reports and then recovers', () async {
-      await build();
-      // After init, so the refusal lands on the change the user made rather
-      // than on the default the service applies on the way up.
+    test('prevent close reports and then recovers', () async {
+      // Prevent-close is applied on the way up now, so the refusal has to land
+      // there — a window that is not ready yet is exactly when it happens.
       natives.window.setPreventCloseFailure = Failure(StateError('not ready'));
 
-      settings().setCloseToTray(true);
-      await pumpEventQueue();
+      await build();
       expect(statusOf(NativeSetting.closeToTray)!.ok, isFalse);
       expect(natives.window.preventClose, isFalse);
 
@@ -263,6 +264,32 @@ void main() {
   });
 
   group('closing the window', () {
+    test('prevent close is on whatever close to tray says', () async {
+      // The whole point of A1: `window_manager` only routes `WM_CLOSE` to Dart
+      // in time to act on it while prevent-close is set. Tying it to a setting
+      // that ships off meant the X destroyed the window and the ordered
+      // shutdown never ran.
+      await build();
+      expect(natives.window.preventClose, isTrue);
+
+      settings().setCloseToTray(true);
+      await pumpEventQueue();
+      expect(natives.window.preventClose, isTrue);
+
+      settings().setCloseToTray(false);
+      await pumpEventQueue();
+      expect(
+        natives.window.preventClose,
+        isTrue,
+        reason: 'turning close-to-tray off must not turn the hook off',
+      );
+      // And it was applied once, not re-applied on every settings change.
+      expect(
+        natives.window.calls.where((c) => c == 'setPreventClose(true)'),
+        hasLength(1),
+      );
+    });
+
     test('close to tray hides and does not quit', () async {
       await build();
       settings().setCloseToTray(true);

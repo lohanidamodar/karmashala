@@ -11,6 +11,7 @@ import '../domain/agent_pane_launch.dart';
 import '../domain/mouse_wheel_reporter.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
+import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
@@ -61,6 +62,26 @@ abstract class TerminalInstance {
   void dispose();
 }
 
+/// A [TerminalInstance] whose teardown outlives its `dispose()`.
+///
+/// Deliberately a second, narrower interface: most panes have nothing to reap —
+/// an error pane never spawned anything and a dormant pane is replayed history,
+/// not a process — and only the ones that do should make a caller wait.
+///
+/// [dispose] stays synchronous because panes are closed from build callbacks,
+/// but ending a real pane on Windows means spawning `taskkill /PID <pid> /T /F`
+/// (see `killWindowsProcessTree`). Dropping that future is fine when a tab is
+/// closed and the app keeps running; on quit it meant `windowManager.destroy()`
+/// ended the process while the kill was still in flight, orphaning the dev
+/// server, build or ssh session the user had running inside the pane.
+abstract interface class ReapableTerminalInstance {
+  /// Completes once the process tree behind this pane is gone.
+  ///
+  /// A future that is already complete before [TerminalInstance.dispose] is
+  /// called, so awaiting it is always safe.
+  Future<void> get reaped;
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -80,7 +101,8 @@ typedef TerminalInstanceFactory =
 /// This is the one deliberate exception to the `CommandRunner` rule
 /// (architecture constraint 6): an interactive terminal needs a pseudo-terminal,
 /// which the run-to-completion/stream abstraction does not model.
-class PtyTerminalInstance implements TerminalInstance {
+class PtyTerminalInstance
+    implements TerminalInstance, ReapableTerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
@@ -186,6 +208,10 @@ class PtyTerminalInstance implements TerminalInstance {
   late final int _pid;
   bool _disposed = false;
   bool _exited = false;
+  Future<void>? _reap;
+
+  @override
+  Future<void> get reaped => _reap ?? Future<void>.value();
 
   @override
   void dispose() {
@@ -203,13 +229,14 @@ class PtyTerminalInstance implements TerminalInstance {
     // anything long-running — a build, a dev server, an ssh session, a database
     // client mid-write — because the process never gets to flush or run its
     // exit handlers. This runs on app quit as well as tab close.
-    unawaited(
-      shutdownProcess(
-        kill: _pty.kill,
-        exitCode: _pty.exitCode,
-        // The whole tree, not just the pid: see killWindowsProcessTree.
-        pid: _exited ? null : _pid,
-      ),
+    //
+    // Kept rather than dropped: closing a tab does not have to wait for the
+    // kill, but quitting does — see [reaped].
+    _reap = shutdownProcess(
+      kill: _pty.kill,
+      exitCode: _pty.exitCode,
+      // The whole tree, not just the pid: see killWindowsProcessTree.
+      pid: _exited ? null : _pid,
     );
   }
 }
@@ -416,6 +443,30 @@ class DormantTerminalInstance implements TerminalInstance {
   }
 }
 
+/// Whether a pane launched this way gets an OSC 133 [CommandBlockRecorder].
+///
+/// Three conditions, all of them necessary:
+///
+/// * an agent pane runs the agent CLI directly, so there is no shell and no
+///   prompt hook to emit markers;
+/// * the user's setting has to be on;
+/// * and the shell has to be one this app can make emit them
+///   ([shellSupportsIntegration] — PowerShell today).
+///
+/// `ptyLaunchFor` has always applied the third rule to the *launch*; until
+/// Loop 65 the factory did not apply it to the *recorder*, so every cmd.exe and
+/// WSL pane got a live recorder and a permanent `onPrivateOSC` listener that no
+/// marker could ever reach — and answered "yes" to *is this pane integrated?*,
+/// which is what [TerminalInstance.commandBlocks] being nullable exists to say.
+bool shellIntegrationApplies({
+  required TerminalProfile profile,
+  required bool shellIntegration,
+  required AgentPaneLaunch? agentLaunch,
+}) =>
+    agentLaunch == null &&
+    shellIntegration &&
+    shellSupportsIntegration(profile.shell);
+
 /// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the profile
 /// and spawns a [PtyTerminalInstance], degrading to an [ErrorTerminalInstance]
 /// (whose buffer shows the failure) if the PTY cannot be created.
@@ -434,7 +485,11 @@ TerminalInstance createPtyTerminalInstance({
   final PtyLaunch launch;
   final String title;
   final String profileId;
-  final integrate = agentLaunch == null && shellIntegration;
+  final integrate = shellIntegrationApplies(
+    profile: profile,
+    shellIntegration: shellIntegration,
+    agentLaunch: agentLaunch,
+  );
   if (agentLaunch != null) {
     launch = agentPtyLaunchFor(agentLaunch, onWindowsHost: Platform.isWindows);
     title = agentLaunch.title ?? agentLaunch.agentId;
