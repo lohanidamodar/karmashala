@@ -121,6 +121,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Panes whose buffer changed since their last snapshot.
   final Set<String> _dirty = {};
 
+  /// The last encoding written for each pane.
+  ///
+  /// A pane that is not in [_dirty] has not touched its buffer since this was
+  /// produced, so re-running the encoder on it can only produce the same string.
+  /// Keeping it turns a workspace save from "re-encode every pane" into "encode
+  /// the ones that changed" — which is what makes a save on every structural
+  /// change (open, split, close, detach) affordable, and what makes the save on
+  /// quit a delta over the last autosave tick rather than a full re-encode of
+  /// every open pane.
+  final Map<String, String> _encoded = {};
+
   /// Per-pane buffer listeners, kept so they can be removed on close.
   final Map<String, void Function()> _dirtyListeners = {};
 
@@ -166,6 +177,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _dirtyListeners.clear();
     _livenessListeners.clear();
     _dirty.clear();
+    _encoded.clear();
     _tabs.clear();
     _detached.clear();
     _activeTabId = null;
@@ -489,7 +501,6 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         for (final tab in _tabs) _storedTab(tab),
         for (final session in _detached) ?_storedDetached(session),
       ], activeTabId: _activeTabId);
-      _dirty.clear();
     } catch (error, stack) {
       _log.warning('Could not persist the terminal workspace.', error, stack);
     }
@@ -506,14 +517,32 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       for (final paneId in _dirty.toList()) {
         final instance = _instances[paneId];
         if (instance == null) continue;
-        dao.saveScrollback(paneId, encodeScrollback(instance.terminal));
+        dao.saveScrollback(paneId, _scrollbackOf(paneId, instance));
         written.add(paneId);
       }
-      _dirty.clear();
     } catch (error, stack) {
       _log.warning('Could not autosave terminal scrollback.', error, stack);
     }
     return written;
+  }
+
+  /// This pane's scrollback, encoding it only if its buffer moved.
+  ///
+  /// Encoding is the expensive half of a save (the codec walks every line and
+  /// emits an SGR run per style change), so the cache is what keeps a save
+  /// proportional to what changed rather than to how much is open.
+  String _scrollbackOf(String paneId, TerminalInstance instance) {
+    if (!_dirty.contains(paneId)) {
+      final cached = _encoded[paneId];
+      if (cached != null) return cached;
+    }
+    final encoded = encodeScrollback(instance.terminal);
+    _encoded[paneId] = encoded;
+    // Written, so no longer owed a write. Clearing per pane rather than in bulk
+    // means a pane that was somehow not persisted keeps its flag, which is the
+    // safe direction to be wrong in.
+    _dirty.remove(paneId);
+    return encoded;
   }
 
   StoredTerminalTab _storedTab(TerminalTab tab) {
@@ -530,7 +559,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               profileId: instance.profileId,
               title: instance.title,
               workingDirectory: instance.workingDirectory,
-              scrollback: encodeScrollback(instance.terminal),
+              scrollback: _scrollbackOf(paneId, instance),
               agentLaunch: instance.agentLaunch,
             ),
       ],
@@ -556,7 +585,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           profileId: instance.profileId,
           title: instance.title,
           workingDirectory: instance.workingDirectory,
-          scrollback: encodeScrollback(instance.terminal),
+          scrollback: _scrollbackOf(session.paneId, instance),
           agentLaunch: instance.agentLaunch,
         ),
       ],
@@ -738,6 +767,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (instance == null) return;
     _unlisten(paneId, instance);
     _dirty.remove(paneId);
+    _encoded.remove(paneId);
     instance.dispose();
   }
 
