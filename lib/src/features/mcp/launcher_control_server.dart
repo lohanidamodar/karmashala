@@ -33,10 +33,14 @@ import '../environments/domain/execution_environment.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
-import '../sessions/application/session_actions.dart';
+import '../sessions/application/session_launcher.dart';
+import '../sessions/application/session_providers.dart';
+import '../sessions/domain/session.dart';
+import '../sessions/domain/session_launch.dart';
 import '../settings/application/settings_controller.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
+import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/system_terminal_service.dart';
 import 'handshake_file_permissions.dart';
 import 'tmux_orchestration.dart';
@@ -225,7 +229,15 @@ class LauncherControlServer {
       final args =
           (payload['arguments'] as Map?)?.cast<String, dynamic>() ??
           const <String, dynamic>{};
-      final result = await _dispatch(tool, args);
+      // Which of *our* sessions is calling, when one is.
+      //
+      // The bridge reads it from its own environment, which Chitragupta stamped
+      // on the agent process when it opened the pane, so it describes the actual
+      // process tree rather than something the model chose to say. That is what
+      // makes the spawn-depth cap worth having: a tool argument would be a
+      // number the caller could simply omit.
+      final callerSessionId = payload['callerSessionId'] as String?;
+      final result = await _dispatch(tool, args, callerSessionId);
       response.headers.contentType = ContentType.json;
       response.write(jsonEncode({'ok': true, 'result': result}));
       await response.close();
@@ -274,7 +286,11 @@ class LauncherControlServer {
     }
   }
 
-  Future<Object?> _dispatch(String? tool, Map<String, dynamic> args) async {
+  Future<Object?> _dispatch(
+    String? tool,
+    Map<String, dynamic> args, [
+    String? callerSessionId,
+  ]) async {
     switch (tool) {
       // Meta-call: the MCP bridge fetches tool schemas from here so there is a
       // single source of truth for the tool list.
@@ -300,6 +316,10 @@ class LauncherControlServer {
           cli: args['cli'] as String?,
           agentInstallationId: args['agentInstallationId'] as String?,
           repositoryId: args['repositoryId'] as String?,
+          title: args['title'] as String?,
+          prompt: args['prompt'] as String?,
+          useWorktree: args['useWorktree'] == true,
+          callerSessionId: callerSessionId,
         );
       case 'open_session':
         return _openSession(args['id'] as String?);
@@ -374,9 +394,12 @@ class LauncherControlServer {
     {
       'name': 'list_sessions',
       'description':
-          'List coding-agent sessions. Optionally filter by a case-insensitive '
-          'substring (matched against project, repository, title, and preview) '
-          'and by CLI ("claude" or "codex").',
+          'List coding-agent sessions — both the ones running in Chitragupta '
+          '("kind": "native", with a status and, when an agent started it, a '
+          'parentSessionId) and ones imported from a CLI store ("kind": '
+          '"imported"). Optionally filter by a case-insensitive substring '
+          '(matched against project, repository, title, and preview) and by CLI '
+          '("claude" or "codex").',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -403,12 +426,14 @@ class LauncherControlServer {
     {
       'name': 'open_new_session',
       'description':
-          'Start a NEW agent session (not a resume) in a project, in a new '
-          'terminal. Choose the agent with agentInstallationId (from '
+          'Start a NEW agent session (not a resume) in a project, as a terminal '
+          'tab in Chitragupta. Choose the agent with agentInstallationId (from '
           'list_agents) or cli ("claude"/"codex"); omit both to use the '
           "configured default. repositoryId is optional (defaults to the "
           "project's first repository). The agent must be installed in the "
-          "project's environment.",
+          "project's environment. Sessions you start this way are recorded as "
+          'your children, and nesting is capped: if the call is refused for '
+          'depth, do the work yourself instead of delegating it further.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -425,6 +450,23 @@ class LauncherControlServer {
             'description': 'Specific installation id from list_agents.',
           },
           'repositoryId': {'type': 'string'},
+          'title': {
+            'type': 'string',
+            'description': 'Short name for the session, shown in the tab.',
+          },
+          'prompt': {
+            'type': 'string',
+            'description':
+                'Opening instruction for the new agent. Sent as its first '
+                'message, prefixed with a line naming this session.',
+          },
+          'useWorktree': {
+            'type': 'boolean',
+            'description':
+                'Run in a dedicated Git worktree instead of the repository '
+                'itself. Use this when the new session will edit files and you '
+                'are still working in the same repository.',
+          },
         },
         'required': ['projectId'],
       },
@@ -447,7 +489,9 @@ class LauncherControlServer {
     {
       'name': 'open_session',
       'description':
-          'Open one session by its id in a new external terminal, resuming it.',
+          'Open one session by its id. A Chitragupta session that is still '
+          'running is reattached to a tab; anything else is resumed. Imported '
+          'CLI sessions open in an external terminal.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -740,9 +784,51 @@ class LauncherControlServer {
     final needle = query?.trim().toLowerCase();
     final wantCli = _parseCli(cli);
 
+    final sessionDao = _container.read(sessionDaoProvider);
+    final registry = _container.read(agentRegistryProvider);
+    final installDao = _container.read(agentInstallationDaoProvider);
+
     final sessions = <Map<String, dynamic>>[];
     for (final project in projects) {
       for (final repo in repositoryDao.getByProject(project.id)) {
+        // Sessions started **in the app**. These were invisible here: every
+        // session tool read only `imported_sessions`, so a session the user (or
+        // another agent) started in Chitragupta could not be listed, opened or
+        // grouped — the launcher agent saw a different world from the one on
+        // screen (Loop 33 §6.9).
+        for (final session in sessionDao.getByRepository(repo.id)) {
+          final agentId =
+              installDao.getById(session.agentInstallationId)?.agentId ?? '';
+          if (wantCli != null && agentId != wantCli) continue;
+          final haystack = [
+            project.name,
+            repo.name,
+            session.title,
+          ].join(' ').toLowerCase();
+          if (needle != null &&
+              needle.isNotEmpty &&
+              !haystack.contains(needle)) {
+            continue;
+          }
+          sessions.add({
+            'id': session.id,
+            'kind': 'native',
+            if (session.externalSessionId != null)
+              'externalId': session.externalSessionId,
+            'title': session.title,
+            'cli': agentId,
+            'agent': registry.displayNameFor(agentId),
+            'project': project.name,
+            'repository': repo.name,
+            'environmentId': repo.path.environmentId,
+            'status': session.status.name,
+            'surface': session.surface.name,
+            'view': session.view.name,
+            if (session.parentSessionId != null)
+              'parentSessionId': session.parentSessionId,
+            'createdAt': session.createdAt.toIso8601String(),
+          });
+        }
         for (final session in importedDao.getByRepository(repo.id)) {
           if (wantCli != null && session.cli != wantCli) continue;
           final haystack = [
@@ -758,6 +844,7 @@ class LauncherControlServer {
           }
           sessions.add({
             'id': session.id,
+            'kind': 'imported',
             'externalId': session.externalId,
             'title': session.displayTitle,
             'cli': session.cli,
@@ -805,6 +892,10 @@ class LauncherControlServer {
     String? cli,
     String? agentInstallationId,
     String? repositoryId,
+    String? title,
+    String? prompt,
+    bool useWorktree = false,
+    String? callerSessionId,
   }) async {
     if (projectId == null) throw ArgumentError('Missing projectId.');
     final repos = _container
@@ -866,24 +957,44 @@ class LauncherControlServer {
           installs.first;
     }
 
-    final terminal = await _container.read(
-      defaultSystemTerminalProvider.future,
-    );
-    if (terminal == null) {
-      throw StateError('No external terminal is configured.');
-    }
-    await _container
-        .read(sessionActionsProvider)
-        .startNewInSystemTerminal(
-          repo: repo,
+    // Through the one launcher, exactly as the New-session dialog is. A session
+    // an agent starts is not a second kind of session: same row, same PTY, same
+    // permission resolution, same worktree option — and, because it has a row,
+    // it is visible to `list_sessions` and reattachable, which a spawned
+    // external terminal never was.
+    //
+    // This is also where the spawn-depth cap applies. `callerSessionId` comes
+    // from the bridge's environment, not from the model.
+    final launcher = _container.read(sessionLauncherProvider);
+    try {
+      final launched = await launcher.launch(
+        SessionLaunchRequest(
+          repository: repo,
           installation: install,
-          terminal: terminal,
-        );
-    return {
-      'opened': 'new ${install.agentId} session',
-      'repository': repo.name,
-      'environmentId': repo.path.environmentId,
-    };
+          title: (title == null || title.trim().isEmpty)
+              ? 'Agent session'
+              : title.trim(),
+          purpose: SessionPurpose.newSession,
+          useWorktree: useWorktree,
+          firstMessage: prompt,
+          parentSessionId: callerSessionId,
+        ),
+      );
+      return {
+        'sessionId': launched.session.id,
+        'opened': 'new ${install.agentId} session',
+        'title': launched.session.title,
+        'repository': repo.name,
+        'environmentId': repo.path.environmentId,
+        'depth': launcher.depthForChildOf(callerSessionId).depth,
+        if (launched.session.worktree != null)
+          'worktree': launched.session.worktree!.path,
+      };
+    } on SessionDepthRefused catch (refused) {
+      // Fail the caller's turn with the reason, rather than with a generic
+      // error it might reasonably retry.
+      throw StateError(refused.depth.refusal);
+    }
   }
 
   Future<Object?> _getUsage({String? cli, String? environmentId}) async {
@@ -913,6 +1024,14 @@ class LauncherControlServer {
 
   Future<Object?> _openSession(String? id) async {
     if (id == null) throw ArgumentError('Missing session id.');
+
+    // A native session is reattached, not relaunched: it may still be running in
+    // a pane, in which case "open" means bring its tab back — the same thing the
+    // background-sessions list does. Only if nothing is live is it restarted,
+    // through the one launcher, as a resume.
+    final native = _container.read(sessionDaoProvider).getById(id);
+    if (native != null) return _openNativeSession(native);
+
     final session = _container.read(importedSessionDaoProvider).getById(id);
     if (session == null) throw StateError('Session not found: $id');
     final repo = _container
@@ -947,6 +1066,52 @@ class LauncherControlServer {
           workingDirectory: env.wslDistribution == null ? repo.path.path : null,
         );
     return {'opened': session.displayTitle, 'environmentId': env.id};
+  }
+
+  Future<Object?> _openNativeSession(Session session) async {
+    final paneId = session.paneId;
+    final terminals = _container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    if (paneId != null) {
+      final instance = terminals.instanceFor(paneId);
+      if (instance != null && instance.liveness.value.isLive) {
+        terminals.reattachSession(paneId);
+        terminals.focusPane(paneId);
+        _container.read(terminalVisibleProvider.notifier).set(true);
+        return {
+          'opened': session.title,
+          'sessionId': session.id,
+          'reattached': true,
+        };
+      }
+    }
+
+    final repo = _container
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId);
+    final install = _container
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (repo == null || install == null) {
+      throw StateError('Session repository or agent is missing.');
+    }
+    final launched = await _container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repo,
+            installation: install,
+            title: session.title,
+            purpose: SessionPurpose.existingSession,
+            resumeExternalSessionId: session.externalSessionId,
+          ),
+        );
+    return {
+      'opened': launched.session.title,
+      'sessionId': launched.session.id,
+      'reattached': false,
+    };
   }
 
   Future<Object?> _openSessionsInTmux(List<String> ids, {String? name}) async {

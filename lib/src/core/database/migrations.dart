@@ -349,11 +349,20 @@ void _migrateToV10(Database db) {
   // sessions launched into an external terminal, which we do not own a pane for.
   db.execute('ALTER TABLE sessions ADD COLUMN pane_id TEXT;');
 
-  // Which surface the session runs on, so the session list can tell a chat
-  // session from one that is a terminal tab without inferring it from whether
-  // some other column happens to be null.
+  // Where the process lives, and how the session is drawn. Two columns because
+  // they are two questions: `surface` is a runtime fact (we own the PTY, or
+  // somebody else's terminal window does) and `view` is a rendering the user can
+  // flip without starting or stopping anything.
+  //
+  // Rows written before this migration were driven by a protocol adapter with no
+  // terminal of any kind, so `external` is the closest true answer for them — we
+  // do not own a process for them either — and `chat` is what they were actually
+  // showing. Neither default claims a pane that does not exist.
   db.execute(
-    "ALTER TABLE sessions ADD COLUMN surface TEXT NOT NULL DEFAULT 'chat';",
+    "ALTER TABLE sessions ADD COLUMN surface TEXT NOT NULL DEFAULT 'external';",
+  );
+  db.execute(
+    "ALTER TABLE sessions ADD COLUMN view TEXT NOT NULL DEFAULT 'chat';",
   );
 
   db.execute(

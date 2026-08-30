@@ -1,0 +1,128 @@
+import '../../agents/domain/agent_descriptor.dart';
+import '../../agents/domain/agent_installation.dart';
+import '../../repositories/domain/repository.dart';
+import '../../settings/domain/permission_mode.dart';
+import '../../terminal/data/system_terminal_service.dart';
+
+/// Where a session's process actually lives.
+///
+/// This is a **runtime** distinction, not a rendering one: `pane` means we own
+/// the process, `external` means somebody else's terminal window does. How an
+/// in-app session is *drawn* is [SessionView], which is orthogonal.
+enum SessionSurface {
+  /// A PTY pane inside the app. Every in-app agent session runs here.
+  pane,
+
+  /// A terminal emulator we launched and do not own.
+  external,
+}
+
+/// How an in-app session is rendered. A view, never a second kind of session.
+///
+/// Both views are over the same session record, the same PTY and the same
+/// lifecycle. Switching between them starts and stops nothing.
+enum SessionView {
+  /// Structured chat, reconstructed from the agent's own transcript.
+  chat,
+
+  /// The terminal the agent is actually running in.
+  terminal;
+
+  SessionView get other => this == chat ? terminal : chat;
+}
+
+/// Whether a chat view can be offered for an agent, and why not when it cannot.
+///
+/// This is a **capability query over the registry**, deliberately not a branch
+/// on whether the agent has a hand-written protocol adapter. The runtime is the
+/// same either way — a PTY — so an agent without a chat view is not a different
+/// kind of session, it is the same session with one of its two renderings
+/// unavailable.
+///
+/// The capability is "can we read this agent's own structured record of the
+/// conversation", which is exactly what an [AgentStoreSpec] with a readable
+/// [AgentStoreFormat] says. It is not "does an `AgentAdapter` subclass exist":
+/// Antigravity has an adapter and no readable store, and correctly gets no chat
+/// view.
+bool agentSupportsChatView(AgentDescriptor? descriptor) {
+  final format = descriptor?.store?.format;
+  return format == AgentStoreFormat.claudeJsonl ||
+      format == AgentStoreFormat.codexRollout;
+}
+
+/// The default view for an agent: chat where we can build one, terminal
+/// otherwise. The user can always switch.
+SessionView defaultViewFor(AgentDescriptor? descriptor) =>
+    agentSupportsChatView(descriptor) ? SessionView.chat : SessionView.terminal;
+
+/// Why a permission mode is being resolved.
+///
+/// Loop 33's audit found permission mode resolved in eight places with three
+/// different answers — the sharpest being a *new* session started under the
+/// "existing sessions" preference. This enum is the fix: callers say what they
+/// are doing, and exactly one place turns that into a [PermissionMode].
+enum SessionPurpose {
+  /// A conversation that does not exist yet, whatever it is seeded with.
+  newSession,
+
+  /// Continuing a conversation the agent already has a record of.
+  existingSession,
+}
+
+/// Everything one session-creation entry point has to decide, stated once.
+///
+/// Every field that used to be resolved differently per call site is here, so
+/// the divergence has somewhere to have been removed *to*. A caller that does
+/// not care leaves a default; a caller that cares says so, in the same words as
+/// every other caller.
+class SessionLaunchRequest {
+  const SessionLaunchRequest({
+    required this.repository,
+    required this.installation,
+    required this.title,
+    required this.purpose,
+    this.surface = SessionSurface.pane,
+    this.useWorktree = false,
+    this.additionalRepositories = const [],
+    this.resumeExternalSessionId,
+    this.firstMessage,
+    this.parentSessionId,
+    this.permissionOverride,
+    this.view,
+    this.externalTerminal,
+  });
+
+  final Repository repository;
+  final AgentInstallation installation;
+  final String title;
+
+  /// New or existing — the *only* input to permission-mode resolution.
+  final SessionPurpose purpose;
+
+  final SessionSurface surface;
+  final bool useWorktree;
+  final List<Repository> additionalRepositories;
+
+  /// The CLI's own session id to resume, when continuing one it already wrote.
+  final String? resumeExternalSessionId;
+
+  /// Sent as soon as the session is up. One code path, guarded once.
+  final String? firstMessage;
+
+  /// The session that asked for this one, when an agent did. Never supplied by
+  /// the model directly — see `SessionDepth`.
+  final String? parentSessionId;
+
+  /// Escape hatch for a caller that genuinely knows better than the setting.
+  /// Unused by any in-app path; kept so "the setting decides" stays true by
+  /// inspection rather than by convention.
+  final PermissionMode? permissionOverride;
+
+  /// Forced rendering, or `null` to take the agent's default.
+  final SessionView? view;
+
+  /// Which external terminal to launch into, for [SessionSurface.external].
+  /// `null` takes the configured default, which is what every in-app caller
+  /// should do — the parameter exists for the dialog, where the user picked one.
+  final SystemTerminal? externalTerminal;
+}

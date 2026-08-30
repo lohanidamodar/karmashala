@@ -11,9 +11,9 @@ import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
-import '../application/session_actions.dart';
-import '../application/session_engine_provider.dart';
+import '../application/session_launcher.dart';
 import '../application/session_ui_providers.dart';
+import '../domain/session_launch.dart';
 
 /// Creates a session for the selected repository: pick an agent installation, a
 /// title, and whether to run in a dedicated Git worktree.
@@ -69,38 +69,30 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       _error = null;
     });
     try {
-      if (_external) {
-        final terminal = _terminal;
-        if (terminal == null) {
-          setState(() => _error = 'Choose a terminal to launch in.');
-          return;
-        }
-        await ref
-            .read(sessionActionsProvider)
-            .startNewInSystemTerminal(
-              repo: repo,
-              installation: installation,
-              terminal: terminal,
-            );
-        if (mounted) Navigator.of(context).pop();
+      if (_external && _terminal == null) {
+        setState(() => _error = 'Choose a terminal to launch in.');
         return;
       }
-      final session = await ref
-          .read(sessionEngineProvider)
-          .start(
-            repository: repo,
-            installation: installation,
-            title: _titleController.text.trim().isEmpty
-                ? 'Session'
-                : _titleController.text.trim(),
-            useWorktree: _useWorktree,
-            permissionMode: ref
-                .read(settingsControllerProvider)
-                .permissionsFor(installation.agentId)
-                .newSessions,
+      // One call for both branches. In-app and external are now the same
+      // creation path with a different surface, so the title, the worktree
+      // choice and the permission mode mean the same thing in both — the title
+      // field used to be drawn over the external branch and quietly discarded.
+      final launched = await ref
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repo,
+              installation: installation,
+              title: _titleController.text,
+              purpose: SessionPurpose.newSession,
+              surface: _external
+                  ? SessionSurface.external
+                  : SessionSurface.pane,
+              useWorktree: _useWorktree,
+              externalTerminal: _terminal,
+            ),
           );
-      ref.read(sessionsRevisionProvider.notifier).bump();
-      ref.read(selectedSessionIdProvider.notifier).select(session.id);
+      ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       setState(() => _error = 'Could not start session: $e');
@@ -224,13 +216,15 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               onSelectionChanged: (s) => setState(() => _external = s.first),
             ),
             if (_external) _terminalPicker(),
-            if (!_external)
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _useWorktree,
-                onChanged: (v) => setState(() => _useWorktree = v ?? false),
-                title: const Text('Run in a dedicated Git worktree'),
-              ),
+            // Offered for both surfaces now: the worktree is created before the
+            // agent starts, so where the agent's window happens to be makes no
+            // difference to it. It used to be reachable from one path of nine.
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _useWorktree,
+              onChanged: (v) => setState(() => _useWorktree = v ?? false),
+              title: const Text('Run in a dedicated Git worktree'),
+            ),
             if (_error != null) ...[
               const SizedBox(height: 10),
               DesktopErrorBanner(_error!),

@@ -44,6 +44,8 @@ const _claudeCode = AgentDescriptor(
     // both — which is what makes a PTY-hosted Claude session's transcript
     // locatable at launch instead of guessed at afterwards.
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
+    // `claude [prompt]` — verified against v2.1.251.
+    acceptsPromptArgument: true,
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -102,6 +104,8 @@ const _codex = AgentDescriptor(
     resume: AgentResume.flag('--resume'),
     // Interactively Codex resumes with a subcommand, not a flag.
     interactiveResume: AgentResume.subcommand('resume'),
+    // `codex [OPTIONS] [PROMPT]` — verified against 0.146.
+    acceptsPromptArgument: true,
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.codex',

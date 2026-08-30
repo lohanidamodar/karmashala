@@ -71,6 +71,7 @@ class AgentLaunchSpec {
     this.resume = const AgentResume.unsupported(),
     this.interactiveResume = const AgentResume.unsupported(),
     this.sessionIdAssignment = const AgentSessionIdAssignment.unsupported(),
+    this.acceptsPromptArgument = false,
   });
 
   final List<String> baseArguments;
@@ -81,6 +82,15 @@ class AgentLaunchSpec {
   /// Whether this agent will accept a session id we choose. See
   /// [AgentSessionIdAssignment].
   final AgentSessionIdAssignment sessionIdAssignment;
+
+  /// Whether a trailing positional argument is taken as the opening prompt.
+  ///
+  /// This is how a session's first message is delivered: typing it into the PTY
+  /// instead would race the agent's own startup, which takes seconds and shows
+  /// no reliable "ready" marker. Defaults to **false**, so an agent nobody has
+  /// checked is launched bare rather than handed a stray argument it may read as
+  /// a subcommand.
+  final bool acceptsPromptArgument;
 
   List<String> permissionArgumentsFor(PermissionMode mode) =>
       permissionArguments[mode] ?? const [];

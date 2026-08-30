@@ -13,9 +13,7 @@ import 'dart:io';
 
 Future<void> main(List<String> args) async {
   final bridge = _Bridge();
-  final lines = stdin
-      .transform(utf8.decoder)
-      .transform(const LineSplitter());
+  final lines = stdin.transform(utf8.decoder).transform(const LineSplitter());
   await for (final line in lines) {
     if (line.trim().isEmpty) continue;
     Map<String, dynamic> message;
@@ -92,7 +90,10 @@ class _Bridge {
       }
       _reply(id, {
         'content': [
-          {'type': 'text', 'text': const JsonEncoder.withIndent('  ').convert(result)},
+          {
+            'type': 'text',
+            'text': const JsonEncoder.withIndent('  ').convert(result),
+          },
         ],
       });
     } catch (e) {
@@ -118,7 +119,24 @@ class _Bridge {
       request.headers
         ..set(HttpHeaders.authorizationHeader, 'Bearer ${config.token}')
         ..contentType = ContentType.json;
-      request.write(jsonEncode({'tool': tool, 'arguments': arguments}));
+      // Which Chitragupta session this bridge is running inside, when it is
+      // running inside one.
+      //
+      // Chitragupta stamps CHITRAGUPTA_SESSION_ID on the agent process when it
+      // opens an agent pane; this bridge is that agent's own child, so it
+      // inherits it. Forwarding it here is what lets the app cap how deep agents
+      // may spawn agents — read off the real process tree rather than declared
+      // by the caller, which could simply omit it. Absent for the launcher chat
+      // and for a bridge started by hand, which are then treated as root.
+      final callerSessionId = Platform.environment['CHITRAGUPTA_SESSION_ID'];
+      request.write(
+        jsonEncode({
+          'tool': tool,
+          'arguments': arguments,
+          if (callerSessionId != null && callerSessionId.isNotEmpty)
+            'callerSessionId': callerSessionId,
+        }),
+      );
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
       final decoded = jsonDecode(body);
@@ -139,9 +157,7 @@ class _Bridge {
     if (appData == null) {
       throw StateError('APPDATA is not set; cannot locate mcp_bridge.json.');
     }
-    final file = File(
-      '$appData\\com.popupbits\\chitragupta\\mcp_bridge.json',
-    );
+    final file = File('$appData\\com.popupbits\\chitragupta\\mcp_bridge.json');
     if (!await file.exists()) {
       throw StateError(
         'Chitragupta is not running (mcp_bridge.json not found). '
