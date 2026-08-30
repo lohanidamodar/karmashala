@@ -127,7 +127,22 @@ class AdbService {
 
   /// Boots an AVD. Returns immediately: booting takes tens of seconds, and the
   /// device appears in [listDevices] once it is up.
-  Future<void> bootAvd(String name) async {
+  ///
+  /// [headless] passes `-no-window`, so the emulator has no window of its own
+  /// and this pane's live view is the only way to see it — which is the point:
+  /// the preview, its gestures and its accessibility tree are what this feature
+  /// exists for, and a second floating window is in the way. A real window is
+  /// still one toggle away, because the extended controls (rotation, location,
+  /// simulated calls) only exist there.
+  ///
+  /// Use [bootAvdAndWait] when you need to know it is actually usable —
+  /// headless there is nothing to watch, so "it appeared in `adb devices`" is
+  /// not the same as "it has booted".
+  Future<ProcessHandle> bootAvd(
+    String name, {
+    bool headless = true,
+    void Function(String line)? onLog,
+  }) async {
     final emulator = sdk.emulator;
     if (emulator == null) {
       throw StateError(
@@ -135,8 +150,104 @@ class AdbService {
         'so AVDs cannot be booted.',
       );
     }
-    await runner.start(
-      CommandRequest(executable: emulator.path, arguments: ['-avd', name]),
+    final handle = await runner.start(
+      CommandRequest(
+        executable: emulator.path,
+        arguments: [
+          '-avd',
+          name,
+          if (headless) '-no-window',
+          // Nothing watches the boot animation, headless least of all.
+          '-no-boot-anim',
+        ],
+      ),
+    );
+    // Both streams must be drained even when nobody wants the output. The
+    // emulator is chatty during boot and its stdout is a pipe of a few
+    // kilobytes; with no reader it fills, the emulator blocks on write, and the
+    // boot simply stops — observed on this machine, and it looks exactly like a
+    // slow emulator rather than a wedged one. It is also where the emulator
+    // explains itself when it refuses to start.
+    void drain(Stream<String> lines) {
+      lines.listen(
+        (line) => onLog?.call(line),
+        onError: (_) {},
+        cancelOnError: false,
+      );
+    }
+
+    drain(handle.stdoutLines);
+    drain(handle.stderrLines);
+    return handle;
+  }
+
+  /// Serial of the running emulator booted from the AVD [name], or `null`.
+  ///
+  /// Asks each emulator which AVD it booted rather than diffing `adb devices`
+  /// across the boot. The diff is wrong as soon as two emulators start close
+  /// together — it cannot say which new serial is which — and it is also wrong
+  /// when the AVD was already running. The console answers this even before the
+  /// system has finished booting, which is exactly when it is needed.
+  Future<String?> serialForAvd(String name) async {
+    for (final device in await listDevices()) {
+      if (!device.isEmulator) continue;
+      if (await runningAvdName(device.serial) == name) return device.serial;
+    }
+    return null;
+  }
+
+  /// Whether Android has finished booting on [serial].
+  ///
+  /// `sys.boot_completed` is the property Android sets when it broadcasts
+  /// `BOOT_COMPLETED`. A device answers adb well before that, so without this
+  /// check the first `wm size`, `uiautomator dump` or scrcpy start can land on
+  /// a half-booted system and fail in ways that look like our bugs.
+  Future<bool> isBootCompleted(String serial) async {
+    try {
+      final result = await runner.run(
+        _forDevice(serial, const ['shell', 'getprop', 'sys.boot_completed']),
+      );
+      return result.ok && result.stdout.trim() == '1';
+    } on CommandException {
+      return false;
+    }
+  }
+
+  /// Boots [name] and waits until it is genuinely usable, returning its serial.
+  ///
+  /// Bounded: an emulator that never comes up says so rather than leaving a
+  /// spinner running forever.
+  Future<String> bootAvdAndWait(
+    String name, {
+    bool headless = true,
+    Duration timeout = const Duration(minutes: 3),
+    Duration pollInterval = const Duration(seconds: 2),
+  }) async {
+    final log = <String>[];
+    await bootAvd(
+      name,
+      headless: headless,
+      onLog: (line) {
+        // Its last words, for the failure message. The emulator normally
+        // explains why it would not start.
+        log.add(line);
+        if (log.length > 20) log.removeAt(0);
+      },
+    );
+    final deadline = DateTime.now().add(timeout);
+    String? serial;
+    while (DateTime.now().isBefore(deadline)) {
+      serial ??= await serialForAvd(name);
+      if (serial != null && await isBootCompleted(serial)) return serial;
+      await Future<void>.delayed(pollInterval);
+    }
+    final lastWords = log.isEmpty ? '' : ' Last output: ${log.last}';
+    throw StateError(
+      serial == null
+          ? '$name did not become reachable within '
+                '${timeout.inSeconds}s.$lastWords'
+          : '$name ($serial) did not finish booting within '
+                '${timeout.inSeconds}s.$lastWords',
     );
   }
 

@@ -1,6 +1,8 @@
+import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/features/devices/application/device_providers.dart';
 import 'package:chitragupta/src/features/devices/domain/android_device.dart';
+import 'package:chitragupta/src/features/devices/domain/device_input.dart';
 import 'package:chitragupta/src/features/devices/presentation/device_pane.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
@@ -13,22 +15,30 @@ import '../../support/fake_command_runner.dart';
 const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);
 
+const _emulator = 'emulator-5554';
+const _phoneSerial = 'F6IZLV6LMFT4U4ZT';
+
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'windows', path: r'C:\sdk'),
   adb: EnvironmentPath(
     environmentId: 'windows',
     path: r'C:\sdk\platform-tools\adb.exe',
   ),
+  emulator: EnvironmentPath(
+    environmentId: 'windows',
+    path: r'C:\sdk\emulator\emulator.exe',
+  ),
 );
 
 AndroidDevice _device({
-  String serial = 'emulator-5554',
+  String serial = _emulator,
   DeviceConnectionState state = DeviceConnectionState.device,
+  String model = 'Pixel',
 }) => AndroidDevice(
   serial: serial,
   environmentId: 'windows',
   state: state,
-  model: 'Pixel',
+  model: model,
 );
 
 Future<void> _pump(
@@ -36,6 +46,7 @@ Future<void> _pump(
   required AndroidSdk? sdk,
   required List<AndroidDevice> devices,
   List<Avd> avds = const [],
+  Map<String, DeviceScreenSize> screens = const {},
   Size size = _desktop,
   FakeCommandRunner? runner,
 }) async {
@@ -54,7 +65,9 @@ Future<void> _pump(
         androidSdkProvider.overrideWith((ref) async => sdk),
         devicesProvider.overrideWith((ref) async => devices),
         avdsProvider.overrideWith((ref) async => avds),
-        selectedDeviceScreenSizeProvider.overrideWith((ref) async => null),
+        deviceScreenSizeProvider.overrideWith(
+          (ref, serial) async => screens[serial],
+        ),
       ],
       child: const MaterialApp(home: Scaffold(body: DevicePane())),
     ),
@@ -86,9 +99,11 @@ void main() {
         sdk: _sdk(),
         devices: [_device(state: DeviceConnectionState.unauthorized)],
       );
+      // Twice over: the pane says why it is empty, and the row says what is
+      // wrong with that particular device.
       expect(
         find.textContaining('accept the USB debugging prompt'),
-        findsOneWidget,
+        findsWidgets,
       );
     });
 
@@ -103,11 +118,9 @@ void main() {
       expect(find.text('Start'), findsOneWidget);
     });
 
-    testWidgets('prompts to start the live view once a device is ready', (
-      tester,
-    ) async {
+    testWidgets('points at the list once a device is ready', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
-      expect(find.textContaining('start the live view'), findsOneWidget);
+      expect(find.textContaining('Pick a device below'), findsOneWidget);
       expect(find.text('Live view'), findsOneWidget);
     });
   });
@@ -123,6 +136,24 @@ void main() {
       await _pump(tester, sdk: _sdk(), devices: [_device()], size: _desktop);
       expect(tester.takeException(), isNull);
       expect(find.byType(DevicePane), findsOneWidget);
+    });
+
+    testWidgets('the emulator list does not overflow a compact pane', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [
+          Avd(name: 'Pixel_8_Pro', runningSerial: _emulator),
+          Avd(name: 'Pixel_Tablet'),
+          Avd(name: 'Nexus_5'),
+          Avd(name: 'Wear_Small'),
+        ],
+        size: _phone,
+      );
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('hides the hardware buttons when no device is selected', (
@@ -210,9 +241,13 @@ void main() {
       await _pump(
         tester,
         sdk: _sdk(),
-        devices: [_device(serial: 'F6IZLV6LMFT4U4ZT')],
+        devices: [_device(serial: _phoneSerial)],
       );
       expect(find.byTooltip('Stop emulator'), findsNothing);
+      expect(
+        find.byKey(const Key('stop-emulator-$_phoneSerial')),
+        findsNothing,
+      );
     });
 
     testWidgets(
@@ -232,5 +267,467 @@ void main() {
         );
       },
     );
+  });
+
+  // Bug 1: "i see an emulator running but cannot stop it in the list without
+  // starting live view". The action existed, but only on the live-view toolbar.
+  group('DevicePane device list', () {
+    testWidgets('offers to stop a running emulator with the live view off', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+      // Nothing is streaming — the toolbar still offers to *start* the live
+      // view — and the row is stoppable anyway. That is the whole fix.
+      expect(find.text('Live view'), findsOneWidget);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+      expect(find.text('Start'), findsNothing);
+    });
+
+    testWidgets('stopping from the list confirms, then runs emu kill', (
+      tester,
+    ) async {
+      final runner = FakeCommandRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('stop-emulator-$_emulator')));
+      await tester.pumpAndSettle();
+      // The confirmation is kept: anything not written to a snapshot is lost.
+      expect(find.textContaining('is lost'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Stop emulator'));
+      await tester.pumpAndSettle();
+
+      expect(
+        runner.requests.map((r) => r.arguments.join(' ')),
+        contains('-s $_emulator emu kill'),
+      );
+    });
+
+    testWidgets('cancelling a stop from the list kills nothing', (
+      tester,
+    ) async {
+      final runner = FakeCommandRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('stop-emulator-$_emulator')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(runner.requests.any((r) => r.arguments.contains('kill')), isFalse);
+    });
+
+    testWidgets('an AVD that is not running offers Start, not Stop', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+      );
+      expect(find.byKey(const Key('start-avd-Pixel_8_Pro')), findsOneWidget);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsNothing);
+    });
+
+    testWidgets('a running emulator with no AVD row is still stoppable', (
+      tester,
+    ) async {
+      // No emulator package means no AVD list at all, but `adb devices` still
+      // shows the emulator and `emu kill` still works on it.
+      await _pump(tester, sdk: _sdk(), devices: [_device()]);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+    });
+
+    testWidgets('a running emulator is not listed twice', (tester) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+    });
+
+    testWidgets('a physical device is listed, with a preview and no stop', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device(serial: _phoneSerial, model: 'CPH1989')],
+      );
+      expect(find.text('CPH1989'), findsOneWidget);
+      expect(find.byKey(const Key('preview-$_phoneSerial')), findsOneWidget);
+      expect(
+        find.byKey(const Key('stop-emulator-$_phoneSerial')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a running emulator offers both a preview and a stop', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+      expect(find.byKey(const Key('preview-$_emulator')), findsOneWidget);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+      // Named by its AVD, which is what the user called it.
+      expect(find.text('Pixel_8_Pro'), findsOneWidget);
+    });
+
+    testWidgets('an unauthorized device says what to do about it and offers '
+        'nothing', (tester) async {
+      // A row that can only fail should not have a button on it.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [
+          _device(
+            serial: _phoneSerial,
+            model: 'CPH1989',
+            state: DeviceConnectionState.unauthorized,
+          ),
+        ],
+      );
+      expect(find.text('CPH1989'), findsOneWidget);
+      expect(
+        find.textContaining('accept the USB debugging prompt'),
+        findsWidgets,
+      );
+      expect(find.byKey(const Key('preview-$_phoneSerial')), findsNothing);
+    });
+
+    testWidgets('an offline device is shown and explained, not hidden', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [
+          _device(
+            serial: _phoneSerial,
+            model: 'CPH1989',
+            state: DeviceConnectionState.offline,
+          ),
+        ],
+      );
+      expect(find.textContaining('offline —'), findsOneWidget);
+      expect(find.byKey(const Key('preview-$_phoneSerial')), findsNothing);
+    });
+  });
+
+  // The owner: "previously, sambandha test was running in background without
+  // ui and we could connect using live preview; that would be the best
+  // approach, like Android Studio does."
+  group('DevicePane emulator boot', () {
+    /// A runner that plays a whole emulator boot: the device appears, says
+    /// which AVD it is, and reports `sys.boot_completed` after [slowPolls]
+    /// polls that answer "not yet".
+    FakeCommandRunner bootingRunner({int slowPolls = 0}) {
+      var polls = 0;
+      return FakeCommandRunner(
+        responder: (request) {
+          final args = request.arguments.join(' ');
+          if (args == 'devices -l') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout:
+                  'List of devices attached\n'
+                  '$_emulator  device product:sdk model:Pixel transport_id:2\n',
+              stderr: '',
+            );
+          }
+          if (args.endsWith('emu avd name')) {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'Pixel_8_Pro\nOK\n',
+              stderr: '',
+            );
+          }
+          if (args.contains('sys.boot_completed')) {
+            polls += 1;
+            return CommandResult(
+              exitCode: 0,
+              stdout: polls > slowPolls ? '1\n' : '0\n',
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+    }
+
+    Future<void> settle(WidgetTester tester, {int frames = 12}) async {
+      for (var i = 0; i < frames; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('offers headless boot, and defaults to it', (tester) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+      );
+      final toggle = tester.widget<SwitchListTile>(
+        find.byKey(const Key('headless-emulator-toggle')),
+      );
+      expect(toggle.value, isTrue);
+    });
+
+    testWidgets('starting an AVD boots it without a window', (tester) async {
+      final runner = bootingRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(runner.startRequests.single.arguments, [
+        '-avd',
+        'Pixel_8_Pro',
+        '-no-window',
+        '-no-boot-anim',
+      ]);
+    });
+
+    testWidgets('the toggle really controls the window', (tester) async {
+      // The extended controls — rotation, location, simulated calls — only
+      // exist in the emulator's own window, so this has to be reachable.
+      final runner = bootingRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('headless-emulator-toggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(
+        runner.startRequests.single.arguments,
+        isNot(contains('-no-window')),
+      );
+    });
+
+    testWidgets('a booting row says so rather than looking ignored', (
+      tester,
+    ) async {
+      // Headless there is nothing on screen to show for the click at all.
+      final runner = bootingRunner(slowPolls: 1);
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('starting…'), findsOneWidget);
+      expect(find.text('Start'), findsNothing);
+
+      await settle(tester, frames: 40);
+      expect(find.text('starting…'), findsNothing);
+    });
+
+    testWidgets('a boot that fails is reported, and the row resets', (
+      tester,
+    ) async {
+      // Headless, a failed boot is completely invisible otherwise: no window
+      // appears either way. (The three-minute timeout itself is covered in
+      // adb_service_test — it is wall-clock bounded, which a fake test clock
+      // cannot advance.)
+      final runner = FakeCommandRunner(
+        throwError: StateError('emulator.exe could not be started'),
+      );
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(find.textContaining('could not be started'), findsOneWidget);
+      expect(find.text('Start'), findsOneWidget, reason: 'the row must reset');
+      await tester.pump(const Duration(seconds: 6));
+    });
+  });
+
+  // Bug 2: "on live view when i switch to another device, live view still
+  // showing old device". `_streamingSerial` won once streaming started and
+  // nothing watched the selection, so the picture stayed put.
+  group('liveViewSelection', () {
+    final emulator = _device();
+    final phone = _device(serial: _phoneSerial, model: 'CPH1989');
+    final offline = _device(
+      serial: 'offline-1',
+      state: DeviceConnectionState.offline,
+    );
+    final devices = [emulator, phone, offline];
+
+    test('does nothing while the live view is off', () {
+      // Picking a device in the toolbar is not a request to start streaming it.
+      final next = liveViewSelection(
+        liveSerial: null,
+        selectedSerial: _phoneSerial,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.none);
+    });
+
+    test('does nothing when the choice is already the device on screen', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: _emulator,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.none);
+    });
+
+    test('moves the live view to the newly chosen device', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: _phoneSerial,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.moveTo);
+      expect(next.device, phone);
+    });
+
+    test('stops the live view when the choice is cleared', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: null,
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.stop);
+    });
+
+    test('stops rather than leave a stale picture up when the chosen device '
+        'is not ready', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: 'offline-1',
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.stop);
+      expect(next.device, isNull);
+    });
+
+    test('stops when the chosen device is not in the list at all', () {
+      final next = liveViewSelection(
+        liveSerial: _emulator,
+        selectedSerial: 'ghost',
+        devices: devices,
+      );
+      expect(next.action, LiveViewSelectionAction.stop);
+    });
+  });
+
+  // Bug 3: the adb gesture sink took its coordinate space from the *selected*
+  // device's screen size. Once selection and streaming diverged, a tap was
+  // mapped through the wrong resolution and landed in the wrong place on the
+  // device being watched — while appearing to work.
+  group('deviceScreenSizeProvider', () {
+    ProviderContainer containerFor(FakeCommandRunner runner) {
+      final container = ProviderContainer(
+        overrides: [
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: runner),
+          ),
+          androidSdkProvider.overrideWith((ref) async => _sdk()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('reports each device its own screen size, by serial', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          final args = request.arguments.join(' ');
+          if (args == '-s $_emulator shell wm size') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'Physical size: 1080x2400\n',
+              stderr: '',
+            );
+          }
+          if (args == '-s $_phoneSerial shell wm size') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'Physical size: 1080x2340\n',
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+        },
+      );
+      final container = containerFor(runner);
+      await container.read(androidSdkProvider.future);
+
+      // The two devices differ by 60 px of height. Asking for one and being
+      // given the other's is exactly how a tap lands in the wrong place.
+      expect(
+        await container.read(deviceScreenSizeProvider(_emulator).future),
+        const DeviceScreenSize(width: 1080, height: 2400),
+      );
+      expect(
+        await container.read(deviceScreenSizeProvider(_phoneSerial).future),
+        const DeviceScreenSize(width: 1080, height: 2340),
+      );
+    });
+
+    test('asks the device named, and no other', () async {
+      final runner = FakeCommandRunner();
+      final container = containerFor(runner);
+      await container.read(androidSdkProvider.future);
+      await container.read(deviceScreenSizeProvider(_phoneSerial).future);
+
+      expect(runner.requests.map((r) => r.arguments.join(' ')), [
+        '-s $_phoneSerial shell wm size',
+      ]);
+    });
+
+    test('is null when there is no SDK to ask with', () async {
+      final container = ProviderContainer(
+        overrides: [androidSdkProvider.overrideWith((ref) async => null)],
+      );
+      addTearDown(container.dispose);
+      await container.read(androidSdkProvider.future);
+      expect(
+        await container.read(deviceScreenSizeProvider(_emulator).future),
+        isNull,
+      );
+    });
   });
 }
