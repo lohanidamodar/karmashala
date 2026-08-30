@@ -1,9 +1,17 @@
+import 'dart:io';
+
+import 'package:chitragupta/src/app/shell/quick_open/repo_file_index.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/core/process/command_runner.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/core/util/directory_change_watcher.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/git/application/changes_providers.dart';
 import 'package:chitragupta/src/features/git/application/changes_service.dart';
 import 'package:chitragupta/src/features/git/domain/file_change.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -64,5 +72,60 @@ void main() {
       '--',
       'a.dart',
     ]);
+  });
+
+  test('a merge announces the working tree it rewrote', () async {
+    final changed = <EnvironmentPath>[];
+    final notifying = ChangesService(
+      runnerFactory: FakeCommandRunnerFactory(fallback: runner),
+      environmentDao: ExecutionEnvironmentDao(db),
+      onWorkingTreeChanged: changed.add,
+    );
+    await notifying.mergeBranch(repo, 'session/s1');
+    expect(changed.single, repo);
+  });
+
+  test('the app wires a merge through to quick open\'s index', () async {
+    // B6: a merge rewrites files in place, and the index's only other notice of
+    // that is an OS watcher that exists on some platforms and watches at most
+    // eight roots.
+    // No real watcher: the point is that the *merge* reports the change, and a
+    // filesystem watch firing on its own would make the assertion vacuous.
+    final index = RepoFileIndex(
+      watcher: DirectoryChangeWatcher(recursiveWatchSupported: false),
+    );
+    addTearDown(index.dispose);
+    final touched = <String>[];
+    final subscription = index.changes.listen(touched.add);
+    addTearDown(subscription.cancel);
+    // `touch` is a no-op on a root nothing has indexed, so the root has to be
+    // known before the merge for this to prove anything. An empty temp folder,
+    // because a walk of anything real is a slow non-hermetic dependency.
+    final root = Directory.systemTemp.createTempSync('chitragupta-merge').path;
+    addTearDown(() => Directory(root).deleteSync(recursive: true));
+    await index.index(root);
+    await pumpEventQueue();
+    touched.clear();
+
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: runner),
+        ),
+        repoFileIndexProvider.overrideWithValue(index),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container
+        .read(changesServiceProvider)
+        .mergeBranch(
+          EnvironmentPath(environmentId: 'windows', path: root),
+          'session/s1',
+        );
+    await pumpEventQueue();
+
+    expect(touched, [root]);
   });
 }

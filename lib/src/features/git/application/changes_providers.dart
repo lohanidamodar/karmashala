@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/quick_open/repo_file_index.dart';
 import '../../../core/process/command_runner_providers.dart';
+import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/file_change.dart';
@@ -14,6 +16,13 @@ final changesServiceProvider = Provider<ChangesService>(
   (ref) => ChangesService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    // A merge rewrites files in place, which the watcher does see — but only on
+    // the platforms that have a recursive one, and only for a root that is
+    // being watched at all.
+    onWorkingTreeChanged: (repo) {
+      final root = ref.read(editorActionsProvider).windowsPathFor(repo);
+      if (root != null) ref.read(repoFileIndexProvider).touch(root);
+    },
   ),
 );
 

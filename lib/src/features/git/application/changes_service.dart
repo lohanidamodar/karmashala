@@ -7,14 +7,26 @@ import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 import '../domain/working_tree_status.dart';
 
+/// Notified with a repository whose working tree this service has just
+/// rewritten. Quick Open's index marks that root stale; see [CheckoutMoved] for
+/// why the notice is a callback and not the index itself.
+typedef WorkingTreeChanged = void Function(EnvironmentPath repo);
+
 /// High-level access to a repository's working-tree changes and diffs, resolving
 /// the correct runner for the repository's environment. Read-only: Git is the
 /// source of truth and there is no editor (ADR 0004).
 class ChangesService {
-  ChangesService({required this.runnerFactory, required this.environmentDao});
+  ChangesService({
+    required this.runnerFactory,
+    required this.environmentDao,
+    this.onWorkingTreeChanged,
+  });
 
   final CommandRunnerFactory runnerFactory;
   final ExecutionEnvironmentDao environmentDao;
+
+  /// See [WorkingTreeChanged]. Null in a test that only asserts git arguments.
+  final WorkingTreeChanged? onWorkingTreeChanged;
 
   GitService _gitFor(EnvironmentPath repo) {
     final env = environmentDao.getById(repo.environmentId);
@@ -86,6 +98,13 @@ class ChangesService {
   /// Pushes the current branch of [repo].
   Future<void> push(EnvironmentPath repo) => _gitFor(repo).push(repo);
 
-  Future<void> mergeBranch(EnvironmentPath repo, String branch) =>
-      _gitFor(repo).mergeBranch(repo, branch);
+  /// Merges [branch] into [repo]'s checked-out branch.
+  ///
+  /// `touch` rather than `invalidate` for the index: the directory is still the
+  /// same directory and most of its files are still the files it had, so the
+  /// cached list stays worth drawing for one frame while the re-walk runs.
+  Future<void> mergeBranch(EnvironmentPath repo, String branch) async {
+    await _gitFor(repo).mergeBranch(repo, branch);
+    onWorkingTreeChanged?.call(repo);
+  }
 }
