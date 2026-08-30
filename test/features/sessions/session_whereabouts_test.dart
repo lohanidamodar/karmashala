@@ -24,6 +24,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import '../../support/fake_command_runner.dart';
 
 /// Captured from codex-cli 0.151.0 on 2026-08-30, by holding thread
 /// `01a051ab-…` open in one process and resuming it in a second (which exited
@@ -67,6 +70,8 @@ class _StaticSettings extends SettingsController {
     overrides: [
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
+      // Never shell out: an external launch must not open a real terminal.
+      hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(
         const AgentRegistry([_exclusive]),
@@ -76,6 +81,12 @@ class _StaticSettings extends SettingsController {
   );
   return (container: container, db: db);
 }
+
+const _fixedTerminal = SystemTerminal(
+  kind: SystemTerminalKind.windowsTerminal,
+  label: 'Windows Terminal',
+  executable: 'wt.exe',
+);
 
 Future<String> launch(
   ProviderContainer container, {
@@ -90,6 +101,7 @@ Future<String> launch(
           title: 'Work',
           purpose: SessionPurpose.newSession,
           surface: surface,
+          externalTerminal: _fixedTerminal,
         ),
       );
   return launched.session.id;
@@ -224,6 +236,8 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
+        // Never shell out: an external launch must not open a real terminal.
+        hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
         agentRegistryProvider.overrideWithValue(
           const AgentRegistry([undeclared]),
