@@ -14,9 +14,9 @@ import '../../support/fixtures.dart';
 
 const _spec = AgentLaunchSpec(
   baseArguments: ['--headless'],
-  permissionArguments: {
-    PermissionMode.ask: [],
-    PermissionMode.bypass: ['--trust'],
+  permissionModes: {
+    PermissionMode.ask: PermissionModeMapping.exact([]),
+    PermissionMode.bypass: PermissionModeMapping.exact(['--trust']),
   },
   resume: AgentResume.flag('--continue'),
 );

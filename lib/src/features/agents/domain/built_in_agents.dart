@@ -32,10 +32,26 @@ const _claudeCode = AgentDescriptor(
       'stream-json',
       '--verbose',
     ],
-    permissionArguments: {
-      PermissionMode.ask: [],
-      PermissionMode.acceptEdits: ['--permission-mode', 'acceptEdits'],
-      PermissionMode.bypass: ['--permission-mode', 'bypassPermissions'],
+    permissionModes: {
+      // Empty **because it is exact**: `--permission-mode default` is what
+      // Claude Code already does, so asking for it by name would add a flag
+      // that changes nothing. This is the case that makes the fidelity a
+      // declared field rather than something inferred from the list's length —
+      // Antigravity's absent modes below are the other half of the same point.
+      PermissionMode.ask: PermissionModeMapping.exact(
+        [],
+        note:
+            'Claude Code prompts before every edit and command by default, so '
+            'no flag is needed.',
+      ),
+      PermissionMode.acceptEdits: PermissionModeMapping.exact([
+        '--permission-mode',
+        'acceptEdits',
+      ]),
+      PermissionMode.bypass: PermissionModeMapping.exact([
+        '--permission-mode',
+        'bypassPermissions',
+      ]),
     },
     resume: AgentResume.flag('--resume'),
     interactiveResume: AgentResume.flag('--resume'),
@@ -104,10 +120,25 @@ const _codex = AgentDescriptor(
   binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
   launch: AgentLaunchSpec(
     baseArguments: ['app-server'],
-    permissionArguments: {
-      PermissionMode.ask: ['--ask-for-approval', 'on-request'],
-      PermissionMode.acceptEdits: ['--ask-for-approval', 'on-failure'],
-      PermissionMode.bypass: ['--dangerously-bypass-approvals-and-sandbox'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact([
+        '--ask-for-approval',
+        'on-request',
+      ]),
+      // Codex has no accept-edits mode, and `on-failure` is not one wearing a
+      // different name: it runs commands *without* asking and prompts only once
+      // one has already failed. That auto-approves strictly more than edits, so
+      // it is declared approximate and says so where the user picks it.
+      PermissionMode.acceptEdits: PermissionModeMapping.approximate(
+        ['--ask-for-approval', 'on-failure'],
+        note:
+            'Codex has no accept-edits mode. The nearest is on-failure, which '
+            'also runs commands without asking and prompts only after one '
+            'fails.',
+      ),
+      PermissionMode.bypass: PermissionModeMapping.exact([
+        '--dangerously-bypass-approvals-and-sandbox',
+      ]),
     },
     resume: AgentResume.flag('--resume'),
     // Interactively Codex resumes with a subcommand, not a flag.
@@ -171,10 +202,14 @@ const _antigravity = AgentDescriptor(
   binaries: AgentBinaries(windows: ['antigravity'], posix: ['antigravity']),
   launch: AgentLaunchSpec(
     baseArguments: ['--stdio'],
-    permissionArguments: {
-      PermissionMode.ask: [],
-      PermissionMode.acceptEdits: [],
-      PermissionMode.bypass: ['--yolo'],
+    // `ask` and `acceptEdits` are **absent, not empty**. We know of no
+    // Antigravity flag for either, and the old `[]` meant the app passed
+    // nothing while the UI reported the user's choice as applied — Loop 31 §4's
+    // sharpest case, since the mode being silently dropped was the *safe* one.
+    // Omitted means not offered, and the control says why instead of implying a
+    // policy we cannot enforce.
+    permissionModes: {
+      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
     },
     resume: AgentResume.flag('--resume'),
   ),

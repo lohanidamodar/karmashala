@@ -32,9 +32,9 @@ const _rover = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    permissionArguments: {
-      PermissionMode.ask: ['--careful'],
-      PermissionMode.bypass: ['--trust-me'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
     interactiveResume: AgentResume.flag('--continue'),
   ),

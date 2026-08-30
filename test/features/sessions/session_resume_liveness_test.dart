@@ -36,8 +36,8 @@ const _codexish = AgentDescriptor(
   displayName: 'Codexish',
   binaries: AgentBinaries(windows: ['codexish'], posix: ['codexish']),
   launch: AgentLaunchSpec(
-    permissionArguments: {
-      PermissionMode.ask: ['--ask'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
     },
     interactiveResume: AgentResume.subcommand('resume'),
   ),
