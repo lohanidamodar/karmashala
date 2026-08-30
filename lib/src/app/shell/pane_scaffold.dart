@@ -46,11 +46,17 @@ class PaneScaffold extends StatelessWidget {
               children: [
                 Icon(icon, size: Chrome.iconSmall, color: accent),
                 const SizedBox(width: Insets.sm),
-                Text(
-                  title.toUpperCase(),
-                  style: text.labelSmall?.copyWith(color: accent),
+                // Expanded rather than a Spacer: the title is the only thing
+                // in this row that can give way, and at the Explorer's own
+                // 200px minimum the actions alone are wider than the pane.
+                Expanded(
+                  child: Text(
+                    title.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.labelSmall?.copyWith(color: accent),
+                  ),
                 ),
-                const Spacer(),
                 ...actions,
               ],
             ),

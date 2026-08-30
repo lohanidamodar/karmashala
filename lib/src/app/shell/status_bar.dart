@@ -6,6 +6,7 @@ import '../theme/design_tokens.dart';
 import 'side_panel_state.dart';
 
 import '../../features/git/application/changes_providers.dart';
+import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 
@@ -31,6 +32,7 @@ class ShellStatusBar extends ConsumerWidget {
     final terminals = ref.watch(terminalSessionsControllerProvider);
     final detached = terminals.detached.length;
     final panel = ref.watch(sidePanelProvider);
+    final attention = ref.watch(attentionCountProvider);
 
     final style = theme.textTheme.labelSmall?.copyWith(
       letterSpacing: 0,
@@ -73,6 +75,17 @@ class ShellStatusBar extends ConsumerWidget {
                 icon: AppIcons.pictureInpicture,
                 label: '$detached in background',
                 emphasised: true,
+              ),
+            if (attention > 0)
+              _Item(
+                icon: AppIcons.warningCircle,
+                label: attention == 1 ? '1 needs you' : '$attention need you',
+                emphasised: true,
+                // The same number the rail badges and the tray badges, and the
+                // same click: there is one inbox and three ways in.
+                onTap: () => ref
+                    .read(sidePanelProvider.notifier)
+                    .select(SidePanelSurface.inbox),
               ),
             _Item(
               icon: AppIcons.sidebarSimple,

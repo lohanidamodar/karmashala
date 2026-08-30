@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// ended up behind one index. Naming them makes it obvious when something new is
 /// being added to a grab-bag instead of given its own home.
 enum SidePanelSurface {
+  /// First on the rail because it is the thing you check first: everything
+  /// pending, in one list, whichever pane owns the thing that is waiting.
+  inbox('Inbox', drawsOwnHeader: true),
   changes('Changes', drawsOwnHeader: true),
   github('GitHub', drawsOwnHeader: true),
   files('Files', drawsOwnHeader: true),

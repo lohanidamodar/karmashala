@@ -3,7 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/terminal/application/terminal_sessions_controller.dart';
-import 'command_palette.dart';
+import 'quick_open/quick_open.dart';
 import 'shell_state.dart';
 import 'side_panel_state.dart';
 
@@ -33,9 +33,17 @@ class ToggleFocusModeIntent extends Intent {
   const ToggleFocusModeIntent();
 }
 
-/// Intent: open the command palette.
-class OpenCommandPaletteIntent extends Intent {
-  const OpenCommandPaletteIntent();
+/// Intent: open quick open, optionally with text already typed.
+class OpenQuickOpenIntent extends Intent {
+  const OpenQuickOpenIntent({this.query = ''});
+
+  /// Seed text. `>` opens straight into the command list.
+  final String query;
+}
+
+/// Intent: show the attention inbox.
+class OpenAttentionInboxIntent extends Intent {
+  const OpenAttentionInboxIntent();
 }
 
 /// Wraps [child] with the application's desktop keyboard shortcuts.
@@ -50,7 +58,14 @@ class OpenCommandPaletteIntent extends Intent {
 /// | `Ctrl+B` | show or hide the Explorer |
 /// | `` Ctrl+` `` | switch the workbench between the terminal and the chat view |
 /// | `Ctrl+\` | focus mode — the workbench takes the window |
-/// | `Ctrl+K` | command palette |
+/// | `Ctrl+K` / `Ctrl+P` | quick open — sessions, files, branches, PRs, commands |
+/// | `Ctrl+Shift+P` | quick open, already filtered to commands |
+/// | `Ctrl+Shift+A` | the attention inbox — open it, or close it again |
+///
+/// `Ctrl+Shift+A` was chosen against the whole existing map: the terminal owns
+/// `Ctrl+Shift+D/E/W/F/T` and `Ctrl+Shift+↑/↓`, the shell owns `Ctrl+1/2/3`,
+/// `Ctrl+B`, `` Ctrl+` ``, `Ctrl+\`, `Ctrl+N`, `Ctrl+Shift+N` and quick open's
+/// three. `A` for attention was free in every one of them.
 ///
 /// `` Ctrl+` `` was "show/hide the terminal dock" until Loop 47. There is no
 /// dock to hide now, so it does the thing the user actually wanted from it: put
@@ -78,7 +93,17 @@ class ShellShortcuts extends ConsumerWidget {
     SingleActivator(LogicalKeyboardKey.backslash, control: true):
         ToggleFocusModeIntent(),
     SingleActivator(LogicalKeyboardKey.keyK, control: true):
-        OpenCommandPaletteIntent(),
+        OpenQuickOpenIntent(),
+    SingleActivator(LogicalKeyboardKey.keyP, control: true):
+        OpenQuickOpenIntent(),
+    // Straight into the command list, VS Code style. Also the only one of the
+    // three with a chance of surviving a focused terminal pane: a plain
+    // `Ctrl+K`/`Ctrl+P` is a control character the shell expects to receive,
+    // and xterm consumes it before this map is ever consulted.
+    SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true):
+        OpenQuickOpenIntent(query: '>'),
+    SingleActivator(LogicalKeyboardKey.keyA, control: true, shift: true):
+        OpenAttentionInboxIntent(),
   };
 
   @override
@@ -88,9 +113,19 @@ class ShellShortcuts extends ConsumerWidget {
       shortcuts: _shortcuts,
       child: Actions(
         actions: {
-          OpenCommandPaletteIntent: CallbackAction<OpenCommandPaletteIntent>(
+          OpenQuickOpenIntent: CallbackAction<OpenQuickOpenIntent>(
             onInvoke: (intent) {
-              CommandPalette.show(context);
+              QuickOpen.show(context, initialQuery: intent.query);
+              return null;
+            },
+          ),
+          OpenAttentionInboxIntent: CallbackAction<OpenAttentionInboxIntent>(
+            onInvoke: (intent) {
+              // `select` toggles when the surface is already showing, so
+              // the same chord opens and closes it.
+              ref
+                  .read(sidePanelProvider.notifier)
+                  .select(SidePanelSurface.inbox);
               return null;
             },
           ),

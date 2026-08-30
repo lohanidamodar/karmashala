@@ -4,6 +4,7 @@ import '../../agents/data/agent_status_service.dart';
 import '../../agents/domain/agent_status.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/agent_status_transition.dart';
+import '../domain/inbox_item.dart';
 import '../domain/notification_policy.dart';
 import '../domain/notification_request.dart';
 import '../domain/notification_settings.dart';
@@ -33,6 +34,7 @@ class AgentStatusWatcher {
     required this.visibleSessionIds,
     required this.onAttention,
     required this.onNotify,
+    this.onInbox,
     this.policy = const AgentNotificationPolicy(),
     this.interval = const Duration(seconds: 5),
   });
@@ -48,6 +50,16 @@ class AgentStatusWatcher {
   final Set<String> Function() visibleSessionIds;
   final void Function(List<SessionAttention> attention) onAttention;
   final void Function(PendingNotification event) onNotify;
+
+  /// Everything one poll saw, for the attention inbox: what is waiting, what
+  /// was looked at, and what changed.
+  ///
+  /// A third output rather than a reshaping of the first two, because the inbox
+  /// needs a fact neither of them carries — *which sessions the watcher could
+  /// still see*. Without it an inbox cannot tell "the approval was answered"
+  /// from "we lost sight of the session", and Loop 42's tray silently dropped
+  /// the second case.
+  final void Function(InboxUpdate update)? onInbox;
 
   final AgentNotificationPolicy policy;
   final Duration interval;
@@ -90,6 +102,7 @@ class AgentStatusWatcher {
 
       final attention = <SessionAttention>[];
       final seen = <AgentSessionKey>{};
+      final news = <({WatchedSession session, NotificationReason reason})>[];
 
       for (final session in sessions) {
         seen.add(session.key);
@@ -103,6 +116,20 @@ class AgentStatusWatcher {
 
         final previous = _lastStatus[session.key];
         _lastStatus[session.key] = report.status;
+
+        // What happened, before anything about whether to interrupt. The inbox
+        // takes this; the toast takes the gated form below.
+        final reason = policy
+            .newsIn(
+              AgentStatusTransition(
+                session: session.key,
+                from: previous,
+                to: report.status,
+                source: report.source,
+              ),
+            )
+            .reason;
+        if (reason != null) news.add((session: session, reason: reason));
 
         final decision = policy.decide(
           NotificationContext(
@@ -134,6 +161,7 @@ class AgentStatusWatcher {
       // anything just changed" — the conservative answer.
       _lastStatus.removeWhere((key, _) => !seen.contains(key));
       onAttention(attention);
+      onInbox?.call(InboxUpdate(waiting: attention, watched: seen, news: news));
     } finally {
       _polling = false;
     }

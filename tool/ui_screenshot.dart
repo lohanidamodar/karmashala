@@ -5,16 +5,25 @@
 //   flutter test tool/ui_screenshot.dart
 //
 // Images land in build/ui-screenshots/.
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:chitragupta/src/app/chitragupta_app.dart';
+import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
 import 'package:chitragupta/src/app/shell/side_panel_state.dart';
+import 'package:chitragupta/src/app/shell/status_bar.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
+import 'package:chitragupta/src/features/notifications/application/attention_inbox.dart';
+import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
+import 'package:chitragupta/src/features/notifications/domain/inbox_item.dart';
+import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
+import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
+import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
@@ -138,6 +147,11 @@ void main() {
     required Size size,
     required Brightness brightness,
     SidePanelSurface? panel = SidePanelSurface.changes,
+
+    /// Runs once the shell is mounted and the panel is set, so a frame can put
+    /// the app into a state (an inbox with something in it, quick open showing)
+    /// before the pixels are taken.
+    Future<void> Function(WidgetTester tester)? afterMount,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -190,6 +204,10 @@ void main() {
     controller.collapse();
     if (panel != null) controller.select(panel);
     await settle(tester);
+    if (afterMount != null) {
+      await afterMount(tester);
+      await settle(tester);
+    }
 
     await tester.runAsync(() async {
       final boundary =
@@ -255,6 +273,75 @@ void main() {
       name: 'light-narrow',
       size: const Size(700, 820),
       brightness: Brightness.light,
+    );
+  });
+
+  testWidgets('dark attention inbox', (tester) async {
+    await shoot(
+      tester,
+      name: 'dark-inbox',
+      size: desktop,
+      brightness: Brightness.dark,
+      panel: SidePanelSurface.inbox,
+      afterMount: (tester) async {
+        const key = AgentSessionKey(AgentIds.claudeCode, 'cli-1');
+        const other = AgentSessionKey(AgentIds.claudeCode, 'cli-2');
+        container
+            .read(attentionInboxProvider.notifier)
+            .apply(
+              InboxUpdate(
+                watched: {key, other},
+                waiting: const [
+                  SessionAttention(
+                    session: WatchedSession(
+                      key: other,
+                      label: 'Fix the scrollback restore',
+                      openId: 's2',
+                      imported: false,
+                    ),
+                    kind: AttentionKind.needsInput,
+                  ),
+                ],
+                news: const [
+                  (
+                    session: WatchedSession(
+                      key: key,
+                      label: 'Overhaul the desktop UI',
+                      openId: 's1',
+                      imported: false,
+                    ),
+                    reason: NotificationReason.finished,
+                  ),
+                ],
+              ),
+            );
+      },
+    );
+  });
+
+  testWidgets('dark quick open', (tester) async {
+    await shoot(
+      tester,
+      name: 'dark-quick-open',
+      size: desktop,
+      brightness: Brightness.dark,
+      panel: null,
+      afterMount: (tester) async {
+        container.read(selectedRepositoryIdProvider.notifier).select('r1');
+        final context = tester.element(find.byType(ShellStatusBar));
+        unawaited(QuickOpen.show(context));
+        await tester.pump();
+        // The dialog's own field, not the Explorer's search box — which is
+        // also a TextField and is the one `.first` finds.
+        await tester.enterText(
+          find.descendant(
+            of: find.byType(QuickOpen),
+            matching: find.byType(TextField),
+          ),
+          'des',
+        );
+        await tester.pump();
+      },
     );
   });
 }

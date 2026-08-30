@@ -16,6 +16,7 @@ import '../data/desktop_notification_presenter.dart';
 import '../domain/notification_settings.dart';
 import '../domain/session_attention.dart';
 import 'agent_status_watcher.dart';
+import 'attention_inbox.dart';
 import 'notification_dispatcher.dart';
 import 'watched_session_loader.dart';
 
@@ -162,6 +163,8 @@ final agentStatusWatcherProvider = Provider<AgentStatusWatcher>((ref) {
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
     onAttention: (attention) =>
         ref.read(sessionAttentionProvider.notifier).set(attention),
+    onInbox: (update) =>
+        ref.read(attentionInboxProvider.notifier).apply(update),
     onNotify: (event) => ref.read(notificationDispatcherProvider).add(event),
   );
   ref.onDispose(watcher.dispose);

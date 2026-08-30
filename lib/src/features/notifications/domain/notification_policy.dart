@@ -99,15 +99,17 @@ class NotificationContext {
 class AgentNotificationPolicy {
   const AgentNotificationPolicy();
 
-  NotificationDecision decide(NotificationContext context) {
-    final settings = context.settings;
-    if (!settings.enabled) {
-      return const NotificationDecision.suppress(
-        NotificationSuppression.notificationsDisabled,
-      );
-    }
-
-    final transition = context.transition;
+  /// The news in [transition] — the half of the rule that is about the
+  /// **agent**, with nothing in it about the user's attention.
+  ///
+  /// Split out so the attention inbox and the toast share one classifier. They
+  /// must agree about what happened and disagree only about whether it is worth
+  /// interrupting for: an inbox that used its own rules would list things no
+  /// toast ever mentioned, and the two counts would drift apart within a day.
+  ///
+  /// Returns `notify(reason)` when there is news, and the suppression that
+  /// explains its absence when there is not.
+  NotificationDecision newsIn(AgentStatusTransition transition) {
     if (transition.from == transition.to) {
       return const NotificationDecision.suppress(
         NotificationSuppression.notAChange,
@@ -118,19 +120,32 @@ class AgentNotificationPolicy {
         NotificationSuppression.lostTrack,
       );
     }
-
     final reason = _classify(transition);
     if (reason == null) {
       return const NotificationDecision.suppress(
         NotificationSuppression.notWorthInterrupting,
       );
     }
-
     if (!_justHappened(transition)) {
       return const NotificationDecision.suppress(
         NotificationSuppression.noEvidenceOfChange,
       );
     }
+    return NotificationDecision.notify(reason);
+  }
+
+  NotificationDecision decide(NotificationContext context) {
+    final settings = context.settings;
+    if (!settings.enabled) {
+      return const NotificationDecision.suppress(
+        NotificationSuppression.notificationsDisabled,
+      );
+    }
+
+    final transition = context.transition;
+    final news = newsIn(transition);
+    final reason = news.reason;
+    if (reason == null) return news;
 
     if (!_wanted(reason, settings)) {
       return const NotificationDecision.suppress(

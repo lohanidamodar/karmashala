@@ -9,6 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/widgets/desktop_dialog.dart';
+import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
@@ -20,6 +21,8 @@ import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
+import '../application/session_diff_stat.dart';
+import 'session_card.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
@@ -27,8 +30,8 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
-import '../../sessions/domain/session_resume.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../sessions/domain/session_resume.dart';
 import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -333,6 +336,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final expanded = _expandedProjects.contains(project.id);
     final missing =
         ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
+    // Sessions are counted from the database; changed files are whatever the
+    // per-checkout providers have already answered, so a header never starts a
+    // second wave of git.
+    final summary = ref.watch(projectSummaryProvider(project.id));
     final rows = <Widget>[
       _TreeRow(
         depth: 0,
@@ -405,6 +412,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           if (action == 'refresh') _syncProject(project);
           if (action == 'delete') _confirmDeleteProject(project);
         },
+        // MonoCode's project header carries the aggregate on the right, and it
+        // is the one number that says whether a project is worth opening.
+        aggregate: summary.label,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -592,9 +602,19 @@ class _TreeRow extends StatelessWidget {
     this.subtitle,
     this.expandedState,
     this.trailing,
+    this.aggregate,
     this.menuItems,
     this.onMenu,
   });
+
+  /// A short right-hand summary — "6 sessions · 3 changed". Dropped entirely
+  /// below [_aggregateWidth]: a ListTile whose trailing eats the tile is an
+  /// assertion, and half a word of aggregate is worth less than the row.
+  final String? aggregate;
+
+  /// The narrowest pane that still has room for [aggregate] beside the row's
+  /// buttons. The Explorer clamps to 200px, so this is a real case.
+  static const _aggregateWidth = 260.0;
 
   final int depth;
   final bool selected;
@@ -610,8 +630,14 @@ class _TreeRow extends StatelessWidget {
   final bool? expandedState;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) =>
+        _tile(context, wide: constraints.maxWidth >= _aggregateWidth),
+  );
+
+  Widget _tile(BuildContext context, {required bool wide}) {
     final theme = Theme.of(context);
+    final label = wide ? aggregate : null;
     final tile = ListTile(
       dense: true,
       selected: selected,
@@ -655,11 +681,31 @@ class _TreeRow extends StatelessWidget {
           ],
         ],
       ),
-      trailing: trailing,
+      trailing: label == null
+          ? trailing
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 132),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                ?trailing,
+              ],
+            ),
       onTap: onTap,
     );
     if (menuItems == null || onMenu == null) return tile;
-    return _ContextMenuRegion(
+    return ContextMenuRegion(
       menuItems: menuItems!,
       onSelected: onMenu!,
       child: tile,
@@ -738,33 +784,50 @@ class _NativeSessionRow extends ConsumerWidget {
     // the user clicks anything. Three separately-weighted facts, none of which
     // is allowed to become a confident "active": see [SessionWhereabouts].
     final whereabouts = ref.watch(sessionWhereaboutsProvider(session.id));
-    final subtitle = [
-      session.status.name,
-      if (session.useWorktree) 'worktree',
-      // "running here" is left out: the row already says `running` and carries a
-      // live badge, so repeating it would spend the row's width on the one fact
-      // the user can already see. The other two are things nothing else says.
-      if (whereabouts.external) 'opened in an external terminal',
-      if (whereabouts.refusedResume) 'open in another process',
-    ];
-    final lastSeen = whereabouts.lastSeenLabel(
-      ref.read(clockProvider).nowUtc(),
-    );
-    if (lastSeen != null) subtitle.add(lastSeen);
+    // The newest evidence the agent itself produced, or failing that when the
+    // session was created. Never the time of our last poll: ageing a poll would
+    // make a week-old transcript look live.
+    final now = ref.read(clockProvider).nowUtc();
+    final since = whereabouts.lastSeen ?? session.createdAt;
+    final agentId = ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+    final (statusIcon, statusColor) = _status(session.status, context);
+    // Asynchronous by construction: the card renders without it and fills in
+    // when git answers. Keyed by session, deduplicated by checkout.
+    final stat = ref.watch(sessionDiffStatProvider(session.id)).asData?.value;
 
-    return _SessionRow(
+    return SessionCard(
       depth: depth,
       selected: selected,
       pinned: pinned,
-      leading: _statusIcon(session.status, context),
-      title: session.title,
+      agentIcon: statusIcon,
+      agentColor: statusColor,
+      agentLabel: [
+        agentId == null
+            ? 'Agent'
+            : AgentRegistry.builtIn.displayNameFor(agentId),
+        session.status.name,
+      ].join('  ·  '),
       // Two different things, deliberately both shown: the badge is what the
       // agent is doing *now* (from a hook, its transcript, or its screen) and
-      // the subtitle is the session's own lifecycle. A session can be `running`
-      // and its agent idle, waiting for you to type.
+      // the word beside its name is the session's own lifecycle. A session can
+      // be `running` and its agent idle, waiting for you to type.
       badge: AgentStatusBadge(sessionId: session.id),
-      subtitle: subtitle.join(' · '),
-      subtitleTooltip: whereabouts.explanation,
+      age: compactAge(now.difference(since)),
+      // The corner has room for a number, not for how much to trust it. Loop
+      // 46's exact wording survives on hover, including the distinction
+      // between evidence the agent produced and the row's own birthday.
+      ageTooltip:
+          whereabouts.lastSeenLabel(now) ??
+          'Created ${describeAge(now.difference(session.createdAt))}',
+      title: session.title,
+      branch: stat?.branch,
+      whereabouts: whereabouts.note,
+      whereaboutsTooltip: whereabouts.explanation,
+      stat: stat,
+      worktree: session.useWorktree,
       onTap: select,
       menuItems: [
         for (final terminal in terminals)
@@ -826,17 +889,18 @@ class _NativeSessionRow extends ConsumerWidget {
     );
   }
 
-  Widget _statusIcon(SessionStatus status, BuildContext context) {
+  /// The session's lifecycle, as a glyph and a semantic colour. Returned as a
+  /// record rather than a widget because the card draws it at its own size.
+  (IconData, Color) _status(SessionStatus status, BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final semantic = SemanticColors.of(context);
-    final (IconData icon, Color color) = switch (status) {
+    return switch (status) {
       SessionStatus.running => (AppIcons.playCircle, semantic.working),
       SessionStatus.completed => (AppIcons.checkCircle, semantic.idle),
       SessionStatus.failed => (AppIcons.warningCircle, semantic.failure),
       SessionStatus.cancelled => (AppIcons.xCircle, scheme.outline),
       _ => (AppIcons.circle, scheme.outline),
     };
-    return Icon(icon, size: 16, color: color);
   }
 }
 
@@ -866,8 +930,7 @@ class _ImportedSessionRow extends ConsumerWidget {
     final updatedAt = session.updatedAt;
     final lastSeen = updatedAt == null
         ? null
-        : 'last seen '
-              '${describeAge(ref.read(clockProvider).nowUtc().difference(updatedAt))}';
+        : compactAge(ref.read(clockProvider).nowUtc().difference(updatedAt));
 
     Future<void> onMenu(String action) async {
       switch (action) {
@@ -908,22 +971,24 @@ class _ImportedSessionRow extends ConsumerWidget {
       ref.read(selectedImportedSessionIdProvider.notifier).select(session.id);
     }
 
-    return _SessionRow(
+    final stat = ref.watch(repositoryDiffStatProvider(repoId)).asData?.value;
+
+    return SessionCard(
       depth: depth + (session.isSubagent ? 1 : 0),
       selected: selected,
       pinned: pinned,
-      leading: Icon(
-        session.isSubagent
-            ? AppIcons.arrowBendDownRight
-            : AppIcons.clockCounterClockwise,
-        size: 16,
-      ),
-      title: session.displayTitle,
-      subtitle: [cliLabel, 'imported', ?lastSeen].join(' · '),
-      subtitleTooltip: lastSeen == null
+      agentIcon: session.isSubagent
+          ? AppIcons.arrowBendDownRight
+          : AppIcons.clockCounterClockwise,
+      agentLabel: [cliLabel, 'imported'].join('  ·  '),
+      age: lastSeen,
+      ageTooltip: lastSeen == null
           ? null
           : 'The agent last wrote to this conversation then. We cannot see '
                 'whether a process still has it open.',
+      title: session.displayTitle,
+      branch: stat?.branch,
+      stat: stat,
       onTap: select,
       menuItems: [
         DesktopMenuItem(
@@ -965,144 +1030,6 @@ class _ImportedSessionRow extends ConsumerWidget {
       onMenu: onMenu,
     );
   }
-}
-
-/// Shared chrome for a session row: indented [ListTile] with selection, a
-/// trailing menu button, and a right-click (secondary tap) context menu.
-class _SessionRow extends StatelessWidget {
-  const _SessionRow({
-    required this.depth,
-    required this.selected,
-    required this.leading,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    required this.menuItems,
-    required this.onMenu,
-    this.pinned = false,
-    this.badge,
-    this.subtitleTooltip,
-  });
-
-  final int depth;
-  final bool selected;
-  final Widget leading;
-  final String title;
-  final String subtitle;
-
-  /// The longer form of what [subtitle] says, when the short form had to leave
-  /// something out — chiefly *how sure we are*. Falls back to the subtitle
-  /// itself, which is also what makes an ellipsised row readable.
-  final String? subtitleTooltip;
-
-  /// Live agent status, for rows that have one. Sits between the title and the
-  /// lifecycle text so "what is it doing right now" reads before "what happened
-  /// to it".
-  final Widget? badge;
-  final VoidCallback onTap;
-  final List<PopupMenuEntry<String>> menuItems;
-  final ValueChanged<String> onMenu;
-  final bool pinned;
-
-  @override
-  Widget build(BuildContext context) {
-    return _ContextMenuRegion(
-      menuItems: menuItems,
-      onSelected: onMenu,
-      child: ListTile(
-        dense: true,
-        selected: selected,
-        contentPadding: EdgeInsets.only(left: 8.0 + depth * 16 + 36, right: 0),
-        leading: leading,
-        // The subtitle grew in Loop 46 — it now carries what we know about
-        // where the session's process is — so it has to be capped rather than
-        // laid out at its natural width. Half the row, ellipsised, with the
-        // title taking the rest: the alternative is a row that overflows at the
-        // pane widths people actually use.
-        title: LayoutBuilder(
-          builder: (context, constraints) => Row(
-            children: [
-              if (pinned) ...[
-                Icon(
-                  AppIcons.pushPinFill,
-                  size: 11,
-                  color: Theme.of(context).colorScheme.tertiary,
-                ),
-                const SizedBox(width: 4),
-              ],
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (badge != null) ...[const SizedBox(width: 6), badge!],
-              const SizedBox(width: 6),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
-                child: Tooltip(
-                  message: subtitleTooltip == null
-                      ? subtitle
-                      : '$subtitle\n$subtitleTooltip',
-                  child: Text(
-                    subtitle,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(fontSize: 10),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        trailing: PopupMenuButton<String>(
-          tooltip: 'Session actions',
-          icon: const Icon(AppIcons.dotsThreeVertical, size: 16),
-          onSelected: onMenu,
-          itemBuilder: (context) => menuItems,
-        ),
-        onTap: onTap,
-      ),
-    );
-  }
-}
-
-class _ContextMenuRegion extends StatelessWidget {
-  const _ContextMenuRegion({
-    required this.menuItems,
-    required this.onSelected,
-    required this.child,
-  });
-
-  final List<PopupMenuEntry<String>> menuItems;
-  final ValueChanged<String> onSelected;
-  final Widget child;
-
-  Future<void> _show(BuildContext context, Offset position) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(position.dx, position.dy, 1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: menuItems,
-    );
-    if (selected != null) onSelected(selected);
-  }
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.translucent,
-    onSecondaryTapDown: (details) => _show(context, details.globalPosition),
-    child: child,
-  );
 }
 
 Future<void> _openNativeInTerminal(
