@@ -22,6 +22,7 @@ import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
+import '../../../app/shell/shell_shortcuts.dart';
 import 'command_history_sheet.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
@@ -191,8 +192,19 @@ class TerminalActions {
   /// the widget consults *before* its own shortcut manager and before
   /// `Terminal.keyInput`.
   ///
-  /// All are `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`, `Ctrl+F` and `Ctrl+W`
-  /// are live control characters a shell expects to receive.
+  /// The pane's own verbs are all `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`,
+  /// `Ctrl+F` and `Ctrl+W` are live control characters a shell expects to
+  /// receive.
+  ///
+  /// **This is also the only hook the app's own chords have.** Key events reach
+  /// the focused node first and bubble *upward*, so no wrapper above
+  /// `TerminalView` can see a key before it does — and xterm reports every key
+  /// as handled, turning an unclaimed `Ctrl+B` into a literal `^B` and leaving
+  /// the shell's ambient [Shortcuts] permanently unreachable from the app's
+  /// primary surface. So the pane asks [handleAppChordFromTerminal] — the
+  /// declared skip-list, derived from the one shortcut map — and dispatches
+  /// what it finds through the same [Actions] the rest of the app uses. One
+  /// implementation of "toggle the side panel", reached two ways.
   KeyEventResult onPaneKey(FocusNode node, KeyEvent event) {
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed) return KeyEventResult.ignored;
@@ -236,7 +248,19 @@ class TerminalActions {
       }
     }
 
-    if (action == null) return KeyEventResult.ignored;
+    // The pane's own verbs win; then the app's skip-list. Nothing overlaps
+    // today, and ordering it this way keeps it that way — a chord the pane
+    // owns cannot be taken from it by a later addition to the shell map.
+    if (action == null) {
+      final context = node.context;
+      if (context == null) return KeyEventResult.ignored;
+      // Claimed for the app, or passed to the process. There is no third
+      // answer: reporting `ignored` for a chord the shell owns would let
+      // xterm's fallback type it as a control character.
+      return handleAppChordFromTerminal(context, event)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
+    }
     // Act once, on the down event, but swallow the matching up/repeat too so a
     // consumed combo cannot leak a character through xterm's fallback.
     if (event is KeyDownEvent) action();

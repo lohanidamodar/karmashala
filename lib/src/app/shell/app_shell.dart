@@ -27,6 +27,7 @@ import '../../features/settings/application/settings_controller.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import 'quick_open/quick_open.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
@@ -264,9 +265,16 @@ class _ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
     // the menu bar so the chrome reads like a native desktop menu bar.
     return AppBar(
       titleSpacing: Insets.xs,
-      title: const Align(
-        alignment: Alignment.centerLeft,
-        child: _DesktopMenuBar(),
+      title: const Row(
+        children: [
+          _DesktopMenuBar(),
+          SizedBox(width: Insets.sm),
+          // Quick open had no mouse affordance at all (Loop 50 §8.1): no
+          // button, no menu item, nothing to click. A search field beside the
+          // menus is where every desktop app of this shape puts it, and it is
+          // also the only place the chord can teach itself.
+          Flexible(child: QuickOpenButton()),
+        ],
       ),
       actions: [
         Builder(
@@ -289,14 +297,18 @@ class _ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
         const VerticalDivider(indent: 7, endIndent: 7, width: Insets.sm),
         IconButton(
-          tooltip: 'Toggle Explorer (Ctrl+B)',
+          tooltip:
+              'Toggle Explorer  ·  '
+              '${shellChordLabel<ToggleExplorerPaneIntent>()}'
+              '  (Ctrl+B outside a terminal pane)',
           isSelected: explorerVisible,
           icon: const Icon(AppIcons.treeStructure),
           onPressed: () =>
               ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
         ),
         IconButton(
-          tooltip: 'Toggle side panel (Ctrl+3)',
+          tooltip:
+              'Toggle side panel  ·  ${shellChordLabel<ToggleSidePanelIntent>()}',
           isSelected: panelOpen,
           icon: const Icon(AppIcons.sidebarSimple),
           onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
@@ -407,6 +419,16 @@ class _DesktopMenuBar extends ConsumerWidget {
             ),
             const Divider(height: 1),
             MenuItemButton(
+              leadingIcon: const Icon(AppIcons.magnifyingGlass),
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.keyK,
+                control: true,
+              ),
+              onPressed: () => QuickOpen.show(context),
+              child: const Text('Go to…'),
+            ),
+            const Divider(height: 1),
+            MenuItemButton(
               leadingIcon: const Icon(AppIcons.globe),
               onPressed: () => _showDetected(context, ref),
               child: const Text('Detect CLI sessions'),
@@ -423,9 +445,12 @@ class _DesktopMenuBar extends ConsumerWidget {
           menuChildren: [
             CheckboxMenuButton(
               value: shell.explorerPaneVisible,
+              // Ctrl+Shift+B, not Ctrl+B: a menu should teach the chord that
+              // works everywhere, and Ctrl+B belongs to tmux inside a pane.
               shortcut: const SingleActivator(
                 LogicalKeyboardKey.keyB,
                 control: true,
+                shift: true,
               ),
               onChanged: (_) => ref
                   .read(shellControllerProvider.notifier)

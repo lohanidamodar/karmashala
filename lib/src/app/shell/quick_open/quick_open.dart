@@ -292,6 +292,69 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   }
 }
 
+/// The mouse's way in to [QuickOpen] — a search field that is really a button,
+/// sitting beside the menu bar the way a desktop app's command centre does.
+///
+/// Loop 50 shipped quick open with **no** mouse affordance: no button, no menu
+/// item, nothing to click. A keyboard-only entrance to the app's main way of
+/// finding things is an entrance most people never find.
+class QuickOpenButton extends StatelessWidget {
+  const QuickOpenButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = scheme.onSurfaceVariant;
+    return Tooltip(
+      message: 'Search sessions, files, branches and commands  ·  Ctrl+K',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Material(
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(Radii.sm),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            onTap: () => QuickOpen.show(context),
+            child: Container(
+              height: 24,
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.sm),
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(AppIcons.magnifyingGlass, size: 13, color: muted),
+                  const SizedBox(width: Insets.sm),
+                  Flexible(
+                    child: Text(
+                      'Go to…',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                    ),
+                  ),
+                  const SizedBox(width: Insets.md),
+                  Text(
+                    'Ctrl+K',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: muted,
+                      fontFamily: kMonoFamily,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SearchField extends StatelessWidget {
   const _SearchField({required this.controller, required this.onChanged});
 
