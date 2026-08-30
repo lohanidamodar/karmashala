@@ -9,6 +9,8 @@ environment:
 dependencies:
   chitragupta_local_ipc:
     path: packages/local_ipc
+  # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
+  cryptography: ^2.9.0
   dartssh2: ^3.3.1
   file_selector: ^1.1.0
   flutter:
@@ -34,6 +36,8 @@ dependencies:
   tray_manager: ^0.5.3
   url_launcher: ^6.3.2
   wakelock_plus: ^1.5.2
+  # The relay client transport for the mobile companion.
+  web_socket_channel: ^3.0.3
   window_manager: ^0.5.1
   # Vendored fork — see packages/xterm/VENDORED.md.
   xterm:
@@ -41,6 +45,9 @@ dependencies:
   yaml: ^3.1.4
 
 dev_dependencies:
+  # The relay server, started in-process by the transport conformance tests.
+  chitragupta_relay:
+    path: packages/relay
   flutter_test:
     sdk: flutter
   integration_test:
