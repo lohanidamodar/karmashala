@@ -13,6 +13,8 @@ import '../../git/domain/git_commit.dart';
 import '../../git/domain/git_worktree.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/domain/repository.dart';
+import '../../git/presentation/remote_link.dart';
+import '../../sessions/application/delivery_providers.dart';
 
 /// The browsable `https://` URL for a git remote, or null when there is not one.
 ///
@@ -198,6 +200,11 @@ class _GitDetails extends ConsumerWidget {
     final remote = ref.watch(repoRemoteUrlProvider);
     final worktrees = ref.watch(repoWorktreesProvider);
     final commits = ref.watch(recentCommitsProvider);
+    final repoIdForLinks = ref.watch(selectedRepositoryIdProvider);
+    // Commits link to the forge when the remote is known (owner request).
+    final remoteRepo = repoIdForLinks == null
+        ? null
+        : ref.watch(repositoryRemoteProvider(repoIdForLinks));
 
     String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
       AsyncData(:final value) => value ?? fallback,
@@ -266,9 +273,17 @@ class _GitDetails extends ConsumerWidget {
                     for (final GitCommit c in list)
                       _line(
                         theme,
-                        c.sha.length >= 7 ? c.sha.substring(0, 7) : c.sha,
+                        shortSha(c.sha),
                         c.subject,
                         icon: AppIcons.gitDiff,
+                        leadWidget: RemoteLink(
+                          text: shortSha(c.sha),
+                          url: remoteRepo?.commitUrl(c.sha),
+                          style: const TextStyle(
+                            fontFamily: kMonoFamily,
+                            fontSize: 11.5,
+                          ),
+                        ),
                       ),
                   ],
                 ),
@@ -321,16 +336,18 @@ class _GitDetails extends ConsumerWidget {
     String rest, {
     required IconData icon,
     Widget? action,
+    Widget? leadWidget,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 4),
     child: Row(
       children: [
         Icon(icon, size: 13, color: theme.colorScheme.onSurfaceVariant),
         const SizedBox(width: 6),
-        Text(
-          lead,
-          style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11.5),
-        ),
+        leadWidget ??
+            Text(
+              lead,
+              style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11.5),
+            ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
