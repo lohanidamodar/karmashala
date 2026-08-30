@@ -25,3 +25,32 @@ import 'device_input.dart';
   final y = (local.dy / box.height * screen.height).round();
   return (x: x.clamp(0, screen.width - 1), y: y.clamp(0, screen.height - 1));
 }
+
+/// How long `input swipe` is asked to hold still for a long press.
+///
+/// Android's own long-press threshold is 500 ms
+/// (`ViewConfiguration.getLongPressTimeout()`); 700 ms clears it comfortably
+/// without making the gesture feel stuck, and leaves room for the ~223 ms the
+/// adb round trip costs before the press even begins.
+const Duration kLongPressHoldDuration = Duration(milliseconds: 700);
+
+/// Bounds on the duration handed to `input swipe` for a drag.
+///
+/// Below the floor Android treats the gesture as a fling with an implausible
+/// velocity; above the ceiling a single `input swipe` blocks for that long,
+/// and the user has already let go.
+const Duration kMinSwipeDuration = Duration(milliseconds: 60);
+const Duration kMaxSwipeDuration = Duration(milliseconds: 1500);
+
+/// The duration to pass to `input swipe` for a drag the user held for
+/// [held].
+///
+/// This is what separates a flick from a slow drag: `input swipe` interpolates
+/// between two points over the duration given, so the duration *is* the
+/// velocity. Passing a fixed value would make every gesture scroll by the same
+/// amount regardless of how the user moved.
+Duration swipeDurationFor(Duration held) {
+  if (held < kMinSwipeDuration) return kMinSwipeDuration;
+  if (held > kMaxSwipeDuration) return kMaxSwipeDuration;
+  return held;
+}

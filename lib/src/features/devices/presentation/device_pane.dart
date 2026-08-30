@@ -8,6 +8,7 @@ import '../data/device_stream.dart';
 import '../domain/android_device.dart';
 import '../domain/device_geometry.dart';
 import '../domain/device_input.dart';
+import 'device_touch_surface.dart';
 
 /// The device pane: pick a device or emulator, watch it live, and drive it.
 class DevicePane extends ConsumerStatefulWidget {
@@ -283,44 +284,41 @@ class _LiveView extends ConsumerWidget {
     return Center(
       child: AspectRatio(
         aspectRatio: aspect,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final box = Size(constraints.maxWidth, constraints.maxHeight);
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapUp: screen == null
-                  ? null
-                  : (details) => _tap(
-                      ref,
-                      currentDevice,
-                      details.localPosition,
-                      box,
-                      screen,
-                    ),
-              onPanEnd: null,
-              child: Video(
-                controller: controller,
-                fit: BoxFit.fill,
-                controls: NoVideoControls,
+        child: DeviceTouchSurface(
+          screen: screen,
+          onTap: (x, y) =>
+              ref.read(adbServiceProvider)?.tap(currentDevice.serial, x, y),
+          // A long press is a swipe that goes nowhere: `input swipe` with the
+          // same start and end point held for a duration is exactly the event
+          // Android's long-press timeout is waiting for.
+          onLongPress: (x, y) => ref
+              .read(adbServiceProvider)
+              ?.swipe(
+                currentDevice.serial,
+                fromX: x,
+                fromY: y,
+                toX: x,
+                toY: y,
+                duration: kLongPressHoldDuration,
               ),
-            );
-          },
+          onSwipe: (fromX, fromY, toX, toY, duration) => ref
+              .read(adbServiceProvider)
+              ?.swipe(
+                currentDevice.serial,
+                fromX: fromX,
+                fromY: fromY,
+                toX: toX,
+                toY: toY,
+                duration: duration,
+              ),
+          child: Video(
+            controller: controller,
+            fit: BoxFit.fill,
+            controls: NoVideoControls,
+          ),
         ),
       ),
     );
-  }
-
-  void _tap(
-    WidgetRef ref,
-    AndroidDevice device,
-    Offset local,
-    Size box,
-    DeviceScreenSize screen,
-  ) {
-    final adb = ref.read(adbServiceProvider);
-    if (adb == null) return;
-    final point = widgetPointToDevice(local: local, box: box, screen: screen);
-    adb.tap(device.serial, point.x, point.y);
   }
 }
 
