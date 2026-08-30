@@ -91,13 +91,14 @@ class _ConnectionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
     final (colour, label) = switch (state.status) {
       BrowserPaneStatus.disconnected => (
         theme.colorScheme.outline,
         'Not connected',
       ),
-      BrowserPaneStatus.connecting => (AppColors.brass, 'Connecting…'),
-      BrowserPaneStatus.busy => (AppColors.brass, 'Working…'),
+      BrowserPaneStatus.connecting => (semantic.working, 'Connecting…'),
+      BrowserPaneStatus.busy => (semantic.working, 'Working…'),
       BrowserPaneStatus.picking => (
         theme.colorScheme.tertiary,
         'Click an element in the browser…',

@@ -2,10 +2,17 @@ import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
 
-/// Application theming — the "ink & brass on parchment" identity (see
-/// [AppColors]). One seed (indigo ink) drives the Material 3 scheme; brass is
-/// injected as the accent (tertiary) and surfaces are warmed so the app reads
-/// like a record-keeper's ledger rather than a default blue Material app.
+/// Application theming — a neutral desktop chrome with one accent.
+///
+/// The scheme is written out rather than seeded: `ColorScheme.fromSeed` tints
+/// every surface towards the seed hue, which is exactly what a neutral ramp must
+/// not do. Greys are grey; the accent appears only on selection, focus and the
+/// primary action; anything that carries meaning comes from [SemanticColors].
+///
+/// `primary` and `tertiary` are deliberately the same colour. Material hands
+/// widgets three "brand" slots, and the direction allows one accent — aliasing
+/// them means a widget cannot accidentally introduce a second brand colour by
+/// reaching for the other slot.
 class AppTheme {
   const AppTheme._();
 
@@ -13,44 +20,85 @@ class AppTheme {
 
   static ThemeData dark() => _build(Brightness.dark);
 
-  static ThemeData _build(Brightness brightness) {
-    final isLight = brightness == Brightness.light;
-    final base = ColorScheme.fromSeed(
-      seedColor: AppColors.ink,
-      brightness: brightness,
+  static ColorScheme _scheme(Brightness brightness) {
+    if (brightness == Brightness.light) {
+      const accent = AppColors.accentLight;
+      return const ColorScheme(
+        brightness: Brightness.light,
+        primary: accent,
+        onPrimary: Colors.white,
+        primaryContainer: Color(0xFFDCE6FB),
+        onPrimaryContainer: Color(0xFF10305F),
+        secondary: AppColors.lightOnVariant,
+        onSecondary: Colors.white,
+        secondaryContainer: AppColors.lightHigh,
+        onSecondaryContainer: AppColors.lightOn,
+        tertiary: accent,
+        onTertiary: Colors.white,
+        tertiaryContainer: Color(0xFFDCE6FB),
+        onTertiaryContainer: Color(0xFF10305F),
+        error: AppColors.dangerLight,
+        onError: Colors.white,
+        errorContainer: Color(0xFFF9DEDC),
+        onErrorContainer: Color(0xFF410E0B),
+        surface: AppColors.lightSurface,
+        onSurface: AppColors.lightOn,
+        onSurfaceVariant: AppColors.lightOnVariant,
+        surfaceContainerLowest: AppColors.lightLowest,
+        surfaceContainerLow: AppColors.lightLow,
+        surfaceContainer: AppColors.lightContainer,
+        surfaceContainerHigh: AppColors.lightHigh,
+        surfaceContainerHighest: AppColors.lightHighest,
+        surfaceTint: accent,
+        outline: AppColors.lightOutline,
+        outlineVariant: AppColors.lightOutlineVariant,
+        inverseSurface: Color(0xFF2B2B31),
+        onInverseSurface: Color(0xFFF2F2F4),
+        inversePrimary: AppColors.accentDark,
+        shadow: Colors.black,
+        scrim: Colors.black,
+      );
+    }
+    const accent = AppColors.accentDark;
+    return const ColorScheme(
+      brightness: Brightness.dark,
+      primary: accent,
+      onPrimary: Color(0xFF0B1B36),
+      primaryContainer: Color(0xFF22365C),
+      onPrimaryContainer: Color(0xFFD7E3FF),
+      secondary: AppColors.darkOnVariant,
+      onSecondary: Color(0xFF14141A),
+      secondaryContainer: AppColors.darkHigh,
+      onSecondaryContainer: AppColors.darkOn,
+      tertiary: accent,
+      onTertiary: Color(0xFF0B1B36),
+      tertiaryContainer: Color(0xFF22365C),
+      onTertiaryContainer: Color(0xFFD7E3FF),
+      error: AppColors.dangerDark,
+      onError: Color(0xFF3B0906),
+      errorContainer: Color(0xFF62211C),
+      onErrorContainer: Color(0xFFFFDAD6),
+      surface: AppColors.darkSurface,
+      onSurface: AppColors.darkOn,
+      onSurfaceVariant: AppColors.darkOnVariant,
+      surfaceContainerLowest: AppColors.darkLowest,
+      surfaceContainerLow: AppColors.darkLow,
+      surfaceContainer: AppColors.darkContainer,
+      surfaceContainerHigh: AppColors.darkHigh,
+      surfaceContainerHighest: AppColors.darkHighest,
+      surfaceTint: accent,
+      outline: AppColors.darkOutline,
+      outlineVariant: AppColors.darkOutlineVariant,
+      inverseSurface: Color(0xFFE4E4E9),
+      onInverseSurface: Color(0xFF1B1B1F),
+      inversePrimary: AppColors.accentLight,
+      shadow: Colors.black,
+      scrim: Colors.black,
     );
+  }
 
-    final scheme = isLight
-        ? base.copyWith(
-            primary: AppColors.ink,
-            tertiary: AppColors.brass,
-            onTertiary: Colors.white,
-            surface: AppColors.parchment,
-            surfaceContainerLowest: Colors.white,
-            surfaceContainerLow: const Color(0xFFF7F3EA),
-            surfaceContainer: AppColors.parchmentDim,
-            surfaceContainerHigh: const Color(0xFFEDE7DA),
-            surfaceContainerHighest: const Color(0xFFE7E0D1),
-            outlineVariant: const Color(0xFFD9D2C4),
-            error: AppColors.danger,
-          )
-        : base.copyWith(
-            primary: AppColors.inkBright,
-            onPrimary: Colors.white,
-            tertiary: AppColors.brassBright,
-            onTertiary: Colors.black,
-            surface: AppColors.slate,
-            onSurface: const Color(0xFFEDEAF6),
-            onSurfaceVariant: const Color(0xFFBFB8D2),
-            surfaceContainerLowest: const Color(0xFF100E18),
-            surfaceContainerLow: const Color(0xFF1A1726),
-            surfaceContainer: AppColors.slateRaised,
-            surfaceContainerHigh: const Color(0xFF262238),
-            surfaceContainerHighest: const Color(0xFF2E2942),
-            outline: const Color(0xFF6F6889),
-            outlineVariant: const Color(0xFF3C3654),
-          );
-
+  static ThemeData _build(Brightness brightness) {
+    final scheme = _scheme(brightness);
     final text = _textTheme(scheme);
 
     return ThemeData(
@@ -58,36 +106,46 @@ class AppTheme {
       colorScheme: scheme,
       brightness: brightness,
       visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       scaffoldBackgroundColor: scheme.surface,
       textTheme: text,
       fontFamily: null,
+      extensions: [SemanticColors.forBrightness(brightness)],
+      // A neutral chrome has no business tinting elevated surfaces towards the
+      // accent; the ramp already says how high a surface is.
+      applyElevationOverlayColor: false,
+      splashFactory: InkSparkle.splashFactory,
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant,
         thickness: 1,
         space: 1,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
+        backgroundColor: scheme.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: text.titleMedium,
-        toolbarHeight: 46,
+        titleTextStyle: text.titleSmall,
+        toolbarHeight: Chrome.titleBar,
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
-          minimumSize: const Size.square(30),
-          maximumSize: const Size.square(34),
-          padding: const EdgeInsets.all(6),
+          minimumSize: const Size.square(26),
+          maximumSize: const Size.square(30),
+          padding: const EdgeInsets.all(5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm),
           ),
         ),
       ),
+      iconTheme: IconThemeData(
+        size: Chrome.icon,
+        color: scheme.onSurfaceVariant,
+      ),
       listTileTheme: ListTileThemeData(
         selectedColor: scheme.primary,
-        selectedTileColor: scheme.primary.withValues(alpha: 0.08),
+        selectedTileColor: scheme.primary.withValues(alpha: 0.10),
         iconColor: scheme.onSurfaceVariant,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
@@ -103,11 +161,11 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         isDense: true,
         filled: true,
-        fillColor: scheme.surfaceContainerLow,
+        fillColor: scheme.surfaceContainerLowest,
         border: _inputBorder(scheme.outlineVariant),
         enabledBorder: _inputBorder(scheme.outlineVariant),
         focusedBorder: _inputBorder(scheme.primary, width: 1.5),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       ),
       chipTheme: ChipThemeData(
         shape: const RoundedRectangleBorder(
@@ -120,7 +178,17 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 32),
+          minimumSize: const Size(0, 30),
+          padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 30),
+          side: BorderSide(color: scheme.outlineVariant),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
@@ -129,7 +197,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          minimumSize: const Size(0, 32),
+          minimumSize: const Size(0, 30),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
@@ -139,7 +207,10 @@ class AppTheme {
       segmentedButtonTheme: SegmentedButtonThemeData(
         style: ButtonStyle(
           visualDensity: VisualDensity.compact,
-          minimumSize: const WidgetStatePropertyAll(Size(0, 32)),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 28)),
+          side: WidgetStatePropertyAll(
+            BorderSide(color: scheme.outlineVariant),
+          ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(Radii.sm),
@@ -150,7 +221,7 @@ class AppTheme {
       expansionTileTheme: ExpansionTileThemeData(
         shape: const Border(),
         collapsedShape: const Border(),
-        iconColor: scheme.primary,
+        iconColor: scheme.onSurfaceVariant,
         textColor: scheme.onSurface,
       ),
       snackBarTheme: SnackBarThemeData(
@@ -164,7 +235,10 @@ class AppTheme {
           color: scheme.inverseSurface,
           borderRadius: BorderRadius.circular(Radii.sm),
         ),
-        textStyle: text.labelSmall?.copyWith(color: scheme.onInverseSurface),
+        textStyle: text.labelSmall?.copyWith(
+          color: scheme.onInverseSurface,
+          letterSpacing: 0,
+        ),
         waitDuration: const Duration(milliseconds: 450),
       ),
       popupMenuTheme: PopupMenuThemeData(
@@ -198,13 +272,13 @@ class AppTheme {
           elevation: const WidgetStatePropertyAll(0),
           backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
           padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-          minimumSize: const WidgetStatePropertyAll(Size(0, 30)),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 26)),
           shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
         ),
       ),
       menuButtonTheme: MenuButtonThemeData(
         style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(0, 30)),
+          minimumSize: const WidgetStatePropertyAll(Size(0, 26)),
           padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: 9),
           ),
@@ -244,6 +318,13 @@ class AppTheme {
       switchTheme: const SwitchThemeData(
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
+      scrollbarTheme: ScrollbarThemeData(
+        thickness: const WidgetStatePropertyAll(8),
+        radius: const Radius.circular(4),
+        thumbColor: WidgetStatePropertyAll(
+          scheme.onSurfaceVariant.withValues(alpha: 0.35),
+        ),
+      ),
     );
   }
 
@@ -254,7 +335,7 @@ class AppTheme {
       );
 
   /// Intentional type scale: tighter, confident titles; calm body; a spaced,
-  /// small label used as the "ledger" eyebrow.
+  /// small label used as the chrome eyebrow.
   static TextTheme _textTheme(ColorScheme scheme) {
     final typography = Typography.material2021(colorScheme: scheme);
     // Use light-on-dark glyph colours in dark mode (the bug that made dark text

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../agents/domain/agent_status.dart';
 import '../application/session_status_providers.dart';
 
@@ -11,32 +12,36 @@ import '../application/session_status_providers.dart';
 /// there until hooks are installed — and a badge that showed only a grey dot
 /// would be indistinguishable from a badge that failed to load. Colour is never
 /// the only carrier: every state has its own glyph and its own label.
-({IconData icon, String label, Color Function(ColorScheme) colour})
+///
+/// Agent status is the app's clearest case of colour meaning something, so it
+/// draws from [SemanticColors] rather than the neutral scheme — the accent is
+/// reserved for selection and must never read as "this agent is busy".
+({IconData icon, String label, Color Function(SemanticColors) colour})
 agentStatusAppearance(AgentActivityStatus status) => switch (status) {
   AgentActivityStatus.working => (
     icon: AppIcons.circleHalf,
     label: 'Working',
-    colour: (scheme) => scheme.primary,
+    colour: (semantic) => semantic.working,
   ),
   AgentActivityStatus.idle => (
     icon: AppIcons.checkCircle,
     label: 'Idle',
-    colour: (scheme) => scheme.tertiary,
+    colour: (semantic) => semantic.idle,
   ),
   AgentActivityStatus.awaitingApproval => (
     icon: AppIcons.warningCircle,
     label: 'Needs you',
-    colour: (scheme) => scheme.error,
+    colour: (semantic) => semantic.attention,
   ),
   AgentActivityStatus.failed => (
     icon: AppIcons.xCircle,
     label: 'Failed',
-    colour: (scheme) => scheme.error,
+    colour: (semantic) => semantic.failure,
   ),
   AgentActivityStatus.unknown => (
     icon: AppIcons.question,
     label: 'Unknown',
-    colour: (scheme) => scheme.outline,
+    colour: (semantic) => semantic.neutral,
   ),
 };
 
@@ -80,7 +85,7 @@ class AgentStatusBadge extends ConsumerWidget {
     final status = report?.status ?? AgentActivityStatus.unknown;
     final appearance = agentStatusAppearance(status);
     final theme = Theme.of(context);
-    final colour = appearance.colour(theme.colorScheme);
+    final colour = appearance.colour(SemanticColors.of(context));
 
     return Tooltip(
       message: report == null

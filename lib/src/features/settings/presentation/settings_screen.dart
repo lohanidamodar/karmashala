@@ -1092,10 +1092,11 @@ class _UsageBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fraction = (window.percent / 100).clamp(0.0, 1.0);
+    final semantic = SemanticColors.of(context);
     final color = window.percent >= 95
-        ? theme.colorScheme.error
+        ? semantic.failure
         : window.percent >= 80
-        ? Colors.orange
+        ? semantic.attention
         : theme.colorScheme.primary;
     final reset = window.resetsAt == null
         ? ''
