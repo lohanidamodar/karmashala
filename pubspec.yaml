@@ -12,6 +12,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_highlight: ^0.7.0
+  flutter_local_notifications_windows: ^3.1.1
   flutter_markdown_plus: ^1.0.7
   flutter_pty: ^0.4.2
   flutter_riverpod: ^3.3.2
@@ -60,6 +61,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/tray_icon.ico
+    # Same icon with a red badge, shown while sessions are waiting on the user.
+    - assets/tray_icon_attention.ico
     # scrcpy-server (Apache-2.0) is deployed to the device to produce H.264 for
     # the device pane's live view. Its version must match kScrcpyVersion.
     - assets/scrcpy/
