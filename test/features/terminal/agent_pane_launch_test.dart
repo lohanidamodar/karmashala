@@ -8,20 +8,34 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('the PTY launch', () {
-    test('a Windows-native agent runs directly', () {
+    test('a Windows-native agent goes through cmd.exe, not directly', () {
+      // flutter_pty hands the child its own executable name as its first
+      // argument and joins the rest with unquoted spaces. Launching an agent
+      // directly therefore starts a turn about "codex.exe" and splits any
+      // argument containing a space — both observed against a real binary.
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: r'C:\bin\claude.exe',
-        arguments: ['--permission-mode', 'acceptEdits'],
+        arguments: ['--permission-mode', 'acceptEdits', 'say hello'],
         workingDirectory: r'C:\repo',
       );
+      final pty = agentPtyLaunchFor(launch);
+      expect(pty.executable, 'cmd.exe');
+      expect(pty.arguments, [
+        '/c',
+        r'C:\bin\claude.exe --permission-mode acceptEdits "say hello"',
+      ]);
+      expect(pty.workingDirectory, r'C:\repo');
+    });
+
+    test('an executable path with a space is quoted', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'x',
+        executable: r'C:\Program Files\rover\rover.exe',
+      );
       expect(
-        agentPtyLaunchFor(launch),
-        const PtyLaunch(
-          executable: r'C:\bin\claude.exe',
-          arguments: ['--permission-mode', 'acceptEdits'],
-          workingDirectory: r'C:\repo',
-        ),
+        agentPtyLaunchFor(launch).arguments.last,
+        r'"C:\Program Files\rover\rover.exe"',
       );
     });
 
@@ -48,6 +62,30 @@ void main() {
       // wsl.exe sets the child's directory itself; the host process must not be
       // pointed at a Linux path it cannot resolve.
       expect(pty.workingDirectory, isNull);
+    });
+
+    test('a WSL argument with a space is quoted', () {
+      // There is no wrapper on this path to re-parse the line, so the quoting
+      // has to be in the strings — an unquoted prompt reached Claude Code as
+      // several arguments and was silently ignored.
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: 'claude',
+        arguments: ['--permission-mode', 'acceptEdits', 'say hello there'],
+        workingDirectory: '/home/u/repo',
+        wslDistribution: 'Ubuntu',
+      );
+      expect(agentPtyLaunchFor(launch).arguments, [
+        '-d',
+        'Ubuntu',
+        '--cd',
+        '/home/u/repo',
+        '--',
+        'claude',
+        '--permission-mode',
+        'acceptEdits',
+        '"say hello there"',
+      ]);
     });
 
     test('the session id reaches the agent through the environment', () {
@@ -91,6 +129,39 @@ void main() {
       final pty = agentPtyLaunchFor(launch, onWindowsHost: false);
       expect(pty.executable, 'claude');
       expect(pty.workingDirectory, '/home/u/repo');
+    });
+  });
+
+  group('Windows argument quoting', () {
+    // CommandLineToArgvW's rules, because that is what the agent's own parser
+    // applies on the other side.
+    test('a value with no whitespace or quote is untouched', () {
+      expect(quoteWindowsCommandArgument('--resume'), '--resume');
+      expect(quoteWindowsCommandArgument(r'C:\repo\app'), r'C:\repo\app');
+    });
+
+    test('whitespace forces quoting', () {
+      expect(quoteWindowsCommandArgument('say hello'), '"say hello"');
+      expect(quoteWindowsCommandArgument('a\tb'), '"a\tb"');
+    });
+
+    test('an embedded quote is escaped', () {
+      expect(quoteWindowsCommandArgument('say "hi"'), r'"say \"hi\""');
+    });
+
+    test('backslashes before a quote are doubled', () {
+      expect(quoteWindowsCommandArgument(r'a\"b'), r'"a\\\"b"');
+    });
+
+    test('a trailing backslash cannot escape the closing quote', () {
+      expect(
+        quoteWindowsCommandArgument(r'C:\path with space\'),
+        r'"C:\path with space\\"',
+      );
+    });
+
+    test('an empty argument survives as an empty quoted string', () {
+      expect(quoteWindowsCommandArgument(''), '""');
     });
   });
 

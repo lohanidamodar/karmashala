@@ -126,14 +126,20 @@ const _codex = AgentDescriptor(
       StateRecordMatcher(['payload', 'type'], 'reasoning'),
     ],
   ),
-  // Codex 0.146's status line, captured from a real PTY run
-  // (`test/features/agents/fixtures/codex-tui.raw`): `• Working (3s • esc to
-  // interrupt)`. Only `working` is declared — an idle Codex screen has no marker
-  // this source could tell apart from a busy one, and its approval prompt was
-  // never captured, so neither is claimed. The rollout file already answers
-  // idle/working, and an undeclared state resolves to `unknown` rather than to a
-  // guess.
-  grid: AgentGridRules(working: [GridMatcher('esc to interrupt')]),
+  // Codex 0.145's own screen, read off real PTY runs. `working` comes from its
+  // status line (`• Working (3s • esc to interrupt)`, captured in
+  // `test/features/agents/fixtures/codex-tui.raw`); `awaitingApproval` from its
+  // modal footer, observed live when Codex blocked on the directory-trust
+  // question before it would start at all.
+  //
+  // No `idle` marker is declared: an idle Codex screen has nothing this source
+  // could tell apart from a busy one. That is not a gap to paper over — the
+  // rollout file already answers idle, and an undeclared state resolves to
+  // `unknown` rather than to a guess.
+  grid: AgentGridRules(
+    awaitingApproval: [GridMatcher('Press enter to continue')],
+    working: [GridMatcher('esc to interrupt')],
+  ),
 );
 
 const _antigravity = AgentDescriptor(

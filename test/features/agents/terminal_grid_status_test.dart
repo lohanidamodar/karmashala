@@ -120,6 +120,26 @@ void main() {
       }
     });
 
+    test('its directory-trust modal reports awaitingApproval', () {
+      // Observed live in a PTY pane: Codex blocks on this before it will start
+      // at all, so a session sitting here is waiting for the user, not working.
+      final report = const TerminalGridStatusSource().read(
+        AgentRegistry.builtIn.byId(AgentIds.codex)!,
+        const [
+          '  Do you trust the contents of this directory?',
+          '',
+          '\u203a 1. Yes, continue',
+          '  2. No, quit',
+          '',
+          '  Press enter to continue',
+        ],
+        DateTime.utc(2026, 8, 30),
+        sessionId: 's',
+      );
+      expect(report?.status, AgentActivityStatus.awaitingApproval);
+      expect(report?.source, AgentStatusSource.terminalGrid);
+    });
+
     test('claims nothing once it stops saying it is working', () {
       // Codex declares no idle marker, because its idle screen has none this
       // source could tell apart from a busy one. `null` here is the source
