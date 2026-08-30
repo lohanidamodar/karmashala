@@ -5,12 +5,16 @@ import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Codex 0.151 builds its refusal from three adjacent literals in its own
-/// binary — `thread `, the thread id, and ` already has an active writer` — and
-/// the TUI prints it wrapped in a JSON-RPC failure. This is that sentence.
+/// Captured from codex-cli 0.151.0 on 2026-08-30, by holding thread
+/// `01a051ab-…` open in one process and resuming it in a second (which exited
+/// 1). Verbatim, because the point of the matcher is that it survives this
+/// sentence being wrapped, and a paraphrase would not be the same sentence.
 const _refusal =
-    'thread/resume failed: thread 01a05160-2b15-7100-b99a-e38509bb4747 '
-    'already has an active writer (code -32600)';
+    'Error: Failed to resume session from /home/dlohani/.codex/sessions/2026/'
+    '08/30/rollout-2026-08-30T13-41-56-01a051ab-eaeb-7a73-b8a4-a27d81e47984'
+    '.jsonl: thread/resume failed during TUI bootstrap: thread/resume failed: '
+    'thread 01a051ab-eaeb-7a73-b8a4-a27d81e47984 already has an active writer '
+    '(code -32600)';
 
 /// The refusal as a 40-column pane renders it — the wrap falls **inside**
 /// "active", which is the case a per-line substring match cannot see.

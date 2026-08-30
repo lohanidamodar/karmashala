@@ -25,11 +25,16 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// Codex 0.151's refusal, as it reaches a pane: one long sentence that the
-/// terminal hard-wraps wherever the pane happens to end.
+/// Captured from codex-cli 0.151.0 on 2026-08-30, by holding thread
+/// `01a051ab-…` open in one process and resuming it in a second (which exited
+/// 1). Verbatim, because the point of the matcher is that it survives this
+/// sentence being wrapped, and a paraphrase would not be the same sentence.
 const _refusal =
-    'thread/resume failed: thread 01a05160-2b15-7100-b99a-e38509bb4747 '
-    'already has an active writer (code -32600)';
+    'Error: Failed to resume session from /home/dlohani/.codex/sessions/2026/'
+    '08/30/rollout-2026-08-30T13-41-56-01a051ab-eaeb-7a73-b8a4-a27d81e47984'
+    '.jsonl: thread/resume failed during TUI bootstrap: thread/resume failed: '
+    'thread 01a051ab-eaeb-7a73-b8a4-a27d81e47984 already has an active writer '
+    '(code -32600)';
 
 const _exclusive = AgentDescriptor(
   id: 'exclusive',
