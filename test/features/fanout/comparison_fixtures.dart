@@ -1,0 +1,88 @@
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/fanout/data/comparison_dao.dart';
+import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
+import 'package:chitragupta/src/features/projects/data/project_dao.dart';
+import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+
+import '../../support/fixtures.dart';
+
+/// A comparison in the state that matters: merged, one candidate's worktree
+/// deleted, one agent that never started. Shared by the view and the MCP tests
+/// because it is the same record both of them have to render.
+const worktree = EnvironmentPath(
+  environmentId: 'windows',
+  path: r'C:\src\demo\.chitragupta-worktrees\abcd1234',
+);
+
+Comparison seededComparison({bool merged = true}) => Comparison(
+  id: 'cmp-1',
+  repositoryId: 'r1',
+  prompt: 'Make the parser faster\nand keep the tests green',
+  createdAt: testTime,
+  outcome: merged ? ComparisonOutcome.merged : ComparisonOutcome.pending,
+  winnerCandidateId: merged ? 'cand-win' : null,
+  mergedCommit: merged ? 'abc1234def5678' : null,
+  finishedAt: merged ? testTime : null,
+  candidates: [
+    ComparisonCandidate(
+      id: 'cand-win',
+      comparisonId: 'cmp-1',
+      position: 0,
+      installationId: 'a1',
+      agentId: 'claudeCode',
+      launch: CandidateLaunchState.started,
+      sessionId: 's-win',
+      worktree: worktree,
+      branch: 'session/abcd1234',
+      diff: CandidateDiffStat(
+        filesChanged: 4,
+        insertions: 120,
+        deletions: 18,
+        commits: 2,
+        capturedAt: testTime,
+      ),
+      evidence: const CandidateEvidence(
+        verdict: EvidenceVerdict.passed,
+        label: '12 tests, 0 failed',
+      ),
+    ),
+    ComparisonCandidate(
+      id: 'cand-lost',
+      comparisonId: 'cmp-1',
+      position: 1,
+      installationId: 'a2',
+      agentId: 'codex',
+      launch: CandidateLaunchState.started,
+      sessionId: 's-lost',
+      worktree: worktree,
+      branch: 'session/efgh5678',
+      worktreeRemoved: true,
+      diff: CandidateDiffStat(
+        filesChanged: 9,
+        insertions: 400,
+        deletions: 260,
+        capturedAt: testTime,
+      ),
+    ),
+    const ComparisonCandidate(
+      id: 'cand-dead',
+      comparisonId: 'cmp-1',
+      position: 2,
+      installationId: 'a3',
+      agentId: 'flakyCli',
+      launch: CandidateLaunchState.failed,
+      failure: 'Bad state: could not start flakyCli',
+    ),
+  ],
+);
+
+AppDatabase seedDatabase({bool merged = true}) {
+  final db = AppDatabase.memory();
+  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  ProjectDao(db).insert(project());
+  RepositoryDao(db).insert(repository());
+  ComparisonDao(db).insert(seededComparison(merged: merged));
+  return db;
+}

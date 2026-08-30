@@ -1,99 +1,18 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
-import 'package:chitragupta/src/features/fanout/data/comparison_dao.dart';
-import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_list.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_view.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import 'comparison_fixtures.dart';
 
 /// The view has one job the service cannot do for it: read a comparison whose
 /// worktrees are gone. These pump the record alone — no sessions, no git — and
 /// check that the page still says who ran, what they changed and who won.
-
-const _worktree = EnvironmentPath(
-  environmentId: 'windows',
-  path: r'C:\src\demo\.chitragupta-worktrees\abcd1234',
-);
-
-Comparison _seeded({bool merged = true}) => Comparison(
-  id: 'cmp-1',
-  repositoryId: 'r1',
-  prompt: 'Make the parser faster\nand keep the tests green',
-  createdAt: testTime,
-  outcome: merged ? ComparisonOutcome.merged : ComparisonOutcome.pending,
-  winnerCandidateId: merged ? 'cand-win' : null,
-  mergedCommit: merged ? 'abc1234def5678' : null,
-  finishedAt: merged ? testTime : null,
-  candidates: [
-    ComparisonCandidate(
-      id: 'cand-win',
-      comparisonId: 'cmp-1',
-      position: 0,
-      installationId: 'a1',
-      agentId: 'claudeCode',
-      launch: CandidateLaunchState.started,
-      sessionId: 's-win',
-      worktree: _worktree,
-      branch: 'session/abcd1234',
-      diff: CandidateDiffStat(
-        filesChanged: 4,
-        insertions: 120,
-        deletions: 18,
-        commits: 2,
-        capturedAt: testTime,
-      ),
-      evidence: const CandidateEvidence(
-        verdict: EvidenceVerdict.passed,
-        label: '12 tests, 0 failed',
-      ),
-    ),
-    ComparisonCandidate(
-      id: 'cand-lost',
-      comparisonId: 'cmp-1',
-      position: 1,
-      installationId: 'a2',
-      agentId: 'codex',
-      launch: CandidateLaunchState.started,
-      sessionId: 's-lost',
-      worktree: _worktree,
-      branch: 'session/efgh5678',
-      worktreeRemoved: true,
-      diff: CandidateDiffStat(
-        filesChanged: 9,
-        insertions: 400,
-        deletions: 260,
-        capturedAt: testTime,
-      ),
-    ),
-    const ComparisonCandidate(
-      id: 'cand-dead',
-      comparisonId: 'cmp-1',
-      position: 2,
-      installationId: 'a3',
-      agentId: 'flakyCli',
-      launch: CandidateLaunchState.failed,
-      failure: 'Bad state: could not start flakyCli',
-    ),
-  ],
-);
-
-AppDatabase seedDatabase({bool merged = true}) {
-  final db = AppDatabase.memory();
-  ExecutionEnvironmentDao(db).upsert(windowsEnv());
-  ProjectDao(db).insert(project());
-  RepositoryDao(db).insert(repository());
-  ComparisonDao(db).insert(_seeded(merged: merged));
-  return db;
-}
 
 Future<void> pump(WidgetTester tester, AppDatabase db, Widget child) =>
     tester.pumpWidget(
