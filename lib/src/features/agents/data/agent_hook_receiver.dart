@@ -50,6 +50,13 @@ class AgentHookReceiver {
     final spec = id.isEmpty ? null : registry.byId(id)?.hooks;
     final status = spec?.eventStatus[name] ?? AgentActivityStatus.unknown;
     final sessionId = spec == null ? '' : _sessionId(spec.sessionIdPath, body);
+    // The agent's own description of what it wants, when its hooks carry one.
+    // Claude Code's `Notification` payload has a `message`; this used to be
+    // decoded for the session id and discarded, which is why an approval could
+    // be announced but never explained.
+    final message = spec == null || spec.messagePath.isEmpty
+        ? ''
+        : _stringAt(spec.messagePath, body);
 
     final report = AgentStatusReport(
       agentId: id,
@@ -58,12 +65,20 @@ class AgentHookReceiver {
       source: AgentStatusSource.hook,
       observedAt: clock.nowUtc(),
       detail: name.isEmpty ? null : name,
+      evidence: message.isEmpty ? const [] : [message],
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
   }
 
-  String _sessionId(List<String> path, String body) {
+  String _sessionId(List<String> path, String body) => _stringAt(path, body);
+
+  /// The string at [path] in the JSON [body], or `''`.
+  ///
+  /// Empty for a missing key, a non-string value or an unparseable body — all
+  /// of which mean "the agent did not tell us", which the caller renders as
+  /// nothing rather than as a placeholder.
+  String _stringAt(List<String> path, String body) {
     Object? value;
     try {
       value = jsonDecode(body);

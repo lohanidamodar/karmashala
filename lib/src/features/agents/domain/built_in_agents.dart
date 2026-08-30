@@ -78,6 +78,10 @@ const _claudeCode = AgentDescriptor(
   statusStrategy: AgentStatusStrategy.hooks,
   hooks: AgentHookSpec(
     configFileName: 'settings.json',
+    // Claude Code's `Notification` payload carries a `message` describing what
+    // it wants. It was decoded for the session id and dropped, which is why the
+    // app could say an approval was pending and never what for.
+    messagePath: ['message'],
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,
@@ -110,6 +114,23 @@ const _claudeCode = AgentDescriptor(
     ],
     working: [GridMatcher('esc to interrupt')],
     idle: [GridMatcher('shift+tab to cycle')],
+  ),
+  // Both keys are read off the same footer the matchers above fire on —
+  // `Enter to confirm · Esc to cancel` — so we are sending keys the agent
+  // itself advertises rather than ones we assumed.
+  approval: AgentApprovalRules(
+    approve: AgentApprovalKey(
+      keys: '\r',
+      label: 'Approve',
+      effect:
+          'Sends Enter, which confirms whichever option Claude Code currently '
+          'has highlighted.',
+    ),
+    deny: AgentApprovalKey(
+      keys: '\x1b',
+      label: 'Deny',
+      effect: 'Sends Esc, which cancels the prompt.',
+    ),
   ),
 );
 
@@ -192,6 +213,17 @@ const _codex = AgentDescriptor(
   grid: AgentGridRules(
     awaitingApproval: [GridMatcher('Press enter to continue')],
     working: [GridMatcher('esc to interrupt')],
+  ),
+  // Only half of one. Codex's prompt says `Press enter to continue` and names
+  // no way to decline, so `deny` stays null and the UI sends the user to the
+  // terminal for that rather than guessing that Esc backs out. Enter is the key
+  // Loop 41 actually drove a real Codex trust modal with.
+  approval: AgentApprovalRules(
+    approve: AgentApprovalKey(
+      keys: '\r',
+      label: 'Continue',
+      effect: 'Sends Enter, the key this prompt names.',
+    ),
   ),
 );
 

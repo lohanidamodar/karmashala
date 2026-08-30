@@ -407,4 +407,41 @@ void main() {
         .instanceFor(launched.paneId!)!;
     expect(instance.agentLaunch!.wslDistribution, 'Ubuntu');
   });
+
+  test('answering a prompt presses the key and nothing else', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final launched = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Blocked',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    final instance = h.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(launched.paneId!)!;
+    final written = <String>[];
+    instance.terminal.onOutput = written.add;
+
+    expect(launcher.answerPrompt(launched.session.id, '\r'), isTrue);
+    // Exactly the key, once. `sendTo` trims and appends a carriage return to
+    // submit a *message*; doing either here would erase the whole payload or
+    // press a second key nobody asked for.
+    expect(written, ['\r']);
+
+    written.clear();
+    expect(launcher.answerPrompt(launched.session.id, '\x1b'), isTrue);
+    expect(written, ['\x1b']);
+
+    // Nothing to press is a refusal the caller can report, not a silent no-op.
+    written.clear();
+    expect(launcher.answerPrompt(launched.session.id, ''), isFalse);
+    expect(launcher.answerPrompt('no-such-session', '\r'), isFalse);
+    expect(written, isEmpty);
+  });
 }

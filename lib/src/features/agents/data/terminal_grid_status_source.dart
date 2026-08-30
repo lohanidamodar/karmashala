@@ -53,10 +53,36 @@ class TerminalGridStatusSource {
         source: AgentStatusSource.terminalGrid,
         observedAt: now,
         detail: hit,
+        // Only for an approval, and only the rows themselves.
+        //
+        // `detail` is the matcher that fired — `Enter to confirm` — which
+        // explains the verdict and says nothing about what is being asked. The
+        // rows that produced it do, and they were already in scope and thrown
+        // away. Carrying them for `working`/`idle` too would put a screenful of
+        // text through a 1.2-second poll to describe a spinner.
+        //
+        // Passed on verbatim and never parsed. Deciding which of these rows is
+        // "the question" would be guessing at a TUI's layout, and a wrong guess
+        // here misdescribes what the user is about to authorise.
+        evidence: status == AgentActivityStatus.awaitingApproval
+            ? _quotable(tailLines)
+            : const [],
       );
     }
     return null;
   }
+
+  /// The prompt's own rows, blank ones dropped, in screen order.
+  ///
+  /// No interpretation: whatever the agent drew is what the user is shown, over
+  /// a label saying it came from the terminal. Quoting a screen is the only
+  /// honest way this source can answer "what is being approved" — it has no
+  /// structured record to consult, and inventing a summary from these rows
+  /// would describe an action the user is about to allow.
+  static List<String> _quotable(List<String> tailLines) => [
+    for (final line in tailLines)
+      if (line.trim().isNotEmpty) line.trimRight(),
+  ];
 
   /// The matcher that fired, described well enough to explain the verdict in a
   /// tooltip or a log line.

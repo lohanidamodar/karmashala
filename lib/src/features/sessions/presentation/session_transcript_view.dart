@@ -18,6 +18,7 @@ import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
 import 'agent_status_badge.dart';
+import 'approval_request_card.dart';
 import 'chat_transcript.dart';
 import 'handoff_actions_row.dart';
 import 'message_composer.dart';
@@ -104,6 +105,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Above the handoff row and the composer, because it is the
+                  // thing blocking the session: nothing the user types will be
+                  // read until the agent's prompt is answered.
+                  ApprovalRequestCard(sessionId: widget.sessionId),
                   HandoffActionsRow(sessionId: widget.sessionId),
                   MessageComposer(
                     // MonoCode's chip row: the session's own safety policy,

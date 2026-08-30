@@ -274,6 +274,7 @@ class AgentDescriptor {
     this.hooks,
     this.stateFile,
     this.grid = const AgentGridRules(),
+    this.approval = const AgentApprovalRules(),
   });
 
   final String id;
@@ -291,6 +292,14 @@ class AgentDescriptor {
   /// screen we have never looked at, which resolves to `unknown` rather than a
   /// guess.
   final AgentGridRules grid;
+
+  /// Which keys answer this agent's approval prompt, when it names any.
+  ///
+  /// Empty for an agent whose prompt we have never read, so an approval from it
+  /// is surfaced but not answerable from the chat view — which is the honest
+  /// outcome, not a gap. Pressing keys into a TUI on a guess is the one failure
+  /// mode worse than making the user switch to the terminal.
+  final AgentApprovalRules approval;
 
   @override
   String toString() => 'AgentDescriptor($id)';

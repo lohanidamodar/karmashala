@@ -77,7 +77,11 @@ final agentSessionStatusProvider = StreamProvider.autoDispose
             // report, which is the truth.
             sessionId: externalId ?? sessionId,
             stateFilePath: statePath,
-            terminalTailLines: sessionTerminalTail(ref, current ?? session),
+            terminalTailLines: sessionTerminalTail(
+              ref,
+              current ?? session,
+              agentId: agentId,
+            ),
           ),
         );
         await Future<void>.delayed(kAgentStatusPollInterval);
@@ -97,12 +101,25 @@ const Duration kNativeTranscriptSearchInterval = Duration(seconds: 10);
 /// Empty — rather than absent — for a session with no live pane, so the status
 /// service's grid source is simply not consulted rather than being handed a
 /// stale screen from a process that has exited.
-List<String> sessionTerminalTail(Ref ref, Session session) {
+///
+/// [agentId] chooses the depth: `AgentGridRules.scanLines` is the descriptor's
+/// own statement of how far up its prompt reaches, and this used to ignore it
+/// and take the 12-row default for every agent — so the field was live in the
+/// tests and dead in the app. It matters more now than it did for status alone,
+/// because these rows are also what gets quoted back to the user as "what is
+/// being approved": too few and the question is cut off mid-sentence.
+List<String> sessionTerminalTail(Ref ref, Session session, {String? agentId}) {
   final paneId = session.paneId;
   if (paneId == null) return const [];
   final instance = ref
       .read(terminalSessionsControllerProvider.notifier)
       .instanceFor(paneId);
   if (instance == null || !instance.liveness.value.isLive) return const [];
-  return terminalTailLines(instance.terminal);
+  final rules = agentId == null
+      ? null
+      : ref.read(agentRegistryProvider).byId(agentId)?.grid;
+  return terminalTailLines(
+    instance.terminal,
+    lines: rules?.scanLines ?? const AgentGridRules().scanLines,
+  );
 }

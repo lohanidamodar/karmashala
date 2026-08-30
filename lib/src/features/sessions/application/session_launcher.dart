@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:xterm/xterm.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -600,18 +601,48 @@ class SessionLauncher {
   bool sendTo(String sessionId, String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
-    final paneId = session?.paneId;
-    if (paneId == null) return false;
-    final controller = _ref.read(terminalSessionsControllerProvider.notifier);
-    final instance = controller.instanceFor(paneId);
-    if (instance == null || !instance.liveness.value.isLive) return false;
+    final terminal = _liveTerminalFor(sessionId);
+    if (terminal == null) return false;
     // A carriage return, not a newline: a PTY line discipline reads CR as
     // "submit", and a bare LF leaves the text sitting in the agent's composer.
-    instance.terminal
+    terminal
       ..textInput(trimmed)
       ..textInput('\r');
     return true;
+  }
+
+  /// Answers an agent's on-screen prompt by pressing [keys] in its terminal.
+  ///
+  /// Separate from [sendTo] rather than a special case of it, because the two
+  /// are different acts. [sendTo] delivers a *message*: it trims, refuses empty
+  /// input and appends a carriage return to submit it. An answer is a
+  /// **keystroke** — `\r`, `\x1b` — where trimming would erase the whole
+  /// payload and an appended return would press a second key nobody asked for.
+  ///
+  /// [keys] must come from the agent's own [AgentApprovalRules]. Nothing here
+  /// invents a binding: this method presses what it is given, and the registry
+  /// is what decides whether there is anything to press.
+  ///
+  /// Returns false when the session has no live pane, so the caller can say the
+  /// answer did not land instead of assuming it did.
+  bool answerPrompt(String sessionId, String keys) {
+    if (keys.isEmpty) return false;
+    final terminal = _liveTerminalFor(sessionId);
+    if (terminal == null) return false;
+    terminal.textInput(keys);
+    return true;
+  }
+
+  /// The live terminal behind [sessionId], or null. Three things have to be
+  /// true and each has been wrong on its own — see [livePaneFor].
+  Terminal? _liveTerminalFor(String sessionId) {
+    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    if (paneId == null) return null;
+    final instance = _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId);
+    if (instance == null || !instance.liveness.value.isLive) return null;
+    return instance.terminal;
   }
 
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
