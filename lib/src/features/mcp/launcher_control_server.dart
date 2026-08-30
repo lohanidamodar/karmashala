@@ -39,7 +39,6 @@ import '../sessions/domain/session.dart';
 import '../sessions/domain/session_launch.dart';
 import '../settings/domain/permission_mode.dart';
 import '../terminal/application/system_terminal_providers.dart';
-import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/system_terminal_service.dart';
 import 'handshake_file_permissions.dart';
 import 'tmux_orchestration.dart';
@@ -1110,6 +1109,17 @@ class LauncherControlServer {
 
     final session = _container.read(importedSessionDaoProvider).getById(id);
     if (session == null) throw StateError('Session not found: $id');
+    // An imported entry can name a conversation one of our own panes is still
+    // running: open that, rather than putting a second agent on it.
+    final launcher = _container.read(sessionLauncherProvider);
+    final running = launcher.runningSessionWithExternalId(session.externalId);
+    if (running != null && launcher.reveal(running.id)) {
+      return {
+        'opened': running.title,
+        'sessionId': running.id,
+        'reattached': true,
+      };
+    }
     final repo = _container
         .read(repositoryDaoProvider)
         .getById(session.repositoryId);
@@ -1145,22 +1155,15 @@ class LauncherControlServer {
   }
 
   Future<Object?> _openNativeSession(Session session) async {
-    final paneId = session.paneId;
-    final terminals = _container.read(
-      terminalSessionsControllerProvider.notifier,
-    );
-    if (paneId != null) {
-      final instance = terminals.instanceFor(paneId);
-      if (instance != null && instance.liveness.value.isLive) {
-        terminals.reattachSession(paneId);
-        terminals.focusPane(paneId);
-        _container.read(terminalVisibleProvider.notifier).set(true);
-        return {
-          'opened': session.title,
-          'sessionId': session.id,
-          'reattached': true,
-        };
-      }
+    // The launcher owns "is it already running, and where" for every surface —
+    // this used to be the only place that asked, which is why every other resume
+    // path relaunched a session that had never stopped.
+    if (_container.read(sessionLauncherProvider).reveal(session.id)) {
+      return {
+        'opened': session.title,
+        'sessionId': session.id,
+        'reattached': true,
+      };
     }
 
     final repo = _container

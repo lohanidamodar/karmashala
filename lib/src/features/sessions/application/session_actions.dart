@@ -106,7 +106,23 @@ class SessionActions {
   /// (seeded with its prior transcript and launched with `--resume`), and the
   /// imported entry is replaced by it so there is no duplicate. Returns the live
   /// session's id. Throws if the repository or a matching installation is gone.
+  ///
+  /// If we are **already running** that conversation, nothing is launched: the
+  /// running pane is reopened instead. Since Loop 38 a closed tab leaves its
+  /// agent running, so the CLI store keeps listing a session whose process is
+  /// very much alive — and resuming it started a second writer on the same
+  /// transcript, which Codex refuses outright.
   Future<String> resumeImported(ImportedSession session) async {
+    final launcher = _ref.read(sessionLauncherProvider);
+    final running = launcher.runningSessionWithExternalId(session.externalId);
+    if (running != null) {
+      launcher.reveal(running.id);
+      // Same replacement the launch path does: the imported row was only ever a
+      // second record of a session we own, and we are now showing that one.
+      _dropImported(session);
+      return running.id;
+    }
+
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
       throw StateError(
@@ -143,24 +159,33 @@ class SessionActions {
     await _seedHistory(started.id, session);
     // Replace the imported entry with the now-live session (drop only our row,
     // keeping the CLI store file intact).
+    _dropImported(session);
+    _ref.read(selectedSessionIdProvider.notifier).select(started.id);
+    return started.id;
+  }
+
+  /// Drops the imported record for [session] and deselects it, leaving the CLI
+  /// store file alone. Shared by both resume outcomes — launched, and revealed
+  /// because it was already running — so the two cannot tidy up differently.
+  void _dropImported(ImportedSession session) {
     _ref.read(importedSessionDaoProvider).delete(session.id);
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
-    _ref.read(selectedSessionIdProvider.notifier).select(started.id);
     _bump();
-    return started.id;
   }
 
   /// Resumes [session] and immediately sends [text] to it — the flow behind the
   /// imported session's message box, so typing a reply continues the session in
   /// place instead of spawning a separate one.
+  ///
+  /// Delivery goes through [continueSession] rather than the engine, so the text
+  /// is typed into the PTY the resume just produced — the one write path into
+  /// the agent. It also means a session that was *already* running receives the
+  /// message instead of the send being aimed at an engine that never started it.
   Future<void> resumeAndSend(ImportedSession session, String text) async {
     final id = await resumeImported(session);
-    final trimmed = text.trim();
-    if (trimmed.isNotEmpty) {
-      await _ref.read(sessionEngineProvider).sendMessage(id, trimmed);
-    }
+    await continueSession(id, text);
   }
 
   /// Sends [text] to a native session, relaunching its agent first when the
@@ -402,10 +427,21 @@ class SessionActions {
   /// Opens [session] in an external [terminal] (Windows Terminal, WezTerm, …),
   /// starting in its repository and running the agent's resume command. Throws
   /// if the repository/environment is no longer available.
+  ///
+  /// Refuses when we are already running that conversation: the external
+  /// terminal would be a second writer on it, which is not something reopening
+  /// a tab can stand in for, so the user is told rather than shown the CLI's
+  /// own JSON-RPC refusal.
   Future<void> openInSystemTerminal(
     ImportedSession session,
     SystemTerminal terminal,
   ) async {
+    final running = _ref
+        .read(sessionLauncherProvider)
+        .runningSessionWithExternalId(session.externalId);
+    if (running != null) {
+      throw SessionAlreadyRunning(sessionId: running.id, title: running.title);
+    }
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
       throw StateError(
@@ -447,6 +483,9 @@ class SessionActions {
   /// Opens the native [sessionId] in an external [terminal], starting in its
   /// repository and running the agent there. Throws a clear error if the repo or
   /// agent installation is no longer available.
+  ///
+  /// Refuses a session whose pane is still live, for the same reason
+  /// [openInSystemTerminal] does.
   Future<void> openSessionInSystemTerminal(
     String sessionId,
     SystemTerminal terminal,
@@ -454,6 +493,9 @@ class SessionActions {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) {
       throw StateError('This session no longer exists.');
+    }
+    if (_ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null) {
+      throw SessionAlreadyRunning(sessionId: sessionId, title: session.title);
     }
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {

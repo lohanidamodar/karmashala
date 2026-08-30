@@ -44,6 +44,39 @@ class SessionDepthRefused implements Exception {
   String toString() => depth.refusal;
 }
 
+/// Raised when a resume would start a **second** agent on a conversation whose
+/// first one is still running.
+///
+/// Loop 38 separated session lifetime from view lifetime: closing a tab detaches
+/// the view and leaves the process running. So "resume this session" stopped
+/// meaning "nothing is running it" — and launching anyway hands the agent CLI a
+/// transcript it already holds open. Codex refuses that outright:
+///
+/// ```
+/// thread/resume failed: thread <id> already has an active writer (code -32600)
+/// ```
+///
+/// which reaches the user as a raw JSON-RPC failure during TUI bootstrap.
+///
+/// Every in-app surface answers this by *reopening the view* instead, so this
+/// type is only thrown where reopening is not what was asked for — handing the
+/// session to an external terminal — and by [SessionLauncher.launch] itself, as
+/// the backstop no future caller can forget. Its message is the user-facing one:
+/// the UI shows `toString()` directly.
+class SessionAlreadyRunning implements Exception {
+  const SessionAlreadyRunning({required this.sessionId, required this.title});
+
+  /// The session already running it — the one to reveal.
+  final String sessionId;
+  final String title;
+
+  @override
+  String toString() =>
+      '"$title" is already running in Chitragupta. Open it from the terminal, '
+      'or end it first: resuming it now would start a second agent on the same '
+      'conversation, which the CLI refuses.';
+}
+
 /// **The** way a session comes into existence.
 ///
 /// Loop 33's audit (§6) found nine entry points reaching four mechanisms, only
@@ -111,8 +144,71 @@ class SessionLauncher {
         _ref.read(sessionDaoProvider).parentOf,
       );
 
+  // --- is it already running? ------------------------------------------------
+
+  /// The pane [sessionId] is running in **right now**, or `null`.
+  ///
+  /// Three things have to be true, and each of them has been wrong on its own:
+  /// the row must exist, it must name a pane, and that pane's instance must say
+  /// it is live. A detached pane is live (Loop 38); a pane restored from disk is
+  /// not, whatever its buffer shows.
+  String? livePaneFor(String? sessionId) {
+    if (sessionId == null) return null;
+    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    if (paneId == null) return null;
+    final instance = _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId);
+    return instance != null && instance.liveness.value.isLive ? paneId : null;
+  }
+
+  /// The session we are already running the CLI conversation
+  /// [externalSessionId] in, or `null`.
+  ///
+  /// The external id is the join: an imported CLI entry and one of our rows are
+  /// two records of the same conversation, and resuming the imported one while
+  /// our own process holds it is exactly the double-writer case.
+  Session? runningSessionWithExternalId(String? externalSessionId) {
+    if (externalSessionId == null || externalSessionId.isEmpty) return null;
+    final session = _ref
+        .read(sessionDaoProvider)
+        .getByExternalSessionId(externalSessionId);
+    if (session == null) return null;
+    return livePaneFor(session.id) == null ? null : session;
+  }
+
+  /// Brings the pane [sessionId] is already running in back into view and
+  /// selects it. Returns false when nothing of ours is running it.
+  ///
+  /// This is what "resume" should do for a session that never stopped: a
+  /// detached pane comes back as a tab, one already in a tab is focused, and
+  /// nothing is created. The same three lines used to live inline in the MCP
+  /// surface and nowhere else, which is why every other path relaunched.
+  bool reveal(String sessionId) {
+    final paneId = livePaneFor(sessionId);
+    if (paneId == null) return false;
+    _ref.read(terminalSessionsControllerProvider.notifier)
+      ..reattachSession(paneId)
+      ..focusPane(paneId);
+    _ref.read(terminalVisibleProvider.notifier).set(true);
+    _ref.read(selectedSessionIdProvider.notifier).select(sessionId);
+    _bump();
+    return true;
+  }
+
   /// Creates the session row and starts it on the requested surface.
   Future<SessionLaunchResult> launch(SessionLaunchRequest request) async {
+    // Before anything is written: a resume of a conversation we are still
+    // running would be a second agent on it. Callers that can reopen the
+    // running view do so and never get here; this is the backstop for the ones
+    // that cannot, and for whatever is added next.
+    final running = runningSessionWithExternalId(
+      request.resumeExternalSessionId,
+    );
+    if (running != null) {
+      throw SessionAlreadyRunning(sessionId: running.id, title: running.title);
+    }
+
     final depth = depthForChildOf(request.parentSessionId);
     if (!depth.isAllowed) throw SessionDepthRefused(depth);
 
