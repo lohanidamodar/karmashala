@@ -176,6 +176,20 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setRemoteAccessEnabled(bool value) {
+    state = state.copyWith(remoteAccessEnabled: value);
+    _save();
+  }
+
+  /// Sets, or with `null` clears, the relay the remote-access host dials.
+  void setRemoteRelayUrl(String? url) {
+    state = state.copyWith(
+      remoteRelayUrl: url,
+      clearRemoteRelayUrl: url == null,
+    );
+    _save();
+  }
+
   void _save() => ref.read(settingsRepositoryProvider).save(state);
 }
 

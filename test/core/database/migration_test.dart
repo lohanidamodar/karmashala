@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 17);
+    expect(db.schemaVersion, 18);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 17);
+    expect(version, 18);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -39,7 +39,41 @@ void main() {
         'ssh_known_hosts',
         'fanout_comparisons',
         'fanout_candidates',
+        'paired_devices',
       ]),
+    );
+  });
+
+  test('v18 creates the paired-device store', () {
+    final columns = db
+        .query('PRAGMA table_info(paired_devices);')
+        .map((r) => r['name']! as String)
+        .toList();
+    expect(
+      columns,
+      containsAll(<String>[
+        'id',
+        'name',
+        'device_key',
+        'capabilities',
+        'generation',
+        'revoked',
+        'push_token',
+        'push_platform',
+        'created_at',
+        'last_seen_at',
+      ]),
+    );
+
+    // A row written before anyone revoked anything reads back unrevoked.
+    db.execute(
+      'INSERT INTO paired_devices '
+      '(id, name, device_key, capabilities, generation, created_at) '
+      "VALUES ('d', 'Phone', 'ab', 31, 1, '2026-01-01T00:00:00.000Z');",
+    );
+    expect(
+      db.query('SELECT revoked FROM paired_devices;').single['revoked'],
+      0,
     );
   });
 
@@ -60,7 +94,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 17);
+    expect(db.schemaVersion, 18);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });

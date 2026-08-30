@@ -27,6 +27,7 @@ import '../../mcp/launcher_mcp.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/presentation/environments_section.dart';
+import '../../remote/presentation/remote_access_section.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
 import '../../system/launcher_hotkey.dart';
@@ -272,6 +273,7 @@ class SettingsScreen extends ConsumerWidget {
           const EnvironmentsSection(),
           const SshHostsSection(),
           const KnownHostsSection(),
+          const RemoteAccessSection(),
           _ClaudeAccountsSection(
             installations: installations
                 .where((i) => i.agentId == AgentIds.claudeCode)

@@ -74,6 +74,8 @@ class Settings {
     this.shellIntegrationEnabled = false,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
+    this.remoteAccessEnabled = false,
+    this.remoteRelayUrl,
   });
 
   /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
@@ -176,6 +178,14 @@ class Settings {
   /// to the built-in theme with a readable error.
   final String? terminalThemeSource;
 
+  /// Whether the mobile-companion host runs. Off by default: nothing listens,
+  /// nothing dials, until the user turns it on.
+  final bool remoteAccessEnabled;
+
+  /// The relay the host dials, or `null` for the PopupBits default. Stored as
+  /// text so this domain stays free of the remote feature.
+  final String? remoteRelayUrl;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   bool isSessionPinned(String sessionId) =>
@@ -211,6 +221,9 @@ class Settings {
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
+    bool? remoteAccessEnabled,
+    String? remoteRelayUrl,
+    bool clearRemoteRelayUrl = false,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -246,6 +259,10 @@ class Settings {
     terminalThemeSource: clearTerminalThemeSource
         ? null
         : (terminalThemeSource ?? this.terminalThemeSource),
+    remoteAccessEnabled: remoteAccessEnabled ?? this.remoteAccessEnabled,
+    remoteRelayUrl: clearRemoteRelayUrl
+        ? null
+        : (remoteRelayUrl ?? this.remoteRelayUrl),
   );
 
   Settings withPermissions(String agentId, AgentPermissions value) =>
@@ -279,6 +296,8 @@ class Settings {
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
+    'remoteAccessEnabled': remoteAccessEnabled,
+    if (remoteRelayUrl != null) 'remoteRelayUrl': remoteRelayUrl,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
@@ -360,6 +379,10 @@ class Settings {
       terminalThemeSource: json['terminalThemeSource'] is String
           ? json['terminalThemeSource'] as String
           : null,
+      remoteAccessEnabled: json['remoteAccessEnabled'] == true,
+      remoteRelayUrl: json['remoteRelayUrl'] is String
+          ? json['remoteRelayUrl'] as String
+          : null,
     );
   }
 
@@ -387,6 +410,8 @@ class Settings {
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
+      other.remoteAccessEnabled == remoteAccessEnabled &&
+      other.remoteRelayUrl == remoteRelayUrl &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -416,6 +441,8 @@ class Settings {
       defaultAgentInstallationId,
       shellIntegrationEnabled,
       terminalThemeSource,
+      remoteAccessEnabled,
+      remoteRelayUrl,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

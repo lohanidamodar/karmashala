@@ -27,6 +27,8 @@ typedef MigrationStep = void Function(Database db);
 ///   read.
 /// * **v17** — Loop 60: when a session's worktree was archived away. Nothing
 ///   else about the session is removed with it.
+/// * **v18** — Loop 70: companion devices paired with this host
+///   (`paired_devices`), for the mobile-companion remote access feature.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -45,7 +47,41 @@ final Map<int, MigrationStep> schemaMigrations = {
   15: _migrateToV15,
   16: _migrateToV16,
   17: _migrateToV17,
+  18: _migrateToV18,
 };
+
+void _migrateToV18(Database db) {
+  // Phones paired with this desktop host (Loop 70, mobile companion).
+  //
+  // `device_key` is the 32-byte symmetric key from the pairing key schedule,
+  // stored as lowercase hex. Revoking a device **empties** the key rather than
+  // only flagging the row — a revoked row must be unable to seal or open
+  // another frame, and a key that is gone cannot leak later. The row itself
+  // stays so the settings list can show what was revoked and when.
+  //
+  // `generation` is the rendezvous generation counter from the Loop-64 key
+  // schedule: the one number persisted per device. Both the rotating
+  // rendezvous id and the per-direction sealing keys derive from it, so there
+  // are deliberately no sequence-number columns here — sequences live and die
+  // with a generation.
+  //
+  // `push_token`/`push_platform` are what `notifications.register` persists;
+  // actual push delivery is a later loop.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS paired_devices (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      device_key    TEXT NOT NULL,
+      capabilities  INTEGER NOT NULL,
+      generation    INTEGER NOT NULL,
+      revoked       INTEGER NOT NULL DEFAULT 0,
+      push_token    TEXT,
+      push_platform TEXT,
+      created_at    TEXT NOT NULL,
+      last_seen_at  TEXT
+    );
+  ''');
+}
 
 void _migrateToV8(Database db) {
   // SSH as a third kind of execution environment (Loop 37). An `ssh` row in

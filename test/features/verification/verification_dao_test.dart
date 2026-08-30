@@ -33,8 +33,10 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('schema v17 is the current version', () {
-    expect(db.schemaVersion, 17);
+  test('schema v17 (this feature\'s tables) has been applied', () {
+    // At least, not exactly: later loops add their own migrations, and this
+    // feature only needs its own tables to exist.
+    expect(db.schemaVersion, greaterThanOrEqualTo(17));
   });
 
   test('a run round-trips with its target', () {
