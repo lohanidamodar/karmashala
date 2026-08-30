@@ -177,11 +177,8 @@ class AndroidSdkDiscoveryService {
         'ANDROID_SDK_ROOT',
         'LOCALAPPDATA',
       ],
-      EnvironmentKind.wsl || EnvironmentKind.ssh => const [
-        'ANDROID_HOME',
-        'ANDROID_SDK_ROOT',
-        'HOME',
-      ],
+      EnvironmentKind.wsl ||
+      EnvironmentKind.ssh => const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
     };
     final env = <String, String>{};
     for (final name in names) {

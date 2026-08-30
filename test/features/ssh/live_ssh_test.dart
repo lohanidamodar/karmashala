@@ -50,9 +50,13 @@ void main() {
   final port = int.tryParse(_env('CHITRAGUPTA_SSH_PORT') ?? '22') ?? 22;
 
   if (address == null || username == null || keyPath == null) {
-    test('live SSH tests are skipped', () {}, skip:
-        'Set CHITRAGUPTA_SSH_HOST, CHITRAGUPTA_SSH_USER and '
-        'CHITRAGUPTA_SSH_KEY to run the live SSH suite.');
+    test(
+      'live SSH tests are skipped',
+      () {},
+      skip:
+          'Set CHITRAGUPTA_SSH_HOST, CHITRAGUPTA_SSH_USER and '
+          'CHITRAGUPTA_SSH_KEY to run the live SSH suite.',
+    );
     return;
   }
 
@@ -220,13 +224,16 @@ void main() {
       expect(result.stdout.trim(), 'hello remote');
     });
 
-    test('reports a non-zero exit code as a result, not an exception', () async {
-      final result = await runner.run(
-        const CommandRequest(executable: 'false'),
-      );
-      expect(result.ok, isFalse);
-      expect(result.exitCode, isNot(0));
-    });
+    test(
+      'reports a non-zero exit code as a result, not an exception',
+      () async {
+        final result = await runner.run(
+          const CommandRequest(executable: 'false'),
+        );
+        expect(result.ok, isFalse);
+        expect(result.exitCode, isNot(0));
+      },
+    );
 
     test('stderr is captured separately', () async {
       final result = await runner.run(
@@ -269,19 +276,21 @@ void main() {
       expect(result.stdout.trim(), '/etc');
     });
 
-    test('a missing working directory fails instead of running elsewhere',
-        () async {
-      final result = await runner.run(
-        const CommandRequest(
-          executable: 'pwd',
-          workingDirectory: EnvironmentPath(
-            environmentId: 'ssh:live',
-            path: '/no/such/directory',
+    test(
+      'a missing working directory fails instead of running elsewhere',
+      () async {
+        final result = await runner.run(
+          const CommandRequest(
+            executable: 'pwd',
+            workingDirectory: EnvironmentPath(
+              environmentId: 'ssh:live',
+              path: '/no/such/directory',
+            ),
           ),
-        ),
-      );
-      expect(result.ok, isFalse);
-    });
+        );
+        expect(result.ok, isFalse);
+      },
+    );
 
     test('start() streams a long-lived process', () async {
       final handle = await runner.start(
@@ -297,72 +306,77 @@ void main() {
   });
 
   group('connection lifecycle', () {
-    test('a dropped connection is reported, then transparently reconnected',
-        () async {
-      final connection = await trusted();
-      final states = <SshConnectionState>[];
-      connection.states.listen(states.add);
-      final runner = SshCommandRunner(
-        environmentId: environment.id,
-        connection: connection,
-      );
+    test(
+      'a dropped connection is reported, then transparently reconnected',
+      () async {
+        final connection = await trusted();
+        final states = <SshConnectionState>[];
+        connection.states.listen(states.add);
+        final runner = SshCommandRunner(
+          environmentId: environment.id,
+          connection: connection,
+        );
 
-      expect((await runner.run(const CommandRequest(executable: 'true'))).ok,
-          isTrue);
+        expect(
+          (await runner.run(const CommandRequest(executable: 'true'))).ok,
+          isTrue,
+        );
 
-      // Hang up the way a server or a network would.
-      final live = await connection.client();
-      await live.close();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+        // Hang up the way a server or a network would.
+        final live = await connection.client();
+        await live.close();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
 
-      expect(connection.isConnected, isFalse);
-      expect(
-        states.map((s) => s.status),
-        contains(SshConnectionStatus.disconnected),
-      );
+        expect(connection.isConnected, isFalse);
+        expect(
+          states.map((s) => s.status),
+          contains(SshConnectionStatus.disconnected),
+        );
 
-      // The next command reconnects rather than reporting a hollow success.
-      final after = await runner.run(
-        const CommandRequest(executable: 'echo', arguments: ['back']),
-      );
-      expect(after.stdout.trim(), 'back');
-      expect(connection.isConnected, isTrue);
-    });
+        // The next command reconnects rather than reporting a hollow success.
+        final after = await runner.run(
+          const CommandRequest(executable: 'echo', arguments: ['back']),
+        );
+        expect(after.stdout.trim(), 'back');
+        expect(connection.isConnected, isTrue);
+      },
+    );
 
-    test('a wide fan-out queues instead of exhausting the session limit',
-        () async {
-      // 24 at once is well past OpenSSH's MaxSessions default of 10; without
-      // the channel limiter this fails with "open failed".
-      final runner = SshCommandRunner(
-        environmentId: environment.id,
-        connection: await trusted(),
-      );
-      final results = await Future.wait([
-        for (var i = 0; i < 24; i++)
-          runner.run(
-            CommandRequest(executable: 'echo', arguments: ['probe-$i']),
-          ),
-      ]);
-      expect(results.every((r) => r.ok), isTrue);
-      expect(
-        results.map((r) => r.stdout.trim()).toSet(),
-        hasLength(24),
-      );
-    });
+    test(
+      'a wide fan-out queues instead of exhausting the session limit',
+      () async {
+        // 24 at once is well past OpenSSH's MaxSessions default of 10; without
+        // the channel limiter this fails with "open failed".
+        final runner = SshCommandRunner(
+          environmentId: environment.id,
+          connection: await trusted(),
+        );
+        final results = await Future.wait([
+          for (var i = 0; i < 24; i++)
+            runner.run(
+              CommandRequest(executable: 'echo', arguments: ['probe-$i']),
+            ),
+        ]);
+        expect(results.every((r) => r.ok), isTrue);
+        expect(results.map((r) => r.stdout.trim()).toSet(), hasLength(24));
+      },
+    );
 
-    test('commands fail loudly once the connection is closed for good',
-        () async {
-      final connection = await trusted();
-      final runner = SshCommandRunner(
-        environmentId: environment.id,
-        connection: connection,
-      );
-      await connection.close();
-      await expectLater(
-        runner.run(const CommandRequest(executable: 'true')),
-        throwsA(isA<CommandException>()),
-      );
-    });
+    test(
+      'commands fail loudly once the connection is closed for good',
+      () async {
+        final connection = await trusted();
+        final runner = SshCommandRunner(
+          environmentId: environment.id,
+          connection: connection,
+        );
+        await connection.close();
+        await expectLater(
+          runner.run(const CommandRequest(executable: 'true')),
+          throwsA(isA<CommandException>()),
+        );
+      },
+    );
   });
 
   group('agent discovery', () {
@@ -539,11 +553,15 @@ void main() {
       };
 
       // ignore: avoid_print
-      print('  cold connect (TCP + kex + auth): '
-          '${cold.elapsedMilliseconds} ms');
+      print(
+        '  cold connect (TCP + kex + auth): '
+        '${cold.elapsedMilliseconds} ms',
+      );
       // ignore: avoid_print
-      print('  ${'work'.padRight(28)} ${'ssh'.padLeft(9)} '
-          '${'local'.padLeft(9)}  ratio');
+      print(
+        '  ${'work'.padRight(28)} ${'ssh'.padLeft(9)} '
+        '${'local'.padLeft(9)}  ratio',
+      );
       results.forEach((label, values) {
         final remote = values[0]!;
         final local = values[1];
@@ -551,9 +569,11 @@ void main() {
             ? 'n/a'
             : '${(remote / local).toStringAsFixed(1)}x';
         // ignore: avoid_print
-        print('  ${label.padRight(28)} '
-            '${remote.toStringAsFixed(1).padLeft(6)} ms '
-            '${(local?.toStringAsFixed(1) ?? '-').padLeft(6)} ms  $ratio');
+        print(
+          '  ${label.padRight(28)} '
+          '${remote.toStringAsFixed(1).padLeft(6)} ms '
+          '${(local?.toStringAsFixed(1) ?? '-').padLeft(6)} ms  $ratio',
+        );
       });
 
       // Is the per-command cost round trips or client-side crypto? Ten
@@ -580,11 +600,15 @@ void main() {
       final serial = await sequential(10);
       final parallel = await concurrent(10);
       // ignore: avoid_print
-      print('  10 commands sequentially:   $serial ms '
-          '(${(serial / 10).toStringAsFixed(1)} ms each)');
+      print(
+        '  10 commands sequentially:   $serial ms '
+        '(${(serial / 10).toStringAsFixed(1)} ms each)',
+      );
       // ignore: avoid_print
-      print('  10 commands concurrently:   $parallel ms '
-          '(${(parallel / 10).toStringAsFixed(1)} ms each)');
+      print(
+        '  10 commands concurrently:   $parallel ms '
+        '(${(parallel / 10).toStringAsFixed(1)} ms each)',
+      );
 
       // Not a performance assertion — the numbers are the point, and they go
       // in the loop report. This only pins that the work actually happened.

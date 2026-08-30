@@ -78,7 +78,12 @@ void main() {
         .query('PRAGMA table_info(ssh_hosts);')
         .map((r) => (r['name']! as String).toLowerCase())
         .toList();
-    for (final forbidden in ['password', 'passphrase', 'secret', 'private_key']) {
+    for (final forbidden in [
+      'password',
+      'passphrase',
+      'secret',
+      'private_key',
+    ]) {
       expect(
         columns,
         isNot(contains(forbidden)),

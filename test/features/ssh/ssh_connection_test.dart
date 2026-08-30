@@ -116,7 +116,11 @@ void main() {
         throwsA(
           isA<SshConnectionException>()
               .having((e) => e.retryable, 'retryable', isTrue)
-              .having((e) => e.message, 'message', contains('after 2 attempts')),
+              .having(
+                (e) => e.message,
+                'message',
+                contains('after 2 attempts'),
+              ),
         ),
       );
       await Future<void>.delayed(Duration.zero);
@@ -140,39 +144,47 @@ void main() {
       await c.close();
     });
 
-    test('a key host with no key path fails before touching the network',
-        () async {
-      final c = connection(on: host(port: rude.port, key: null));
-      await expectLater(
-        c.client(),
-        throwsA(
-          isA<SshConnectionException>()
-              .having((e) => e.retryable, 'retryable', isFalse)
-              .having((e) => e.message, 'message', contains('no private key')),
-        ),
-      );
-      expect(c.state.status, SshConnectionStatus.failed);
-      await c.close();
-    });
+    test(
+      'a key host with no key path fails before touching the network',
+      () async {
+        final c = connection(on: host(port: rude.port, key: null));
+        await expectLater(
+          c.client(),
+          throwsA(
+            isA<SshConnectionException>()
+                .having((e) => e.retryable, 'retryable', isFalse)
+                .having(
+                  (e) => e.message,
+                  'message',
+                  contains('no private key'),
+                ),
+          ),
+        );
+        expect(c.state.status, SshConnectionStatus.failed);
+        await c.close();
+      },
+    );
 
-    test('a private key that cannot be decoded says so without echoing it',
-        () async {
-      final c = connection(
-        on: host(port: rude.port),
-        keyReader: (_) async =>
-            '-----BEGIN OPENSSH PRIVATE KEY-----\nSUPERSECRET\n'
-            '-----END OPENSSH PRIVATE KEY-----\n',
-      );
-      try {
-        await c.client();
-        fail('expected a connection failure');
-      } on SshConnectionException catch (e) {
-        expect(e.message, contains('could not be decoded'));
-        expect(e.toString(), isNot(contains('SUPERSECRET')));
-        expect(e.retryable, isFalse);
-      }
-      await c.close();
-    });
+    test(
+      'a private key that cannot be decoded says so without echoing it',
+      () async {
+        final c = connection(
+          on: host(port: rude.port),
+          keyReader: (_) async =>
+              '-----BEGIN OPENSSH PRIVATE KEY-----\nSUPERSECRET\n'
+              '-----END OPENSSH PRIVATE KEY-----\n',
+        );
+        try {
+          await c.client();
+          fail('expected a connection failure');
+        } on SshConnectionException catch (e) {
+          expect(e.message, contains('could not be decoded'));
+          expect(e.toString(), isNot(contains('SUPERSECRET')));
+          expect(e.retryable, isFalse);
+        }
+        await c.close();
+      },
+    );
 
     test('a closed connection refuses to hand out a client', () async {
       final c = connection(

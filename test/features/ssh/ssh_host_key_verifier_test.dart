@@ -110,21 +110,23 @@ void main() {
     expect(known.find('build-box', 22)!.fingerprint, _good);
   });
 
-  test('a different key algorithm for a pinned host also counts as changed',
-      () async {
-    known.trust(
-      KnownHostKey(
-        host: 'build-box',
-        port: 22,
-        keyType: 'ssh-ed25519',
-        fingerprint: _good,
-        trustedAt: testTime,
-      ),
-    );
-    final v = verifier(onUnknown: (_) => true);
-    expect(await v.verify('ssh-rsa', fp(_good)), isFalse);
-    expect(v.lastPresentation!.verdict, HostKeyVerdict.changed);
-  });
+  test(
+    'a different key algorithm for a pinned host also counts as changed',
+    () async {
+      known.trust(
+        KnownHostKey(
+          host: 'build-box',
+          port: 22,
+          keyType: 'ssh-ed25519',
+          fingerprint: _good,
+          trustedAt: testTime,
+        ),
+      );
+      final v = verifier(onUnknown: (_) => true);
+      expect(await v.verify('ssh-rsa', fp(_good)), isFalse);
+      expect(v.lastPresentation!.verdict, HostKeyVerdict.changed);
+    },
+  );
 
   test('the same host on another port is a separate identity', () async {
     known.trust(
@@ -142,7 +144,10 @@ void main() {
       port: 2222,
       clock: FixedClock(testTime),
     );
-    expect(other.classify('ssh-ed25519', _good).verdict, HostKeyVerdict.unknown);
+    expect(
+      other.classify('ssh-ed25519', _good).verdict,
+      HostKeyVerdict.unknown,
+    );
   });
 
   test('forgetting a host makes the next connection a first connection', () {
@@ -156,7 +161,10 @@ void main() {
       ),
     );
     known.forget('build-box', 22);
-    expect(verifier().classify('ssh-rsa', _evil).verdict, HostKeyVerdict.unknown);
+    expect(
+      verifier().classify('ssh-rsa', _evil).verdict,
+      HostKeyVerdict.unknown,
+    );
   });
 
   test('the changed-key message names both fingerprints', () {

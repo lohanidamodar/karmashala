@@ -175,10 +175,8 @@ class SshConnection {
   }
 
   /// How many command channels are open right now, and how many are queued.
-  (int inUse, int waiting) get channelPressure => (
-    _commandSlots.inUse,
-    _commandSlots.waiting,
-  );
+  (int inUse, int waiting) get channelPressure =>
+      (_commandSlots.inUse, _commandSlots.waiting);
 
   /// Drops the current session so the next [client] call reconnects. Used by a
   /// manual "reconnect" action and by tests.
@@ -295,12 +293,10 @@ class SshConnection {
       // A refused host key surfaces from dartssh2 as a handshake/auth abort, so
       // the verifier's own verdict is the accurate story to tell.
       final presentation = verifier.lastPresentation;
-      if (presentation != null && presentation.verdict != HostKeyVerdict.trusted) {
+      if (presentation != null &&
+          presentation.verdict != HostKeyVerdict.trusted) {
         final rejection = HostKeyRejected(presentation);
-        throw SshConnectionException(
-          presentation.describe(),
-          cause: rejection,
-        );
+        throw SshConnectionException(presentation.describe(), cause: rejection);
       }
       if (e is SSHAuthFailError) {
         throw SshConnectionException(
@@ -360,10 +356,11 @@ class SshConnection {
   /// Reports an unusable key by the *type* of the failure only. The exception a
   /// decoder throws can quote the bytes it choked on, and those bytes are key
   /// material, so neither its message nor the PEM is ever passed along.
-  SshConnectionException _undecodableKey(Object error) => SshConnectionException(
-    'The private key for ${host.name} could not be decoded '
-    '(${error.runtimeType}). A wrong passphrase looks like this.',
-  );
+  SshConnectionException _undecodableKey(Object error) =>
+      SshConnectionException(
+        'The private key for ${host.name} could not be decoded '
+        '(${error.runtimeType}). A wrong passphrase looks like this.',
+      );
 
   Future<String> _ask(SshSecretPrompt? prompt, String what) async {
     if (prompt == null) {
@@ -387,7 +384,8 @@ class SshConnection {
     _emit(
       SshConnectionState(
         status: SshConnectionStatus.disconnected,
-        error: error == null ? 'The remote host closed the connection.'
+        error: error == null
+            ? 'The remote host closed the connection.'
             : _describe(error),
       ),
     );
