@@ -8,6 +8,7 @@ import '../../git/application/changes_providers.dart';
 import '../../git/domain/remote_repo.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/domain/pull_request_snapshot.dart';
+import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../domain/delivery_action.dart';
@@ -206,14 +207,27 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
         checkoutPullRequestProvider(Checkout(directory)).future,
       );
 
-      final delivery = await local;
-      return delivery.copyWith(
+      final delivery = (await local).copyWith(
         pullRequest: await pullRequest,
         hasWorktree: worktree != null,
         agentRunning:
             ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
         archived: session.isArchived,
       );
+
+      // Attention is filed from the readings a row already paid for, so nothing
+      // polls `gh` twice. Deferred out of this build: the inbox is another
+      // provider's state and Riverpod forbids writing to one while a provider
+      // is building — and by the time the microtask runs, this provider may
+      // have been disposed, which is not an error.
+      Future<void>.microtask(() {
+        try {
+          ref
+              .read(deliveryAttentionProvider.notifier)
+              .observe(sessionId, delivery);
+        } catch (_) {}
+      });
+      return delivery;
     });
 
 /// A repository's delivery state — what an imported session's row shows, since

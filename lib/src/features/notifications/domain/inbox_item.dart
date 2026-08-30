@@ -18,25 +18,47 @@ enum InboxItemKind {
   failed,
 
   /// An agent finished a turn you have not looked at yet.
-  finished;
+  finished,
+
+  /// A pull request's checks went red.
+  checksFailed,
+
+  /// A reviewer asked for changes on a pull request.
+  changesRequested,
+
+  /// A pull request is green and waiting for someone to press merge.
+  readyToMerge;
 
   /// Whether this kind describes a condition that is still true right now.
   ///
   /// The two waiting kinds are *state*: the watcher can see them every poll and
-  /// can therefore see them stop. `finished` is an *event* — a turn that ended
-  /// stays ended, so nothing but the user can retire it.
-  bool get isCondition => this != InboxItemKind.finished;
+  /// can therefore see them stop. Everything else is an *event* — a turn that
+  /// ended stays ended, and a build that went red went red — so nothing but the
+  /// user retires it.
+  ///
+  /// The distinction is load-bearing beyond wording: [AttentionInbox.apply]
+  /// retires conditions for any session the *agent* watcher looked at, so a
+  /// delivery item marked as a condition would be swept away by a poll that
+  /// knows nothing about pull requests.
+  bool get isCondition =>
+      this == InboxItemKind.needsApproval || this == InboxItemKind.failed;
 
   String get label => switch (this) {
     InboxItemKind.needsApproval => 'Needs approval',
     InboxItemKind.failed => 'Failed',
     InboxItemKind.finished => 'Finished',
+    InboxItemKind.checksFailed => 'Checks failed',
+    InboxItemKind.changesRequested => 'Changes requested',
+    InboxItemKind.readyToMerge => 'Ready to merge',
   };
 
   static InboxItemKind of(NotificationReason reason) => switch (reason) {
     NotificationReason.needsInput => InboxItemKind.needsApproval,
     NotificationReason.failed => InboxItemKind.failed,
     NotificationReason.finished => InboxItemKind.finished,
+    NotificationReason.checksFailed => InboxItemKind.checksFailed,
+    NotificationReason.changesRequested => InboxItemKind.changesRequested,
+    NotificationReason.readyToMerge => InboxItemKind.readyToMerge,
   };
 
   static InboxItemKind ofAttention(AttentionKind kind) => switch (kind) {
@@ -80,6 +102,9 @@ class InboxItem {
     InboxItemKind.needsApproval => '${session.label} — needs approval',
     InboxItemKind.failed => '${session.label} — failed',
     InboxItemKind.finished => '${session.label} — finished',
+    InboxItemKind.checksFailed => '${session.label} — checks failed',
+    InboxItemKind.changesRequested => '${session.label} — changes requested',
+    InboxItemKind.readyToMerge => '${session.label} — ready to merge',
   };
 
   @override
@@ -197,9 +222,9 @@ class AttentionInbox {
 
   /// Records that the user is looking at [openIds] right now.
   ///
-  /// A finished turn you have looked at is finished with; it leaves. A pending
-  /// approval you have looked at is marked seen — it stops counting against the
-  /// badge — but stays listed, because looking at a question does not answer it.
+  /// An event you have looked at is done with; it leaves. A pending approval
+  /// you have looked at is marked seen — it stops counting against the badge —
+  /// but stays listed, because looking at a question does not answer it.
   AttentionInbox viewed(Set<String> openIds) {
     if (openIds.isEmpty) return this;
     final next = <InboxItem>[];
@@ -208,16 +233,16 @@ class AttentionInbox {
         next.add(item);
         continue;
       }
-      if (item.kind == InboxItemKind.finished) continue;
+      if (!item.kind.isCondition) continue;
       next.add(item.seen ? item : item.copyWith(seen: true));
     }
     return _maybe(next);
   }
 
-  /// "I have read the inbox." Finished turns leave; conditions stay, seen.
+  /// "I have read the inbox." Events leave; conditions stay, seen.
   AttentionInbox markAllSeen() => _maybe([
     for (final item in items)
-      if (item.kind != InboxItemKind.finished) item.copyWith(seen: true),
+      if (item.kind.isCondition) item.copyWith(seen: true),
   ]);
 
   AttentionInbox dismiss(String id) =>
