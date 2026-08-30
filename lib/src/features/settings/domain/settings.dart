@@ -77,6 +77,7 @@ class Settings {
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
+    this.terminalThemeSource,
   });
 
   /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
@@ -174,6 +175,14 @@ class Settings {
   /// is a much worse outcome than a missing feature, so this stays opt-in.
   final bool shellIntegrationEnabled;
 
+  /// The imported terminal colour theme, as `<format>:<path>` (for example
+  /// `warp:C:\\Users\\a\\...\\nord.yaml`), or `null` for the built-in theme.
+  ///
+  /// The identity is stored rather than the resolved colours, so editing the
+  /// theme file is picked up. A file that later disappears or breaks falls back
+  /// to the built-in theme with a readable error.
+  final String? terminalThemeSource;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   bool isSessionPinned(String sessionId) =>
@@ -210,6 +219,8 @@ class Settings {
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
+    String? terminalThemeSource,
+    bool clearTerminalThemeSource = false,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -245,6 +256,9 @@ class Settings {
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
+    terminalThemeSource: clearTerminalThemeSource
+        ? null
+        : (terminalThemeSource ?? this.terminalThemeSource),
   );
 
   Settings withPermissions(String agentId, AgentPermissions value) =>
@@ -280,6 +294,7 @@ class Settings {
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
+    if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
@@ -358,6 +373,9 @@ class Settings {
           ? (json['pinnedSessionIds'] as List).whereType<String>().toList()
           : const [],
       shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
+      terminalThemeSource: json['terminalThemeSource'] is String
+          ? json['terminalThemeSource'] as String
+          : null,
     );
   }
 
@@ -387,6 +405,7 @@ class Settings {
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.chatToggleShortcutJson == chatToggleShortcutJson &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
+      other.terminalThemeSource == terminalThemeSource &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -419,6 +438,7 @@ class Settings {
       defaultAgentInstallationId,
       chatToggleShortcutJson,
       shellIntegrationEnabled,
+      terminalThemeSource,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

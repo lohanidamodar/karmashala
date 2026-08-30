@@ -57,6 +57,40 @@ void main() {
     });
   });
 
+  group('terminal theme setting', () {
+    test('defaults to none, meaning the built-in theme', () {
+      expect(const Settings().terminalThemeSource, isNull);
+    });
+
+    test('survives a JSON round-trip', () {
+      const s = Settings(terminalThemeSource: r'warp:C:\themes\nord.yaml');
+      final restored = Settings.fromJson(s.toJson());
+      expect(restored.terminalThemeSource, r'warp:C:\themes\nord.yaml');
+      expect(restored, s);
+    });
+
+    test('the controller persists it, and can clear it again', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(settingsControllerProvider.notifier);
+
+      controller.setTerminalThemeSource(r'ghostty:C:\themes\Nord');
+      expect(
+        SettingsRepository(db).load().terminalThemeSource,
+        r'ghostty:C:\themes\Nord',
+      );
+
+      // Clearing must actually clear — a plain `?? this.x` copyWith cannot
+      // express "set this back to null".
+      controller.setTerminalThemeSource(null);
+      expect(SettingsRepository(db).load().terminalThemeSource, isNull);
+    });
+  });
+
   group('Settings model', () {
     test('defaults to ask permissions and no default agent', () {
       const s = Settings();

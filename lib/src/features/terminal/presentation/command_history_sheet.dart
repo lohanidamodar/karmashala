@@ -7,8 +7,9 @@ import '../domain/command_blocks.dart';
 /// Formats how long a command took, at whatever scale reads naturally.
 String formatCommandDuration(Duration d) {
   if (d.inMilliseconds < 1000) return '${d.inMilliseconds}ms';
-  if (d.inSeconds < 60)
+  if (d.inSeconds < 60) {
     return '${(d.inMilliseconds / 1000).toStringAsFixed(1)}s';
+  }
   final minutes = d.inMinutes;
   final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
   return '${minutes}m ${seconds}s';

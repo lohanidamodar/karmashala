@@ -67,8 +67,9 @@ WarpThemeResult parseWarpTheme(String yamlText, {String? fallbackName}) {
   }
 
   final notes = <String>[];
-  if (document['background'] is Map)
+  if (document['background'] is Map) {
     notes.add('Background gradient not supported.');
+  }
   if (document['accent'] is Map) notes.add('Accent gradient not supported.');
   if (document.containsKey('background_image')) {
     notes.add('Background image not supported.');

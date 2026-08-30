@@ -168,6 +168,15 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Sets, or with `null` clears, the imported terminal colour theme.
+  void setTerminalThemeSource(String? id) {
+    state = state.copyWith(
+      terminalThemeSource: id,
+      clearTerminalThemeSource: id == null,
+    );
+    _save();
+  }
+
   void _save() => ref.read(settingsRepositoryProvider).save(state);
 }
 

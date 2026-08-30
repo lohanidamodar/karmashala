@@ -12,10 +12,13 @@ import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/terminal_scroll.dart';
+import '../application/terminal_theme_controller.dart';
 import '../application/terminal_search_controller.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../data/terminal_instance.dart';
+import '../data/theme_discovery.dart';
 import '../domain/command_blocks.dart';
+import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/terminal_profile.dart';
 import 'command_history_sheet.dart';
@@ -100,6 +103,13 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
   ///
   /// All are `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`, `Ctrl+F` and `Ctrl+W`
   /// are live control characters a shell expects to receive.
+  /// The imported palette, or null when the user is on the built-in theme or
+  /// the stored theme no longer resolves.
+  TerminalPalette? _importedPalette() {
+    final result = ref.watch(importedTerminalThemeProvider);
+    return result is ThemeLoadOk ? result.palette : null;
+  }
+
   /// The focused pane's live instance, if there is one.
   TerminalInstance? _focusedInstance() {
     final tab = ref.read(terminalSessionsControllerProvider).activeTab;
@@ -322,7 +332,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
           controller: instance.controller,
           focusNode: instance.focusNode,
           scrollController: instance.scrollController,
-          theme: _terminalTheme(theme),
+          theme: _terminalTheme(theme, _importedPalette()),
           textStyle: const TerminalStyle(fontSize: 13, fontFamily: kMonoFamily),
           padding: const EdgeInsets.all(Insets.sm),
           autofocus: focused,
@@ -562,15 +572,18 @@ class _Tab extends StatelessWidget {
   }
 }
 
-TerminalTheme _terminalTheme(ThemeData theme) {
+TerminalTheme _terminalTheme(ThemeData theme, TerminalPalette? imported) {
   // Keep xterm's well-tuned 16-colour palette; only align the background and
   // foreground with the app surface so the panel reads as one piece.
   final scheme = theme.colorScheme;
-  return TerminalThemes.defaultTheme.copyWith(
+  final base = TerminalThemes.defaultTheme.copyWith(
     background: scheme.surfaceContainerLowest,
     foreground: scheme.onSurface,
     cursor: scheme.tertiary,
   );
+  // An imported theme brings its own background: the user picked those colours
+  // deliberately, so they win over the app surface.
+  return imported?.applyTo(base) ?? base;
 }
 
 extension on TerminalTheme {
