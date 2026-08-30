@@ -166,6 +166,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         return;
       }
       _healthSubscription = session.health.listen(_onHealth);
+      final sink = _controlSink(session);
       setState(() {
         _session = session;
         _player = player;
@@ -173,8 +174,12 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         _streamingSerial = device.serial;
         _starting = false;
         _health = null;
-        _sink = _buildSink(session, device);
+        _sink = sink;
       });
+      // No control socket: the adb fallback needs the device's screen size,
+      // which is a round trip. Fetched off the start path so a slow `wm size`
+      // delays gestures rather than the picture.
+      if (sink == null) unawaited(_useAdbSink(session.serial));
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -184,46 +189,51 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     }
   }
 
-  /// Chooses the gesture transport for a session.
+  /// The control-socket gesture sink for a session, or `null` when the session
+  /// has no control socket and the adb fallback is needed.
   ///
-  /// The control socket when there is one, `adb shell input` otherwise. The two
-  /// are not equivalent and the pane says which is in use, because a drag that
-  /// tracks the finger and a drag that jumps on release are different products.
-  DeviceGestureSink? _buildSink(
-    DeviceStreamSession session,
-    AndroidDevice device,
-  ) {
+  /// The two are not equivalent and the pane says which is in use, because a
+  /// drag that tracks the finger and a drag that jumps on release are different
+  /// products.
+  DeviceGestureSink? _controlSink(DeviceStreamSession session) {
     final control = session.control;
-    if (control != null) {
-      return ScrcpyGestureSink(
-        connection: control,
-        videoSize: () => session.videoSize,
-        onDropped: _onControlDropped,
-      );
-    }
-    return _adbSink(device);
+    if (control == null) return null;
+    return ScrcpyGestureSink(
+      connection: control,
+      videoSize: () => session.videoSize,
+      onDropped: _onControlDropped,
+    );
   }
 
-  DeviceGestureSink? _adbSink(AndroidDevice device) {
+  /// Installs the `adb shell input` gesture sink for [serial].
+  ///
+  /// The screen size comes from **the device being streamed**, by serial. It
+  /// used to come from whatever was selected, which is a different device the
+  /// moment the two disagree — and a tap mapped through the wrong resolution
+  /// lands in the wrong place while looking like it worked.
+  Future<void> _useAdbSink(String serial) async {
     final adb = ref.read(adbServiceProvider);
-    final screen = ref.read(selectedDeviceScreenSizeProvider).asData?.value;
-    if (adb == null || screen == null) return null;
-    return AdbGestureSink(adb: adb, serial: device.serial, screen: screen);
+    if (adb == null) return;
+    DeviceScreenSize? size;
+    try {
+      size = await ref.read(deviceScreenSizeProvider(serial).future);
+    } catch (_) {
+      size = null;
+    }
+    final screen = size;
+    if (screen == null || !mounted) return;
+    // The stream may have moved to another device while we were asking.
+    if (_streamingSerial != serial || _session?.serial != serial) return;
+    setState(
+      () => _sink = AdbGestureSink(adb: adb, serial: serial, screen: screen),
+    );
   }
 
   /// The control socket went away mid-session. Fall back rather than going mute.
   void _onControlDropped() {
-    if (!mounted) return;
     final serial = _streamingSerial;
-    if (serial == null || _sink is AdbGestureSink) return;
-    final device = ref
-        .read(devicesProvider)
-        .asData
-        ?.value
-        .where((candidate) => candidate.serial == serial)
-        .firstOrNull;
-    if (device == null) return;
-    setState(() => _sink = _adbSink(device));
+    if (!mounted || serial == null || _sink is AdbGestureSink) return;
+    unawaited(_useAdbSink(serial));
   }
 
   Future<void> _stopEmulator({
@@ -276,6 +286,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     }
     ref.invalidate(devicesProvider);
     ref.invalidate(avdsProvider);
+    ref.invalidate(deviceScreenSizeProvider(serial));
     if (failure != null) {
       ScaffoldMessenger.maybeOf(
         context,
@@ -526,7 +537,12 @@ class _LiveView extends ConsumerWidget {
         onStopEmulator: onStopEmulator,
       );
     }
-    final screen = ref.watch(selectedDeviceScreenSizeProvider).asData?.value;
+    // The size of the device on screen, asked for by name. Anything derived
+    // from "the selection" instead can describe a different device.
+    final screen = ref
+        .watch(deviceScreenSizeProvider(currentDevice.serial))
+        .asData
+        ?.value;
     final aspect = screen == null ? 9 / 19.5 : screen.width / screen.height;
     final report = health;
     final unwell = report != null && !report.isHealthy;

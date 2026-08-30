@@ -1,6 +1,8 @@
 import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/features/devices/application/device_providers.dart';
 import 'package:chitragupta/src/features/devices/domain/android_device.dart';
+import 'package:chitragupta/src/features/devices/domain/device_input.dart';
 import 'package:chitragupta/src/features/devices/presentation/device_pane.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
@@ -40,6 +42,7 @@ Future<void> _pump(
   required AndroidSdk? sdk,
   required List<AndroidDevice> devices,
   List<Avd> avds = const [],
+  Map<String, DeviceScreenSize> screens = const {},
   Size size = _desktop,
   FakeCommandRunner? runner,
 }) async {
@@ -58,7 +61,9 @@ Future<void> _pump(
         androidSdkProvider.overrideWith((ref) async => sdk),
         devicesProvider.overrideWith((ref) async => devices),
         avdsProvider.overrideWith((ref) async => avds),
-        selectedDeviceScreenSizeProvider.overrideWith((ref) async => null),
+        deviceScreenSizeProvider.overrideWith(
+          (ref, serial) async => screens[serial],
+        ),
       ],
       child: const MaterialApp(home: Scaffold(body: DevicePane())),
     ),
@@ -364,6 +369,84 @@ void main() {
       );
       expect(find.text('CPH1989'), findsNothing);
       expect(find.text('Stop'), findsNothing);
+    });
+  });
+
+  // Bug 3: the adb gesture sink took its coordinate space from the *selected*
+  // device's screen size. Once selection and streaming diverged, a tap was
+  // mapped through the wrong resolution and landed in the wrong place on the
+  // device being watched — while appearing to work.
+  group('deviceScreenSizeProvider', () {
+    ProviderContainer containerFor(FakeCommandRunner runner) {
+      final container = ProviderContainer(
+        overrides: [
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: runner),
+          ),
+          androidSdkProvider.overrideWith((ref) async => _sdk()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('reports each device its own screen size, by serial', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          final args = request.arguments.join(' ');
+          if (args == '-s $_emulator shell wm size') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'Physical size: 1080x2400\n',
+              stderr: '',
+            );
+          }
+          if (args == '-s $_phoneSerial shell wm size') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'Physical size: 1080x2340\n',
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+        },
+      );
+      final container = containerFor(runner);
+      await container.read(androidSdkProvider.future);
+
+      // The two devices differ by 60 px of height. Asking for one and being
+      // given the other's is exactly how a tap lands in the wrong place.
+      expect(
+        await container.read(deviceScreenSizeProvider(_emulator).future),
+        const DeviceScreenSize(width: 1080, height: 2400),
+      );
+      expect(
+        await container.read(deviceScreenSizeProvider(_phoneSerial).future),
+        const DeviceScreenSize(width: 1080, height: 2340),
+      );
+    });
+
+    test('asks the device named, and no other', () async {
+      final runner = FakeCommandRunner();
+      final container = containerFor(runner);
+      await container.read(androidSdkProvider.future);
+      await container.read(deviceScreenSizeProvider(_phoneSerial).future);
+
+      expect(runner.requests.map((r) => r.arguments.join(' ')), [
+        '-s $_phoneSerial shell wm size',
+      ]);
+    });
+
+    test('is null when there is no SDK to ask with', () async {
+      final container = ProviderContainer(
+        overrides: [androidSdkProvider.overrideWith((ref) async => null)],
+      );
+      addTearDown(container.dispose);
+      await container.read(androidSdkProvider.future);
+      expect(
+        await container.read(deviceScreenSizeProvider(_emulator).future),
+        isNull,
+      );
     });
   });
 }

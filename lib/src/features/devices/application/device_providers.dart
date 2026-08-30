@@ -57,7 +57,13 @@ final avdsProvider = FutureProvider<List<Avd>>((ref) async {
   return adb.listAvds();
 });
 
-/// Serial of the device the pane is showing.
+/// Serial of the device the user has chosen, or `null` for "no explicit
+/// choice".
+///
+/// This is the pane's single source of truth for *which device it is about*.
+/// It changes only when someone picks a device — the derived
+/// [selectedDeviceProvider] supplies the convenience default, and the live view
+/// follows this notifier rather than keeping a second opinion of its own.
 final selectedDeviceSerialProvider =
     NotifierProvider<SelectedDeviceSerial, String?>(SelectedDeviceSerial.new);
 
@@ -82,15 +88,24 @@ final selectedDeviceProvider = Provider<AndroidDevice?>((ref) {
   return ready.length == 1 ? ready.single : null;
 });
 
-/// Screen size of the selected device — the coordinate space taps use.
-final selectedDeviceScreenSizeProvider = FutureProvider<DeviceScreenSize?>((
-  ref,
-) async {
-  final adb = ref.watch(adbServiceProvider);
-  final device = ref.watch(selectedDeviceProvider);
-  if (adb == null || device == null) return null;
-  return adb.screenSize(device.serial);
-});
+/// Screen size of one device, by serial — the coordinate space its taps use.
+///
+/// Keyed by serial on purpose. It used to be "the screen size of the *selected*
+/// device", which is a different device from the one being streamed the moment
+/// the two disagree; a tap was then mapped through the wrong resolution and
+/// landed in the wrong place on the device you were actually looking at, while
+/// appearing to work. Asking for a named device's size makes that impossible to
+/// express.
+///
+/// Cached per serial rather than auto-disposed because `wm size` reports the
+/// *physical* screen, which does not change while the device is plugged in —
+/// not even on rotation.
+final deviceScreenSizeProvider =
+    FutureProvider.family<DeviceScreenSize?, String>((ref, serial) async {
+      final adb = ref.watch(adbServiceProvider);
+      if (adb == null) return null;
+      return adb.screenSize(serial);
+    });
 
 /// Streaming service for the live view.
 final deviceStreamServiceProvider = Provider<DeviceStreamService?>((ref) {
