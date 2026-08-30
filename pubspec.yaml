@@ -45,6 +45,9 @@ dependencies:
   yaml: ^3.1.4
 
 dev_dependencies:
+  # The relay server, started in-process by the transport conformance tests.
+  chitragupta_relay:
+    path: packages/relay
   flutter_test:
     sdk: flutter
   integration_test:

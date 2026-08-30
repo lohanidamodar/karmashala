@@ -80,6 +80,13 @@ packages:
       relative: true
     source: path
     version: "0.2.0"
+  chitragupta_relay:
+    dependency: "direct dev"
+    description:
+      path: "packages/relay"
+      relative: true
+    source: path
+    version: "0.1.0"
   cli_config:
     dependency: transitive
     description:
