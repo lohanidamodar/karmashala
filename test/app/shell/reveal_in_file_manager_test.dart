@@ -96,6 +96,32 @@ void main() {
       expect(h.reveal.canReveal(path), isFalse);
     });
 
+    test('a POSIX path wearing a Windows environment id is refused', () {
+      // `git worktree list` reports `/mnt/c/...` for a worktree created from
+      // inside WSL, and the repository it belongs to is a Windows one, so the
+      // record says "this Windows path is /mnt/c/src/app". It is not a path on
+      // this machine and Explorer would refuse it; guessing which side of the
+      // boundary it meant is the implicit conversion the whole `EnvironmentPath`
+      // type exists to prevent.
+      final h = harness(environments: [_windows()]);
+      const path = EnvironmentPath(
+        environmentId: 'windows',
+        path: '/mnt/c/src/app',
+      );
+      expect(h.reveal.hostPathFor(path), isNull);
+      expect(h.reveal.canReveal(path), isFalse);
+      // A UNC path is a Windows path and stays offered.
+      expect(
+        h.reveal.hostPathFor(
+          const EnvironmentPath(
+            environmentId: 'windows',
+            path: r'\\wsl.localhost\Ubuntu\home\me',
+          ),
+        ),
+        r'\\wsl.localhost\Ubuntu\home\me',
+      );
+    });
+
     test('an environment the app does not know is not guessed at', () {
       final h = harness();
       expect(

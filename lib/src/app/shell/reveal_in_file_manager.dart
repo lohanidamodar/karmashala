@@ -78,14 +78,26 @@ class RevealInFileManager {
   HostFileManager? get fileManager =>
       fileManagerOverride ?? HostFileManager.forHost();
 
+  /// A Windows path as Explorer must be handed it: a drive path or a UNC path.
+  static final _windowsPath = RegExp(r'^([A-Za-z]:[\\/]|\\\\)');
+
   /// [path] spelled the way the host's file manager must be given it, or null
-  /// when the host has no way to reach it (a remote path, an unknown
-  /// environment, a WSL distribution with no name recorded).
+  /// when the host has no way to reach it: a remote path, an unknown
+  /// environment, a WSL distribution with no name recorded, or a path that
+  /// cannot be a path in the environment it claims to belong to.
   String? hostPathFor(EnvironmentPath path) {
     final owner = environmentFor(path.environmentId);
     if (owner == null) return null;
     if (owner.kind == EnvironmentKind.ssh) return null;
-    if (owner.kind == EnvironmentKind.windowsNative) return path.path;
+    if (owner.kind == EnvironmentKind.windowsNative) {
+      // A POSIX-absolute path carrying a Windows environment id is a record
+      // that does not describe a real location — `git worktree list` reports
+      // one for a worktree that was created from inside WSL. Guessing which
+      // machine `/mnt/c/...` meant is the implicit conversion `PathTranslator`
+      // exists to forbid, so this answers "no" rather than handing Explorer
+      // something it will refuse.
+      return _windowsPath.hasMatch(path.path) ? path.path : null;
+    }
     try {
       return translator
           .translate(

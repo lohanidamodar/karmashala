@@ -198,12 +198,6 @@ class _GitDetails extends ConsumerWidget {
     final remote = ref.watch(repoRemoteUrlProvider);
     final worktrees = ref.watch(repoWorktreesProvider);
     final commits = ref.watch(recentCommitsProvider);
-    final repoEnvironment = ref
-        .watch(selectedProjectRepositoriesProvider)
-        .where((r) => r.id == ref.watch(selectedRepositoryIdProvider))
-        .firstOrNull
-        ?.path
-        .environmentId;
 
     String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
       AsyncData(:final value) => value ?? fallback,
@@ -251,15 +245,10 @@ class _GitDetails extends ConsumerWidget {
                         w.branch ?? '(detached)',
                         w.path.path,
                         icon: AppIcons.gitBranch,
-                        action: repoEnvironment == null
-                            ? null
-                            : _RevealButton(
-                                dense: true,
-                                path: EnvironmentPath(
-                                  environmentId: repoEnvironment,
-                                  path: w.path.path,
-                                ),
-                              ),
+                        // The worktree's own path, environment and all — not
+                        // the repository's environment wearing the worktree's
+                        // text, which is a location nobody promised exists.
+                        action: _RevealButton(dense: true, path: w.path),
                       ),
                   ],
                 ),
@@ -390,14 +379,27 @@ class _RemoteValue extends StatelessWidget {
             child: InkWell(
               onTap: () async {
                 final messenger = ScaffoldMessenger.of(context);
+                // `launchUrl` reports a refusal by *returning false*, not by
+                // throwing, so a catch alone would leave a click that did
+                // nothing looking exactly like a click that worked.
+                var opened = false;
+                Object? failure;
                 try {
-                  await launchUrl(
+                  opened = await launchUrl(
                     Uri.parse(url),
                     mode: LaunchMode.externalApplication,
                   );
                 } catch (error) {
+                  failure = error;
+                }
+                if (!opened) {
                   messenger.showSnackBar(
-                    SnackBar(content: Text('Could not open $url: $error')),
+                    SnackBar(
+                      content: Text(
+                        'Could not open $url'
+                        '${failure == null ? '.' : ': $failure'}',
+                      ),
+                    ),
                   );
                 }
               },
