@@ -255,6 +255,13 @@ class Comparison {
 
   int get startedCount => candidates.where((c) => c.started).length;
 
+  /// The merge commit, abbreviated the way git abbreviates it.
+  String? get shortMergedCommit {
+    final sha = mergedCommit;
+    if (sha == null) return null;
+    return sha.length >= 7 ? sha.substring(0, 7) : sha;
+  }
+
   /// The prompt's first line, trimmed for a list row.
   String get title {
     final line = prompt.trim().split('\n').first.trim();

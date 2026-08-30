@@ -201,6 +201,7 @@ void main() {
         addTearDown(restarted.dispose);
 
         final stored = restarted.read(comparisonsProvider).single;
+        expect(stored.id, launched.comparison.id);
         final results = restarted
             .read(fanOutServiceProvider)
             .resultsFor(stored);
