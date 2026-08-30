@@ -1,0 +1,70 @@
+{
+  "note": "Committed so the host and the companion cannot drift. Regenerate with test/features/remote/generate_vectors.dart.",
+  "hkdf": "HKDF-SHA256",
+  "salt": "chitragupta/remote/v1",
+  "aead": "XChaCha20-Poly1305, frame = nonce(24) || ciphertext || mac(16), sealed plaintext = uint64be(sequence) || payload, aad = the direction label",
+  "pairingSecret": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "hostId": "11111111222222223333333344444444",
+  "deviceId": "aaaaaaaabbbbbbbbccccccccdddddddd",
+  "deviceKey": "8e97348a4f2411938bb63885843775b094ad29e89d48390231b00ec2482ac16d",
+  "generations": [
+    {
+      "generation": 0,
+      "rendezvous": "3985bdbde7515e809f2bc73d7e06f4ee",
+      "hostToDevice": "5026c4e82bf6c9108db53f78b114fc30dcb23f2e978dd9f72dd4098798237070",
+      "deviceToHost": "45f7523492ea983e155f2ff5f19823465c613ec7d65879b6a773202658e108b3"
+    },
+    {
+      "generation": 1,
+      "rendezvous": "9417a4fed25cef1a35ccdfc0069eaaa8",
+      "hostToDevice": "06a6dcbae598555f5a49a17d8b849698d71da2214a60f41dfb65db060cbd5069",
+      "deviceToHost": "9de0437e4f6d3da301372723a5e21346a1a8df50f8023e067b466d363ace1261"
+    },
+    {
+      "generation": 7,
+      "rendezvous": "61e6fd3b62f76c9b91c69188a599cc43",
+      "hostToDevice": "03ad0afb8e342fc8bdda1c915dc79d6921f94cf0236b723169b05aebb649a3bb",
+      "deviceToHost": "0a815b750d958f083de9955cc5b710a71d50e5d1af6a246d82325e2860dfcd7c"
+    },
+    {
+      "generation": 1000,
+      "rendezvous": "120e6633a8d4eaf823e792973571352e",
+      "hostToDevice": "9dc7bbaf8271bb0a983c9362b31f6075534e48ab448e9b10e0538d973aa07634",
+      "deviceToHost": "a0d6117384cfa8214846ce524135b1e81454b143bc11ba08a24e6c6e1ca7bfed"
+    }
+  ],
+  "frames": [
+    {
+      "generation": 0,
+      "role": "host",
+      "sequence": 0,
+      "nonce": "303132333435363738393a3b3c3d3e3f4041424344454647",
+      "plaintext": "7b2276223a312c22736571223a302c2274223a2273657373696f6e732e6c697374222c2270223a7b7d7d",
+      "frame": "303132333435363738393a3b3c3d3e3f4041424344454647d4c3821dfd10a99a2979e7671ad0b58b3d11f1c6fe42e1eb49a18b1f2880e775bccb0ba5e02a569a31e6770a51b50e746f24d4e1ea52a86d4062c1d27a92aaa5d5bb"
+    },
+    {
+      "generation": 0,
+      "role": "host",
+      "sequence": 1,
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "plaintext": "",
+      "frame": "505152535455565758595a5b5c5d5e5f606162636465666755af4cd3dddd7cf5934338993d1ce7e173372db72f1e3b67"
+    },
+    {
+      "generation": 0,
+      "role": "companion",
+      "sequence": 0,
+      "nonce": "303132333435363738393a3b3c3d3e3f4041424344454647",
+      "plaintext": "7b2276223a312c22736571223a302c2274223a2273657373696f6e732e6c697374222c2270223a7b7d7d",
+      "frame": "303132333435363738393a3b3c3d3e3f4041424344454647d446d955796abc0ab98fdc820f94d2aa85b77ca96ff5154545eb3aeb9e187fcde53b6b32ea322c81a57c2ecd94a55a6d301108c0bf9e3642feb1dc0d479e767132a2"
+    },
+    {
+      "generation": 0,
+      "role": "companion",
+      "sequence": 1,
+      "nonce": "505152535455565758595a5b5c5d5e5f6061626364656667",
+      "plaintext": "",
+      "frame": "505152535455565758595a5b5c5d5e5f60616263646566670eb86eb8de1955253c154fa62414722153301880dee3a35a"
+    }
+  ]
+}
