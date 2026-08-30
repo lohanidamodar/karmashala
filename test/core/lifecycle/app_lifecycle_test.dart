@@ -232,7 +232,7 @@ void main() {
       // Pinned to literals on purpose. The two bounds this replaces were
       // written against `kShutdownBudget` itself, so widening the constant —
       // the exact regression they existed to catch — kept them green.
-      expect(kShutdownBudget, const Duration(milliseconds: 2200));
+      expect(kShutdownBudget, const Duration(milliseconds: 2350));
       expect(
         kShutdownStepBudgets.values.reduce((a, b) => a + b),
         kShutdownBudget,
@@ -242,7 +242,7 @@ void main() {
         kShutdownStepBudgets['terminal processes'],
         const Duration(milliseconds: 1500),
       );
-      expect(kShutdownStepBudgets, hasLength(6));
+      expect(kShutdownStepBudgets, hasLength(7));
     });
 
     test('a spent budget skips every step but still disposes', () async {

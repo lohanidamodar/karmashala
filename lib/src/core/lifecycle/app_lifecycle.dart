@@ -28,7 +28,7 @@ import '../logging/app_logger.dart';
 /// took the handshake deletion with it — the single step this owner exists for.
 /// Each step gets its own slice instead, so a hang costs that step and nothing
 /// else. [kShutdownStepBudgets] is that sum, itemised.
-const kShutdownBudget = Duration(milliseconds: 2200);
+const kShutdownBudget = Duration(milliseconds: 2350);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -57,6 +57,7 @@ const _kContainerStepBudget = Duration(milliseconds: 250);
 /// written down so a change to one of them cannot silently widen the deadline.
 const kShutdownStepBudgets = <String, Duration>{
   'agent hook installation': _kHookStepBudget,
+  'agent hook uninstall': _kHookStepBudget,
   'background watchers': _kStepBudget,
   'control server': _kStepBudget,
   'system integration': _kStepBudget,
@@ -227,6 +228,16 @@ class AppLifecycle {
       () => _hookInstallation ?? Future<void>.value(),
       cap: _kHookStepBudget,
     );
+
+    // 1b. Take our hooks back out of the agents' config files (Loop 68, B2):
+    //     the endpoint they point at dies with this process, and a stale
+    //     curl in someone's settings.json is exactly what the owner would
+    //     notice next week.
+    await _step('agent hook uninstall', watch, () async {
+      await _container
+          .read(agentHookInstallationServiceProvider)
+          .uninstallAll();
+    }, cap: _kHookStepBudget);
 
     // 2. Watchers, so nothing new arrives while the rest closes.
     await _step('background watchers', watch, () async {
