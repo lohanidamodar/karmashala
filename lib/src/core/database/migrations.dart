@@ -37,6 +37,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   9: _migrateToV9,
   10: _migrateToV10,
   11: _migrateToV11,
+  12: _migrateToV12,
 };
 
 void _migrateToV8(Database db) {
@@ -389,4 +390,80 @@ void _migrateToV11(Database db) {
   // `NOT NULL DEFAULT 'ask'` would have been a lie for the old rows, half of
   // which were launched under a different mode entirely.
   db.execute('ALTER TABLE sessions ADD COLUMN permission_mode TEXT;');
+}
+
+void _migrateToV12(Database db) {
+  // Persistent fan-out comparisons (Loop 52).
+  //
+  // A fan-out used to live entirely in one dialog: closing it lost the prompt,
+  // which agents ran it and which one won. These two tables are the record, and
+  // they are written to be readable *after* the thing they describe is gone —
+  // the winner merged, the losers' worktrees removed.
+  db.execute("""
+    CREATE TABLE IF NOT EXISTS fanout_comparisons (
+      id                  TEXT PRIMARY KEY,
+      repository_id       TEXT NOT NULL,
+      prompt              TEXT NOT NULL,
+      created_at          TEXT NOT NULL,
+      finished_at         TEXT,
+      outcome             TEXT NOT NULL,
+      winner_candidate_id TEXT,
+      merged_commit       TEXT,
+      archived            INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (repository_id) REFERENCES repositories (id) ON DELETE CASCADE
+    );
+  """);
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_fanout_comparisons_repo '
+    'ON fanout_comparisons (repository_id, created_at);',
+  );
+
+  // `session_id` is deliberately **not** a foreign key. A candidate is a
+  // historical fact about a comparison; deleting the session must orphan the
+  // link, not erase the row that says this agent ran and what it produced. The
+  // same reasoning as `sessions.parent_session_id` in v10.
+  //
+  // `agent_id` is copied rather than joined through `installation_id` for the
+  // same reason: an installation can be removed when an agent is uninstalled,
+  // and the record must still name who wrote the diff.
+  //
+  // `worktree_removed` plus the `files_changed`/`insertions`/`deletions`/
+  // `commits` columns are what makes a discarded loser still legible: the
+  // directory is gone, the last thing it showed is not.
+  db.execute("""
+    CREATE TABLE IF NOT EXISTS fanout_candidates (
+      id                      TEXT PRIMARY KEY,
+      comparison_id           TEXT NOT NULL,
+      position                INTEGER NOT NULL,
+      session_id              TEXT,
+      installation_id         TEXT NOT NULL,
+      agent_id                TEXT NOT NULL,
+      worktree_environment_id TEXT,
+      worktree_path           TEXT,
+      branch                  TEXT,
+      launch                  TEXT NOT NULL,
+      failure                 TEXT,
+      files_changed           INTEGER,
+      insertions              INTEGER,
+      deletions               INTEGER,
+      commits                 INTEGER,
+      diff_captured_at        TEXT,
+      worktree_removed        INTEGER NOT NULL DEFAULT 0,
+      verdict                 TEXT,
+      verdict_label           TEXT,
+      verdict_run_id          TEXT,
+      notes                   TEXT,
+      FOREIGN KEY (comparison_id) REFERENCES fanout_comparisons (id)
+        ON DELETE CASCADE,
+      UNIQUE (comparison_id, position)
+    );
+  """);
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_fanout_candidates_comparison '
+    'ON fanout_candidates (comparison_id, position);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_fanout_candidates_session '
+    'ON fanout_candidates (session_id);',
+  );
 }

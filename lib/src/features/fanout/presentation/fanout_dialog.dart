@@ -1,18 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../repositories/domain/repository.dart';
 import '../application/fanout_service.dart';
+import 'comparison_list.dart';
+import 'comparison_view.dart';
 
+/// The fan-out surface: past comparisons, a new one, and one open.
+///
+/// Launching used to *become* the result view and the result view died with the
+/// dialog. It now opens on the list, because a comparison is a thing you return
+/// to — the launch simply selects the one it just made.
 class FanOutDialog extends ConsumerStatefulWidget {
-  const FanOutDialog({super.key});
+  const FanOutDialog({this.initialComparisonId, super.key});
 
-  static Future<void> show(BuildContext context) =>
-      showDialog<void>(context: context, builder: (_) => const FanOutDialog());
+  /// Opens straight into one comparison, when the caller has one in mind.
+  final String? initialComparisonId;
+
+  static Future<void> show(BuildContext context, {String? comparisonId}) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => FanOutDialog(initialComparisonId: comparisonId),
+      );
 
   @override
   ConsumerState<FanOutDialog> createState() => _FanOutDialogState();
@@ -21,9 +36,16 @@ class FanOutDialog extends ConsumerStatefulWidget {
 class _FanOutDialogState extends ConsumerState<FanOutDialog> {
   final _prompt = TextEditingController();
   final _selected = <String>{};
-  FanOutLaunch? _launched;
+  String? _openComparisonId;
+  bool _composing = false;
   bool _busy = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _openComparisonId = widget.initialComparisonId;
+  }
 
   @override
   void dispose() {
@@ -31,18 +53,20 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
     super.dispose();
   }
 
+  Repository? get _repository {
+    final id = ref.read(selectedRepositoryIdProvider);
+    return id == null ? null : ref.read(repositoryDaoProvider).getById(id);
+  }
+
   Future<void> _launch(List<AgentInstallation> installs) async {
-    final repoId = ref.read(selectedRepositoryIdProvider);
-    final repo = repoId == null
-        ? null
-        : ref.read(repositoryDaoProvider).getById(repoId);
+    final repo = _repository;
     if (repo == null) return;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final results = await ref
+      final launched = await ref
           .read(fanOutServiceProvider)
           .launch(
             repository: repo,
@@ -51,7 +75,20 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
                 .toList(),
             prompt: _prompt.text,
           );
-      if (mounted) setState(() => _launched = results);
+      if (!mounted) return;
+      setState(() {
+        _composing = false;
+        _openComparisonId = launched.comparison.id;
+        _prompt.clear();
+        _selected.clear();
+      });
+      // A partial launch is still a launch: the failed agents are candidates in
+      // the comparison now, so the view below names them without a banner.
+      if (launched.hasFailures) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(launched.partialSummary!)));
+      }
     } on Object catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
@@ -61,10 +98,7 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final repoId = ref.watch(selectedRepositoryIdProvider);
-    final repo = repoId == null
-        ? null
-        : ref.read(repositoryDaoProvider).getById(repoId);
+    final repo = _repository;
     final installs = repo == null
         ? const <AgentInstallation>[]
         : ref
@@ -73,32 +107,65 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
     return Dialog(
       insetPadding: const EdgeInsets.all(28),
       child: SizedBox(
-        width: 1100,
-        height: 760,
+        width: 1180,
+        height: 780,
         child: Padding(
-          padding: const EdgeInsets.all(Insets.lg),
-          child: _launched == null
-              ? _setup(repo?.name, installs)
-              : _comparison(_launched!),
+          padding: const EdgeInsets.all(Insets.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  tooltip: 'Close',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(AppIcons.x, size: Chrome.icon),
+                ),
+              ),
+              Expanded(child: _body(repo, installs)),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _body(Repository? repo, List<AgentInstallation> installs) {
+    if (_composing) return _setup(repo?.name, installs);
+    if (_openComparisonId case final id?) {
+      return ComparisonView(
+        comparisonId: id,
+        onBack: () => setState(() => _openComparisonId = null),
+      );
+    }
+    return ComparisonList(
+      onOpen: (id) => setState(() => _openComparisonId = id),
+      onNew: repo == null ? null : () => setState(() => _composing = true),
     );
   }
 
   Widget _setup(String? repoName, List<AgentInstallation> installs) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text(
-        'Parallel worktree fan-out',
-        style: Theme.of(context).textTheme.titleLarge,
+      Row(
+        children: [
+          IconButton(
+            tooltip: 'Back',
+            onPressed: () => setState(() => _composing = false),
+            icon: const Icon(AppIcons.arrowLeft, size: Chrome.icon),
+          ),
+          const SizedBox(width: Insets.xs),
+          Expanded(
+            child: Text(
+              'New fan-out'
+              '${repoName == null ? '' : '  ·  $repoName'}',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+        ],
       ),
-      const SizedBox(height: Insets.xs),
-      Text(
-        repoName == null
-            ? 'Select a repository first.'
-            : 'Repository: $repoName',
-      ),
-      const SizedBox(height: Insets.md),
+      const Divider(height: Insets.lg),
       TextField(
         controller: _prompt,
         minLines: 5,
@@ -108,15 +175,19 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
         ),
       ),
       const SizedBox(height: Insets.md),
-      Text('Agents', style: Theme.of(context).textTheme.titleSmall),
+      Text('Agents', style: Theme.of(context).textTheme.labelLarge),
       Expanded(
         child: ListView(
           children: [
             for (final install in installs)
               CheckboxListTile(
+                dense: true,
                 value: _selected.contains(install.id),
                 title: Text(install.agentId),
-                subtitle: Text(install.version ?? install.executable.path),
+                subtitle: Text(
+                  install.version ?? install.executable.path,
+                  style: const TextStyle(fontFamily: kMonoFamily),
+                ),
                 onChanged: _busy
                     ? null
                     : (value) => setState(() {
@@ -133,13 +204,13 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
       if (_error != null)
         Text(
           _error!,
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
+          style: TextStyle(color: SemanticColors.of(context).failure),
         ),
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => setState(() => _composing = false),
             child: const Text('Cancel'),
           ),
           const SizedBox(width: Insets.sm),
@@ -155,158 +226,4 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
       ),
     ],
   );
-
-  Widget _comparison(FanOutLaunch launched) {
-    final results = launched.started;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Compare results',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Close',
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close),
-            ),
-          ],
-        ),
-        // A partial launch is still a launch: the agents that did start are
-        // below, and the ones that did not are named here rather than lost.
-        if (launched.partialSummary case final summary?) ...[
-          const SizedBox(height: Insets.xs),
-          Text(
-            '$summary '
-            '${launched.failures.map((f) => '${f.agentId}: ${f.error}').join(' · ')}',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        ],
-        const SizedBox(height: Insets.md),
-        Expanded(
-          child: results.isEmpty
-              ? const Center(child: Text('No agent started.'))
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < results.length; i++) ...[
-                        if (i > 0) const VerticalDivider(width: 1),
-                        SizedBox(
-                          width: 400,
-                          child: _ResultColumn(result: results[i]),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ResultColumn extends ConsumerStatefulWidget {
-  const _ResultColumn({required this.result});
-  final FanOutResult result;
-
-  @override
-  ConsumerState<_ResultColumn> createState() => _ResultColumnState();
-}
-
-class _ResultColumnState extends ConsumerState<_ResultColumn> {
-  late Future<String> _diff;
-
-  @override
-  void initState() {
-    super.initState();
-    _diff = ref.read(fanOutServiceProvider).diff(widget.result);
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              widget.result.agentId,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Refresh diff',
-            onPressed: () => setState(
-              () => _diff = ref.read(fanOutServiceProvider).diff(widget.result),
-            ),
-            icon: const Icon(Icons.refresh, size: 17),
-          ),
-        ],
-      ),
-      Text(widget.result.session.worktree?.path ?? 'No worktree', maxLines: 2),
-      const SizedBox(height: Insets.sm),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: OutlinedButton(
-          onPressed: () => _merge(context),
-          child: const Text('Merge this winner'),
-        ),
-      ),
-      const SizedBox(height: Insets.sm),
-      Expanded(
-        child: FutureBuilder<String>(
-          future: _diff,
-          builder: (context, snapshot) => SingleChildScrollView(
-            child: SelectableText(
-              snapshot.connectionState != ConnectionState.done
-                  ? 'Loading diff…'
-                  : snapshot.hasError
-                  ? '${snapshot.error}'
-                  : snapshot.data!.isEmpty
-                  ? 'No changes yet. Refresh after the agent has worked.'
-                  : snapshot.data!,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
-
-  Future<void> _merge(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Merge ${widget.result.agentId} result?'),
-        content: const Text(
-          'The worktree must be clean and its work committed. The session '
-          'branch will be merged into the repository’s current branch.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Merge winner'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(fanOutServiceProvider).mergeWinner(widget.result);
-      messenger.showSnackBar(const SnackBar(content: Text('Winner merged.')));
-    } on Object catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text('$error')));
-    }
-  }
 }

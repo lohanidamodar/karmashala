@@ -27,6 +27,7 @@ import '../devices/domain/logcat_entry.dart';
 import '../devices/domain/ui_node.dart';
 import '../devices/domain/ui_summary.dart';
 import '../environments/application/environment_providers.dart';
+import '../fanout/application/comparison_providers.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
@@ -445,6 +446,14 @@ class LauncherControlServer {
         );
       case 'open_session':
         return _openSession(args['id'] as String?);
+      case 'fanout_list':
+        return _fanOutList(
+          repositoryId: args['repositoryId'] as String?,
+          includeArchived: args['includeArchived'] == true,
+          limit: (args['limit'] as num?)?.round(),
+        );
+      case 'fanout_get':
+        return _fanOutGet(args['id'] as String?);
       case 'list_devices':
         return _listDevices();
       case 'device_screenshot':
@@ -620,6 +629,52 @@ class LauncherControlServer {
           'id': {
             'type': 'string',
             'description': 'Session id from list_sessions.',
+          },
+        },
+        'required': ['id'],
+      },
+    },
+    {
+      'name': 'fanout_list',
+      'description':
+          'List the fan-out comparisons — one prompt run on several agents in '
+          'parallel worktrees. Each row gives the prompt, when it ran, the '
+          'outcome (pending/merged/discarded) and every candidate with its '
+          'agent and diff stat. Comparisons persist: a merged one whose losing '
+          'worktrees were deleted is still listed. Use fanout_get for the full '
+          'record of one.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'repositoryId': {
+            'type': 'string',
+            'description': 'Only comparisons for this repository.',
+          },
+          'includeArchived': {
+            'type': 'boolean',
+            'description': 'Include comparisons the user archived.',
+          },
+          'limit': {
+            'type': 'number',
+            'description': 'Most recent N (default 20).',
+          },
+        },
+      },
+    },
+    {
+      'name': 'fanout_get',
+      'description':
+          'The full record of one fan-out comparison: the prompt, the winner, '
+          'the merge commit, and every candidate with its session, branch, '
+          'worktree (and whether that worktree has been removed), diff stat, '
+          'verification verdict and failure reason. Use this to report on a '
+          'comparison the user ran.',
+      'inputSchema': {
+        'type': 'object',
+        'properties': {
+          'id': {
+            'type': 'string',
+            'description': 'Comparison id, from fanout_list.',
           },
         },
         'required': ['id'],
@@ -897,6 +952,97 @@ class LauncherControlServer {
           'path': project.root.path,
         },
     ];
+  }
+
+  /// Fan-out comparisons, newest first. Compact by design: an agent asking
+  /// "what did we try?" wants the shape, not every diff.
+  List<Map<String, dynamic>> _fanOutList({
+    String? repositoryId,
+    bool includeArchived = false,
+    int? limit,
+  }) {
+    final repositories = _container.read(repositoryDaoProvider);
+    final comparisons = _container
+        .read(comparisonDaoProvider)
+        .getAll(repositoryId: repositoryId, includeArchived: includeArchived);
+    final capped = comparisons.take(limit == null || limit <= 0 ? 20 : limit);
+    return [
+      for (final comparison in capped)
+        {
+          'id': comparison.id,
+          'prompt': comparison.title,
+          'repository': repositories.getById(comparison.repositoryId)?.name,
+          'createdAt': comparison.createdAt.toIso8601String(),
+          'outcome': comparison.outcome.name,
+          'winner': comparison.winner?.agentId,
+          'archived': comparison.archived,
+          'candidates': [
+            for (final candidate in comparison.candidates)
+              {
+                'agentId': candidate.agentId,
+                'state': candidate.launch.name,
+                'diff': candidate.diff?.summary,
+              },
+          ],
+        },
+    ];
+  }
+
+  /// One comparison in full — still without diff text, which is what
+  /// `git diff` in the worktree is for while the worktree exists.
+  Map<String, dynamic> _fanOutGet(String? id) {
+    if (id == null || id.isEmpty) {
+      throw ArgumentError('id is required.');
+    }
+    final comparison = _container.read(comparisonDaoProvider).getById(id);
+    if (comparison == null) {
+      throw ArgumentError('No comparison with id $id.');
+    }
+    final repository = _container
+        .read(repositoryDaoProvider)
+        .getById(comparison.repositoryId);
+    return {
+      'id': comparison.id,
+      'prompt': comparison.prompt,
+      'repository': repository?.name,
+      'repositoryId': comparison.repositoryId,
+      'createdAt': comparison.createdAt.toIso8601String(),
+      'finishedAt': comparison.finishedAt?.toIso8601String(),
+      'outcome': comparison.outcome.name,
+      'mergedCommit': comparison.mergedCommit,
+      'winnerAgentId': comparison.winner?.agentId,
+      'archived': comparison.archived,
+      'candidates': [
+        for (final candidate in comparison.candidates)
+          {
+            'id': candidate.id,
+            'agentId': candidate.agentId,
+            'sessionId': candidate.sessionId,
+            'state': candidate.launch.name,
+            'isWinner': comparison.winnerCandidateId == candidate.id,
+            'branch': candidate.branch,
+            'worktree': candidate.worktree?.path,
+            'worktreeRemoved': candidate.worktreeRemoved,
+            if (candidate.diff case final diff?)
+              'diff': {
+                'summary': diff.summary,
+                'filesChanged': diff.filesChanged,
+                'insertions': diff.insertions,
+                'deletions': diff.deletions,
+                'commits': diff.commits,
+                'capturedAt': diff.capturedAt.toIso8601String(),
+              },
+            if (candidate.evidence case final evidence?)
+              'verdict': {
+                'verdict': evidence.verdict.name,
+                'label': evidence.label,
+                'runId': evidence.runId,
+              },
+            'failure': candidate.failure,
+            'notes': candidate.notes,
+          },
+      ],
+    };
   }
 
   List<Map<String, dynamic>> _listSessions({String? query, String? cli}) {
