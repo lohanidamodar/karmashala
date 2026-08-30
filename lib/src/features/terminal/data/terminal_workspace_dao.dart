@@ -73,7 +73,15 @@ class StoredTerminalWorkspace {
   final String? activeTabId;
 }
 
-/// Reads and writes the terminal workspace (schema v7) with hand-written SQL.
+/// The `app_metadata` key stamped when a save emptied a non-empty workspace.
+///
+/// The backup rows carry their own `updated_at`, but those are the timestamps of
+/// the *save that stored them*, not of the emptying — this is when the copy was
+/// taken, which is the question anyone recovering one is actually asking.
+const kTerminalWorkspaceBackupAtKey = 'terminal.workspace_backup_at';
+
+/// Reads and writes the terminal workspace (schema v7, backup tables v11) with
+/// hand-written SQL.
 ///
 /// Loading is deliberately forgiving: a row this code cannot parse is skipped
 /// rather than thrown on, because a corrupt layout must never make the terminal
@@ -83,10 +91,28 @@ class TerminalWorkspaceDao {
 
   final AppDatabase _db;
 
+  /// How many tabs (including detached rows) the store currently holds.
+  ///
+  /// The controller's guard needs to know whether an empty save would *destroy*
+  /// something, and a count is the cheapest form of that question — it reads no
+  /// scrollback.
+  int storedTabCount() {
+    final rows = _db.query('SELECT COUNT(*) AS n FROM terminal_tabs;');
+    if (rows.isEmpty) return 0;
+    return (rows.first['n'] as int?) ?? 0;
+  }
+
   /// Replaces the stored workspace with [tabs].
+  ///
+  /// When [tabs] is empty and the store is not, the outgoing workspace is copied
+  /// into the backup tables first, inside the same transaction. The controller
+  /// already refuses an empty save it cannot attribute to the user; this is the
+  /// layer below that, for the emptying that *is* attributable — and for any
+  /// future caller that has no such flag to consult.
   void saveWorkspace(List<StoredTerminalTab> tabs, {String? activeTabId}) {
     final now = isoFromDate(DateTime.now());
     _db.transaction(() {
+      if (tabs.isEmpty) _backupWorkspace(now);
       // Panes cascade with their tab.
       _db.execute('DELETE FROM terminal_tabs;');
       for (var i = 0; i < tabs.length; i++) {
@@ -138,10 +164,43 @@ class TerminalWorkspaceDao {
     );
   }
 
-  StoredTerminalWorkspace loadWorkspace() {
+  /// Copies the stored workspace into the backup tables, replacing whatever was
+  /// there. Does nothing when there is nothing to lose.
+  ///
+  /// Called from inside [saveWorkspace]'s transaction, so a failure anywhere in
+  /// the save rolls the copy back with it — the backup can never be a snapshot
+  /// of a delete that did not happen.
+  void _backupWorkspace(String now) {
+    if (storedTabCount() == 0) return;
+    _db.execute('DELETE FROM terminal_panes_backup;');
+    _db.execute('DELETE FROM terminal_tabs_backup;');
+    _db.execute(
+      'INSERT INTO terminal_tabs_backup (id, ordinal, layout, focused_pane_id, '
+      'is_active, detached, updated_at) SELECT id, ordinal, layout, '
+      'focused_pane_id, is_active, detached, updated_at FROM terminal_tabs;',
+    );
+    _db.execute(
+      'INSERT INTO terminal_panes_backup (id, tab_id, ordinal, profile_id, '
+      'title, working_directory, scrollback, launch_command, updated_at) '
+      'SELECT id, tab_id, ordinal, profile_id, title, working_directory, '
+      'scrollback, launch_command, updated_at FROM terminal_panes;',
+    );
+    _db.writeMetadata(kTerminalWorkspaceBackupAtKey, now);
+  }
+
+  StoredTerminalWorkspace loadWorkspace() =>
+      _load('terminal_tabs', 'terminal_panes');
+
+  /// The workspace as it stood immediately before the last save that emptied it.
+  ///
+  /// Empty when no save has ever emptied a non-empty workspace.
+  StoredTerminalWorkspace loadBackup() =>
+      _load('terminal_tabs_backup', 'terminal_panes_backup');
+
+  StoredTerminalWorkspace _load(String tabTable, String paneTable) {
     final tabRows = _db.query(
       'SELECT id, layout, focused_pane_id, is_active, detached '
-      'FROM terminal_tabs ORDER BY ordinal;',
+      'FROM $tabTable ORDER BY ordinal;',
     );
     if (tabRows.isEmpty) return StoredTerminalWorkspace.empty;
 
@@ -156,7 +215,7 @@ class TerminalWorkspaceDao {
 
       final paneRows = _db.query(
         'SELECT id, profile_id, title, working_directory, scrollback, '
-        'launch_command FROM terminal_panes WHERE tab_id = ? ORDER BY ordinal;',
+        'launch_command FROM $paneTable WHERE tab_id = ? ORDER BY ordinal;',
         [id],
       );
       (isDetached ? detached : tabs).add(

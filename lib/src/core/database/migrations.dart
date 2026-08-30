@@ -22,6 +22,9 @@ typedef MigrationStep = void Function(Database db);
 /// * **v10** — Loop 41: agents hosted in terminal panes — a pane records the
 ///   agent command it ran, and a session records which pane it lives in and
 ///   which session (if any) asked for it.
+/// * **v11** — Loop 53: a shadow copy of the terminal workspace, written
+///   immediately before a save would empty it, so an emptying that should not
+///   have happened is recoverable rather than final.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -33,6 +36,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   8: _migrateToV8,
   9: _migrateToV9,
   10: _migrateToV10,
+  11: _migrateToV11,
 };
 
 void _migrateToV8(Database db) {
@@ -369,4 +373,44 @@ void _migrateToV10(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_sessions_parent '
     'ON sessions (parent_session_id);',
   );
+}
+
+void _migrateToV11(Database db) {
+  // The workspace-loss guard (Loop 53).
+  //
+  // `saveWorkspace` is a destructive full replace, so the one save that can
+  // never be taken back is the one that writes nothing over something. Loop 48
+  // watched that happen once in ten real runs and could not find the trigger.
+  //
+  // These two tables are a shadow copy taken *inside* that save's transaction,
+  // just before the delete: whatever the store held is still on disk afterwards.
+  // Deliberately plain mirrors — no foreign key, no cascade, no index. A backup
+  // that participates in the live schema's referential integrity is a backup
+  // that the next cascade can take with it, which is precisely the failure it
+  // exists to survive.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_tabs_backup (
+      id              TEXT PRIMARY KEY,
+      ordinal         INTEGER NOT NULL,
+      layout          TEXT NOT NULL,
+      focused_pane_id TEXT,
+      is_active       INTEGER NOT NULL,
+      detached        INTEGER NOT NULL DEFAULT 0,
+      updated_at      TEXT NOT NULL
+    );
+  ''');
+
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_panes_backup (
+      id                TEXT PRIMARY KEY,
+      tab_id            TEXT NOT NULL,
+      ordinal           INTEGER NOT NULL,
+      profile_id        TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      working_directory TEXT,
+      scrollback        TEXT NOT NULL,
+      launch_command    TEXT,
+      updated_at        TEXT NOT NULL
+    );
+  ''');
 }

@@ -138,6 +138,23 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Per-pane liveness listeners, kept for the same reason.
   final Map<String, void Function()> _livenessListeners = {};
 
+  /// Whether the user has closed a tab, a pane or a session since the workspace
+  /// was restored.
+  ///
+  /// An empty workspace has two causes that the store cannot tell apart, and
+  /// only one of them is a fact worth writing down. *The user closed everything*
+  /// is a decision, and clearing the store is the correct outcome — Loop 29's
+  /// behaviour, and tested. *We momentarily have nothing* is a bug, and since
+  /// [persistWorkspace] is a destructive full replace, writing it destroys the
+  /// user's workspace outright; Loop 48 watched that happen once in ten real
+  /// runs and never found the trigger.
+  ///
+  /// So the controller keeps the one piece of information the database cannot
+  /// reconstruct: whether anything the *user* did could account for the
+  /// emptiness. Nothing else sets this flag — a pane exiting on its own does
+  /// not, because a dead pane still has a row worth restoring.
+  bool _userClosedSinceRestore = false;
+
   late final ScrollbackAutosave _autosave = ref.read(
     scrollbackAutosaveFactoryProvider,
   )(onTick: saveDirtyScrollback);
@@ -254,6 +271,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void closeTab(String id, {bool detach = true}) {
     final tab = _tabById(id);
     if (tab == null) return;
+    _userClosedSinceRestore = true;
     for (final paneId in tab.layout.panes) {
       if (detach) {
         _detachOrRelease(paneId);
@@ -300,6 +318,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void closePane(String paneId, {bool detach = true}) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
+    _userClosedSinceRestore = true;
 
     final layout = tab.layout.close(paneId);
     if (layout == null) {
@@ -414,6 +433,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// escalation, via the instance's `dispose`). Works whether the pane is in a
   /// tab or detached.
   void endSession(String paneId) {
+    _userClosedSinceRestore = true;
     if (_tabContaining(paneId) != null) {
       closePane(paneId, detach: false);
       return;
@@ -428,6 +448,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// escape hatch, so background sessions can never quietly pile up.
   void endAllDetached() {
     if (_detached.isEmpty) return;
+    _userClosedSinceRestore = true;
     for (final session in List.of(_detached)) {
       _releasePane(session.paneId);
     }
@@ -493,14 +514,33 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///
   /// Does nothing when no database is wired up (tests, and any bootstrap that
   /// has not opened one).
+  ///
+  /// Also does nothing when it would replace a non-empty stored workspace with
+  /// an empty one that no user action accounts for — see
+  /// [_userClosedSinceRestore]. That case is a bug by construction, and the
+  /// difference between a bug and a data loss is whether the bug is allowed to
+  /// write.
   void persistWorkspace() {
     final dao = _dao();
     if (dao == null) return;
     try {
-      dao.saveWorkspace([
+      final rows = [
         for (final tab in _tabs) _storedTab(tab),
         for (final session in _detached) ?_storedDetached(session),
-      ], activeTabId: _activeTabId);
+      ];
+      if (rows.isEmpty && !_userClosedSinceRestore) {
+        final stored = dao.storedTabCount();
+        if (stored > 0) {
+          _log.error(
+            'Refusing to save an empty terminal workspace over $stored stored '
+            'tab(s): nothing the user closed accounts for it being empty. The '
+            'stored workspace is left untouched. This should not happen — if '
+            'the terminal really is empty, please report it.',
+          );
+          return;
+        }
+      }
+      dao.saveWorkspace(rows, activeTabId: _activeTabId);
     } catch (error, stack) {
       _log.warning('Could not persist the terminal workspace.', error, stack);
     }
@@ -607,6 +647,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// unopenable. The worst case is an empty workspace, which is what a first run
   /// looks like anyway.
   void _restoreWorkspace() {
+    // Whatever the previous life of this controller decided about closing
+    // things, this one starts owing the store the workspace it just read.
+    _userClosedSinceRestore = false;
     final dao = _dao();
     if (dao == null) return;
 
