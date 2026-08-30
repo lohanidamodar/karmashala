@@ -114,6 +114,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// list can offer to stop more than one.
   final Set<String> _stopping = <String>{};
 
+  /// AVDs with a boot in flight, by AVD name. Headless there is nothing to
+  /// watch, so the row has to say it is starting or the click looks ignored.
+  final Set<String> _booting = <String>{};
+
   @override
   void dispose() {
     _reconnectTimer?.cancel();
@@ -346,6 +350,43 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     unawaited(_useAdbSink(serial));
   }
 
+  /// Boots an AVD and opens the live view on it.
+  ///
+  /// One flow, not two steps: with `-no-window` the live view is the only way
+  /// to see the thing that was just started, so starting it and showing it are
+  /// the same intent.
+  Future<void> _bootAvd(String name) async {
+    final adb = ref.read(adbServiceProvider);
+    if (adb == null || _booting.contains(name)) return;
+    setState(() => _booting.add(name));
+    String? serial;
+    String? failure;
+    try {
+      serial = await adb.bootAvdAndWait(
+        name,
+        headless: ref.read(headlessEmulatorProvider),
+      );
+    } catch (error) {
+      failure = '$error';
+    }
+    if (!mounted) return;
+    setState(() => _booting.remove(name));
+    ref.invalidate(devicesProvider);
+    ref.invalidate(avdsProvider);
+    if (failure != null || serial == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(failure ?? '$name did not start.')),
+      );
+      return;
+    }
+    // Wait for the refreshed list rather than reading the stale one: the device
+    // that was just booted is precisely the one not in it yet.
+    final devices = await ref.read(devicesProvider.future);
+    final device = devices.where((d) => d.serial == serial).firstOrNull;
+    if (!mounted || device == null || !device.isReady) return;
+    await _startStream(device);
+  }
+
   Future<void> _stopEmulator({
     required String serial,
     required String label,
@@ -461,7 +502,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
               ? _DeviceEmptyState(
                   message: reason,
                   stopping: _stopping,
+                  booting: _booting,
+                  onPreview: _startStream,
                   onStopEmulator: _stopEmulator,
+                  onBootAvd: _bootAvd,
                 )
               : _streamError != null
               ? _DeviceEmptyState(
@@ -469,7 +513,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                       'Live view unavailable: $_streamError\n\n'
                       'Screenshots, input and logcat still work.',
                   stopping: _stopping,
+                  booting: _booting,
+                  onPreview: _startStream,
                   onStopEmulator: _stopEmulator,
+                  onBootAvd: _bootAvd,
                 )
               : _LiveView(
                   video: _video,
@@ -482,7 +529,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                       _reconnectTimer == null,
                   onRestart: _restartStream,
                   stopping: _stopping,
+                  booting: _booting,
+                  onPreview: _startStream,
                   onStopEmulator: _stopEmulator,
+                  onBootAvd: _bootAvd,
                 ),
         ),
         if (paneDevice != null) ...[
@@ -622,7 +672,10 @@ class _LiveView extends ConsumerWidget {
     required this.exhausted,
     required this.onRestart,
     required this.stopping,
+    required this.booting,
+    required this.onPreview,
     required this.onStopEmulator,
+    required this.onBootAvd,
   });
 
   final VideoController? video;
@@ -638,8 +691,11 @@ class _LiveView extends ConsumerWidget {
 
   final VoidCallback onRestart;
   final Set<String> stopping;
+  final Set<String> booting;
+  final Future<void> Function(AndroidDevice device) onPreview;
   final Future<void> Function({required String serial, required String label})
   onStopEmulator;
+  final Future<void> Function(String name) onBootAvd;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -650,9 +706,12 @@ class _LiveView extends ConsumerWidget {
     final currentDevice = device;
     if (controller == null || currentDevice == null) {
       return _DeviceEmptyState(
-        message: 'Select a device and start the live view.',
+        message: 'Pick a device below, or start an emulator.',
         stopping: stopping,
+        booting: booting,
+        onPreview: onPreview,
         onStopEmulator: onStopEmulator,
+        onBootAvd: onBootAvd,
       );
     }
     // The size of the device on screen, asked for by name. Anything derived
@@ -749,19 +808,25 @@ class _DeviceEmptyState extends ConsumerWidget {
   const _DeviceEmptyState({
     required this.message,
     required this.stopping,
+    required this.booting,
+    required this.onPreview,
     required this.onStopEmulator,
+    required this.onBootAvd,
   });
 
   final String message;
   final Set<String> stopping;
+  final Set<String> booting;
+  final Future<void> Function(AndroidDevice device) onPreview;
   final Future<void> Function({required String serial, required String label})
   onStopEmulator;
+  final Future<void> Function(String name) onBootAvd;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: const BoxConstraints(maxWidth: 460),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -777,7 +842,13 @@ class _DeviceEmptyState extends ConsumerWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              _EmulatorList(stopping: stopping, onStopEmulator: onStopEmulator),
+              _DeviceList(
+                stopping: stopping,
+                booting: booting,
+                onPreview: onPreview,
+                onStopEmulator: onStopEmulator,
+                onBootAvd: onBootAvd,
+              ),
             ],
           ),
         ),
@@ -786,123 +857,186 @@ class _DeviceEmptyState extends ConsumerWidget {
   }
 }
 
-/// Every emulator this SDK knows about, each with the one action that fits it.
+/// Everything the pane can be pointed at — the devices adb can see and the AVDs
+/// that could be booted — in one list, each row offering what makes sense for
+/// what it is.
 ///
-/// The stop action lives **here, per row**, and not only on the live-view
-/// toolbar. Seeing an emulator running and having no way to shut it down
+/// The actions live **here, per row**, and not only on the toolbar. Stop in
+/// particular: seeing an emulator running and having no way to shut it down
 /// without first starting a video stream of it is the bug this list exists to
-/// close: starting a live view is not a prerequisite for ending a process.
-class _EmulatorList extends ConsumerWidget {
-  const _EmulatorList({required this.stopping, required this.onStopEmulator});
+/// close. Starting a live view is not a prerequisite for ending a process.
+///
+/// Rows that cannot be used say why instead of being silently inert.
+class _DeviceList extends ConsumerWidget {
+  const _DeviceList({
+    required this.stopping,
+    required this.booting,
+    required this.onPreview,
+    required this.onStopEmulator,
+    required this.onBootAvd,
+  });
 
   final Set<String> stopping;
+  final Set<String> booting;
+  final Future<void> Function(AndroidDevice device) onPreview;
   final Future<void> Function({required String serial, required String label})
   onStopEmulator;
+  final Future<void> Function(String name) onBootAvd;
+
+  /// What a row says about itself under its name.
+  static String _stateLine(AndroidDevice device) => switch (device.state) {
+    DeviceConnectionState.device =>
+      device.isEmulator
+          ? 'running · ${device.serial}'
+          : 'connected · ${device.serial}',
+    DeviceConnectionState.unauthorized =>
+      'not authorised — accept the USB debugging prompt on the device',
+    DeviceConnectionState.offline =>
+      'offline — reconnect it, or unplug and plug it back in',
+    DeviceConnectionState.unknown => 'unusable · ${device.serial}',
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final avds = ref.watch(avdsProvider).asData?.value ?? const <Avd>[];
+    final theme = Theme.of(context);
     final devices =
         ref.watch(devicesProvider).asData?.value ?? const <AndroidDevice>[];
-    final named = {
+    final avds = ref.watch(avdsProvider).asData?.value ?? const <Avd>[];
+    final runningAvdNames = {
       for (final avd in avds)
-        if (avd.runningSerial != null) avd.runningSerial!,
+        if (avd.runningSerial != null) avd.runningSerial!: avd.name,
     };
-    // A running emulator with no AVD row: this SDK has no emulator package to
-    // list AVDs with, or it booted from an AVD this SDK cannot see. It is still
-    // a running emulator and it is still stoppable.
-    final unnamed = [
-      for (final device in devices)
-        if (device.isEmulator &&
-            device.isReady &&
-            !named.contains(device.serial))
-          device,
+    // AVDs that are not running are the only ones worth a Start; a running one
+    // is already a row above, with its serial and its Stop.
+    final idle = [
+      for (final avd in avds)
+        if (!avd.isRunning) avd,
     ];
-    if (avds.isEmpty && unnamed.isEmpty) return const SizedBox.shrink();
+    if (devices.isEmpty && idle.isEmpty) return const SizedBox.shrink();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const SizedBox(height: 16),
-        Text('Emulators', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 4),
-        for (final avd in avds)
-          _EmulatorRow(
-            title: avd.name,
-            serial: avd.runningSerial,
-            stopping:
-                avd.runningSerial != null &&
-                stopping.contains(avd.runningSerial),
-            onStart: avd.isRunning
-                ? null
-                : () async {
-                    final adb = ref.read(adbServiceProvider);
-                    await adb?.bootAvd(avd.name);
-                  },
-            onStop: avd.runningSerial == null
-                ? null
-                : () => onStopEmulator(
-                    serial: avd.runningSerial!,
-                    label: avd.name,
+        if (devices.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text('Connected', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          for (final device in devices)
+            _DeviceRow(
+              title: runningAvdNames[device.serial] ?? device.displayName,
+              subtitle: _stateLine(device),
+              actions: [
+                if (device.isReady)
+                  _RowAction(
+                    key: Key('preview-${device.serial}'),
+                    label: 'Live preview',
+                    onPressed: () => onPreview(device),
                   ),
-          ),
-        for (final device in unnamed)
-          _EmulatorRow(
-            title: device.displayName,
-            serial: device.serial,
-            stopping: stopping.contains(device.serial),
-            onStart: null,
-            onStop: () => onStopEmulator(
-              serial: device.serial,
-              label: device.displayName,
+                // Only emulators: `emu kill` talks to the emulator console, so
+                // on a phone it could only ever fail.
+                if (device.isReady && device.isEmulator)
+                  _RowAction(
+                    key: Key('stop-emulator-${device.serial}'),
+                    label: 'Stop',
+                    busy: stopping.contains(device.serial),
+                    onPressed: () => onStopEmulator(
+                      serial: device.serial,
+                      label:
+                          runningAvdNames[device.serial] ?? device.displayName,
+                    ),
+                  ),
+              ],
+            ),
+        ],
+        if (idle.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text('Emulators', style: theme.textTheme.labelLarge),
+          // Headless is the default because the live preview above *is* the
+          // screen. The toggle sits here rather than in a settings page: it
+          // changes what happens when you press Start on the row below it.
+          SwitchListTile(
+            key: const Key('headless-emulator-toggle'),
+            dense: true,
+            value: ref.watch(headlessEmulatorProvider),
+            onChanged: (value) =>
+                ref.read(headlessEmulatorProvider.notifier).update(value),
+            title: const Text('Start without a window'),
+            subtitle: const Text(
+              'Watch it here instead. Turn off for the emulator\'s own '
+              'extended controls.',
             ),
           ),
+          for (final avd in idle)
+            _DeviceRow(
+              title: avd.name,
+              subtitle: booting.contains(avd.name) ? 'starting…' : null,
+              actions: [
+                _RowAction(
+                  key: Key('start-avd-${avd.name}'),
+                  label: 'Start',
+                  busy: booting.contains(avd.name),
+                  onPressed: () => onBootAvd(avd.name),
+                ),
+              ],
+            ),
+        ],
       ],
     );
   }
 }
 
-class _EmulatorRow extends StatelessWidget {
-  const _EmulatorRow({
-    required this.title,
-    required this.serial,
-    required this.stopping,
-    required this.onStart,
-    required this.onStop,
+/// One action on a device row. A spinner replaces the label while it runs,
+/// because with a headless emulator nothing else on screen changes.
+class _RowAction extends StatelessWidget {
+  const _RowAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.busy = false,
   });
 
-  final String title;
-
-  /// Serial of the running emulator, or `null` when this AVD is not running.
-  final String? serial;
-  final bool stopping;
-  final VoidCallback? onStart;
-  final VoidCallback? onStop;
+  final String label;
+  final VoidCallback onPressed;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final running = serial != null;
+    return TextButton(
+      onPressed: busy ? null : onPressed,
+      child: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Text(label),
+    );
+  }
+}
+
+class _DeviceRow extends StatelessWidget {
+  const _DeviceRow({
+    required this.title,
+    required this.subtitle,
+    required this.actions,
+  });
+
+  final String title;
+  final String? subtitle;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text(title),
-      subtitle: running ? Text('running · $serial') : null,
-      trailing: running
-          ? TextButton(
-              key: Key('stop-emulator-$serial'),
-              onPressed: stopping ? null : onStop,
-              child: stopping
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Stop'),
-            )
-          : TextButton(
-              key: Key('start-avd-$title'),
-              onPressed: onStart,
-              child: const Text('Start'),
-            ),
+      contentPadding: const EdgeInsets.only(left: 16, right: 4),
+      title: Text(title, overflow: TextOverflow.ellipsis),
+      subtitle: subtitle == null
+          ? null
+          : Text(subtitle!, overflow: TextOverflow.ellipsis),
+      trailing: actions.isEmpty
+          ? null
+          : Row(mainAxisSize: MainAxisSize.min, children: actions),
     );
   }
 }

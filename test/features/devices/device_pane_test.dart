@@ -24,6 +24,10 @@ AndroidSdk _sdk() => const AndroidSdk(
     environmentId: 'windows',
     path: r'C:\sdk\platform-tools\adb.exe',
   ),
+  emulator: EnvironmentPath(
+    environmentId: 'windows',
+    path: r'C:\sdk\emulator\emulator.exe',
+  ),
 );
 
 AndroidDevice _device({
@@ -95,9 +99,11 @@ void main() {
         sdk: _sdk(),
         devices: [_device(state: DeviceConnectionState.unauthorized)],
       );
+      // Twice over: the pane says why it is empty, and the row says what is
+      // wrong with that particular device.
       expect(
         find.textContaining('accept the USB debugging prompt'),
-        findsOneWidget,
+        findsWidgets,
       );
     });
 
@@ -112,11 +118,9 @@ void main() {
       expect(find.text('Start'), findsOneWidget);
     });
 
-    testWidgets('prompts to start the live view once a device is ready', (
-      tester,
-    ) async {
+    testWidgets('points at the list once a device is ready', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
-      expect(find.textContaining('start the live view'), findsOneWidget);
+      expect(find.textContaining('Pick a device below'), findsOneWidget);
       expect(find.text('Live view'), findsOneWidget);
     });
   });
@@ -267,7 +271,7 @@ void main() {
 
   // Bug 1: "i see an emulator running but cannot stop it in the list without
   // starting live view". The action existed, but only on the live-view toolbar.
-  group('DevicePane emulator list', () {
+  group('DevicePane device list', () {
     testWidgets('offers to stop a running emulator with the live view off', (
       tester,
     ) async {
@@ -359,7 +363,7 @@ void main() {
       expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
     });
 
-    testWidgets('a physical device never appears in the emulator list', (
+    testWidgets('a physical device is listed, with a preview and no stop', (
       tester,
     ) async {
       await _pump(
@@ -367,8 +371,214 @@ void main() {
         sdk: _sdk(),
         devices: [_device(serial: _phoneSerial, model: 'CPH1989')],
       );
-      expect(find.text('CPH1989'), findsNothing);
-      expect(find.text('Stop'), findsNothing);
+      expect(find.text('CPH1989'), findsOneWidget);
+      expect(find.byKey(const Key('preview-$_phoneSerial')), findsOneWidget);
+      expect(
+        find.byKey(const Key('stop-emulator-$_phoneSerial')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('a running emulator offers both a preview and a stop', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+      expect(find.byKey(const Key('preview-$_emulator')), findsOneWidget);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+      // Named by its AVD, which is what the user called it.
+      expect(find.text('Pixel_8_Pro'), findsOneWidget);
+    });
+
+    testWidgets('an unauthorized device says what to do about it and offers '
+        'nothing', (tester) async {
+      // A row that can only fail should not have a button on it.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [
+          _device(
+            serial: _phoneSerial,
+            model: 'CPH1989',
+            state: DeviceConnectionState.unauthorized,
+          ),
+        ],
+      );
+      expect(find.text('CPH1989'), findsOneWidget);
+      expect(
+        find.textContaining('accept the USB debugging prompt'),
+        findsWidgets,
+      );
+      expect(find.byKey(const Key('preview-$_phoneSerial')), findsNothing);
+    });
+
+    testWidgets('an offline device is shown and explained, not hidden', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [
+          _device(
+            serial: _phoneSerial,
+            model: 'CPH1989',
+            state: DeviceConnectionState.offline,
+          ),
+        ],
+      );
+      expect(find.textContaining('offline —'), findsOneWidget);
+      expect(find.byKey(const Key('preview-$_phoneSerial')), findsNothing);
+    });
+  });
+
+  // The owner: "previously, sambandha test was running in background without
+  // ui and we could connect using live preview; that would be the best
+  // approach, like Android Studio does."
+  group('DevicePane emulator boot', () {
+    /// A runner that plays a whole emulator boot: the device appears, says
+    /// which AVD it is, and reports `sys.boot_completed` after [slowPolls]
+    /// polls that answer "not yet".
+    FakeCommandRunner bootingRunner({int slowPolls = 0}) {
+      var polls = 0;
+      return FakeCommandRunner(
+        responder: (request) {
+          final args = request.arguments.join(' ');
+          if (args == 'devices -l') {
+            return const CommandResult(
+              exitCode: 0,
+              stdout:
+                  'List of devices attached\n'
+                  '$_emulator  device product:sdk model:Pixel transport_id:2\n',
+              stderr: '',
+            );
+          }
+          if (args.endsWith('emu avd name')) {
+            return const CommandResult(
+              exitCode: 0,
+              stdout: 'Pixel_8_Pro\nOK\n',
+              stderr: '',
+            );
+          }
+          if (args.contains('sys.boot_completed')) {
+            polls += 1;
+            return CommandResult(
+              exitCode: 0,
+              stdout: polls > slowPolls ? '1\n' : '0\n',
+              stderr: '',
+            );
+          }
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+    }
+
+    Future<void> settle(WidgetTester tester, {int frames = 12}) async {
+      for (var i = 0; i < frames; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('offers headless boot, and defaults to it', (tester) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+      );
+      final toggle = tester.widget<SwitchListTile>(
+        find.byKey(const Key('headless-emulator-toggle')),
+      );
+      expect(toggle.value, isTrue);
+    });
+
+    testWidgets('starting an AVD boots it without a window', (tester) async {
+      final runner = bootingRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(runner.startRequests.single.arguments, [
+        '-avd',
+        'Pixel_8_Pro',
+        '-no-window',
+        '-no-boot-anim',
+      ]);
+    });
+
+    testWidgets('the toggle really controls the window', (tester) async {
+      // The extended controls — rotation, location, simulated calls — only
+      // exist in the emulator's own window, so this has to be reachable.
+      final runner = bootingRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('headless-emulator-toggle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(
+        runner.startRequests.single.arguments,
+        isNot(contains('-no-window')),
+      );
+    });
+
+    testWidgets('a booting row says so rather than looking ignored', (
+      tester,
+    ) async {
+      // Headless there is nothing on screen to show for the click at all.
+      final runner = bootingRunner(slowPolls: 1);
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('starting…'), findsOneWidget);
+      expect(find.text('Start'), findsNothing);
+
+      await settle(tester, frames: 40);
+      expect(find.text('starting…'), findsNothing);
+    });
+
+    testWidgets('a boot that fails is reported, and the row resets', (
+      tester,
+    ) async {
+      // Headless, a failed boot is completely invisible otherwise: no window
+      // appears either way. (The three-minute timeout itself is covered in
+      // adb_service_test — it is wall-clock bounded, which a fake test clock
+      // cannot advance.)
+      final runner = FakeCommandRunner(
+        throwError: StateError('emulator.exe could not be started'),
+      );
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(find.textContaining('could not be started'), findsOneWidget);
+      expect(find.text('Start'), findsOneWidget, reason: 'the row must reset');
+      await tester.pump(const Duration(seconds: 6));
     });
   });
 
