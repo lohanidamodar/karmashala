@@ -5,9 +5,11 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/process_handle.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/android_device.dart';
+import '../domain/device_action.dart';
 import '../domain/device_input.dart';
 import '../domain/logcat_entry.dart';
 import '../domain/ui_node.dart';
+import '../domain/ui_summary.dart';
 import 'adb_output_parsing.dart';
 import 'uiautomator_parsing.dart';
 
@@ -58,6 +60,16 @@ class AdbService {
   final CommandRunner runner;
   final AndroidSdk sdk;
   final HostFileReader _readHostFile;
+
+  /// Who is recording what this service does to devices, or null for nobody.
+  ///
+  /// A seam rather than a recording subclass: the device pane, the `device_*`
+  /// MCP tools and any harness all share one [AdbService], so installing a sink
+  /// here records all of them without a second implementation to keep in step.
+  /// Reads that are pure plumbing — listing devices, asking for a screen size —
+  /// are deliberately *not* reported: they are how the app works, not what
+  /// somebody did to the device.
+  DeviceActionSink? actionSink;
 
   /// Writable scratch directory on the device. `/data/local/tmp` is writable by
   /// the shell user on every supported Android version, unlike `/sdcard` on
@@ -284,7 +296,16 @@ class AdbService {
       throw StateError('adb pull failed for $serial: ${pull.stderr.trim()}');
     }
     await runner.run(_forDevice(serial, ['shell', 'rm', '-f', devicePath]));
-    return _readHostFile(destination);
+    final bytes = await _readHostFile(destination);
+    _report(
+      DeviceAction(
+        verb: 'screenshot',
+        serial: serial,
+        summary: 'Screenshot of $serial',
+        png: bytes,
+      ),
+    );
+    return bytes;
   }
 
   /// Dumps the current accessibility (view) hierarchy.
@@ -337,17 +358,83 @@ class AdbService {
         continue;
       }
       await runner.run(_forDevice(serial, ['shell', 'rm', '-f', devicePath]));
+      _report(
+        DeviceAction(
+          verb: 'uiDump',
+          serial: serial,
+          summary:
+              'Read the UI tree — ${hierarchy.nodeCount} nodes in '
+              '${hierarchy.packageName ?? 'an unknown package'}',
+          text: renderUiTree(hierarchy),
+        ),
+      );
       return hierarchy;
     }
-    throw UiDumpException(
+    final error = UiDumpException(
       failure?.message ?? 'uiautomator dump produced nothing usable.',
       serial: serial,
       attempts: attempts,
     );
+    _report(
+      DeviceAction(
+        verb: 'uiDump',
+        serial: serial,
+        summary: 'Read the UI tree',
+      ).failed(error),
+    );
+    throw error;
+  }
+
+  /// Launches [packageName]'s launcher activity.
+  ///
+  /// Goes through `monkey`, which resolves the launcher activity itself, so the
+  /// caller does not have to know the activity name. `monkey` **exits 0 when it
+  /// finds no activity**, so the decision is made on its output and not on the
+  /// exit status — the same trap `uiautomator dump` sets above.
+  Future<void> launchPackage(String serial, String packageName) async {
+    final result = await runner.run(
+      _forDevice(serial, [
+        'shell',
+        'monkey',
+        '-p',
+        packageName,
+        '-c',
+        'android.intent.category.LAUNCHER',
+        '1',
+      ]),
+    );
+    final output = '${result.stdout}\n${result.stderr}';
+    final missing =
+        output.contains('No activities found') ||
+        output.contains('monkey aborted');
+    if (!result.ok || missing) {
+      final error = StateError(
+        missing
+            ? '$packageName has no launcher activity on $serial (or is not '
+                  'installed).'
+            : 'Could not launch $packageName on $serial: '
+                  '${result.stderr.trim()}',
+      );
+      _report(
+        DeviceAction(
+          verb: 'launch',
+          serial: serial,
+          summary: 'Launched $packageName',
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(
+      DeviceAction(
+        verb: 'launch',
+        serial: serial,
+        summary: 'Launched $packageName',
+      ),
+    );
   }
 
   Future<void> tap(String serial, int x, int y) async {
-    await _runInput(serial, ['tap', '$x', '$y']);
+    await _runInput(serial, ['tap', '$x', '$y'], 'tap', 'Tapped ($x, $y)');
   }
 
   Future<void> swipe(
@@ -358,34 +445,64 @@ class AdbService {
     required int toY,
     Duration duration = const Duration(milliseconds: 200),
   }) async {
-    await _runInput(serial, [
+    await _runInput(
+      serial,
+      [
+        'swipe',
+        '$fromX',
+        '$fromY',
+        '$toX',
+        '$toY',
+        '${duration.inMilliseconds}',
+      ],
       'swipe',
-      '$fromX',
-      '$fromY',
-      '$toX',
-      '$toY',
-      '${duration.inMilliseconds}',
-    ]);
+      'Swiped ($fromX, $fromY) → ($toX, $toY) over '
+          '${duration.inMilliseconds} ms',
+    );
   }
 
   Future<void> inputText(String serial, String text) async {
     if (text.isEmpty) return;
-    await _runInput(serial, ['text', encodeInputText(text)]);
+    await _runInput(
+      serial,
+      ['text', encodeInputText(text)],
+      'type',
+      'Typed "$text"',
+    );
   }
 
   Future<void> pressKey(String serial, DeviceKey key) async {
-    await _runInput(serial, ['keyevent', key.keyCode]);
+    await _runInput(
+      serial,
+      ['keyevent', key.keyCode],
+      'key',
+      'Pressed ${key.name}',
+    );
   }
 
-  Future<void> _runInput(String serial, List<String> arguments) async {
+  Future<void> _runInput(
+    String serial,
+    List<String> arguments,
+    String verb,
+    String summary,
+  ) async {
     final result = await runner.run(
       _forDevice(serial, ['shell', 'input', ...arguments]),
     );
     if (!result.ok) {
-      throw StateError(
+      final error = StateError(
         'input ${arguments.first} failed on $serial: ${result.stderr.trim()}',
       );
+      _report(
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: summary,
+        ).failed(error),
+      );
+      throw error;
     }
+    _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
   /// Reads recent log lines, newest last.
@@ -420,11 +537,23 @@ class AdbService {
       ]),
     );
     if (!result.ok) return const [];
-    return [
+    final entries = [
       for (final line in result.stdout.split(RegExp(r'[\r\n]+')))
         if (parseLogcatLine(line) case final entry?)
           if (entry.level.atLeast(minLevel)) entry,
     ];
+    _report(
+      DeviceAction(
+        verb: 'logcat',
+        serial: serial,
+        summary:
+            '${entries.length} log line${entries.length == 1 ? '' : 's'}'
+            '${packageName == null ? '' : ' from $packageName'}'
+            '${minLevel == LogLevel.verbose ? '' : ' at ${minLevel.name} or above'}',
+        text: entries.map((e) => e.toString()).join('\n'),
+      ),
+    );
+    return entries;
   }
 
   /// Starts a live `logcat` stream. The caller owns the handle and must kill it.
@@ -486,6 +615,18 @@ class AdbService {
       _forDevice(serial, const ['shell', 'ps', '-A', '-o', 'PID,ARGS']),
     );
     return result.ok ? result.stdout : '';
+  }
+
+  /// Tells [actionSink] what happened, without letting a recorder's own fault
+  /// break the device call it was watching.
+  void _report(DeviceAction action) {
+    final sink = actionSink;
+    if (sink == null) return;
+    try {
+      sink(action);
+    } on Object {
+      // Recording is observation. It never decides whether the action worked.
+    }
   }
 
   /// Sends SIGKILL to [pids] on the device. Best effort: a pid that has already
