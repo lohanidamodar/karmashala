@@ -18,9 +18,11 @@ import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
 import 'agent_status_badge.dart';
+import 'approval_request_card.dart';
 import 'chat_transcript.dart';
 import 'handoff_actions_row.dart';
 import 'message_composer.dart';
+import 'permission_mode_chip.dart';
 import 'session_repositories_bar.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
@@ -103,8 +105,16 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Above the handoff row and the composer, because it is the
+                  // thing blocking the session: nothing the user types will be
+                  // read until the agent's prompt is answered.
+                  ApprovalRequestCard(sessionId: widget.sessionId),
                   HandoffActionsRow(sessionId: widget.sessionId),
                   MessageComposer(
+                    // MonoCode's chip row: the session's own safety policy,
+                    // where the message is written rather than buried in
+                    // Settings under the agent's name.
+                    chips: [PermissionModeChip(sessionId: widget.sessionId)],
                     hintText: active
                         ? 'Message the agent…  (attach an image with 🖼)'
                         : 'Type to continue this session…',

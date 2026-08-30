@@ -30,6 +30,7 @@ class AgentStatusReport {
     required this.source,
     this.detail,
     this.sourceModifiedAt,
+    this.evidence = const [],
   });
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -62,7 +63,20 @@ class AgentStatusReport {
   DateTime get evidenceAt => sourceModifiedAt ?? observedAt;
 
   /// Why the source concluded this (hook event name, matched record value, …).
+  ///
+  /// The *matcher*, not the match: for the grid source this is the substring
+  /// that fired, which is a breadcrumb for a tooltip and never a description of
+  /// what the agent wants.
   final String? detail;
+
+  /// The agent's own words, verbatim, when the source carried any: the rendered
+  /// rows of its prompt, or a hook payload's message.
+  ///
+  /// Empty is the normal case and must be rendered as "we do not know", never
+  /// smoothed over. This is the whole difference between telling a user their
+  /// agent is blocked and telling them what on. Nothing here is ever
+  /// synthesised — a source that cannot quote the agent contributes nothing.
+  final List<String> evidence;
 
   @override
   String toString() =>
@@ -141,6 +155,7 @@ class AgentHookSpec {
     required this.configFileName,
     this.configKey = 'hooks',
     this.sessionIdPath = const ['session_id'],
+    this.messagePath = const [],
     required this.eventStatus,
   });
 
@@ -153,8 +168,63 @@ class AgentHookSpec {
   /// Where the agent's session id sits in the hook payload.
   final List<String> sessionIdPath;
 
+  /// Where a human-readable description of *what the agent wants* sits in the
+  /// payload, or empty when this agent's hooks carry none.
+  ///
+  /// The only thing that ever tells us what is being approved in words the
+  /// agent itself chose. Claude Code's `Notification` payload has a `message`;
+  /// it used to be decoded and thrown away, which left the whole app able to
+  /// say "an approval is pending" and never what for. Empty means we quote
+  /// nothing rather than inventing a description.
+  final List<String> messagePath;
+
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;
+}
+
+/// One answer we can send to an agent's approval prompt, and what it does.
+///
+/// [keys] is written to the PTY verbatim. Answering a TUI means typing into
+/// another program's interface, so the button says which key it sends and
+/// [effect] says what that key does *in that agent's words* — the user is
+/// authorising a keystroke, not an abstraction.
+class AgentApprovalKey {
+  const AgentApprovalKey({
+    required this.keys,
+    required this.label,
+    required this.effect,
+  });
+
+  /// Exactly what reaches the terminal. A control sequence (`\r`, `\x1b`), not
+  /// prose, and never followed by an implicit newline.
+  final String keys;
+
+  /// The button's words.
+  final String label;
+
+  /// What this key does to this agent, shown beside the button.
+  final String effect;
+}
+
+/// How an approval prompt from this agent can be answered from outside its TUI.
+///
+/// **Read off the agent's own screen**, which is the only place either shipped
+/// agent states its keys — the same footer the [AgentGridRules] match on.
+/// Declaring an answer we have not seen the agent name would be guessing at
+/// another program's key bindings and pressing the result, so an undeclared
+/// answer is simply unavailable and the UI points at the terminal instead.
+class AgentApprovalRules {
+  const AgentApprovalRules({this.approve, this.deny});
+
+  /// The key that says yes, when the agent names one.
+  final AgentApprovalKey? approve;
+
+  /// The key that says no. Frequently absent: an agent whose prompt says only
+  /// "press enter to continue" has not told us how to decline, and Esc is a
+  /// guess we decline to make on the user's behalf.
+  final AgentApprovalKey? deny;
+
+  bool get isEmpty => approve == null && deny == null;
 }
 
 /// Matches one line of the terminal grid.

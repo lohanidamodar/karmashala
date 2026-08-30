@@ -40,8 +40,8 @@ const _sharing = AgentDescriptor(
   displayName: 'Sharing Agent',
   binaries: AgentBinaries(windows: ['sharing'], posix: ['sharing']),
   launch: AgentLaunchSpec(
-    permissionArguments: {
-      PermissionMode.ask: ['--ask'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
     },
     interactiveResume: AgentResume.flag('--resume'),
     allowsConcurrentResume: true,
@@ -53,8 +53,8 @@ const _exclusive = AgentDescriptor(
   displayName: 'Exclusive Agent',
   binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
   launch: AgentLaunchSpec(
-    permissionArguments: {
-      PermissionMode.ask: ['--ask'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
     },
     interactiveResume: AgentResume.subcommand('resume'),
     // Left at the default — the point of the default.

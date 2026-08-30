@@ -117,6 +117,10 @@ void main() {
         '--output-format',
         'stream-json',
         '--verbose',
+        // The default `ask` mode, named rather than assumed — see
+        // built_in_agents.dart.
+        '--permission-mode',
+        'manual',
       ]);
     });
   });

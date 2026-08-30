@@ -13,9 +13,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 10);
+    expect(db.schemaVersion, 11);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 10);
+    expect(version, 11);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -58,7 +58,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 10);
+    expect(db.schemaVersion, 11);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });
@@ -81,5 +81,19 @@ void main() {
       db.query('SELECT detached FROM terminal_tabs;').single['detached'],
       0,
     );
+  });
+
+  test('v11 gives sessions a nullable permission mode with no default', () {
+    final column = db
+        .query('PRAGMA table_info(sessions);')
+        .firstWhere((r) => r['name'] == 'permission_mode');
+
+    // Both halves matter, and they are the whole point of the column's shape.
+    // Nullable with no default means a row written before v11 reads back as
+    // null — "we never recorded it" — and the resolver falls back to the agent
+    // setting. `NOT NULL DEFAULT 'ask'` would instead have every old session
+    // claim it ran under the safe mode, which plenty of them did not.
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
   });
 }

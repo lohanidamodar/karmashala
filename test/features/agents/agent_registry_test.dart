@@ -32,6 +32,7 @@ class _AgentGolden {
     required this.executable,
     required this.baseArguments,
     required this.permissionArguments,
+    required this.permissionFits,
     required this.resumeArguments,
     required this.interactiveResumeArguments,
   });
@@ -48,6 +49,15 @@ class _AgentGolden {
 
   /// The flags each [PermissionMode] adds.
   final Map<PermissionMode, List<String>> permissionArguments;
+
+  /// How faithfully each mode maps onto this agent.
+  ///
+  /// Written out per mode, by hand, **because the arguments cannot tell you**:
+  /// Claude Code's `ask` and Antigravity's `acceptEdits` are both empty lists
+  /// and are opposites — one is the CLI's own default, the other is a mode we
+  /// have no way to request. That is the distinction Loop 31 §4 asked for and
+  /// the reason the descriptor declares fidelity instead of inferring it.
+  final Map<PermissionMode, PermissionModeFit> permissionFits;
 
   /// What resuming session `sid` appends in the headless/protocol launch.
   final List<String> resumeArguments;
@@ -78,9 +88,17 @@ const List<_AgentGolden> _goldens = [
       '--verbose',
     ],
     permissionArguments: {
-      PermissionMode.ask: [],
+      PermissionMode.ask: ['--permission-mode', 'manual'],
       PermissionMode.acceptEdits: ['--permission-mode', 'acceptEdits'],
       PermissionMode.bypass: ['--permission-mode', 'bypassPermissions'],
+    },
+    // `ask` names `manual` rather than passing nothing: an unflagged session
+    // starts in `auto` on a Pro/Max/Team account, so "no flag" was not the safe
+    // mode it looked like.
+    permissionFits: {
+      PermissionMode.ask: PermissionModeFit.exact,
+      PermissionMode.acceptEdits: PermissionModeFit.exact,
+      PermissionMode.bypass: PermissionModeFit.exact,
     },
     resumeArguments: ['--resume', 'sid'],
     interactiveResumeArguments: ['--resume', 'sid'],
@@ -93,8 +111,21 @@ const List<_AgentGolden> _goldens = [
     baseArguments: ['app-server'],
     permissionArguments: {
       PermissionMode.ask: ['--ask-for-approval', 'on-request'],
-      PermissionMode.acceptEdits: ['--ask-for-approval', 'on-failure'],
+      PermissionMode.acceptEdits: [
+        '--sandbox',
+        'workspace-write',
+        '--ask-for-approval',
+        'untrusted',
+      ],
       PermissionMode.bypass: ['--dangerously-bypass-approvals-and-sandbox'],
+    },
+    // Not accept-edits: the sandbox bounds writes to the working tree and the
+    // policy still escalates untrusted commands. `on-failure` used to sit here
+    // and codex-cli 0.145.0 rejects it outright — see built_in_agents.dart.
+    permissionFits: {
+      PermissionMode.ask: PermissionModeFit.exact,
+      PermissionMode.acceptEdits: PermissionModeFit.approximate,
+      PermissionMode.bypass: PermissionModeFit.exact,
     },
     resumeArguments: ['--resume', 'sid'],
     // Interactively Codex resumes with a subcommand, not a flag.
@@ -110,6 +141,14 @@ const List<_AgentGolden> _goldens = [
       PermissionMode.ask: [],
       PermissionMode.acceptEdits: [],
       PermissionMode.bypass: ['--yolo'],
+    },
+    // We know of no Antigravity flag for either safe mode. Both are `none`, and
+    // the arguments above stay empty for exactly that reason — which is why the
+    // two maps are not redundant.
+    permissionFits: {
+      PermissionMode.ask: PermissionModeFit.none,
+      PermissionMode.acceptEdits: PermissionModeFit.none,
+      PermissionMode.bypass: PermissionModeFit.exact,
     },
     resumeArguments: ['--resume', 'sid'],
     // No documented interactive resume convention.
@@ -169,6 +208,64 @@ void main() {
           expected,
           reason: 'descriptor: ${golden.id} / ${mode.name}',
         );
+      }
+    }
+  });
+
+  test('the registry declares the golden permission fidelity', () {
+    for (final golden in _goldens) {
+      final spec = registry.byId(golden.id)!.launch;
+      for (final mode in PermissionMode.values) {
+        expect(
+          spec.permissionFitFor(mode),
+          golden.permissionFits[mode],
+          reason: '${golden.id} / ${mode.name}',
+        );
+      }
+    }
+  });
+
+  test('a mode that does not map is absent, not empty', () {
+    // The two halves of the same fact, checked against each other: what the
+    // control offers must be exactly what the descriptor can express, and a
+    // `none` mode must contribute no arguments. Antigravity is the agent that
+    // makes this test able to fail — restoring its old `ask: []` entry would
+    // make it expressible again while its arguments stayed empty.
+    for (final golden in _goldens) {
+      final spec = registry.byId(golden.id)!.launch;
+      final expressible = [
+        for (final mode in PermissionMode.values)
+          if (golden.permissionFits[mode] != PermissionModeFit.none) mode,
+      ];
+      expect(spec.expressiblePermissionModes, expressible, reason: golden.id);
+      for (final mode in PermissionMode.values) {
+        if (golden.permissionFits[mode] != PermissionModeFit.none) continue;
+        expect(
+          spec.permissionArgumentsFor(mode),
+          isEmpty,
+          reason: '${golden.id} / ${mode.name} maps to nothing',
+        );
+        expect(spec.permissionNoteFor(mode), isNull);
+      }
+    }
+  });
+
+  test('every approximate mapping explains itself', () {
+    // An approximation the user cannot see the shape of is worse than none:
+    // they read the mode's own label and believe it. The constructor requires a
+    // note; this pins that the shipped data actually carries one worth reading.
+    for (final golden in _goldens) {
+      final spec = registry.byId(golden.id)!.launch;
+      for (final mode in PermissionMode.values) {
+        if (spec.permissionFitFor(mode) != PermissionModeFit.approximate) {
+          continue;
+        }
+        expect(
+          spec.permissionNoteFor(mode),
+          isNotNull,
+          reason: '${golden.id} / ${mode.name}',
+        );
+        expect(spec.permissionNoteFor(mode)!.length, greaterThan(20));
       }
     }
   });

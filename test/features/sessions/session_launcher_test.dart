@@ -32,9 +32,9 @@ const _rover = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    permissionArguments: {
-      PermissionMode.ask: ['--careful'],
-      PermissionMode.bypass: ['--trust-me'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
     interactiveResume: AgentResume.flag('--continue'),
   ),
@@ -160,6 +160,112 @@ void main() {
       '--continue',
       'external-1',
     ]);
+  });
+
+  test('a launched session is stamped with the mode it ran under', () async {
+    final h = harness(
+      settings: const Settings().withPermissions(
+        'roverCli',
+        const AgentPermissions(
+          newSessions: PermissionMode.ask,
+          existingSessions: PermissionMode.bypass,
+        ),
+      ),
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final launched = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Stamped',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+
+    // The mode used to die with the local that held it, so nothing could say
+    // what a running session was running under.
+    final stored = SessionDao(h.db).getById(launched.session.id)!;
+    expect(stored.permissionMode, PermissionMode.ask);
+  });
+
+  test('a session keeps its own mode when the global default moves', () async {
+    final h = harness(
+      settings: const Settings().withPermissions(
+        'roverCli',
+        const AgentPermissions(existingSessions: PermissionMode.bypass),
+      ),
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final launched = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Mine',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    final id = launched.session.id;
+
+    // Stamped `ask` at creation. The agent's *existing-session* default is
+    // `bypass`, so a resolver that re-read the setting would silently escalate
+    // this session to full autonomy on its next resume. It must not.
+    expect(
+      launcher.permissionFor(
+        'roverCli',
+        SessionPurpose.existingSession,
+        sessionMode: SessionDao(h.db).getById(id)!.permissionMode,
+      ),
+      PermissionMode.ask,
+    );
+
+    // The override is what changes it, and it is readable back as the
+    // session's own rather than as an inherited default.
+    launcher.setPermissionMode(id, PermissionMode.bypass);
+    final effective = launcher.effectivePermissionFor(id)!;
+    expect(effective.mode, PermissionMode.bypass);
+    expect(effective.inherited, isFalse);
+    expect(effective.descriptor?.id, 'roverCli');
+  });
+
+  test('a row from before v11 falls back to the agent default', () async {
+    final h = harness(
+      settings: const Settings().withPermissions(
+        'roverCli',
+        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+      ),
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final launched = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Legacy',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    // Exactly what an old row looks like: the column exists and is null.
+    h.db.execute('UPDATE sessions SET permission_mode = NULL WHERE id = ?;', [
+      launched.session.id,
+    ]);
+
+    expect(
+      SessionDao(h.db).getById(launched.session.id)!.permissionMode,
+      isNull,
+    );
+    final effective = launcher.effectivePermissionFor(launched.session.id)!;
+    expect(effective.mode, PermissionMode.acceptEdits);
+    // Null is "never recorded", not a defaulted `ask` — the control says
+    // "inherited" rather than claiming the session chose this.
+    expect(effective.inherited, isTrue);
   });
 
   test('a spawned session records its parent and is capped', () async {
@@ -300,5 +406,42 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(launched.paneId!)!;
     expect(instance.agentLaunch!.wslDistribution, 'Ubuntu');
+  });
+
+  test('answering a prompt presses the key and nothing else', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final launched = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Blocked',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    final instance = h.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(launched.paneId!)!;
+    final written = <String>[];
+    instance.terminal.onOutput = written.add;
+
+    expect(launcher.answerPrompt(launched.session.id, '\r'), isTrue);
+    // Exactly the key, once. `sendTo` trims and appends a carriage return to
+    // submit a *message*; doing either here would erase the whole payload or
+    // press a second key nobody asked for.
+    expect(written, ['\r']);
+
+    written.clear();
+    expect(launcher.answerPrompt(launched.session.id, '\x1b'), isTrue);
+    expect(written, ['\x1b']);
+
+    // Nothing to press is a refusal the caller can report, not a silent no-op.
+    written.clear();
+    expect(launcher.answerPrompt(launched.session.id, ''), isFalse);
+    expect(launcher.answerPrompt('no-such-session', '\r'), isFalse);
+    expect(written, isEmpty);
   });
 }

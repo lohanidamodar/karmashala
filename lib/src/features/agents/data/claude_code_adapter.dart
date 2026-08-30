@@ -19,7 +19,10 @@ List<String> claudeLaunchArgs(AgentLaunch launch) => [
   'stream-json',
   '--verbose',
   ...switch (launch.permissionMode) {
-    PermissionMode.ask => const <String>[],
+    // Not empty: an unflagged session starts in `auto` on Pro/Max/Team
+    // accounts, which reviews actions with a classifier instead of asking.
+    // Kept in step with the descriptor, which carries the evidence.
+    PermissionMode.ask => const ['--permission-mode', 'manual'],
     PermissionMode.acceptEdits => const ['--permission-mode', 'acceptEdits'],
     PermissionMode.bypass => const ['--permission-mode', 'bypassPermissions'],
   },

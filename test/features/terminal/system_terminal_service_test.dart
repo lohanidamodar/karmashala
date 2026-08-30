@@ -11,7 +11,7 @@ void main() {
   group('resumeCommandLine', () {
     final cwd = EnvironmentPath(environmentId: 'windows', path: r'C:\ws\app');
 
-    test('Claude on the Windows host resumes by id (ask adds no flags)', () {
+    test('Claude on the Windows host resumes by id, in the asked mode', () {
       final cmd = resumeCommandLine(
         agentExecutable: 'claude',
         cli: 'claudeCode',
@@ -19,7 +19,9 @@ void main() {
         environment: windowsEnv(),
         cwd: cwd,
       );
-      expect(cmd, ['claude', '--resume', 'abc']);
+      // `ask` used to add nothing here. It names `manual` now: an unflagged
+      // Claude Code session starts in `auto` on a Pro/Max/Team account.
+      expect(cmd, ['claude', '--permission-mode', 'manual', '--resume', 'abc']);
     });
 
     test('Claude bypass adds --permission-mode bypassPermissions', () {
@@ -146,8 +148,14 @@ void main() {
       }
     });
 
-    test('the built-in agents keep the flags they already had', () {
-      expect(permissionArgsFor('claudeCode', PermissionMode.ask), isEmpty);
+    test('the built-in agents pass the flags their descriptors declare', () {
+      // `ask` was `isEmpty` here until a real CLI contradicted it: an unflagged
+      // Claude Code session starts in `auto` on a Pro/Max/Team account, so
+      // passing nothing was not the safe mode it looked like.
+      expect(permissionArgsFor('claudeCode', PermissionMode.ask), [
+        '--permission-mode',
+        'manual',
+      ]);
       expect(permissionArgsFor('claudeCode', PermissionMode.acceptEdits), [
         '--permission-mode',
         'acceptEdits',
@@ -161,9 +169,13 @@ void main() {
         '--ask-for-approval',
         'on-request',
       ]);
+      // Not `on-failure`: codex-cli 0.145.0 rejects that value outright and
+      // refuses to start. See built_in_agents.dart for the transcript.
       expect(permissionArgsFor('codex', PermissionMode.acceptEdits), [
+        '--sandbox',
+        'workspace-write',
         '--ask-for-approval',
-        'on-failure',
+        'untrusted',
       ]);
       expect(permissionArgsFor('codex', PermissionMode.bypass), [
         '--dangerously-bypass-approvals-and-sandbox',

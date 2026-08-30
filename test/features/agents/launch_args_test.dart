@@ -19,8 +19,14 @@ void main() {
   );
 
   group('claudeLaunchArgs', () {
-    test('ask adds no permission flag', () {
-      expect(claudeLaunchArgs(launch()), isNot(contains('--permission-mode')));
+    test('ask names the manual mode rather than passing nothing', () {
+      // This asserted `isNot(contains('--permission-mode'))` until a real CLI
+      // contradicted it: an unflagged session starts in `auto` on a
+      // Pro/Max/Team account, so "no flag" silently was not "ask".
+      expect(
+        claudeLaunchArgs(launch()),
+        containsAllInOrder(['--permission-mode', 'manual']),
+      );
     });
     test('acceptEdits and bypass map to --permission-mode', () {
       expect(

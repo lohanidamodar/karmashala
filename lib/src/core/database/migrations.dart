@@ -22,6 +22,9 @@ typedef MigrationStep = void Function(Database db);
 /// * **v10** — Loop 41: agents hosted in terminal panes — a pane records the
 ///   agent command it ran, and a session records which pane it lives in and
 ///   which session (if any) asked for it.
+/// * **v11** — Loop 49: a session carries its own permission mode, so the
+///   composer control has somewhere to write and the resolver has one place to
+///   read.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -33,6 +36,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   8: _migrateToV8,
   9: _migrateToV9,
   10: _migrateToV10,
+  11: _migrateToV11,
 };
 
 void _migrateToV8(Database db) {
@@ -369,4 +373,20 @@ void _migrateToV10(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_sessions_parent '
     'ON sessions (parent_session_id);',
   );
+}
+
+void _migrateToV11(Database db) {
+  // Per-session permission mode (Loop 49).
+  //
+  // Until now the mode was resolved at launch from the per-agent setting and
+  // then thrown away with the local that held it, so nothing could say what a
+  // running session was actually running under — which is exactly what a
+  // control claiming to show the *effective* mode has to answer.
+  //
+  // Nullable with no default, and null is a real answer: "written before this
+  // column existed, ask the settings". Every row created from here on is
+  // stamped at launch, so null never means "unknown" for a new session. A
+  // `NOT NULL DEFAULT 'ask'` would have been a lie for the old rows, half of
+  // which were launched under a different mode entirely.
+  db.execute('ALTER TABLE sessions ADD COLUMN permission_mode TEXT;');
 }

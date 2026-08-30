@@ -4,6 +4,7 @@ import '../../environments/domain/environment_path.dart';
 import '../domain/session.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_status.dart';
+import '../../settings/domain/permission_mode.dart';
 
 /// Data-access for [Session] rows. Hand-written SQL, no codegen.
 class SessionDao {
@@ -16,8 +17,9 @@ class SessionDao {
       'INSERT INTO sessions '
       '(id, repository_id, agent_installation_id, title, use_worktree, '
       'worktree_environment_id, worktree_path, status, created_at, '
-      'external_session_id, parent_session_id, pane_id, surface, view) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'external_session_id, parent_session_id, pane_id, surface, view, '
+      'permission_mode) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -33,6 +35,7 @@ class SessionDao {
         session.paneId,
         session.surface.name,
         session.view.name,
+        session.permissionMode?.name,
       ],
     );
   }
@@ -77,6 +80,17 @@ class SessionDao {
   /// statement: a view change must never be able to touch anything else.
   void updateView(String id, SessionView view) {
     _db.execute('UPDATE sessions SET view = ? WHERE id = ?;', [view.name, id]);
+  }
+
+  /// Records the permission mode this session runs under.
+  ///
+  /// Its own statement, like [updateView], and for the same reason: changing a
+  /// session's safety policy must not be able to carry any other edit with it.
+  void updatePermissionMode(String id, PermissionMode mode) {
+    _db.execute('UPDATE sessions SET permission_mode = ? WHERE id = ?;', [
+      mode.name,
+      id,
+    ]);
   }
 
   /// The parent of [id], or `null` for a root session or an unknown id.
@@ -153,6 +167,18 @@ class SessionDao {
     return SessionView.terminal;
   }
 
+  /// Null-preserving, unlike [_surfaceFrom] and [_viewFrom], because null is a
+  /// meaningful value here: a row written before schema v11 never recorded a
+  /// mode, and falling back to `ask` would claim it ran under a policy it may
+  /// well not have. The caller resolves that from the settings instead.
+  static PermissionMode? _permissionFrom(String? value) {
+    if (value == null) return null;
+    for (final mode in PermissionMode.values) {
+      if (mode.name == value) return mode;
+    }
+    return null;
+  }
+
   Session _fromRow(Map<String, Object?> row) {
     final worktreeEnv = row['worktree_environment_id'] as String?;
     final worktreePath = row['worktree_path'] as String?;
@@ -175,6 +201,7 @@ class SessionDao {
       // fourth agent's rows unreadable (Loop 30).
       surface: _surfaceFrom(row['surface'] as String?),
       view: _viewFrom(row['view'] as String?),
+      permissionMode: _permissionFrom(row['permission_mode'] as String?),
     );
   }
 }

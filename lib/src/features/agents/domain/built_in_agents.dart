@@ -32,10 +32,38 @@ const _claudeCode = AgentDescriptor(
       'stream-json',
       '--verbose',
     ],
-    permissionArguments: {
-      PermissionMode.ask: [],
-      PermissionMode.acceptEdits: ['--permission-mode', 'acceptEdits'],
-      PermissionMode.bypass: ['--permission-mode', 'bypassPermissions'],
+    permissionModes: {
+      // `manual` — the CLI's alias for the config value `default` — is the
+      // mode that stops and asks before edits, commands and network access.
+      //
+      // **Passing nothing is not the same thing.** Which mode an unflagged
+      // session starts in depends on the account: Claude Code 2.1.228+ starts
+      // Pro/Max/Team sessions in `auto`, where a classifier reviews each action
+      // instead of prompting, and only falls back to `default` for Enterprise,
+      // API-key, `-p` and cloud-platform sessions.
+      //
+      // So the previous empty mapping was Loop 31 §4's worst case made real:
+      // the user picked the *safest* mode, we passed no flag, and a Pro account
+      // silently ran under `auto`. Naming the mode costs one flag and makes the
+      // choice true for every account.
+      //
+      //   $ claude --permission-mode manual -p 'reply with the single word OK'
+      //   OK
+      //
+      // Verified against 2.1.251, which also rejects an unknown value outright,
+      // so this is a name the CLI really has.
+      PermissionMode.ask: PermissionModeMapping.exact([
+        '--permission-mode',
+        'manual',
+      ]),
+      PermissionMode.acceptEdits: PermissionModeMapping.exact([
+        '--permission-mode',
+        'acceptEdits',
+      ]),
+      PermissionMode.bypass: PermissionModeMapping.exact([
+        '--permission-mode',
+        'bypassPermissions',
+      ]),
     },
     resume: AgentResume.flag('--resume'),
     interactiveResume: AgentResume.flag('--resume'),
@@ -62,6 +90,10 @@ const _claudeCode = AgentDescriptor(
   statusStrategy: AgentStatusStrategy.hooks,
   hooks: AgentHookSpec(
     configFileName: 'settings.json',
+    // Claude Code's `Notification` payload carries a `message` describing what
+    // it wants. It was decoded for the session id and dropped, which is why the
+    // app could say an approval was pending and never what for.
+    messagePath: ['message'],
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,
@@ -95,6 +127,23 @@ const _claudeCode = AgentDescriptor(
     working: [GridMatcher('esc to interrupt')],
     idle: [GridMatcher('shift+tab to cycle')],
   ),
+  // Both keys are read off the same footer the matchers above fire on —
+  // `Enter to confirm · Esc to cancel` — so we are sending keys the agent
+  // itself advertises rather than ones we assumed.
+  approval: AgentApprovalRules(
+    approve: AgentApprovalKey(
+      keys: '\r',
+      label: 'Approve',
+      effect:
+          'Sends Enter, which confirms whichever option Claude Code currently '
+          'has highlighted.',
+    ),
+    deny: AgentApprovalKey(
+      keys: '\x1b',
+      label: 'Deny',
+      effect: 'Sends Esc, which cancels the prompt.',
+    ),
+  ),
 );
 
 const _codex = AgentDescriptor(
@@ -104,10 +153,38 @@ const _codex = AgentDescriptor(
   binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
   launch: AgentLaunchSpec(
     baseArguments: ['app-server'],
-    permissionArguments: {
-      PermissionMode.ask: ['--ask-for-approval', 'on-request'],
-      PermissionMode.acceptEdits: ['--ask-for-approval', 'on-failure'],
-      PermissionMode.bypass: ['--dangerously-bypass-approvals-and-sandbox'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact([
+        '--ask-for-approval',
+        'on-request',
+      ]),
+      // Codex has no accept-edits mode. It splits the question in two — a
+      // *sandbox* decides what may be written, an *approval policy* decides
+      // what must be asked — so the nearest thing takes one flag from each:
+      // `workspace-write` lets it edit files in the working tree without
+      // asking, and `untrusted` still escalates any command outside its own
+      // read-only trusted set.
+      //
+      // This replaced `--ask-for-approval on-failure`, which **the real CLI
+      // rejects**. Verified against codex-cli 0.145.0:
+      //
+      //   $ codex --ask-for-approval on-failure exec 'hi'
+      //   error: invalid value 'on-failure' for '--ask-for-approval <APPROVAL_POLICY>'
+      //     [possible values: untrusted, on-request, never]
+      //
+      // So choosing "Accept edits" for Codex did not weaken a policy — it made
+      // the agent refuse to start. No unit test could catch that: the flag was
+      // asserted against a string literal that was itself the mistake.
+      PermissionMode.acceptEdits: PermissionModeMapping.approximate(
+        ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
+        note:
+            'Codex has no accept-edits mode. The nearest lets it write inside '
+            'the working tree without asking, and still escalates any command '
+            'outside its trusted read-only set.',
+      ),
+      PermissionMode.bypass: PermissionModeMapping.exact([
+        '--dangerously-bypass-approvals-and-sandbox',
+      ]),
     },
     resume: AgentResume.flag('--resume'),
     // Interactively Codex resumes with a subcommand, not a flag.
@@ -162,6 +239,17 @@ const _codex = AgentDescriptor(
     awaitingApproval: [GridMatcher('Press enter to continue')],
     working: [GridMatcher('esc to interrupt')],
   ),
+  // Only half of one. Codex's prompt says `Press enter to continue` and names
+  // no way to decline, so `deny` stays null and the UI sends the user to the
+  // terminal for that rather than guessing that Esc backs out. Enter is the key
+  // Loop 41 actually drove a real Codex trust modal with.
+  approval: AgentApprovalRules(
+    approve: AgentApprovalKey(
+      keys: '\r',
+      label: 'Continue',
+      effect: 'Sends Enter, the key this prompt names.',
+    ),
+  ),
 );
 
 const _antigravity = AgentDescriptor(
@@ -171,10 +259,14 @@ const _antigravity = AgentDescriptor(
   binaries: AgentBinaries(windows: ['antigravity'], posix: ['antigravity']),
   launch: AgentLaunchSpec(
     baseArguments: ['--stdio'],
-    permissionArguments: {
-      PermissionMode.ask: [],
-      PermissionMode.acceptEdits: [],
-      PermissionMode.bypass: ['--yolo'],
+    // `ask` and `acceptEdits` are **absent, not empty**. We know of no
+    // Antigravity flag for either, and the old `[]` meant the app passed
+    // nothing while the UI reported the user's choice as applied — Loop 31 §4's
+    // sharpest case, since the mode being silently dropped was the *safe* one.
+    // Omitted means not offered, and the control says why instead of implying a
+    // policy we cannot enforce.
+    permissionModes: {
+      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
     },
     resume: AgentResume.flag('--resume'),
   ),

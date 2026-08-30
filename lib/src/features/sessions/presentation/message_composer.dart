@@ -23,6 +23,7 @@ class MessageComposer extends StatefulWidget {
     required this.onSend,
     required this.hintText,
     this.enabled = true,
+    this.chips = const [],
     super.key,
   });
 
@@ -31,6 +32,11 @@ class MessageComposer extends StatefulWidget {
   final Future<void> Function(String text) onSend;
   final String hintText;
   final bool enabled;
+
+  /// Controls shown in a row beneath the text box — the permission mode, and
+  /// whatever the model/effort chips become. A slot rather than a widget this
+  /// class builds, so the composer keeps knowing nothing about sessions.
+  final List<Widget> chips;
 
   @override
   State<MessageComposer> createState() => _MessageComposerState();
@@ -220,6 +226,18 @@ class _MessageComposerState extends State<MessageComposer> {
             ],
           ),
         ),
+        if (widget.chips.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Row(
+              children: [
+                for (final chip in widget.chips) ...[
+                  chip,
+                  const SizedBox(width: Insets.sm),
+                ],
+              ],
+            ),
+          ),
         if (_attachments.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),

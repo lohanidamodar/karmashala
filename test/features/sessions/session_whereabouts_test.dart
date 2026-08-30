@@ -44,8 +44,8 @@ const _exclusive = AgentDescriptor(
   displayName: 'Exclusive Agent',
   binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
   launch: AgentLaunchSpec(
-    permissionArguments: {
-      PermissionMode.ask: ['--ask'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
     },
     interactiveResume: AgentResume.subcommand('resume'),
     resumeConflict: AgentResumeConflictRules(

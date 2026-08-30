@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:xterm/xterm.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -131,7 +132,22 @@ class SessionLauncher {
   /// The engine's own `PermissionMode.ask` default was dead code — every caller
   /// overrode it — so the safe default was not a backstop. It is one here:
   /// nothing else reads `permissionsFor`.
-  PermissionMode permissionFor(String agentId, SessionPurpose purpose) {
+  ///
+  /// **[sessionMode] wins when it is set.** That is `Session.permissionMode`,
+  /// stamped at launch and rewritten by the composer control, and it is why the
+  /// per-agent setting keeps its two values without either of them being able
+  /// to overwrite a session's own choice later. A caller holding a session row
+  /// passes it; one that has no session yet (a shell command for a project, a
+  /// brand-new launch) leaves it null and gets the default for [purpose].
+  ///
+  /// Null [sessionMode] on an *existing* row means the row predates schema v11,
+  /// so the setting is the only answer anyone ever had for it.
+  PermissionMode permissionFor(
+    String agentId,
+    SessionPurpose purpose, {
+    PermissionMode? sessionMode,
+  }) {
+    if (sessionMode != null) return sessionMode;
     final permissions = _ref
         .read(settingsControllerProvider)
         .permissionsFor(agentId);
@@ -139,6 +155,44 @@ class SessionLauncher {
       SessionPurpose.newSession => permissions.newSessions,
       SessionPurpose.existingSession => permissions.existingSessions,
     };
+  }
+
+  /// The mode [sessionId] will run under on its next launch or resume, and the
+  /// agent it will be handed to.
+  ///
+  /// The read behind the composer control, so what the chip shows and what the
+  /// launcher passes come from one place by construction rather than by two
+  /// call sites agreeing.
+  ({PermissionMode mode, AgentDescriptor? descriptor, bool inherited})?
+  effectivePermissionFor(String sessionId) {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) return null;
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (installation == null) return null;
+    return (
+      mode: permissionFor(
+        installation.agentId,
+        SessionPurpose.existingSession,
+        sessionMode: session.permissionMode,
+      ),
+      descriptor: _ref.read(agentRegistryProvider).byId(installation.agentId),
+      inherited: session.permissionMode == null,
+    );
+  }
+
+  /// Records the mode [sessionId] should run under from its next launch on.
+  ///
+  /// Deliberately **does not touch the running process**. Every agent here
+  /// takes its permission policy from its command line at startup; none of them
+  /// has a documented way to be told a new one mid-session, and typing a slash
+  /// command at whatever has focus would be a guess about another program's
+  /// UI. So this writes the row, and the control says the change applies on the
+  /// next launch rather than implying the live agent has been re-governed.
+  void setPermissionMode(String sessionId, PermissionMode mode) {
+    _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
+    _bump();
   }
 
   /// The single default-installation resolution.
@@ -381,6 +435,13 @@ class SessionLauncher {
       parentSessionId: request.parentSessionId,
       surface: request.surface,
       view: request.view ?? defaultViewFor(descriptor),
+      // Stamped, not left null. The mode was already resolved above and then
+      // died with the local that held it, so nothing could say what a running
+      // session was running under — the exact question a control showing the
+      // *effective* mode has to answer. Recording it here also means a later
+      // resume runs under the session's own mode rather than re-reading a
+      // global default that may have changed since.
+      permissionMode: permissionMode,
     );
     final dao = _ref.read(sessionDaoProvider);
     dao.insert(session);
@@ -541,18 +602,48 @@ class SessionLauncher {
   bool sendTo(String sessionId, String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
-    final paneId = session?.paneId;
-    if (paneId == null) return false;
-    final controller = _ref.read(terminalSessionsControllerProvider.notifier);
-    final instance = controller.instanceFor(paneId);
-    if (instance == null || !instance.liveness.value.isLive) return false;
+    final terminal = _liveTerminalFor(sessionId);
+    if (terminal == null) return false;
     // A carriage return, not a newline: a PTY line discipline reads CR as
     // "submit", and a bare LF leaves the text sitting in the agent's composer.
-    instance.terminal
+    terminal
       ..textInput(trimmed)
       ..textInput('\r');
     return true;
+  }
+
+  /// Answers an agent's on-screen prompt by pressing [keys] in its terminal.
+  ///
+  /// Separate from [sendTo] rather than a special case of it, because the two
+  /// are different acts. [sendTo] delivers a *message*: it trims, refuses empty
+  /// input and appends a carriage return to submit it. An answer is a
+  /// **keystroke** — `\r`, `\x1b` — where trimming would erase the whole
+  /// payload and an appended return would press a second key nobody asked for.
+  ///
+  /// [keys] must come from the agent's own [AgentApprovalRules]. Nothing here
+  /// invents a binding: this method presses what it is given, and the registry
+  /// is what decides whether there is anything to press.
+  ///
+  /// Returns false when the session has no live pane, so the caller can say the
+  /// answer did not land instead of assuming it did.
+  bool answerPrompt(String sessionId, String keys) {
+    if (keys.isEmpty) return false;
+    final terminal = _liveTerminalFor(sessionId);
+    if (terminal == null) return false;
+    terminal.textInput(keys);
+    return true;
+  }
+
+  /// The live terminal behind [sessionId], or null. Three things have to be
+  /// true and each has been wrong on its own — see [livePaneFor].
+  Terminal? _liveTerminalFor(String sessionId) {
+    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    if (paneId == null) return null;
+    final instance = _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId);
+    if (instance == null || !instance.liveness.value.isLive) return null;
+    return instance.terminal;
   }
 
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();

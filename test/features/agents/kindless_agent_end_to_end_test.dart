@@ -33,10 +33,10 @@ const _rover = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    permissionArguments: {
-      PermissionMode.ask: [],
-      PermissionMode.acceptEdits: ['--auto-edit'],
-      PermissionMode.bypass: ['--trust-me'],
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact([]),
+      PermissionMode.acceptEdits: PermissionModeMapping.exact(['--auto-edit']),
+      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
     resume: AgentResume.flag('--continue'),
   ),

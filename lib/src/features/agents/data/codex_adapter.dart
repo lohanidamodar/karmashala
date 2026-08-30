@@ -16,7 +16,15 @@ List<String> codexLaunchArgs(AgentLaunch launch) => [
   'app-server',
   ...switch (launch.permissionMode) {
     PermissionMode.ask => const ['--ask-for-approval', 'on-request'],
-    PermissionMode.acceptEdits => const ['--ask-for-approval', 'on-failure'],
+    // `on-failure` is not a value codex accepts — 0.145.0 answers
+    // `invalid value 'on-failure'` and exits. Kept in step with the
+    // descriptor, which carries the evidence.
+    PermissionMode.acceptEdits => const [
+      '--sandbox',
+      'workspace-write',
+      '--ask-for-approval',
+      'untrusted',
+    ],
     PermissionMode.bypass => const [
       '--dangerously-bypass-approvals-and-sandbox',
     ],

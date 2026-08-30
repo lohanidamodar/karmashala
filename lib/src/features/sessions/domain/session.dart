@@ -1,4 +1,5 @@
 import '../../environments/domain/environment_path.dart';
+import '../../settings/domain/permission_mode.dart';
 import 'session_launch.dart';
 import 'session_status.dart';
 
@@ -24,6 +25,7 @@ class Session {
     this.paneId,
     this.surface = SessionSurface.pane,
     this.view = SessionView.terminal,
+    this.permissionMode,
   });
 
   final String id;
@@ -62,6 +64,21 @@ class Session {
   /// time; it starts and stops nothing.
   final SessionView view;
 
+  /// How much this session's agent may do without asking.
+  ///
+  /// Stamped at launch from the per-agent default for the session's
+  /// [SessionPurpose], and rewritten when the user overrides it on the composer
+  /// control. Once written it is **the** answer for this session: a later
+  /// resume runs under the mode the session carries, not under whatever the
+  /// global default has since become.
+  ///
+  /// Null only for rows written before schema v11, which fall back to the
+  /// per-agent setting. That is a genuine "we never recorded it", not a
+  /// defaulted [PermissionMode.ask] — half those sessions were launched under
+  /// something else, and claiming otherwise would be the silent lie this field
+  /// exists to remove. See `SessionLauncher.permissionFor`.
+  final PermissionMode? permissionMode;
+
   Session copyWith({
     String? id,
     String? repositoryId,
@@ -76,6 +93,7 @@ class Session {
     String? paneId,
     SessionSurface? surface,
     SessionView? view,
+    PermissionMode? permissionMode,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -90,6 +108,7 @@ class Session {
     paneId: paneId ?? this.paneId,
     surface: surface ?? this.surface,
     view: view ?? this.view,
+    permissionMode: permissionMode ?? this.permissionMode,
   );
 
   @override
@@ -107,7 +126,8 @@ class Session {
       other.parentSessionId == parentSessionId &&
       other.paneId == paneId &&
       other.surface == surface &&
-      other.view == view;
+      other.view == view &&
+      other.permissionMode == permissionMode;
 
   @override
   int get hashCode => Object.hash(
@@ -124,6 +144,7 @@ class Session {
     paneId,
     surface,
     view,
+    permissionMode,
   );
 
   @override

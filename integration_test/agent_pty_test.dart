@@ -164,6 +164,116 @@ void main() {
   void answer(TerminalInstance instance, String keys) =>
       instance.terminal.textInput(keys);
 
+  group('an approval answered the way the transcript control answers it', () {
+    testWidgets(
+      'the prompt is quoted from the screen and its declared key clears it',
+      (_) async {
+        final descriptor = AgentRegistry.builtIn.byId(AgentIds.codex)!;
+        // The mode the user picked reaches the process. `acceptEdits` is the
+        // mapping a real codex rejected until this loop, so launching under it
+        // is itself the regression test: a bad flag never reaches a trust
+        // modal, it exits.
+        final arguments = agentPaneArguments(
+          descriptor,
+          PermissionMode.acceptEdits,
+          prompt: 'Reply with exactly the word PONG and nothing else.',
+        );
+        expect(
+          arguments,
+          containsAllInOrder([
+            '--sandbox',
+            'workspace-write',
+            '--ask-for-approval',
+            'untrusted',
+          ]),
+        );
+
+        final instance = start(
+          AgentPaneLaunch(
+            agentId: AgentIds.codex,
+            executable: 'codex.exe',
+            arguments: arguments,
+            workingDirectory: work.path,
+            sessionId: 'sess-codex-approval',
+          ),
+        );
+        addTearDown(instance.dispose);
+
+        // Poll the way the app does, and keep the report — not just its status
+        // — so the evidence the card would render can be asserted on.
+        const source = TerminalGridStatusSource();
+        AgentStatusReport? pending;
+        final deadline = DateTime.now().add(const Duration(minutes: 2));
+        while (DateTime.now().isBefore(deadline)) {
+          final report = source.read(
+            descriptor,
+            terminalTailLines(
+              instance.terminal,
+              lines: descriptor.grid.scanLines,
+            ),
+            DateTime.now(),
+            sessionId: 'probe',
+          );
+          if (report?.status == AgentActivityStatus.awaitingApproval) {
+            pending = report;
+            break;
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+
+        final screen = terminalTailLines(
+          instance.terminal,
+          lines: 24,
+        ).join('\n');
+        expect(
+          pending,
+          isNotNull,
+          reason: 'codex never blocked on its trust modal. Screen:\n$screen',
+        );
+
+        // The card would render exactly this. It must be the agent's own words
+        // and not the matcher that fired.
+        // ignore: avoid_print
+        print('TRACE evidence:\n${pending!.evidence.join("\n")}');
+        expect(pending.evidence, isNotEmpty);
+        expect(pending.detail, 'Press enter to continue');
+        expect(
+          pending.evidence.join('\n'),
+          contains('Press enter to continue'),
+          reason: 'the quoted rows must include the prompt itself',
+        );
+        expect(
+          pending.evidence.any((l) => l.trim().isEmpty),
+          isFalse,
+          reason: 'blank rows are dropped',
+        );
+
+        // Answer with the key the *descriptor declares*, which is the value the
+        // transcript card passes to `answerPrompt` — not a literal typed here.
+        final approve = descriptor.approval.approve!;
+        expect(approve.keys, '\r');
+        expect(descriptor.approval.deny, isNull);
+        answer(instance, approve.keys);
+
+        final after = await watchTrace(
+          instance,
+          AgentIds.codex,
+          done: (seen) => seen.contains(AgentActivityStatus.working),
+          within: const Duration(minutes: 2),
+        );
+        expect(
+          after,
+          contains(AgentActivityStatus.working),
+          reason:
+              'the declared key did not clear the modal. Screen:\n'
+              '${terminalTailLines(instance.terminal, lines: 24).join("\n")}',
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 8)),
+      skip: !onHostPath('codex.exe'),
+    );
+  });
+
   group('Codex, natively on Windows', () {
     testWidgets(
       'runs in a PTY, and its status is read off its own screen',
@@ -213,6 +323,58 @@ void main() {
       },
       timeout: const Timeout(Duration(minutes: 6)),
       skip: !onHostPath('codex.exe'),
+    );
+  });
+
+  group('the safe mode reaches a real interactive agent', () {
+    testWidgets(
+      'Claude Code starts under the flag `ask` now passes',
+      (_) async {
+        final distro = firstWslDistro()!;
+        final descriptor = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
+        final arguments = agentPaneArguments(
+          descriptor,
+          PermissionMode.ask,
+          prompt: 'Reply with exactly the word PONG and nothing else.',
+        );
+        // `ask` used to add nothing here, which silently left a Pro/Max/Team
+        // session in `auto`. It names the prompting mode now, and this proves
+        // the *interactive* CLI accepts it — `--permission-mode manual -p ...`
+        // only proves print mode does, and flags have differed between the two.
+        expect(arguments, containsAllInOrder(['--permission-mode', 'manual']));
+
+        final instance = start(
+          AgentPaneLaunch(
+            agentId: AgentIds.claudeCode,
+            executable: 'claude',
+            arguments: arguments,
+            workingDirectory: '/tmp',
+            wslDistribution: distro,
+            sessionId: 'sess-claude-ask',
+          ),
+        );
+        addTearDown(instance.dispose);
+
+        final seen = await watchTrace(
+          instance,
+          AgentIds.claudeCode,
+          done: workedThenIdled,
+          within: const Duration(minutes: 3),
+        );
+        // A rejected flag never draws a TUI at all, so reaching any of Claude's
+        // own footers is the assertion that matters.
+        expect(
+          seen.where((s) => s != AgentActivityStatus.unknown),
+          isNotEmpty,
+          reason:
+              'claude never drew its own UI, which is what a rejected flag '
+              'looks like. Screen:\n'
+              '${terminalTailLines(instance.terminal, lines: 24).join("\n")}',
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 6)),
+      skip:
+          firstWslDistro() == null || !inWsl(firstWslDistro() ?? '', 'claude'),
     );
   });
 
