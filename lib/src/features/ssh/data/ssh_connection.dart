@@ -8,6 +8,7 @@ import '../../environments/domain/environment_path.dart';
 import '../domain/ssh_connection_state.dart';
 import '../domain/ssh_host.dart';
 import '../domain/ssh_host_key.dart';
+import 'resilient_ssh_socket.dart';
 import 'ssh_host_key_verifier.dart';
 
 /// Asked for a password or a key passphrase when one is needed.
@@ -195,12 +196,16 @@ class SshConnection {
   }
 
   Future<SSHClient> _connectOnce() async {
+    // Credentials are resolved before the socket is opened: a host with a
+    // missing or unreadable key is a configuration error, and it should say so
+    // immediately rather than after a connect timeout — and never leave a
+    // socket open that it then cannot use.
+    final identities = await _identities();
+
     final SSHSocket socket;
     try {
-      socket = await SSHSocket.connect(
-        host.host,
-        host.port,
-        timeout: connectTimeout,
+      socket = ResilientSshSocket(
+        await SSHSocket.connect(host.host, host.port, timeout: connectTimeout),
       );
     } on Object catch (e) {
       throw SshConnectionException(
@@ -209,8 +214,6 @@ class SshConnection {
         retryable: true,
       );
     }
-
-    final identities = await _identities();
     final client = SSHClient(
       socket,
       username: host.username,
@@ -221,6 +224,16 @@ class SshConnection {
           : null,
       handshakeTimeout: connectTimeout,
       authTimeout: connectTimeout,
+    );
+    // Listened to immediately, not after authentication: a client that fails to
+    // authenticate also completes `done` with that error, and with nobody
+    // listening it would surface as an unhandled async error instead of the
+    // failure the caller is about to be told about.
+    unawaited(
+      client.done.then(
+        (_) => _handleDropped(client, null),
+        onError: (Object e) => _handleDropped(client, e),
+      ),
     );
 
     try {
@@ -249,13 +262,6 @@ class SshConnection {
         retryable: true,
       );
     }
-
-    unawaited(
-      client.done.then(
-        (_) => _handleDropped(null),
-        onError: (Object e) => _handleDropped(e),
-      ),
-    );
     return client;
   }
 
@@ -279,21 +285,33 @@ class SshConnection {
       );
     }
 
+    final bool encrypted;
+    try {
+      encrypted = SSHKeyPair.isEncryptedPem(pem);
+    } on Object catch (e) {
+      throw _undecodableKey(e);
+    }
+
     String? passphrase;
-    if (SSHKeyPair.isEncryptedPem(pem)) {
+    if (encrypted) {
       passphrase = await _ask(passphrasePrompt, 'key passphrase');
     }
     try {
       return SSHKeyPair.fromPem(pem, passphrase);
-    } on SSHKeyDecodeError catch (e) {
-      // e carries the failure reason, not the key; still, only its type is
-      // reported so no fragment of key material can reach a log.
-      throw SshConnectionException(
-        'The private key for ${host.name} could not be decoded '
-        '(${e.runtimeType}). A wrong passphrase looks like this.',
-      );
+    } on SshConnectionException {
+      rethrow;
+    } on Object catch (e) {
+      throw _undecodableKey(e);
     }
   }
+
+  /// Reports an unusable key by the *type* of the failure only. The exception a
+  /// decoder throws can quote the bytes it choked on, and those bytes are key
+  /// material, so neither its message nor the PEM is ever passed along.
+  SshConnectionException _undecodableKey(Object error) => SshConnectionException(
+    'The private key for ${host.name} could not be decoded '
+    '(${error.runtimeType}). A wrong passphrase looks like this.',
+  );
 
   Future<String> _ask(SshSecretPrompt? prompt, String what) async {
     if (prompt == null) {
@@ -308,7 +326,10 @@ class SshConnection {
     return value;
   }
 
-  void _handleDropped(Object? error) {
+  void _handleDropped(SSHClient client, Object? error) {
+    // Only the session that is actually in use reports a drop: one that never
+    // authenticated, or one already replaced by a reconnect, is not news.
+    if (!identical(_client, client)) return;
     _client = null;
     if (_closed) return;
     _emit(
