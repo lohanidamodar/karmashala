@@ -13,8 +13,19 @@ import '../domain/working_tree_status.dart';
 typedef WorkingTreeChanged = void Function(EnvironmentPath repo);
 
 /// High-level access to a repository's working-tree changes and diffs, resolving
-/// the correct runner for the repository's environment. Read-only: Git is the
-/// source of truth and there is no editor (ADR 0004).
+/// the correct runner for the repository's environment. Git is the source of
+/// truth and there is no editor (ADR 0004).
+///
+/// **Almost read-only, and that is a rule rather than an accident.** Committing
+/// and pushing are things the *agent* does: the delivery strip's `Commit` and
+/// `Push` send a prompt into the session verbatim, so the model writes the
+/// message with the context it just worked in and reports a rejected push in
+/// the transcript. `commitAll` and `push` wrappers sat here with no caller from
+/// the day they were written until Loop 67 deleted them; they were a second,
+/// silent way to do what the strip already asks for. `GitService` keeps
+/// `stageAll`/`commit`/`push` — the data layer's vocabulary is not an offer.
+/// [mergeBranch] is the exception, and it exists for the fan-out comparison,
+/// which merges a winning branch on the user's explicit instruction.
 class ChangesService {
   ChangesService({
     required this.runnerFactory,
@@ -88,17 +99,8 @@ class ChangesService {
   Future<List<GitCommit>> log(EnvironmentPath repo, {int limit = 20}) =>
       _gitFor(repo).log(repo, limit: limit);
 
-  /// Stages all changes and commits them with [message].
-  Future<void> commitAll(EnvironmentPath repo, String message) async {
-    final git = _gitFor(repo);
-    await git.stageAll(repo);
-    await git.commit(repo, message);
-  }
-
-  /// Pushes the current branch of [repo].
-  Future<void> push(EnvironmentPath repo) => _gitFor(repo).push(repo);
-
-  /// Merges [branch] into [repo]'s checked-out branch.
+  /// Merges [branch] into [repo]'s checked-out branch. The one write here; see
+  /// the class doc for why it is the only one.
   ///
   /// `touch` rather than `invalidate` for the index: the directory is still the
   /// same directory and most of its files are still the files it had, so the
