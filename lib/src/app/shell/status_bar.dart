@@ -52,7 +52,7 @@ class ShellStatusBar extends ConsumerWidget {
         child: Row(
           children: [
             if (repo != null) ...[
-              _Item(icon: AppIcons.folder, label: repo.name),
+              _Item(icon: AppIcons.bookBookmark, label: repo.name),
               _Item(
                 icon: AppIcons.gitBranch,
                 label: switch (branch) {
@@ -62,7 +62,10 @@ class ShellStatusBar extends ConsumerWidget {
                 },
               ),
             ] else
-              _Item(icon: AppIcons.folder, label: 'No repository selected'),
+              _Item(
+                icon: AppIcons.bookBookmark,
+                label: 'No repository selected',
+              ),
             const Spacer(),
             _Item(
               icon: AppIcons.terminal,
@@ -72,13 +75,15 @@ class ShellStatusBar extends ConsumerWidget {
             ),
             if (detached > 0)
               _Item(
-                icon: AppIcons.pictureInpicture,
+                icon: AppIcons.terminalWindow,
                 label: '$detached in background',
                 emphasised: true,
               ),
             if (attention > 0)
               _Item(
-                icon: AppIcons.warningCircle,
+                // The Inbox's own glyph, not a warning sign: this is the
+                // same count, the same list and the same click as the rail.
+                icon: AppIcons.tray,
                 label: attention == 1 ? '1 needs you' : '$attention need you',
                 emphasised: true,
                 // The same number the rail badges and the tray badges, and the

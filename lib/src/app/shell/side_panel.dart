@@ -29,14 +29,20 @@ import '../../features/settings/application/settings_controller.dart';
 class SidePanel extends ConsumerWidget {
   const SidePanel({super.key});
 
+  /// The glyph for each surface. **Every one of these must be legible as a
+  /// different thing at 16px** — the rail is seven unlabelled icons in a 34px
+  /// column, so a near-miss is a surface nobody can find. Inbox and Info were
+  /// `warning-circle` and `info`: a circle with a `!` above a circle with an
+  /// `i`, which is why the owner could not see the worktree viewer at all.
+  /// `side_panel_test.dart` pins that they stay distinct.
   static IconData iconFor(SidePanelSurface surface) => switch (surface) {
-    SidePanelSurface.inbox => AppIcons.warningCircle,
+    SidePanelSurface.inbox => AppIcons.tray,
     SidePanelSurface.changes => AppIcons.gitDiff,
     SidePanelSurface.github => AppIcons.gitMerge,
     SidePanelSurface.files => AppIcons.folder,
-    SidePanelSurface.device => Icons.smartphone,
+    SidePanelSurface.device => AppIcons.deviceMobile,
     SidePanelSurface.browser => AppIcons.globe,
-    SidePanelSurface.info => AppIcons.info,
+    SidePanelSurface.repository => AppIcons.bookBookmark,
   };
 
   @override
@@ -234,7 +240,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.files => const FileExplorerView(),
     SidePanelSurface.device => const DevicePane(),
     SidePanelSurface.browser => const BrowserPane(),
-    SidePanelSurface.info => const RepositoryInfoView(),
+    SidePanelSurface.repository => const RepositoryInfoView(),
   };
 }
 

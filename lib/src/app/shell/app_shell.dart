@@ -429,7 +429,9 @@ class _DesktopMenuBar extends ConsumerWidget {
             ),
             const Divider(height: 1),
             MenuItemButton(
-              leadingIcon: const Icon(AppIcons.globe),
+              // `globe` is the Browser surface; scanning the CLI stores for
+              // sessions is a search, not the web.
+              leadingIcon: const Icon(AppIcons.listMagnifyingGlass),
               onPressed: () => _showDetected(context, ref),
               child: const Text('Detect CLI sessions'),
             ),

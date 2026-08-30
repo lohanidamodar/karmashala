@@ -507,37 +507,38 @@ class TerminalToolbar extends ConsumerWidget {
               count: backgroundCount,
               backgroundColor: Theme.of(context).colorScheme.primary,
               textColor: Theme.of(context).colorScheme.onPrimary,
-              child: const Icon(AppIcons.pictureInpicture, size: 15),
+              // Not `pictureInPicture` — that is the mini launcher.
+              child: const Icon(AppIcons.terminalWindow, size: Chrome.icon),
             ),
             onPressed: () => actions.showBackgroundSessions(context),
           ),
         if (hasCommands)
           IconButton(
             tooltip: 'Commands',
-            icon: const Icon(AppIcons.clockCounterClockwise, size: 14),
+            icon: const Icon(AppIcons.clockCounterClockwise, size: Chrome.icon),
             onPressed: () => actions.showCommands(context),
           ),
         IconButton(
           tooltip: 'Find in scrollback (Ctrl+Shift+F)',
-          icon: const Icon(AppIcons.magnifyingGlass, size: 15),
+          icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
         IconButton(
           tooltip: 'Split right (Ctrl+Shift+D)',
-          icon: const Icon(AppIcons.sidebarSimple, size: 15),
+          // `sidebarSimple` means the side panel everywhere else in the
+          // chrome; a split is its own shape, and the vertical one no longer
+          // needs a RotatedBox to be drawn.
+          icon: const Icon(AppIcons.squareSplitHorizontal, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
         ),
         IconButton(
           tooltip: 'Split down (Ctrl+Shift+E)',
-          icon: const RotatedBox(
-            quarterTurns: 1,
-            child: Icon(AppIcons.sidebarSimple, size: 15),
-          ),
+          icon: const Icon(AppIcons.squareSplitVertical, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
         ),
         PopupMenuButton<TerminalProfile>(
           tooltip: 'New terminal tab',
-          icon: const Icon(AppIcons.plus, size: 16),
+          icon: const Icon(AppIcons.plus, size: Chrome.icon),
           onSelected: actions.open,
           itemBuilder: (context) => [
             for (final profile in actions.profiles())
@@ -546,7 +547,7 @@ class TerminalToolbar extends ConsumerWidget {
                 height: 32,
                 child: Row(
                   children: [
-                    const Icon(AppIcons.terminal, size: 15),
+                    const Icon(AppIcons.terminal, size: Chrome.icon),
                     const SizedBox(width: 10),
                     Text(profile.label),
                   ],
