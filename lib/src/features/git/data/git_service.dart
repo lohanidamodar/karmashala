@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
+import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
@@ -160,6 +161,68 @@ class GitService {
       final result = await _git(repo, ['rev-list', '--count', '$base..HEAD']);
       if (!result.ok) return null;
       return int.tryParse(result.stdout.trim());
+    } on CommandException {
+      return null;
+    }
+  }
+
+  /// Lines added and removed in [repo] — one `git diff --numstat`.
+  ///
+  /// With [base], the comparison runs from that ref to the working tree, so a
+  /// session's committed *and* uncommitted work land in one number from one
+  /// process. Without it, the working tree is compared to `HEAD`.
+  ///
+  /// Untracked files are in neither, because no `git diff` sees them. That is
+  /// why the changed-file count beside this still comes from `git status`, and
+  /// why the two can legitimately disagree. Null is "could not tell".
+  Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) async {
+    try {
+      final result = await _git(repo, ['diff', '--numstat', base ?? 'HEAD']);
+      if (!result.ok) return null;
+      return parseNumstat(result.stdout);
+    } on CommandException {
+      return null;
+    }
+  }
+
+  /// How [repo]'s `HEAD` stands against [base], both directions in one call.
+  ///
+  /// [commitsAhead] answers half of this and is kept because the Explorer's
+  /// per-row path only needs the half; anything deciding a delivery stage needs
+  /// both, and paying for two `rev-list` runs to learn them would be silly.
+  Future<AheadBehind?> aheadBehind(
+    EnvironmentPath repo, {
+    required String base,
+  }) async {
+    try {
+      final result = await _git(repo, [
+        'rev-list',
+        '--left-right',
+        '--count',
+        '$base...HEAD',
+      ]);
+      if (!result.ok) return null;
+      return parseAheadBehind(result.stdout);
+    } on CommandException {
+      return null;
+    }
+  }
+
+  /// The upstream branch of [branch] (`origin/work`), or null when it has none.
+  ///
+  /// `for-each-ref` rather than `rev-parse @{upstream}`: a branch with no
+  /// upstream is an ordinary empty answer here instead of an error, and the
+  /// format string carries no braces for a remote shell to interpret.
+  Future<String?> upstreamOf(EnvironmentPath repo, String branch) async {
+    try {
+      final result = await _git(repo, [
+        'for-each-ref',
+        '--format=%(upstream:short)',
+        'refs/heads/$branch',
+      ]);
+      if (!result.ok) return null;
+      final name = result.stdout.trim();
+      return name.isEmpty ? null : name;
     } on CommandException {
       return null;
     }

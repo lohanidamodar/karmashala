@@ -1,4 +1,5 @@
 import '../domain/diff_line.dart';
+import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 
@@ -124,4 +125,51 @@ List<FileChange> parseNameStatus(String output) {
     );
   }
   return changes;
+}
+
+/// Parses `git diff --numstat` output — `added<TAB>removed<TAB>path` per file.
+///
+/// A binary file reports `-` for both counts; it is counted as a file and as a
+/// binary file, and contributes no lines. Rename entries can carry NUL-separated
+/// paths under `-z`, which this deliberately does not ask for: the counts are
+/// the point, and the path is only used to know a row happened.
+DiffStat parseNumstat(String output) {
+  var added = 0;
+  var removed = 0;
+  var files = 0;
+  var binary = 0;
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    if (line.isEmpty) continue;
+    final parts = line.split('\t');
+    if (parts.length < 3) continue;
+    files++;
+    final a = int.tryParse(parts[0]);
+    final r = int.tryParse(parts[1]);
+    if (a == null || r == null) {
+      binary++;
+      continue;
+    }
+    added += a;
+    removed += r;
+  }
+  return DiffStat(
+    added: added,
+    removed: removed,
+    files: files,
+    binaryFiles: binary,
+  );
+}
+
+/// Parses `git rev-list --left-right --count <base>...HEAD` — two counts on one
+/// line, left (behind) then right (ahead).
+///
+/// Returns null for anything that is not two numbers, which is what an
+/// unresolvable base ref produces. "Could not tell" must never read as zero.
+AheadBehind? parseAheadBehind(String output) {
+  final parts = output.trim().split(RegExp(r'\s+'));
+  if (parts.length != 2) return null;
+  final behind = int.tryParse(parts[0]);
+  final ahead = int.tryParse(parts[1]);
+  if (behind == null || ahead == null) return null;
+  return AheadBehind(ahead: ahead, behind: behind);
 }

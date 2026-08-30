@@ -2,6 +2,7 @@ import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../environments/domain/environment_path.dart';
 import '../data/git_service.dart';
+import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 
@@ -38,6 +39,21 @@ class ChangesService {
   /// git could not answer.
   Future<int?> commitsAhead(EnvironmentPath repo, {required String base}) =>
       _gitFor(repo).commitsAhead(repo, base: base);
+
+  /// Lines added and removed in [repo], against [base] when one is given.
+  Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) =>
+      _gitFor(repo).diffStat(repo, base: base);
+
+  /// How [repo] stands against [base] in both directions; `null` when git could
+  /// not answer.
+  Future<AheadBehind?> aheadBehind(
+    EnvironmentPath repo, {
+    required String base,
+  }) => _gitFor(repo).aheadBehind(repo, base: base);
+
+  /// The upstream of [branch] in [repo] (`origin/work`), or `null`.
+  Future<String?> upstreamOf(EnvironmentPath repo, String branch) =>
+      _gitFor(repo).upstreamOf(repo, branch);
 
   /// Unified diff for [repo], optionally limited to [path] / staged changes.
   Future<String> diff(

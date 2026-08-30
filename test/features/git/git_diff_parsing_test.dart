@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/features/git/data/git_diff_parsing.dart';
 import 'package:chitragupta/src/features/git/domain/diff_line.dart';
+import 'package:chitragupta/src/features/git/domain/diff_stat.dart';
 import 'package:chitragupta/src/features/git/domain/file_change.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,6 +81,54 @@ void main() {
         DiffLineKind.removed,
         DiffLineKind.added,
       ]);
+    });
+  });
+
+  group('parseNumstat', () {
+    test('sums added and removed lines across files', () {
+      const out = '12\t3\tlib/a.dart\n0\t7\tlib/b.dart\n';
+      final stat = parseNumstat(out);
+      expect(stat.added, 12);
+      expect(stat.removed, 10);
+      expect(stat.files, 2);
+      expect(stat.binaryFiles, 0);
+    });
+
+    test('a binary file counts as a file and as no lines', () {
+      const out = '5\t1\tlib/a.dart\n-\t-\tassets/icon.png\n';
+      final stat = parseNumstat(out);
+      expect(stat.added, 5);
+      expect(stat.removed, 1);
+      expect(stat.files, 2);
+      expect(stat.binaryFiles, 1);
+    });
+
+    test('no output is an empty stat, not a failure', () {
+      expect(parseNumstat(''), DiffStat.none);
+      expect(parseNumstat('\n\n'), DiffStat.none);
+    });
+
+    test('a rename with a tab-separated old and new path still counts', () {
+      expect(parseNumstat('3\t2\told.dart\tnew.dart').files, 1);
+    });
+  });
+
+  group('parseAheadBehind', () {
+    test('left is behind, right is ahead', () {
+      expect(
+        parseAheadBehind('2\t5\n'),
+        const AheadBehind(ahead: 5, behind: 2),
+      );
+    });
+
+    test('space separated output parses the same way', () {
+      expect(parseAheadBehind('0 3'), const AheadBehind(ahead: 3, behind: 0));
+    });
+
+    test('anything that is not two numbers is "could not tell"', () {
+      expect(parseAheadBehind(''), isNull);
+      expect(parseAheadBehind('fatal: bad revision'), isNull);
+      expect(parseAheadBehind('3'), isNull);
     });
   });
 }
