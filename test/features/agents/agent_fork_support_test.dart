@@ -1,0 +1,116 @@
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+AgentDescriptor _descriptor(String id) => AgentRegistry.builtIn.byId(id)!;
+
+void main() {
+  group('AgentForkSupport as declared data', () {
+    test('defaults to unsupported, like allowsConcurrentResume', () {
+      const spec = AgentLaunchSpec();
+      expect(spec.fork.style, AgentForkStyle.unsupported);
+      expect(spec.fork.isNative, isFalse);
+      expect(spec.fork.argumentsFor('any-id'), isEmpty);
+    });
+
+    test('an unsupported fork contributes nothing, whatever the id', () {
+      const fork = AgentForkSupport.unsupported();
+      expect(fork.argumentsFor(''), isEmpty);
+      expect(fork.argumentsFor('01a0-abcd'), isEmpty);
+      expect(fork.evidence, isEmpty);
+    });
+
+    test('viaHandoff produces no arguments but does carry its evidence', () {
+      const fork = AgentForkSupport.viaHandoff(evidence: 'checked --help');
+      expect(fork.style, AgentForkStyle.viaHandoff);
+      expect(fork.isNative, isFalse);
+      expect(fork.argumentsFor('01a0-abcd'), isEmpty);
+      expect(fork.evidence, 'checked --help');
+    });
+
+    test('a native fork with an empty id yields nothing to run', () {
+      // The degraded case `SessionForkPlan` exists for: the capability is
+      // there, the conversation has no name we can pass.
+      const fork = AgentForkSupport.native(
+        resume: AgentResume.subcommand('fork'),
+        evidence: 'x',
+      );
+      expect(fork.argumentsFor(''), isEmpty);
+    });
+  });
+
+  group('the shipped agents, against the installed CLIs', () {
+    test('Claude Code forks by modifying a resume', () {
+      final fork = _descriptor(AgentIds.claudeCode).launch.fork;
+      expect(fork.style, AgentForkStyle.native);
+      // `--fork-session` is documented as "use with --resume or --continue",
+      // so the id still travels on the resume flag.
+      expect(fork.argumentsFor('7f3a-1'), [
+        '--resume',
+        '7f3a-1',
+        '--fork-session',
+      ]);
+      expect(fork.evidence, contains('--fork-session'));
+    });
+
+    test('Codex forks with a subcommand of its own, not with resume', () {
+      final launch = _descriptor(AgentIds.codex).launch;
+      expect(launch.fork.style, AgentForkStyle.native);
+      expect(launch.fork.argumentsFor('01a0-9'), ['fork', '01a0-9']);
+      // The distinction that matters: forking is not resuming, and the two
+      // subcommands must never both appear.
+      expect(launch.interactiveResume.argumentsFor('01a0-9'), [
+        'resume',
+        '01a0-9',
+      ]);
+      expect(launch.fork.evidence, contains('codex fork --help'));
+    });
+
+    test('Antigravity declares neither route', () {
+      final descriptor = _descriptor(AgentIds.antigravity);
+      expect(descriptor.launch.fork.style, AgentForkStyle.unsupported);
+      // Not merely untested: it has no readable store to build a packet from
+      // and does not take an opening prompt to deliver one with.
+      expect(descriptor.store, isNull);
+      expect(descriptor.launch.acceptsPromptArgument, isFalse);
+    });
+
+    test('every native fork states where it was verified', () {
+      for (final descriptor in AgentRegistry.builtIn.descriptors) {
+        if (!descriptor.launch.fork.isNative) continue;
+        expect(
+          descriptor.launch.fork.evidence,
+          isNotEmpty,
+          reason:
+              '${descriptor.id} claims a native fork without saying what was '
+              'checked. The claim has to be re-checkable against a future CLI.',
+        );
+      }
+    });
+  });
+
+  group('values the real CLIs have retired', () {
+    // Not a golden — a golden is what let this through twice. These are values
+    // observed being *rejected* by an installed CLI, which is knowledge no
+    // amount of comparing the descriptor to itself can produce.
+    const retiredCodexApprovals = ['on-failure', 'untrusted'];
+
+    test('no built-in descriptor passes a retired codex approval value', () {
+      final launch = _descriptor(AgentIds.codex).launch;
+      for (final mode in PermissionMode.values) {
+        for (final retired in retiredCodexApprovals) {
+          expect(
+            launch.permissionArgumentsFor(mode),
+            isNot(contains(retired)),
+            reason:
+                'codex-cli rejects "$retired" outright and refuses to start, '
+                'so $mode would make the agent unlaunchable rather than '
+                'differently governed.',
+          );
+        }
+      }
+    });
+  });
+}

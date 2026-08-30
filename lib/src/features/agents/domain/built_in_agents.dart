@@ -82,6 +82,19 @@ const _claudeCode = AgentDescriptor(
     // on this machine (started 4s ago) already has Remote Control for this
     // conversation". Nothing about the session itself was refused.
     allowsConcurrentResume: true,
+    // `--fork-session` is a *modifier on a resume*, not a mode of its own, so
+    // the arguments are `--resume <id> --fork-session`. The forked process
+    // loads the original's history and writes its own session id from the first
+    // turn on, which is precisely what "shares history up to now, then
+    // diverges" has to mean for the original to be left alone.
+    fork: AgentForkSupport.native(
+      resume: AgentResume.flag('--resume'),
+      extraArguments: ['--fork-session'],
+      evidence:
+          'claude 2.1.251 --help: "--fork-session  When resuming, create a new '
+          'session ID instead of reusing the original (use with --resume or '
+          '--continue)"',
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -218,6 +231,26 @@ const _codex = AgentDescriptor(
     resumeConflict: AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],
     ),
+    // **Codex can fork**, contrary to the assumption this feature was designed
+    // under. 0.151.0 has a `fork` subcommand alongside `resume`, taking the
+    // same `[SESSION_ID] [PROMPT]` arguments, so the fork is expressed exactly
+    // like the interactive resume with one word changed.
+    //
+    // The picker forms (`--last`, no argument) are deliberately not used: they
+    // choose a session by recency within a working directory, which is a guess
+    // about which conversation the user meant, and the app already knows the
+    // id whenever it has one. When it does *not* — a native Codex row whose
+    // thread id was never discovered, which Loop 46 §6 leaves as an open gap —
+    // there is nothing truthful to pass, and `SessionForkPlan` degrades that
+    // session to a handoff rather than letting a picker guess.
+    fork: AgentForkSupport.native(
+      resume: AgentResume.subcommand('fork'),
+      evidence:
+          'codex-cli 0.151.0 --help: "fork  Fork a previous interactive '
+          'session (picker by default; use --last to fork the most recent)"; '
+          'codex fork --help: "Usage: codex fork [OPTIONS] [SESSION_ID] '
+          '[PROMPT]"',
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.codex',
@@ -282,6 +315,11 @@ const _antigravity = AgentDescriptor(
       PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
     },
     resume: AgentResume.flag('--resume'),
+    // `fork` is left at the default (unsupported), and for Antigravity that is
+    // not merely caution. A fork needs a conversation to fork *from*, and
+    // Antigravity has no readable store (`store` is null below), so there is
+    // neither a CLI mechanism to invoke nor a transcript to build a handoff
+    // packet out of. Both fork routes are genuinely closed, not untested.
   ),
   // No documented session store, hook config, or resume convention yet.
   statusStrategy: AgentStatusStrategy.none,

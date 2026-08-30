@@ -31,6 +31,94 @@ class AgentResume {
       style == AgentResumeStyle.unsupported ? const [] : [token, sessionId];
 }
 
+/// How an agent CLI starts a **new** conversation that already contains an
+/// existing one's history.
+///
+/// A fork is not a resume and it is not a fan-out: the new conversation shares
+/// everything said so far and then diverges, so the original is left exactly as
+/// it was rather than being continued or re-prompted from scratch.
+enum AgentForkStyle {
+  /// The CLI does it itself, from its own copy of the transcript.
+  native,
+
+  /// The CLI cannot, but it will accept a handoff packet as an opening prompt —
+  /// so the *history* is carried as text rather than as the agent's own record.
+  /// A weaker thing, and the UI must say so before it happens.
+  viaHandoff,
+
+  /// Neither. Nothing is offered.
+  unsupported,
+}
+
+/// Whether one agent can fork a conversation, and how.
+///
+/// Modelled exactly like [AgentLaunchSpec.allowsConcurrentResume] — declared
+/// data on the descriptor, defaulting to the conservative answer — so "Claude
+/// forks with a flag, Codex forks with a subcommand, Antigravity cannot" is
+/// read from the registry rather than re-derived per call site, and an agent
+/// added tomorrow is answered by the same rule.
+///
+/// **Defaults to [AgentForkStyle.unsupported]**, because the failure modes are
+/// asymmetric in the same direction they are for concurrent resume. Not
+/// offering a fork that would have worked costs a menu entry; offering one that
+/// does not means handing a CLI arguments it will reject, which surfaces to the
+/// user as the agent refusing to launch — twice now the exact shape of the
+/// worst bug in this area (see the Codex approval flags in
+/// `built_in_agents.dart`).
+class AgentForkSupport {
+  /// The CLI forks by itself. [resume] is how it is told *which* conversation —
+  /// a flag for Claude Code, a subcommand for Codex — and [extraArguments] is
+  /// whatever else turns that reference into a fork rather than a resume.
+  ///
+  /// [evidence] is required and is the `--help` line or transcript this was
+  /// read off, so the claim can be re-checked against a future CLI version
+  /// instead of being trusted because it is written down.
+  const AgentForkSupport.native({
+    required this.resume,
+    this.extraArguments = const [],
+    required this.evidence,
+  }) : style = AgentForkStyle.native;
+
+  /// The CLI has no fork of its own, but takes an opening prompt, so a handoff
+  /// packet is the honest substitute. [evidence] says what was checked.
+  const AgentForkSupport.viaHandoff({required this.evidence})
+    : style = AgentForkStyle.viaHandoff,
+      resume = const AgentResume.unsupported(),
+      extraArguments = const [];
+
+  /// Nothing is known to work. The default.
+  const AgentForkSupport.unsupported()
+    : style = AgentForkStyle.unsupported,
+      resume = const AgentResume.unsupported(),
+      extraArguments = const [],
+      evidence = '';
+
+  final AgentForkStyle style;
+
+  /// How the conversation being forked is named on the command line.
+  final AgentResume resume;
+
+  /// Flags that turn [resume]'s reference into a fork.
+  final List<String> extraArguments;
+
+  /// Where this was verified. Empty only for [AgentForkStyle.unsupported],
+  /// where there is nothing to have verified.
+  final String evidence;
+
+  bool get isNative => style == AgentForkStyle.native;
+
+  /// The arguments that fork [externalSessionId], or nothing when this agent
+  /// cannot be told.
+  ///
+  /// These **replace** [AgentLaunchSpec.interactiveResume]'s arguments rather
+  /// than joining them: Codex's fork is the `fork` subcommand *instead of*
+  /// `resume`, and emitting both would be two subcommands on one command line.
+  List<String> argumentsFor(String externalSessionId) =>
+      style == AgentForkStyle.native && externalSessionId.isNotEmpty
+      ? [...resume.argumentsFor(externalSessionId), ...extraArguments]
+      : const [];
+}
+
 /// Executable base names to probe, per execution-environment kind. Each list is
 /// tried in order and the first hit wins.
 ///
@@ -139,6 +227,7 @@ class AgentLaunchSpec {
     this.acceptsPromptArgument = false,
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
+    this.fork = const AgentForkSupport.unsupported(),
   });
 
   final List<String> baseArguments;
@@ -179,6 +268,10 @@ class AgentLaunchSpec {
   /// whose refusal we have never seen — which resolves to "no explanation",
   /// never to a guessed one.
   final AgentResumeConflictRules resumeConflict;
+
+  /// Whether this agent can start a new conversation from an existing one's
+  /// history, and how. Defaults to [AgentForkStyle.unsupported].
+  final AgentForkSupport fork;
 
   /// Whether this agent will accept a session id we choose. See
   /// [AgentSessionIdAssignment].
