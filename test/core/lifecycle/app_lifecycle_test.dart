@@ -236,6 +236,42 @@ void main() {
       expect(natives.window.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
     });
+
+    test('closing the window runs the whole sequence too', () async {
+      // The X is the default way out, and it used to run none of this:
+      // prevent-close was derived from close-to-tray (off by default), so
+      // `WM_CLOSE` fell through to `DefWindowProc` and destroyed the window
+      // before the `close` event reached Dart. The first expectation below is
+      // the whole fix; the rest is what it buys.
+      final lifecycle = AppLifecycle(container);
+      final natives = FakeNatives();
+      final service = await lifecycle.startSystemIntegration(
+        adapters: natives.adapters,
+      );
+      final server = LauncherControlServer(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      lifecycle.adopt(controlServer: server);
+
+      expect(
+        natives.window.preventClose,
+        isTrue,
+        reason: 'without this the window is gone before onWindowClose runs',
+      );
+
+      service.onWindowClose();
+      // The same sequence, awaited: `shutdown` is idempotent, so this is the
+      // future the window's close path started, not a second one.
+      await lifecycle.shutdown();
+      await pumpEventQueue();
+
+      expect(File(bridge).existsSync(), isFalse);
+      expect(natives.window.destroyed, isTrue);
+      expect(isDisposed(container), isTrue);
+    });
   });
 }
 

@@ -86,6 +86,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// rest of the app down in order. A no-op outside the app (tests, tools).
   final Future<void> Function() _onQuitRequested;
 
+  /// Whether closing the window hides to the tray instead of quitting.
+  ///
+  /// Read by [onWindowClose] and nothing else. Prevent-close is deliberately
+  /// *not* derived from it — see [apply].
   bool _closeToTray = false;
   bool _disposed = false;
 
@@ -197,17 +201,25 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Applies [settings] to the OS: keep-awake, close-to-tray, launch-at-login,
   /// and refreshes the tray menu.
+  ///
+  /// Prevent-close is the one value here that is **not** a setting. It is
+  /// applied unconditionally, because it is what makes `WM_CLOSE` reach Dart at
+  /// all: `window_manager` posts `close` over a method channel and then, unless
+  /// prevent-close is on, falls straight through to `DefWindowProc` — the
+  /// window is destroyed before [onWindowClose] is dispatched. Deriving it from
+  /// `closeToTray` (off by default) therefore meant the ordered shutdown ran on
+  /// the tray's Quit and on nothing else: closing with the X skipped the
+  /// handshake deletion, the hook rewrite, the hotkey release and the PTY reap.
+  /// [_closeToTray] keeps its job — [onWindowClose] decides hide versus quit —
+  /// and clearing prevent-close is already part of destroying the window
+  /// (`PluginWindowAdapter.setPreventCloseAndDestroy`).
   Future<void> apply(Settings settings) async {
     if (_disposed) return;
     _closeToTray = settings.closeToTray;
     _want(NativeSetting.keepAwake, settings.keepAwake, _desiredKeepAwake);
     _desiredKeepAwake = settings.keepAwake;
-    _want(
-      NativeSetting.closeToTray,
-      settings.closeToTray,
-      _desiredPreventClose,
-    );
-    _desiredPreventClose = settings.closeToTray;
+    _want(NativeSetting.closeToTray, true, _desiredPreventClose);
+    _desiredPreventClose = true;
     _want(NativeSetting.autoStart, settings.autoStart, _desiredAutoStart);
     _desiredAutoStart = settings.autoStart;
 
@@ -241,6 +253,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
       }
     }
 
+    // Constant now, but still reconciled: the platform call can be refused
+    // while the window is coming up, and this is what retries it on focus.
     if (_desiredPreventClose != _appliedPreventClose &&
         _hasBudget(NativeSetting.closeToTray)) {
       final want = _desiredPreventClose!;
@@ -650,6 +664,11 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   // --- WindowListener ---
 
+  /// The window's X.
+  ///
+  /// Reached only because prevent-close is on (see [apply]); without it the
+  /// window is already gone by the time this runs. The quit branch is the same
+  /// ordered teardown the tray's Quit uses.
   @override
   void onWindowClose() {
     if (_closeToTray) {
