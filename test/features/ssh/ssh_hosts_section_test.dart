@@ -5,6 +5,7 @@ import 'package:chitragupta/src/core/util/id_generator_provider.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
+import 'package:chitragupta/src/features/environments/presentation/environments_section.dart';
 import 'package:chitragupta/src/features/ssh/presentation/ssh_hosts_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,7 +37,13 @@ void main() {
           idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
         ],
         child: const MaterialApp(
-          home: Scaffold(body: SingleChildScrollView(child: SshHostsSection())),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [SshHostsSection(), EnvironmentsSection()],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -205,5 +212,30 @@ void main() {
 
     expect(hosts.getAll(), isEmpty);
     expect(environments.getById('ssh:id-0'), isNull);
+  });
+
+  testWidgets('a new host appears in the environments list straight away', (
+    tester,
+  ) async {
+    // A remote environment you have just created but cannot see is not created
+    // as far as the user is concerned: both lists read the same table, and one
+    // of them used to keep showing the world as it was.
+    await pump(tester);
+    expect(find.text('SSH'), findsNothing);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add host'));
+    await tester.pumpAndSettle();
+    await fillHostForm(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add host'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SSH'), findsOneWidget);
+    expect(find.text('ssh:id-0 · dev@build.example.com:2222'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(find.text('SSH'), findsNothing);
   });
 }
