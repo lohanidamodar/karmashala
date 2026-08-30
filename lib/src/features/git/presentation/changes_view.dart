@@ -40,11 +40,12 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
         .where((item) => item.repositoryId == repositoryId)
         .toList();
 
-    // What this repository's work is called on the forge, so a branch or a
-    // pull request in view is one click from the page that owns it.
+    // What this repository's work is called on the forge, so a branch, a
+    // commit or a pull request in view is one click from the page that owns it.
     final delivery = repositoryId == null
         ? null
         : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
+    final head = ref.watch(recentCommitsProvider).asData?.value.firstOrNull;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -71,6 +72,17 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
                     url: delivery!.remote?.branchUrl(branch),
                     style: theme.textTheme.labelSmall,
                   ),
+                ),
+              ],
+              if (head != null) ...[
+                const SizedBox(width: Insets.sm),
+                RemoteLink(
+                  text: shortSha(head.sha),
+                  // Drawn plainly when there is no remote — a commit without
+                  // one is still a commit.
+                  url: delivery?.remote?.commitUrl(head.sha),
+                  style: theme.textTheme.labelSmall,
+                  tooltip: head.subject,
                 ),
               ],
               if (delivery?.pullRequest case final pr?) ...[
