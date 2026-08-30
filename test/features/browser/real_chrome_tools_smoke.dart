@@ -540,15 +540,22 @@ String _firstLine(String text) => text.split('\n').first;
 
 void _cost(String label, String text) => _costs.add((label, text.length));
 
+/// Deletes a temp directory, retrying: Chrome keeps handles open for a moment
+/// after it exits, and a profile left in %TEMP% is exactly the mess this
+/// harness is supposed to avoid.
 Future<void> _remove(String? path) async {
   if (path == null) return;
-  try {
-    final directory = Directory(path);
-    if (directory.existsSync()) await directory.delete(recursive: true);
-  } catch (_) {
-    // Chrome can still hold a handle for a moment after exiting; the OS
-    // reclaims %TEMP% either way.
+  final directory = Directory(path);
+  for (var attempt = 0; attempt < 10; attempt++) {
+    if (!directory.existsSync()) return;
+    try {
+      directory.deleteSync(recursive: true);
+      return;
+    } catch (_) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    }
   }
+  stdout.writeln('  NOTE: could not delete $path; delete it by hand.');
 }
 
 Future<String> _writeTestPage() async {
