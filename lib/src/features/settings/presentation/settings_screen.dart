@@ -20,6 +20,8 @@ import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../mcp/control_server_status.dart';
+import '../../system/native_status.dart';
+import 'native_setting_status_line.dart';
 import '../../mcp/launcher_control_server.dart';
 import '../../mcp/launcher_mcp.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -113,6 +115,7 @@ class SettingsScreen extends ConsumerWidget {
                     'Chitragupta is running.',
                   ),
                 ),
+                const NativeSettingStatusLine(NativeSetting.keepAwake),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.closeToTray,
@@ -123,6 +126,7 @@ class SettingsScreen extends ConsumerWidget {
                     'instead of quitting.',
                   ),
                 ),
+                const NativeSettingStatusLine(NativeSetting.closeToTray),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.autoStart,
@@ -132,6 +136,7 @@ class SettingsScreen extends ConsumerWidget {
                     'Launch Chitragupta automatically when you sign in.',
                   ),
                 ),
+                const NativeSettingStatusLine(NativeSetting.autoStart),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.compactDensity,
@@ -935,6 +940,12 @@ class _LauncherHotkeySection extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: Insets.sm),
+          // A chord another application already holds registers as a failure
+          // and nothing else; without this the switch says on and the shortcut
+          // does nothing. Changing the chord resets the retry budget, so this
+          // line is also the instruction for clearing it.
+          const NativeSettingStatusLine(NativeSetting.launcherHotkey),
         ],
       ),
     );
