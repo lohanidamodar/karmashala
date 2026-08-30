@@ -89,4 +89,35 @@ void main() {
       expect(mapped.y, 267);
     });
   });
+
+  group('swipeDurationFor', () {
+    test('passes an ordinary gesture through unchanged', () {
+      // `input swipe` interpolates over the duration it is given, so the
+      // duration IS the gesture's velocity: a fixed value would make a flick
+      // and a slow drag scroll by the same amount.
+      expect(
+        swipeDurationFor(const Duration(milliseconds: 400)),
+        const Duration(milliseconds: 400),
+      );
+    });
+
+    test('raises an implausibly quick flick to the floor', () {
+      expect(swipeDurationFor(Duration.zero), kMinSwipeDuration);
+      expect(
+        swipeDurationFor(const Duration(milliseconds: 10)),
+        kMinSwipeDuration,
+      );
+    });
+
+    test('caps a long drag, which would otherwise block for that long', () {
+      expect(swipeDurationFor(const Duration(seconds: 30)), kMaxSwipeDuration);
+    });
+
+    test('the long-press hold clears Android own 500 ms threshold', () {
+      expect(
+        kLongPressHoldDuration,
+        greaterThan(const Duration(milliseconds: 500)),
+      );
+    });
+  });
 }

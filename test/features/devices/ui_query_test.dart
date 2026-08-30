@@ -166,6 +166,55 @@ void main() {
       );
     });
 
+    test(
+      'an exact content-desc beats a longer one that merely contains it',
+      () {
+        // Found on the physical OPPO: contentDesc "a" on a Flutter keyboard
+        // ranked the clock widget first, because its four-line description
+        // contains an "a" and it comes earlier in the tree than the "a" key.
+        final tree = UiHierarchy(
+          roots: [
+            _node(
+              className: 'android.widget.FrameLayout',
+              children: [
+                _node(contentDescription: '7:12 AM\nSunday\n2083 Bhadra 14'),
+                _node(contentDescription: 'a'),
+              ],
+            ),
+          ],
+        );
+        final matches = tree.find(
+          const UiElementQuery(contentDescription: 'a'),
+        );
+        expect(matches, hasLength(2));
+        expect(matches.first.contentDescription, 'a');
+      },
+    );
+
+    test('an exact resource id outranks one that contains it', () {
+      final tree = UiHierarchy(
+        roots: [
+          _node(
+            className: 'android.widget.FrameLayout',
+            children: [
+              _node(resourceId: 'com.app:id/search_action_bar_title'),
+              _node(resourceId: 'com.app:id/title'),
+            ],
+          ),
+        ],
+      );
+      final matches = tree.find(const UiElementQuery(resourceId: 'title'));
+      expect(matches.first.shortResourceId, 'title');
+    });
+
+    test('every criterion must match exactly to rank first', () {
+      final almost = _node(text: 'OK', className: 'android.widget.TextView');
+      final both = _node(text: 'OK', className: 'android.widget.Button');
+      const query = UiElementQuery(text: 'OK', className: 'Button');
+      expect(query.rank(both), 0);
+      expect(query.rank(almost), 1);
+    });
+
     test('limit truncates without reordering', () {
       final matches = _settings.find(
         const UiElementQuery(className: 'TextView'),

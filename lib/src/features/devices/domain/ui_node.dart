@@ -387,14 +387,34 @@ class UiElementQuery {
     return true;
   }
 
-  /// 0 for an exact label match, 1 for anything else — the sort key that puts
-  /// "Settings" ahead of "Search settings".
+  /// 0 when every supplied criterion matches its field exactly, 1 otherwise —
+  /// the sort key that puts "Settings" ahead of "Search settings".
+  ///
+  /// It covers every criterion, not just [text]. Found on a real device:
+  /// `contentDesc: "a"` on a keyboard ranked the clock widget first, because
+  /// its four-line description happens to contain an "a" and it came earlier
+  /// in the tree than the "a" key.
   int rank(UiNode node) {
-    final needle = text?.trim().toLowerCase();
-    if (needle == null || needle.isEmpty) return 1;
-    if (node.text.trim().toLowerCase() == needle) return 0;
-    if (node.contentDescription.trim().toLowerCase() == needle) return 0;
-    return 1;
+    var criteria = 0;
+    var exactHits = 0;
+    void check(String? needle, List<String> candidates) {
+      if (needle == null) return;
+      criteria++;
+      final a = needle.trim().toLowerCase();
+      for (final candidate in candidates) {
+        if (candidate.trim().toLowerCase() == a) {
+          exactHits++;
+          return;
+        }
+      }
+    }
+
+    check(text, [node.text, node.contentDescription]);
+    check(contentDescription, [node.contentDescription]);
+    check(resourceId, [node.resourceId, node.shortResourceId]);
+    check(className, [node.className, node.shortClassName]);
+    if (criteria == 0) return 1;
+    return exactHits == criteria ? 0 : 1;
   }
 
   bool _matchesAny(String needle, List<String> candidates) {
