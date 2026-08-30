@@ -7,10 +7,15 @@ import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/environments/application/environment_health.dart';
+import 'package:chitragupta/src/features/environments/presentation/environment_health_dialog.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_view.dart';
 import 'package:chitragupta/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:chitragupta/src/features/git/application/changes_providers.dart';
+import 'package:chitragupta/src/features/git/domain/file_change.dart';
+import 'package:chitragupta/src/features/git/presentation/changes_view.dart';
 import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
+import 'package:chitragupta/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
@@ -22,6 +27,8 @@ import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:chitragupta/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:chitragupta/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
+import 'package:chitragupta/src/features/ssh/presentation/remote_file_browser_dialog.dart';
 import 'package:chitragupta/src/features/ssh/presentation/ssh_host_dialog.dart';
 import 'package:chitragupta/src/features/detail/presentation/repository_info_view.dart';
 import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
@@ -313,6 +320,164 @@ void main() {
       tester,
       build: () => panel(container, const RepositoryInfoView()),
       because: 'the panel is the narrowest surface in the app',
+    );
+  });
+
+  // --- B3: the four hard-sized dialogs the senior review found uncovered -----
+  //
+  // Each of these asks for a fixed box that is wider or taller than the whole
+  // supported window, and none of them had a test that pumped it small enough
+  // to notice.
+
+  testWidgets('the full-screen diff dialog', (tester) async {
+    // `_DiffFullscreenDialog` is private, so it is reached the way a user
+    // reaches it: through the "Open full screen" button on a changed file. It
+    // constrains itself to 1200x900 around a `width: 1400` child.
+    Widget build() => ProviderScope(
+      overrides: [
+        repositoryChangesProvider.overrideWith(
+          (ref) async => const [
+            FileChange(
+              path: 'lib/src/features/git/presentation/changes_view.dart',
+              type: FileChangeType.modified,
+              staged: false,
+              unstaged: true,
+            ),
+          ],
+        ),
+        recentCommitsProvider.overrideWith((ref) async => const []),
+        fileDiffByPathProvider(
+          'lib/src/features/git/presentation/changes_view.dart',
+        ).overrideWith(
+          (ref) async =>
+              '@@ -1,2 +1,2 @@\n'
+              '-final short = 1;\n'
+              // A line far longer than the window, which is what the 1400-wide
+              // horizontal scroller inside the dialog exists for.
+              '+final long = ${'x' * 400};\n',
+        ),
+        ...noProcessOverrides(),
+      ],
+      child: const MaterialApp(
+        home: Scaffold(body: ChangesView(repositoryName: 'app')),
+      ),
+    );
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: build,
+      warmUp: (tester) async {
+        await tester.tap(find.byTooltip('Open full screen'));
+        await tester.pump();
+        // "Copy diff" exists only inside the dialog, so this is what stops the
+        // cell from passing vacuously if the tap stopped opening it.
+        expect(find.byTooltip('Copy diff'), findsOneWidget);
+      },
+      because:
+          'the dialog constrains itself to 1200x900 around a 1400-wide diff',
+    );
+  });
+
+  testWidgets('RemoteFileBrowserDialog', (tester) async {
+    // Offline on purpose: the host is not saved, so `forHostId` refuses before
+    // any socket is opened and the dialog settles into its error state. The
+    // 620x460 content box under test is the same in every state, and the live
+    // listing is covered by `test/features/ssh/live_ssh_ui_test.dart`.
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        ...noProcessOverrides(),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final host = SshHost(
+      id: 'unsaved',
+      name: 'build-box',
+      host: 'build-box.example',
+      port: 22,
+      username: 'dev',
+      authMethod: SshAuthMethod.privateKey,
+      createdAt: testTime,
+    );
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(container, RemoteFileBrowserDialog(host: host)),
+      because: 'the content is a hard 620x460 inside a 720x560 window',
+    );
+  });
+
+  testWidgets('EnvironmentHealthDialog', (tester) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ExecutionEnvironmentDao(db)
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
+
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        ...noProcessOverrides(),
+        // Checking health really runs `git --version` per environment; the
+        // dialog only needs rows to lay out.
+        environmentHealthProvider.overrideWith(
+          (ref) async => [
+            EnvironmentHealth(
+              environment: windowsEnv(),
+              level: HealthLevel.healthy,
+              summary: 'Ready',
+              installations: const [],
+              gitVersion: 'git version 2.45.1.windows.1',
+            ),
+            EnvironmentHealth(
+              environment: wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'),
+              level: HealthLevel.failed,
+              summary:
+                  'git is not installed in this distribution, so worktrees '
+                  'cannot be created here',
+              installations: const [],
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(container, const EnvironmentHealthDialog()),
+      because: 'the content is a hard 620x420 inside a 720x560 window',
+    );
+  });
+
+  testWidgets('NewProjectDialog', (tester) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ExecutionEnvironmentDao(db)
+      ..upsert(windowsEnv())
+      ..upsert(wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'));
+
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        ...noProcessOverrides(),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(container, const NewProjectDialog()),
+      because:
+          'a 460-wide column of two fields, a dropdown and a button row, '
+          'which grows a preview line and an error banner as it is used',
     );
   });
 }
