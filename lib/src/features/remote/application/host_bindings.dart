@@ -1,0 +1,77 @@
+/// What the host session API needs from the rest of the desktop app, as a
+/// bag of functions.
+///
+/// The production wiring (`remote_bindings.dart`) points every one of these at
+/// the SAME provider the desktop UI reads — the composer's send path, the
+/// Loop-49 approval keys, the chat view's transcript source — so the phone can
+/// never see a different truth than the screen. Tests hand in closures over
+/// plain maps, which is what keeps the protocol tests free of processes,
+/// terminals and agents.
+library;
+
+import '../domain/remote_payloads.dart';
+import '../protocol.dart';
+
+/// A handler refusing a request for a reason the protocol can carry.
+class RemoteApiRefusal implements Exception {
+  const RemoteApiRefusal(this.code, this.message);
+
+  final ErrorCode code;
+
+  /// Safe to put on the wire: names the refusal, never quotes content.
+  final String message;
+
+  @override
+  String toString() => 'RemoteApiRefusal(${code.wire}: $message)';
+}
+
+class RemoteHostBindings {
+  const RemoteHostBindings({
+    required this.hostName,
+    required this.listSessions,
+    required this.sessionById,
+    required this.deliveryStageFor,
+    required this.transcriptFor,
+    required this.sendPrompt,
+    required this.answerApproval,
+    required this.approvalEvidenceFor,
+    required this.registerPush,
+  });
+
+  /// What `host.status` calls this desktop.
+  final String hostName;
+
+  /// Every session the desktop would list, already shaped for the wire.
+  /// Stage is deliberately absent here — computing it costs a git/gh probe
+  /// per session, which a list must not pay; subscribed sessions get it.
+  final List<RemoteSessionSnapshot> Function() listSessions;
+
+  final RemoteSessionSnapshot? Function(String sessionId) sessionById;
+
+  /// The delivery stage of one *subscribed* session, or null for "could not
+  /// tell". Production reads `sessionDeliveryProvider` — the same probe the
+  /// desktop strip pays for a session on screen.
+  final Future<String?> Function(String sessionId) deliveryStageFor;
+
+  /// The full transcript, from the same source the desktop chat view reads:
+  /// the agent's own record for a PTY session, the engine's event log
+  /// otherwise. Attribution is rebuilt from typed fields, never parsed out.
+  final Future<RemoteTranscriptPage> Function(String sessionId) transcriptFor;
+
+  /// Routes a prompt into the session exactly as the desktop composer does.
+  final Future<void> Function(String sessionId, String text) sendPrompt;
+
+  /// Answers a pending approval; [decision] is `approve` or `deny`. Returns
+  /// the label of the key actually pressed, or throws [RemoteApiRefusal].
+  final Future<String> Function(String sessionId, String decision)
+  answerApproval;
+
+  /// The Loop-49 evidence for a pending approval — the agent's words or
+  /// nothing.
+  final Future<RemoteApprovalRequest> Function(String sessionId)
+  approvalEvidenceFor;
+
+  /// Persists a push registration for [deviceId]. Delivery is Loop D.
+  final Future<void> Function(String deviceId, String token, String platform)
+  registerPush;
+}
