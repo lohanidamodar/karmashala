@@ -5,11 +5,13 @@ import '../../../core/process/command_runner.dart';
 import '../domain/browser_failure.dart';
 import '../domain/browser_target.dart';
 import '../domain/element_capture.dart';
+import '../domain/found_element.dart';
 import 'browser_launcher.dart';
 import 'cdp_connection.dart';
 import 'cdp_page.dart';
 import 'cdp_socket.dart';
 import 'element_picker.dart';
+import 'page_input.dart';
 
 /// An attached browser plus the page we are driving in it.
 class BrowserSession {
@@ -17,11 +19,15 @@ class BrowserSession {
     required this.endpoint,
     required this.page,
     required this.picker,
+    required this.input,
   });
 
   final BrowserEndpoint endpoint;
   final CdpPage page;
   final ElementPicker picker;
+
+  /// Clicking, typing and filling in the attached page.
+  final PageInput input;
 
   /// Whether the browser is still there.
   bool get isConnected => page.isConnected;
@@ -139,6 +145,7 @@ class BrowserService {
       endpoint: endpoint,
       page: page,
       picker: ElementPicker(page),
+      input: PageInput(page),
     );
     _session = session;
 
@@ -198,6 +205,84 @@ class BrowserService {
     final described = await page.describeSelector(selector);
     return page.screenshot(clip: described.box);
   }
+
+  /// Elements matching a CSS [selector] or their visible [text].
+  Future<FindResult> findElements({
+    String? selector,
+    String? text,
+    bool exact = false,
+    bool visibleOnly = true,
+    int limit = 25,
+  }) async => _require().input.find(
+    selector: selector,
+    text: text,
+    exact: exact,
+    visibleOnly: visibleOnly,
+    limit: limit,
+  );
+
+  /// Clicks the element matching [selector] or visible [text].
+  Future<ClickResult> click({
+    String? selector,
+    String? text,
+    bool exact = false,
+    int? index,
+    int clickCount = 1,
+  }) async => _require().input.click(
+    selector: selector,
+    text: text,
+    exact: exact,
+    index: index,
+    clickCount: clickCount,
+  );
+
+  /// Types [text] with real key events, into [selector] when one is given and
+  /// otherwise into whatever has focus.
+  Future<TypeResult> type(
+    String text, {
+    String? selector,
+    String? targetText,
+    bool exact = false,
+    int? index,
+    bool submit = false,
+  }) async => _require().input.type(
+    text,
+    selector: selector,
+    targetText: targetText,
+    exact: exact,
+    index: index,
+    submit: submit,
+  );
+
+  /// Replaces a field's contents with [value] and reads back what it holds.
+  Future<TypeResult> fill({
+    String? selector,
+    String? text,
+    bool exact = false,
+    int? index,
+    required String value,
+    bool submit = false,
+  }) async => _require().input.fill(
+    selector: selector,
+    text: text,
+    exact: exact,
+    index: index,
+    value: value,
+    submit: submit,
+  );
+
+  /// Presses a named key in the page — `enter`, `tab`, `escape`, `arrowDown`…
+  Future<void> pressKey(String key) async => _require().input.pressKey(key);
+
+  /// Scrolls the page by a wheel gesture.
+  Future<void> scrollBy({double dx = 0, double dy = 0}) async =>
+      _require().input.scrollBy(dx: dx, dy: dy);
+
+  /// Where the attached page is now, read from the page itself.
+  Future<String> currentUrl() async => _require().page.currentUrl();
+
+  /// The attached page's title, read from the page itself.
+  Future<String> currentTitle() async => _require().page.currentTitle();
 
   /// Every debuggable target the browser reports.
   Future<List<BrowserTarget>> listTargets() async =>
