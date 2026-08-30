@@ -154,12 +154,15 @@ void main() {
     expect([instance(first).encodes, instance(second).encodes], afterTick);
   });
 
-  test('a pane that never wrote anything is still encoded once, and stored', () {
-    final (first, _) = twoPanes();
-    controller.persistWorkspace();
-    expect(instance(first).encodes, 1);
-    expect(storedScrollbackFor(first), isEmpty);
-  });
+  test(
+    'a pane that never wrote anything is still encoded once, and stored',
+    () {
+      final (first, _) = twoPanes();
+      controller.persistWorkspace();
+      expect(instance(first).encodes, 1);
+      expect(storedScrollbackFor(first), isEmpty);
+    },
+  );
 
   test('a closed pane does not keep its cached encoding alive', () {
     final (first, second) = twoPanes();
