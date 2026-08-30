@@ -20,6 +20,7 @@ import 'handoff_providers.dart';
 import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
+import 'session_ui_providers.dart';
 
 /// One agent this session could be continued in.
 ///
@@ -483,3 +484,38 @@ class SessionHandoffService {
 final sessionHandoffServiceProvider = Provider<SessionHandoffService>(
   (ref) => SessionHandoffService(ref),
 );
+
+/// Everything the composer needs to decide whether — and how — a session can be
+/// continued elsewhere.
+///
+/// A read model rather than two calls from the widget, because both answers
+/// come from the same three rows (the session, its repository, the
+/// installations in its environment) and a widget that asked twice would read
+/// them twice on every rebuild.
+class SessionContinuation {
+  const SessionContinuation({required this.targets, required this.plan});
+
+  final List<HandoffTarget> targets;
+  final SessionForkPlan plan;
+
+  /// Whether there is anywhere at all for this session to go.
+  bool get isPossible =>
+      targets.any((target) => target.canReceive) || !plan.isRefused;
+}
+
+/// The continuation options for one session.
+///
+/// A provider rather than a service call in `build` — the row is a widget, and
+/// this is the seam a widget test overrides instead of standing up a database
+/// to answer a yes/no question.
+final sessionContinuationProvider = Provider.autoDispose
+    .family<SessionContinuation, String>((ref, sessionId) {
+      // The session's own row and the installed agents both move under this;
+      // the revision is what every other session mutation already bumps.
+      ref.watch(sessionsRevisionProvider);
+      final service = ref.watch(sessionHandoffServiceProvider);
+      return SessionContinuation(
+        targets: service.targetsFor(sessionId),
+        plan: service.forkPlanFor(sessionId),
+      );
+    });

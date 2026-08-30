@@ -5,7 +5,9 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/handoff_providers.dart';
 import '../application/session_actions.dart';
+import '../application/session_handoff_service.dart';
 import '../domain/handoff_action.dart';
+import 'continue_with_dialog.dart';
 
 /// The handoff row: commit / open PR / run tests, sat above the message box.
 ///
@@ -25,6 +27,13 @@ import '../domain/handoff_action.dart';
 /// is reported by the agent in the transcript. The single error surface is a
 /// snackbar for a failure that means the prompt never left the app at all (the
 /// repository or agent installation is gone).
+///
+/// **"Continue with…" is the one entry here that is not a prompt**, and it is
+/// drawn apart from the others for that reason. Commit, PR and tests are
+/// sentences typed into the session that is already running; continuing
+/// somewhere else starts a *different* session, with a document the user should
+/// read first. It opens [ContinueWithDialog] rather than doing anything, and
+/// the whole of the decision lives there.
 class HandoffActionsRow extends ConsumerStatefulWidget {
   const HandoffActionsRow({required this.sessionId, super.key});
 
@@ -64,7 +73,11 @@ class _HandoffActionsRowState extends ConsumerState<HandoffActionsRow> {
         .asData
         ?.value;
     final actions = handoffActionsFor(state);
-    if (actions.isEmpty) return const SizedBox.shrink();
+
+    final canContinue = ref
+        .watch(sessionContinuationProvider(widget.sessionId))
+        .isPossible;
+    if (actions.isEmpty && !canContinue) return const SizedBox.shrink();
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -83,6 +96,19 @@ class _HandoffActionsRowState extends ConsumerState<HandoffActionsRow> {
                   label: Text(action.label),
                   tooltip: 'Sends “${action.prompt}”',
                   onPressed: _sending ? null : () => _send(action),
+                ),
+              if (canContinue)
+                ActionChip(
+                  avatar: const Icon(AppIcons.arrowBendDownRight, size: 14),
+                  label: const Text('Continue with…'),
+                  tooltip:
+                      'Move this session to another agent, or fork it. '
+                      'Nothing is launched until you have seen what the next '
+                      'agent will be told.',
+                  onPressed: _sending
+                      ? null
+                      : () =>
+                            ContinueWithDialog.show(context, widget.sessionId),
                 ),
             ],
           ),

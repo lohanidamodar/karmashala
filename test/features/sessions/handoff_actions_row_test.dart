@@ -1,6 +1,9 @@
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/sessions/application/handoff_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_actions.dart';
+import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
 import 'package:chitragupta/src/features/sessions/domain/handoff_action.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
 import 'package:chitragupta/src/features/sessions/presentation/handoff_actions_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,11 +34,25 @@ void main() {
 
   setUp(() => actions = _Recorder());
 
-  Future<void> pumpRow(WidgetTester tester, HandoffRepoState? state) async {
+  /// Nowhere to continue to, which is the shape these tests are about: they
+  /// assert the *prompt* buttons, and "Continue with…" is not one.
+  final noContinuation = SessionContinuation(
+    targets: const [],
+    plan: SessionForkPlan.decide(descriptor: null, agentName: 'Test CLI'),
+  );
+
+  Future<void> pumpRow(
+    WidgetTester tester,
+    HandoffRepoState? state, {
+    SessionContinuation? continuation,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           sessionHandoffStateProvider.overrideWith((ref, _) async => state),
+          sessionContinuationProvider.overrideWith(
+            (ref, _) => continuation ?? noContinuation,
+          ),
           sessionActionsProvider.overrideWith(
             (ref) => _RecordingActions(ref, actions),
           ),
@@ -128,5 +145,47 @@ void main() {
 
     expect(find.text('The agent for this session is gone.'), findsOneWidget);
     expect(actions.sent, isEmpty);
+  });
+
+  testWidgets('offers Continue with… when there is somewhere to go', (
+    tester,
+  ) async {
+    const target = AgentDescriptor(
+      id: 'x',
+      displayName: 'X CLI',
+      binaries: AgentBinaries(windows: ['x'], posix: ['x']),
+      launch: AgentLaunchSpec(
+        acceptsPromptArgument: true,
+        fork: AgentForkSupport.native(
+          resume: AgentResume.flag('--resume'),
+          evidence: 'x --help',
+        ),
+      ),
+    );
+    await pumpRow(
+      tester,
+      null,
+      continuation: SessionContinuation(
+        targets: const [],
+        plan: SessionForkPlan.decide(
+          descriptor: target,
+          agentName: 'X CLI',
+          externalSessionId: 'id',
+        ),
+      ),
+    );
+    expect(find.text('Continue with…'), findsOneWidget);
+  });
+
+  testWidgets('withholds it when the session has nowhere to go', (
+    tester,
+  ) async {
+    // An agent that declares no fork and no reachable target: the entry is
+    // absent rather than present-and-broken.
+    await pumpRow(tester, null);
+    expect(find.text('Continue with…'), findsNothing);
+    // The prompt buttons are unaffected — the two halves of the row are
+    // independent.
+    expect(find.text('Commit'), findsOneWidget);
   });
 }
