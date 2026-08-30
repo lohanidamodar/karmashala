@@ -12,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../app/shell/app_mode.dart';
 import '../mcp/launcher_chat_controller.dart';
 import '../settings/application/settings_controller.dart';
+import '../terminal/application/terminal_sessions_controller.dart';
 import '../settings/domain/settings.dart';
 import 'launcher_hotkey.dart';
 
@@ -210,11 +211,33 @@ class SystemIntegrationService with TrayListener, WindowListener {
   }
 
   Future<void> _quit() async {
+    _saveTerminalWorkspace();
     try {
       await windowManager.setPreventClose(false);
       await windowManager.destroy();
     } catch (_) {
       exit(0);
+    }
+  }
+
+  /// Snapshots the terminal workspace on the way out.
+  ///
+  /// `windowManager.destroy()` ends the process without disposing the provider
+  /// container, so the controller's own teardown hook never runs — without this
+  /// the last thing the user did before quitting is the one thing that does not
+  /// come back.
+  ///
+  /// Guarded by [ProviderContainer.exists] so quitting never *creates* the
+  /// terminal controller: building it would restore a workspace only to write
+  /// it straight back.
+  void _saveTerminalWorkspace() {
+    try {
+      if (!_container.exists(terminalSessionsControllerProvider)) return;
+      _container.read(terminalSessionsControllerProvider.notifier)
+        ..saveDirtyScrollback()
+        ..persistWorkspace();
+    } catch (_) {
+      // Never block quitting on persistence.
     }
   }
 
