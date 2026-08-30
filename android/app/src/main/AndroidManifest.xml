@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The companion talks to the desktop host over the relay or the LAN. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The pairing screen's QR scanner. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Attention notifications (Android 13+ runtime permission). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="chitragupta"
+        android:label="Chitragupta"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

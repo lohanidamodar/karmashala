@@ -6,6 +6,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app/chitragupta_app.dart';
+import 'src/app/companion/companion_bootstrap.dart';
+import 'src/app/companion/companion_mode.dart';
 import 'src/core/database/app_database.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
@@ -25,6 +27,11 @@ import 'src/features/system/system_integration_service.dart';
 /// the app, then injects the opened database into the provider graph via a
 /// `ProviderScope` override so features depend on providers, not globals.
 Future<void> main() async {
+  // A companion build (`--dart-define=CHITRAGUPTA_MODE=companion`) boots its
+  // own shell and nothing below this line — no PTYs, no discovery, no control
+  // server, no tray, no window chrome.
+  if (CompanionMode.enabled) return runCompanionApp();
+
   WidgetsFlutterBinding.ensureInitialized();
   // Loads libmpv, which decodes the device pane's H.264 live view.
   MediaKit.ensureInitialized();
