@@ -5,6 +5,7 @@ import '../data/git_service.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
+import '../domain/working_tree_status.dart';
 
 /// High-level access to a repository's working-tree changes and diffs, resolving
 /// the correct runner for the repository's environment. Read-only: Git is the
@@ -26,6 +27,15 @@ class ChangesService {
   /// Changed files in [repo].
   Future<List<FileChange>> changes(EnvironmentPath repo) =>
       _gitFor(repo).status(repo);
+
+  /// The branch, its upstream, their divergence and the changed files, in one
+  /// process. What a delivery row reads.
+  Future<WorkingTreeStatus> statusWithBranch(EnvironmentPath repo) =>
+      _gitFor(repo).statusWithBranch(repo);
+
+  /// The default branch this clone recorded for `origin`, or `null`.
+  Future<String?> originHead(EnvironmentPath repo) =>
+      _gitFor(repo).originHead(repo);
 
   /// The current branch of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) =>

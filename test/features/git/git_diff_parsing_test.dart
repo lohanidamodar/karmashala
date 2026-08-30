@@ -131,4 +131,68 @@ void main() {
       expect(parseAheadBehind('3'), isNull);
     });
   });
+
+  group('parseGitStatusBranch', () {
+    test('reads branch, upstream and divergence from the header', () {
+      final status = parseGitStatusBranch(
+        '## work...origin/work [ahead 2, behind 1]\n'
+        ' M lib/a.dart\n'
+        '?? new.txt\n',
+      );
+      expect(status.branch, 'work');
+      expect(status.upstream, 'origin/work');
+      expect(status.aheadOfUpstream, 2);
+      expect(status.behindUpstream, 1);
+      expect(status.changes.length, 2);
+    });
+
+    test('the header is never read as a changed file', () {
+      final status = parseGitStatusBranch('## work...origin/work\n');
+      expect(status.changes, isEmpty);
+      // No bracket means level with the upstream, not "unknown".
+      expect(status.aheadOfUpstream, 0);
+      expect(status.behindUpstream, 0);
+    });
+
+    test('a branch with no upstream reports no distance', () {
+      final status = parseGitStatusBranch('## work\n M a\n');
+      expect(status.branch, 'work');
+      expect(status.upstream, isNull);
+      expect(status.aheadOfUpstream, isNull);
+      expect(status.changes.single.path, 'a');
+    });
+
+    test('an upstream that is gone has no distance to report', () {
+      final status = parseGitStatusBranch('## work...origin/work [gone]\n');
+      expect(status.upstream, 'origin/work');
+      expect(status.aheadOfUpstream, isNull);
+      expect(status.behindUpstream, isNull);
+    });
+
+    test('a detached HEAD has no branch', () {
+      expect(parseGitStatusBranch('## HEAD (no branch)\n').branch, isNull);
+    });
+
+    test('a repository with no commits still names its branch', () {
+      final status = parseGitStatusBranch(
+        '## No commits yet on main\n?? README.md\n',
+      );
+      expect(status.branch, 'main');
+      expect(status.upstream, isNull);
+      expect(status.changes.single.path, 'README.md');
+    });
+
+    test('ahead only', () {
+      expect(
+        parseGitStatusBranch('## w...origin/w [ahead 3]\n').aheadOfUpstream,
+        3,
+      );
+    });
+
+    test('output with no header at all is still a file list', () {
+      final status = parseGitStatusBranch(' M a\n');
+      expect(status.branch, isNull);
+      expect(status.changes.single.path, 'a');
+    });
+  });
 }

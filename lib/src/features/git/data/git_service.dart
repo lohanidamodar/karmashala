@@ -7,6 +7,7 @@ import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
+import '../domain/working_tree_status.dart';
 import 'git_diff_parsing.dart';
 import 'git_files.dart';
 
@@ -235,6 +236,38 @@ class GitService {
       throw GitException('git status failed: ${result.stderr.trim()}');
     }
     return parseGitStatus(result.stdout);
+  }
+
+  /// The branch, its upstream, their divergence and the changed files, from
+  /// **one** `git status --porcelain=v1 --branch`.
+  ///
+  /// This is what a delivery row wants and it costs one process. [status] is
+  /// kept for callers that only need the files.
+  Future<WorkingTreeStatus> statusWithBranch(EnvironmentPath repo) async {
+    final result = await _git(repo, ['status', '--porcelain=v1', '--branch']);
+    if (!result.ok) {
+      throw GitException('git status failed: ${result.stderr.trim()}');
+    }
+    return parseGitStatusBranch(result.stdout);
+  }
+
+  /// The remote's default branch as this clone recorded it (`origin/main`).
+  ///
+  /// Local and free, unlike `gh repo view`. Null when `origin/HEAD` is not set,
+  /// which a single-branch clone and an older `git remote add` both produce.
+  Future<String?> originHead(EnvironmentPath repo) async {
+    try {
+      final result = await _git(repo, [
+        'rev-parse',
+        '--abbrev-ref',
+        'origin/HEAD',
+      ]);
+      if (!result.ok) return null;
+      final name = result.stdout.trim();
+      return (name.isEmpty || name == 'origin/HEAD') ? null : name;
+    } on CommandException {
+      return null;
+    }
   }
 
   /// Returns the unified diff for [repo], optionally limited to [path] and/or the

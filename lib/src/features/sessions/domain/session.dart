@@ -28,6 +28,7 @@ class Session {
     this.surface = SessionSurface.pane,
     this.view = SessionView.terminal,
     this.permissionMode,
+    this.archivedAt,
   });
 
   final String id;
@@ -92,6 +93,16 @@ class Session {
   /// exists to remove. See `SessionLauncher.permissionFor`.
   final PermissionMode? permissionMode;
 
+  /// When this session's worktree was archived away, if it was.
+  ///
+  /// Archiving removes the worktree directory and nothing else — the
+  /// transcript, review notes and checkpoints all stay reachable through this
+  /// same row. Kept apart from [status], which records what the agent did, not
+  /// what was tidied afterwards.
+  final DateTime? archivedAt;
+
+  bool get isArchived => archivedAt != null;
+
   Session copyWith({
     String? id,
     String? repositoryId,
@@ -108,6 +119,7 @@ class Session {
     SessionSurface? surface,
     SessionView? view,
     PermissionMode? permissionMode,
+    DateTime? archivedAt,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -124,6 +136,7 @@ class Session {
     surface: surface ?? this.surface,
     view: view ?? this.view,
     permissionMode: permissionMode ?? this.permissionMode,
+    archivedAt: archivedAt ?? this.archivedAt,
   );
 
   @override
@@ -143,7 +156,8 @@ class Session {
       other.paneId == paneId &&
       other.surface == surface &&
       other.view == view &&
-      other.permissionMode == permissionMode;
+      other.permissionMode == permissionMode &&
+      other.archivedAt == archivedAt;
 
   @override
   int get hashCode => Object.hash(
@@ -162,6 +176,7 @@ class Session {
     surface,
     view,
     permissionMode,
+    archivedAt,
   );
 
   @override

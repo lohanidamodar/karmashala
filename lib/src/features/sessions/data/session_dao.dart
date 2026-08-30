@@ -19,8 +19,8 @@ class SessionDao {
       '(id, repository_id, agent_installation_id, title, use_worktree, '
       'worktree_environment_id, worktree_path, status, created_at, '
       'external_session_id, parent_session_id, parent_link_kind, pane_id, '
-      'surface, view, permission_mode) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'surface, view, permission_mode, archived_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -38,6 +38,7 @@ class SessionDao {
         session.surface.name,
         session.view.name,
         session.permissionMode?.name,
+        session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
       ],
     );
   }
@@ -82,6 +83,19 @@ class SessionDao {
   /// statement: a view change must never be able to touch anything else.
   void updateView(String id, SessionView view) {
     _db.execute('UPDATE sessions SET view = ? WHERE id = ?;', [view.name, id]);
+  }
+
+  /// Records that this session's worktree has been archived away.
+  ///
+  /// Its own statement, and deliberately an `UPDATE` of one column: archiving
+  /// must not be able to carry any other edit with it, and nothing here deletes
+  /// anything. The transcript, review notes and checkpoints keep pointing at
+  /// this row.
+  void markArchived(String id, DateTime at) {
+    _db.execute('UPDATE sessions SET archived_at = ? WHERE id = ?;', [
+      isoFromDate(at),
+      id,
+    ]);
   }
 
   /// Records the permission mode this session runs under.
@@ -207,6 +221,9 @@ class SessionDao {
       surface: _surfaceFrom(row['surface'] as String?),
       view: _viewFrom(row['view'] as String?),
       permissionMode: _permissionFrom(row['permission_mode'] as String?),
+      archivedAt: row['archived_at'] == null
+          ? null
+          : dateFromIso(row['archived_at']),
     );
   }
 }
