@@ -82,4 +82,18 @@ void main() {
       0,
     );
   });
+
+  test('v11 gives sessions a nullable permission mode with no default', () {
+    final column = db
+        .query('PRAGMA table_info(sessions);')
+        .firstWhere((r) => r['name'] == 'permission_mode');
+
+    // Both halves matter, and they are the whole point of the column's shape.
+    // Nullable with no default means a row written before v11 reads back as
+    // null — "we never recorded it" — and the resolver falls back to the agent
+    // setting. `NOT NULL DEFAULT 'ask'` would instead have every old session
+    // claim it ran under the safe mode, which plenty of them did not.
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
+  });
 }
