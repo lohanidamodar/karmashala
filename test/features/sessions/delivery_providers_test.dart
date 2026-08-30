@@ -266,7 +266,8 @@ void main() {
     },
   );
 
-  test('an archived session reports archived and offers no prompts', () async {
+  test('an archived session reports archived, offers no prompts, and asks '
+      'git nothing — its directory is gone', () async {
     addSession('s1');
     SessionDao(db).markArchived('s1', testTime);
 
@@ -280,6 +281,8 @@ void main() {
           .where((o) => o.action.isPrompt),
       isEmpty,
     );
+    expect(gitCalls, isEmpty);
+    expect(ghCalls, isEmpty);
   });
 
   test('gh being unusable leaves no pull request, never a wrong one', () async {

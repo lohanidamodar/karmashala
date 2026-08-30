@@ -199,6 +199,13 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
       if (repository == null) return SessionDelivery.unknown;
 
       final worktree = session.worktree;
+      if (session.isArchived) {
+        // The directory this session worked in is gone. Asking git about it
+        // would cost two failed processes per archived row on every workspace
+        // change, and could one day describe a directory someone else created
+        // at the same path.
+        return SessionDelivery(hasWorktree: worktree != null, archived: true);
+      }
       final directory = worktree ?? repository.path;
       final local = worktree == null
           ? ref.watch(

@@ -59,43 +59,57 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
           ),
           child: Row(
             children: [
-              Text(
-                'Changes',
-                style: theme.textTheme.labelSmall,
-                overflow: TextOverflow.ellipsis,
+              // Every part of the header line is flexible, so a long branch
+              // name in a narrow panel ellipsises rather than overflowing —
+              // this row sits in a side panel that can be dragged to 250px.
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Changes',
+                        style: theme.textTheme.labelSmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (delivery?.branch case final branch?) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: RemoteLink(
+                          text: branch,
+                          url: delivery!.remote?.branchUrl(branch),
+                          style: theme.textTheme.labelSmall,
+                        ),
+                      ),
+                    ],
+                    if (head != null) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: RemoteLink(
+                          text: shortSha(head.sha),
+                          // Drawn plainly when there is no remote — a commit
+                          // without one is still a commit.
+                          url: delivery?.remote?.commitUrl(head.sha),
+                          style: theme.textTheme.labelSmall,
+                          tooltip: head.subject,
+                        ),
+                      ),
+                    ],
+                    if (delivery?.pullRequest case final pr?) ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: RemoteLink(
+                          text: '#${pr.number}',
+                          url: pr.url,
+                          style: theme.textTheme.labelSmall,
+                          tooltip: pr.title.isEmpty ? pr.url : pr.title,
+                          icon: true,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              if (delivery?.branch case final branch?) ...[
-                const SizedBox(width: Insets.sm),
-                Flexible(
-                  child: RemoteLink(
-                    text: branch,
-                    url: delivery!.remote?.branchUrl(branch),
-                    style: theme.textTheme.labelSmall,
-                  ),
-                ),
-              ],
-              if (head != null) ...[
-                const SizedBox(width: Insets.sm),
-                RemoteLink(
-                  text: shortSha(head.sha),
-                  // Drawn plainly when there is no remote — a commit without
-                  // one is still a commit.
-                  url: delivery?.remote?.commitUrl(head.sha),
-                  style: theme.textTheme.labelSmall,
-                  tooltip: head.subject,
-                ),
-              ],
-              if (delivery?.pullRequest case final pr?) ...[
-                const SizedBox(width: Insets.sm),
-                RemoteLink(
-                  text: '#${pr.number}',
-                  url: pr.url,
-                  style: theme.textTheme.labelSmall,
-                  tooltip: pr.title.isEmpty ? pr.url : pr.title,
-                  icon: true,
-                ),
-              ],
-              const Spacer(),
               changes.maybeWhen(
                 data: (files) => files.isEmpty
                     ? const SizedBox.shrink()

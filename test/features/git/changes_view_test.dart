@@ -118,6 +118,15 @@ void main() {
     await tester.tap(find.text('abcdef1'));
     await tester.pumpAndSettle();
     expect(opened, ['https://github.com/o/r/commit/abcdef1234567890']);
+
+    // The panel can be dragged narrow; the header must ellipsise rather than
+    // overflow, which would fail this pump on its own.
+    tester.view.physicalSize = const Size(250, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpAndSettle();
+    expect(find.text('Changes'), findsOneWidget);
   });
 }
 
