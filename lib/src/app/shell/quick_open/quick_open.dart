@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,13 +75,25 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   List<QuickOpenResult> _flat = const [];
   int _selected = 0;
 
-  /// The root whose walk was asked for, so it is asked for once.
-  String? _indexing;
+  /// Held rather than re-read, because [dispose] needs it after `ref` is no
+  /// longer somewhere to read providers from.
+  late final RepoFileIndex _index;
+
+  /// The root of the walk currently being waited on, or `null`. Also what
+  /// [dispose] cancels: a walk nobody is looking at any more should not go on
+  /// spending the UI isolate.
+  String? _walking;
+
+  StreamSubscription<String>? _indexChanges;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialQuery);
+    _index = ref.read(repoFileIndexProvider);
+    // The index refreshes itself behind the dialog — a watcher fires, an agent
+    // turn ends — so the open palette has to be told, not just asked once.
+    _indexChanges = _index.changes.listen(_onIndexChanged);
     // Take a copy of whatever the app has already loaded about this repository.
     // Reading is free; the providers this reads from are never created here.
     ref
@@ -93,6 +107,9 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   @override
   void dispose() {
+    _indexChanges?.cancel();
+    final walking = _walking;
+    if (walking != null) _index.cancel(walking);
     _controller.dispose();
     _scroll.dispose();
     super.dispose();
@@ -110,7 +127,6 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   void _rebuildItems() {
     final root = ref.read(quickOpenFileRootProvider);
-    final index = ref.read(repoFileIndexProvider);
     final navigator = Navigator.of(context);
     _items =
         QuickOpenSources(
@@ -125,7 +141,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
             action();
           },
         ).build(
-          files: root == null ? const [] : index.cached(root),
+          files: root == null ? const [] : _index.cached(root),
           changedPaths: _changedPaths(),
         );
     _rerank();
@@ -141,18 +157,33 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     if (_selected >= _flat.length) _selected = _flat.isEmpty ? 0 : 0;
   }
 
-  /// Starts the repository walk the first time the user types, and refreshes
-  /// the list in place when it lands. Never awaited by the UI.
+  /// Starts the repository walk the first time the user types, and again
+  /// whenever what is cached has gone stale. Never awaited by the UI: the
+  /// cached list is already on screen and the walk refreshes it in place.
   void _ensureFileIndex() {
     final root = ref.read(quickOpenFileRootProvider);
-    if (root == null || _indexing == root) return;
-    final index = ref.read(repoFileIndexProvider);
-    if (index.isIndexed(root)) return;
-    _indexing = root;
-    index.index(root).then((_) {
+    final walking = _walking;
+    // The selected repository changed under an open palette. The walk in
+    // flight is for a tree nobody is searching any more.
+    if (walking != null && walking != root) {
+      _index.cancel(walking);
+      _walking = null;
+    }
+    if (root == null || _index.isFresh(root) || _walking == root) return;
+    _walking = root;
+    _index.index(root).then((_) {
       if (!mounted) return;
+      if (_walking == root) _walking = null;
       setState(_rebuildItems);
     });
+  }
+
+  /// Something under the indexed repository moved, or a walk landed. Re-rank
+  /// against whatever is cached now, and start the re-walk if one is due.
+  void _onIndexChanged(String root) {
+    if (!mounted || root != ref.read(quickOpenFileRootProvider)) return;
+    if (!_query.isEmpty) _ensureFileIndex();
+    setState(_rebuildItems);
   }
 
   void _onQueryChanged(String _) {
@@ -296,7 +327,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
               const Divider(height: 1),
               _Footer(
                 count: _flat.length,
-                indexing: _indexing != null && !_indexed,
+                indexing: _walking != null && !_indexed,
                 colour: scheme.onSurfaceVariant,
               ),
             ],
@@ -308,7 +339,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   bool get _indexed {
     final root = ref.read(quickOpenFileRootProvider);
-    return root != null && ref.read(repoFileIndexProvider).isIndexed(root);
+    return root != null && _index.isIndexed(root);
   }
 
   /// Headers and rows, flattened once per build so the list and the offset
