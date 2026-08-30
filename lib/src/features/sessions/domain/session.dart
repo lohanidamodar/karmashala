@@ -61,8 +61,8 @@ class Session {
   /// Null in two different situations, and they are told apart by
   /// [parentSessionId]: null-with-no-parent is a root session, and there is no
   /// relationship to name. Null-*with*-a-parent is a row written before schema
-  /// v12 whose kind was never recorded — every one of which is in fact a
-  /// [SessionLink.spawn], and the v12 migration backfills them, so this shape
+  /// v13 whose kind was never recorded — every one of which is in fact a
+  /// [SessionLink.spawn], and the v13 migration backfills them, so this shape
   /// should not survive a migrated database.
   final SessionLink? parentLink;
 

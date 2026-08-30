@@ -469,7 +469,7 @@ class SessionLauncher {
       externalSessionId: externalSessionId,
       parentSessionId: request.parentSessionId,
       // A parent with no stated reason is a spawn — the only way a session
-      // could acquire one before schema v12, and what the MCP path still means
+      // could acquire one before schema v13, and what the MCP path still means
       // when it names a caller without saying more.
       parentLink: request.parentSessionId == null
           ? null

@@ -22,8 +22,20 @@ class AppDatabase {
 
   final Database _db;
 
-  /// Current schema version. Equal to the highest key in [schemaMigrations].
-  int get schemaVersion => schemaMigrations.length;
+  /// Current schema version: the highest key in [schemaMigrations].
+  ///
+  /// Read from the keys rather than from `schemaMigrations.length`, which is
+  /// the same number **only while the keys are dense**. They are not always:
+  /// two feature branches in flight both claim the next version, and whichever
+  /// merges second has to renumber, so a branch legitimately holds a migration
+  /// numbered above a gap until the merge closes it. `length` answered that
+  /// situation with a lower number than the migrations it was describing, which
+  /// would stamp a freshly migrated database with a version *behind* its own
+  /// schema — the one error in a migration runner that no later run can detect,
+  /// because it is indistinguishable from a database that legitimately stopped
+  /// there.
+  int get schemaVersion =>
+      schemaMigrations.keys.fold(0, (a, b) => a > b ? a : b);
 
   /// Opens the database backed by a file in the per-user application-support
   /// directory (outside the project tree).
@@ -38,25 +50,34 @@ class AppDatabase {
 
   // --- Schema management -----------------------------------------------------
 
+  /// Applies every step whose version is greater than the stored
+  /// `PRAGMA user_version`, in ascending order, each in its own transaction.
+  ///
+  /// Driven by the map's own sorted keys rather than by counting up from the
+  /// stored version, which is the same thing whenever the keys are dense and
+  /// **a hard failure when they are not**: the old loop asked for version
+  /// `current + 1` and threw `Missing migration step` if a branch had renumbered
+  /// around a gap, refusing to open a database it could have migrated
+  /// perfectly well.
+  ///
+  /// This is what the doc comment on [schemaMigrations] has always described.
+  /// The counting loop was a stricter approximation of it that happened to
+  /// agree until two loops landed migrations at once.
   void _migrate() {
     _db.execute('PRAGMA foreign_keys = ON;');
-    var current = _userVersion;
-    while (current < schemaVersion) {
-      final next = current + 1;
-      final step = schemaMigrations[next];
-      if (step == null) {
-        throw StateError('Missing migration step for schema version $next.');
-      }
+    final current = _userVersion;
+    final pending = schemaMigrations.keys.where((v) => v > current).toList()
+      ..sort();
+    for (final version in pending) {
       _db.execute('BEGIN;');
       try {
-        step(_db);
-        _db.execute('PRAGMA user_version = $next;');
+        schemaMigrations[version]!(_db);
+        _db.execute('PRAGMA user_version = $version;');
         _db.execute('COMMIT;');
       } catch (_) {
         _db.execute('ROLLBACK;');
         rethrow;
       }
-      current = next;
     }
   }
 

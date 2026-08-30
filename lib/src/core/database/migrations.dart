@@ -25,9 +25,13 @@ typedef MigrationStep = void Function(Database db);
 /// * **v11** — Loop 49: a session carries its own permission mode, so the
 ///   composer control has somewhere to write and the resolver has one place to
 ///   read.
-/// * **v12** — Loop 54: a session records *why* it has a parent — spawned,
+/// * **v13** — Loop 54: a session records *why* it has a parent — spawned,
 ///   handed off to another provider, or forked — so lineage can be drawn
-///   without inferring the relationship from the two rows.
+///   without inferring the relationship from the two rows. Numbered 13, not
+///   12, because Loop 52's fan-out tables took 12 on `main` first; the gap
+///   this leaves on this branch closes when the two merge, and `AppDatabase`
+///   walks the map's own keys so a gap is migrated through rather than
+///   refused.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -40,7 +44,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   9: _migrateToV9,
   10: _migrateToV10,
   11: _migrateToV11,
-  12: _migrateToV12,
+  13: _migrateToV13,
 };
 
 void _migrateToV8(Database db) {
@@ -395,7 +399,7 @@ void _migrateToV11(Database db) {
   db.execute('ALTER TABLE sessions ADD COLUMN permission_mode TEXT;');
 }
 
-void _migrateToV12(Database db) {
+void _migrateToV13(Database db) {
   // Why a session has a parent (Loop 54).
   //
   // `parent_session_id` arrived in v10 with exactly one way to acquire one: an
@@ -406,7 +410,7 @@ void _migrateToV12(Database db) {
   // apart afterwards. Two sessions in one repository with one naming the other
   // look identical whichever of the three produced them.
   //
-  // Nullable, and null is a real answer for a *pre-v12* row: "we did not record
+  // Nullable, and null is a real answer for a *pre-v13* row: "we did not record
   // it". Unlike depth, this is not derivable from the chain, so there is no
   // second source of truth to disagree with — a link kind is a fact about the
   // moment of creation, and nothing else keeps it.

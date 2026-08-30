@@ -3,14 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`
-/// does, so a *pre-v12* database can be populated and then migrated.
+/// does, so a *pre-v13* database can be populated and then migrated.
 ///
-/// The backfill is the only part of v12 that a fresh database cannot exercise:
+/// The backfill is the only part of v13 that a fresh database cannot exercise:
 /// there are no rows in one to backfill.
+///
+/// Walks the map's own keys rather than counting, because this branch's keys
+/// are deliberately not dense — Loop 52 took v12 on `main` first, so this
+/// loop's migration is v13 with a gap the merge will close.
 Database _migratedTo(int upTo) {
   final db = sqlite3.openInMemory();
   db.execute('PRAGMA foreign_keys = ON;');
-  for (var version = 1; version <= upTo; version++) {
+  final versions = schemaMigrations.keys.where((v) => v <= upTo).toList()
+    ..sort();
+  for (final version in versions) {
     schemaMigrations[version]!(db);
     db.execute('PRAGMA user_version = $version;');
   }
@@ -40,7 +46,7 @@ void _seedSession(
 }
 
 void main() {
-  test('v12 backfills spawn for rows that already had a parent', () {
+  test('v13 backfills spawn for rows that already had a parent', () {
     final db = _migratedTo(11);
     addTearDown(db.close);
     // Foreign keys would refuse a session with no repository row; the migration
@@ -49,14 +55,14 @@ void main() {
     _seedSession(db, 'root');
     _seedSession(db, 'child', parent: 'root');
 
-    schemaMigrations[12]!(db);
+    schemaMigrations[13]!(db);
 
     Object? linkOf(String id) => db.select(
       'SELECT parent_link_kind FROM sessions WHERE id = ?;',
       [id],
     ).first['parent_link_kind'];
 
-    // The backfill is a *fact*, not a default: before v12 the only writer of
+    // The backfill is a *fact*, not a default: before v13 the only writer of
     // parent_session_id in the app was the MCP spawn path, so every parented
     // row genuinely is a spawn.
     expect(linkOf('child'), 'spawn');
@@ -65,16 +71,16 @@ void main() {
     expect(linkOf('root'), isNull);
   });
 
-  test('v12 does not disturb a database that already has the column', () {
+  test('v13 does not disturb a database that already has the column', () {
     // `ALTER TABLE ... ADD COLUMN` cannot be made idempotent, and does not have
     // to be: `AppDatabase` runs each step exactly once, guarded by
-    // `PRAGMA user_version`. What must hold is that a database already at v12
+    // `PRAGMA user_version`. What must hold is that a database already at v13
     // is left alone by the loop, which is what this asserts.
-    final db = _migratedTo(12);
+    final db = _migratedTo(13);
     addTearDown(db.close);
     expect(
       db.select('PRAGMA user_version;').first.values.first,
-      greaterThanOrEqualTo(12),
+      greaterThanOrEqualTo(13),
     );
     final columns = db
         .select('PRAGMA table_info(sessions);')

@@ -18,7 +18,7 @@ library;
 /// is not an argument against the other.
 enum SessionLink {
   /// An agent asked for this session through MCP. The original meaning of
-  /// `parent_session_id`, and the only one before schema v12.
+  /// `parent_session_id`, and the only one before schema v13.
   spawn('spawned by'),
 
   /// The user moved the work to a different agent. The child was launched with
@@ -37,7 +37,7 @@ enum SessionLink {
   final String phrase;
 
   /// Parses a stored value, or `null` for anything unrecognised — including the
-  /// null written by a row created before schema v12.
+  /// null written by a row created before schema v13.
   ///
   /// Deliberately not `values.byName`, which throws on an unknown string and is
   /// the failure mode that made a fourth agent's rows unreadable in Loop 30.
@@ -64,7 +64,7 @@ class SessionLineageNode {
   final String title;
 
   /// Why *this* session points at its parent. Null for a root session, and also
-  /// null for a parented row written before schema v12 — the two are told apart
+  /// null for a parented row written before schema v13 — the two are told apart
   /// by whether the node has a parent above it in [SessionLineage.ancestors].
   final SessionLink? link;
 
