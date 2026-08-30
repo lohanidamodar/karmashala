@@ -7,6 +7,7 @@ import '../../settings/application/settings_controller.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
+import '../domain/agent_pane_launch.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
@@ -188,6 +189,40 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _publish();
     persistWorkspace();
     return tabId;
+  }
+
+  /// Opens a new tab running an agent CLI in a PTY and makes it active.
+  ///
+  /// This is what makes any registry agent usable without a protocol adapter:
+  /// the pane is an ordinary terminal, so keep-alive, detach/reattach, scrollback
+  /// persistence, search and the split tree all apply to an agent exactly as
+  /// they do to a shell. Returns the new pane's id.
+  ({String tabId, String paneId}) openAgentTab(AgentPaneLaunch launch) {
+    final tabId = _newId();
+    final paneId = _newId();
+    _adopt(
+      paneId,
+      ref.read(terminalInstanceFactoryProvider)(
+        id: paneId,
+        // Unused for an agent pane, but the factory's contract requires one and
+        // a bogus profile would be worse than the host default.
+        profile: TerminalProfile.powerShell,
+        workingDirectory: launch.workingDirectory,
+        agentLaunch: launch,
+      ),
+    );
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(paneId),
+        focusedPaneId: paneId,
+      ),
+    );
+    _activeTabId = tabId;
+    _publish();
+    persistWorkspace();
+    _focusActivePane();
+    return (tabId: tabId, paneId: paneId);
   }
 
   void activateTab(String id) {
@@ -401,7 +436,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void startPane(String paneId) {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return;
-    final profile = terminalProfileFromId(existing.profileId);
+    // An agent pane is restarted from its recorded command, not from a shell
+    // profile: `agent:<id>` deliberately does not resolve as one.
+    final agentLaunch = existing.agentLaunch;
+    final profile = agentLaunch != null
+        ? TerminalProfile.powerShell
+        : terminalProfileFromId(existing.profileId);
     if (profile == null) return;
 
     // A dormant pane hands back exactly what was restored; a pane whose process
@@ -420,6 +460,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         workingDirectory: workingDirectory,
         restoredScrollback: scrollback,
         shellIntegration: _shellIntegrationEnabled,
+        agentLaunch: agentLaunch,
       ),
     );
     _publish();
@@ -490,6 +531,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               title: instance.title,
               workingDirectory: instance.workingDirectory,
               scrollback: encodeScrollback(instance.terminal),
+              agentLaunch: instance.agentLaunch,
             ),
       ],
     );
@@ -515,6 +557,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           title: instance.title,
           workingDirectory: instance.workingDirectory,
           scrollback: encodeScrollback(instance.terminal),
+          agentLaunch: instance.agentLaunch,
         ),
       ],
     );
@@ -589,7 +632,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Returns false when the pane's profile no longer resolves — a WSL distro
   /// that has been removed, say — since there would be nothing to start it with.
   bool _adoptDormant(StoredTerminalPane pane) {
-    if (terminalProfileFromId(pane.profileId) == null) return false;
+    // An agent pane carries its own command, so it does not need — and never
+    // had — a resolvable shell profile.
+    if (pane.agentLaunch == null &&
+        terminalProfileFromId(pane.profileId) == null) {
+      return false;
+    }
     _adopt(
       pane.id,
       DormantTerminalInstance(
@@ -598,6 +646,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         profileId: pane.profileId,
         workingDirectory: pane.workingDirectory,
         restoredScrollback: pane.scrollback,
+        agentLaunch: pane.agentLaunch,
       ),
     );
     return true;

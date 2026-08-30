@@ -15,6 +15,7 @@ import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
+import 'src/features/agents/application/agent_hook_installation_service.dart';
 import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
@@ -87,8 +88,41 @@ Future<void> main() async {
     await SystemIntegrationService(container).init();
 
     // Local control server for the launcher agent's MCP bridge (best-effort).
+    //
+    // The instance is kept, not discarded, because it owns `/agent-hook`'s
+    // ephemeral port and token — which the agents' installed hooks have to be
+    // told about. Nothing installed them before this: `AgentHookInstaller` had
+    // no call site since Loop 28, so `awaitingApproval` and `failed`, which only
+    // a hook can observe, were unreachable in the running app.
     try {
-      await LauncherControlServer(container, logger: logger).start();
+      final controlServer = LauncherControlServer(container, logger: logger);
+      await controlServer.start();
+      final endpoint = controlServer.hookEndpoint;
+      if (endpoint != null) {
+        // Off the startup path: rewriting hooks reads and writes the agents' own
+        // config files, and the window should not wait for it. Hooks that land a
+        // moment after launch are still hooks; a slower launch is felt every
+        // time.
+        unawaited(
+          container
+              .read(agentHookInstallationServiceProvider)
+              .installAll(endpoint)
+              .then(
+                (results) {
+                  final installed = results.where((r) => r.installed).length;
+                  logger.info(
+                    'Agent hooks: $installed installed, '
+                    '${results.length - installed} skipped.',
+                  );
+                },
+                onError: (Object error, StackTrace stack) => logger.warning(
+                  'Agent hook installation failed.',
+                  error,
+                  stack,
+                ),
+              ),
+        );
+      }
     } catch (error, stack) {
       logger.warning('Launcher control server failed to start.', error, stack);
     }

@@ -13,6 +13,9 @@ enum AgentStatusSource {
   /// The agent's session/state file on disk.
   stateFile,
 
+  /// The rendered bottom of the agent's own terminal screen.
+  terminalGrid,
+
   /// Nothing could tell us anything.
   none,
 }
@@ -52,6 +55,7 @@ class AgentStatusQuery {
     required this.agentId,
     required this.sessionId,
     this.stateFilePath,
+    this.terminalTailLines = const [],
   });
 
   final String agentId;
@@ -60,6 +64,12 @@ class AgentStatusQuery {
   /// The session transcript's path, as already known from CLI detection or an
   /// imported session. `null` when we have no file to read.
   final String? stateFilePath;
+
+  /// The rendered bottom rows of the pane this session runs in, when it runs in
+  /// one. Empty for a session with no terminal — an imported CLI session, or one
+  /// launched into somebody else's terminal window — which is the honest input
+  /// for "we cannot see its screen".
+  final List<String> terminalTailLines;
 }
 
 /// Matches one decoded state-file record by walking [path] into it and
@@ -125,4 +135,56 @@ class AgentHookSpec {
 
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;
+}
+
+/// Matches one line of the terminal grid.
+///
+/// A plain, case-insensitive substring rather than a regular expression, on
+/// purpose. The text being matched is an agent's own UI, which changes between
+/// releases; a substring that stops matching produces
+/// [AgentActivityStatus.unknown], which is a first-class state. A regex that
+/// half-matches produces a wrong answer, which is not.
+class GridMatcher {
+  const GridMatcher(this.contains);
+
+  /// Matched case-insensitively against one row of the screen.
+  final String contains;
+
+  bool matches(String line) =>
+      line.toLowerCase().contains(contains.toLowerCase());
+
+  @override
+  String toString() => 'GridMatcher($contains)';
+}
+
+/// How to read an agent's status off the bottom of its own TUI — Orca's third
+/// source, and the only one available to an agent with neither installed hooks
+/// nor a state file we can parse.
+///
+/// Ordered by confidence when several match: [failed], then [awaitingApproval],
+/// then [working], then [idle]. An approval prompt drawn over a spinner is
+/// waiting for the user, not working.
+class AgentGridRules {
+  const AgentGridRules({
+    this.awaitingApproval = const [],
+    this.working = const [],
+    this.idle = const [],
+    this.failed = const [],
+    this.scanLines = 12,
+  });
+
+  final List<GridMatcher> awaitingApproval;
+  final List<GridMatcher> working;
+  final List<GridMatcher> idle;
+  final List<GridMatcher> failed;
+
+  /// How many rows up from the bottom of the screen to consider. Small on
+  /// purpose — see `terminalTailLines`.
+  final int scanLines;
+
+  bool get isEmpty =>
+      awaitingApproval.isEmpty &&
+      working.isEmpty &&
+      idle.isEmpty &&
+      failed.isEmpty;
 }

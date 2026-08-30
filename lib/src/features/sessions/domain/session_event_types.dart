@@ -16,4 +16,39 @@ class SessionEventTypes {
   static const agentMessage = 'message.agent';
   static const agentStatus = 'agent.status';
   static const error = 'session.error';
+
+  /// One tool invocation by the agent. Payload: `name`, `input`, and — where the
+  /// protocol carries one — `toolUseId`.
+  ///
+  /// This was a bare string literal in two adapters while every sibling went
+  /// through this class.
+  static const toolCall = 'tool.call';
+
+  /// The result of a [toolCall], correlated back to it by `toolUseId`.
+  ///
+  /// **Not emitted yet.** It is named here because it is the missing half of the
+  /// pair: without a result event there is no way to know a tool call finished,
+  /// which is why an in-agent subagent (Claude Code's `Task` tool, which arrives
+  /// as an ordinary [toolCall]) would show as running forever. Whoever adds
+  /// subagent rendering needs this, and needs the correlation id below to be
+  /// carried through first.
+  static const toolResult = 'tool.result';
 }
+
+/// Payload key holding the protocol's own id for a tool invocation.
+///
+/// The correlation key between a [SessionEventTypes.toolCall] and its
+/// [SessionEventTypes.toolResult]. Claude Code puts it on the `tool_use` block
+/// as `id` and echoes it on the matching `tool_result` as `tool_use_id`.
+const String kToolUseIdKey = 'toolUseId';
+
+/// The tool name Claude Code uses to launch an **in-agent subagent**.
+///
+/// Worth naming because there are two unrelated things called a subagent and
+/// conflating them would be a real bug:
+///
+/// * this one lives *inside* a single session, arrives as a tool call, and never
+///   creates a session row — so the spawn-depth cap must **not** apply to it;
+/// * a session an agent creates through the MCP bridge is a separate row with a
+///   `parent_session_id`, and the cap **must** apply to that (`SessionDepth`).
+const String kSubagentToolName = 'Task';

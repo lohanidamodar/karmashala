@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -15,14 +14,15 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
-import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session.dart';
+import '../domain/session_launch.dart';
 import 'session_engine_provider.dart';
+import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
 
@@ -124,19 +124,22 @@ class SessionActions {
         'Run "Discover agents" in Settings first.',
       );
     }
-    final permission = _ref
-        .read(settingsControllerProvider)
-        .permissionsFor(session.cli)
-        .existingSessions;
-    final started = await _ref
-        .read(sessionEngineProvider)
-        .start(
-          repository: repo,
-          installation: installs.first,
-          title: session.displayTitle,
-          resumeSessionId: session.externalId,
-          permissionMode: permission,
+    // Through the one launcher, so a resumed session is the same kind of thing
+    // as a new one: a PTY, a row, and the *existing-session* permission mode —
+    // which this path used to apply to `SessionEngine.start`, i.e. to a
+    // genuinely new session (Loop 33 §6.1).
+    final launched = await _ref
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repo,
+            installation: installs.first,
+            title: session.displayTitle,
+            purpose: SessionPurpose.existingSession,
+            resumeExternalSessionId: session.externalId,
+          ),
         );
+    final started = launched.session;
     await _seedHistory(started.id, session);
     // Replace the imported entry with the now-live session (drop only our row,
     // keeping the CLI store file intact).
@@ -167,6 +170,12 @@ class SessionActions {
   Future<void> continueSession(String sessionId, String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
+
+    // A PTY-hosted session is typed into, not messaged: chat and terminal are
+    // two views of one session, so there is exactly one write path into the
+    // agent and the two views cannot get out of step.
+    if (_ref.read(sessionLauncherProvider).sendTo(sessionId, trimmed)) return;
+
     final engine = _ref.read(sessionEngineProvider);
 
     if (!engine.isActive(sessionId)) {
@@ -190,9 +199,8 @@ class SessionActions {
         );
       }
       final permission = _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .existingSessions;
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.existingSession);
       await engine.resume(
         session: session,
         workingDirectory: session.worktree ?? repo.path,
@@ -243,51 +251,36 @@ class SessionActions {
 
   /// Launches a fresh agent session in an external [terminal]: runs the agent's
   /// executable in [repo]'s directory (wrapped in `wsl.exe` for WSL repos).
-  Future<void> startNewInSystemTerminal({
+  Future<Session> startNewInSystemTerminal({
     required Repository repo,
     required AgentInstallation installation,
     required SystemTerminal terminal,
     PermissionMode? permissionMode,
+    String? title,
   }) async {
-    final env = _ref
-        .read(executionEnvironmentDaoProvider)
-        .getById(repo.path.environmentId);
-    if (env == null) {
-      throw StateError('The repository\'s environment is unavailable.');
-    }
-    final exe = installation.executable.path;
-    final mode =
-        permissionMode ??
-        _ref
-            .read(settingsControllerProvider)
-            .permissionsFor(installation.agentId)
-            .newSessions;
-    // Permission flags come from the agent's own registry entry, so an agent
-    // the app has no hardcoded knowledge of gets its declared flags — or none —
-    // rather than another agent's.
-    final agentArgs = [
-      exe,
-      ...?_ref
-          .read(agentRegistryProvider)
-          .byId(installation.agentId)
-          ?.launch
-          .permissionArgumentsFor(mode),
-    ];
-    final command = env.wslDistribution != null
-        ? [
-            'wsl.exe',
-            '-d',
-            env.wslDistribution!,
-            '--cd',
-            repo.path.path,
-            '--',
-            ...agentArgs,
-          ]
-        : agentArgs;
-    final cwd = env.wslDistribution == null ? repo.path.path : null;
-    await _ref
-        .read(systemTerminalServiceProvider)
-        .launch(terminal, command: command, workingDirectory: cwd);
+    // Now goes through the one launcher, which means it **records a session**.
+    // Spawning an external terminal used to change real-world state with no row
+    // and no UI feedback; the session only reappeared later, as an unrelated
+    // `ImportedSession` (Loop 33 §6.5).
+    //
+    // [terminal] is no longer chosen here: the launcher resolves the configured
+    // default so the dialog, the mini launcher and the MCP tool cannot pick
+    // three different ones. The parameter stays so callers that already asked
+    // the user keep compiling, and is honoured by preference below.
+    final launched = await _ref
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repo,
+            installation: installation,
+            title: title ?? 'Session',
+            purpose: SessionPurpose.newSession,
+            surface: SessionSurface.external,
+            permissionOverride: permissionMode,
+            externalTerminal: terminal,
+          ),
+        );
+    return launched.session;
   }
 
   /// A shell command (cd + resume, with permission flags) for [session], to copy
@@ -310,9 +303,8 @@ class SessionActions {
       cli: session.cli,
       externalId: session.externalId,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(session.cli)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(session.cli, SessionPurpose.existingSession),
       cwd: repo.path.path,
     );
   }
@@ -336,9 +328,8 @@ class SessionActions {
       cli: installation.agentId,
       externalId: session.externalSessionId,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.existingSession),
       cwd: (session.worktree ?? repo.path).path,
     );
   }
@@ -360,21 +351,17 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    final settings = _ref.read(settingsControllerProvider);
     final installation =
-        resolveDefaultInstallation(
-          installs,
-          defaultInstallationId: settings.defaultAgentInstallationId,
-          defaultAgentId: settings.defaultAgent,
-        ) ??
+        _ref
+            .read(sessionLauncherProvider)
+            .defaultInstallationIn(repo.path.environmentId) ??
         installs.first;
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .newSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.newSession),
       cwd: repo.path.path,
     );
   }
@@ -400,13 +387,10 @@ class SessionActions {
         'Run "Discover agents" in Settings.',
       );
     }
-    final settings = _ref.read(settingsControllerProvider);
     final installation =
-        resolveDefaultInstallation(
-          installs,
-          defaultInstallationId: settings.defaultAgentInstallationId,
-          defaultAgentId: settings.defaultAgent,
-        ) ??
+        _ref
+            .read(sessionLauncherProvider)
+            .defaultInstallationIn(repo.path.environmentId) ??
         installs.first;
     await startNewInSystemTerminal(
       repo: repo,
@@ -449,9 +433,8 @@ class SessionActions {
       environment: env,
       cwd: repo.path,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(session.cli)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(session.cli, SessionPurpose.existingSession),
     );
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host shells
     // take a start directory.
@@ -508,9 +491,8 @@ class SessionActions {
       environment: env,
       cwd: session.worktree ?? repo.path,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.existingSession),
     );
     final cwd = env.wslDistribution == null
         ? (session.worktree ?? repo.path).path

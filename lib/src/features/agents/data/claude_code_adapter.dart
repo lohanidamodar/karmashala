@@ -80,9 +80,13 @@ List<AgentEvent> parseClaudeMessage(String line) {
             );
           case 'tool_use':
             events.add(
-              AgentEvent('tool.call', {
+              AgentEvent(SessionEventTypes.toolCall, {
                 'name': block['name'],
                 'input': block['input'],
+                // Carried so a later result can be matched back to this call.
+                // Nothing consumes it yet; without it, correlating a subagent's
+                // completion would be guesswork over ordering.
+                if (block['id'] != null) kToolUseIdKey: block['id'],
               }),
             );
         }

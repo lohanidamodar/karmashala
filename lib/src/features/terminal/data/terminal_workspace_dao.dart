@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/database/row_mapping.dart';
+import '../domain/agent_pane_launch.dart';
 import '../domain/pane_layout.dart';
 
 /// One persisted terminal pane: how to relaunch it, and what was on its screen.
@@ -16,6 +17,7 @@ class StoredTerminalPane {
     required this.title,
     required this.workingDirectory,
     required this.scrollback,
+    this.agentLaunch,
   });
 
   final String id;
@@ -24,6 +26,9 @@ class StoredTerminalPane {
   final String title;
   final String? workingDirectory;
   final String scrollback;
+
+  /// The agent CLI this pane ran, when it ran one. A shell pane stores `null`.
+  final AgentPaneLaunch? agentLaunch;
 }
 
 /// One persisted tab: its pane tree plus the panes the tree references.
@@ -103,8 +108,8 @@ class TerminalWorkspaceDao {
           final pane = tab.panes[j];
           _db.execute(
             'INSERT INTO terminal_panes (id, tab_id, ordinal, profile_id, '
-            'title, working_directory, scrollback, updated_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+            'title, working_directory, scrollback, launch_command, updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
             [
               pane.id,
               tab.id,
@@ -113,6 +118,9 @@ class TerminalWorkspaceDao {
               pane.title,
               pane.workingDirectory,
               pane.scrollback,
+              pane.agentLaunch == null
+                  ? null
+                  : jsonEncode(pane.agentLaunch!.toJson()),
               now,
             ],
           );
@@ -147,8 +155,8 @@ class TerminalWorkspaceDao {
       final isDetached = boolFromInt(row['detached']);
 
       final paneRows = _db.query(
-        'SELECT id, profile_id, title, working_directory, scrollback '
-        'FROM terminal_panes WHERE tab_id = ? ORDER BY ordinal;',
+        'SELECT id, profile_id, title, working_directory, scrollback, '
+        'launch_command FROM terminal_panes WHERE tab_id = ? ORDER BY ordinal;',
         [id],
       );
       (isDetached ? detached : tabs).add(
@@ -166,6 +174,9 @@ class TerminalWorkspaceDao {
                 title: pane['title']! as String,
                 workingDirectory: pane['working_directory'] as String?,
                 scrollback: pane['scrollback']! as String,
+                agentLaunch: _agentLaunchFrom(
+                  pane['launch_command'] as String?,
+                ),
               ),
           ],
         ),
@@ -181,6 +192,18 @@ class TerminalWorkspaceDao {
   }
 
   void clear() => _db.execute('DELETE FROM terminal_tabs;');
+
+  /// Parses a stored agent launch, treating anything unreadable as "no agent"
+  /// — the pane then comes back as a plain restored buffer rather than not at
+  /// all.
+  static AgentPaneLaunch? _agentLaunchFrom(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      return AgentPaneLaunch.fromJson(jsonDecode(raw));
+    } on FormatException {
+      return null;
+    }
+  }
 
   /// Parses stored layout JSON, treating anything unreadable as "no layout".
   static PaneLayout? _layoutFrom(String? raw) {

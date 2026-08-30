@@ -1,0 +1,304 @@
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/util/clock_provider.dart';
+import 'package:chitragupta/src/core/util/id_generator_provider.dart';
+import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/projects/data/project_dao.dart';
+import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
+import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
+import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
+import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:chitragupta/src/features/settings/domain/settings.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+import '../terminal/fake_instance.dart';
+
+/// An agent that exists only as a registry entry: no `AgentKind`, no protocol
+/// adapter, no store. If this can run, "adding an agent is a data entry" is
+/// true of the runtime and not only of discovery.
+const _rover = AgentDescriptor(
+  id: 'roverCli',
+  displayName: 'Rover CLI',
+  binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
+  launch: AgentLaunchSpec(
+    baseArguments: ['--headless'],
+    permissionArguments: {
+      PermissionMode.ask: ['--careful'],
+      PermissionMode.bypass: ['--trust-me'],
+    },
+    interactiveResume: AgentResume.flag('--continue'),
+  ),
+);
+
+({ProviderContainer container, AppDatabase db}) harness({
+  Settings settings = const Settings(),
+  AgentRegistry registry = const AgentRegistry([_rover]),
+}) {
+  final db = AppDatabase.memory();
+  ExecutionEnvironmentDao(db)
+    ..upsert(windowsEnv())
+    ..upsert(wslEnv());
+  ProjectDao(db).insert(project());
+  RepositoryDao(db).insert(repository());
+  AgentInstallationDao(db).insert(agentInstallation(agentId: 'roverCli'));
+
+  // The same process-free terminal the controller's own tests use, so the pane
+  // behaviour exercised here is not a second, friendlier fake.
+  final container = ProviderContainer(
+    overrides: [
+      ...fakeTerminalOverrides(database: db),
+      clockProvider.overrideWithValue(FixedClock(testTime)),
+      idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
+      agentRegistryProvider.overrideWithValue(registry),
+      settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
+    ],
+  );
+  return (container: container, db: db);
+}
+
+class _StaticSettings extends SettingsController {
+  _StaticSettings(this._settings);
+  final Settings _settings;
+
+  @override
+  Settings build() => _settings;
+}
+
+void main() {
+  test('a registry-only agent runs in a PTY pane, with a session row', () {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+
+    final launched = h.container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(agentId: 'roverCli'),
+            title: 'Rover run',
+            purpose: SessionPurpose.newSession,
+          ),
+        );
+
+    return launched.then((result) {
+      // The row exists, knows its pane, and says it is a pane session.
+      final stored = SessionDao(h.db).getById(result.session.id)!;
+      expect(stored.surface, SessionSurface.pane);
+      expect(stored.paneId, isNotNull);
+      expect(stored.paneId, result.paneId);
+      // No readable store, so no chat view — a capability answer, not a failure.
+      expect(stored.view, SessionView.terminal);
+
+      // And a real pane is running it, launched from the descriptor's own
+      // vocabulary rather than from anything hardcoded.
+      final controller = h.container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final instance = controller.instanceFor(result.paneId!)!;
+      final launch = instance.agentLaunch!;
+      expect(launch.agentId, 'roverCli');
+      expect(launch.arguments, ['--careful']);
+      expect(launch.sessionId, stored.id);
+      expect(launch.workingDirectory, repository().path.path);
+      // Protocol arguments never reach an interactive launch.
+      expect(launch.arguments, isNot(contains('--headless')));
+    });
+  });
+
+  test('permission mode comes from the purpose, in one place', () async {
+    const settings = Settings();
+    final h = harness(
+      settings: settings.withPermissions(
+        'roverCli',
+        const AgentPermissions(
+          newSessions: PermissionMode.ask,
+          existingSessions: PermissionMode.bypass,
+        ),
+      ),
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    expect(
+      launcher.permissionFor('roverCli', SessionPurpose.newSession),
+      PermissionMode.ask,
+    );
+    expect(
+      launcher.permissionFor('roverCli', SessionPurpose.existingSession),
+      PermissionMode.bypass,
+    );
+
+    // The sharpest divergence the audit found: a resume used to be started
+    // under the *new*-session preference and vice versa. Now the flags on the
+    // command line follow the purpose.
+    final resumed = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Continue',
+        purpose: SessionPurpose.existingSession,
+        resumeExternalSessionId: 'external-1',
+      ),
+    );
+    final instance = h.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(resumed.paneId!)!;
+    expect(instance.agentLaunch!.arguments, [
+      '--trust-me',
+      '--continue',
+      'external-1',
+    ]);
+  });
+
+  test('a spawned session records its parent and is capped', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    SessionLaunchRequest request(String? parent) => SessionLaunchRequest(
+      repository: repository(),
+      installation: agentInstallation(agentId: 'roverCli'),
+      title: 'Spawned',
+      purpose: SessionPurpose.newSession,
+      parentSessionId: parent,
+    );
+
+    final root = await launcher.launch(request(null));
+    final child = await launcher.launch(request(root.session.id));
+    final grandchild = await launcher.launch(request(child.session.id));
+
+    expect(root.session.parentSessionId, isNull);
+    expect(child.session.parentSessionId, root.session.id);
+    // Read back from storage: the chain is the only record of depth.
+    expect(
+      SessionDao(h.db).getById(grandchild.session.id)!.parentSessionId,
+      child.session.id,
+    );
+    expect(
+      SessionDao(h.db).childrenOf(root.session.id).single.id,
+      child.session.id,
+    );
+
+    await expectLater(
+      launcher.launch(request(grandchild.session.id)),
+      throwsA(isA<SessionDepthRefused>()),
+    );
+    // And nothing was created for the refused call.
+    expect(SessionDao(h.db).getAll().length, 3);
+  });
+
+  test('a spawned session names its parent in its opening prompt', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    // The rover agent does not accept a prompt argument, so use a built-in that
+    // does — the attribution is what is under test, not the delivery.
+    final claudeHarness = harness(registry: AgentRegistry.builtIn);
+    addTearDown(claudeHarness.db.close);
+    addTearDown(claudeHarness.container.dispose);
+    AgentInstallationDao(
+      claudeHarness.db,
+    ).insert(agentInstallation(id: 'i2', agentId: AgentIds.claudeCode));
+    final claudeLauncher = claudeHarness.container.read(
+      sessionLauncherProvider,
+    );
+
+    final parent = await claudeLauncher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(id: 'i2', agentId: AgentIds.claudeCode),
+        title: 'Fix [urgent] crash',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    final child = await claudeLauncher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(id: 'i2', agentId: AgentIds.claudeCode),
+        title: 'Helper',
+        purpose: SessionPurpose.newSession,
+        parentSessionId: parent.session.id,
+        firstMessage: 'run the tests',
+      ),
+    );
+
+    final instance = claudeHarness.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(child.paneId!)!;
+    final prompt = instance.agentLaunch!.arguments.last;
+    expect(prompt, contains('Fix [urgent] crash'));
+    expect(prompt, endsWith('run the tests'));
+    expect(launcher, isNotNull);
+  });
+
+  test('Claude Code is launched with our own id as its session id', () async {
+    final h = harness(registry: AgentRegistry.builtIn);
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    AgentInstallationDao(
+      h.db,
+    ).insert(agentInstallation(id: 'i2', agentId: AgentIds.claudeCode));
+
+    final launched = await h.container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(
+              id: 'i2',
+              agentId: AgentIds.claudeCode,
+            ),
+            title: 'Claude',
+            purpose: SessionPurpose.newSession,
+          ),
+        );
+    // One string is both ids, so the transcript backing the chat view is
+    // locatable at launch rather than guessed at afterwards.
+    expect(launched.session.externalSessionId, launched.session.id);
+    // And the agent has a chat view, because its store is readable.
+    expect(launched.session.view, SessionView.chat);
+  });
+
+  test('a WSL session is wrapped for wsl.exe', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    RepositoryDao(h.db).insert(
+      repository(id: 'r2', environmentId: 'wsl:Ubuntu', path: '/home/u/app'),
+    );
+
+    final launched = await h.container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(
+              id: 'r2',
+              environmentId: 'wsl:Ubuntu',
+              path: '/home/u/app',
+            ),
+            installation: agentInstallation(agentId: 'roverCli'),
+            title: 'In WSL',
+            purpose: SessionPurpose.newSession,
+          ),
+        );
+    final instance = h.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(launched.paneId!)!;
+    expect(instance.agentLaunch!.wslDistribution, 'Ubuntu');
+  });
+}

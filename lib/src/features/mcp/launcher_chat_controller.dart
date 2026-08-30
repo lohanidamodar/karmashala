@@ -191,7 +191,7 @@ class LauncherChatController extends Notifier<LauncherChatState> {
         final text = (event.data['text'] ?? '').toString();
         if (text.trim().isNotEmpty) _append(LauncherChatRole.agent, text);
         state = state.copyWith(busy: false);
-      case 'tool.call':
+      case SessionEventTypes.toolCall:
         final name = (event.data['name'] ?? 'tool').toString();
         _append(LauncherChatRole.tool, name);
       case SessionEventTypes.error:

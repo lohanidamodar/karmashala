@@ -1,4 +1,5 @@
 import '../../environments/domain/environment_path.dart';
+import 'session_launch.dart';
 import 'session_status.dart';
 
 /// A unit of work targeting one repository, run by one agent installation.
@@ -19,6 +20,10 @@ class Session {
     required this.createdAt,
     this.worktree,
     this.externalSessionId,
+    this.parentSessionId,
+    this.paneId,
+    this.surface = SessionSurface.pane,
+    this.view = SessionView.terminal,
   });
 
   final String id;
@@ -40,6 +45,23 @@ class Session {
   /// one. External terminals must resume this id, never the app database id.
   final String? externalSessionId;
 
+  /// The session that asked for this one, when an agent did.
+  ///
+  /// The **only** record of spawn depth — see `SessionDepth` for why the depth
+  /// itself is walked from this and never stored beside it.
+  final String? parentSessionId;
+
+  /// The terminal pane this session runs in, for a [SessionSurface.pane]
+  /// session. Null for one launched into a terminal we do not own.
+  final String? paneId;
+
+  /// Where the process lives. A runtime fact.
+  final SessionSurface surface;
+
+  /// How the session is drawn. A rendering choice the user can flip at any
+  /// time; it starts and stops nothing.
+  final SessionView view;
+
   Session copyWith({
     String? id,
     String? repositoryId,
@@ -50,6 +72,10 @@ class Session {
     SessionStatus? status,
     DateTime? createdAt,
     String? externalSessionId,
+    String? parentSessionId,
+    String? paneId,
+    SessionSurface? surface,
+    SessionView? view,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -60,6 +86,10 @@ class Session {
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
     externalSessionId: externalSessionId ?? this.externalSessionId,
+    parentSessionId: parentSessionId ?? this.parentSessionId,
+    paneId: paneId ?? this.paneId,
+    surface: surface ?? this.surface,
+    view: view ?? this.view,
   );
 
   @override
@@ -73,7 +103,11 @@ class Session {
       other.worktree == worktree &&
       other.status == status &&
       other.createdAt == createdAt &&
-      other.externalSessionId == externalSessionId;
+      other.externalSessionId == externalSessionId &&
+      other.parentSessionId == parentSessionId &&
+      other.paneId == paneId &&
+      other.surface == surface &&
+      other.view == view;
 
   @override
   int get hashCode => Object.hash(
@@ -86,6 +120,10 @@ class Session {
     status,
     createdAt,
     externalSessionId,
+    parentSessionId,
+    paneId,
+    surface,
+    view,
   );
 
   @override

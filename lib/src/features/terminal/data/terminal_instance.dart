@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
+import '../domain/agent_pane_launch.dart';
 import '../domain/mouse_wheel_reporter.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
@@ -28,6 +29,14 @@ abstract class TerminalInstance {
   /// started in — kept so the pane can be recreated after a restart.
   String get profileId;
   String? get workingDirectory;
+
+  /// The agent CLI this pane runs, or `null` for a plain shell.
+  ///
+  /// Recorded rather than derived because restoring the pane has to reproduce
+  /// the exact command line, and a profile id alone cannot: it does not know
+  /// which installation's executable was used, which permission flags applied,
+  /// or which session it belonged to.
+  AgentPaneLaunch? get agentLaunch;
 
   /// Whether a process is running behind [terminal], and why not when there is
   /// none. Listenable so a pane stops advertising itself as live the moment its
@@ -61,6 +70,7 @@ typedef TerminalInstanceFactory =
       String? workingDirectory,
       String? restoredScrollback,
       bool shellIntegration,
+      AgentPaneLaunch? agentLaunch,
     });
 
 /// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
@@ -77,6 +87,7 @@ class PtyTerminalInstance implements TerminalInstance {
     required this.profileId,
     required PtyLaunch launch,
     this.workingDirectory,
+    this.agentLaunch,
     String? restoredScrollback,
     bool shellIntegration = false,
   }) {
@@ -104,7 +115,7 @@ class PtyTerminalInstance implements TerminalInstance {
     _pty = Pty.start(
       launch.executable,
       arguments: launch.arguments,
-      environment: _ptyEnvironment(),
+      environment: _ptyEnvironment(launch.environment),
       workingDirectory: workingDirectory,
     );
 
@@ -152,6 +163,8 @@ class PtyTerminalInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+  @override
+  final AgentPaneLaunch? agentLaunch;
   @override
   late final Terminal terminal;
   @override
@@ -228,7 +241,7 @@ String _two(int value) => value.toString().padLeft(2, '0');
 /// (`/usr/bin:/bin:…`), `SHELL=/usr/bin/fish` and `WSL*` interop vars leak into
 /// the Windows process. Handing those to `wsl.exe`/`powershell.exe` breaks them,
 /// so we rebuild a clean Windows `Path` and drop the Unix leak.
-Map<String, String> _ptyEnvironment() {
+Map<String, String> _ptyEnvironment([Map<String, String> extra = const {}]) {
   final env = Map<String, String>.of(Platform.environment);
 
   // WSL-interop / Unix-shell leaks (present only when launched from WSL); these
@@ -252,6 +265,11 @@ Map<String, String> _ptyEnvironment() {
           '$sysRoot\\System32\\WindowsPowerShell\\v1.0;'
           '$sysRoot\\System32\\wbem';
   }
+
+  // Layered last so a caller's variables survive the WSL-leak scrubbing above —
+  // an agent pane sets WSLENV deliberately, and it must not be the one that was
+  // just removed.
+  env.addAll(extra);
   return env;
 }
 
@@ -264,6 +282,7 @@ class ErrorTerminalInstance implements TerminalInstance {
     required this.profileId,
     required String message,
     this.workingDirectory,
+    this.agentLaunch,
     String? restoredScrollback,
   }) {
     terminal = Terminal(maxLines: kErrorPaneScrollbackMaxLines);
@@ -279,6 +298,8 @@ class ErrorTerminalInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+  @override
+  final AgentPaneLaunch? agentLaunch;
   @override
   late final Terminal terminal;
   @override
@@ -340,6 +361,7 @@ class DormantTerminalInstance implements TerminalInstance {
     required this.profileId,
     required this.restoredScrollback,
     this.workingDirectory,
+    this.agentLaunch,
   }) {
     terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
       ..mouseHandler = const ChitraguptaMouseHandler();
@@ -354,6 +376,8 @@ class DormantTerminalInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+  @override
+  final AgentPaneLaunch? agentLaunch;
 
   /// The stored scrollback exactly as it was read back.
   ///
@@ -401,39 +425,57 @@ TerminalInstance createPtyTerminalInstance({
   String? workingDirectory,
   String? restoredScrollback,
   bool shellIntegration = false,
+  AgentPaneLaunch? agentLaunch,
 }) {
-  // The terminal profiles (PowerShell/cmd/WSL) assume a Windows host. When the
-  // app itself runs on Linux/macOS (e.g. inside WSL), `wsl.exe`/`powershell.exe`
-  // don't exist — we're already in the target shell — so just open the login
-  // shell in the working directory.
+  // An agent pane runs the agent CLI itself, so the shell profile is not
+  // consulted at all — the launch is built from the agent's registry descriptor
+  // and its installation. Shell integration is meaningless here: OSC 133 markers
+  // come from a shell's prompt hooks, and there is no shell.
   final PtyLaunch launch;
-  if (Platform.isWindows) {
+  final String title;
+  final String profileId;
+  final integrate = agentLaunch == null && shellIntegration;
+  if (agentLaunch != null) {
+    launch = agentPtyLaunchFor(agentLaunch, onWindowsHost: Platform.isWindows);
+    title = agentLaunch.title ?? agentLaunch.agentId;
+    profileId = agentLaunch.profileId;
+  } else if (Platform.isWindows) {
+    // The terminal profiles (PowerShell/cmd/WSL) assume a Windows host.
     launch = ptyLaunchFor(
       profile,
       workingDirectory: workingDirectory,
-      shellIntegration: shellIntegration,
+      shellIntegration: integrate,
     );
+    title = profile.label;
+    profileId = profile.id;
   } else {
+    // When the app itself runs on Linux/macOS (e.g. inside WSL),
+    // `wsl.exe`/`powershell.exe` don't exist — we're already in the target
+    // shell — so just open the login shell in the working directory.
     final shell = Platform.environment['SHELL'] ?? '/bin/bash';
     launch = PtyLaunch(executable: shell, workingDirectory: workingDirectory);
+    title = profile.label;
+    profileId = profile.id;
   }
   try {
     return PtyTerminalInstance(
       id: id,
-      title: profile.label,
-      profileId: profile.id,
+      title: title,
+      profileId: profileId,
       launch: launch,
       workingDirectory: workingDirectory,
+      agentLaunch: agentLaunch,
       restoredScrollback: restoredScrollback,
-      shellIntegration: shellIntegration && Platform.isWindows,
+      shellIntegration: integrate && Platform.isWindows,
     );
   } catch (e) {
     final args = launch.arguments.join(' ');
     return ErrorTerminalInstance(
       id: id,
-      title: profile.label,
-      profileId: profile.id,
+      title: title,
+      profileId: profileId,
       workingDirectory: workingDirectory,
+      agentLaunch: agentLaunch,
       restoredScrollback: restoredScrollback,
       message:
           'Failed to start "${launch.executable} $args"'
