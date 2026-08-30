@@ -1,0 +1,399 @@
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/core/util/clock_provider.dart';
+import 'package:chitragupta/src/core/util/id_generator_provider.dart';
+import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
+import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/explorer/application/explorer_actions.dart';
+import 'package:chitragupta/src/features/projects/data/project_dao.dart';
+import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
+import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/session_resume_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
+import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/session.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
+import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
+import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:chitragupta/src/features/settings/domain/settings.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fake_command_runner.dart';
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+import '../terminal/fake_instance.dart';
+
+/// What one click on a card, or on a `+`, is allowed to do.
+///
+/// The rules are Loop 46's and they are not re-implemented here — these tests
+/// exist to prove the Explorer *asks* rather than deciding for itself, and to
+/// pin the two things it does own: a worktree session resumes **in its
+/// worktree**, and a second click never stacks a third process on one
+/// conversation.
+
+/// Verbatim from codex-cli 0.151.0 — see `session_whereabouts_test.dart`. The
+/// only proof we ever get that a process we do not own holds a conversation.
+const _refusal =
+    'Error: thread/resume failed: thread 01a051ab already has an active writer '
+    '(code -32600)';
+
+const _sharing = AgentDescriptor(
+  id: 'sharing',
+  displayName: 'Sharing Agent',
+  binaries: AgentBinaries(windows: ['sharing'], posix: ['sharing']),
+  launch: AgentLaunchSpec(
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
+    },
+    interactiveResume: AgentResume.flag('--resume'),
+    allowsConcurrentResume: true,
+  ),
+);
+
+/// The other half of the capability: an agent that refuses a second writer, and
+/// whose refusal we can recognise on its own screen.
+const _exclusive = AgentDescriptor(
+  id: 'exclusive',
+  displayName: 'Exclusive Agent',
+  binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
+  launch: AgentLaunchSpec(
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
+    },
+    interactiveResume: AgentResume.subcommand('resume'),
+    resumeConflict: AgentResumeConflictRules(
+      markers: [GridMatcher('already has an active writer')],
+    ),
+  ),
+);
+
+class _StaticSettings extends SettingsController {
+  @override
+  Settings build() => const Settings();
+}
+
+typedef Harness = ({ProviderContainer container, AppDatabase db});
+
+Harness harness({bool installAgent = true, String agentId = 'sharing'}) {
+  final db = AppDatabase.memory();
+  ExecutionEnvironmentDao(db).upsert(windowsEnv());
+  ProjectDao(db).insert(project());
+  RepositoryDao(db).insert(repository());
+  if (installAgent) {
+    AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
+  }
+  final container = ProviderContainer(
+    overrides: [
+      ...fakeTerminalOverrides(database: db),
+      clockProvider.overrideWithValue(FixedClock(testTime)),
+      hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+      commandRunnerFactoryProvider.overrideWithValue(
+        FakeCommandRunnerFactory(),
+      ),
+      idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
+      agentRegistryProvider.overrideWithValue(
+        const AgentRegistry([_sharing, _exclusive]),
+      ),
+      settingsControllerProvider.overrideWith(_StaticSettings.new),
+      // The whereabouts provider watches this stream for a "last seen" time;
+      // a real poll leaves an autoDispose stream mid-flight when a plain
+      // container reads it once. Nothing here is about ageing evidence.
+      agentSessionStatusProvider.overrideWith(
+        (ref, id) => const Stream<AgentStatusReport>.empty(),
+      ),
+    ],
+  );
+  return (container: container, db: db);
+}
+
+EnvironmentPath path(String value) =>
+    EnvironmentPath(environmentId: 'windows', path: value);
+
+/// A row for a conversation nothing of ours is running — the resume case.
+Session stopped({
+  String id = 'old',
+  String externalId = 'ext-1',
+  EnvironmentPath? worktree,
+}) => Session(
+  id: id,
+  repositoryId: 'r1',
+  agentInstallationId: 'a1',
+  title: 'Earlier work',
+  useWorktree: worktree != null,
+  worktree: worktree,
+  status: SessionStatus.completed,
+  createdAt: testTime,
+  externalSessionId: externalId,
+);
+
+Future<String> launchLive(
+  Harness h, {
+  String? externalId,
+  String agentId = 'sharing',
+}) async {
+  final launched = await h.container
+      .read(sessionLauncherProvider)
+      .launch(
+        SessionLaunchRequest(
+          repository: repository(),
+          installation: agentInstallation(agentId: agentId),
+          title: 'Live work',
+          purpose: SessionPurpose.newSession,
+        ),
+      );
+  if (externalId != null) {
+    h.container
+        .read(sessionDaoProvider)
+        .updateExternalSessionId(launched.session.id, externalId);
+  }
+  return launched.session.id;
+}
+
+String? paneCwd(Harness h, String sessionId) {
+  final paneId = h.container
+      .read(sessionDaoProvider)
+      .getById(sessionId)
+      ?.paneId;
+  if (paneId == null) return null;
+  return h.container
+      .read(terminalSessionsControllerProvider.notifier)
+      .instanceFor(paneId)
+      ?.workingDirectory;
+}
+
+void main() {
+  group('opening a session', () {
+    test(
+      'a session we are still running is reattached, not relaunched',
+      () async {
+        final h = harness();
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        final id = await launchLive(h);
+        final before = h.container.read(sessionDaoProvider).getAll().length;
+
+        final result = await h.container
+            .read(explorerActionsProvider)
+            .openNative(id);
+
+        expect(result.outcome, ExplorerOutcome.reattached);
+        expect(
+          h.container.read(sessionDaoProvider).getAll().length,
+          before,
+          reason: 'nothing was spawned',
+        );
+      },
+    );
+
+    test('a stopped worktree session resumes in its worktree', () async {
+      // Loop 57's blocker, and the reason it could not be fixed there: the
+      // launcher had no way to say "this repository, but run over there", so
+      // every resume put the agent back in the repository root — a different
+      // directory on a different branch from the work being resumed.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final worktree = path(r'C:\src\demo\.chitragupta-worktrees\wt-a');
+      SessionDao(h.db).insert(stopped(worktree: worktree));
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .openNative('old');
+
+      expect(result.outcome, ExplorerOutcome.resumed);
+      final resumed = h.container
+          .read(sessionDaoProvider)
+          .getAll()
+          .firstWhere((s) => s.id != 'old');
+      expect(resumed.worktree, worktree);
+      expect(resumed.useWorktree, isTrue);
+      expect(
+        resumed.externalSessionId,
+        'ext-1',
+        reason: 'the same conversation',
+      );
+      // The fact that actually matters: the process was started there.
+      expect(paneCwd(h, resumed.id), worktree.path);
+    });
+
+    test('a session in no worktree resumes in the repository', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      SessionDao(h.db).insert(stopped());
+
+      await h.container.read(explorerActionsProvider).openNative('old');
+
+      final resumed = h.container
+          .read(sessionDaoProvider)
+          .getAll()
+          .firstWhere((s) => s.id != 'old');
+      expect(resumed.worktree, isNull);
+      expect(paneCwd(h, resumed.id), repository().path.path);
+    });
+
+    test('a session whose CLI id we never learned is only selected', () async {
+      // Starting the agent here would be a *new* conversation wearing this
+      // row's title, which is worse than doing nothing.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      SessionDao(h.db).insert(stopped(externalId: ''));
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .openNative('old');
+
+      expect(result.outcome, ExplorerOutcome.selected);
+      expect(h.container.read(sessionDaoProvider).getAll().length, 1);
+    });
+
+    test('clicking the older row of a resumed conversation reveals the live '
+        'one instead of stacking a third', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      SessionDao(h.db).insert(stopped());
+      // The first click resumes and leaves two rows for one conversation.
+      await h.container.read(explorerActionsProvider).openNative('old');
+      final after = h.container.read(sessionDaoProvider).getAll().length;
+      expect(after, 2);
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .openNative('old');
+
+      expect(result.outcome, ExplorerOutcome.reattached);
+      expect(
+        h.container.read(sessionDaoProvider).getAll().length,
+        after,
+        reason: 'a second click must not put a third agent on the transcript',
+      );
+    });
+
+    test('an agent that refused to share says so in plain words', () async {
+      final h = harness(agentId: 'exclusive');
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      // A pane of ours died showing the agent's own refusal — the only certain
+      // knowledge we ever get about a process we do not own.
+      final id = await launchLive(h, externalId: 'ext-9', agentId: 'exclusive');
+      final paneId = SessionDao(h.db).getById(id)!.paneId!;
+      final instance =
+          h.container
+                  .read(terminalSessionsControllerProvider.notifier)
+                  .instanceFor(paneId)!
+              as FakeTerminalInstance;
+      instance.terminal.write('$_refusal\r\n');
+      instance.livenessNotifier.value = PaneLiveness.exited;
+      h.container.invalidate(sessionWhereaboutsProvider(id));
+      expect(
+        h.container.read(sessionWhereaboutsProvider(id)).knownHeldElsewhere,
+        isTrue,
+        reason: 'the fixture has to reach the state the assertion is about',
+      );
+      final before = h.container.read(sessionDaoProvider).getAll().length;
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .openNative(id);
+
+      expect(result.outcome, ExplorerOutcome.blocked);
+      expect(result.message, contains('will not resume a conversation'));
+      expect(
+        h.container.read(sessionDaoProvider).getAll().length,
+        before,
+        reason: 'refused means nothing was started',
+      );
+    });
+
+    test(
+      'a session that has been deleted underneath us fails cleanly',
+      () async {
+        final h = harness();
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+
+        final result = await h.container
+            .read(explorerActionsProvider)
+            .openNative('gone');
+
+        expect(result.outcome, ExplorerOutcome.failed);
+        expect(result.message, 'This session no longer exists.');
+      },
+    );
+  });
+
+  group('starting a session', () {
+    test('the + uses the default agent for that environment', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .startSession(repository: repository());
+
+      expect(result.outcome, ExplorerOutcome.started);
+      final started = h.container.read(sessionDaoProvider).getAll().single;
+      expect(started.agentInstallationId, 'a1');
+      expect(paneCwd(h, started.id), repository().path.path);
+    });
+
+    test('a worktree with no repositories row of its own is startable', () async {
+      // Loop 57 had to refuse this: a session needs a repository id and a folder
+      // with no row has none. The owning repository supplies the id and
+      // `existingWorktree` supplies the directory.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final worktree = path(r'C:\elsewhere\wt-side');
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .startSession(repository: repository(), existingWorktree: worktree);
+
+      expect(result.outcome, ExplorerOutcome.started);
+      final started = h.container.read(sessionDaoProvider).getAll().single;
+      expect(started.repositoryId, 'r1');
+      expect(started.worktree, worktree);
+      expect(paneCwd(h, started.id), worktree.path);
+    });
+
+    test('no agent installed is a sentence, not an exception', () async {
+      final h = harness(installAgent: false);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final result = await h.container
+          .read(explorerActionsProvider)
+          .startSession(repository: repository());
+
+      expect(result.outcome, ExplorerOutcome.failed);
+      expect(result.message, contains('Discover agents'));
+      expect(h.container.read(sessionDaoProvider).getAll(), isEmpty);
+    });
+
+    test('installationsFor lists what the "…with" menu may offer', () {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final installations = h.container
+          .read(explorerActionsProvider)
+          .installationsFor(repository());
+
+      expect(installations.map((i) => i.id), ['a1']);
+    });
+  });
+}

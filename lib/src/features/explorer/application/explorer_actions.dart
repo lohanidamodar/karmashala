@@ -1,0 +1,314 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../agents/application/agent_providers.dart';
+import '../../agents/domain/agent_installation.dart';
+import '../../cli_detection/domain/imported_session.dart';
+import '../../environments/domain/environment_path.dart';
+import '../../git/application/changes_providers.dart';
+import '../../repositories/application/repository_providers.dart';
+import '../../repositories/domain/repository.dart';
+import '../../sessions/application/session_actions.dart';
+import '../../sessions/application/session_launcher.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_resume_providers.dart';
+import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/domain/session.dart';
+import '../../sessions/domain/session_launch.dart';
+import '../../sessions/domain/session_resume.dart';
+
+/// What clicking a card or a `+` actually did.
+enum ExplorerOutcome {
+  /// The row is selected and nothing was started — the honest answer for a
+  /// session there is no conversation to resume.
+  selected,
+
+  /// A pane of ours was already running it and has been brought back. Nothing
+  /// was spawned.
+  reattached,
+
+  /// The agent was started on the existing conversation.
+  resumed,
+
+  /// A new session was started.
+  started,
+
+  /// Another process holds the conversation and this agent will not share.
+  blocked,
+
+  /// We could not do it, and [ExplorerResult.message] says why.
+  failed,
+}
+
+/// The outcome of an Explorer action, plus whatever the user needs told.
+class ExplorerResult {
+  const ExplorerResult(this.outcome, {this.message});
+
+  final ExplorerOutcome outcome;
+
+  /// What to put in front of the user, or null when the change on screen is the
+  /// whole answer. A reattach needs no sentence: the pane is simply back.
+  final String? message;
+
+  bool get isFailure =>
+      outcome == ExplorerOutcome.failed || outcome == ExplorerOutcome.blocked;
+}
+
+/// One-click open and one-click start, for every row in the Explorer.
+///
+/// This exists so the tree does not make launch decisions in a `build()`, and so
+/// a card, a `+` button and a context-menu item cannot answer "is it already
+/// running?" three different ways. Every decision below is delegated:
+/// [SessionLauncher.reveal] owns reattaching, [resumeActionFor] owns the choice
+/// between reattach / resume / blocked, and [SessionLauncher.launch] owns
+/// creating anything.
+class ExplorerActions {
+  ExplorerActions(this._ref);
+
+  final Ref _ref;
+
+  /// Opens a native session: reattach if we are still running it, otherwise
+  /// resume the conversation, otherwise just select it.
+  ///
+  /// **A session in a worktree resumes in that worktree.** Until Loop 54 added
+  /// [SessionLaunchRequest.existingWorktree] there was no way to say so, and
+  /// every resume path — this one, and the MCP `open_session` tool — put the
+  /// agent back in the repository root: a different directory, on a different
+  /// branch, from the work being resumed.
+  Future<ExplorerResult> openNative(String sessionId) async {
+    final dao = _ref.read(sessionDaoProvider);
+    final session = dao.getById(sessionId);
+    if (session == null) {
+      return const ExplorerResult(
+        ExplorerOutcome.failed,
+        message: 'This session no longer exists.',
+      );
+    }
+    selectNative(session);
+
+    final launcher = _ref.read(sessionLauncherProvider);
+    if (launcher.reveal(sessionId)) {
+      return const ExplorerResult(ExplorerOutcome.reattached);
+    }
+
+    // A previous resume of this same conversation left a second row behind (a
+    // resume mints one — see the loop report), and that row's pane may well be
+    // the live one. Reveal it rather than stacking a third process on the
+    // conversation, which is what clicking the older card would otherwise do.
+    final twin = _liveTwinOf(session);
+    if (twin != null && launcher.reveal(twin.id)) {
+      return ExplorerResult(
+        ExplorerOutcome.reattached,
+        message: '"${twin.title}" is already running this conversation.',
+      );
+    }
+
+    final externalId = session.externalSessionId;
+    if (externalId == null || externalId.isEmpty) {
+      // Nothing to resume: the CLI never told us its id, so starting the agent
+      // here would be a *new* conversation wearing this row's title. The menu's
+      // "Copy resume command" is the honest way out, and the row is selected so
+      // its transcript is on screen.
+      return const ExplorerResult(ExplorerOutcome.selected);
+    }
+
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    final repository = _ref
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId);
+    if (installation == null || repository == null) {
+      return const ExplorerResult(
+        ExplorerOutcome.failed,
+        message:
+            'The agent or repository for this session is no longer available.',
+      );
+    }
+
+    final action = launcher.resumeActionForConversation(
+      agentId: installation.agentId,
+      sessionId: sessionId,
+      externalSessionId: externalId,
+      // The only certain knowledge we ever get about a process we do not own:
+      // the agent's own refusal, read off the pane it died on.
+      heldByAnotherProcess: _ref
+          .read(sessionWhereaboutsProvider(sessionId))
+          .knownHeldElsewhere,
+    );
+    switch (action) {
+      case ResumeAction.blocked:
+        return ExplorerResult(
+          ExplorerOutcome.blocked,
+          message: resumeBlockedMessage(
+            launcher.agentDisplayName(installation.agentId),
+          ),
+        );
+      case ResumeAction.reattach:
+        // Unreachable in practice — every way `hostedLive` can be true is a
+        // pane the two reveals above would have brought back. Kept because the
+        // one thing this branch must never do is fall through to a launch: a
+        // conversation we are certain we hold is the double-writer case.
+        return const ExplorerResult(
+          ExplorerOutcome.selected,
+          message: 'That conversation is already running here.',
+        );
+      case ResumeAction.resume:
+        break;
+    }
+
+    try {
+      final launched = await launcher.launch(
+        SessionLaunchRequest(
+          repository: repository,
+          installation: installation,
+          title: session.title,
+          purpose: SessionPurpose.existingSession,
+          resumeExternalSessionId: externalId,
+          existingWorktree: session.worktree,
+        ),
+      );
+      _ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
+      return const ExplorerResult(ExplorerOutcome.resumed);
+    } catch (error) {
+      return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
+    }
+  }
+
+  /// Opens an imported CLI session: reattach when we are already running that
+  /// conversation, otherwise resume it in place (which replaces the imported
+  /// row with a live one — [SessionActions.resumeImported] owns that).
+  Future<ExplorerResult> openImported(ImportedSession session) async {
+    selectImported(session);
+    final launcher = _ref.read(sessionLauncherProvider);
+    final action = launcher.resumeActionForConversation(
+      agentId: session.cli,
+      externalSessionId: session.externalId,
+    );
+    if (action == ResumeAction.blocked) {
+      return ExplorerResult(
+        ExplorerOutcome.blocked,
+        message: resumeBlockedMessage(launcher.agentDisplayName(session.cli)),
+      );
+    }
+    final reattaching = action == ResumeAction.reattach;
+    try {
+      await _ref.read(sessionActionsProvider).resumeImported(session);
+      return ExplorerResult(
+        reattaching ? ExplorerOutcome.reattached : ExplorerOutcome.resumed,
+        message: reattaching ? null : 'Resuming session…',
+      );
+    } catch (error) {
+      return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
+    }
+  }
+
+  /// Starts a session in [repository], or in [existingWorktree] when a worktree
+  /// row asked for it.
+  ///
+  /// [installation] is the "…with" choice; omitted, the configured default agent
+  /// for the repository's environment is used, which is what makes `+` a single
+  /// click rather than a dialog.
+  ///
+  /// **A worktree with no `repositories` row of its own is startable now.** Loop
+  /// 57 could only offer `+` where the workspace happened to have a row at that
+  /// exact path, because a session needs a repository id and there was no way to
+  /// say "this id, but run over there". [existingWorktree] is that way: the
+  /// owning repository supplies the id and the worktree supplies the directory.
+  Future<ExplorerResult> startSession({
+    required Repository repository,
+    EnvironmentPath? existingWorktree,
+    AgentInstallation? installation,
+    String? title,
+  }) async {
+    final launcher = _ref.read(sessionLauncherProvider);
+    final environmentId = repository.path.environmentId;
+    final agent =
+        installation ??
+        launcher.defaultInstallationIn(environmentId) ??
+        _ref
+            .read(agentInstallationDaoProvider)
+            .getByEnvironment(environmentId)
+            .firstOrNull;
+    if (agent == null) {
+      return ExplorerResult(
+        ExplorerOutcome.failed,
+        message:
+            'No agent is installed in $environmentId. '
+            'Run "Discover agents" in Settings first.',
+      );
+    }
+    try {
+      final launched = await launcher.launch(
+        SessionLaunchRequest(
+          repository: repository,
+          installation: agent,
+          title: title ?? 'New session',
+          purpose: SessionPurpose.newSession,
+          existingWorktree: existingWorktree,
+        ),
+      );
+      selectNative(launched.session);
+      return const ExplorerResult(ExplorerOutcome.started);
+    } catch (error) {
+      return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
+    }
+  }
+
+  /// Every agent installed where [repository] lives, for the "…with" menu.
+  List<AgentInstallation> installationsFor(Repository repository) => _ref
+      .read(agentInstallationDaoProvider)
+      .getByEnvironment(repository.path.environmentId);
+
+  /// Selects a native session, and the repository above it, so the detail pane
+  /// and the workbench follow the tree.
+  void selectNative(Session session) {
+    _ref
+        .read(selectedRepositoryIdProvider.notifier)
+        .select(session.repositoryId);
+    _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+    _ref.read(selectedSessionIdProvider.notifier).select(session.id);
+  }
+
+  void selectImported(ImportedSession session) {
+    _ref
+        .read(selectedRepositoryIdProvider.notifier)
+        .select(session.repositoryId);
+    _ref.read(selectedSessionIdProvider.notifier).select(null);
+    _ref.read(selectedImportedSessionIdProvider.notifier).select(session.id);
+  }
+
+  /// Another of our rows for the same CLI conversation whose pane is live.
+  ///
+  /// `SessionLauncher.runningSessionWithExternalId` asks the DAO for *a* row
+  /// with that external id and takes the first of them; once a resume has
+  /// produced a second row (it mints one — see the loop report) the first is the
+  /// dead one, so that check comes back empty and the click launches a third
+  /// process. Scanning every row costs one query on a click and cannot be fooled
+  /// that way — and it is deliberately not scoped to the repository, because a
+  /// resume that joined an existing worktree can land the twin on a different
+  /// repository row from the one clicked.
+  Session? _liveTwinOf(Session session) {
+    final externalId = session.externalSessionId;
+    if (externalId == null || externalId.isEmpty) return null;
+    final launcher = _ref.read(sessionLauncherProvider);
+    for (final candidate in _ref.read(sessionDaoProvider).getAll()) {
+      if (candidate.id == session.id) continue;
+      if (candidate.externalSessionId != externalId) continue;
+      if (launcher.livePaneFor(candidate.id) != null) return candidate;
+    }
+    return null;
+  }
+
+  /// The user-facing half of an error. A [StateError]'s message is already
+  /// written for a human; anything else is shown as it stands rather than
+  /// swallowed.
+  String _say(Object error) => switch (error) {
+    StateError() => error.message,
+    SessionAlreadyRunning() => error.toString(),
+    _ => '$error',
+  };
+}
+
+final explorerActionsProvider = Provider<ExplorerActions>(
+  (ref) => ExplorerActions(ref),
+);

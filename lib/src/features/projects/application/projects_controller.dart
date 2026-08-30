@@ -138,6 +138,31 @@ class ProjectsController extends Notifier<List<Project>> {
     return result;
   }
 
+  /// Re-runs repository discovery over [projectId]'s root and records anything
+  /// new. Returns the repositories that were added.
+  ///
+  /// [ProjectService.rediscover] has existed since the discovery work and had
+  /// never had a caller: a project scanned once kept whatever it found then, so
+  /// a repository cloned into it afterwards stayed invisible. The Explorer's
+  /// tree now depends on this being reachable — a session working in a folder
+  /// with no `repositories` row is drawn as "not scanned yet", and this is the
+  /// action that turns such a row into a real one.
+  Future<List<Repository>> rediscover(String projectId) async {
+    final project = ref.read(projectDaoProvider).getById(projectId);
+    if (project == null) {
+      throw StateError('This project is no longer in the workspace.');
+    }
+    final added = await ref.read(projectServiceProvider).rediscover(project);
+    if (added.isNotEmpty) {
+      // New repositories may already have CLI history behind them, and the
+      // tree's providers all hang off the revision.
+      await _autoImportSessions(added);
+      ref.read(sessionsRevisionProvider.notifier).bump();
+    }
+    _refresh();
+    return added;
+  }
+
   /// Removes [projectId] from the workspace. The database cascades to its
   /// repositories, sessions, events and imported sessions. Clears any selection
   /// that pointed into the deleted project.

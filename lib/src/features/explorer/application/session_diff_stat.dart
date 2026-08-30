@@ -226,6 +226,16 @@ class ProjectSummary {
     ].join(' · ');
   }
 
+  /// How the attention count reads beside [label], or null when nothing is
+  /// waiting. Worded exactly as the status bar words it, because they are the
+  /// same number and a user who sees "1 needs you" in one place and "1 need
+  /// you" in another has to wonder whether they are two counts.
+  String? get attentionLabel => switch (needsAttention) {
+    0 => null,
+    1 => '1 needs you',
+    final n => '$n need you',
+  };
+
   @override
   bool operator ==(Object other) =>
       other is ProjectSummary &&
