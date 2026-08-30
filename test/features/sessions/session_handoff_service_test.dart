@@ -16,7 +16,6 @@ import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_chat_source.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
-import 'package:chitragupta/src/features/sessions/application/session_lineage_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
@@ -536,18 +535,18 @@ void main() {
       );
       final forked = await service.forkSession(sessionId: 'src');
 
-      final lineage = h.container.read(sessionLineageProvider('src'))!;
-      expect(lineage.isRoot, isTrue);
-      expect(lineage.chainBroken, isFalse);
+      final dao = SessionDao(h.db);
+      expect(dao.parentOf('src'), isNull, reason: 'the source is a root');
       // Both children hang off the same parent and are distinguishable, which
       // is the whole reason the link kind is stored rather than inferred: the
       // two rows are otherwise identical in shape.
+      final children = dao.childrenOf('src');
       expect(
-        lineage.children.map((c) => c.link).toList(),
+        children.map((c) => c.parentLink).toList(),
         containsAll([SessionLink.handoff, SessionLink.fork]),
       );
       expect(
-        lineage.children.map((c) => c.sessionId).toList(),
+        children.map((c) => c.id).toList(),
         containsAll([handed.session.id, forked.session.id]),
       );
     });
@@ -567,15 +566,16 @@ void main() {
             instruction: 'Take over.',
           );
 
-      final lineage = h.container.read(
-        sessionLineageProvider(handed.session.id),
-      )!;
-      expect(lineage.parent!.sessionId, 'src');
-      expect(lineage.self.link, SessionLink.handoff);
-      expect(lineage.self.agentId, 'forker');
+      final child = SessionDao(h.db).getById(handed.session.id)!;
+      expect(child.parentSessionId, 'src');
+      expect(child.parentLink, SessionLink.handoff);
+      expect(
+        AgentInstallationDao(h.db).getById(child.agentInstallationId)!.agentId,
+        'forker',
+      );
       // Phrased child-first so a sidebar can render it as a sentence without
       // the explorer having to know the enum.
-      expect(lineage.self.link!.phrase, 'handed off from');
+      expect(child.parentLink!.phrase, 'handed off from');
     });
   });
 }
