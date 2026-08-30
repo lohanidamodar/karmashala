@@ -9,6 +9,13 @@
 // It lives in the tests because it is a test oracle, not app behaviour — but it
 // is the thing standing in for `ffprobe`, which is not installed on this
 // machine.
+//
+// It is **not** fully independent of what it judges: it imports the muxer's own
+// `kTsPacketSize`, `kPmtPid` and `kVideoPid` rather than restating them, so a
+// change to one of those would move the muxer and this validator together. The
+// three are pinned to their literal wire values in `ts_muxer_test.dart` ("the
+// wire constants are the ones the format fixes"), which is what keeps that
+// shared import honest.
 import 'dart:typed_data';
 
 import 'package:chitragupta/src/features/devices/data/ts_muxer.dart';
