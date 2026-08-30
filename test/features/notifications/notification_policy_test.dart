@@ -329,12 +329,10 @@ void main() {
       );
     });
 
-    test('the defaults are on, but only while the window is in the back', () {
-      const defaults = NotificationSettings();
-      expect(defaults.enabled, isTrue);
-      expect(defaults.onlyWhenUnfocused, isTrue);
-      expect(defaults.notifyWhenFinished, isTrue);
-      expect(defaults.notifyWhenAttentionNeeded, isTrue);
-    });
+    // The default field values themselves belong to notification_settings_test.
+    // What each default *does* is already asserted above, through the policy:
+    // 'an agent that finished its turn' and 'an agent waiting for approval'
+    // cover enabled/notifyWhenFinished/notifyWhenAttentionNeeded, and 'by
+    // default a focused window is never interrupted' covers onlyWhenUnfocused.
   });
 }
