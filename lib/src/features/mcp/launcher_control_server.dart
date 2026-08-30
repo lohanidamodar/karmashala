@@ -51,6 +51,7 @@ import '../terminal/data/system_terminal_service.dart';
 import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
+import 'control_server_status.dart';
 import 'handshake_file_permissions.dart';
 import 'tmux_orchestration.dart';
 
@@ -111,6 +112,15 @@ import 'tmux_orchestration.dart';
 /// silently downgrading privileged RPC to a transport every local process can
 /// reach.
 ///
+/// **Every step of that hardening is a prerequisite, not a best effort.** The
+/// directory ACL, the socket bind and the handshake file's ACL each have to
+/// succeed before a privileged token exists at all; if any of them does not,
+/// nothing privileged is bound, no privileged credential is minted or
+/// published, and [ControlServerStatus] says why. Loop 61 wrote that down after
+/// an audit found the ACL results were being read and then ignored: the
+/// promise was in this comment and nowhere in the code, because no test could
+/// reach the branch. See `start`.
+///
 /// This replaced a Windows-only named pipe. The pipe's DACL gave the same
 /// boundary, but it left Linux and macOS on loopback TCP, and its blocking-FFI
 /// serving isolate could not be shut down: Loop 48 measured a build with the
@@ -126,11 +136,21 @@ import 'tmux_orchestration.dart';
 /// can list process command lines; that is the threat model above, and moving
 /// the route would not improve it.
 class LauncherControlServer {
-  LauncherControlServer(this._container, {AppLogger? logger})
-    : _logger = logger ?? AppLogger.named('mcp-control');
+  LauncherControlServer(
+    this._container, {
+    AppLogger? logger,
+    HandshakePermissions? permissions,
+  }) : _logger = logger ?? AppLogger.named('mcp-control'),
+       _permissions = permissions ?? const SystemHandshakePermissions();
 
   final ProviderContainer _container;
   final AppLogger _logger;
+
+  /// How the owner-only boundary is applied. Injectable because the failure
+  /// path *is* the security contract: `icacls` cannot be made to fail on
+  /// demand, so without a seam the fail-closed branch below is untestable — and
+  /// it was, which is how it came to be ignored in the first place.
+  final HandshakePermissions _permissions;
 
   HttpServer? _server;
   LocalRpcServer? _socketServer;
@@ -138,6 +158,11 @@ class LauncherControlServer {
   String? _token;
   AgentHookEndpoint? _hookEndpoint;
   String? _publishedBridgePath;
+  ControlServerStatus _status = ControlServerStatus.notStarted;
+
+  /// What came up, and what did not. Mirrored into
+  /// [controlServerStatusProvider] so the settings screen can say so.
+  ControlServerStatus get status => _status;
 
   static const _maxRequestBytes = 1024 * 1024;
 
@@ -158,6 +183,18 @@ class LauncherControlServer {
   ///
   /// [useLocalSocket] is the owner-only `/rpc` transport. Tests turn it off to
   /// exercise the HTTP fallback; nothing in the app does.
+  ///
+  /// ## Fail closed
+  ///
+  /// Every privileged step is a **prerequisite**, not a best effort. Applying
+  /// the owner-only ACL to the socket directory, binding the socket inside it,
+  /// and applying the owner-only ACL to the handshake file all have to succeed
+  /// before a privileged token is minted and published. If any of them does
+  /// not, this method still returns — the deliberately low-privilege
+  /// `/agent-hook` route stays up, because an agent that cannot report status
+  /// is a worse outcome than one that cannot drive a device — but no privileged
+  /// transport is listening and no privileged credential exists to be leaked.
+  /// The reason goes to the log and to [controlServerStatusProvider].
   Future<void> start({
     String? bridgeFilePath,
     bool useLocalSocket = true,
@@ -166,7 +203,6 @@ class LauncherControlServer {
     if (_server != null) return;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server = server;
-    _token = _generateToken();
     // A *separate* token for /agent-hook. It is pasted verbatim into a curl
     // command in the agent's own config file, so it also shows up in process
     // command lines; the /rpc token opens sessions and drives devices, and must
@@ -175,20 +211,102 @@ class LauncherControlServer {
       port: server.port,
       token: _generateToken(),
     );
-    _httpRpcEnabled = !useLocalSocket;
+
+    ControlServerFailureStage? stage;
+    String? detail;
+
     if (useLocalSocket) {
       try {
         _socketServer = await _bindLocalSocket(socketDirectory);
+      } on _HardeningFailure catch (failure) {
+        stage = failure.stage;
+        detail = failure.detail;
       } on Object catch (error, stack) {
-        // Fail closed: hooks still work, but privileged RPC is not silently
-        // downgraded to loopback when the owner-only transport cannot start.
-        _logger.warning('Owner-only RPC socket failed to start.', error, stack);
+        stage = ControlServerFailureStage.socketBind;
+        detail = '$error';
+        _logger.error(
+          'control-server: privileged RPC withheld '
+          'stage=socketBind reason=$error',
+          error,
+          stack,
+        );
       }
+    } else {
+      // The deliberate opt-out: a caller has asked for loopback HTTP in code.
+      _httpRpcEnabled = true;
     }
-    await _writeBridgeFile(server.port, _token!, bridgeFilePath);
+
+    // A privileged credential is minted only where a privileged transport
+    // actually came up — there is nothing for it to authenticate to otherwise,
+    // and an unpublishable secret on disk is pure downside.
+    if (_socketServer != null || _httpRpcEnabled) _token = _generateToken();
+
+    // Restrict the (still empty) handshake file before deciding what goes in
+    // it, so a privileged token is never written under an ACL that was not
+    // applied — not even for the instant before a follow-up `icacls`.
+    final file = await _prepareBridgeFile(bridgeFilePath);
+    var restricted = false;
+    try {
+      restricted = await _permissions.restrictFile(file, logger: _logger);
+    } on Object catch (error, stack) {
+      // A throw and a `false` mean the same thing here: the ACL is not on.
+      detail ??= '$error';
+      _logger.warning('Handshake file could not be restricted.', error, stack);
+    }
+    if (!restricted && _token != null) {
+      // The handshake is the only way the token reaches the bridge. If it
+      // cannot be locked to this account the token does not go in it — and a
+      // privileged transport no legitimate caller can authenticate to is not
+      // worth listening on, so it comes down too.
+      stage ??= ControlServerFailureStage.handshakePermissions;
+      detail ??= 'the handshake file ACL was not applied';
+      await _withholdPrivilegedRpc();
+    }
+    await _publishHandshake(file, server.port);
+
+    _publishStatus(
+      stage == null
+          ? ControlServerStatus.running(
+              _socketServer != null
+                  ? PrivilegedRpcTransport.ownerOnlySocket
+                  : PrivilegedRpcTransport.loopbackHttp,
+            )
+          : ControlServerStatus.failedClosed(stage: stage, detail: detail!),
+    );
+
     server.listen(_handle, onError: (Object e) => _logger.warning('$e'));
     _logger.info('Launcher control server on 127.0.0.1:${server.port}.');
     _startCheckpointRecorder();
+  }
+
+  /// Takes down whatever privileged RPC had come up and destroys its
+  /// credential. Idempotent; `/agent-hook` is untouched.
+  Future<void> _withholdPrivilegedRpc() async {
+    try {
+      await _socketServer?.close();
+    } on Object catch (error) {
+      _logger.warning('Could not close the owner-only RPC socket: $error');
+    }
+    _socketServer = null;
+    _token = null;
+    _httpRpcEnabled = false;
+  }
+
+  void _publishStatus(ControlServerStatus status) {
+    _status = status;
+    if (status.failedClosed) {
+      _logger.error(
+        'control-server: privileged RPC withheld '
+        'stage=${status.failureStage!.name} reason=${status.failureDetail}',
+      );
+    }
+    try {
+      _container.read(controlServerStatusProvider.notifier).set(status);
+    } on Object catch (error) {
+      // A disposed container on the way out must not turn into a start/stop
+      // failure; the log line above is the record that matters.
+      _logger.warning('Could not publish control server status: $error');
+    }
   }
 
   /// Brings the per-turn checkpoint recorder to life.
@@ -209,14 +327,22 @@ class LauncherControlServer {
   /// Creates the owner-only directory and binds the RPC socket inside it.
   ///
   /// The directory is restricted **before** the socket is created, so there is
-  /// no window in which the socket exists under a permissive ACL.
+  /// no window in which the socket exists under a permissive ACL — and if the
+  /// restriction does not apply, the socket is never created at all. A unix
+  /// domain socket carries no permissions of its own, so a directory whose ACL
+  /// was not applied is the whole boundary missing, not a degraded one.
   Future<LocalRpcServer> _bindLocalSocket(String? overrideDirectory) async {
     final dirPath =
         overrideDirectory ??
         p.join((await getApplicationSupportDirectory()).path, 'ipc');
     final dir = Directory(dirPath);
     await dir.create(recursive: true);
-    await restrictDirectoryToCurrentUser(dir, logger: _logger);
+    if (!await _permissions.restrictDirectory(dir, logger: _logger)) {
+      throw _HardeningFailure(
+        ControlServerFailureStage.socketDirectoryPermissions,
+        'the owner-only ACL on $dirPath was not applied',
+      );
+    }
     final socketPath = p.join(dir.path, 'rpc.sock');
     final socket = await LocalRpcServer.bind(socketPath, _handleSocketRpc);
     _logger.info('Owner-only RPC socket at $socketPath.');
@@ -241,37 +367,42 @@ class LauncherControlServer {
     _hookEndpoint = null;
     _httpRpcEnabled = false;
     _publishedBridgePath = null;
+    _publishStatus(ControlServerStatus.notStarted);
   }
 
-  /// Publishes the port and tokens for the bridge to read.
+  /// Creates the handshake file **empty**, ready to be restricted.
   ///
-  /// The file is created **empty**, restricted, and only then written to, so the
-  /// tokens never touch the disk under a permissive ACL — not even for the
-  /// instant between `writeAsString` and a follow-up `icacls`. Any pre-existing
-  /// file is removed first rather than overwritten, because a write preserves
-  /// the DACL a file already carries.
-  Future<void> _writeBridgeFile(
-    int port,
-    String token,
-    String? overridePath,
-  ) async {
+  /// Nothing is written until the ACL has been applied and the caller has
+  /// decided what may go in it, so the tokens never touch the disk under a
+  /// permissive ACL. Any pre-existing file is removed first rather than
+  /// overwritten, because a write preserves the DACL a file already carries.
+  Future<File> _prepareBridgeFile(String? overridePath) async {
     final file = File(overridePath ?? await bridgeFilePath());
     _publishedBridgePath = file.path;
     await file.parent.create(recursive: true);
     try {
       if (file.existsSync()) await file.delete();
     } catch (error) {
-      // A bridge still holding it open; the restriction below covers us.
+      // A bridge still holding it open; the restriction covers us.
       _logger.warning('Could not replace the handshake file: $error');
     }
     await file.create();
-    await restrictHandshakeFileToCurrentUser(file, logger: _logger);
+    return file;
+  }
+
+  /// Publishes the port, the pid and whichever credentials survived hardening.
+  ///
+  /// `token` and `socketPath` appear only when a privileged transport is
+  /// actually up: a bridge that finds neither is told, by their absence, that
+  /// privileged RPC is not on offer. The hook port and token are always
+  /// published — they are the low-privilege half that fails *open* by design.
+  Future<void> _publishHandshake(File file, int port) async {
     await file.writeAsString(
       jsonEncode({
         'port': port,
-        'token': token,
         'pid': pid,
         'hookToken': _hookEndpoint!.token,
+        'token': ?_token,
         if (_socketServer case final socket?) 'socketPath': socket.path,
       }),
       flush: true,
@@ -299,10 +430,14 @@ class LauncherControlServer {
     }
     final response = request.response;
     try {
-      if (!_constantTimeEquals(
-        request.headers.value(HttpHeaders.authorizationHeader),
-        'Bearer $_token',
-      )) {
+      final token = _token;
+      // No privileged credential means no privileged caller. Without this an
+      // interpolated `Bearer null` would be a header anyone could send.
+      if (token == null ||
+          !_constantTimeEquals(
+            request.headers.value(HttpHeaders.authorizationHeader),
+            'Bearer $token',
+          )) {
         response.statusCode = HttpStatus.unauthorized;
         await response.close();
         return;
@@ -352,7 +487,9 @@ class LauncherControlServer {
   Future<String> _handleSocketRpc(String body) async {
     try {
       final payload = jsonDecode(body) as Map<String, dynamic>;
-      if (!_constantTimeEquals(payload['token'] as String?, _token ?? '')) {
+      final token = _token;
+      if (token == null ||
+          !_constantTimeEquals(payload['token'] as String?, token)) {
         return jsonEncode({'ok': false, 'error': 'Unauthorized.'});
       }
       final tool = payload['tool'] as String?;
@@ -2412,4 +2549,16 @@ class LauncherControlServer {
         {'path': file.path, 'status': file.type.name},
     ],
   };
+}
+
+/// A hardening step that did not apply, thrown out of the privileged-transport
+/// setup so `start` can fail closed with the reason intact.
+class _HardeningFailure implements Exception {
+  _HardeningFailure(this.stage, this.detail);
+
+  final ControlServerFailureStage stage;
+  final String detail;
+
+  @override
+  String toString() => detail;
 }

@@ -85,7 +85,15 @@ void main() {
       path = p.join(tmp.path, 'mcp_bridge.json');
       container = ProviderContainer();
       server = LauncherControlServer(container);
-      await server.start(bridgeFilePath: path);
+      // A real socket directory inside the temp folder. Without one the server
+      // falls back to `getApplicationSupportDirectory()`, which no plugin
+      // answers under `flutter test`; since Loop 61 a socket that cannot be
+      // brought up withholds the privileged token entirely, so these
+      // assertions would be reading a handshake that deliberately has none.
+      await server.start(
+        bridgeFilePath: path,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
     });
 
     tearDown(() async {

@@ -152,3 +152,33 @@ String? _currentWindowsPrincipal() {
   final domain = env['USERDOMAIN'];
   return (domain == null || domain.isEmpty) ? user : '$domain\\$user';
 }
+
+/// The two permission operations [restrictHandshakeFileToCurrentUser] and
+/// [restrictDirectoryToCurrentUser] provide, behind a seam.
+///
+/// `icacls` and `chmod` cannot be made to fail on demand, and "what happens
+/// when hardening fails" is the entire security contract of the privileged RPC
+/// transport — the real-ACL success tests above cannot reach it. Injecting this
+/// is what makes the fail-closed path testable.
+abstract class HandshakePermissions {
+  const HandshakePermissions();
+
+  /// Restricts [file] to the current user. Returns whether it was applied.
+  Future<bool> restrictFile(File file, {AppLogger? logger});
+
+  /// Restricts [dir] to the current user. Returns whether it was applied.
+  Future<bool> restrictDirectory(Directory dir, {AppLogger? logger});
+}
+
+/// The real thing: the platform ACL tools.
+class SystemHandshakePermissions extends HandshakePermissions {
+  const SystemHandshakePermissions();
+
+  @override
+  Future<bool> restrictFile(File file, {AppLogger? logger}) =>
+      restrictHandshakeFileToCurrentUser(file, logger: logger);
+
+  @override
+  Future<bool> restrictDirectory(Directory dir, {AppLogger? logger}) =>
+      restrictDirectoryToCurrentUser(dir, logger: logger);
+}

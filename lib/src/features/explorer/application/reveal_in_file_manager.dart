@@ -25,4 +25,3 @@ final revealInFileManagerProvider = Provider<RevealInFileManager>(
     await ref.read(shell_reveal.revealInFileManagerProvider).reveal(path);
   },
 );
-
