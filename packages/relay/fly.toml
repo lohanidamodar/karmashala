@@ -1,0 +1,31 @@
+# fly.toml — the PopupBits default relay. Self-hosters can copy this verbatim
+# and change the app name; the relay keeps no state, so one small machine and
+# no volumes is the whole deployment.
+app = "chitragupta-relay"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.http_options]
+    # A paired connection is long-lived and mostly quiet between prompts.
+    idle_timeout = 900
+
+  [[http_service.checks]]
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
