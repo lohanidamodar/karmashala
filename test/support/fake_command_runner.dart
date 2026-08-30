@@ -4,6 +4,7 @@ import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/core/process/command_runner_factory.dart';
 import 'package:chitragupta/src/core/process/process_handle.dart';
 import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
+import 'package:chitragupta/src/features/ssh/data/ssh_connection_pool.dart';
 
 /// A deterministic [CommandRunner] test double.
 ///
@@ -110,6 +111,10 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
 
   final Map<String, FakeCommandRunner> _byEnvironmentId;
   final FakeCommandRunner _fallback;
+
+  /// Fakes never open a real connection, so there is nothing to hand out.
+  @override
+  SshConnectionPool Function()? get sshConnections => null;
 
   @override
   CommandRunner forEnvironment(ExecutionEnvironment environment) =>

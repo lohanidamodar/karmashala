@@ -1,0 +1,8 @@
+# Test tags. Declaring a tag here is what keeps `flutter test` from warning
+# about it; it changes no default behaviour.
+tags:
+  # Opt-in end-to-end tests that need a real SSH server (see
+  # test/features/ssh/live_ssh_test.dart). They skip themselves when the
+  # CHITRAGUPTA_SSH_* environment variables are unset, so a normal run is
+  # unaffected; `--exclude-tags live-ssh` drops them outright.
+  live-ssh:

@@ -33,16 +33,18 @@ class AgentResume {
 
 /// Executable base names to probe, per execution-environment kind. Each list is
 /// tried in order and the first hit wins.
+///
+/// There are two lists rather than one per kind because the split that matters
+/// is Windows vs POSIX: a WSL distro and a remote SSH host both run `claude`,
+/// not `claude.exe`.
 class AgentBinaries {
   const AgentBinaries({required this.windows, required this.posix});
 
   final List<String> windows;
   final List<String> posix;
 
-  List<String> forKind(EnvironmentKind kind) => switch (kind) {
-    EnvironmentKind.windowsNative => windows,
-    EnvironmentKind.wsl => posix,
-  };
+  List<String> forKind(EnvironmentKind kind) =>
+      kind == EnvironmentKind.windowsNative ? windows : posix;
 }
 
 /// How to confirm a located executable and read its version.

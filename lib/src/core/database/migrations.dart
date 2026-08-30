@@ -17,6 +17,8 @@ typedef MigrationStep = void Function(Database db);
 ///   session-event log).
 /// * **v7** — Loop 29: the terminal workspace (tabs, their pane split trees and
 ///   each pane's persisted scrollback).
+/// * **v8** — Loop 37: SSH as an execution environment (saved hosts, trusted
+///   host keys, and the `ssh_host_id` link on `execution_environments`).
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -25,7 +27,53 @@ final Map<int, MigrationStep> schemaMigrations = {
   5: _migrateToV5,
   6: _migrateToV6,
   7: _migrateToV7,
+  8: _migrateToV8,
 };
+
+void _migrateToV8(Database db) {
+  // SSH as a third kind of execution environment (Loop 37). An `ssh` row in
+  // `execution_environments` points at the `ssh_hosts` row that says where it
+  // is and how to log in.
+  db.execute('ALTER TABLE execution_environments ADD COLUMN ssh_host_id TEXT;');
+
+  // Saved remote hosts. Deliberately **not** a credential store: no password,
+  // no passphrase and no key material is written here. `private_key_path` is
+  // where the key file lives, paired with the environment that owns that path
+  // (principle 2) — the key itself is read at connect time and never copied
+  // into the database. Passwords and passphrases are prompted per connection
+  // and held in memory only.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS ssh_hosts (
+      id                         TEXT PRIMARY KEY,
+      name                       TEXT NOT NULL,
+      host                       TEXT NOT NULL,
+      port                       INTEGER NOT NULL,
+      username                   TEXT NOT NULL,
+      auth_method                TEXT NOT NULL,
+      private_key_path           TEXT,
+      private_key_environment_id TEXT,
+      default_directory          TEXT,
+      created_at                 TEXT NOT NULL,
+      UNIQUE (host, port, username)
+    );
+  ''');
+
+  // Trusted host keys — our known_hosts. One row per `host:port`: the presented
+  // fingerprint must equal the stored one, and a mismatch is the MITM signal, so
+  // the primary key is deliberately the address and not the address plus key
+  // type. Re-trusting a legitimately rebuilt host means deleting the row, which
+  // is an explicit user action.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS ssh_known_hosts (
+      host        TEXT NOT NULL,
+      port        INTEGER NOT NULL,
+      key_type    TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      trusted_at  TEXT NOT NULL,
+      PRIMARY KEY (host, port)
+    );
+  ''');
+}
 
 void _migrateToV7(Database db) {
   // The terminal workspace (Loop 29): which tabs were open, how each tab's panes

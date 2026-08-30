@@ -43,7 +43,7 @@ List<String> sdkCandidateRoots({
       if (localAppData != null && localAppData.isNotEmpty) {
         add(_join(kind, [localAppData, 'Android', 'Sdk']));
       }
-    case EnvironmentKind.wsl:
+    case EnvironmentKind.wsl || EnvironmentKind.ssh:
       final home = env['HOME']?.trim();
       if (home != null && home.isNotEmpty) {
         add(_join(kind, [home, 'Android', 'Sdk']));
@@ -89,7 +89,7 @@ CommandRequest envRequest(EnvironmentKind kind, String name) => switch (kind) {
     executable: 'cmd',
     arguments: ['/c', 'echo %$name%'],
   ),
-  EnvironmentKind.wsl => CommandRequest(
+  EnvironmentKind.wsl || EnvironmentKind.ssh => CommandRequest(
     executable: 'bash',
     arguments: ['-lc', 'echo \$$name'],
   ),
@@ -120,7 +120,7 @@ CommandRequest adbOnPathRequest(EnvironmentKind kind) => switch (kind) {
   ),
   // A login shell so PATH additions from ~/.profile are visible, matching how
   // agent CLIs are discovered.
-  EnvironmentKind.wsl => const CommandRequest(
+  EnvironmentKind.wsl || EnvironmentKind.ssh => const CommandRequest(
     executable: 'bash',
     arguments: ['-lc', 'command -v adb'],
   ),
@@ -177,7 +177,8 @@ class AndroidSdkDiscoveryService {
         'ANDROID_SDK_ROOT',
         'LOCALAPPDATA',
       ],
-      EnvironmentKind.wsl => const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
+      EnvironmentKind.wsl ||
+      EnvironmentKind.ssh => const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
     };
     final env = <String, String>{};
     for (final name in names) {

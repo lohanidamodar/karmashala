@@ -9,23 +9,21 @@ import '../domain/agent_installation.dart';
 import '../domain/agent_registry.dart';
 
 /// The command that locates an executable by name in a given environment:
-/// `where` on Windows, `command -v` inside WSL.
+/// `where` on Windows, `command -v` in a POSIX environment.
 ///
-/// The WSL lookup runs through a login shell (`bash -lc`) so the distro's PATH
-/// additions — e.g. `~/.local/bin` sourced from `~/.profile`, where agent CLIs
-/// are commonly installed — are present. A bare `which` runs in a non-login
-/// shell that can't see them, so WSL-installed agents go undetected.
+/// The POSIX lookup runs through a login shell (`bash -lc`) so the machine's
+/// PATH additions — e.g. `~/.local/bin` sourced from `~/.profile`, where agent
+/// CLIs are commonly installed — are present. A bare `which` runs in a
+/// non-login shell that can't see them, so those agents go undetected. This is
+/// as true of a remote host over SSH as it is of a WSL distribution, which is
+/// why both take the same branch.
 CommandRequest locateRequest(EnvironmentKind kind, String executableName) =>
-    switch (kind) {
-      EnvironmentKind.windowsNative => CommandRequest(
-        executable: 'where',
-        arguments: [executableName],
-      ),
-      EnvironmentKind.wsl => CommandRequest(
+    isPosixShell(kind)
+    ? CommandRequest(
         executable: 'bash',
         arguments: ['-lc', 'command -v $executableName'],
-      ),
-    };
+      )
+    : CommandRequest(executable: 'where', arguments: [executableName]);
 
 /// First non-blank, trimmed line of [text], or `null` if there is none.
 String? firstNonEmptyLine(String text) {
