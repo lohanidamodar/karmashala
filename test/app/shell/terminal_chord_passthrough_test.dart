@@ -6,6 +6,7 @@ import 'package:chitragupta/src/app/shell/side_panel_state.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,10 +35,17 @@ void main() {
   /// Boots the whole shell, focuses the terminal pane the workbench opens, and
   /// hands back the container plus everything the pane's process was sent.
   Future<(ProviderContainer, List<String>)> pumpFocusedTerminal(
-    WidgetTester tester,
-  ) async {
+    WidgetTester tester, {
+    Map<String, bool> chordOverrides = const {},
+  }) async {
     final container = fakeTerminalContainer(database: db);
     addTearDown(container.dispose);
+    // Applied before the first frame, the way a saved setting arrives.
+    for (final entry in chordOverrides.entries) {
+      container
+          .read(settingsControllerProvider.notifier)
+          .setTerminalChordClaimed(entry.key, entry.value);
+    }
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -213,5 +221,62 @@ void main() {
   test('the Explorer advertises the chord that survives a terminal', () {
     expect(shellChordLabel<ToggleExplorerPaneIntent>(), 'Ctrl+Shift+B');
     expect(shellChordLabel<ToggleSidePanelIntent>(), 'Ctrl+3');
+  });
+
+  testWidgets('Ctrl+B claimed in Settings stops being the tmux prefix', (
+    tester,
+  ) async {
+    // The defaults are a guess about how the user works. Someone who does not
+    // live in tmux should be able to have Ctrl+B for the Explorer without
+    // editing the source, which is what Loop 56 could not offer.
+    final (container, toShell) = await pumpFocusedTerminal(
+      tester,
+      chordOverrides: const {'Ctrl+B': true},
+    );
+    expect(container.read(shellControllerProvider).explorerPaneVisible, isTrue);
+
+    await chord(tester, LogicalKeyboardKey.keyB);
+
+    expect(
+      container.read(shellControllerProvider).explorerPaneVisible,
+      isFalse,
+    );
+    expect(toShell, isEmpty, reason: 'the app took it, so ^B was not typed');
+  });
+
+  testWidgets('Ctrl+K handed back to the shell types kill-line again', (
+    tester,
+  ) async {
+    final (_, toShell) = await pumpFocusedTerminal(
+      tester,
+      chordOverrides: const {'Ctrl+K': false},
+    );
+
+    await chord(tester, LogicalKeyboardKey.keyK);
+
+    expect(find.byType(QuickOpen), findsNothing);
+    expect(toShell, ['\x0b']);
+  });
+
+  test('only the contested chords are offered as a setting', () {
+    // A terminal cannot encode Ctrl+Shift+<letter>, so a switch for one would
+    // be a switch that changes nothing.
+    final contested = [
+      for (final chord in shellChords)
+        if (chord.contested) chord.label,
+    ];
+    expect(contested, isNot(contains('Ctrl+Shift+B')));
+    expect(contested, isNot(contains('Ctrl+Shift+P')));
+    expect(contested, isNot(contains('Ctrl+Shift+A')));
+    expect(contested, contains('Ctrl+B'));
+    expect(contested, contains('Ctrl+K'));
+  });
+
+  test('an override decides, and only for the chord it names', () {
+    const overrides = {'Ctrl+B': true};
+    final byLabel = {for (final c in shellChords) c.label: c};
+    expect(byLabel['Ctrl+B']!.claimedByApp(overrides), isTrue);
+    expect(byLabel['Ctrl+B']!.claimedByApp(const {}), isFalse);
+    expect(byLabel['Ctrl+K']!.claimedByApp(overrides), isTrue);
   });
 }

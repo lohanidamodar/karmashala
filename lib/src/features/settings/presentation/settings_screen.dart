@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
+import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -19,7 +20,6 @@ import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../mcp/launcher_control_server.dart';
-import '../../mcp/launcher_chat_controller.dart';
 import '../../mcp/launcher_mcp.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
@@ -34,7 +34,6 @@ import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
 import 'settings_section.dart';
 import '../domain/app_theme_mode.dart';
-import '../domain/mini_position.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 
@@ -57,6 +56,9 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        // A page header, not a chrome row: `Chrome.titleBar` is the shell's
+        // 30px strip and a back button plus a title does not sit in it.
+        toolbarHeight: 44,
         leading: const BackButton(),
         title: Row(
           children: [
@@ -193,9 +195,9 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           const _TerminalThemeSection(),
+          const _TerminalChordsSection(),
           const _TerminalAppSection(),
           const _CodeEditorSection(),
-          const _MiniLauncherSection(),
           const _LauncherHotkeySection(),
           const _AgentLauncherSection(),
           SettingsSection(
@@ -397,8 +399,8 @@ class _PermissionCard extends StatelessWidget {
   }
 }
 
-/// The external terminal app used to resume sessions (mini mode / open-in-
-/// terminal): a detected terminal or a custom executable (browse or paste path).
+/// The external terminal app used to resume sessions: a detected terminal or
+/// a custom executable (browse or paste path).
 class _TerminalAppSection extends ConsumerStatefulWidget {
   const _TerminalAppSection();
 
@@ -631,104 +633,138 @@ class _CodeEditorSectionState extends ConsumerState<_CodeEditorSection> {
   }
 }
 
-/// Mini-launcher preferences: where the compact window appears on screen. The
-/// six choices are laid out spatially (top row / bottom row) so the grid mirrors
-/// the eventual on-screen position.
-class _MiniLauncherSection extends ConsumerWidget {
-  const _MiniLauncherSection();
-
-  static const _rows = <List<MiniPosition>>[
-    [MiniPosition.topLeft, MiniPosition.topCenter, MiniPosition.topRight],
-    [
-      MiniPosition.bottomLeft,
-      MiniPosition.bottomCenter,
-      MiniPosition.bottomRight,
-    ],
-  ];
-
-  static const _icons = <MiniPosition, IconData>{
-    MiniPosition.topLeft: AppIcons.arrowUpLeft,
-    MiniPosition.topCenter: AppIcons.arrowUp,
-    MiniPosition.topRight: AppIcons.arrowUpRight,
-    MiniPosition.bottomLeft: AppIcons.arrowDownLeft,
-    MiniPosition.bottomCenter: AppIcons.arrowDown,
-    MiniPosition.bottomRight: AppIcons.arrowDownRight,
-  };
+/// Who gets a keystroke when a terminal pane has focus: Chitragupta, or the
+/// process inside the pane.
+///
+/// This exists because the honest answer is "it depends on how you work".
+/// `Ctrl+B` is the tmux prefix, and taking it from someone who lives in tmux
+/// breaks every window, pane and copy-mode command they have; `Ctrl+K` is
+/// readline's kill-line, and quick open is the chord this app is used through.
+/// Both defaults are a guess about the user, so both are switches.
+///
+/// Only the contested chords are listed. A terminal cannot encode
+/// `Ctrl+Shift+<letter>` at all, so those take nothing from the shell however
+/// they are set and a switch for them would be a switch that does nothing.
+class _TerminalChordsSection extends ConsumerWidget {
+  const _TerminalChordsSection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final current = ref.watch(
-      settingsControllerProvider.select((s) => s.miniPosition),
+    final overrides = ref.watch(
+      settingsControllerProvider.select((s) => s.terminalChordOverrides),
     );
     final controller = ref.read(settingsControllerProvider.notifier);
-
-    Widget cell(MiniPosition pos) {
-      final selected = pos == current;
-      return Expanded(
-        child: Padding(
-          padding: const EdgeInsets.all(3),
-          child: Tooltip(
-            message: pos.label,
-            child: Material(
-              color: selected
-                  ? theme.colorScheme.primaryContainer
-                  : theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => controller.setMiniPosition(pos),
-                child: Container(
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: selected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outlineVariant,
-                      width: selected ? 1.5 : 1,
-                    ),
-                  ),
-                  child: Icon(
-                    _icons[pos],
-                    size: 18,
-                    color: selected
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
+    final contested = shellChords.where((c) => c.contested).toList();
 
     return SettingsSection(
-      title: 'MINI LAUNCHER',
+      title: 'TERMINAL CHORDS',
+      trailing: overrides.isEmpty
+          ? null
+          : TextButton(
+              onPressed: controller.resetTerminalChordOverrides,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: theme.textTheme.labelSmall,
+              ),
+              child: const Text('Reset to defaults'),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Window position', style: theme.textTheme.bodyMedium),
-          const SizedBox(height: 2),
           Text(
-            'Where the compact launcher appears, inset from the screen edge.',
+            'A focused terminal pane sees every key first. These chords are '
+            'taken back for the app; switch one off and it reaches the shell '
+            'instead. Chords with Shift are never in question — a terminal '
+            'cannot encode them.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: Insets.sm),
-          for (final row in _MiniLauncherSection._rows)
-            Row(children: [for (final pos in row) cell(pos)]),
+          for (final chord in contested)
+            _ChordRow(
+              chord: chord,
+              claimed: chord.claimedByApp(overrides),
+              onChanged: (value) =>
+                  controller.setTerminalChordClaimed(chord.label, value),
+            ),
         ],
       ),
     );
   }
 }
 
-/// The agent launcher / MCP status: whether the chat agent can use
-/// Chitragupta's own tools, and which tools are exposed.
+class _ChordRow extends StatelessWidget {
+  const _ChordRow({
+    required this.chord,
+    required this.claimed,
+    required this.onChanged,
+  });
+
+  final ShellChord chord;
+  final bool claimed;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // The price is only on screen while it is being paid. Saying what Ctrl+K
+    // costs a shell that is not being asked to give it up is noise.
+    final cost = claimed ? chord.shellCost : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 96,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(
+                chord.label,
+                style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    claimed ? chord.does : 'Goes to the shell',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: claimed
+                          ? theme.colorScheme.onSurface
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (cost != null)
+                  Text(
+                    'The shell loses $cost',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 0,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Switch(value: claimed, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+/// The MCP bridge status: whether an agent can drive Chitragupta through its
+/// own tools, and which tools are exposed.
 class _AgentLauncherSection extends ConsumerWidget {
   const _AgentLauncherSection();
 
@@ -737,46 +773,14 @@ class _AgentLauncherSection extends ConsumerWidget {
     final theme = Theme.of(context);
     final bridge = const LauncherMcp().bridgeExecutable();
     final available = bridge != null;
-    final controller = ref.read(settingsControllerProvider.notifier);
-    final chatShortcut = decodeChatToggleHotKey(
-      ref.watch(
-        settingsControllerProvider.select((s) => s.chatToggleShortcutJson),
-      ),
-    );
     return SettingsSection(
-      title: 'AGENT LAUNCHER (MCP)',
+      title: 'MCP BRIDGE',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Toggle chat shortcut'),
-            subtitle: Text(
-              'Show/hide the agent chat (mini: chat ↔ list; full: chat panel).'
-              '  Current: ${launcherHotKeyLabel(chatShortcut)}',
-              style: theme.textTheme.bodySmall,
-            ),
-            trailing: OutlinedButton.icon(
-              onPressed: () async {
-                final recorded = await showDialog<HotKey>(
-                  context: context,
-                  builder: (_) => _HotkeyRecorderDialog(initial: chatShortcut),
-                );
-                if (recorded != null) {
-                  controller.setChatToggleShortcut(
-                    encodeLauncherHotKey(recorded),
-                  );
-                }
-              },
-              icon: const Icon(AppIcons.pencilSimple, size: 15),
-              label: const Text('Change'),
-            ),
-          ),
-          const Divider(),
           Text(
-            'The chat with your default agent (in the launcher and the mini '
-            'window) can query and act on your projects and sessions through '
-            'these built-in tools:',
+            'An agent pointed at Chitragupta\'s MCP bridge can query and act '
+            'on your projects and sessions through these built-in tools:',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -815,24 +819,11 @@ class _AgentLauncherSection extends ConsumerWidget {
                   available
                       ? 'Tools available — the MCP bridge is installed.'
                       : 'Tools unavailable — the MCP bridge (chitragupta_mcp) '
-                            'was not found next to the app. Chat still works '
-                            'without tools.',
+                            'was not found next to the app.',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: Insets.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: () {
-                Navigator.of(context).maybePop();
-                ref.read(launcherChatVisibleProvider.notifier).set(true);
-              },
-              icon: const Icon(AppIcons.chatCircleDots, size: 16),
-              label: const Text('Open agent chat'),
-            ),
           ),
         ],
       ),
@@ -840,8 +831,8 @@ class _AgentLauncherSection extends ConsumerWidget {
   }
 }
 
-/// A global hotkey that summons the mini launcher from anywhere. Shows the
-/// current combo with a Change button; recording only happens inside the dialog
+/// The global hotkey that summons the window from anywhere. Shows the current
+/// combo with a Change button; recording only happens inside the dialog
 /// the button opens, so it never captures stray keypresses on the settings page.
 class _LauncherHotkeySection extends ConsumerWidget {
   const _LauncherHotkeySection();
@@ -864,7 +855,9 @@ class _LauncherHotkeySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'A global shortcut that opens the mini launcher from any app.',
+            'A global shortcut that brings Chitragupta forward from any app '
+            'with quick open ready, and puts it away again when it is already '
+            'in front.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

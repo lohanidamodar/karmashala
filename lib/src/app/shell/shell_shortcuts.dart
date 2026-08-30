@@ -80,6 +80,20 @@ class ShellChord {
   /// What the shell loses because [skipsShell] is true. Null when the chord
   /// means nothing to a shell, which is the case for most of them.
   final String? shellCost;
+
+  /// Whether who gets this chord is a real question.
+  ///
+  /// A terminal cannot encode `Ctrl+Shift+<letter>` at all — there is no
+  /// control character for it — so those chords take nothing from the shell
+  /// however they are set, and offering the user a switch for them would be
+  /// offering a switch that does nothing. Everything without `Shift` is
+  /// genuinely contested and is what Settings lists.
+  bool get contested => !activator.shift;
+
+  /// Whether a focused terminal pane must let this chord through to the app,
+  /// after the user's own answer in [overrides] (keyed by [label]).
+  bool claimedByApp(Map<String, bool> overrides) =>
+      overrides[label] ?? skipsShell;
 }
 
 /// The application's keyboard map, and the terminal skip-list derived from it.
@@ -121,6 +135,15 @@ class ShellChord {
 ///
 /// `Ctrl+Shift+<letter>` is the safe namespace for exactly that reason, which is
 /// why the three chords that must never be in doubt live there.
+///
+/// ## The user has the last word
+///
+/// Every [ShellChord.contested] entry — everything without `Shift`, because a
+/// terminal cannot encode `Ctrl+Shift+<letter>` — can be flipped in Settings
+/// under *Terminal chords*, and [ShellChord.claimedByApp] is what actually
+/// decides. The defaults below are a recommendation, not a policy: `Ctrl+B` is
+/// the tmux prefix here, and someone who does not live in tmux should be able
+/// to have it back for the Explorer without editing the source.
 ///
 /// ## What the skip-list costs, stated plainly
 ///
@@ -247,6 +270,10 @@ final Map<ShortcutActivator, Intent> shellShortcutMap = {
 /// Where an action has two chords, the one that survives a focused terminal
 /// pane wins: that is the one that always works, so it is the one worth
 /// teaching. The Explorer therefore advertises `Ctrl+Shift+B`, not `Ctrl+B`.
+///
+/// Reads the declared defaults, not the user's overrides: every chord this
+/// picks is a `Ctrl+Shift+…` or a `Ctrl+<digit>`, which is to say one nobody
+/// gives back to a shell that cannot encode it.
 String? shellChordLabel<T extends Intent>() {
   ShellChord? best;
   for (final chord in shellChords) {
@@ -261,10 +288,13 @@ String? shellChordLabel<T extends Intent>() {
 /// Matching ignores the *kind* of event on purpose: the key-up and any repeat of
 /// a claimed combo must be swallowed too, or xterm's fallback leaks a character
 /// for a chord the app already acted on.
-Intent? appChordForTerminal(KeyEvent event) {
+Intent? appChordForTerminal(
+  KeyEvent event, {
+  Map<String, bool> overrides = const {},
+}) {
   final keyboard = HardwareKeyboard.instance;
   for (final chord in shellChords) {
-    if (!chord.skipsShell) continue;
+    if (!chord.claimedByApp(overrides)) continue;
     final activator = chord.activator;
     if (event.logicalKey != activator.trigger) continue;
     if (keyboard.isControlPressed != activator.control) continue;
@@ -280,8 +310,12 @@ Intent? appChordForTerminal(KeyEvent event) {
 ///
 /// Returns true when the event was one — the caller must then report it handled,
 /// key-up included, so nothing reaches the shell.
-bool handleAppChordFromTerminal(BuildContext context, KeyEvent event) {
-  final intent = appChordForTerminal(event);
+bool handleAppChordFromTerminal(
+  BuildContext context,
+  KeyEvent event, {
+  Map<String, bool> overrides = const {},
+}) {
+  final intent = appChordForTerminal(event, overrides: overrides);
   if (intent == null) return false;
   // Act once, on the way down; the rest of the combo is swallowed in silence.
   if (event is KeyDownEvent) Actions.maybeInvoke(context, intent);

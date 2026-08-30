@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
-import '../domain/mini_position.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 
@@ -58,16 +57,6 @@ class SettingsController extends Notifier<Settings> {
 
   void setWindowSize(double width, double height) {
     state = state.copyWith(windowWidth: width, windowHeight: height);
-    _save();
-  }
-
-  void setMiniSize(double width, double height) {
-    state = state.copyWith(miniWidth: width, miniHeight: height);
-    _save();
-  }
-
-  void setMiniPosition(MiniPosition position) {
-    state = state.copyWith(miniPosition: position);
     _save();
   }
 
@@ -137,13 +126,23 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setLauncherHotkeyEnabled(bool enabled) {
-    state = state.copyWith(launcherHotkeyEnabled: enabled);
+  /// Says whether a focused terminal pane hands [label] to the app or to the
+  /// shell, overriding the default declared in `shellChords`.
+  void setTerminalChordClaimed(String label, bool claimed) {
+    state = state.copyWith(
+      terminalChordOverrides: {...state.terminalChordOverrides, label: claimed},
+    );
     _save();
   }
 
-  void setChatToggleShortcut(String hotkeyJson) {
-    state = state.copyWith(chatToggleShortcutJson: hotkeyJson);
+  /// Drops every override, putting the whole skip-list back to its defaults.
+  void resetTerminalChordOverrides() {
+    state = state.copyWith(terminalChordOverrides: const {});
+    _save();
+  }
+
+  void setLauncherHotkeyEnabled(bool enabled) {
+    state = state.copyWith(launcherHotkeyEnabled: enabled);
     _save();
   }
 

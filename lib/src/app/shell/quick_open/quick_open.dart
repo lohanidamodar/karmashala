@@ -10,6 +10,24 @@ import 'quick_open_item.dart';
 import 'quick_open_sources.dart';
 import 'repo_file_index.dart';
 
+/// Bumped when something outside the widget tree asks for quick open — today
+/// the global hotkey, which summons the window with the palette already up.
+///
+/// A provider rather than a direct call because `SystemIntegrationService` lives
+/// outside the tree and has no `BuildContext`; the shell listens and opens the
+/// dialog with one it actually has. Same shape as `windowRaiseRequestProvider`:
+/// the counter's value means nothing, only that it moved.
+class QuickOpenRequest extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state++;
+}
+
+final quickOpenRequestProvider = NotifierProvider<QuickOpenRequest, int>(
+  QuickOpenRequest.new,
+);
+
 /// Row geometry. Fixed so the list can be scrolled to an arbitrary selection
 /// without waiting for it to be laid out — a keyboard-driven list that can only
 /// reveal rows it has already built is a list that jumps.

@@ -9,8 +9,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../app/shell/app_mode.dart';
-import '../mcp/launcher_chat_controller.dart';
+import '../../app/shell/quick_open/quick_open.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import '../notifications/domain/inbox_item.dart';
@@ -21,7 +20,6 @@ import '../settings/domain/settings.dart';
 import 'launcher_hotkey.dart';
 
 const _kMenuShow = 'show';
-const _kMenuMini = 'mini';
 const _kMenuHide = 'hide';
 const _kMenuKeepAwake = 'keep_awake';
 const _kMenuNotifications = 'notifications';
@@ -51,10 +49,6 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   bool _closeToTray = false;
   bool _autoStartConfigured = false;
-
-  /// True briefly while the mini launcher is being summoned, so the focus
-  /// transition doesn't trigger an immediate blur-hide.
-  bool _summoning = false;
 
   /// The last hotkey config applied, so [apply] only re-registers when it
   /// actually changes (re-registering on every settings change is wasteful and
@@ -175,24 +169,26 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Global-hotkey handler. Toggles the mini launcher: if it is already
-  /// showing, hide it; otherwise bring it up in chat mode with the input
-  /// focused. A brief guard stops the show transition from self-dismissing via
-  /// [onWindowBlur].
+  /// Global-hotkey handler: a summon/dismiss toggle for the whole app.
+  ///
+  /// Chitragupta used to answer this with a second window — a borderless
+  /// always-on-top mini launcher with its own list of projects and sessions,
+  /// its own size and position, and its own chat. Quick open does that job
+  /// inside the window the user already has, over more than projects and
+  /// sessions, so the hotkey now brings *the app* forward with the palette up
+  /// and puts it away again when it is already in front.
   Future<void> _summonLauncher() async {
-    final inMini = _container.read(appModeProvider) == AppMode.mini;
-    if (inMini && await windowManager.isVisible()) {
-      await windowManager.hide();
-      return;
+    try {
+      if (await windowManager.isVisible() && await windowManager.isFocused()) {
+        await windowManager.hide();
+        return;
+      }
+    } catch (_) {
+      // An unavailable window manager must not swallow the hotkey; fall
+      // through and try to show.
     }
-    _summoning = true;
-    _container.read(launcherChatVisibleProvider.notifier).set(true);
-    _container.read(appModeProvider.notifier).enterMini();
     await _showWindow();
-    _container.read(launcherFocusRequestProvider.notifier).bump();
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _summoning = false;
-    });
+    _container.read(quickOpenRequestProvider.notifier).bump();
   }
 
   Future<void> _applyAutoStart(bool enabled) async {
@@ -254,7 +250,6 @@ class SystemIntegrationService with TrayListener, WindowListener {
             ..._attentionMenuItems(),
             MenuItem.separator(),
             MenuItem(key: _kMenuShow, label: 'Open Chitragupta'),
-            MenuItem(key: _kMenuMini, label: 'Mini launcher'),
             MenuItem(key: _kMenuHide, label: 'Hide window'),
             MenuItem.separator(),
             MenuItem.checkbox(
@@ -315,10 +310,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     unawaited(_raiseWindow());
   }
 
-  Future<void> _raiseWindow() async {
-    _container.read(appModeProvider.notifier).enterFull();
-    await _showWindow();
-  }
+  Future<void> _raiseWindow() => _showWindow();
 
   Future<void> _showWindow() async {
     try {
@@ -392,10 +384,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
     switch (key) {
       case _kMenuShow:
-        _container.read(appModeProvider.notifier).enterFull();
         _showWindow();
-      case _kMenuMini:
-        _container.read(appModeProvider.notifier).enterMini();
       case _kMenuHide:
         windowManager.hide();
       case _kMenuKeepAwake:
@@ -441,17 +430,6 @@ class SystemIntegrationService with TrayListener, WindowListener {
     // Notifications only fire while the window is unfocused, so this is the
     // signal that opens that gate.
     _container.read(windowFocusedProvider.notifier).set(false);
-    // The mini launcher is ephemeral: dismiss it when it loses focus (click
-    // away / Alt-Tab). Only in mini mode, and not during the summon transition.
-    if (_summoning) return;
-    if (_container.read(appModeProvider) != AppMode.mini) return;
-    unawaited(_hideIfVisible());
-  }
-
-  Future<void> _hideIfVisible() async {
-    try {
-      if (await windowManager.isVisible()) await windowManager.hide();
-    } catch (_) {}
   }
 
   @override
@@ -461,13 +439,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     try {
       final size = await windowManager.getSize();
       if (size.width < 200 || size.height < 200) return;
-      // Persist the mini size separately so resizing the mini launcher doesn't
-      // clobber the full-window size (and vice versa).
-      if (_container.read(appModeProvider) == AppMode.mini) {
-        _controller.setMiniSize(size.width, size.height);
-      } else {
-        _controller.setWindowSize(size.width, size.height);
-      }
+      _controller.setWindowSize(size.width, size.height);
     } catch (_) {}
   }
 }
