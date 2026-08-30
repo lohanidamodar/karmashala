@@ -30,22 +30,30 @@ Future<WebSocketChannel> _connect([String rendezvous = _rendezvous]) async {
   return channel;
 }
 
-/// Sends an upgrade request by hand so the HTTP status is visible.
-Future<HttpClientResponse> _rawUpgrade(String rendezvous) async {
-  final client = HttpClient();
-  try {
-    final request = await client.getUrl(
-      Uri.parse('http://127.0.0.1:${relay.port}/v1/$rendezvous'),
-    );
-    request.headers
-      ..set('connection', 'Upgrade')
-      ..set('upgrade', 'websocket')
-      ..set('sec-websocket-version', '13')
-      ..set('sec-websocket-key', base64Encode(List<int>.filled(16, 7)));
-    return await request.close();
-  } finally {
-    client.close(force: true);
+/// Sends an upgrade request over a raw socket and returns the status line.
+///
+/// Not `HttpClient`: it handles a non-101 answer to an upgrade request
+/// differently on Windows and Linux, and what matters here is the literal
+/// status a client is sent.
+Future<String> _rawUpgrade(String rendezvous) async {
+  final socket = await Socket.connect('127.0.0.1', relay.port);
+  socket.write(
+    'GET /v1/$rendezvous HTTP/1.1\r\n'
+    'Host: 127.0.0.1:${relay.port}\r\n'
+    'Connection: Upgrade\r\n'
+    'Upgrade: websocket\r\n'
+    'Sec-WebSocket-Version: 13\r\n'
+    'Sec-WebSocket-Key: ${base64Encode(List<int>.filled(16, 7))}\r\n'
+    '\r\n',
+  );
+  await socket.flush();
+  final response = StringBuffer();
+  await for (final chunk in socket.timeout(const Duration(seconds: 5))) {
+    response.write(latin1.decode(chunk));
+    if (response.toString().contains('\r\n\r\n')) break;
   }
+  socket.destroy();
+  return response.toString().split('\r\n').first;
 }
 
 Future<String> _get(String path) async {
@@ -154,10 +162,14 @@ void main() {
       await _connect();
       await _connect();
 
-      final refused = await _rawUpgrade(_rendezvous);
+      expect(await _rawUpgrade(_rendezvous), 'HTTP/1.1 409 Conflict');
+    });
 
-      expect(refused.statusCode, 409);
-      await refused.drain<void>();
+    test('but the first two are upgraded', () async {
+      expect(
+        await _rawUpgrade(_rendezvous),
+        'HTTP/1.1 101 Switching Protocols',
+      );
     });
 
     test('and a real client sees the connection fail', () async {
@@ -293,7 +305,7 @@ void main() {
       final phone = await _connect();
       host.sink.add(Uint8List.fromList([1, 2, 3, 4]));
       await phone.stream.first;
-      await _rawUpgrade(_rendezvous).then((r) => r.drain<void>());
+      await _rawUpgrade(_rendezvous);
 
       expect(lines, isNotEmpty);
       for (final line in lines) {
