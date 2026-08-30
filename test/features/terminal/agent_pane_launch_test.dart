@@ -234,7 +234,7 @@ void main() {
         sessionId: 'ours',
         resumeSessionId: 'theirs',
       );
-      expect(args, ['--resume', 'theirs']);
+      expect(args, ['--permission-mode', 'manual', '--resume', 'theirs']);
     });
 
     test('Codex resumes with a subcommand, after its global flags', () {
@@ -266,7 +266,7 @@ void main() {
           PermissionMode.ask,
           prompt: '  do the thing  ',
         ),
-        ['do the thing'],
+        ['--permission-mode', 'manual', 'do the thing'],
       );
     });
 

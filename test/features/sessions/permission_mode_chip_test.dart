@@ -107,7 +107,7 @@ void main() {
     await tester.pumpWidget(h.app);
 
     // Not only in the tooltip: "Accept edits" that is really Codex's
-    // on-failure has to look different from one that really is accept-edits.
+    // sandbox mode has to look different from one that really is accept-edits.
     expect(find.text('Accept edits'), findsOneWidget);
     expect(find.text('· approximate'), findsOneWidget);
   });

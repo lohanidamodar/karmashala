@@ -48,11 +48,14 @@ void main() {
       );
       expect(option(AgentIds.claudeCode, mode).isSelectable, isTrue);
     }
-    // `ask` is exact with no flag, and says so rather than leaving the user to
-    // wonder why the safest mode adds nothing to the command line.
+    // And `ask` is enforced by naming the mode, not by hoping the CLI's own
+    // default prompts — which, on a Pro/Max/Team account, it does not.
     expect(
-      option(AgentIds.claudeCode, PermissionMode.ask).summary,
-      contains('by default'),
+      registry
+          .byId(AgentIds.claudeCode)!
+          .launch
+          .permissionArgumentsFor(PermissionMode.ask),
+      ['--permission-mode', 'manual'],
     );
   });
 
@@ -64,7 +67,7 @@ void main() {
     expect(acceptEdits.isSelectable, isTrue);
     expect(acceptEdits.fitLabel, 'approximate');
     expect(acceptEdits.summary, startsWith('Approximate.'));
-    expect(acceptEdits.summary, contains('on-failure'));
+    expect(acceptEdits.summary, contains('without asking'));
 
     expect(
       option(AgentIds.codex, PermissionMode.ask).fit,

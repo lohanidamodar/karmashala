@@ -33,17 +33,29 @@ const _claudeCode = AgentDescriptor(
       '--verbose',
     ],
     permissionModes: {
-      // Empty **because it is exact**: `--permission-mode default` is what
-      // Claude Code already does, so asking for it by name would add a flag
-      // that changes nothing. This is the case that makes the fidelity a
-      // declared field rather than something inferred from the list's length —
-      // Antigravity's absent modes below are the other half of the same point.
-      PermissionMode.ask: PermissionModeMapping.exact(
-        [],
-        note:
-            'Claude Code prompts before every edit and command by default, so '
-            'no flag is needed.',
-      ),
+      // `manual` — the CLI's alias for the config value `default` — is the
+      // mode that stops and asks before edits, commands and network access.
+      //
+      // **Passing nothing is not the same thing.** Which mode an unflagged
+      // session starts in depends on the account: Claude Code 2.1.228+ starts
+      // Pro/Max/Team sessions in `auto`, where a classifier reviews each action
+      // instead of prompting, and only falls back to `default` for Enterprise,
+      // API-key, `-p` and cloud-platform sessions.
+      //
+      // So the previous empty mapping was Loop 31 §4's worst case made real:
+      // the user picked the *safest* mode, we passed no flag, and a Pro account
+      // silently ran under `auto`. Naming the mode costs one flag and makes the
+      // choice true for every account.
+      //
+      //   $ claude --permission-mode manual -p 'reply with the single word OK'
+      //   OK
+      //
+      // Verified against 2.1.251, which also rejects an unknown value outright,
+      // so this is a name the CLI really has.
+      PermissionMode.ask: PermissionModeMapping.exact([
+        '--permission-mode',
+        'manual',
+      ]),
       PermissionMode.acceptEdits: PermissionModeMapping.exact([
         '--permission-mode',
         'acceptEdits',
@@ -146,16 +158,29 @@ const _codex = AgentDescriptor(
         '--ask-for-approval',
         'on-request',
       ]),
-      // Codex has no accept-edits mode, and `on-failure` is not one wearing a
-      // different name: it runs commands *without* asking and prompts only once
-      // one has already failed. That auto-approves strictly more than edits, so
-      // it is declared approximate and says so where the user picks it.
+      // Codex has no accept-edits mode. It splits the question in two — a
+      // *sandbox* decides what may be written, an *approval policy* decides
+      // what must be asked — so the nearest thing takes one flag from each:
+      // `workspace-write` lets it edit files in the working tree without
+      // asking, and `untrusted` still escalates any command outside its own
+      // read-only trusted set.
+      //
+      // This replaced `--ask-for-approval on-failure`, which **the real CLI
+      // rejects**. Verified against codex-cli 0.145.0:
+      //
+      //   $ codex --ask-for-approval on-failure exec 'hi'
+      //   error: invalid value 'on-failure' for '--ask-for-approval <APPROVAL_POLICY>'
+      //     [possible values: untrusted, on-request, never]
+      //
+      // So choosing "Accept edits" for Codex did not weaken a policy — it made
+      // the agent refuse to start. No unit test could catch that: the flag was
+      // asserted against a string literal that was itself the mistake.
       PermissionMode.acceptEdits: PermissionModeMapping.approximate(
-        ['--ask-for-approval', 'on-failure'],
+        ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
         note:
-            'Codex has no accept-edits mode. The nearest is on-failure, which '
-            'also runs commands without asking and prompts only after one '
-            'fails.',
+            'Codex has no accept-edits mode. The nearest lets it write inside '
+            'the working tree without asking, and still escalates any command '
+            'outside its trusted read-only set.',
       ),
       PermissionMode.bypass: PermissionModeMapping.exact([
         '--dangerously-bypass-approvals-and-sandbox',

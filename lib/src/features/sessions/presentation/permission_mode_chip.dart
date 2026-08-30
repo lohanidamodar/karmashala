@@ -90,7 +90,7 @@ class PermissionModeChip extends ConsumerWidget {
                 style: theme.textTheme.labelSmall?.copyWith(color: foreground),
               ),
               // The fit is on the chip, not only in the tooltip: "Accept edits"
-              // that is really Codex's on-failure has to look different from one
+              // that is really Codex's sandbox has to look different from one
               // that is really accept-edits, without a hover.
               if (current.fit != PermissionModeFit.exact) ...[
                 const SizedBox(width: Insets.xs),

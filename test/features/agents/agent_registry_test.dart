@@ -88,12 +88,13 @@ const List<_AgentGolden> _goldens = [
       '--verbose',
     ],
     permissionArguments: {
-      PermissionMode.ask: [],
+      PermissionMode.ask: ['--permission-mode', 'manual'],
       PermissionMode.acceptEdits: ['--permission-mode', 'acceptEdits'],
       PermissionMode.bypass: ['--permission-mode', 'bypassPermissions'],
     },
-    // `ask` is exact *with no flag*: prompting for everything is what Claude
-    // Code already does, so there is nothing to add.
+    // `ask` names `manual` rather than passing nothing: an unflagged session
+    // starts in `auto` on a Pro/Max/Team account, so "no flag" was not the safe
+    // mode it looked like.
     permissionFits: {
       PermissionMode.ask: PermissionModeFit.exact,
       PermissionMode.acceptEdits: PermissionModeFit.exact,
@@ -110,11 +111,17 @@ const List<_AgentGolden> _goldens = [
     baseArguments: ['app-server'],
     permissionArguments: {
       PermissionMode.ask: ['--ask-for-approval', 'on-request'],
-      PermissionMode.acceptEdits: ['--ask-for-approval', 'on-failure'],
+      PermissionMode.acceptEdits: [
+        '--sandbox',
+        'workspace-write',
+        '--ask-for-approval',
+        'untrusted',
+      ],
       PermissionMode.bypass: ['--dangerously-bypass-approvals-and-sandbox'],
     },
-    // `on-failure` is not accept-edits: it runs commands without asking and
-    // prompts only after one has failed, which auto-approves more than edits.
+    // Not accept-edits: the sandbox bounds writes to the working tree and the
+    // policy still escalates untrusted commands. `on-failure` used to sit here
+    // and codex-cli 0.145.0 rejects it outright — see built_in_agents.dart.
     permissionFits: {
       PermissionMode.ask: PermissionModeFit.exact,
       PermissionMode.acceptEdits: PermissionModeFit.approximate,
