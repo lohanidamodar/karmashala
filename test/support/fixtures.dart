@@ -101,3 +101,15 @@ SessionEvent event({
   payload: payload,
   createdAt: testTime,
 );
+
+ExecutionEnvironment sshEnvFixture({
+  String id = 'ssh:h1',
+  String hostId = 'h1',
+  String name = 'build-box',
+}) => ExecutionEnvironment(
+  id: id,
+  kind: EnvironmentKind.ssh,
+  name: name,
+  sshHostId: hostId,
+  createdAt: testTime,
+);

@@ -345,6 +345,21 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
                   hintText: '/home/you/src',
                 ),
               ),
+              const SizedBox(height: Insets.lg),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _test,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(AppIcons.play, size: 16),
+                  label: const Text('Test connection'),
+                ),
+              ),
               if (_error != null) ...[
                 const SizedBox(height: Insets.md),
                 DesktopErrorBanner(_error!),
@@ -364,18 +379,6 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
         ),
       ),
       actions: [
-        TextButton.icon(
-          onPressed: _busy ? null : _test,
-          icon: _busy
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(AppIcons.play, size: 16),
-          label: const Text('Test connection'),
-        ),
-        const Spacer(),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
