@@ -63,18 +63,6 @@ final gitHubReviewServiceProvider = Provider<GitHubReviewService>(
   ),
 );
 
-/// Which review tab is active for the selected repository (0 = changes,
-/// 1 = GitHub).
-class RepoReviewTabController extends Notifier<int> {
-  @override
-  int build() => 0;
-  void select(int index) => state = index;
-}
-
-final repoReviewTabProvider = NotifierProvider<RepoReviewTabController, int>(
-  RepoReviewTabController.new,
-);
-
 /// GitHub metadata for the selected repository (null if not a GitHub repo).
 final githubRepositoryProvider = FutureProvider.autoDispose<GitHubRepo?>((
   ref,

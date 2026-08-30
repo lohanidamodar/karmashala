@@ -321,6 +321,15 @@ const _antigravity = AgentDescriptor(
     // neither a CLI mechanism to invoke nor a transcript to build a handoff
     // packet out of. Both fork routes are genuinely closed, not untested.
   ),
-  // No documented session store, hook config, or resume convention yet.
+  // No documented session store and no hook config, so nothing here can
+  // observe what an Antigravity session is doing.
+  //
+  // The `--resume` above is the one value in this file with **no provenance**:
+  // every other flag carries the `--help` output or transcript it was read
+  // from, and this one only mirrors `antigravityLaunchArgs`
+  // (`data/antigravity_adapter.dart`), which says of itself that it is a
+  // compatibility adapter and provisional. The two agree, so the registry and
+  // the adapter build the same command line — but they agree about a guess.
+  // Re-check it against a real CLI before anything relies on it.
   statusStrategy: AgentStatusStrategy.none,
 );
