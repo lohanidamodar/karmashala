@@ -18,12 +18,42 @@ import 'device_input.dart';
   required Size box,
   required DeviceScreenSize screen,
 }) {
-  if (box.width <= 0 || box.height <= 0) {
-    return (x: 0, y: 0);
-  }
-  final x = (local.dx / box.width * screen.width).round();
-  final y = (local.dy / box.height * screen.height).round();
-  return (x: x.clamp(0, screen.width - 1), y: y.clamp(0, screen.height - 1));
+  final fraction = widgetPointToFraction(local: local, box: box);
+  return fractionToDevice(fx: fraction.x, fy: fraction.y, screen: screen);
+}
+
+/// The same mapping stopped one step early, at a resolution-free `0..1`
+/// fraction of the picture.
+///
+/// Gestures are carried in this form because the two transports want different
+/// coordinate spaces for the *same* touch: `adb shell input` wants device
+/// pixels, while scrcpy's control socket wants **video** pixels and rejects
+/// anything else (`PositionMapper.map` compares the declared size against the
+/// video size and silently drops the event when they differ). Converting once,
+/// late, in whichever sink is active keeps a single mapping instead of two.
+({double x, double y}) widgetPointToFraction({
+  required Offset local,
+  required Size box,
+}) {
+  if (box.width <= 0 || box.height <= 0) return (x: 0, y: 0);
+  return (
+    x: (local.dx / box.width).clamp(0.0, 1.0),
+    y: (local.dy / box.height).clamp(0.0, 1.0),
+  );
+}
+
+/// Turns a `0..1` fraction of the picture into a pixel in [screen].
+({int x, int y}) fractionToDevice({
+  required double fx,
+  required double fy,
+  required DeviceScreenSize screen,
+}) {
+  final x = (fx * screen.width).round();
+  final y = (fy * screen.height).round();
+  return (
+    x: x.clamp(0, screen.width > 0 ? screen.width - 1 : 0),
+    y: y.clamp(0, screen.height > 0 ? screen.height - 1 : 0),
+  );
 }
 
 /// How long `input swipe` is asked to hold still for a long press.

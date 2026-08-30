@@ -6,7 +6,9 @@ import 'dart:typed_data';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner.dart';
 import '../domain/device_input.dart';
+import 'adb_output_parsing.dart';
 import 'adb_service.dart';
+import 'scrcpy_control.dart';
 import 'scrcpy_protocol.dart';
 import 'ts_muxer.dart';
 
@@ -52,6 +54,53 @@ class LiveFrameMark {
   int writtenUs = 0;
 }
 
+/// What the live view is doing, as far as the app can tell from outside the
+/// video player.
+enum DeviceStreamState {
+  /// Connected; frames are arriving.
+  live,
+
+  /// Nothing has decoded for a while. The picture on screen is stale.
+  stalled,
+
+  /// The socket closed or the server exited. Nothing more will arrive.
+  ended,
+}
+
+/// A health report for one live view.
+///
+/// [bytesArriving] is the field worth reading first when something is wrong:
+/// "no bytes at all" (the server died, or its tunnel is stale) and "bytes but
+/// no frames" (the stream is alive and we are failing to decode or present it)
+/// look identical on screen — a frozen picture — and have completely different
+/// causes. Loop 36 found the first, on a physical device whose scrcpy server had
+/// exited while its `adb forward` entry stayed registered.
+class DeviceStreamHealth {
+  const DeviceStreamHealth({
+    required this.state,
+    required this.detail,
+    this.bytesArriving = false,
+    this.serverLog = const [],
+  });
+
+  final DeviceStreamState state;
+
+  /// One line the user can act on.
+  final String detail;
+
+  /// Whether the socket has produced any bytes recently, even unparsable ones.
+  final bool bytesArriving;
+
+  /// The last few lines scrcpy-server wrote to stderr. When a server dies it
+  /// usually says why, and that message is otherwise thrown away.
+  final List<String> serverLog;
+
+  bool get isHealthy => state == DeviceStreamState.live;
+
+  @override
+  String toString() => 'DeviceStreamHealth($state, $detail)';
+}
+
 /// A running live view of one device.
 class DeviceStreamSession {
   DeviceStreamSession._({
@@ -59,7 +108,10 @@ class DeviceStreamSession {
     required this.url,
     required this.onStop,
     required this.videoSizeChanges,
+    required this.health,
     required this.mark,
+    required this.control,
+    required this.videoSize,
   });
 
   final String serial;
@@ -72,6 +124,20 @@ class DeviceStreamSession {
 
   /// Emits whenever the device's video geometry changes (rotation, resize).
   final Stream<DeviceScreenSize> videoSizeChanges;
+
+  /// Emits every time the stream's health changes. Never emits [
+  /// DeviceStreamState.live] twice in a row.
+  final Stream<DeviceStreamHealth> health;
+
+  /// scrcpy's control socket, or `null` when it could not be opened — in which
+  /// case input falls back to `adb shell input` and nothing else changes.
+  final ScrcpyControlConnection? control;
+
+  /// The size of the encoded video, which is **not** the device's screen size:
+  /// `max_size` scales it down. Touch messages must declare this exact size or
+  /// scrcpy's `PositionMapper` drops them without a word. It changes when the
+  /// device rotates, so it is mutable and kept current by the stream.
+  DeviceScreenSize? videoSize;
 
   /// Tears down the socket, the scrcpy process, the tunnel and the HTTP shim.
   final Future<void> Function() onStop;
@@ -103,15 +169,56 @@ class DeviceStreamService {
     required this.adb,
     required this.runner,
     required this.serverBytes,
+    this.stallTimeout = const Duration(seconds: 6),
+    this.watchdogInterval = const Duration(seconds: 1),
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('device-stream');
 
   final AdbService adb;
   final CommandRunner runner;
   final ScrcpyServerBytes serverBytes;
+
+  /// How long the picture may stand still before the stream is called stalled.
+  ///
+  /// Long enough that a device sitting on a static screen is not accused of
+  /// dying — scrcpy still sends frames then, but slowly — and short enough that
+  /// a user does not stare at a dead picture wondering.
+  final Duration stallTimeout;
+
+  final Duration watchdogInterval;
   final AppLogger _logger;
 
   static const _devicePath = '/data/local/tmp/chitragupta-scrcpy-server.jar';
+
+  /// Kills scrcpy servers and removes `adb forward` entries left behind by an
+  /// earlier run on [serial].
+  ///
+  /// Both leaks are real and were observed together: on one device the server
+  /// had exited while its forward stayed registered, and on another four
+  /// servers were alive at once because killing the host-side `adb shell` does
+  /// **not** kill the `app_process` it started on the device. Neither is
+  /// self-correcting, so every start begins by clearing them.
+  Future<int> reapOrphans(String serial) async {
+    var reaped = 0;
+    final pids = parseOwnedScrcpyPids(
+      await adb.processList(serial),
+      jarPath: _devicePath,
+    );
+    if (pids.isNotEmpty) {
+      _logger.warning(
+        'Reaping ${pids.length} orphaned scrcpy server(s) on $serial: $pids',
+      );
+      await adb.killPids(serial, pids);
+      reaped += pids.length;
+    }
+    final ports = parseScrcpyForwards(await adb.listForwards(), serial: serial);
+    for (final port in ports) {
+      _logger.warning('Removing stale adb forward tcp:$port on $serial.');
+      await adb.removeForward(serial, port);
+      reaped += 1;
+    }
+    return reaped;
+  }
 
   /// Connects to the tunnel, retrying until the server is really streaming.
   ///
@@ -210,6 +317,10 @@ class DeviceStreamService {
         : _hardwareEncoder;
     final captureSize = maxSize ?? profile.maxSize;
     final captureFps = maxFps ?? profile.maxFps;
+
+    // 0. Clear anything a previous run left running or registered.
+    await reapOrphans(serial);
+
     // 1. Put the server on the device.
     final jar = await serverBytes();
     final hostJar = File(
@@ -263,7 +374,10 @@ class DeviceStreamService {
           'log_level=warn',
           'tunnel_forward=true',
           'audio=false',
-          'control=false',
+          // Loop 36: the control socket. The server accepts connections in the
+          // order video, audio, control, so with audio off it is the second
+          // connection to the same tunnel.
+          'control=true',
           'cleanup=true',
           'send_device_meta=false',
           'send_dummy_byte=false',
@@ -277,21 +391,51 @@ class DeviceStreamService {
         ],
       ),
     );
+    // Keep what the server says. When it dies it normally explains itself on
+    // stderr, and that explanation used to go only to a log nobody reads — the
+    // pane now shows it, because "the live view stopped" on its own is not a
+    // report anyone can act on.
+    final serverLog = <String>[];
     unawaited(
-      server.stderrLines.forEach((line) => _logger.warning('scrcpy: $line')),
+      server.stderrLines.forEach((line) {
+        _logger.warning('scrcpy: $line');
+        serverLog.add(line);
+        if (serverLog.length > 20) serverLog.removeAt(0);
+      }),
     );
 
     // 4. Connect, once the server is actually serving.
     final connection = await _connectWhenServing(localPort);
     if (connection == null) {
       await server.kill();
+      await _killDeviceServers(serial, scid);
       await adb.removeForward(serial, localPort);
-      throw StateError('scrcpy-server did not start streaming.');
+      throw StateError(
+        'scrcpy-server did not start streaming.'
+        '${serverLog.isEmpty ? '' : ' Server said: ${serverLog.join(' / ')}'}',
+      );
     }
     final socket = connection.socket;
 
+    // 4b. The control socket, on the same tunnel.
+    //
+    // The server accepts video, then audio, then control; audio is off, so this
+    // second connection is the control one. Loop 27's hazard — `adb forward`
+    // accepts the host side *before* the device socket exists — cannot bite
+    // here in the same way, because the video socket has already proved the
+    // device-side listener is up. What it can still do is close on us, so the
+    // connection is only accepted if it survives a short grace period, and every
+    // later write checks the socket rather than assuming it.
+    final control = await _connectControl(localPort);
+    if (control == null) {
+      _logger.warning(
+        'Device $serial: no control socket; input falls back to adb input.',
+      );
+    }
+
     // 5. Parse, mux, fan out.
     final mark = LiveFrameMark();
+    DeviceScreenSize? videoSize;
     final sizes = StreamController<DeviceScreenSize>.broadcast();
     final frames = StreamController<ScrcpyFrame>.broadcast();
     final parser = ScrcpyStreamParser();
@@ -300,13 +444,42 @@ class DeviceStreamService {
     // immediately instead of waiting for the next one.
     ScrcpyFrame? lastKeyFrame;
 
+    // Two clocks, deliberately. `lastByteUs` says the socket is alive;
+    // `mark.arrivalUs` says frames are decoding out of it. When the picture
+    // freezes, which of the two has stopped is the whole diagnosis.
+    var lastByteUs = DateTime.now().microsecondsSinceEpoch;
+    final healthController = StreamController<DeviceStreamHealth>.broadcast();
+    var lastState = DeviceStreamState.live;
+
+    void report(DeviceStreamState state, String detail) {
+      if (state == lastState && state != DeviceStreamState.ended) return;
+      lastState = state;
+      if (healthController.isClosed) return;
+      healthController.add(
+        DeviceStreamHealth(
+          state: state,
+          detail: detail,
+          bytesArriving:
+              DateTime.now().microsecondsSinceEpoch - lastByteUs <
+              stallTimeout.inMicroseconds,
+          serverLog: List.unmodifiable(serverLog),
+        ),
+      );
+    }
+
     void handleChunk(List<int> chunk) {
+      lastByteUs = DateTime.now().microsecondsSinceEpoch;
       for (final packet in parser.add(chunk)) {
         switch (packet) {
           case ScrcpyCodec():
             break;
           case ScrcpySessionMeta(:final width, :final height):
-            sizes.add(DeviceScreenSize(width: width, height: height));
+            // Also the coordinate space every touch message must declare.
+            final size = DeviceScreenSize(width: width, height: height);
+            if (size != videoSize) {
+              videoSize = size;
+              sizes.add(size);
+            }
           case ScrcpyFrame frame:
             if (frame.isConfig) {
               codecConfig = frame.data;
@@ -324,16 +497,54 @@ class DeviceStreamService {
 
     handleChunk(connection.firstChunk);
     final socketSubscription = connection.subscription
-      ..onData(handleChunk)
+      ..onData((chunk) {
+        handleChunk(chunk);
+        report(DeviceStreamState.live, 'Streaming.');
+      })
       ..onDone(() {
         _logger.info('Device $serial stream ended.');
+        report(DeviceStreamState.ended, 'The scrcpy stream closed.');
         if (!frames.isClosed) frames.close();
       })
       ..onError((Object error) {
         _logger.warning('Device $serial stream error: $error');
+        report(DeviceStreamState.ended, 'The scrcpy stream failed: $error');
         if (!frames.isClosed) frames.close();
       })
       ..resume();
+
+    // The server exiting is the failure that used to be invisible: the socket
+    // may stay in a state where nothing arrives and nothing complains.
+    unawaited(
+      server.exitCode.then((code) {
+        _logger.warning('Device $serial scrcpy-server exited with $code.');
+        report(
+          DeviceStreamState.ended,
+          'scrcpy-server exited (code $code).'
+          '${serverLog.isEmpty ? '' : ' ${serverLog.last}'}',
+        );
+      }).catchError((Object _) {}),
+    );
+
+    // The watchdog. A frozen picture is otherwise indistinguishable from a
+    // device sitting on a static screen.
+    final watchdog = Timer.periodic(watchdogInterval, (_) {
+      final now = DateTime.now().microsecondsSinceEpoch;
+      final sinceFrame = now - mark.arrivalUs;
+      if (mark.frames == 0 || sinceFrame <= stallTimeout.inMicroseconds) {
+        if (mark.frames > 0) report(DeviceStreamState.live, 'Streaming.');
+        return;
+      }
+      final bytesRecent = now - lastByteUs < stallTimeout.inMicroseconds;
+      report(
+        DeviceStreamState.stalled,
+        bytesRecent
+            ? 'The stream is still sending data but no frame has decoded for '
+                  '${(sinceFrame / 1000000).round()}s.'
+            : 'No data from the device for '
+                  '${(sinceFrame / 1000000).round()}s.',
+      );
+    });
 
     // 6. Serve MPEG-TS over loopback.
     final http = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -398,22 +609,81 @@ class DeviceStreamService {
     Future<void> stop() async {
       if (stopped) return;
       stopped = true;
+      watchdog.cancel();
+      await control?.close();
       await socketSubscription.cancel();
       socket.destroy();
       if (!frames.isClosed) await frames.close();
       if (!sizes.isClosed) await sizes.close();
+      if (!healthController.isClosed) await healthController.close();
       await http.close(force: true);
+      // Three separate things have to die, and the first does not imply the
+      // others: killing the host-side `adb shell` leaves the `app_process` it
+      // started running on the device, and the forward outlives both.
       await server.kill();
+      await _killDeviceServers(serial, scid);
       await adb.removeForward(serial, localPort);
       _logger.info('Device $serial stream stopped.');
     }
 
-    return DeviceStreamSession._(
+    final session = DeviceStreamSession._(
       serial: serial,
       url: Uri.parse('http://127.0.0.1:${http.port}/live.ts'),
       onStop: stop,
       videoSizeChanges: sizes.stream,
+      health: healthController.stream,
       mark: mark,
+      control: control,
+      videoSize: videoSize,
     );
+    // Rotation and resize change the coordinate space touch messages must
+    // declare; a stale value makes every later touch vanish silently.
+    sizes.stream.listen((size) => session.videoSize = size);
+    return session;
+  }
+
+  /// Opens the control socket and gives it a moment to prove it survives.
+  ///
+  /// There is no positive handshake to wait for — the server says nothing on
+  /// this socket until asked — so the test is the negative one: a connection
+  /// that adb accepted but the device never did closes almost immediately.
+  Future<ScrcpyControlConnection?> _connectControl(
+    int port, {
+    int attempts = 5,
+    Duration grace = const Duration(milliseconds: 250),
+  }) async {
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      Socket candidate;
+      try {
+        candidate = await Socket.connect('127.0.0.1', port);
+      } on SocketException {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        continue;
+      }
+      final connection = ScrcpyControlConnection(candidate, logger: _logger);
+      await Future<void>.delayed(grace);
+      if (connection.isOpen) return connection;
+      await connection.close();
+    }
+    return null;
+  }
+
+  /// Kills the device-side server for one session.
+  ///
+  /// Matched on `scid=`, which is unique per session, so a second live view on
+  /// the same device — or a scrcpy the developer is running themselves — is
+  /// untouched. The `[d]` is not a typo: it stops the pattern matching the
+  /// `sh -c` that is running `pkill` itself.
+  Future<void> _killDeviceServers(String serial, String scid) async {
+    try {
+      await runner.run(
+        CommandRequest(
+          executable: adb.sdk.adb.path,
+          arguments: ['-s', serial, 'shell', 'pkill', '-f', 'sci[d]=$scid'],
+        ),
+      );
+    } catch (error) {
+      _logger.warning('Could not kill scrcpy server $scid on $serial: $error');
+    }
   }
 }
