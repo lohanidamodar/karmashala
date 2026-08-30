@@ -42,8 +42,8 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.github => AppIcons.gitMerge,
     SidePanelSurface.files => AppIcons.folder,
     SidePanelSurface.device => AppIcons.deviceMobile,
+    SidePanelSurface.verification => AppIcons.checkCircle,
     SidePanelSurface.browser => AppIcons.globe,
-    SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => AppIcons.bookBookmark,
   };
 
@@ -242,6 +242,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.files => const FileExplorerView(),
     SidePanelSurface.device => const DevicePane(),
     SidePanelSurface.browser => const BrowserPane(),
+    SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
   };
 }
