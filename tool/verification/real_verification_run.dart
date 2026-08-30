@@ -1,7 +1,7 @@
 // Manual verification — NOT part of `flutter test`'s default run (the file does
 // not end in `_test.dart`). Run it explicitly:
 //
-//   flutter test test/features/verification/real_verification_run.dart
+//   flutter test tool/verification/real_verification_run.dart
 //
 // It drives the *MCP tool handlers* — `VerificationTools.call(...)`, exactly
 // what the control server invokes — against a real Chrome and a real Android
@@ -37,7 +37,7 @@ import 'package:chitragupta/src/features/verification/data/verification_dao.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import '../browser/png_reader.dart';
+import 'png_reader.dart';
 
 const int kPort = 9336;
 const String kTeal = '#0d9488';

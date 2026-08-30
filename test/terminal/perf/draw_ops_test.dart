@@ -22,8 +22,8 @@ const _budgets = <PerfCorpus, int>{
 };
 
 /// Draw-op counts are exact and machine-independent, which is what makes them
-/// safe to assert on. Wall-clock numbers live in `paint_bench_test.dart` and
-/// are only reported.
+/// safe to assert on. Wall-clock numbers live in
+/// `tool/benchmark/paint_bench.dart` and are only reported.
 void main() {
   test('baseline: per-cell draw ops for one frame', () {
     for (final corpus in PerfCorpus.values) {

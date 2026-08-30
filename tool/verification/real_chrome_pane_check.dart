@@ -1,7 +1,7 @@
 // Manual verification — NOT part of `flutter test`'s default run (the file does
 // not end in `_test.dart`). Run it explicitly, with a Chrome installed:
 //
-//   flutter test test/features/browser/real_chrome_pane_check.dart
+//   flutter test tool/verification/real_chrome_pane_check.dart
 //
 // The widget tests drive the pane against a scripted socket. This drives the
 // pane's *controller* against a real Chrome instead: attach, navigate, list

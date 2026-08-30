@@ -31,8 +31,16 @@ class ComparisonList extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Text('Fan-out comparisons', style: theme.textTheme.titleSmall),
-            const Spacer(),
+            // Expanded, not a bare Text plus Spacer: at 720x560 the dialog is
+            // only 664 wide and the title used to hold its full intrinsic
+            // width, pushing "New fan-out" past the window edge.
+            Expanded(
+              child: Text(
+                'Fan-out comparisons',
+                style: theme.textTheme.titleSmall,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             TextButton(
               onPressed: () =>
                   controller.showArchived(!controller.includeArchived),

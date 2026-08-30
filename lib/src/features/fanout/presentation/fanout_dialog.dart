@@ -104,11 +104,18 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
         : ref
               .watch(agentInstallationDaoProvider)
               .getByEnvironment(repo.path.environmentId);
+    // 28 of margin on every side is comfortable on a desktop-sized window and
+    // wasteful on the 720x560 minimum, where it spends a tenth of the height on
+    // nothing. The requested size is clamped for the same reason: asking for
+    // 1180x780 inside a smaller window only tells Flutter to shrink it, and the
+    // number then lies to anyone reading this.
+    final screen = MediaQuery.sizeOf(context);
+    final inset = screen.height < 700 || screen.width < 900 ? 8.0 : 28.0;
     return Dialog(
-      insetPadding: const EdgeInsets.all(28),
+      insetPadding: EdgeInsets.all(inset),
       child: SizedBox(
-        width: 1180,
-        height: 780,
+        width: (screen.width - inset * 2).clamp(0.0, 1180.0),
+        height: (screen.height - inset * 2).clamp(0.0, 780.0),
         child: Padding(
           padding: const EdgeInsets.all(Insets.md),
           child: Column(

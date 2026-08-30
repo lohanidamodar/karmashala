@@ -116,10 +116,13 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
               const SizedBox(height: Insets.xs),
               Row(
                 children: [
-                  Text(
-                    '${comparison.candidates.length} agents  ·  '
-                    '${shortAge(comparison.createdAt)}',
-                    style: theme.textTheme.labelSmall,
+                  Flexible(
+                    child: Text(
+                      '${comparison.candidates.length} agents  ·  '
+                      '${shortAge(comparison.createdAt)}',
+                      style: theme.textTheme.labelSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(width: Insets.sm),
                   OutcomeLabel(comparison: comparison),
@@ -142,13 +145,17 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
         );
     return Row(
       children: [
-        Text(
-          winner == null
-              ? 'Pick a winner to merge it and clear the rest.'
-              : 'Winner: ${winner.agentId}',
-          style: Theme.of(context).textTheme.labelSmall,
+        // Expanded rather than Text-plus-Spacer, so the two actions keep their
+        // width when the window is narrow instead of being pushed off it.
+        Expanded(
+          child: Text(
+            winner == null
+                ? 'Pick a winner to merge it and clear the rest.'
+                : 'Winner: ${winner.agentId}',
+            style: Theme.of(context).textTheme.labelSmall,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
-        const Spacer(),
         TextButton.icon(
           onPressed: canDiscard
               ? () => _discardLosers(comparison, results)
