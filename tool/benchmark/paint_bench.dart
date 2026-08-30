@@ -14,8 +14,11 @@ import '../../test/terminal/perf/paint_harness.dart';
 /// compare them against a run of the same build on the same machine.
 ///
 /// The asserted budget lives in `test/terminal/perf/draw_ops_test.dart`, which
-/// counts draw calls and is therefore machine-independent. That file and the
-/// pixel goldens beside it are the CI guard; this one is a measuring stick.
+/// counts draw calls and is therefore machine-independent. That file and
+/// `pixel_equivalence_test.dart` beside it are the CI guard; this one is a
+/// measuring stick. There are no golden *files*: the equivalence check rasters
+/// both painters and compares the bytes, which is stronger than a golden and
+/// needs nothing checked in.
 void main() {
   test('paint() timing for a ${kPerfColumns}x$kPerfRows viewport', () {
     for (final corpus in PerfCorpus.values) {
