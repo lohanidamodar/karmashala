@@ -7,7 +7,13 @@
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
-FlutterWindow::~FlutterWindow() {}
+FlutterWindow::~FlutterWindow() {
+  // Clear the member before the controller is deleted. Letting `~unique_ptr` do
+  // it deletes while the member still points at the controller, and a window
+  // message arriving mid-delete re-enters MessageHandler and dereferences it.
+  // See the note in main.cpp.
+  flutter_controller_ = nullptr;
+}
 
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
