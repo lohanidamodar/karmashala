@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'selector_js.dart';
+
 /// Name of the CDP binding the injected picker calls to report a selection.
 ///
 /// `Runtime.addBinding` installs a function of this name on the page's global
@@ -21,6 +23,7 @@ String buildPickerScript({
   String bindingName = kPickerBindingName,
   String namespace = kPickerNamespace,
 }) => _pickerSource
+    .replaceAll('__UNIQUE__', kUniqueSelectorJs.trimRight())
     .replaceAll('__BINDING__', bindingName)
     .replaceAll('__NAMESPACE__', namespace);
 
@@ -65,46 +68,7 @@ const String _pickerSource = r'''
     return el;
   }
 
-  function unique(el) {
-    if (!el || el.nodeType !== 1) return null;
-    var esc = (window.CSS && CSS.escape)
-      ? function (s) { return CSS.escape(s); }
-      : function (s) { return s; };
-    var parts = [];
-    var node = el;
-    while (node && node.nodeType === 1) {
-      if (node.id) {
-        var byId = '#' + esc(node.id);
-        try {
-          if (document.querySelectorAll(byId).length === 1) {
-            parts.unshift(byId);
-            node = null;
-            break;
-          }
-        } catch (err) { /* invalid id, fall through to the structural path */ }
-      }
-      var part = node.tagName.toLowerCase();
-      var parent = node.parentElement;
-      if (parent) {
-        var same = 0, index = 0;
-        for (var i = 0; i < parent.children.length; i++) {
-          var child = parent.children[i];
-          if (child.tagName === node.tagName) {
-            same++;
-            if (child === node) index = same;
-          }
-        }
-        if (same > 1) part += ':nth-of-type(' + index + ')';
-      }
-      parts.unshift(part);
-      node = parent;
-    }
-    var selector = parts.join(' > ');
-    if (!selector) return null;
-    try {
-      return document.querySelector(selector) === el ? selector : null;
-    } catch (err) { return null; }
-  }
+__UNIQUE__
 
   function describe(el, x, y) {
     var r = el.getBoundingClientRect();

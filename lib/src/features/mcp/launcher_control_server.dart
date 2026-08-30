@@ -15,6 +15,9 @@ import '../agents/application/agent_usage_providers.dart';
 import '../agents/domain/agent_hook_endpoint.dart';
 import '../agents/domain/agent_installation.dart';
 import '../agents/domain/agent_ids.dart';
+import '../browser/application/browser_providers.dart';
+import '../browser/application/browser_tool_schemas.dart';
+import '../browser/application/browser_tools.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../devices/application/device_providers.dart';
 import '../devices/data/adb_service.dart';
@@ -348,6 +351,13 @@ class LauncherControlServer {
               const <String>[],
           name: args['name'] as String?,
         );
+      // The browser tools live in features/browser and share the app's single
+      // BrowserService with the browser pane, so an agent and the developer
+      // drive the same page.
+      case final String name when BrowserTools.handles(name):
+        return BrowserTools(
+          _container.read(browserServiceProvider),
+        ).call(name, args);
       default:
         throw ArgumentError('Unknown tool: $tool');
     }
@@ -707,6 +717,7 @@ class LauncherControlServer {
         'required': ['ids'],
       },
     },
+    ...browserToolSchemas,
   ];
 
   List<Map<String, dynamic>> _listProjects() {
