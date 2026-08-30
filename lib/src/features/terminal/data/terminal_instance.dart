@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
+import '../domain/mouse_wheel_reporter.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/terminal_profile.dart';
 import 'command_block_recorder.dart';
@@ -72,7 +73,10 @@ class PtyTerminalInstance implements TerminalInstance {
     String? restoredScrollback,
     bool shellIntegration = false,
   }) {
-    terminal = Terminal(maxLines: kLiveScrollbackMaxLines);
+    terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
+      // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
+      // tmux (and anything else reading the modifier bits) from scrolling.
+      ..mouseHandler = const ChitraguptaMouseHandler();
     // Attach before the process starts so no marker can be missed. When the
     // shell is not integrated this stays null and nothing else changes.
     if (shellIntegration) {
