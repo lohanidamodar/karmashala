@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
+import '../../features/remote/application/remote_access_controller.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
@@ -28,7 +29,7 @@ import '../logging/app_logger.dart';
 /// took the handshake deletion with it — the single step this owner exists for.
 /// Each step gets its own slice instead, so a hang costs that step and nothing
 /// else. [kShutdownStepBudgets] is that sum, itemised.
-const kShutdownBudget = Duration(milliseconds: 2350);
+const kShutdownBudget = Duration(milliseconds: 2450);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -59,6 +60,7 @@ const kShutdownStepBudgets = <String, Duration>{
   'agent hook installation': _kHookStepBudget,
   'agent hook uninstall': _kHookStepBudget,
   'background watchers': _kStepBudget,
+  'remote access': _kStepBudget,
   'control server': _kStepBudget,
   'system integration': _kStepBudget,
   'terminal processes': _kTerminalStepBudget,
@@ -142,6 +144,10 @@ class AppLifecycle {
       adapters: adapters,
       onQuitRequested: shutdown,
     );
+    // Mounting the remote-access controller here is what makes "enabled last
+    // run" mean "listening this run". Off by default, it costs one settings
+    // read and starts nothing.
+    _container.read(remoteAccessControllerProvider);
     _systemIntegration = service;
     await service.init();
     return service;
@@ -243,6 +249,15 @@ class AppLifecycle {
     await _step('background watchers', watch, () async {
       if (_container.exists(agentStatusWatcherProvider)) {
         _container.read(agentStatusWatcherProvider).dispose();
+      }
+    });
+
+    // 2c. Remote access (Loop 70): the LAN listener, the beacon and every
+    //     device channel. A phone left talking to a dead port would just
+    //     reconnect forever; closing cleanly lets it back off properly.
+    await _step('remote access', watch, () async {
+      if (_container.exists(remoteAccessControllerProvider)) {
+        await _container.read(remoteAccessControllerProvider).shutdown();
       }
     });
 
