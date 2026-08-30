@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/diff_annotations.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
+import 'remote_link.dart';
 import '../domain/diff_line.dart';
 import '../domain/file_change.dart';
 
@@ -38,6 +40,12 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
         .where((item) => item.repositoryId == repositoryId)
         .toList();
 
+    // What this repository's work is called on the forge, so a branch or a
+    // pull request in view is one click from the page that owns it.
+    final delivery = repositoryId == null
+        ? null
+        : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -50,13 +58,32 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
           ),
           child: Row(
             children: [
-              Expanded(
-                child: Text(
-                  'Changes',
-                  style: theme.textTheme.labelSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Text(
+                'Changes',
+                style: theme.textTheme.labelSmall,
+                overflow: TextOverflow.ellipsis,
               ),
+              if (delivery?.branch case final branch?) ...[
+                const SizedBox(width: Insets.sm),
+                Flexible(
+                  child: RemoteLink(
+                    text: branch,
+                    url: delivery!.remote?.branchUrl(branch),
+                    style: theme.textTheme.labelSmall,
+                  ),
+                ),
+              ],
+              if (delivery?.pullRequest case final pr?) ...[
+                const SizedBox(width: Insets.sm),
+                RemoteLink(
+                  text: '#${pr.number}',
+                  url: pr.url,
+                  style: theme.textTheme.labelSmall,
+                  tooltip: pr.title.isEmpty ? pr.url : pr.title,
+                  icon: true,
+                ),
+              ],
+              const Spacer(),
               changes.maybeWhen(
                 data: (files) => files.isEmpty
                     ? const SizedBox.shrink()

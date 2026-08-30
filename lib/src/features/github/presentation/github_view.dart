@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../git/presentation/remote_link.dart';
 import '../application/github_providers.dart';
 import '../domain/github_repo.dart';
 
@@ -52,7 +53,16 @@ class GitHubView extends ConsumerWidget {
                 itemBuilder: (pr) => ListTile(
                   dense: true,
                   leading: const Icon(AppIcons.gitMerge, size: 16),
-                  title: Text('#${pr.number} ${pr.title}'),
+                  // The number is the link, and `gh` gave us the URL rather
+                  // than us rebuilding it: a URL the server named cannot be
+                  // wrong about its own host.
+                  title: RemoteLink(
+                    text: '#${pr.number} ${pr.title}',
+                    url: pr.url,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    tooltip: pr.url,
+                    icon: pr.url != null,
+                  ),
                   subtitle: Text(
                     '${pr.state}${pr.author == null ? '' : ' · ${pr.author}'}',
                   ),
@@ -108,9 +118,11 @@ class _RepoHeader extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: SelectableText(
-                  repo.nameWithOwner,
+                child: RemoteLink(
+                  text: repo.nameWithOwner,
+                  url: repo.url.isEmpty ? null : repo.url,
                   style: theme.textTheme.titleSmall,
+                  icon: true,
                 ),
               ),
             ],

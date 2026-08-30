@@ -18,11 +18,16 @@ import 'session_providers.dart';
 import 'session_ui_providers.dart';
 
 /// How often the pull request and its checks are re-read while the app is in
-/// front. A provider so a test can make it long enough never to fire.
+/// front, or [Duration.zero] for never.
 ///
 /// Two minutes because the answer costs a `gh` process per checkout and nothing
 /// downstream is time-critical: a check that went red is worth knowing about
 /// within a couple of minutes, not within a second.
+///
+/// Zero exists for the widget tests: a real periodic timer outlives the widget
+/// tree and trips `flutter_test`'s pending-timer check, which is the same
+/// reason `scrollbackAutosaveFactoryProvider` is overridable. Tests turn it off
+/// through `fakeTerminalOverrides`; nothing in the app ever sets it.
 final deliveryPollIntervalProvider = Provider<Duration>(
   (ref) => const Duration(minutes: 2),
 );
@@ -43,9 +48,11 @@ class DeliveryPollController extends Notifier<int> {
   int build() {
     final interval = ref.watch(deliveryPollIntervalProvider);
     _timer?.cancel();
-    _timer = Timer.periodic(interval, (_) {
-      if (ref.read(windowFocusedProvider)) state++;
-    });
+    _timer = interval <= Duration.zero
+        ? null
+        : Timer.periodic(interval, (_) {
+            if (ref.read(windowFocusedProvider)) state++;
+          });
     ref.onDispose(() => _timer?.cancel());
     ref.listen(windowFocusedProvider, (previous, next) {
       if (next && previous == false) state++;

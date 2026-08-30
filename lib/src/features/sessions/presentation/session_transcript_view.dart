@@ -20,7 +20,7 @@ import '../domain/session_launch.dart';
 import 'agent_status_badge.dart';
 import 'approval_request_card.dart';
 import 'chat_transcript.dart';
-import 'handoff_actions_row.dart';
+import 'delivery_strip.dart';
 import 'message_composer.dart';
 import 'permission_mode_chip.dart';
 import 'session_repositories_bar.dart';
@@ -98,9 +98,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (messages) => ChatTranscriptView(
               messages: messages,
-              // The handoff row sits on the composer's channel: both send
-              // through `continueSession`, so both are available in exactly the
-              // same circumstances.
+              // The delivery strip sits on the composer's channel: its prompt
+              // actions send through `continueSession`, so they are available
+              // in exactly the same circumstances.
               footer: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -109,7 +109,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   // thing blocking the session: nothing the user types will be
                   // read until the agent's prompt is answered.
                   ApprovalRequestCard(sessionId: widget.sessionId),
-                  HandoffActionsRow(sessionId: widget.sessionId),
+                  DeliveryStrip(sessionId: widget.sessionId),
                   MessageComposer(
                     // MonoCode's chip row: the session's own safety policy,
                     // where the message is written rather than buried in

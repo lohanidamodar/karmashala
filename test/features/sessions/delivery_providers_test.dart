@@ -110,9 +110,6 @@ void main() {
             fallback: FakeCommandRunner(responder: respond),
           ),
         ),
-        // Never fires: the poll's own behaviour is not what these assert, and a
-        // live periodic timer in a unit test is a flake waiting to happen.
-        deliveryPollIntervalProvider.overrideWithValue(const Duration(days: 1)),
       ],
     );
     addTearDown(container.dispose);
@@ -239,9 +236,6 @@ void main() {
         overrides: [
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
-          deliveryPollIntervalProvider.overrideWithValue(
-            const Duration(days: 1),
-          ),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(
               fallback: FakeCommandRunner(
@@ -294,7 +288,6 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        deliveryPollIntervalProvider.overrideWithValue(const Duration(days: 1)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(
             fallback: FakeCommandRunner(
@@ -324,9 +317,6 @@ void main() {
         overrides: [
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
-          deliveryPollIntervalProvider.overrideWithValue(
-            const Duration(days: 1),
-          ),
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(
               fallback: FakeCommandRunner(
