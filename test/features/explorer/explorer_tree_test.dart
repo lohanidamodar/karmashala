@@ -1,7 +1,9 @@
+import 'package:chitragupta/src/app/shell/reveal_in_file_manager.dart';
 import 'package:chitragupta/src/app/theme/app_icons.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/process/command_runner.dart';
 import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/core/process/path_translator.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
 import 'package:chitragupta/src/core/util/id_generator_provider.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
@@ -10,8 +12,8 @@ import 'package:chitragupta/src/features/cli_detection/application/cli_detection
 import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/explorer/application/reveal_in_file_manager.dart';
 import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:chitragupta/src/features/explorer/presentation/project_card.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
@@ -42,6 +44,10 @@ import '../terminal/fake_instance.dart';
 void main() {
   late AppDatabase db;
   late FakeCommandRunner git;
+
+  /// The host runner the reveal helper shells out on: its requests are the
+  /// `explorer.exe <path>` calls a successful reveal makes.
+  late FakeCommandRunner revealHost;
   late FakeRepositoryDiscoveryService discovery;
 
   /// The directory `git -C <dir> …` was pointed at.
@@ -65,6 +71,7 @@ void main() {
       ..insert(repository(id: 'r3', name: 'lib', path: r'C:\hub\projects\lib'));
     AgentInstallationDao(db).insert(agentInstallation());
     git = FakeCommandRunner(responder: _defaultGit);
+    revealHost = FakeCommandRunner();
     discovery = FakeRepositoryDiscoveryService();
   });
   tearDown(() => db.close);
@@ -93,14 +100,11 @@ void main() {
     ),
   );
 
-  final revealed = <EnvironmentPath>[];
-
   Future<void> pump(
     WidgetTester tester, {
     Size size = const Size(460, 900),
     bool expand = true,
   }) async {
-    revealed.clear();
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -123,8 +127,16 @@ void main() {
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),
           ),
+          // The real helper on a fake host: `canReveal` and the outcome then
+          // behave exactly as they do in production, which is what A4's two
+          // failures — a hidden entry and a reported error — turn on.
           revealInFileManagerProvider.overrideWithValue(
-            (path) async => revealed.add(path),
+            RevealInFileManager(
+              host: revealHost,
+              translator: const PathTranslator(),
+              environmentFor: (id) => ExecutionEnvironmentDao(db).getById(id),
+              fileManagerOverride: HostFileManager.windowsExplorer,
+            ),
           ),
           // A rescan must never walk the real filesystem from a widget test.
           repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
@@ -456,7 +468,66 @@ void main() {
 
       await tester.tap(find.text('Open in File Explorer'));
       await tester.pumpAndSettle();
-      expect(revealed.single.path, r'C:\hub');
+      expect(revealHost.requests.single.executable, 'explorer.exe');
+      expect(revealHost.requests.single.arguments.single, r'C:\hub');
+    });
+
+    testWidgets('a reveal that fails says so instead of going quiet', (
+      tester,
+    ) async {
+      revealHost.throwError = CommandException('explorer.exe not found');
+      await pump(tester);
+      await tester.tap(find.byTooltip('Folder actions').first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open in File Explorer'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+        find.textContaining('Could not open the file manager'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an SSH row is not offered "Open in File Explorer"', (
+      tester,
+    ) async {
+      // A path on a remote host has no host spelling at all, so the entry would
+      // always fail — it must be absent, not present and inert.
+      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      ProjectDao(db).insert(
+        project(
+          id: 'p2',
+          name: 'Remote',
+          environmentId: 'ssh:h1',
+          path: '/srv/work',
+        ),
+      );
+      RepositoryDao(db).insert(
+        repository(
+          id: 'r4',
+          projectId: 'p2',
+          name: 'remote-app',
+          environmentId: 'ssh:h1',
+          path: '/srv/work/app',
+        ),
+      );
+      await pump(tester, expand: false);
+
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Remote'),
+            matching: find.byType(ProjectCard),
+          ),
+          matching: find.byTooltip('Project actions'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copy path'), findsOneWidget);
+      expect(find.text('Open in File Explorer'), findsNothing);
     });
 
     testWidgets('the project menu can rescan for repositories', (tester) async {

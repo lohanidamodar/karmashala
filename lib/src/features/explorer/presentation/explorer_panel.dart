@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/pane_scaffold.dart';
+import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/shell_state.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
@@ -26,7 +27,6 @@ import '../../repositories/domain/repository.dart';
 import '../application/checkout.dart';
 import '../application/explorer_actions.dart';
 import '../application/project_tree.dart';
-import '../application/reveal_in_file_manager.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_forest.dart';
 import 'checkout_row.dart';
@@ -140,13 +140,17 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     }
   }
 
+  /// Opens [path] in the host's file manager and says why when it cannot.
+  ///
+  /// [RevealInFileManager.reveal] reports its two real failures — no file
+  /// manager, and a path with no host spelling — as a [RevealOutcome] rather
+  /// than a throw, so a `catch` here would never fire and the click would be
+  /// silent. The menu entry is hidden on rows that cannot be revealed
+  /// ([_pathMenuItems]); this covers the ones that fail anyway, such as a file
+  /// manager that will not start.
   Future<void> _reveal(EnvironmentPath path) async {
-    _say('Opening ${path.path}…');
-    try {
-      await ref.read(revealInFileManagerProvider)(path);
-    } catch (error) {
-      _say('Could not open the folder: $error');
-    }
+    final outcome = await ref.read(revealInFileManagerProvider).reveal(path);
+    if (!outcome.ok) _say(outcome.error!);
   }
 
   Future<void> _copyPath(EnvironmentPath path) async {
@@ -445,7 +449,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             label: 'Open sub-folder in editor…',
             icon: AppIcons.folderOpen,
           ),
-          ..._pathMenuItems(),
+          ..._pathMenuItems(project.root),
           const DesktopMenuDivider(),
           DesktopMenuItem(
             value: 'pin',
@@ -614,7 +618,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             icon: AppIcons.chatCircleDots,
           ),
           ..._agentMenuItems(repository.path.environmentId),
-          ..._pathMenuItems(),
+          ..._pathMenuItems(repository.path),
         ],
         onMenu: (action) {
           final installation = _installationFromMenu(
@@ -711,7 +715,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         newSessionTooltip: 'New session in this worktree',
         menuItems: [
           ..._agentMenuItems(worktree.path.environmentId),
-          ..._pathMenuItems(),
+          ..._pathMenuItems(worktree.path),
         ],
         onMenu: (action) {
           final installation = _installationFromMenu(
@@ -781,7 +785,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             label: 'Rescan for repositories',
             icon: AppIcons.arrowsClockwise,
           ),
-          ..._pathMenuItems(),
+          ..._pathMenuItems(folder.path),
         ],
         onMenu: (action) {
           switch (action) {
@@ -903,16 +907,19 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         .firstOrNull;
   }
 
-  /// The two items every folder row carries. "Copy path" works today; "Open in
-  /// File Explorer" goes through [revealInFileManagerProvider], whose default
-  /// does nothing until the shell's launcher is wired to it.
-  List<PopupMenuEntry<String>> _pathMenuItems() => [
+  /// The path items a folder row carries. "Copy path" always works — it is
+  /// text. "Open in File Explorer" is offered only where the host can actually
+  /// reach [path]: an SSH-owned row has no local spelling at all, and an entry
+  /// that always fails is worse than no entry. [RevealInFileManager.canReveal]
+  /// starts no process, so asking it while building a menu is free.
+  List<PopupMenuEntry<String>> _pathMenuItems(EnvironmentPath path) => [
     const DesktopMenuDivider(),
-    DesktopMenuItem(
-      value: 'reveal',
-      label: 'Open in File Explorer',
-      icon: AppIcons.folderOpen,
-    ),
+    if (ref.read(revealInFileManagerProvider).canReveal(path))
+      DesktopMenuItem(
+        value: 'reveal',
+        label: 'Open in File Explorer',
+        icon: AppIcons.folderOpen,
+      ),
     DesktopMenuItem(
       value: 'copy-path',
       label: 'Copy path',
