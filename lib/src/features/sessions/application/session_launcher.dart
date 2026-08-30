@@ -246,13 +246,27 @@ class SessionLauncher {
   /// The external id is the join: an imported CLI entry and one of our rows are
   /// two records of the same conversation, and resuming the imported one while
   /// our own process holds it is exactly the double-writer case.
+  ///
+  /// **Every** row with that id is examined, not the first one the database
+  /// hands back. `external_session_id` has no `UNIQUE` constraint and a resume
+  /// used to mint a second row for a conversation that already had one, so a
+  /// single-row read answered with whichever the engine felt like — and a dead
+  /// duplicate answers "nothing is running this" while a pane is still writing
+  /// to it. That is the answer this method exists to never give: it gates the
+  /// refusal that keeps a second writer off a Codex thread.
+  ///
+  /// Newest-first (see `SessionDao.getAllByExternalSessionId`), so when an agent
+  /// permits two live processes on one conversation the one just started is the
+  /// one named.
   Session? runningSessionWithExternalId(String? externalSessionId) {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
-    final session = _ref
-        .read(sessionDaoProvider)
-        .getByExternalSessionId(externalSessionId);
-    if (session == null) return null;
-    return livePaneFor(session.id) == null ? null : session;
+    for (final candidate
+        in _ref
+            .read(sessionDaoProvider)
+            .getAllByExternalSessionId(externalSessionId)) {
+      if (livePaneFor(candidate.id) != null) return candidate;
+    }
+    return null;
   }
 
   /// Brings the pane [sessionId] is already running in back into view and

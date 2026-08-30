@@ -72,6 +72,7 @@ class _StaticSettings extends SettingsController {
 Future<String> _startLiveSession(
   ProviderContainer container, {
   String externalId = 'ext-1',
+  String title = 'Live work',
 }) async {
   final launched = await container
       .read(sessionLauncherProvider)
@@ -79,7 +80,7 @@ Future<String> _startLiveSession(
         SessionLaunchRequest(
           repository: repository(),
           installation: agentInstallation(agentId: 'codexish'),
-          title: 'Live work',
+          title: title,
           purpose: SessionPurpose.newSession,
         ),
       );
@@ -87,6 +88,24 @@ Future<String> _startLiveSession(
       .read(sessionDaoProvider)
       .updateExternalSessionId(launched.session.id, externalId);
   return launched.session.id;
+}
+
+/// A second row for the same conversation whose process has since ended — the
+/// duplicate a resume used to leave behind.
+Future<String> _startDeadSession(
+  ProviderContainer container, {
+  String externalId = 'ext-1',
+  String title = 'Dead work',
+}) async {
+  final id = await _startLiveSession(
+    container,
+    externalId: externalId,
+    title: title,
+  );
+  container
+      .read(terminalSessionsControllerProvider.notifier)
+      .endSession(container.read(sessionDaoProvider).getById(id)!.paneId!);
+  return id;
 }
 
 ImportedSession _imported({String externalId = 'ext-1'}) => ImportedSession(
@@ -240,6 +259,73 @@ void main() {
       );
     },
   );
+
+  group('duplicate rows for one conversation', () {
+    // The double-writer check is what stands between a Codex thread and a
+    // corrupted rollout JSONL, and until Loop 66 it asked the database for
+    // *a* row with the conversation's id and trusted whichever came back.
+    // With two rows — the shape every resume used to create — that answer was
+    // the insertion order, so a dead duplicate written first reported the
+    // conversation free while a pane was still writing to it.
+    test('the live row is found when the dead duplicate came first', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final deadId = await _startDeadSession(h.container);
+      final liveId = await _startLiveSession(h.container);
+      expect(SessionDao(h.db).getAllByExternalSessionId('ext-1'), hasLength(2));
+
+      final launcher = h.container.read(sessionLauncherProvider);
+      expect(launcher.runningSessionWithExternalId('ext-1')?.id, liveId);
+      expect(launcher.hostedLive(externalSessionId: 'ext-1'), isTrue);
+      expect(launcher.livePaneFor(deadId), isNull);
+
+      // And the refusal that gate exists for still fires, naming the session
+      // that actually holds the conversation.
+      await expectLater(
+        launcher.launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(agentId: 'codexish'),
+            title: 'Second writer',
+            purpose: SessionPurpose.existingSession,
+            resumeExternalSessionId: 'ext-1',
+          ),
+        ),
+        throwsA(
+          isA<SessionAlreadyRunning>()
+              .having((e) => e.sessionId, 'sessionId', liveId)
+              .having((e) => e.title, 'title', 'Live work'),
+        ),
+      );
+    });
+
+    test('the live row is found when the dead duplicate came after', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final liveId = await _startLiveSession(h.container);
+      await _startDeadSession(h.container);
+
+      final launcher = h.container.read(sessionLauncherProvider);
+      expect(launcher.runningSessionWithExternalId('ext-1')?.id, liveId);
+    });
+
+    test('all-dead duplicates leave the conversation free', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      await _startDeadSession(h.container);
+      await _startDeadSession(h.container);
+
+      final launcher = h.container.read(sessionLauncherProvider);
+      expect(launcher.runningSessionWithExternalId('ext-1'), isNull);
+      expect(launcher.hostedLive(externalSessionId: 'ext-1'), isFalse);
+    });
+  });
 
   test('an unrelated conversation is unaffected by a live one', () async {
     final h = harness();

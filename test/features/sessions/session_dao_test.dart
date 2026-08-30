@@ -60,6 +60,46 @@ void main() {
     expect(dao.getById('s1')!.externalSessionId, 'cli-thread-42');
   });
 
+  test('duplicate rows for one CLI conversation read back newest first', () {
+    // `external_session_id` carries no UNIQUE constraint (migrations.dart:171)
+    // and a resume used to mint a second row for a conversation that already
+    // had one, so two rows sharing an id is a shape the database really holds.
+    // Written oldest-first, which is the order a query with no ORDER BY answers
+    // in — so "the" row was the stale one.
+    dao.insert(session(id: 'older').copyWith(externalSessionId: 'ext-1'));
+    dao.insert(
+      session(id: 'newer').copyWith(
+        createdAt: testTime.add(const Duration(minutes: 5)),
+        externalSessionId: 'ext-1',
+      ),
+    );
+
+    expect(dao.getAllByExternalSessionId('ext-1').map((s) => s.id).toList(), [
+      'newer',
+      'older',
+    ]);
+    expect(dao.getByExternalSessionId('ext-1')!.id, 'newer');
+    expect(dao.getAllByExternalSessionId('nobody'), isEmpty);
+    expect(dao.getByExternalSessionId('nobody'), isNull);
+  });
+
+  test(
+    'duplicates written in the same instant still order deterministically',
+    () {
+      // The tie-break earns its place: rows minted in one burst share a
+      // timestamp to the microsecond, and an ordering that stops at `created_at`
+      // would hand those back in whatever order the engine felt like.
+      for (final id in ['b', 'a', 'c']) {
+        dao.insert(session(id: id).copyWith(externalSessionId: 'ext-1'));
+      }
+      expect(dao.getAllByExternalSessionId('ext-1').map((s) => s.id).toList(), [
+        'c',
+        'b',
+        'a',
+      ]);
+    },
+  );
+
   test('getByRepository filters by repository', () {
     dao.insert(session(id: 's1'));
     dao.insert(session(id: 's2', title: 'Other'));
