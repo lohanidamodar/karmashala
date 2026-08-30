@@ -8,6 +8,7 @@ import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
@@ -64,17 +65,19 @@ void main() {
   });
   tearDown(() => db.close());
 
-  void addSession(String id, String title) => SessionDao(db).insert(
-    Session(
-      id: id,
-      repositoryId: 'r1',
-      agentInstallationId: 'a1',
-      title: title,
-      useWorktree: false,
-      status: SessionStatus.running,
-      createdAt: testTime,
-    ),
-  );
+  void addSession(String id, String title, {EnvironmentPath? worktree}) =>
+      SessionDao(db).insert(
+        Session(
+          id: id,
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: title,
+          useWorktree: worktree != null,
+          worktree: worktree,
+          status: SessionStatus.running,
+          createdAt: testTime,
+        ),
+      );
 
   Future<void> pump(
     WidgetTester tester, {
@@ -200,5 +203,52 @@ void main() {
     // At the Explorer's own minimum width the header's buttons already fill the
     // row, so the aggregate is dropped rather than squeezed into an ellipsis.
     expect(find.textContaining('1 session'), findsNothing);
+  });
+
+  testWidgets('a session in its own worktree gets a stat of its own', (
+    tester,
+  ) async {
+    // The case every other test in this file misses: a session with its own
+    // checkout must describe *that* checkout, not its repository's — a
+    // different branch, a different change count, and how far ahead it is.
+    git.responder = (request) {
+      final args = request.arguments;
+      final inWorktree = args.contains(r'C:\src\demo\wt');
+      if (args.contains('status')) {
+        return CommandResult(
+          exitCode: 0,
+          stdout: inWorktree ? ' M lib/a.dart\n' : ' M lib/a.dart\n?? b.dart\n',
+          stderr: '',
+        );
+      }
+      if (args.contains('--abbrev-ref')) {
+        return CommandResult(
+          exitCode: 0,
+          stdout: inWorktree ? 'feature/side\n' : 'main\n',
+          stderr: '',
+        );
+      }
+      if (args.contains('rev-list')) {
+        return const CommandResult(exitCode: 0, stdout: '4\n', stderr: '');
+      }
+      return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+    };
+    addSession(
+      's1',
+      'In a worktree',
+      worktree: const EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\src\demo\wt',
+      ),
+    );
+    await pump(tester);
+    await tester.tap(find.text('Demo'));
+    await tester.pumpAndSettle();
+
+    // Its own branch and its own change count — not the repository's.
+    expect(find.textContaining('feature/side'), findsOneWidget);
+    expect(find.text('1 changed'), findsOneWidget);
+    // And how far ahead of what the repository has checked out.
+    expect(find.text('↑4'), findsOneWidget);
   });
 }

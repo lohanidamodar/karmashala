@@ -176,7 +176,11 @@ class SessionCard extends StatelessWidget {
               _line1(context, muted),
               const SizedBox(height: 2),
               _line2(theme),
-              if (branch != null ||
+              // A worktree session draws its third line even before git has
+              // answered: the glyph that says "this has its own checkout" is a
+              // persisted fact, and it must not blink into existence.
+              if (worktree ||
+                  branch != null ||
                   whereabouts != null ||
                   !(stat?.isEmpty ?? true)) ...[
                 const SizedBox(height: 3),
@@ -191,24 +195,34 @@ class SessionCard extends StatelessWidget {
 
   Widget _line1(BuildContext context, TextStyle? muted) {
     final scheme = Theme.of(context).colorScheme;
+    // The left group is one Expanded child rather than a Flexible label beside
+    // a Spacer: two flex children split the free space evenly, which truncated
+    // "Claude Code · running" to "Claude Code · run…" with half the row empty.
+    // Caught by looking at the running app, not by a test.
     return Row(
       children: [
-        Icon(
-          agentIcon,
-          size: Chrome.iconSmall,
-          color: agentColor ?? scheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 5),
-        Flexible(
-          child: Text(
-            agentLabel,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: muted,
+        Expanded(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                agentIcon,
+                size: Chrome.iconSmall,
+                color: agentColor ?? scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  agentLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              ),
+            ],
           ),
         ),
         if (badge != null) ...[const SizedBox(width: 6), badge!],
-        const Spacer(),
         if (age != null) ...[
           const SizedBox(width: 6),
           if (ageTooltip == null)

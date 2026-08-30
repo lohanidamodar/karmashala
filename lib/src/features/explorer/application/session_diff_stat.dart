@@ -110,26 +110,12 @@ final checkoutStatProvider = FutureProvider.autoDispose
       }
     });
 
-/// How far [dir] is ahead of [base].
-final commitsAheadProvider = FutureProvider.autoDispose
-    .family<int?, ({EnvironmentPath dir, String base})>((ref, key) async {
-      ref.watch(sessionsRevisionProvider);
-      try {
-        return await ref
-            .read(changesServiceProvider)
-            .commitsAhead(key.dir, base: key.base);
-      } catch (_) {
-        return null;
-      }
-    });
-
 /// The stat for a native session: its worktree's when it has one, otherwise the
 /// repository's.
 final sessionDiffStatProvider = FutureProvider.autoDispose
     .family<SessionDiffStat, String>((ref, sessionId) async {
-      final session = ref.watch(sessionsRevisionProvider) >= 0
-          ? ref.read(sessionDaoProvider).getById(sessionId)
-          : null;
+      ref.watch(sessionsRevisionProvider);
+      final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return SessionDiffStat.unknown;
       final repository = ref
           .read(repositoryDaoProvider)
@@ -141,19 +127,26 @@ final sessionDiffStatProvider = FutureProvider.autoDispose
         return ref.watch(checkoutStatProvider(repository.path).future);
       }
 
-      final stat = await ref.watch(checkoutStatProvider(worktree).future);
+      // Both watches are taken before the first await: `ref.watch` after an
+      // await is a documented Riverpod hazard, and taking them together also
+      // runs the two checkouts' `git status` concurrently rather than in series.
+      final own = ref.watch(checkoutStatProvider(worktree).future);
+      final base = ref.watch(checkoutStatProvider(repository.path).future);
+      final stat = await own;
+      final baseBranch = (await base).branch;
+      if (baseBranch == null || baseBranch == stat.branch) return stat;
+
       // Ahead of what the repository itself has checked out — a local question
       // with a local answer. Comparing against `origin/<default>` would mean a
       // network call per row, which a tree cannot afford.
-      final base = await ref.watch(
-        checkoutStatProvider(repository.path).future,
-      );
-      final baseBranch = base.branch;
-      if (baseBranch == null || baseBranch == stat.branch) return stat;
-      final ahead = await ref.watch(
-        commitsAheadProvider((dir: worktree, base: baseBranch)).future,
-      );
-      return stat.copyWith(commitsAhead: ahead);
+      try {
+        final ahead = await ref
+            .read(changesServiceProvider)
+            .commitsAhead(worktree, base: baseBranch);
+        return stat.copyWith(commitsAhead: ahead);
+      } catch (_) {
+        return stat;
+      }
     });
 
 /// The stat for a repository — what an imported session's row shows, since an
