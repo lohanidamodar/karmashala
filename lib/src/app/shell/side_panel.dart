@@ -12,6 +12,8 @@ import '../../features/devices/presentation/device_pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
 import '../../features/github/presentation/github_view.dart';
+import '../../features/notifications/application/attention_inbox.dart';
+import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
 
 /// The right-hand side panel: a permanent icon rail plus a body that exists
@@ -28,6 +30,7 @@ class SidePanel extends ConsumerWidget {
   const SidePanel({super.key});
 
   static IconData iconFor(SidePanelSurface surface) => switch (surface) {
+    SidePanelSurface.inbox => AppIcons.warningCircle,
     SidePanelSurface.changes => AppIcons.gitDiff,
     SidePanelSurface.github => AppIcons.gitMerge,
     SidePanelSurface.files => AppIcons.folder,
@@ -71,6 +74,11 @@ class _SidePanelRail extends ConsumerWidget {
             _RailButton(
               surface: surface,
               selected: surface == open,
+              // The rail is where a badge belongs: it is always visible, even
+              // when the panel is collapsed to its 34px.
+              badge: surface == SidePanelSurface.inbox
+                  ? ref.watch(attentionCountProvider)
+                  : 0,
               onTap: () => ref.read(sidePanelProvider.notifier).select(surface),
             ),
         ],
@@ -84,19 +92,27 @@ class _RailButton extends StatelessWidget {
     required this.surface,
     required this.selected,
     required this.onTap,
+    this.badge = 0,
   });
 
   final SidePanelSurface surface;
   final bool selected;
   final VoidCallback onTap;
 
+  /// How many things are waiting behind this glyph; 0 draws nothing.
+  final int badge;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // The tooltip is the only place the surface names itself once the tab strip
     // is gone, so it also carries the collapse affordance.
+    final semantic = SemanticColors.of(context);
     return Tooltip(
-      message: selected ? '${surface.label} · click to close' : surface.label,
+      message: [
+        selected ? '${surface.label} · click to close' : surface.label,
+        if (badge > 0) '$badge waiting',
+      ].join(' · '),
       child: Semantics(
         button: true,
         selected: selected,
@@ -112,10 +128,35 @@ class _RailButton extends StatelessWidget {
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(Radii.sm),
             ),
-            child: Icon(
-              SidePanel.iconFor(surface),
-              size: Chrome.icon,
-              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  SidePanel.iconFor(surface),
+                  size: Chrome.icon,
+                  color: badge > 0
+                      ? semantic.attention
+                      : (selected ? scheme.primary : scheme.onSurfaceVariant),
+                ),
+                if (badge > 0)
+                  Positioned(
+                    top: 1,
+                    right: 0,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: semantic.attention,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: scheme.surfaceContainerLow,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -187,6 +228,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
   }
 
   Widget _surfaceBody(SidePanelSurface surface) => switch (surface) {
+    SidePanelSurface.inbox => const AttentionInboxView(),
     SidePanelSurface.changes => _ChangesSurface(),
     SidePanelSurface.github => const GitHubView(),
     SidePanelSurface.files => const FileExplorerView(),

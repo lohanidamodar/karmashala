@@ -41,6 +41,11 @@ class OpenQuickOpenIntent extends Intent {
   final String query;
 }
 
+/// Intent: show the attention inbox.
+class OpenAttentionInboxIntent extends Intent {
+  const OpenAttentionInboxIntent();
+}
+
 /// Wraps [child] with the application's desktop keyboard shortcuts.
 ///
 /// Bindings are declared through Flutter's [Shortcuts]/[Actions] system rather
@@ -97,6 +102,8 @@ class ShellShortcuts extends ConsumerWidget {
     // and xterm consumes it before this map is ever consulted.
     SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true):
         OpenQuickOpenIntent(query: '>'),
+    SingleActivator(LogicalKeyboardKey.keyA, control: true, shift: true):
+        OpenAttentionInboxIntent(),
   };
 
   @override
@@ -109,6 +116,16 @@ class ShellShortcuts extends ConsumerWidget {
           OpenQuickOpenIntent: CallbackAction<OpenQuickOpenIntent>(
             onInvoke: (intent) {
               QuickOpen.show(context, initialQuery: intent.query);
+              return null;
+            },
+          ),
+          OpenAttentionInboxIntent: CallbackAction<OpenAttentionInboxIntent>(
+            onInvoke: (intent) {
+              // `select` toggles when the surface is already showing, so
+              // the same chord opens and closes it.
+              ref
+                  .read(sidePanelProvider.notifier)
+                  .select(SidePanelSurface.inbox);
               return null;
             },
           ),

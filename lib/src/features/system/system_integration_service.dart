@@ -11,9 +11,10 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/app_mode.dart';
 import '../mcp/launcher_chat_controller.dart';
+import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
+import '../notifications/domain/inbox_item.dart';
 import '../notifications/domain/notification_settings.dart';
-import '../notifications/domain/session_attention.dart';
 import '../settings/application/settings_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../settings/domain/settings.dart';
@@ -28,7 +29,7 @@ const _kMenuOnlyWhenUnfocused = 'notifications_unfocused';
 const _kMenuQuit = 'quit';
 
 /// Prefix for the per-session "needs you" items; the suffix is the index into
-/// [SystemIntegrationService._attention].
+/// [SystemIntegrationService._pending].
 const _kMenuAttentionPrefix = 'attention:';
 
 const _kIdleTrayIcon = 'assets/tray_icon.ico';
@@ -60,8 +61,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// can briefly drop the global binding).
   String? _appliedHotkeySignature;
 
-  /// Sessions currently waiting on the user, as the tray shows them.
-  List<SessionAttention> _attention = const [];
+  /// What the attention inbox has that the user has not seen, as the tray
+  /// shows it.
+  ///
+  /// Deliberately the *inbox* and not the raw attention set. Loop 42 badged the
+  /// set of sessions currently in a waiting status, which meant a finished turn
+  /// never reached the tray at all and a session whose status report went stale
+  /// silently un-badged itself. One list, one count, three surfaces.
+  List<InboxItem> _pending = const [];
 
   /// How many were showing last time the icon and tooltip were set, so the
   /// native calls only happen when the count actually moved. `-1` forces the
@@ -111,8 +118,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     // Agent status → tray. The icon and menu are ambient state, so they follow
     // what needs the user regardless of focus; the interrupting half (toasts)
     // is the dispatcher's job, behind the policy.
-    _container.listen<List<SessionAttention>>(
-      sessionAttentionProvider,
+    _container.listen<AttentionInbox>(
+      attentionInboxProvider,
       (_, next) => unawaited(_applyAttention(next)),
     );
     _container.listen<NotificationSettings>(
@@ -211,9 +218,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Reflects the current attention set in the tray: a badged icon, a tooltip
   /// that says how many, and the menu section that lists them.
-  Future<void> _applyAttention(List<SessionAttention> attention) async {
-    _attention = attention;
-    final count = attention.length;
+  Future<void> _applyAttention(AttentionInbox inbox) async {
+    _pending = inbox.pending;
+    final count = inbox.unseen;
     if (count != _appliedAttentionCount) {
       final wasBadged = _appliedAttentionCount > 0;
       final isBadged = count > 0;
@@ -232,8 +239,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   String _toolTip(int count) => switch (count) {
     0 => 'Chitragupta',
-    1 => 'Chitragupta — 1 session needs you',
-    _ => 'Chitragupta — $count sessions need you',
+    1 => 'Chitragupta — 1 thing needs you',
+    _ => 'Chitragupta — $count things need you',
   };
 
   Future<void> _refreshMenu(Settings settings) async {
@@ -277,7 +284,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// The "needs you" section: one clickable item per waiting session, or a
   /// disabled line when nothing does — an empty tray menu reads as broken.
   List<MenuItem> _attentionMenuItems() {
-    if (_attention.isEmpty) {
+    if (_pending.isEmpty) {
       return [
         MenuItem(
           key: 'attention_none',
@@ -286,14 +293,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
         ),
       ];
     }
-    final shown = _attention.take(_kMaxAttentionItems).toList();
+    final shown = _pending.take(_kMaxAttentionItems).toList();
     return [
       for (var i = 0; i < shown.length; i++)
         MenuItem(key: '$_kMenuAttentionPrefix$i', label: shown[i].menuLabel),
-      if (_attention.length > shown.length)
+      if (_pending.length > shown.length)
         MenuItem(
           key: 'attention_more',
-          label: '+${_attention.length - shown.length} more',
+          label: '+${_pending.length - shown.length} more',
           disabled: true,
         ),
     ];
@@ -301,13 +308,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Brings the app forward on the session behind tray item [index].
   void _openAttention(int index) {
-    if (index < 0 || index >= _attention.length) return;
-    final session = _attention[index].session;
-    focusWatchedSession(
-      _container,
-      openId: session.openId,
-      imported: session.imported,
-    );
+    if (index < 0 || index >= _pending.length) return;
+    // Through the inbox, so opening from the tray marks the item seen and the
+    // badge, the rail and the status bar all drop by one together.
+    _container.read(attentionInboxProvider.notifier).open(_pending[index]);
     unawaited(_raiseWindow());
   }
 
