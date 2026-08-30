@@ -9,8 +9,8 @@ import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../logging/app_logger.dart';
 
-/// How long the whole ordered shutdown may take before the app stops waiting
-/// and closes anyway.
+/// The deadline for the whole ordered shutdown, after which the app closes
+/// regardless.
 ///
 /// Quitting is measured, not assumed: Loop 55 timed a graceful quit at
 /// 225–396 ms end to end, and Loop 48 found a build that would not exit at all
@@ -18,7 +18,21 @@ import '../logging/app_logger.dart';
 /// worth doing quickly; cleanup that hangs is worth abandoning. Everything in
 /// the sequence is either an in-memory teardown or a single file delete, so this
 /// is generous — it exists to bound the pathological case, not the normal one.
-const kShutdownBudget = Duration(milliseconds: 300);
+///
+/// It is the sum of the per-step caps below, deliberately: a **shared** budget
+/// let the first step starve every later one, which meant one hung hook rewrite
+/// took the handshake deletion with it — the single step this owner exists for.
+/// Each step gets its own slice instead, so a hang costs that step and nothing
+/// else.
+const kShutdownBudget = Duration(milliseconds: 450);
+
+/// What one shutdown step gets before it is abandoned.
+const _kStepBudget = Duration(milliseconds: 100);
+
+/// The hook rewrite gets longer: it is the only step that touches another
+/// application's files, and the only one where being cut off is worse than
+/// being slow.
+const _kHookStepBudget = Duration(milliseconds: 150);
 
 /// The single owner of everything bootstrap creates.
 ///
@@ -163,7 +177,7 @@ class AppLifecycle {
       'agent hook installation',
       watch,
       () => _hookInstallation ?? Future<void>.value(),
-      cap: const Duration(milliseconds: 150),
+      cap: _kHookStepBudget,
     );
 
     // 2. Watchers, so nothing new arrives while the rest closes.
@@ -202,15 +216,15 @@ class AppLifecycle {
     _logger.info('lifecycle: shutdown in ${watch.elapsedMilliseconds} ms.');
   }
 
-  /// One shutdown step, bounded by whatever is left of the budget.
+  /// One shutdown step, bounded by its own slice and by the overall deadline.
   Future<void> _step(
     String name,
     Stopwatch watch,
     Future<void> Function() action, {
-    Duration? cap,
+    Duration cap = _kStepBudget,
   }) async {
-    var remaining = _shutdownBudget - watch.elapsed;
-    if (cap != null && cap < remaining) remaining = cap;
+    final left = _shutdownBudget - watch.elapsed;
+    var remaining = cap < left ? cap : left;
     if (remaining <= Duration.zero) {
       _logger.warning(
         'lifecycle: skipped $name — the shutdown budget is spent',

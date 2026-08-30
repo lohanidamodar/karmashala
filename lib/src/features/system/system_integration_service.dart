@@ -283,11 +283,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
     NativeSetting setting,
     Future<void> Function() action,
   ) async {
-    final status = _container.read(nativeIntegrationStatusProvider.notifier);
     try {
       await action();
       _attempts.remove(setting);
-      status.record(setting, const NativeSettingStatus.applied());
+      _record(setting, const NativeSettingStatus.applied());
       return true;
     } on Object catch (error, stack) {
       final attempts = (_attempts[setting] ?? 0) + 1;
@@ -299,7 +298,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
         error,
         stack,
       );
-      status.record(
+      _record(
         setting,
         NativeSettingStatus.failed(
           '$error',
@@ -308,6 +307,22 @@ class SystemIntegrationService with TrayListener, WindowListener {
         ),
       );
       return false;
+    }
+  }
+
+  /// Publishes one setting's native state.
+  ///
+  /// A platform call that was still in flight when the app started shutting
+  /// down would otherwise land on a disposed container — a crash on the way
+  /// out, in the code whose whole job is to make failures visible.
+  void _record(NativeSetting setting, NativeSettingStatus status) {
+    if (_disposed) return;
+    try {
+      _container
+          .read(nativeIntegrationStatusProvider.notifier)
+          .record(setting, status);
+    } on Object catch (error) {
+      _logger.warning('system: could not publish native status: $error');
     }
   }
 
@@ -357,9 +372,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     // Avoid a redundant registry write when the OS already agrees.
     if (_appliedAutoStart != null && enabled == await _isAutoStartEnabled()) {
       _appliedAutoStart = enabled;
-      _container
-          .read(nativeIntegrationStatusProvider.notifier)
-          .record(NativeSetting.autoStart, const NativeSettingStatus.applied());
+      _record(NativeSetting.autoStart, const NativeSettingStatus.applied());
       return;
     }
     final ok = await _run(
@@ -534,10 +547,13 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Snapshots the terminal workspace on the way out.
   ///
-  /// `windowManager.destroy()` ends the process without disposing the provider
-  /// container, so the controller's own teardown hook never runs — without this
-  /// the last thing the user did before quitting is the one thing that does not
-  /// come back.
+  /// First, and synchronously, before anything else in the quit sequence gets a
+  /// chance to fail or time out. Loop 38 and Loop 53 both landed here: without
+  /// this call the last thing the user did before quitting is the one thing
+  /// that does not come back. The lifecycle owner does now dispose the
+  /// container, which would run the controller's own teardown — but that
+  /// happens inside a bounded budget, several steps later, and the workspace is
+  /// not something to leave to a step that is allowed to be abandoned.
   ///
   /// Guarded by [ProviderContainer.exists] so quitting never *creates* the
   /// terminal controller: building it would restore a workspace only to write

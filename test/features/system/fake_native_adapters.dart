@@ -115,6 +115,9 @@ class FakeTrayAdapter implements TrayAdapter {
   /// this step landed relative to the others.
   void Function()? onDestroy;
 
+  /// Makes teardown take this long, for the shutdown-deadline tests.
+  Duration? destroyDelay;
+
   @override
   Future<void> setIcon(String assetPath) async {
     calls.add('setIcon($assetPath)');
@@ -145,6 +148,7 @@ class FakeTrayAdapter implements TrayAdapter {
   @override
   Future<void> destroy() async {
     calls.add('destroy');
+    if (destroyDelay case final delay?) await Future<void>.delayed(delay);
     destroyed = true;
     onDestroy?.call();
   }

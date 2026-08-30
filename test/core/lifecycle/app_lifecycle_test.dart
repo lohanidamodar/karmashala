@@ -19,6 +19,20 @@ import '../../features/system/fake_native_adapters.dart';
 /// sat in a local whose comment claimed otherwise, and `stop()` — which deletes
 /// the bridge handshake — had no caller at all. A normal quit therefore left a
 /// handshake on disk advertising a port nothing was listening on.
+/// Whether [container] has been disposed.
+///
+/// Riverpod 3.3 does not expose a `disposed` getter, and reading through a
+/// disposed container is exactly what the lifecycle owner must have made
+/// impossible, so the observable behaviour is the assertion.
+bool isDisposed(ProviderContainer container) {
+  try {
+    container.read(agentStatusWatcherProvider);
+    return false;
+  } on StateError {
+    return true;
+  }
+}
+
 void main() {
   late Directory tmp;
   late AppDatabase db;
@@ -96,7 +110,7 @@ void main() {
       await lifecycle.shutdown();
 
       expect(order, ['hooks', 'control server', 'system integration']);
-      expect(container.disposed, isTrue);
+      expect(isDisposed(container), isTrue);
       // And the service really is detached, not merely marked so.
       expect(natives.window.listeners, isEmpty);
       expect(natives.tray.listeners, isEmpty);
@@ -114,30 +128,56 @@ void main() {
       await lifecycle.shutdown();
 
       expect(natives.tray.destroyed, isTrue);
-      expect(container.disposed, isTrue);
+      expect(isDisposed(container), isTrue);
     });
   });
 
   group('the budget', () {
-    test('a step that hangs is abandoned, and the rest still run', () async {
-      final lifecycle = AppLifecycle(
-        container,
-        shutdownBudget: const Duration(milliseconds: 120),
-      );
+    test('a step that hangs does not starve the ones after it', () async {
+      // The first draft shared one budget across the sequence, so a hook
+      // rewrite that never returned spent all of it and the control server —
+      // the step that deletes the handshake — was skipped entirely. That is the
+      // exact failure this owner exists to prevent, so it gets its own test.
+      final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(adapters: natives.adapters);
+      final server = LauncherControlServer(container);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      await server.start(
+        bridgeFilePath: bridge,
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
       // A hook rewrite that never returns — the shape of Loop 48's build that
       // could not exit at all.
-      lifecycle.adopt(hookInstallation: Completer<void>().future);
+      lifecycle.adopt(
+        controlServer: server,
+        hookInstallation: Completer<void>().future,
+      );
 
       final watch = Stopwatch()..start();
       await lifecycle.shutdown();
       watch.stop();
 
-      expect(watch.elapsed, lessThan(const Duration(milliseconds: 600)));
+      expect(watch.elapsed, lessThan(kShutdownBudget + kShutdownBudget));
+      expect(File(bridge).existsSync(), isFalse, reason: 'handshake removed');
       expect(natives.tray.destroyed, isTrue);
-      expect(container.disposed, isTrue);
+      expect(isDisposed(container), isTrue);
       expect(lifecycle.lastShutdownDuration, isNotNull);
+    });
+
+    test('every step hanging still finishes inside the deadline', () async {
+      final lifecycle = AppLifecycle(container);
+      final natives = FakeNatives();
+      await lifecycle.startSystemIntegration(adapters: natives.adapters);
+      lifecycle.adopt(hookInstallation: Completer<void>().future);
+      natives.tray.destroyDelay = const Duration(seconds: 30);
+
+      final watch = Stopwatch()..start();
+      await lifecycle.shutdown();
+      watch.stop();
+
+      expect(watch.elapsed, lessThan(const Duration(milliseconds: 900)));
+      expect(isDisposed(container), isTrue);
     });
 
     test('a clean shutdown is far inside the budget', () async {
@@ -194,17 +234,14 @@ void main() {
 
       expect(File(bridge).existsSync(), isFalse);
       expect(natives.window.destroyed, isTrue);
-      expect(container.disposed, isTrue);
+      expect(isDisposed(container), isTrue);
     });
   });
 }
 
 /// A control server that records when it was stopped, without binding a port.
 class _RecordingControlServer extends LauncherControlServer {
-  // Positional forwarding: the base class takes its container as a private
-  // field, which a super parameter in another library cannot name.
-  _RecordingControlServer(ProviderContainer container, this._order)
-    : super(container);
+  _RecordingControlServer(super.container, this._order);
 
   final List<String> _order;
 

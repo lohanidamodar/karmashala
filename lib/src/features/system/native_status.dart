@@ -57,8 +57,15 @@ class NativeSettingStatus {
 
   /// The line a settings row shows beside its toggle, or `null` when the OS
   /// agreed.
-  String? messageFor(NativeSetting setting) =>
-      ok ? null : 'enabled — ${setting.label} failed: $reason';
+  ///
+  /// [enabled] is the toggle's current position, because turning a setting
+  /// *off* is a platform call that can fail too, and "enabled — close to tray
+  /// failed" beside a switch that is off would be a second wrong answer on top
+  /// of the first.
+  String? messageFor(NativeSetting setting, {bool enabled = true}) => ok
+      ? null
+      : '${enabled ? 'enabled' : 'disabled'} — ${setting.label} '
+            'failed: $reason';
 
   @override
   bool operator ==(Object other) =>

@@ -38,10 +38,13 @@ import '../../core/logging/app_logger.dart';
 /// unprivileged account other than the owner", which is exactly what a `0700`
 /// directory gives dray.
 ///
-/// Returns whether the restriction was applied. A `false` is logged and
-/// otherwise tolerated: the file keeps its inherited ACL, which on a default
-/// profile is still user-only. Failing to start the control server over this
-/// would be worse than the risk it mitigates.
+/// Returns whether the restriction was applied. **A `false` is not tolerated.**
+/// Until Loop 61 it was — the file kept its inherited ACL, which on a default
+/// profile is still user-only, and the tokens went in anyway. That reasoning
+/// held only for the *default* profile, which is precisely the case where the
+/// call succeeds; the returned `false` describes the profiles where it does
+/// not. `LauncherControlServer` now treats it as a refusal: the privileged
+/// token is never written, and the transport it authenticates comes down.
 Future<bool> restrictHandshakeFileToCurrentUser(
   File file, {
   AppLogger? logger,
@@ -74,7 +77,9 @@ Future<bool> restrictHandshakeFileToCurrentUser(
 /// socket node created inside the directory is covered too, rather than
 /// depending on whatever the socket file is born with.
 ///
-/// Returns whether the restriction was applied.
+/// Returns whether the restriction was applied. A `false` means the boundary is
+/// simply absent, not weakened, so `LauncherControlServer` does not create the
+/// socket at all.
 Future<bool> restrictDirectoryToCurrentUser(
   Directory dir, {
   AppLogger? logger,

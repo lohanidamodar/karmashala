@@ -115,7 +115,10 @@ class SettingsScreen extends ConsumerWidget {
                     'Chitragupta is running.',
                   ),
                 ),
-                const NativeSettingStatusLine(NativeSetting.keepAwake),
+                NativeSettingStatusLine(
+                  NativeSetting.keepAwake,
+                  enabled: settings.keepAwake,
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.closeToTray,
@@ -126,7 +129,10 @@ class SettingsScreen extends ConsumerWidget {
                     'instead of quitting.',
                   ),
                 ),
-                const NativeSettingStatusLine(NativeSetting.closeToTray),
+                NativeSettingStatusLine(
+                  NativeSetting.closeToTray,
+                  enabled: settings.closeToTray,
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.autoStart,
@@ -136,7 +142,10 @@ class SettingsScreen extends ConsumerWidget {
                     'Launch Chitragupta automatically when you sign in.',
                   ),
                 ),
-                const NativeSettingStatusLine(NativeSetting.autoStart),
+                NativeSettingStatusLine(
+                  NativeSetting.autoStart,
+                  enabled: settings.autoStart,
+                ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: settings.compactDensity,
@@ -940,12 +949,14 @@ class _LauncherHotkeySection extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: Insets.sm),
           // A chord another application already holds registers as a failure
           // and nothing else; without this the switch says on and the shortcut
           // does nothing. Changing the chord resets the retry budget, so this
           // line is also the instruction for clearing it.
-          const NativeSettingStatusLine(NativeSetting.launcherHotkey),
+          NativeSettingStatusLine(
+            NativeSetting.launcherHotkey,
+            enabled: enabled,
+          ),
         ],
       ),
     );
