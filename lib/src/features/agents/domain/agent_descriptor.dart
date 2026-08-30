@@ -70,12 +70,17 @@ class AgentLaunchSpec {
     this.permissionArguments = const {},
     this.resume = const AgentResume.unsupported(),
     this.interactiveResume = const AgentResume.unsupported(),
+    this.sessionIdAssignment = const AgentSessionIdAssignment.unsupported(),
   });
 
   final List<String> baseArguments;
   final Map<PermissionMode, List<String>> permissionArguments;
   final AgentResume resume;
   final AgentResume interactiveResume;
+
+  /// Whether this agent will accept a session id we choose. See
+  /// [AgentSessionIdAssignment].
+  final AgentSessionIdAssignment sessionIdAssignment;
 
   List<String> permissionArgumentsFor(PermissionMode mode) =>
       permissionArguments[mode] ?? const [];
@@ -105,8 +110,7 @@ class AgentStoreSpec {
 
 /// The best status source an agent supports. The status service falls back down
 /// the sources it actually has, so this is a preference, not an exclusive
-/// choice. [terminalGrid] is declarable but unimplemented — it needs PTY-hosted
-/// sessions — and resolves to `unknown` today.
+/// choice.
 enum AgentStatusStrategy { hooks, stateFile, terminalGrid, none }
 
 /// Everything Chitragupta needs to find, launch and observe one agent CLI.
@@ -130,6 +134,7 @@ class AgentDescriptor {
     this.statusStrategy = AgentStatusStrategy.none,
     this.hooks,
     this.stateFile,
+    this.grid = const AgentGridRules(),
   });
 
   final String id;
@@ -143,6 +148,36 @@ class AgentDescriptor {
   final AgentHookSpec? hooks;
   final AgentStateFileRules? stateFile;
 
+  /// How to read this agent's status off its own TUI. Empty for an agent whose
+  /// screen we have never looked at, which resolves to `unknown` rather than a
+  /// guess.
+  final AgentGridRules grid;
+
   @override
   String toString() => 'AgentDescriptor($id)';
+}
+
+/// Whether an agent lets us choose its session id, and how.
+///
+/// This is the difference between knowing a PTY-hosted session's CLI id at
+/// launch and having to go looking for it afterwards. Claude Code takes
+/// `--session-id <uuid>`; Codex has no equivalent and its id can only be
+/// discovered from the rollout file it writes. Recording that as a capability
+/// keeps the asymmetry in the registry instead of in an `if` somewhere.
+class AgentSessionIdAssignment {
+  const AgentSessionIdAssignment.flag(this.token) : isSupported = true;
+  const AgentSessionIdAssignment.unsupported()
+    : token = '',
+      isSupported = false;
+
+  final String token;
+  final bool isSupported;
+
+  /// The arguments that pin the agent's session id to [sessionId], or nothing
+  /// when the agent cannot be told.
+  ///
+  /// [sessionId] must be a UUID; Chitragupta's own session ids already are (see
+  /// `RandomIdGenerator`), which is what lets one string be both.
+  List<String> argumentsFor(String sessionId) =>
+      isSupported ? [token, sessionId] : const [];
 }

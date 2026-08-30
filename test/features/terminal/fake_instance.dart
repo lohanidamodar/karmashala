@@ -4,6 +4,7 @@ import 'package:chitragupta/src/features/terminal/application/scrollback_autosav
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -19,6 +20,7 @@ class FakeTerminalInstance implements TerminalInstance {
     required this.profileId,
     this.workingDirectory,
     this.restored,
+    this.agentLaunch,
   }) {
     terminal = Terminal(maxLines: 1000)..resize(40, 10);
     if (restored != null && restored!.isNotEmpty) terminal.write(restored!);
@@ -32,6 +34,8 @@ class FakeTerminalInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+  @override
+  final AgentPaneLaunch? agentLaunch;
 
   /// What the factory was handed to replay — asserted on by the restore tests.
   final String? restored;
@@ -93,12 +97,14 @@ ProviderContainer fakeTerminalContainer({AppDatabase? database}) {
           workingDirectory,
           restoredScrollback,
           shellIntegration = false,
+          agentLaunch,
         }) => FakeTerminalInstance(
           id: id,
-          title: profile.label,
-          profileId: profile.id,
+          title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
+          profileId: agentLaunch?.profileId ?? profile.id,
           workingDirectory: workingDirectory,
           restored: restoredScrollback,
+          agentLaunch: agentLaunch,
         ),
       ),
     ],

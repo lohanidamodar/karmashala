@@ -39,6 +39,11 @@ const _claudeCode = AgentDescriptor(
     },
     resume: AgentResume.flag('--resume'),
     interactiveResume: AgentResume.flag('--resume'),
+    // `claude --session-id <uuid>` pins the CLI's session id to one we choose.
+    // Chitragupta's own session ids are already RFC-4122 v4, so one string is
+    // both — which is what makes a PTY-hosted Claude session's transcript
+    // locatable at launch instead of guessed at afterwards.
+    sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -65,6 +70,20 @@ const _claudeCode = AgentDescriptor(
     working: [
       StateRecordMatcher(['type'], 'user'),
     ],
+  ),
+  // Read off Claude Code v2.1.251's own footer, captured from a real PTY run
+  // (`test/features/agents/fixtures/claude-code-*.raw`). Working and idle differ
+  // by one segment of the same line, which is why the order matters more than
+  // the patterns: `esc to interrupt` is checked before the footer that is always
+  // there.
+  grid: AgentGridRules(
+    awaitingApproval: [
+      // The trust and permission modals both end in this pair.
+      GridMatcher('Enter to confirm'),
+      GridMatcher('Esc to cancel'),
+    ],
+    working: [GridMatcher('esc to interrupt')],
+    idle: [GridMatcher('shift+tab to cycle')],
   ),
 );
 
@@ -103,6 +122,14 @@ const _codex = AgentDescriptor(
       StateRecordMatcher(['payload', 'type'], 'reasoning'),
     ],
   ),
+  // Codex 0.146's status line, captured from a real PTY run
+  // (`test/features/agents/fixtures/codex-tui.raw`): `• Working (3s • esc to
+  // interrupt)`. Only `working` is declared — an idle Codex screen has no marker
+  // this source could tell apart from a busy one, and its approval prompt was
+  // never captured, so neither is claimed. The rollout file already answers
+  // idle/working, and an undeclared state resolves to `unknown` rather than to a
+  // guess.
+  grid: AgentGridRules(working: [GridMatcher('esc to interrupt')]),
 );
 
 const _antigravity = AgentDescriptor(

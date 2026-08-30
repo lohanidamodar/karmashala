@@ -19,6 +19,9 @@ typedef MigrationStep = void Function(Database db);
 ///   each pane's persisted scrollback).
 /// * **v8** — Loop 37: SSH as an execution environment (saved hosts, trusted
 ///   host keys, and the `ssh_host_id` link on `execution_environments`).
+/// * **v10** — Loop 41: agents hosted in terminal panes — a pane records the
+///   agent command it ran, and a session records which pane it lives in and
+///   which session (if any) asked for it.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -29,6 +32,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   7: _migrateToV7,
   8: _migrateToV8,
   9: _migrateToV9,
+  10: _migrateToV10,
 };
 
 void _migrateToV8(Database db) {
@@ -320,5 +324,40 @@ void _migrateToV9(Database db) {
   // sessions the user can reopen or end.
   db.execute(
     'ALTER TABLE terminal_tabs ADD COLUMN detached INTEGER NOT NULL DEFAULT 0;',
+  );
+}
+
+void _migrateToV10(Database db) {
+  // Agents in a PTY (Loop 41).
+  //
+  // `launch_command` lets a pane be restored as the agent it was rather than as
+  // the shell profile it never had. It is deliberately on the *pane*, not on a
+  // session: the dormant restore path re-executes nothing, so recording a
+  // command here can only be read by `startPane`, which is the user explicitly
+  // asking for it.
+  db.execute('ALTER TABLE terminal_panes ADD COLUMN launch_command TEXT;');
+
+  // `parent_session_id` is the *only* record of agent-spawn depth. The depth
+  // itself is walked from this chain and never stored: a stored number is a
+  // second source of truth that will eventually disagree with the chain it
+  // claims to describe. Deliberately not a foreign key — deleting a parent must
+  // orphan its children, not cascade away sessions the user still has open.
+  db.execute('ALTER TABLE sessions ADD COLUMN parent_session_id TEXT;');
+
+  // The terminal pane a session runs in, for sessions hosted in a PTY rather
+  // than driven through a protocol adapter. Null for chat sessions and for
+  // sessions launched into an external terminal, which we do not own a pane for.
+  db.execute('ALTER TABLE sessions ADD COLUMN pane_id TEXT;');
+
+  // Which surface the session runs on, so the session list can tell a chat
+  // session from one that is a terminal tab without inferring it from whether
+  // some other column happens to be null.
+  db.execute(
+    "ALTER TABLE sessions ADD COLUMN surface TEXT NOT NULL DEFAULT 'chat';",
+  );
+
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_parent '
+    'ON sessions (parent_session_id);',
   );
 }

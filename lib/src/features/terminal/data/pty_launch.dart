@@ -1,3 +1,4 @@
+import '../domain/agent_pane_launch.dart';
 import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
 
@@ -11,22 +12,43 @@ class PtyLaunch {
     required this.executable,
     this.arguments = const [],
     this.workingDirectory,
+    this.environment = const {},
   });
 
   final String executable;
   final List<String> arguments;
   final String? workingDirectory;
 
+  /// Extra variables layered over the host environment for this child only.
+  /// Empty for a plain shell; an agent pane uses it to tell the agent which
+  /// session it is running in.
+  final Map<String, String> environment;
+
   @override
   bool operator ==(Object other) =>
       other is PtyLaunch &&
       other.executable == executable &&
       other.workingDirectory == workingDirectory &&
+      _mapEquals(other.environment, environment) &&
       _listEquals(other.arguments, arguments);
 
   @override
-  int get hashCode =>
-      Object.hash(executable, workingDirectory, Object.hashAll(arguments));
+  int get hashCode => Object.hash(
+    executable,
+    workingDirectory,
+    Object.hashAll(arguments),
+    Object.hashAllUnordered(
+      environment.entries.map((e) => '${e.key}=${e.value}'),
+    ),
+  );
+
+  static bool _mapEquals(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -86,4 +108,57 @@ PtyLaunch ptyLaunchFor(
         ],
       );
   }
+}
+
+/// Builds the ConPTY launch that runs an agent CLI in a pane.
+///
+/// A WSL launch is wrapped exactly the way the external-terminal path wraps it
+/// (`wsl.exe -d <distro> --cd <cwd> -- <exe> <args…>`), so an agent started in a
+/// pane and the same agent started in Windows Terminal are the same command
+/// line. On a non-Windows host ([onWindowsHost] false — the app running under
+/// Linux/macOS) there is nothing to wrap: we are already in the target shell.
+///
+/// The session id is stamped into the child's environment rather than passed as
+/// an argument, because it has to reach a *grandchild* — the MCP bridge the
+/// agent spawns — and an argument would not. For WSL that also means naming the
+/// variable in `WSLENV`, which is the only way a Win32 variable crosses into the
+/// distro.
+PtyLaunch agentPtyLaunchFor(
+  AgentPaneLaunch launch, {
+  bool onWindowsHost = true,
+}) {
+  final environment = <String, String>{
+    if (launch.sessionId != null)
+      kSessionIdEnvironmentVariable: launch.sessionId!,
+  };
+  final distro = launch.wslDistribution;
+  if (distro == null || distro.isEmpty || !onWindowsHost) {
+    return PtyLaunch(
+      executable: launch.executable,
+      arguments: launch.arguments,
+      workingDirectory: launch.workingDirectory,
+      environment: environment,
+    );
+  }
+  return PtyLaunch(
+    executable: 'wsl.exe',
+    arguments: [
+      '-d',
+      distro,
+      if (launch.workingDirectory != null) ...[
+        '--cd',
+        launch.workingDirectory!,
+      ],
+      '--',
+      launch.executable,
+      ...launch.arguments,
+    ],
+    // wsl.exe sets the child's directory itself, so the host process must not
+    // also be pointed at a Linux path it cannot resolve.
+    environment: {
+      ...environment,
+      if (launch.sessionId != null)
+        'WSLENV': '$kSessionIdEnvironmentVariable/u',
+    },
+  );
 }
