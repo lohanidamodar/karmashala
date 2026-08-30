@@ -169,13 +169,14 @@ void main() {
         '--ask-for-approval',
         'on-request',
       ]);
-      // Not `on-failure`: codex-cli 0.145.0 rejects that value outright and
-      // refuses to start. See built_in_agents.dart for the transcript.
+      // Not `on-failure` and no longer `untrusted`: codex-cli rejects both
+      // outright and refuses to start (0.145.0 and 0.151.0 respectively). See
+      // built_in_agents.dart for the transcripts.
       expect(permissionArgsFor('codex', PermissionMode.acceptEdits), [
         '--sandbox',
         'workspace-write',
         '--ask-for-approval',
-        'untrusted',
+        'on-request',
       ]);
       expect(permissionArgsFor('codex', PermissionMode.bypass), [
         '--dangerously-bypass-approvals-and-sandbox',

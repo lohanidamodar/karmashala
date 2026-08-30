@@ -115,13 +115,14 @@ const List<_AgentGolden> _goldens = [
         '--sandbox',
         'workspace-write',
         '--ask-for-approval',
-        'untrusted',
+        'on-request',
       ],
       PermissionMode.bypass: ['--dangerously-bypass-approvals-and-sandbox'],
     },
     // Not accept-edits: the sandbox bounds writes to the working tree and the
-    // policy still escalates untrusted commands. `on-failure` used to sit here
-    // and codex-cli 0.145.0 rejects it outright — see built_in_agents.dart.
+    // approval policy still governs commands. Two values have been retired from
+    // this slot by the real CLI — `on-failure` (0.145.0) and `untrusted`
+    // (0.151.0) — see built_in_agents.dart for both transcripts.
     permissionFits: {
       PermissionMode.ask: PermissionModeFit.exact,
       PermissionMode.acceptEdits: PermissionModeFit.approximate,

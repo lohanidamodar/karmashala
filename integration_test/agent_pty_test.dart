@@ -184,7 +184,7 @@ void main() {
             '--sandbox',
             'workspace-write',
             '--ask-for-approval',
-            'untrusted',
+            'on-request',
           ]),
         );
 

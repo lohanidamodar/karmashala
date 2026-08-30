@@ -162,25 +162,38 @@ const _codex = AgentDescriptor(
       // *sandbox* decides what may be written, an *approval policy* decides
       // what must be asked — so the nearest thing takes one flag from each:
       // `workspace-write` lets it edit files in the working tree without
-      // asking, and `untrusted` still escalates any command outside its own
-      // read-only trusted set.
+      // asking, and the approval policy still escalates commands.
       //
-      // This replaced `--ask-for-approval on-failure`, which **the real CLI
-      // rejects**. Verified against codex-cli 0.145.0:
+      // **This value has now been wrong twice, on two different CLI versions,
+      // and both times the symptom was the agent refusing to launch.** Loop 49
+      // replaced `on-failure` (rejected by 0.145.0) with `untrusted`; 0.151.0
+      // has since removed `untrusted` too:
       //
-      //   $ codex --ask-for-approval on-failure exec 'hi'
-      //   error: invalid value 'on-failure' for '--ask-for-approval <APPROVAL_POLICY>'
-      //     [possible values: untrusted, on-request, never]
+      //   $ codex --sandbox workspace-write --ask-for-approval untrusted \
+      //       exec 'reply with the single word PONG'
+      //   error: invalid value 'untrusted' for '--ask-for-approval <APPROVAL_POLICY>'
+      //     [possible values: on-request, never]
       //
-      // So choosing "Accept edits" for Codex did not weaken a policy — it made
-      // the agent refuse to start. No unit test could catch that: the flag was
-      // asserted against a string literal that was itself the mistake.
+      // `on-request` is the only remaining value that is not *more* permissive
+      // than accept-edits (`never` asks for nothing at all, which is the wrong
+      // direction for a mode the user picked to stay in control of commands).
+      // Verified to launch on 0.151.0:
+      //
+      //   $ codex --sandbox workspace-write --ask-for-approval on-request \
+      //       exec --skip-git-repo-check 'reply with the single word PONG'
+      //   sandbox: workspace-write [workdir, /tmp, $TMPDIR]
+      //   codex
+      //   PONG
+      //
+      // The lesson Loop 49 drew still holds and is worth restating: no unit
+      // test can catch this, because the flag is asserted against a string
+      // literal that is itself the mistake. Only running the CLI can.
       PermissionMode.acceptEdits: PermissionModeMapping.approximate(
-        ['--sandbox', 'workspace-write', '--ask-for-approval', 'untrusted'],
+        ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
         note:
             'Codex has no accept-edits mode. The nearest lets it write inside '
-            'the working tree without asking, and still escalates any command '
-            'outside its trusted read-only set.',
+            'the working tree without asking, and leaves commands under the '
+            'same on-request approval policy as "Ask every time".',
       ),
       PermissionMode.bypass: PermissionModeMapping.exact([
         '--dangerously-bypass-approvals-and-sandbox',
