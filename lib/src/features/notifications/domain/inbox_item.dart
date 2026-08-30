@@ -97,15 +97,9 @@ class InboxItem {
   InboxItem copyWith({bool? seen}) =>
       InboxItem(session: session, kind: kind, at: at, seen: seen ?? this.seen);
 
-  /// The one-line form used in the tray menu.
-  String get menuLabel => switch (kind) {
-    InboxItemKind.needsApproval => '${session.label} — needs approval',
-    InboxItemKind.failed => '${session.label} — failed',
-    InboxItemKind.finished => '${session.label} — finished',
-    InboxItemKind.checksFailed => '${session.label} — checks failed',
-    InboxItemKind.changesRequested => '${session.label} — changes requested',
-    InboxItemKind.readyToMerge => '${session.label} — ready to merge',
-  };
+  /// The one-line form used in the tray menu — the list's own wording, so the
+  /// tray and the inbox cannot come to describe the same item differently.
+  String get menuLabel => '${session.label} — ${kind.label.toLowerCase()}';
 
   @override
   bool operator ==(Object other) =>

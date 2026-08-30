@@ -150,7 +150,7 @@ class AgentStatusWatcher {
           );
         }
 
-        final kind = _attentionKind(report.status);
+        final kind = AttentionKind.forStatus(report.status);
         if (kind != null) {
           attention.add(SessionAttention(session: session, kind: kind));
         }
@@ -166,10 +166,4 @@ class AgentStatusWatcher {
       _polling = false;
     }
   }
-
-  AttentionKind? _attentionKind(AgentActivityStatus status) => switch (status) {
-    AgentActivityStatus.awaitingApproval => AttentionKind.needsInput,
-    AgentActivityStatus.failed => AttentionKind.failed,
-    _ => null,
-  };
 }

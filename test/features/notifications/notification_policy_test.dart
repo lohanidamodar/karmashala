@@ -3,6 +3,7 @@ import 'package:chitragupta/src/features/notifications/domain/agent_session_key.
 import 'package:chitragupta/src/features/notifications/domain/agent_status_transition.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_settings.dart';
+import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _policy = AgentNotificationPolicy();
@@ -334,5 +335,46 @@ void main() {
     // 'an agent that finished its turn' and 'an agent waiting for approval'
     // cover enabled/notifyWhenFinished/notifyWhenAttentionNeeded, and 'by
     // default a focused window is never interrupted' covers onlyWhenUnfocused.
+  });
+
+  group('one table for agent status', () {
+    // The tray's waiting list is a *level* and a toast is an *edge*: the
+    // distinction is real and the two enums stay separate. What must not
+    // happen is two tables — before Loop 68 `agent_status_watcher` carried its
+    // own status→AttentionKind switch, so moving an arm in the policy left the
+    // tray listing something no toast would ever mention.
+    test('attention is exactly the statuses that ask something of you', () {
+      for (final status in AgentActivityStatus.values) {
+        final reason = AgentNotificationPolicy.reasonForStatus(status);
+        final asksSomething =
+            reason == NotificationReason.needsInput ||
+            reason == NotificationReason.failed;
+        expect(
+          AttentionKind.forStatus(status) != null,
+          asksSomething,
+          reason:
+              'AttentionKind.forStatus disagrees with the policy on $status',
+        );
+      }
+    });
+
+    test('a finished turn is news, not a hold-up', () {
+      expect(
+        AgentNotificationPolicy.reasonForStatus(AgentActivityStatus.idle),
+        NotificationReason.finished,
+      );
+      expect(AttentionKind.forStatus(AgentActivityStatus.idle), isNull);
+    });
+
+    test('the two statuses only a hook can observe are both held', () {
+      expect(
+        AttentionKind.forStatus(AgentActivityStatus.awaitingApproval),
+        AttentionKind.needsInput,
+      );
+      expect(
+        AttentionKind.forStatus(AgentActivityStatus.failed),
+        AttentionKind.failed,
+      );
+    });
   });
 }
