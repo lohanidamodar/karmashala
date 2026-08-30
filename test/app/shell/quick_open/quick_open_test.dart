@@ -112,18 +112,123 @@ void main() {
     expect(find.byType(QuickOpen), findsNothing);
   });
 
-  testWidgets('the arrows move the selection before Enter takes it', (
-    tester,
+  /// Opens quick open, lists only the two sessions, runs [drive], and reports
+  /// which session Enter actually opened.
+  ///
+  /// Comparing two runs is what makes a navigation test mean something: an
+  /// assertion that *something* was selected passes just as well when the
+  /// arrows do nothing at all, which is exactly the bug this exists to catch.
+  Future<String?> sessionAfter(
+    WidgetTester tester,
+    Future<void> Function() drive,
   ) async {
     final container = await open(tester);
+    await type(tester, '#');
+    await drive();
+    await press(tester, LogicalKeyboardKey.enter);
+    return container.read(selectedSessionIdProvider);
+  }
 
-    // Both sessions match; the first is whichever ranks higher.
-    await type(tester, 'the');
+  testWidgets('Down moves the selection off the first result', (tester) async {
+    final first = await sessionAfter(tester, () async {});
+    final second = await sessionAfter(
+      tester,
+      () => press(tester, LogicalKeyboardKey.arrowDown),
+    );
+
+    expect(first, isNotNull);
+    expect(second, isNotNull);
+    expect(second, isNot(first));
+  });
+
+  testWidgets('Up comes back, and stops at the top', (tester) async {
+    final first = await sessionAfter(tester, () async {});
+    final backAgain = await sessionAfter(tester, () async {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      // Already at the top: this must not wrap round to the bottom.
+      await press(tester, LogicalKeyboardKey.arrowUp);
+    });
+
+    expect(backAgain, first);
+  });
+
+  testWidgets('Ctrl+N and Ctrl+P move as the arrows do', (tester) async {
+    Future<void> ctrl(LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    final first = await sessionAfter(tester, () async {});
+    final next = await sessionAfter(
+      tester,
+      () => ctrl(LogicalKeyboardKey.keyN),
+    );
+    final backAgain = await sessionAfter(tester, () async {
+      await ctrl(LogicalKeyboardKey.keyN);
+      await ctrl(LogicalKeyboardKey.keyP);
+    });
+
+    expect(next, isNot(first));
+    expect(backAgain, first);
+  });
+
+  testWidgets('End jumps to the last result and Home back to the first', (
+    tester,
+  ) async {
+    final first = await sessionAfter(tester, () async {});
+    final last = await sessionAfter(
+      tester,
+      () => press(tester, LogicalKeyboardKey.end),
+    );
+    final backAgain = await sessionAfter(tester, () async {
+      await press(tester, LogicalKeyboardKey.end);
+      await press(tester, LogicalKeyboardKey.home);
+    });
+
+    expect(last, isNot(first));
+    expect(backAgain, first);
+  });
+
+  testWidgets('typing keeps the caret in the field while the arrows move', (
+    tester,
+  ) async {
+    await open(tester);
+    await type(tester, '#');
     await press(tester, LogicalKeyboardKey.arrowDown);
-    await press(tester, LogicalKeyboardKey.arrowUp);
+
+    // The arrows drive the list, so they must not have moved the caret or
+    // stolen focus: the next character still lands in the query.
+    await tester.enterText(find.byType(TextField), '#release');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Write the release notes'), findsOneWidget);
+    expect(find.text('Fix login redirect'), findsNothing);
+  });
+
+  testWidgets('a new query resets the selection to the top', (tester) async {
+    final container = await open(tester);
+
+    await type(tester, '#');
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    // Re-filtering to one result must not leave the highlight on a row that
+    // is no longer there.
+    await type(tester, '#login');
     await press(tester, LogicalKeyboardKey.enter);
 
-    expect(container.read(selectedSessionIdProvider), isNotNull);
+    expect(container.read(selectedSessionIdProvider), 's1');
+  });
+
+  testWidgets('Escape closes it without opening anything', (tester) async {
+    final container = await open(tester);
+
+    await type(tester, '#');
+    await press(tester, LogicalKeyboardKey.escape);
+
+    expect(find.byType(QuickOpen), findsNothing);
+    expect(container.read(selectedSessionIdProvider), isNull);
   });
 
   testWidgets('a > query lists commands and nothing else', (tester) async {

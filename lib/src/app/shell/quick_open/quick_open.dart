@@ -143,14 +143,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       _selected = 0;
       _rerank();
     });
-    _revealSelected();
+    _revealSelectedAfterLayout();
   }
 
-  void _move(int delta) {
+  void _move(int delta) => _selectRow(_selected + delta);
+
+  /// Moves the highlight to [index], clamped. Deliberately does **not** wrap:
+  /// a list that jumps from its last row to its first on one more press is a
+  /// list you cannot hold the arrow key down on.
+  void _selectRow(int index) {
     if (_flat.isEmpty) return;
-    setState(() {
-      _selected = (_selected + delta).clamp(0, _flat.length - 1);
-    });
+    setState(() => _selected = index.clamp(0, _flat.length - 1));
     _revealSelected();
   }
 
@@ -168,6 +171,18 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       }
     }
     return offset;
+  }
+
+  /// Scrolls the highlighted row into view.
+  ///
+  /// Deferred to after the frame when the list itself has just changed: the
+  /// scroll position's extents still describe the *previous* list until it has
+  /// been laid out, and clamping a target against those is how a keyboard-
+  /// driven list ends up scrolled somewhere nobody asked for.
+  void _revealSelectedAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _revealSelected();
+    });
   }
 
   void _revealSelected() {
@@ -213,6 +228,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     }
     if (key == LogicalKeyboardKey.pageUp) {
       _move(-8);
+      return KeyEventResult.handled;
+    }
+    // Home/End drive the list, not the caret. The query is a short phrase in a
+    // single-line box — there is nothing in it worth jumping to — and the ends
+    // of a result list are somewhere people genuinely want to reach.
+    if (key == LogicalKeyboardKey.home) {
+      _selectRow(0);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.end) {
+      _selectRow(_flat.length - 1);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.enter ||
@@ -418,61 +444,65 @@ class _ResultRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final item = result.item;
     final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: _rowHeight,
-        // Selection is a wash plus a rule, not a filled bar: the row has to
-        // stay readable and the accent is the only colour in the palette.
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.10)
-              : Colors.transparent,
-          border: Border(
-            left: BorderSide(
-              color: selected ? scheme.primary : Colors.transparent,
-              width: 2,
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          height: _rowHeight,
+          // Selection is a wash plus a rule, not a filled bar: the row has to
+          // stay readable and the accent is the only colour in the palette.
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.10)
+                : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: selected ? scheme.primary : Colors.transparent,
+                width: 2,
+              ),
             ),
           ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-        child: Row(
-          children: [
-            Icon(item.icon, size: Chrome.icon, color: foreground),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Highlighted(
-                    text: item.title,
-                    positions: result.titlePositions,
-                    style: theme.textTheme.bodyMedium!,
-                    accent: scheme.primary,
-                  ),
-                  if (item.subtitle != null)
-                    Text(
-                      item.subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (item.detail != null) ...[
+          padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          child: Row(
+            children: [
+              Icon(item.icon, size: Chrome.icon, color: foreground),
               const SizedBox(width: Insets.sm),
-              Text(
-                item.detail!,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Highlighted(
+                      text: item.title,
+                      positions: result.titlePositions,
+                      style: theme.textTheme.bodyMedium!,
+                      accent: scheme.primary,
+                    ),
+                    if (item.subtitle != null)
+                      Text(
+                        item.subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
                 ),
               ),
+              if (item.detail != null) ...[
+                const SizedBox(width: Insets.sm),
+                Text(
+                  item.detail!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
