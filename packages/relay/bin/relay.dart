@@ -58,14 +58,22 @@ Future<void> main(List<String> arguments) async {
   stdout.writeln('relay: listening on ${relay.address.address}:${relay.port}');
 
   final done = Completer<void>();
+  final signals = <StreamSubscription<ProcessSignal>>[];
   Future<void> stop(ProcessSignal signal) async {
     stdout.writeln('relay: stopping');
+    // Cancelled first: a live signal subscription keeps the event loop alive,
+    // so without this the process logs that it stopped and then never exits.
+    for (final signal in signals) {
+      await signal.cancel();
+    }
     await relay.close();
     if (!done.isCompleted) done.complete();
   }
 
-  ProcessSignal.sigint.watch().listen(stop);
-  if (!Platform.isWindows) ProcessSignal.sigterm.watch().listen(stop);
+  signals.add(ProcessSignal.sigint.watch().listen(stop));
+  if (!Platform.isWindows) {
+    signals.add(ProcessSignal.sigterm.watch().listen(stop));
+  }
   await done.future;
 }
 
