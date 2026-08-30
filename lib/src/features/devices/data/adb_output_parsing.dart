@@ -140,3 +140,66 @@ String? firstMeaningfulLine(String output) {
   }
   return null;
 }
+
+/// Local ports of `adb forward` entries that point at a scrcpy socket on
+/// [serial].
+///
+/// A forward that outlives its server is worse than useless: `adb forward`
+/// accepts the host-side TCP connection *before* the device-side socket exists
+/// and then closes it, so a stale entry makes a reconnect look like it worked
+/// while delivering nothing. Every start therefore reaps the entries left by a
+/// previous run.
+///
+/// Lines look like `SERIAL tcp:56213 localabstract:scrcpy_c7a1b2c3`.
+List<int> parseScrcpyForwards(String output, {required String serial}) {
+  final ports = <int>[];
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    final fields = line.trim().split(RegExp(r'\s+'));
+    if (fields.length < 3) continue;
+    if (fields[0] != serial) continue;
+    if (!fields[2].startsWith('localabstract:scrcpy_')) continue;
+    final port = int.tryParse(fields[1].replaceFirst('tcp:', ''));
+    if (port != null) ports.add(port);
+  }
+  return ports;
+}
+
+/// Pids of scrcpy servers **this app** started, from `ps -A -o PID,ARGS`.
+///
+/// Identified by [jarPath] rather than by the scrcpy class name, so a scrcpy
+/// the developer is running themselves is never killed. That takes two steps:
+/// the jar only appears in the `CLASSPATH=` prefix of the wrapping
+/// `sh -c`, never in the `app_process` child's own arguments — the child is
+/// matched by the `scid=` its parent line carries.
+///
+/// ```
+/// 11026 sh -c CLASSPATH=/data/local/tmp/chitragupta-scrcpy-server.jar \
+///       app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef …
+/// 11028 app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef …
+/// ```
+List<int> parseOwnedScrcpyPids(String output, {required String jarPath}) {
+  final lines = output.split(RegExp(r'[\r\n]+'));
+  final scids = <String>{};
+  final scidPattern = RegExp(r'scid=([0-9a-fA-F]+)');
+
+  for (final line in lines) {
+    if (!line.contains(jarPath)) continue;
+    final scid = scidPattern.firstMatch(line)?.group(1);
+    if (scid != null) scids.add(scid.toLowerCase());
+  }
+
+  final pids = <int>[];
+  for (final line in lines) {
+    final trimmed = line.trim();
+    if (!trimmed.contains('com.genymobile.scrcpy.Server') &&
+        !trimmed.contains(jarPath)) {
+      continue;
+    }
+    final scid = scidPattern.firstMatch(trimmed)?.group(1)?.toLowerCase();
+    final ownsJar = trimmed.contains(jarPath);
+    if (!ownsJar && (scid == null || !scids.contains(scid))) continue;
+    final pid = int.tryParse(trimmed.split(RegExp(r'\s+')).first);
+    if (pid != null && pid > 1) pids.add(pid);
+  }
+  return pids;
+}

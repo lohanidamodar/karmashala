@@ -1,34 +1,53 @@
-import 'package:chitragupta/src/features/devices/domain/device_geometry.dart';
-import 'package:chitragupta/src/features/devices/domain/device_input.dart';
+import 'package:chitragupta/src/features/devices/data/device_gesture_sink.dart';
 import 'package:chitragupta/src/features/devices/presentation/device_touch_surface.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// A 405x900 surface over a 1080x2400 device — the same pane size the Loop 27
-/// coordinate mapping was verified at, so the expected numbers below are
-/// comparable to that measurement.
+/// A 405x900 surface, the same pane size Loop 27 verified its coordinate
+/// mapping at, so the fractions below are comparable to that measurement.
 const _paneSize = Size(405, 900);
-const _screen = DeviceScreenSize(width: 1080, height: 2400);
 
-typedef _Swipe = ({int fromX, int fromY, int toX, int toY, Duration duration});
+/// One reported pointer event, recorded so a test can assert the whole
+/// sequence rather than just its endpoints — the sequence *is* the feature.
+typedef _Event = ({String kind, int pointer, double fx, double fy});
+
+class _RecordingSink implements DeviceGestureSink {
+  final List<_Event> events = [];
+
+  @override
+  DeviceGestureTransport get transport => DeviceGestureTransport.scrcpyControl;
+
+  @override
+  void pointerDown(int pointer, double fx, double fy) =>
+      events.add((kind: 'down', pointer: pointer, fx: fx, fy: fy));
+
+  @override
+  void pointerMove(int pointer, double fx, double fy) =>
+      events.add((kind: 'move', pointer: pointer, fx: fx, fy: fy));
+
+  @override
+  void pointerUp(int pointer, double fx, double fy, Duration held) =>
+      events.add((kind: 'up', pointer: pointer, fx: fx, fy: fy));
+
+  @override
+  void pointerCancel(int pointer) =>
+      events.add((kind: 'cancel', pointer: pointer, fx: 0, fy: 0));
+
+  List<String> get kinds => [for (final e in events) e.kind];
+}
 
 void main() {
-  ({int x, int y})? tapped;
-  ({int x, int y})? longPressed;
-  _Swipe? swiped;
+  late _RecordingSink sink;
 
-  setUp(() {
-    tapped = null;
-    longPressed = null;
-    swiped = null;
-  });
+  setUp(() => sink = _RecordingSink());
 
   Future<void> pump(
     WidgetTester tester, {
-    DeviceScreenSize? screen = _screen,
+    bool withSink = true,
+    bool pinchWithModifier = true,
   }) async {
-    // The default 800x600 test surface would squash a 405x900 pane to 600 tall
-    // and every mapped coordinate with it.
+    // The default 800x600 test surface would squash a 405x900 pane.
     await tester.binding.setSurfaceSize(const Size(600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -38,16 +57,8 @@ void main() {
             width: _paneSize.width,
             height: _paneSize.height,
             child: DeviceTouchSurface(
-              screen: screen,
-              onTap: (x, y) => tapped = (x: x, y: y),
-              onLongPress: (x, y) => longPressed = (x: x, y: y),
-              onSwipe: (fromX, fromY, toX, toY, duration) => swiped = (
-                fromX: fromX,
-                fromY: fromY,
-                toX: toX,
-                toY: toY,
-                duration: duration,
-              ),
+              sink: withSink ? sink : null,
+              pinchWithModifier: pinchWithModifier,
               child: const ColoredBox(color: Color(0xFF000000)),
             ),
           ),
@@ -56,107 +67,106 @@ void main() {
     );
   }
 
-  /// The widget-local point that maps to a given device point, so tests can be
-  /// written in device coordinates.
-  Offset localFor(int deviceX, int deviceY) => Offset(
-    deviceX / _screen.width * _paneSize.width,
-    deviceY / _screen.height * _paneSize.height,
-  );
+  Offset globalAt(WidgetTester tester, double fx, double fy) =>
+      tester.getTopLeft(find.byType(DeviceTouchSurface)) +
+      Offset(fx * _paneSize.width, fy * _paneSize.height);
 
-  Offset globalFor(WidgetTester tester, Offset local) =>
-      tester.getTopLeft(find.byType(DeviceTouchSurface)) + local;
-
-  group('tap', () {
-    testWidgets('reports the point in device pixels', (tester) async {
+  group('a drag', () {
+    testWidgets('reports every intermediate move, not just the endpoints', (
+      tester,
+    ) async {
       await pump(tester);
-      // The Loop 27 example: a Settings row centred at device (954, 338)
-      // appears at (357.8, 126.8) in a 405x900 pane.
-      await tester.tapAt(globalFor(tester, const Offset(357.8, 126.8)));
-      expect(tapped, (x: 954, y: 338));
+      final gesture = await tester.startGesture(globalAt(tester, 0.5, 0.8));
+      for (var i = 1; i <= 8; i++) {
+        await gesture.moveTo(globalAt(tester, 0.5, 0.8 - 0.05 * i));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await gesture.up();
+      await tester.pump();
+
+      // This is the whole point of Loop 36. A gesture recogniser would have
+      // reported one summary; the device needs the motion as it happens.
+      expect(sink.kinds.first, 'down');
+      expect(sink.kinds.last, 'up');
+      expect(sink.kinds.where((k) => k == 'move').length, 8);
+    });
+
+    testWidgets('the first move is not swallowed by touch slop', (
+      tester,
+    ) async {
+      await pump(tester);
+      final gesture = await tester.startGesture(globalAt(tester, 0.5, 0.5));
+      // Two pixels: far below the ~18 px slop a GestureDetector insists on.
+      await gesture.moveBy(const Offset(0, -2));
+      await tester.pump();
+      expect(sink.kinds, ['down', 'move']);
+      await gesture.up();
+    });
+
+    testWidgets('positions are fractions of the picture', (tester) async {
+      await pump(tester);
+      await tester.tapAt(globalAt(tester, 0.25, 0.75));
+      expect(sink.events.first.fx, closeTo(0.25, 0.005));
+      expect(sink.events.first.fy, closeTo(0.75, 0.005));
     });
   });
 
-  group('long press', () {
-    testWidgets('reports the point, which a plain onLongPress cannot', (
-      tester,
-    ) async {
+  group('pointer ids', () {
+    testWidgets('two fingers get two distinct ids', (tester) async {
       await pump(tester);
-      await tester.longPressAt(globalFor(tester, localFor(540, 1200)));
-      expect(longPressed, (x: 540, y: 1200));
-      expect(swiped, isNull, reason: 'a long press is not a drag');
-      expect(tapped, isNull, reason: 'a long press is not a tap');
+      final a = await tester.startGesture(globalAt(tester, 0.2, 0.2));
+      final b = await tester.startGesture(globalAt(tester, 0.8, 0.8));
+      await a.moveTo(globalAt(tester, 0.3, 0.3));
+      await b.moveTo(globalAt(tester, 0.7, 0.7));
+      await a.up();
+      await b.up();
+      await tester.pump();
+
+      final ids = sink.events.map((e) => e.pointer).toSet();
+      expect(ids, {0, 1});
+    });
+
+    testWidgets('an id is recycled once its finger lifts', (tester) async {
+      await pump(tester);
+      await tester.tapAt(globalAt(tester, 0.2, 0.2));
+      await tester.tapAt(globalAt(tester, 0.8, 0.8));
+      // Flutter's own pointer numbers keep climbing; scrcpy's PointersState is
+      // a fixed-size table, so ours must not.
+      expect(sink.events.map((e) => e.pointer).toSet(), {0});
     });
   });
 
-  group('drag', () {
-    testWidgets('reports both endpoints in device pixels', (tester) async {
-      await pump(tester);
-      await tester.timedDragFrom(
-        globalFor(tester, localFor(540, 1800)),
-        localFor(540, 600) - localFor(540, 1800),
-        const Duration(milliseconds: 300),
-      );
-      expect(swiped, isNotNull);
-      expect(swiped!.fromX, 540);
-      expect(swiped!.fromY, 1800);
-      expect(swiped!.toX, 540);
-      expect(swiped!.toY, closeTo(600, 8));
-      expect(tapped, isNull);
-    });
-
-    testWidgets('a slow drag and a flick get different durations', (
-      tester,
-    ) async {
-      // This is the whole reason the duration is derived rather than fixed:
-      // `input swipe` interpolates over the duration, so the duration is the
-      // gesture's velocity.
-      await pump(tester);
-      final from = globalFor(tester, localFor(540, 1800));
-      final offset = localFor(540, 900) - localFor(540, 1800);
-
-      await tester.timedDragFrom(from, offset, const Duration(seconds: 1));
-      final slow = swiped!.duration;
-
-      await tester.timedDragFrom(
-        from,
-        offset,
-        const Duration(milliseconds: 120),
-      );
-      final quick = swiped!.duration;
-
-      expect(slow, greaterThan(quick));
-      expect(slow, greaterThanOrEqualTo(const Duration(milliseconds: 800)));
-      expect(quick, lessThanOrEqualTo(const Duration(milliseconds: 300)));
-    });
-
-    testWidgets('a very slow drag is capped, not passed through', (
+  group('Ctrl-drag pinch', () {
+    testWidgets('adds a second pointer mirrored about the centre', (
       tester,
     ) async {
       await pump(tester);
-      await tester.timedDragFrom(
-        globalFor(tester, localFor(540, 1800)),
-        localFor(540, 900) - localFor(540, 1800),
-        const Duration(seconds: 6),
-      );
-      expect(swiped!.duration, kMaxSwipeDuration);
+      await simulateKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      addTearDown(() => simulateKeyUpEvent(LogicalKeyboardKey.controlLeft));
+
+      final gesture = await tester.startGesture(globalAt(tester, 0.3, 0.3));
+      await gesture.moveTo(globalAt(tester, 0.4, 0.4));
+      await gesture.up();
+      await tester.pump();
+
+      final downs = sink.events.where((e) => e.kind == 'down').toList();
+      expect(downs.length, 2);
+      expect(downs[0].fx, closeTo(0.3, 0.01));
+      expect(downs[1].fx, closeTo(0.7, 0.01));
+      expect(downs[1].fy, closeTo(0.7, 0.01));
+      expect(sink.events.where((e) => e.kind == 'up').length, 2);
+    });
+
+    testWidgets('is off without the modifier', (tester) async {
+      await pump(tester);
+      await tester.tapAt(globalAt(tester, 0.3, 0.3));
+      expect(sink.events.where((e) => e.kind == 'down').length, 1);
     });
   });
 
-  group('no screen size', () {
-    testWidgets('input is inert rather than mapping against nothing', (
-      tester,
-    ) async {
-      await pump(tester, screen: null);
-      await tester.tapAt(globalFor(tester, const Offset(100, 100)));
-      await tester.longPressAt(globalFor(tester, const Offset(100, 100)));
-      await tester.timedDragFrom(
-        globalFor(tester, const Offset(100, 700)),
-        const Offset(0, -400),
-        const Duration(milliseconds: 300),
-      );
-      expect(tapped, isNull);
-      expect(longPressed, isNull);
-      expect(swiped, isNull);
-    });
+  testWidgets('no sink means no input at all', (tester) async {
+    await pump(tester, withSink: false);
+    await tester.tapAt(globalAt(tester, 0.5, 0.5));
+    expect(sink.events, isEmpty);
   });
 }

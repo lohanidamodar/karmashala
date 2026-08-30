@@ -1,3 +1,4 @@
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/features/devices/application/device_providers.dart';
 import 'package:chitragupta/src/features/devices/domain/android_device.dart';
 import 'package:chitragupta/src/features/devices/presentation/device_pane.dart';
@@ -6,6 +7,8 @@ import 'package:chitragupta/src/features/environments/domain/environment_path.da
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fake_command_runner.dart';
 
 const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);
@@ -34,6 +37,7 @@ Future<void> _pump(
   required List<AndroidDevice> devices,
   List<Avd> avds = const [],
   Size size = _desktop,
+  FakeCommandRunner? runner,
 }) async {
   tester.view
     ..physicalSize = size
@@ -43,6 +47,10 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        if (runner != null)
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: runner),
+          ),
         androidSdkProvider.overrideWith((ref) async => sdk),
         devicesProvider.overrideWith((ref) async => devices),
         avdsProvider.overrideWith((ref) async => avds),
@@ -178,5 +186,51 @@ void main() {
       );
       expect(reason, contains('offline'));
     });
+  });
+
+  group('DevicePane toolbar', () {
+    testWidgets('the refresh button says what it actually refreshes', (
+      tester,
+    ) async {
+      // It used to say "Refresh devices", so that is what people pressed when
+      // the live view froze — and it refreshed the list, not the stream.
+      await _pump(tester, sdk: _sdk(), devices: [_device()]);
+      expect(find.byTooltip('Refresh device list'), findsOneWidget);
+      expect(find.byTooltip('Refresh devices'), findsNothing);
+    });
+
+    testWidgets('offers to stop a selected emulator', (tester) async {
+      await _pump(tester, sdk: _sdk(), devices: [_device()]);
+      expect(find.byTooltip('Stop emulator'), findsOneWidget);
+    });
+
+    testWidgets('does not offer to stop a physical device', (tester) async {
+      // `emu kill` talks to the emulator console; on a phone it can only fail,
+      // and a control that can only fail should not be there.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device(serial: 'F6IZLV6LMFT4U4ZT')],
+      );
+      expect(find.byTooltip('Stop emulator'), findsNothing);
+    });
+
+    testWidgets(
+      'stopping an emulator asks first, and cancelling does nothing',
+      (tester) async {
+        final runner = FakeCommandRunner();
+        await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
+        await tester.tap(find.byTooltip('Stop emulator'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('is lost'), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(
+          runner.requests.any((r) => r.arguments.contains('kill')),
+          isFalse,
+        );
+      },
+    );
   });
 }

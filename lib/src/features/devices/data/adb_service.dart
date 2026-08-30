@@ -359,4 +359,57 @@ class AdbService {
       _forDevice(serial, ['forward', '--remove', 'tcp:$localPort']),
     );
   }
+
+  /// Every `adb forward` currently registered, across all devices.
+  ///
+  /// Not filtered by serial here: `adb forward --list` ignores `-s` and always
+  /// prints the whole table, so the filtering is [parseScrcpyForwards]'s job.
+  Future<String> listForwards() async {
+    final result = await runner.run(_adb(const ['forward', '--list']));
+    return result.ok ? result.stdout : '';
+  }
+
+  /// The device's process table with full command lines.
+  Future<String> processList(String serial) async {
+    final result = await runner.run(
+      _forDevice(serial, const ['shell', 'ps', '-A', '-o', 'PID,ARGS']),
+    );
+    return result.ok ? result.stdout : '';
+  }
+
+  /// Sends SIGKILL to [pids] on the device. Best effort: a pid that has already
+  /// gone is not an error.
+  Future<void> killPids(String serial, List<int> pids) async {
+    if (pids.isEmpty) return;
+    await runner.run(
+      _forDevice(serial, ['shell', 'kill', '-9', ...pids.map((pid) => '$pid')]),
+    );
+  }
+
+  /// Shuts a running emulator down.
+  ///
+  /// `emu kill` talks to the emulator's own console rather than to the device,
+  /// so it does nothing on a physical phone — callers must check
+  /// [AndroidDevice.isEmulator] first. Returns whether the emulator actually
+  /// went away, rather than whether the command was accepted: the console
+  /// answers `OK` before the process has finished exiting.
+  Future<bool> stopEmulator(
+    String serial, {
+    Duration timeout = const Duration(seconds: 20),
+    Duration pollInterval = const Duration(milliseconds: 500),
+  }) async {
+    final result = await runner.run(_forDevice(serial, const ['emu', 'kill']));
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final devices = await listDevices();
+      if (!devices.any((device) => device.serial == serial)) return true;
+      await Future<void>.delayed(pollInterval);
+    }
+    if (!result.ok) {
+      throw StateError(
+        'Could not stop $serial: ${result.stderr.trim().isEmpty ? result.stdout.trim() : result.stderr.trim()}',
+      );
+    }
+    return false;
+  }
 }
