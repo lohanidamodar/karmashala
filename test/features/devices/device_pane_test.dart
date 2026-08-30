@@ -13,6 +13,9 @@ import '../../support/fake_command_runner.dart';
 const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);
 
+const _emulator = 'emulator-5554';
+const _phoneSerial = 'F6IZLV6LMFT4U4ZT';
+
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'windows', path: r'C:\sdk'),
   adb: EnvironmentPath(
@@ -22,13 +25,14 @@ AndroidSdk _sdk() => const AndroidSdk(
 );
 
 AndroidDevice _device({
-  String serial = 'emulator-5554',
+  String serial = _emulator,
   DeviceConnectionState state = DeviceConnectionState.device,
+  String model = 'Pixel',
 }) => AndroidDevice(
   serial: serial,
   environmentId: 'windows',
   state: state,
-  model: 'Pixel',
+  model: model,
 );
 
 Future<void> _pump(
@@ -125,6 +129,24 @@ void main() {
       expect(find.byType(DevicePane), findsOneWidget);
     });
 
+    testWidgets('the emulator list does not overflow a compact pane', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [
+          Avd(name: 'Pixel_8_Pro', runningSerial: _emulator),
+          Avd(name: 'Pixel_Tablet'),
+          Avd(name: 'Nexus_5'),
+          Avd(name: 'Wear_Small'),
+        ],
+        size: _phone,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('hides the hardware buttons when no device is selected', (
       tester,
     ) async {
@@ -210,9 +232,13 @@ void main() {
       await _pump(
         tester,
         sdk: _sdk(),
-        devices: [_device(serial: 'F6IZLV6LMFT4U4ZT')],
+        devices: [_device(serial: _phoneSerial)],
       );
       expect(find.byTooltip('Stop emulator'), findsNothing);
+      expect(
+        find.byKey(const Key('stop-emulator-$_phoneSerial')),
+        findsNothing,
+      );
     });
 
     testWidgets(
@@ -232,5 +258,112 @@ void main() {
         );
       },
     );
+  });
+
+  // Bug 1: "i see an emulator running but cannot stop it in the list without
+  // starting live view". The action existed, but only on the live-view toolbar.
+  group('DevicePane emulator list', () {
+    testWidgets('offers to stop a running emulator with the live view off', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+      // Nothing is streaming — the toolbar still offers to *start* the live
+      // view — and the row is stoppable anyway. That is the whole fix.
+      expect(find.text('Live view'), findsOneWidget);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+      expect(find.text('Start'), findsNothing);
+    });
+
+    testWidgets('stopping from the list confirms, then runs emu kill', (
+      tester,
+    ) async {
+      final runner = FakeCommandRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('stop-emulator-$_emulator')));
+      await tester.pumpAndSettle();
+      // The confirmation is kept: anything not written to a snapshot is lost.
+      expect(find.textContaining('is lost'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Stop emulator'));
+      await tester.pumpAndSettle();
+
+      expect(
+        runner.requests.map((r) => r.arguments.join(' ')),
+        contains('-s $_emulator emu kill'),
+      );
+    });
+
+    testWidgets('cancelling a stop from the list kills nothing', (
+      tester,
+    ) async {
+      final runner = FakeCommandRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+        runner: runner,
+      );
+      await tester.tap(find.byKey(const Key('stop-emulator-$_emulator')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(runner.requests.any((r) => r.arguments.contains('kill')), isFalse);
+    });
+
+    testWidgets('an AVD that is not running offers Start, not Stop', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+      );
+      expect(find.byKey(const Key('start-avd-Pixel_8_Pro')), findsOneWidget);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsNothing);
+    });
+
+    testWidgets('a running emulator with no AVD row is still stoppable', (
+      tester,
+    ) async {
+      // No emulator package means no AVD list at all, but `adb devices` still
+      // shows the emulator and `emu kill` still works on it.
+      await _pump(tester, sdk: _sdk(), devices: [_device()]);
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+    });
+
+    testWidgets('a running emulator is not listed twice', (tester) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+      expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
+    });
+
+    testWidgets('a physical device never appears in the emulator list', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device(serial: _phoneSerial, model: 'CPH1989')],
+      );
+      expect(find.text('CPH1989'), findsNothing);
+      expect(find.text('Stop'), findsNothing);
+    });
   });
 }
