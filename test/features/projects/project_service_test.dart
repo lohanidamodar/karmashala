@@ -86,6 +86,31 @@ void main() {
     expect(repositoryDao.getByProject(created.project.id).length, 2);
   });
 
+  test('rediscover matches a recorded repository however it is spelled', () async {
+    // B7: the match used to be string equality on the whole `EnvironmentPath`,
+    // so a scanner that reported `C:/ws/app` — or the same path with a trailing
+    // separator — inserted a second row for a checkout already in the table.
+    discovery.result = [
+      DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),
+    ];
+    final created = await build().createProjectByDiscovery(
+      name: 'W',
+      root: root(r'C:\ws'),
+    );
+
+    discovery.result = [
+      DiscoveredRepository(name: 'app', path: root('C:/ws/app')),
+      DiscoveredRepository(name: 'api', path: root(r'C:\ws\api\')),
+      DiscoveredRepository(name: 'App', path: root(r'C:\WS\APP')),
+    ];
+    final added = await build().rediscover(created.project);
+
+    expect(added.map((r) => r.name), [
+      'api',
+    ], reason: 'three spellings of one Windows checkout are one checkout');
+    expect(repositoryDao.getByProject(created.project.id).length, 2);
+  });
+
   test('createProjectForEnvironment binds repos to a WSL target', () async {
     discovery.result = [
       DiscoveredRepository(name: 'app', path: root(r'C:\ws\app')),

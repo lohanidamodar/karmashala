@@ -3,6 +3,7 @@ import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
+import '../../explorer/application/checkout.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../repositories/data/repository_dao.dart';
 import '../../repositories/domain/repository.dart';
@@ -129,14 +130,21 @@ class ProjectService {
   }
 
   /// Re-runs discovery for an existing [project] and persists any repositories
-  /// not already recorded (matched by path). Returns the newly added rows.
+  /// not already recorded. Returns the newly added rows.
+  ///
+  /// Matched by **checkout identity**, not by string equality: discovery, `git
+  /// worktree list` and the workspace's own rows spell the same directory three
+  /// ways (`C:\ws\app`, `C:/ws/app`, a trailing separator), and comparing the
+  /// spellings would insert a second row for a repository that is already
+  /// there. "Rescan for repositories" is a menu item now, so that duplicate is
+  /// one click away rather than hypothetical. See [Checkout].
   Future<List<Repository>> rediscover(
     Project project, {
     int maxDepth = 5,
   }) async {
     final existing = repositoryDao
         .getByProject(project.id)
-        .map((r) => r.path)
+        .map((r) => Checkout(r.path))
         .toSet();
     final discovered = await discovery.discover(
       project.root,
@@ -145,7 +153,7 @@ class ProjectService {
     final now = clock.nowUtc();
     final added = <Repository>[];
     for (final d in discovered) {
-      if (existing.contains(d.path)) continue;
+      if (existing.contains(Checkout(d.path))) continue;
       final repo = Repository(
         id: ids.newId(),
         projectId: project.id,
