@@ -15,6 +15,7 @@ import '../data/session_repository_dao.dart';
 import '../domain/session.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
+import '../domain/session_naming.dart';
 import '../domain/session_status.dart';
 
 /// Resolves the [AgentAdapter] for an `AgentDescriptor.id`. Agents with a
@@ -80,8 +81,8 @@ class SessionEngine {
     if (useWorktree) {
       final created = await worktreeService.createForSession(
         repo: repository.path,
-        worktreeName: id.substring(0, 8),
-        branch: 'session/${id.substring(0, 8)}',
+        worktreeName: sessionWorktreeName(id),
+        branch: sessionBranchName(id),
       );
       workingDirectory = created.path;
       worktree = created.path;
