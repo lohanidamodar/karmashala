@@ -224,12 +224,8 @@ class LauncherControlServer {
       } on Object catch (error, stack) {
         stage = ControlServerFailureStage.socketBind;
         detail = '$error';
-        _logger.error(
-          'control-server: privileged RPC withheld '
-          'stage=socketBind reason=$error',
-          error,
-          stack,
-        );
+        // The stack, here; the structured one-liner comes from _publishStatus.
+        _logger.warning('Owner-only RPC socket failed to bind.', error, stack);
       }
     } else {
       // The deliberate opt-out: a caller has asked for loopback HTTP in code.

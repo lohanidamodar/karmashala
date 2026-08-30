@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'src/app/chitragupta_app.dart';
 import 'src/core/database/app_database.dart';
 import 'src/core/database/database_providers.dart';
+import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/logging/app_logger.dart';
 import 'src/core/process/windows_command_runner.dart';
 import 'src/core/util/clock.dart';
@@ -15,8 +16,6 @@ import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
-import 'src/features/agents/application/agent_hook_installation_service.dart';
-import 'src/features/mcp/launcher_control_server.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
 
@@ -63,6 +62,10 @@ Future<void> main() async {
     unawaited(_discoverAgentsOnFirstRun(container, database, clock, logger));
   }
 
+  // One owner for everything below, so quitting is an ordered teardown rather
+  // than a process that happens to end. See `AppLifecycle`.
+  final lifecycle = AppLifecycle(container, logger: logger);
+
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
   if (SystemIntegrationService.isSupported) {
     try {
@@ -85,47 +88,18 @@ Future<void> main() async {
     } catch (error, stack) {
       logger.warning('Window manager init failed.', error, stack);
     }
-    await SystemIntegrationService(container).init();
+    await lifecycle.startSystemIntegration();
 
     // Local control server for the launcher agent's MCP bridge (best-effort).
     //
-    // The instance is kept, not discarded, because it owns `/agent-hook`'s
-    // ephemeral port and token — which the agents' installed hooks have to be
-    // told about. Nothing installed them before this: `AgentHookInstaller` had
-    // no call site since Loop 28, so `awaitingApproval` and `failed`, which only
-    // a hook can observe, were unreachable in the running app.
-    try {
-      final controlServer = LauncherControlServer(container, logger: logger);
-      await controlServer.start();
-      final endpoint = controlServer.hookEndpoint;
-      if (endpoint != null) {
-        // Off the startup path: rewriting hooks reads and writes the agents' own
-        // config files, and the window should not wait for it. Hooks that land a
-        // moment after launch are still hooks; a slower launch is felt every
-        // time.
-        unawaited(
-          container
-              .read(agentHookInstallationServiceProvider)
-              .installAll(endpoint)
-              .then(
-                (results) {
-                  final installed = results.where((r) => r.installed).length;
-                  logger.info(
-                    'Agent hooks: $installed installed, '
-                    '${results.length - installed} skipped.',
-                  );
-                },
-                onError: (Object error, StackTrace stack) => logger.warning(
-                  'Agent hook installation failed.',
-                  error,
-                  stack,
-                ),
-              ),
-        );
-      }
-    } catch (error, stack) {
-      logger.warning('Launcher control server failed to start.', error, stack);
-    }
+    // The lifecycle owner keeps the instance — it owns `/agent-hook`'s
+    // ephemeral port and token, which the agents' installed hooks have to be
+    // told about, and its `stop()` is what removes the handshake on the way
+    // out. Nothing installed the hooks before Loop 31: `AgentHookInstaller` had
+    // no call site since Loop 28, so `awaitingApproval` and `failed`, which
+    // only a hook can observe, were unreachable in the running app.
+    final controlServer = await lifecycle.startControlServer();
+    if (controlServer != null) lifecycle.installAgentHooks(controlServer);
   }
 
   runApp(
