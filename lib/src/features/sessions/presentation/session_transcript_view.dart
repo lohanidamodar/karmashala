@@ -12,6 +12,7 @@ import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
 import '../domain/session_event_types.dart';
 import 'chat_transcript.dart';
+import 'handoff_actions_row.dart';
 import 'message_composer.dart';
 import 'session_repositories_bar.dart';
 
@@ -73,13 +74,23 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (events) => ChatTranscriptView(
               messages: _toMessages(events),
-              footer: MessageComposer(
-                hintText: active
-                    ? 'Message the agent…  (attach an image with 🖼)'
-                    : 'Type to continue this session…',
-                onSend: (text) => ref
-                    .read(sessionActionsProvider)
-                    .continueSession(widget.sessionId, text),
+              // The handoff row sits on the composer's channel: both send
+              // through `continueSession`, so both are available in exactly the
+              // same circumstances.
+              footer: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  HandoffActionsRow(sessionId: widget.sessionId),
+                  MessageComposer(
+                    hintText: active
+                        ? 'Message the agent…  (attach an image with 🖼)'
+                        : 'Type to continue this session…',
+                    onSend: (text) => ref
+                        .read(sessionActionsProvider)
+                        .continueSession(widget.sessionId, text),
+                  ),
+                ],
               ),
               emptyHint: active
                   ? 'Session is running — say something to the agent.'
