@@ -225,7 +225,9 @@ class _CopyButtonState extends State<_CopyButton> {
       iconSize: 13,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       padding: EdgeInsets.zero,
-      color: _copied ? Colors.green : scheme.onSurfaceVariant,
+      color: _copied
+          ? SemanticColors.of(context).idle
+          : scheme.onSurfaceVariant,
       icon: Icon(_copied ? AppIcons.check : AppIcons.copySimple),
       onPressed: () async {
         await Clipboard.setData(ClipboardData(text: widget.text));

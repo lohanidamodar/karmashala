@@ -27,46 +27,32 @@ import 'pane_layout_view.dart';
 import 'session_status.dart';
 import 'terminal_search_bar.dart';
 
-/// The terminal panel: a bar of tabs, each holding a tree of split panes, over
-/// the active tab's panes.
+/// Everything the terminal surface can be asked to *do*, in one place.
 ///
-/// Inactive tabs stay alive inside an [IndexedStack], which paints only its
-/// active child — hidden tabs cost VT parsing but no painting, which is the
-/// property Loop 26's performance work depends on.
-class TerminalPanel extends ConsumerStatefulWidget {
-  const TerminalPanel({super.key});
+/// The terminal used to be a dock that owned both its tab strip and its panes.
+/// Loop 47 moved the tabs into the shell's workbench strip, so the strip and the
+/// panes are now built by different widgets — and both need the same verbs.
+/// Holding them here keeps that a re-placement rather than a fork: there is
+/// still exactly one implementation of "open a tab", "split", "find".
+class TerminalActions {
+  const TerminalActions(this.ref);
 
-  @override
-  ConsumerState<TerminalPanel> createState() => _TerminalPanelState();
-}
-
-class _TerminalPanelState extends ConsumerState<TerminalPanel> {
-  @override
-  void initState() {
-    super.initState();
-    // Ensure there is always at least one terminal when the panel is shown.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (ref.read(terminalSessionsControllerProvider).isEmpty) {
-        _open(_defaultProfile());
-      }
-    });
-  }
+  final WidgetRef ref;
 
   TerminalSessionsController get _sessions =>
       ref.read(terminalSessionsControllerProvider.notifier);
 
-  List<TerminalProfile> _profiles() =>
+  List<TerminalProfile> profiles() =>
       terminalProfilesFor(ref.read(environmentsControllerProvider));
 
-  TerminalProfile _defaultProfile() {
+  TerminalProfile defaultProfile() {
     final id = ref.read(settingsControllerProvider).defaultTerminalProfileId;
-    return resolveTerminalProfile(id, _profiles());
+    return resolveTerminalProfile(id, profiles());
   }
 
   /// The working directory a new terminal should start in, derived from the
   /// selected repository when it is compatible with the chosen shell.
-  String? _workingDirFor(TerminalProfile profile) {
+  String? workingDirFor(TerminalProfile profile) {
     final repoId = ref.read(selectedRepositoryIdProvider);
     if (repoId == null) return null;
     final repo = ref.read(repositoryDaoProvider).getById(repoId);
@@ -79,41 +65,28 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     return repoIsWindows ? repo.path.path : null;
   }
 
-  void _open(TerminalProfile profile) {
-    _sessions.openTab(profile, workingDirectory: _workingDirFor(profile));
+  void open(TerminalProfile profile) {
+    _sessions.openTab(profile, workingDirectory: workingDirFor(profile));
   }
 
-  void _split(SplitAxis axis, [TerminalProfile? profile]) {
-    final chosen = profile ?? _defaultProfile();
-    _sessions.splitPane(axis, chosen, workingDirectory: _workingDirFor(chosen));
+  void split(SplitAxis axis, [TerminalProfile? profile]) {
+    final chosen = profile ?? defaultProfile();
+    _sessions.splitPane(axis, chosen, workingDirectory: workingDirFor(chosen));
   }
 
-  void _closeFocusedPane() {
+  void closeFocusedPane() {
     final tab = ref.read(terminalSessionsControllerProvider).activeTab;
     if (tab != null) _sessions.closePane(tab.focusedPaneId);
   }
 
-  void _openSearch() {
+  void openSearch() {
     final tab = ref.read(terminalSessionsControllerProvider).activeTab;
     if (tab == null) return;
     ref.read(terminalSearchControllerProvider.notifier).open(tab.focusedPaneId);
   }
 
-  /// Terminal-wide shortcuts, handled through `TerminalView.onKeyEvent`, which
-  /// the widget consults *before* its own shortcut manager and before
-  /// `Terminal.keyInput`.
-  ///
-  /// All are `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`, `Ctrl+F` and `Ctrl+W`
-  /// are live control characters a shell expects to receive.
-  /// The imported palette, or null when the user is on the built-in theme or
-  /// the stored theme no longer resolves.
-  TerminalPalette? _importedPalette() {
-    final result = ref.watch(importedTerminalThemeProvider);
-    return result is ThemeLoadOk ? result.palette : null;
-  }
-
   /// The focused pane's live instance, if there is one.
-  TerminalInstance? _focusedInstance() {
+  TerminalInstance? focusedInstance() {
     final tab = ref.read(terminalSessionsControllerProvider).activeTab;
     if (tab == null) return null;
     return _sessions.instanceFor(tab.focusedPaneId);
@@ -121,16 +94,16 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
 
   /// The commands OSC 133 saw in the focused pane. Empty for any pane without
   /// shell integration, which is what keeps every affordance invisible there.
-  List<CommandBlock> _focusedBlocks() {
-    final recorder = _focusedInstance()?.commandBlocks;
+  List<CommandBlock> focusedBlocks() {
+    final recorder = focusedInstance()?.commandBlocks;
     if (recorder == null) return const [];
     recorder.tracker.pruneEvicted();
     return recorder.tracker.blocks;
   }
 
   /// Scrolls the focused pane to the command before or after the one on screen.
-  void _jumpCommand({required bool forward}) {
-    final instance = _focusedInstance();
+  void jumpCommand({required bool forward}) {
+    final instance = focusedInstance();
     final recorder = instance?.commandBlocks;
     if (instance == null || recorder == null) return;
     recorder.tracker.pruneEvicted();
@@ -149,10 +122,10 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     final target = forward
         ? recorder.tracker.nextAfter(centreLine)
         : recorder.tracker.previousBefore(centreLine);
-    _scrollPaneTo(instance, target);
+    scrollPaneTo(instance, target);
   }
 
-  void _scrollPaneTo(TerminalInstance instance, CommandBlock? block) {
+  void scrollPaneTo(TerminalInstance instance, CommandBlock? block) {
     final line = block?.promptLine;
     if (line == null) return;
     scrollTerminalToLine(
@@ -164,7 +137,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
 
   /// Shows what is still running with no tab, and lets the user bring one back
   /// or end it.
-  Future<void> _showBackgroundSessions() async {
+  Future<void> showBackgroundSessions(BuildContext context) async {
     await showDialog<void>(
       context: context,
       builder: (context) => Consumer(
@@ -188,8 +161,8 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     );
   }
 
-  Future<void> _showCommands() async {
-    final instance = _focusedInstance();
+  Future<void> showCommands(BuildContext context) async {
+    final instance = focusedInstance();
     if (instance == null) return;
     final picked = await showDialog<CommandBlock>(
       context: context,
@@ -199,7 +172,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         content: SizedBox(
           width: 560,
           child: CommandHistorySheet(
-            blocks: _focusedBlocks(),
+            blocks: focusedBlocks(),
             onSelect: (block) => Navigator.of(context).pop(block),
           ),
         ),
@@ -211,10 +184,16 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         ],
       ),
     );
-    if (picked != null) _scrollPaneTo(instance, picked);
+    if (picked != null) scrollPaneTo(instance, picked);
   }
 
-  KeyEventResult _onPaneKey(FocusNode node, KeyEvent event) {
+  /// Terminal-wide shortcuts, handled through `TerminalView.onKeyEvent`, which
+  /// the widget consults *before* its own shortcut manager and before
+  /// `Terminal.keyInput`.
+  ///
+  /// All are `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`, `Ctrl+F` and `Ctrl+W`
+  /// are live control characters a shell expects to receive.
+  KeyEventResult onPaneKey(FocusNode node, KeyEvent event) {
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed) return KeyEventResult.ignored;
 
@@ -225,19 +204,19 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     void Function()? action;
     if (shift && !alt) {
       if (key == LogicalKeyboardKey.keyD) {
-        action = () => _split(SplitAxis.horizontal);
+        action = () => split(SplitAxis.horizontal);
       } else if (key == LogicalKeyboardKey.keyE) {
-        action = () => _split(SplitAxis.vertical);
+        action = () => split(SplitAxis.vertical);
       } else if (key == LogicalKeyboardKey.keyW) {
-        action = _closeFocusedPane;
+        action = closeFocusedPane;
       } else if (key == LogicalKeyboardKey.keyF) {
-        action = _openSearch;
+        action = openSearch;
       } else if (key == LogicalKeyboardKey.keyT) {
-        action = () => _open(_defaultProfile());
+        action = () => open(defaultProfile());
       } else if (key == LogicalKeyboardKey.arrowUp) {
-        action = () => _jumpCommand(forward: false);
+        action = () => jumpCommand(forward: false);
       } else if (key == LogicalKeyboardKey.arrowDown) {
-        action = () => _jumpCommand(forward: true);
+        action = () => jumpCommand(forward: true);
       }
     } else if (alt && !shift) {
       if (key == LogicalKeyboardKey.arrowLeft) {
@@ -263,6 +242,44 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
     if (event is KeyDownEvent) action();
     return KeyEventResult.handled;
   }
+}
+
+/// The terminal's panes: the search bar over the active tab's split tree.
+///
+/// Inactive tabs stay alive inside an [IndexedStack], which paints only its
+/// active child — hidden tabs cost VT parsing but no painting, which is the
+/// property Loop 26's performance work depends on.
+class TerminalPaneStack extends ConsumerStatefulWidget {
+  const TerminalPaneStack({super.key});
+
+  @override
+  ConsumerState<TerminalPaneStack> createState() => _TerminalPaneStackState();
+}
+
+class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
+  late final TerminalActions _actions = TerminalActions(ref);
+
+  @override
+  void initState() {
+    super.initState();
+    // Ensure there is always at least one terminal when the panes are shown.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (ref.read(terminalSessionsControllerProvider).isEmpty) {
+        _actions.open(_actions.defaultProfile());
+      }
+    });
+  }
+
+  TerminalSessionsController get _sessions =>
+      ref.read(terminalSessionsControllerProvider.notifier);
+
+  /// The imported palette, or null when the user is on the built-in theme or
+  /// the stored theme no longer resolves.
+  TerminalPalette? _importedPalette() {
+    final result = ref.watch(importedTerminalThemeProvider);
+    return result is ThemeLoadOk ? result.palette : null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -275,27 +292,6 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
       color: theme.colorScheme.surfaceContainerLowest,
       child: Column(
         children: [
-          _TabBar(
-            tabs: state.tabs,
-            activeTabId: state.activeTabId,
-            titleFor: _sessions.titleForTab,
-            livenessFor: _sessions.livenessForTab,
-            profiles: _profiles(),
-            onSelect: _sessions.activateTab,
-            onClose: _sessions.closeTab,
-            onEnd: (tabId) => _sessions.closeTab(tabId, detach: false),
-            onOpen: _open,
-            onSplit: _split,
-            onFind: _openSearch,
-            backgroundCount: state.detached.length,
-            onBackgroundSessions: _showBackgroundSessions,
-            onCommands: _focusedBlocks().isEmpty ? null : _showCommands,
-            maximized: ref.watch(terminalMaximizedProvider),
-            onToggleMaximize: () =>
-                ref.read(terminalMaximizedProvider.notifier).toggle(),
-            onHide: () => ref.read(terminalVisibleProvider.notifier).set(false),
-          ),
-          const Divider(height: 1),
           if (search.visible) const TerminalSearchBar(),
           Expanded(
             child: state.tabs.isEmpty
@@ -356,7 +352,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
           border: showFocusRing
               ? Border.all(
                   color: focused
-                      ? theme.colorScheme.tertiary
+                      ? theme.colorScheme.primary
                       : Colors.transparent,
                 )
               : null,
@@ -380,7 +376,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                 controller: instance.controller,
                 focusNode: instance.focusNode,
                 scrollController: instance.scrollController,
-                theme: _terminalTheme(theme, _importedPalette()),
+                theme: terminalThemeFor(theme, _importedPalette()),
                 textStyle: const TerminalStyle(
                   fontSize: 13,
                   fontFamily: kMonoFamily,
@@ -392,7 +388,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
                 // with "Could not set client, view ID is null" and blanks the
                 // terminal.
                 hardwareKeyboardOnly: true,
-                onKeyEvent: _onPaneKey,
+                onKeyEvent: _actions.onPaneKey,
                 // Right-click → copy selection / paste / end the session.
                 onSecondaryTapDown: (details, _) => _terminalMenu(
                   context,
@@ -449,165 +445,106 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         final text = data?.text;
         if (text != null && text.isNotEmpty) session.terminal.paste(text);
       case 'find':
-        _openSearch();
+        _actions.openSearch();
       case 'end':
         _sessions.endSession(paneId);
     }
   }
 }
 
-class _TabBar extends StatelessWidget {
-  const _TabBar({
-    required this.tabs,
-    required this.activeTabId,
-    required this.titleFor,
-    required this.livenessFor,
-    required this.profiles,
-    required this.onSelect,
-    required this.onClose,
-    required this.onEnd,
-    required this.onOpen,
-    required this.onSplit,
-    required this.onFind,
-    required this.backgroundCount,
-    required this.onBackgroundSessions,
-    required this.onCommands,
-    required this.maximized,
-    required this.onToggleMaximize,
-    required this.onHide,
-  });
-
-  final List<TerminalTab> tabs;
-  final String? activeTabId;
-  final String Function(String tabId) titleFor;
-  final PaneLiveness Function(String tabId) livenessFor;
-  final List<TerminalProfile> profiles;
-  final ValueChanged<String> onSelect;
-  final ValueChanged<String> onClose;
-  final ValueChanged<String> onEnd;
-  final ValueChanged<TerminalProfile> onOpen;
-  final void Function(SplitAxis axis) onSplit;
-  final VoidCallback onFind;
-
-  /// How many sessions are running with no tab. Zero hides the button entirely.
-  final int backgroundCount;
-  final VoidCallback onBackgroundSessions;
-
-  /// Null when the focused pane reported no commands, which is also the case
-  /// for any shell without integration — the button simply is not there.
-  final VoidCallback? onCommands;
-  final bool maximized;
-  final VoidCallback onToggleMaximize;
-  final VoidCallback onHide;
+/// The terminal's own toolbar buttons — find, split, new tab and the two
+/// buttons that only appear when they have something to say (background
+/// sessions, recorded commands).
+///
+/// Sits at the right of the workbench's tab strip, so terminal verbs stay
+/// beside terminal tabs.
+class TerminalToolbar extends ConsumerWidget {
+  const TerminalToolbar({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      height: 36,
-      child: Row(
-        children: [
-          const SizedBox(width: Insets.sm),
-          Icon(AppIcons.terminal, size: 16, color: theme.colorScheme.tertiary),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                for (final tab in tabs)
-                  _Tab(
-                    title: titleFor(tab.id),
-                    liveness: livenessFor(tab.id),
-                    selected: tab.id == activeTabId,
-                    onTap: () => onSelect(tab.id),
-                    onClose: () => onClose(tab.id),
-                    onEnd: () => onEnd(tab.id),
-                  ),
-              ],
-            ),
-          ),
-          if (backgroundCount > 0)
-            IconButton(
-              tooltip:
-                  '$backgroundCount session'
-                  '${backgroundCount == 1 ? '' : 's'} running in the background',
-              icon: Badge.count(
-                count: backgroundCount,
-                child: const Icon(AppIcons.pictureInpicture, size: 16),
-              ),
-              onPressed: onBackgroundSessions,
-            ),
-          if (onCommands != null)
-            IconButton(
-              tooltip: 'Commands',
-              icon: const Icon(AppIcons.clockCounterClockwise, size: 15),
-              onPressed: onCommands,
-            ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final actions = TerminalActions(ref);
+    final state = ref.watch(terminalSessionsControllerProvider);
+    final backgroundCount = state.detached.length;
+    final hasTabs = state.tabs.isNotEmpty;
+    final hasCommands = actions.focusedBlocks().isNotEmpty;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (backgroundCount > 0)
           IconButton(
-            tooltip: 'Find in scrollback (Ctrl+Shift+F)',
-            icon: const Icon(AppIcons.magnifyingGlass, size: 16),
-            onPressed: tabs.isEmpty ? null : onFind,
-          ),
-          IconButton(
-            tooltip: 'Split right (Ctrl+Shift+D)',
-            icon: const Icon(AppIcons.sidebarSimple, size: 16),
-            onPressed: tabs.isEmpty
-                ? null
-                : () => onSplit(SplitAxis.horizontal),
-          ),
-          IconButton(
-            tooltip: 'Split down (Ctrl+Shift+E)',
-            icon: const RotatedBox(
-              quarterTurns: 1,
-              child: Icon(AppIcons.sidebarSimple, size: 16),
+            tooltip:
+                '$backgroundCount session'
+                '${backgroundCount == 1 ? '' : 's'} running in the background',
+            // The accent, not Material's default error red: a session running
+            // without a tab is the app working as designed, not a fault.
+            icon: Badge.count(
+              count: backgroundCount,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              textColor: Theme.of(context).colorScheme.onPrimary,
+              child: const Icon(AppIcons.pictureInpicture, size: 15),
             ),
-            onPressed: tabs.isEmpty ? null : () => onSplit(SplitAxis.vertical),
+            onPressed: () => actions.showBackgroundSessions(context),
           ),
-          PopupMenuButton<TerminalProfile>(
-            tooltip: 'New terminal tab',
-            icon: const Icon(AppIcons.plus, size: 18),
-            onSelected: onOpen,
-            itemBuilder: (context) => [
-              for (final profile in profiles)
-                PopupMenuItem(
-                  value: profile,
-                  height: 32,
-                  child: Row(
-                    children: [
-                      const Icon(AppIcons.terminal, size: 16),
-                      const SizedBox(width: 10),
-                      Text(profile.label),
-                    ],
-                  ),
+        if (hasCommands)
+          IconButton(
+            tooltip: 'Commands',
+            icon: const Icon(AppIcons.clockCounterClockwise, size: 14),
+            onPressed: () => actions.showCommands(context),
+          ),
+        IconButton(
+          tooltip: 'Find in scrollback (Ctrl+Shift+F)',
+          icon: const Icon(AppIcons.magnifyingGlass, size: 15),
+          onPressed: hasTabs ? actions.openSearch : null,
+        ),
+        IconButton(
+          tooltip: 'Split right (Ctrl+Shift+D)',
+          icon: const Icon(AppIcons.sidebarSimple, size: 15),
+          onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
+        ),
+        IconButton(
+          tooltip: 'Split down (Ctrl+Shift+E)',
+          icon: const RotatedBox(
+            quarterTurns: 1,
+            child: Icon(AppIcons.sidebarSimple, size: 15),
+          ),
+          onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
+        ),
+        PopupMenuButton<TerminalProfile>(
+          tooltip: 'New terminal tab',
+          icon: const Icon(AppIcons.plus, size: 16),
+          onSelected: actions.open,
+          itemBuilder: (context) => [
+            for (final profile in actions.profiles())
+              PopupMenuItem(
+                value: profile,
+                height: 32,
+                child: Row(
+                  children: [
+                    const Icon(AppIcons.terminal, size: 15),
+                    const SizedBox(width: 10),
+                    Text(profile.label),
+                  ],
                 ),
-            ],
-          ),
-          IconButton(
-            tooltip: maximized ? 'Restore terminal' : 'Maximize terminal',
-            isSelected: maximized,
-            icon: const Icon(AppIcons.arrowsOutSimple, size: 18),
-            onPressed: onToggleMaximize,
-          ),
-          IconButton(
-            tooltip: 'Hide terminal (Ctrl+`)',
-            icon: const Icon(AppIcons.x, size: 18),
-            onPressed: onHide,
-          ),
-          const SizedBox(width: Insets.xs),
-        ],
-      ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-class _Tab extends StatelessWidget {
-  const _Tab({
+/// One terminal tab, drawn as a chip in the workbench strip.
+class TerminalTabChip extends StatelessWidget {
+  const TerminalTabChip({
     required this.title,
     required this.liveness,
     required this.selected,
     required this.onTap,
     required this.onClose,
     required this.onEnd,
+    super.key,
   });
 
   final String title;
@@ -624,51 +561,22 @@ class _Tab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-      child: Material(
-        color: selected ? scheme.surfaceContainerHigh : Colors.transparent,
-        borderRadius: BorderRadius.circular(Radii.sm),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(Radii.sm),
-          onTap: onTap,
-          onSecondaryTapDown: (details) =>
-              _menu(context, details.globalPosition),
-          child: Padding(
-            padding: const EdgeInsets.only(left: Insets.sm, right: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TabLivenessDot(liveness: liveness),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: selected
-                        ? scheme.onSurface
-                        : scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                IconButton(
-                  tooltip: liveness.isLive
-                      ? 'Close tab (the session keeps running)'
-                      : 'Close tab',
-                  iconSize: 14,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(AppIcons.x),
-                  onPressed: onClose,
-                ),
-              ],
-            ),
-          ),
-        ),
+    return WorkbenchTabChip(
+      selected: selected,
+      onTap: onTap,
+      onSecondaryTapDown: (details) => _menu(context, details.globalPosition),
+      leading: TabLivenessDot(liveness: liveness),
+      label: title,
+      trailing: IconButton(
+        tooltip: liveness.isLive
+            ? 'Close tab (the session keeps running)'
+            : 'Close tab',
+        iconSize: 13,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+        padding: EdgeInsets.zero,
+        icon: const Icon(AppIcons.x),
+        onPressed: onClose,
       ),
     );
   }
@@ -700,17 +608,95 @@ class _Tab extends StatelessWidget {
   }
 }
 
-TerminalTheme _terminalTheme(ThemeData theme, TerminalPalette? imported) {
-  // Keep xterm's well-tuned 16-colour palette; only align the background and
-  // foreground with the app surface so the panel reads as one piece.
+/// The shared chip shape for everything in the workbench tab strip, so a
+/// session tab and a terminal tab are visibly the same kind of thing.
+class WorkbenchTabChip extends StatelessWidget {
+  const WorkbenchTabChip({
+    required this.selected,
+    required this.onTap,
+    required this.label,
+    this.leading,
+    this.trailing,
+    this.onSecondaryTapDown,
+    this.tooltip,
+    super.key,
+  });
+
+  final bool selected;
+  final VoidCallback onTap;
+  final String label;
+  final Widget? leading;
+  final Widget? trailing;
+  final GestureTapDownCallback? onSecondaryTapDown;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // The active chip takes the colour of the ground it sits over, so the tab
+    // and its content read as one surface; selection is then carried by a top
+    // rule in the accent, because an outline alone is invisible against a
+    // neutral ramp at this size.
+    final chip = Material(
+      color: selected ? scheme.surfaceContainerLowest : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onSecondaryTapDown: onSecondaryTapDown,
+        child: Container(
+          height: Chrome.tabStrip,
+          constraints: const BoxConstraints(maxWidth: 220),
+          padding: EdgeInsets.only(
+            left: Insets.sm,
+            right: trailing == null ? Insets.sm : 2,
+          ),
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                width: 2,
+                color: selected ? scheme.primary : Colors.transparent,
+              ),
+              right: BorderSide(color: scheme.outlineVariant),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ?leading,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: selected
+                        ? scheme.onSurface
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 2), trailing!],
+            ],
+          ),
+        ),
+      ),
+    );
+    return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
+  }
+}
+
+/// The terminal's colours: xterm's own 16-colour palette, with the background,
+/// foreground and cursor aligned to the app surface so the panel reads as one
+/// piece. An imported theme brings its own background and wins.
+TerminalTheme terminalThemeFor(ThemeData theme, TerminalPalette? imported) {
   final scheme = theme.colorScheme;
   final base = TerminalThemes.defaultTheme.copyWith(
     background: scheme.surfaceContainerLowest,
     foreground: scheme.onSurface,
-    cursor: scheme.tertiary,
+    cursor: scheme.primary,
   );
-  // An imported theme brings its own background: the user picked those colours
-  // deliberately, so they win over the app surface.
+  // The user picked those colours deliberately, so they win over the app
+  // surface.
   return imported?.applyTo(base) ?? base;
 }
 

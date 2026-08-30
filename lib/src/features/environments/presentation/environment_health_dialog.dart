@@ -39,10 +39,11 @@ class EnvironmentHealthDialog extends ConsumerWidget {
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final item = items[index];
+                    final semantic = SemanticColors.of(context);
                     final color = switch (item.level) {
-                      HealthLevel.healthy => Colors.green,
-                      HealthLevel.warning => Colors.orange,
-                      HealthLevel.failed => Theme.of(context).colorScheme.error,
+                      HealthLevel.healthy => semantic.idle,
+                      HealthLevel.warning => semantic.attention,
+                      HealthLevel.failed => semantic.failure,
                     };
                     return ListTile(
                       leading: Icon(

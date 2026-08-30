@@ -828,10 +828,11 @@ class _NativeSessionRow extends ConsumerWidget {
 
   Widget _statusIcon(SessionStatus status, BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final semantic = SemanticColors.of(context);
     final (IconData icon, Color color) = switch (status) {
-      SessionStatus.running => (AppIcons.playCircle, scheme.tertiary),
-      SessionStatus.completed => (AppIcons.checkCircle, Colors.green),
-      SessionStatus.failed => (AppIcons.warningCircle, scheme.error),
+      SessionStatus.running => (AppIcons.playCircle, semantic.working),
+      SessionStatus.completed => (AppIcons.checkCircle, semantic.idle),
+      SessionStatus.failed => (AppIcons.warningCircle, semantic.failure),
       SessionStatus.cancelled => (AppIcons.xCircle, scheme.outline),
       _ => (AppIcons.circle, scheme.outline),
     };

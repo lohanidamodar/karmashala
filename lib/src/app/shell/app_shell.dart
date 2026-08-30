@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_icons.dart';
+import '../theme/design_tokens.dart';
 import '../widgets/desktop_dialog.dart';
 import 'app_mode.dart';
 import 'resize_handle.dart';
+import 'side_panel.dart';
+import 'side_panel_state.dart';
+import 'status_bar.dart';
+import 'workbench.dart';
 
-import '../../features/detail/presentation/detail_panel.dart';
 import '../../core/database/database_providers.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
@@ -23,20 +27,43 @@ import '../../features/settings/application/settings_controller.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
-import '../../features/terminal/presentation/terminal_panel.dart';
 import 'shell_shortcuts.dart';
 import 'shell_state.dart';
 
-/// The adaptive two-pane desktop shell: Explorer | Detail.
+/// Width classes for the desktop shell, in one place (see `CLAUDE.md` §6).
 ///
-/// Layout adapts to the available width:
-/// * **Wide/Medium** (≥ 760): Explorer tree beside the Detail view, with the
-///   Explorer collapsible via `Ctrl+B`.
-/// * **Narrow** (< 760): a single pane (the focused one) with a bottom selector.
+/// Branching on width rather than platform, and naming the classes here rather
+/// than scattering `constraints.maxWidth > 760` through the panes, is what keeps
+/// "responsive" a property of the shell instead of a per-widget afterthought.
+enum ShellWidth {
+  /// One pane at a time, chosen with a selector. The side panel's rail stays —
+  /// it is 34px and it is the only way back to the tools.
+  compact,
+
+  /// Explorer beside the workbench. An open side panel eats into the workbench,
+  /// which its own clamp keeps survivable.
+  medium,
+
+  /// Everything at its natural width.
+  expanded;
+
+  static ShellWidth of(double width) {
+    if (width < 760) return ShellWidth.compact;
+    if (width < 1180) return ShellWidth.medium;
+    return ShellWidth.expanded;
+  }
+
+  bool get isCompact => this == ShellWidth.compact;
+}
+
+/// The desktop shell: Explorer · Workbench · side panel, over a status bar.
+///
+/// The terminal is not a dock any more. Chitragupta is terminal-primary (see
+/// `docs/superpowers/specs/2026-08-30-session-daemon-direction.md`), so the
+/// terminal and its tabs live in the middle of the window and the navigation
+/// stays on the left — the shape Orca, cmux, Warp and Ghostty all converge on.
 class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
-
-  static const double _mediumBreakpoint = 760;
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -44,13 +71,6 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  static const _minTerminalHeight = 120.0;
-
-  /// Dock height, held in widget state rather than Settings: persisting it needs
-  /// a settings field owned by another branch this cycle, and a remembered pixel
-  /// count is not worth a cross-branch schema edit.
-  double _terminalHeight = 280;
 
   @override
   void initState() {
@@ -81,7 +101,10 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final shell = ref.watch(shellControllerProvider);
-    final terminalVisible = ref.watch(terminalVisibleProvider);
+    // Focus mode: the workbench takes the window. The provider is the old
+    // "maximize the dock" flag, which is the same intent now that the dock is
+    // gone — everything but the work gets out of the way.
+    final zen = ref.watch(terminalMaximizedProvider);
     final toggleActivator = chatToggleActivator(
       decodeChatToggleHotKey(
         ref.watch(
@@ -94,7 +117,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       child: ShellShortcuts(
         child: Scaffold(
           key: _scaffoldKey,
-          appBar: const _ShellAppBar(),
+          appBar: const _ShellTitleBar(),
           endDrawer: const Drawer(
             width: 420,
             child: SafeArea(
@@ -107,45 +130,33 @@ class _AppShellState extends ConsumerState<AppShell> {
           body: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // The terminal is a first-class surface, not a fixed strip: it
-                // is draggable, and can take the whole body.
-                final maximized =
-                    terminalVisible && ref.watch(terminalMaximizedProvider);
-                final maxDock = constraints.maxHeight * 0.8;
+                final width = ShellWidth.of(constraints.maxWidth);
+                // At compact widths the Explorer and the workbench take turns
+                // in the same column; the side panel keeps only its rail.
+                final showExplorer = width.isCompact
+                    ? shell.focusedPane == ShellPane.explorer
+                    : shell.explorerPaneVisible;
                 return Column(
                   children: [
-                    if (!maximized)
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child:
-                              constraints.maxWidth >= AppShell._mediumBreakpoint
-                              ? _SplitLayout(shell: shell)
-                              : _NarrowLayout(shell: shell),
-                        ),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (!zen && showExplorer)
+                            width.isCompact
+                                ? const Expanded(child: ExplorerPanel())
+                                : _ExplorerColumn(
+                                    available: constraints.maxWidth,
+                                  ),
+                          if (!width.isCompact || !showExplorer)
+                            const Expanded(child: WorkbenchView()),
+                          if (!zen) const SidePanel(),
+                        ],
                       ),
-                    if (terminalVisible && !maximized)
-                      ResizeHandle(
-                        axis: Axis.vertical,
-                        semanticLabel: 'Resize terminal height',
-                        // Dragging up (negative dy) makes the dock taller.
-                        onDelta: (dy) => setState(
-                          () => _terminalHeight = (_terminalHeight - dy).clamp(
-                            _minTerminalHeight,
-                            maxDock,
-                          ),
-                        ),
-                      ),
-                    if (terminalVisible)
-                      maximized
-                          ? const Expanded(child: TerminalPanel())
-                          : SizedBox(
-                              height: _terminalHeight.clamp(
-                                _minTerminalHeight,
-                                maxDock,
-                              ),
-                              child: const TerminalPanel(),
-                            ),
+                    ),
+                    if (width.isCompact && !zen)
+                      _CompactPaneSelector(shell: shell),
+                    const ShellStatusBar(),
                   ],
                 );
               },
@@ -157,19 +168,102 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
-  const _ShellAppBar();
+/// At compact widths there is only room for one pane, so a selector says which.
+class _CompactPaneSelector extends ConsumerWidget {
+  const _CompactPaneSelector({required this.shell});
 
-  @override
-  Size get preferredSize => const Size.fromHeight(40);
+  final ShellState shell;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final terminalVisible = ref.watch(terminalVisibleProvider);
-    // No app icon/name here — the OS title bar already shows those. Lead with the
-    // menu bar so the chrome reads like a native desktop menu bar.
+    final controller = ref.read(shellControllerProvider.notifier);
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      height: Chrome.tabStrip + Insets.sm,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: SegmentedButton<ShellPane>(
+        segments: const [
+          ButtonSegment(
+            value: ShellPane.explorer,
+            icon: Icon(AppIcons.treeStructure, size: Chrome.iconSmall),
+            label: Text('Explorer'),
+          ),
+          ButtonSegment(
+            value: ShellPane.detail,
+            icon: Icon(AppIcons.terminal, size: Chrome.iconSmall),
+            label: Text('Workbench'),
+          ),
+        ],
+        showSelectedIcon: false,
+        selected: {shell.focusedPane},
+        onSelectionChanged: (selection) =>
+            controller.focusPane(selection.first),
+      ),
+    );
+  }
+}
+
+/// The Explorer with a draggable right edge; its width is persisted.
+class _ExplorerColumn extends ConsumerStatefulWidget {
+  const _ExplorerColumn({required this.available});
+
+  final double available;
+
+  @override
+  ConsumerState<_ExplorerColumn> createState() => _ExplorerColumnState();
+}
+
+class _ExplorerColumnState extends ConsumerState<_ExplorerColumn> {
+  static const _min = 200.0;
+  static const _max = 560.0;
+  double? _width;
+
+  @override
+  Widget build(BuildContext context) {
+    _width ??= ref.read(
+      settingsControllerProvider.select((s) => s.explorerPaneWidth),
+    );
+    // A saved desktop width must not crush the workbench when the window is
+    // later restored or resized smaller. Always reserve a useful work surface.
+    final responsiveMax = (widget.available - 520).clamp(_min, _max);
+    final width = _width!.clamp(_min, responsiveMax);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(width: width, child: const ExplorerPanel()),
+        ResizeHandle(
+          semanticLabel: 'Resize Explorer width',
+          onDelta: (dx) =>
+              setState(() => _width = (width + dx).clamp(_min, responsiveMax)),
+          onEnd: () => ref
+              .read(settingsControllerProvider.notifier)
+              .setExplorerPaneWidth(_width!.clamp(_min, _max)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
+  const _ShellTitleBar();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(Chrome.titleBar);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final panelOpen = ref.watch(sidePanelProvider) != null;
+    final explorerVisible = ref.watch(
+      shellControllerProvider.select((s) => s.explorerPaneVisible),
+    );
+    // No app icon/name here — the OS title bar already shows those. Lead with
+    // the menu bar so the chrome reads like a native desktop menu bar.
     return AppBar(
-      titleSpacing: 8,
+      titleSpacing: Insets.xs,
       title: const Align(
         alignment: Alignment.centerLeft,
         child: _DesktopMenuBar(),
@@ -193,13 +287,21 @@ class _ShellAppBar extends ConsumerWidget implements PreferredSizeWidget {
           icon: const Icon(AppIcons.gearSix),
           onPressed: () => SettingsScreen.show(context),
         ),
+        const VerticalDivider(indent: 7, endIndent: 7, width: Insets.sm),
         IconButton(
-          tooltip: 'Toggle terminal (Ctrl+`)',
-          isSelected: terminalVisible,
-          icon: const Icon(AppIcons.terminal),
-          onPressed: () => ref.read(terminalVisibleProvider.notifier).toggle(),
+          tooltip: 'Toggle Explorer (Ctrl+B)',
+          isSelected: explorerVisible,
+          icon: const Icon(AppIcons.treeStructure),
+          onPressed: () =>
+              ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
         ),
-        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'Toggle side panel (Ctrl+3)',
+          isSelected: panelOpen,
+          icon: const Icon(AppIcons.sidebarSimple),
+          onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
+        ),
+        const SizedBox(width: Insets.xs),
       ],
     );
   }
@@ -276,8 +378,8 @@ class _DesktopMenuBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedRepo = ref.watch(selectedRepositoryIdProvider);
     final shell = ref.watch(shellControllerProvider);
-    final terminalVisible = ref.watch(terminalVisibleProvider);
-    final sidebarVisible = ref.watch(detailSidebarVisibleProvider);
+    final panel = ref.watch(sidePanelProvider);
+    final zen = ref.watch(terminalMaximizedProvider);
     return MenuBar(
       children: [
         SubmenuButton(
@@ -321,22 +423,44 @@ class _DesktopMenuBar extends ConsumerWidget {
           menuChildren: [
             CheckboxMenuButton(
               value: shell.explorerPaneVisible,
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.keyB,
+                control: true,
+              ),
               onChanged: (_) => ref
                   .read(shellControllerProvider.notifier)
                   .toggleExplorerPane(),
               child: const Text('Explorer'),
             ),
             CheckboxMenuButton(
-              value: sidebarVisible,
-              onChanged: (_) =>
-                  ref.read(detailSidebarVisibleProvider.notifier).toggle(),
-              child: const Text('Detail sidebar'),
+              value: panel != null,
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.digit3,
+                control: true,
+              ),
+              onChanged: (_) => ref.read(sidePanelProvider.notifier).toggle(),
+              child: const Text('Side panel'),
             ),
+            const Divider(height: 1),
+            // The surfaces the panel can show, so every tool is reachable from
+            // the menu bar and not only from a glyph on the rail.
+            for (final surface in SidePanelSurface.values)
+              MenuItemButton(
+                leadingIcon: Icon(SidePanel.iconFor(surface)),
+                onPressed: () =>
+                    ref.read(sidePanelProvider.notifier).select(surface),
+                child: Text(surface.label),
+              ),
+            const Divider(height: 1),
             CheckboxMenuButton(
-              value: terminalVisible,
+              value: zen,
+              shortcut: const SingleActivator(
+                LogicalKeyboardKey.backslash,
+                control: true,
+              ),
               onChanged: (_) =>
-                  ref.read(terminalVisibleProvider.notifier).toggle(),
-              child: const Text('Terminal'),
+                  ref.read(terminalMaximizedProvider.notifier).toggle(),
+              child: const Text('Focus mode'),
             ),
           ],
           child: const Text('View'),
@@ -350,92 +474,6 @@ class _DesktopMenuBar extends ConsumerWidget {
             ),
           ],
           child: const Text('Tools'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Split: the Explorer tree beside the Detail view, Explorer collapsible.
-class _SplitLayout extends ConsumerStatefulWidget {
-  const _SplitLayout({required this.shell});
-  final ShellState shell;
-
-  @override
-  ConsumerState<_SplitLayout> createState() => _SplitLayoutState();
-}
-
-class _SplitLayoutState extends ConsumerState<_SplitLayout> {
-  static const _min = 220.0;
-  static const _max = 620.0;
-  double? _width;
-
-  @override
-  Widget build(BuildContext context) {
-    _width ??= ref.read(
-      settingsControllerProvider.select((s) => s.explorerPaneWidth),
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // A saved desktop width must not crush Detail when the window is later
-        // restored or resized smaller. Always reserve a useful work surface.
-        final responsiveMax = (constraints.maxWidth - 520).clamp(_min, _max);
-        final width = _width!.clamp(_min, responsiveMax);
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.shell.explorerPaneVisible) ...[
-              SizedBox(width: width, child: const ExplorerPanel()),
-              ResizeHandle(
-                semanticLabel: 'Resize Explorer width',
-                onDelta: (dx) => setState(
-                  () => _width = (width + dx).clamp(_min, responsiveMax),
-                ),
-                onEnd: () => ref
-                    .read(settingsControllerProvider.notifier)
-                    .setExplorerPaneWidth(_width!.clamp(_min, _max)),
-              ),
-            ],
-            const Expanded(child: DetailPanel()),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Narrow: only the focused pane, with a selector to switch panes.
-class _NarrowLayout extends ConsumerWidget {
-  const _NarrowLayout({required this.shell});
-  final ShellState shell;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final controller = ref.read(shellControllerProvider.notifier);
-    final Widget active = switch (shell.focusedPane) {
-      ShellPane.explorer => const ExplorerPanel(),
-      ShellPane.detail => const DetailPanel(),
-    };
-    return Column(
-      children: [
-        Expanded(child: active),
-        const SizedBox(height: 8),
-        SegmentedButton<ShellPane>(
-          segments: const [
-            ButtonSegment(
-              value: ShellPane.explorer,
-              icon: Icon(AppIcons.treeStructure),
-              label: Text('Explorer'),
-            ),
-            ButtonSegment(
-              value: ShellPane.detail,
-              icon: Icon(AppIcons.article),
-              label: Text('Detail'),
-            ),
-          ],
-          selected: {shell.focusedPane},
-          onSelectionChanged: (selection) =>
-              controller.focusPane(selection.first),
         ),
       ],
     );

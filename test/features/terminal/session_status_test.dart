@@ -1,9 +1,9 @@
+import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/session_status.dart';
-import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -225,7 +225,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(TerminalPanel), findsNothing);
+      expect(find.byType(WorkbenchView), findsNothing);
       final instance = controller.instanceFor(pane);
       expect(instance, isNotNull);
       expect((instance! as FakeTerminalInstance).disposed, isFalse);

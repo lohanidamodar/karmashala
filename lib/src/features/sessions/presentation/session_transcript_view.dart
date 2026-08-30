@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../terminal/application/system_terminal_providers.dart';
-import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -43,7 +43,6 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     ref.watch(sessionsRevisionProvider);
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript,
@@ -67,22 +66,17 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+        // No title and no back button: the workbench tab above already names
+        // the session and closes it, and the strip's Chat/Terminal toggle
+        // already switches the view. What is left is what only this session
+        // can answer — what it is doing, and how to stop it.
+        SizedBox(
+          height: Chrome.tabStrip,
           child: Row(
             children: [
-              IconButton(
-                tooltip: 'Back',
-                icon: const Icon(AppIcons.arrowLeft, size: 18),
-                onPressed: () =>
-                    ref.read(selectedSessionIdProvider.notifier).select(null),
-              ),
-              Expanded(
-                child: Text('Transcript', style: theme.textTheme.titleSmall),
-              ),
+              const SizedBox(width: Insets.md),
               AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
-              const SizedBox(width: 8),
-              _ShowTerminalButton(sessionId: widget.sessionId),
+              const Spacer(),
               _OpenInTerminalButton(sessionId: widget.sessionId),
               if (active)
                 IconButton(
@@ -90,6 +84,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   icon: const Icon(AppIcons.stopCircle, size: 18),
                   onPressed: _stop,
                 ),
+              const SizedBox(width: Insets.xs),
             ],
           ),
         ),
@@ -232,47 +227,6 @@ class _OpenInTerminalButton extends ConsumerWidget {
               ],
             ),
       orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
-/// Switches this session to its terminal view.
-///
-/// Chat and terminal are two renderings of **one** session — same row, same PTY,
-/// same lifecycle — so this starts and stops nothing. It reveals the pane the
-/// agent is already running in and records the preference, and the session is
-/// entirely unaffected either way.
-///
-/// Absent for a session with no pane of ours (an external terminal, or a session
-/// from before this existed), because there would be nothing to show.
-class _ShowTerminalButton extends ConsumerWidget {
-  const _ShowTerminalButton({required this.sessionId});
-
-  final String sessionId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(sessionsRevisionProvider);
-    final session = ref.read(sessionDaoProvider).getById(sessionId);
-    final paneId = session?.paneId;
-    if (paneId == null) return const SizedBox.shrink();
-
-    return IconButton(
-      tooltip: 'Show the terminal this session is running in',
-      icon: const Icon(AppIcons.terminal, size: 18),
-      onPressed: () {
-        final terminals = ref.read(terminalSessionsControllerProvider.notifier);
-        // A detached pane comes back as a tab; one already in a tab is simply
-        // focused. Neither recreates anything.
-        terminals
-          ..reattachSession(paneId)
-          ..focusPane(paneId);
-        ref.read(terminalVisibleProvider.notifier).set(true);
-        ref
-            .read(sessionDaoProvider)
-            .updateView(sessionId, SessionView.terminal);
-        ref.read(sessionsRevisionProvider.notifier).bump();
-      },
     );
   }
 }

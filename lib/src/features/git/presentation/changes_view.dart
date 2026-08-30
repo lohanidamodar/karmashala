@@ -359,16 +359,17 @@ class _DiffLineTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final semantic = SemanticColors.of(context);
     final (Color? bg, Color? fg, Color? accent) = switch (line.kind) {
       DiffLineKind.added => (
-        Colors.green.withValues(alpha: 0.14),
+        semantic.diffAdded.withValues(alpha: 0.14),
         null,
-        Colors.green,
+        semantic.diffAdded,
       ),
       DiffLineKind.removed => (
-        scheme.error.withValues(alpha: 0.12),
+        semantic.diffRemoved.withValues(alpha: 0.14),
         null,
-        scheme.error,
+        semantic.diffRemoved,
       ),
       DiffLineKind.hunk => (
         scheme.primary.withValues(alpha: 0.10),
@@ -527,9 +528,10 @@ IconData _iconFor(FileChangeType type) => switch (type) {
 
 Color _colorFor(FileChangeType type, BuildContext context) {
   final scheme = Theme.of(context).colorScheme;
+  final semantic = SemanticColors.of(context);
   return switch (type) {
-    FileChangeType.added => Colors.green,
-    FileChangeType.deleted => scheme.error,
+    FileChangeType.added => semantic.diffAdded,
+    FileChangeType.deleted => semantic.diffRemoved,
     _ => scheme.primary,
   };
 }

@@ -1,10 +1,10 @@
+import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_search_controller.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/pane_layout_view.dart';
-import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:chitragupta/src/features/terminal/presentation/terminal_search_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,8 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
 
-/// The panel reads settings, environments and the selected repository, all of
-/// which sit behind the database — so a panel test needs a real (empty) one.
+/// The workbench reads settings, environments and the selected repository, all
+/// of which sit behind the database — so a workbench test needs a real (empty)
+/// one. Loop 47 moved the terminal's tab strip into the shell's workbench, so
+/// these tests pump the workbench rather than a standalone panel: the tabs and
+/// the panes are no longer the same widget.
 ProviderContainer panelContainer() {
   final database = AppDatabase.memory();
   addTearDown(database.close);
@@ -26,7 +29,7 @@ Future<void> pumpPanel(WidgetTester tester, ProviderContainer container) async {
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: TerminalPanel())),
+      child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
     ),
   );
   await tester.pump();
@@ -159,7 +162,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(home: Scaffold(body: TerminalPanel())),
+        child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
       ),
     );
 
