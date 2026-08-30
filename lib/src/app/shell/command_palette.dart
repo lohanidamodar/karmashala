@@ -16,6 +16,8 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import 'shell_state.dart';
+import 'side_panel.dart';
+import 'side_panel_state.dart';
 
 /// A `Ctrl+K` command palette: fuzzy-jump to any project or session, or run a
 /// quick action — the keyboard-first way around a desktop app.
@@ -90,19 +92,50 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     }
     entries.add(
       _PaletteEntry(
-        label: 'Toggle terminal',
+        label: 'Terminal view',
+        sublabel: 'Show the terminal in the workbench  ·  Ctrl+`',
         icon: AppIcons.terminal,
         onSelect: () =>
-            run(() => ref.read(terminalVisibleProvider.notifier).toggle()),
+            run(() => ref.read(terminalVisibleProvider.notifier).set(true)),
       ),
     );
     entries.add(
       _PaletteEntry(
         label: 'Toggle Explorer',
+        sublabel: 'Ctrl+B',
         icon: AppIcons.treeStructure,
         onSelect: () => run(
           () => ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
         ),
+      ),
+    );
+    entries.add(
+      _PaletteEntry(
+        label: 'Toggle side panel',
+        sublabel: 'Ctrl+3',
+        icon: AppIcons.sidebarSimple,
+        onSelect: () =>
+            run(() => ref.read(sidePanelProvider.notifier).toggle()),
+      ),
+    );
+    for (final surface in SidePanelSurface.values) {
+      entries.add(
+        _PaletteEntry(
+          label: surface.label,
+          sublabel: 'Side panel',
+          icon: SidePanel.iconFor(surface),
+          onSelect: () =>
+              run(() => ref.read(sidePanelProvider.notifier).select(surface)),
+        ),
+      );
+    }
+    entries.add(
+      _PaletteEntry(
+        label: 'Focus mode',
+        sublabel: 'Give the workbench the whole window  ·  Ctrl+\\',
+        icon: AppIcons.arrowsOutSimple,
+        onSelect: () =>
+            run(() => ref.read(terminalMaximizedProvider.notifier).toggle()),
       ),
     );
     entries.add(

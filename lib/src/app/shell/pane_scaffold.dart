@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../theme/design_tokens.dart';
 
-/// A consistent frame for a shell pane: a "ledger tab" header over a body.
+/// A consistent frame for a shell pane: a compact header over a body.
 ///
-/// All three panes share this chrome. [focused] lights the header's brass accent
-/// so the active pane is obvious without a heavy border.
+/// Flat, not a card. The old frame gave every pane a rounded outline and a brass
+/// accent rule, which read as three floating documents on a desk; a desktop
+/// shell is one surface divided by hairlines, and the rounded corners cost real
+/// pixels at the top of a pane that is mostly list. [focused] now shows in the
+/// header label alone — enough to answer "which pane is the keyboard in", quiet
+/// enough not to compete with the workbench.
 class PaneScaffold extends StatelessWidget {
   const PaneScaffold({
     required this.title,
@@ -26,48 +30,32 @@ class PaneScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final accent = focused ? scheme.tertiary : scheme.onSurfaceVariant;
+    final accent = focused ? scheme.onSurface : scheme.onSurfaceVariant;
     // A Material (not a plain DecoratedBox) so descendant ListTiles have a
     // valid background/ink ancestor to paint on.
     return Material(
       color: scheme.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(Radii.sm),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // "Ledger tab" header: a tracked label over a brass accent rule.
           Container(
+            height: Chrome.tabStrip,
             color: scheme.surfaceContainerLow,
-            padding: const EdgeInsets.fromLTRB(Insets.sm, 3, Insets.xs, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            padding: const EdgeInsets.only(left: Insets.md, right: 2),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Icon(icon, size: 16, color: accent),
-                    const SizedBox(width: Insets.sm),
-                    Text(
-                      title.toUpperCase(),
-                      style: text.labelSmall?.copyWith(color: accent),
-                    ),
-                    const Spacer(),
-                    ...actions,
-                  ],
+                Icon(icon, size: Chrome.iconSmall, color: accent),
+                const SizedBox(width: Insets.sm),
+                Text(
+                  title.toUpperCase(),
+                  style: text.labelSmall?.copyWith(color: accent),
                 ),
-                const SizedBox(height: 3),
-                // The accent rule: brass when focused, hairline otherwise.
-                AnimatedContainer(
-                  duration: Motion.fast,
-                  height: focused ? 2 : 1,
-                  color: focused ? scheme.tertiary : scheme.outlineVariant,
-                ),
+                const Spacer(),
+                ...actions,
               ],
             ),
           ),
+          const Divider(height: 1),
           Expanded(child: body),
         ],
       ),
@@ -75,7 +63,7 @@ class PaneScaffold extends StatelessWidget {
   }
 }
 
-/// Centered empty-state placeholder used inside panes during Loop 0.
+/// Centered empty-state placeholder used inside panes.
 class PanePlaceholder extends StatelessWidget {
   const PanePlaceholder({required this.message, super.key});
 
@@ -86,7 +74,7 @@ class PanePlaceholder extends StatelessWidget {
     final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(Insets.xl),
         child: Text(
           message,
           textAlign: TextAlign.center,

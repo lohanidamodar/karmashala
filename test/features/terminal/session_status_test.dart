@@ -1,3 +1,4 @@
+import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
@@ -225,7 +226,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(TerminalPanel), findsNothing);
+      expect(find.byType(WorkbenchView), findsNothing);
       final instance = controller.instanceFor(pane);
       expect(instance, isNotNull);
       expect((instance! as FakeTerminalInstance).disposed, isFalse);
