@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../environments/application/environment_providers.dart';
+import '../data/environment_key_reader.dart';
 import '../data/known_host_dao.dart';
 import '../data/ssh_connection.dart';
 import '../data/ssh_connection_pool.dart';
@@ -51,6 +53,13 @@ final sshPassphrasePromptProvider = Provider<SshSecretPrompt?>(
           .askSecret(host, SshSecretKind.passphrase),
 );
 
+/// Reads a private key from the local environment its path is paired with.
+final sshPrivateKeyReaderProvider = Provider<EnvironmentPrivateKeyReader>(
+  (ref) => EnvironmentPrivateKeyReader(
+    environments: ref.watch(executionEnvironmentDaoProvider),
+  ),
+);
+
 /// The shared pool of SSH connections, one per host.
 final sshConnectionPoolProvider = Provider<SshConnectionPool>((ref) {
   final pool = SshConnectionPool(
@@ -59,6 +68,7 @@ final sshConnectionPoolProvider = Provider<SshConnectionPool>((ref) {
     onUnknownHostKey: ref.watch(hostKeyTrustDecisionProvider),
     passwordPrompt: ref.watch(sshPasswordPromptProvider),
     passphrasePrompt: ref.watch(sshPassphrasePromptProvider),
+    keyReader: ref.watch(sshPrivateKeyReaderProvider).read,
     clock: ref.watch(clockProvider),
   );
   ref.onDispose(pool.closeAll);

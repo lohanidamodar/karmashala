@@ -18,7 +18,7 @@ class SshHostsController extends Notifier<List<SshHost>> {
   List<SshHost> build() => ref.watch(sshHostDaoProvider).getAll();
 
   /// Saves a new host and its `ssh:<id>` execution environment.
-  SshHost add({
+  Future<SshHost> add({
     required String name,
     required String host,
     required int port,
@@ -48,7 +48,13 @@ class SshHostsController extends Notifier<List<SshHost>> {
   }
 
   /// Inserts or updates [host] together with its environment row.
-  SshHost save(SshHost host) {
+  ///
+  /// Any open connection to it is dropped first. An edited address, port, user
+  /// or key must take effect on the next connection — a pooled session opened
+  /// under the old settings would otherwise keep answering, and the user would
+  /// be looking at a machine they thought they had stopped talking to.
+  Future<SshHost> save(SshHost host) async {
+    await ref.read(sshConnectionPoolProvider).evict(host.id);
     ref.read(sshHostDaoProvider).upsert(host);
     ref.read(executionEnvironmentDaoProvider).upsert(sshEnvironment(host));
     state = ref.read(sshHostDaoProvider).getAll();

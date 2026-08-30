@@ -9,7 +9,6 @@ import 'package:chitragupta/src/features/ssh/data/known_host_dao.dart';
 import 'package:chitragupta/src/features/ssh/data/ssh_host_key_verifier.dart';
 import 'package:chitragupta/src/features/ssh/domain/ssh_host_key.dart';
 import 'package:chitragupta/src/features/ssh/presentation/host_key_changed_alert.dart';
-import 'package:chitragupta/src/features/ssh/presentation/host_key_dialog.dart';
 import 'package:chitragupta/src/features/ssh/presentation/ssh_prompt_host.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

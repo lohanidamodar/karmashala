@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../application/ssh_providers.dart';
+import '../application/known_hosts_controller.dart';
 import '../domain/ssh_host_key.dart';
 
 /// The one SSH failure that is not a nuisance but a warning.
@@ -207,7 +207,7 @@ class ForgetHostKeyDialog extends ConsumerWidget {
             foregroundColor: theme.colorScheme.onError,
           ),
           onPressed: () {
-            ref.read(knownHostDaoProvider).forget(host, port);
+            ref.read(knownHostsControllerProvider.notifier).forget(host, port);
             Navigator.of(context).pop(true);
           },
           child: const Text('Forget it'),
