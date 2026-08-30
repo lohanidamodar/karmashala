@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/app/chitragupta_app.dart';
 import 'package:chitragupta/src/app/shell/app_shell.dart';
 import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
+import 'package:chitragupta/src/app/shell/shell_shortcuts.dart';
 import 'package:chitragupta/src/app/shell/shell_state.dart';
 import 'package:chitragupta/src/app/shell/side_panel.dart';
 import 'package:chitragupta/src/app/shell/side_panel_state.dart';
@@ -101,6 +102,39 @@ void main() {
       );
     }
     expect(container.read(sidePanelProvider), SidePanelSurface.changes);
+  });
+
+  testWidgets('every rail glyph teaches its name and the key that reaches it', (
+    tester,
+  ) async {
+    // Eight unlabelled glyphs in a 34px column. Hovering one has to be worth
+    // something, and the thing worth teaching is the chord — a rail you have
+    // to go to with the mouse every time is a rail you stop using.
+    await pumpApp(tester, size: const Size(1440, 900));
+
+    for (final surface in SidePanelSurface.values) {
+      final tooltips = tester
+          .widgetList<Tooltip>(find.byType(Tooltip))
+          .map((t) => t.message ?? '')
+          .where((m) => m.startsWith(surface.label));
+      expect(
+        tooltips,
+        isNotEmpty,
+        reason: '${surface.label} has no tooltip naming it',
+      );
+      expect(
+        tooltips.first,
+        contains(shellChordLabel<ToggleSidePanelIntent>()!),
+        reason: '${surface.label} does not say how to reach it',
+      );
+    }
+
+    // And the inbox, which has a chord of its own, says that one too.
+    final inbox = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .map((t) => t.message ?? '')
+        .firstWhere((m) => m.startsWith(SidePanelSurface.inbox.label));
+    expect(inbox, contains(shellChordLabel<OpenAttentionInboxIntent>()!));
   });
 
   testWidgets('the side panel keeps only its rail when collapsed', (

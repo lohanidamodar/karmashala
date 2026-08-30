@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import 'resize_handle.dart';
+import 'shell_shortcuts.dart';
 import 'side_panel_state.dart';
 
 import '../../features/browser/presentation/browser_pane.dart';
@@ -110,17 +111,36 @@ class _RailButton extends StatelessWidget {
   /// How many things are waiting behind this glyph; 0 draws nothing.
   final int badge;
 
+  /// What the tooltip says: the surface's name, then the keystroke that reaches
+  /// it. Eight unlabelled glyphs in a 34px column are only findable if hovering
+  /// one teaches something, and the thing worth teaching is the chord — a rail
+  /// you have to reach for with the mouse every time is a rail you stop using.
+  ///
+  /// The chord is read out of [shellChords] rather than typed here, so a
+  /// rebinding cannot leave the tooltip advertising a key that does nothing.
+  String _tooltip() {
+    final head = [
+      surface.label,
+      if (badge > 0) '$badge waiting',
+      if (selected) 'click to close',
+    ].join('  ·  ');
+    final direct = surface == SidePanelSurface.inbox
+        ? shellChordLabel<OpenAttentionInboxIntent>()
+        : null;
+    final panel = shellChordLabel<ToggleSidePanelIntent>();
+    return [
+      head,
+      if (direct != null) '$direct  ·  opens this one',
+      if (panel != null) '$panel  ·  shows or hides the panel',
+    ].join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // The tooltip is the only place the surface names itself once the tab strip
-    // is gone, so it also carries the collapse affordance.
     final semantic = SemanticColors.of(context);
     return Tooltip(
-      message: [
-        selected ? '${surface.label} · click to close' : surface.label,
-        if (badge > 0) '$badge waiting',
-      ].join(' · '),
+      message: _tooltip(),
       child: Semantics(
         button: true,
         selected: selected,
@@ -281,7 +301,8 @@ class _SidePanelHeader extends ConsumerWidget {
             ),
           ),
           IconButton(
-            tooltip: 'Close panel (Ctrl+3)',
+            tooltip:
+                'Close panel  ·  ${shellChordLabel<ToggleSidePanelIntent>()}',
             icon: const Icon(AppIcons.x, size: 14),
             onPressed: () => ref.read(sidePanelProvider.notifier).collapse(),
           ),
