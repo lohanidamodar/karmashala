@@ -16,6 +16,7 @@ import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/handoff_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_chat_source.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
+import 'package:chitragupta/src/features/sessions/application/session_lineage_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/handoff_action.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
@@ -514,5 +515,64 @@ void main() {
         expect(SessionDao(h.db).getAll(), hasLength(1));
       },
     );
+  });
+
+  group('lineage', () {
+    test('a handoff and a fork show up on the parent, told apart', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+      final service = h.container.read(sessionHandoffServiceProvider);
+
+      final handed = await service.handoffTo(
+        sessionId: 'src',
+        targetInstallationId: 'a1',
+        instruction: 'Take over.',
+      );
+      final forked = await service.forkSession(sessionId: 'src');
+
+      final lineage = h.container.read(sessionLineageProvider('src'))!;
+      expect(lineage.isRoot, isTrue);
+      expect(lineage.chainBroken, isFalse);
+      // Both children hang off the same parent and are distinguishable, which
+      // is the whole reason the link kind is stored rather than inferred: the
+      // two rows are otherwise identical in shape.
+      expect(
+        lineage.children.map((c) => c.link).toList(),
+        containsAll([SessionLink.handoff, SessionLink.fork]),
+      );
+      expect(
+        lineage.children.map((c) => c.sessionId).toList(),
+        containsAll([handed.session.id, forked.session.id]),
+      );
+    });
+
+    test('the child knows what it came from, and by which route', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final handed = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take over.',
+          );
+
+      final lineage = h.container.read(
+        sessionLineageProvider(handed.session.id),
+      )!;
+      expect(lineage.parent!.sessionId, 'src');
+      expect(lineage.self.link, SessionLink.handoff);
+      expect(lineage.self.agentId, 'forker');
+      // Phrased child-first so a sidebar can render it as a sentence without
+      // the explorer having to know the enum.
+      expect(lineage.self.link!.phrase, 'handed off from');
+    });
   });
 }
