@@ -122,6 +122,11 @@ class ShellChord {
 /// `Ctrl+Z`, `Ctrl+R`, `Ctrl+L`, `Ctrl+A/E/W/U`, `Ctrl+N`, the arrows — is never
 /// looked at and goes to the shell exactly as before.
 ///
+/// "Everything else" is only true because of [terminalPaneShortcuts]: xterm has
+/// a **second** claimant, its own `ShortcutManager`, which runs after
+/// `onPaneKey` and before `Terminal.keyInput`. Its Windows defaults took
+/// `Ctrl+V` and `Ctrl+A` — see that map for what replaced them.
+///
 /// ## `Ctrl+B` belongs to tmux
 ///
 /// VS Code keeps `Ctrl+B` for its sidebar. VS Code is editor-primary and its
@@ -161,6 +166,9 @@ class ShellChord {
 /// Everything else in the list means nothing to a shell: a terminal cannot even
 /// encode `Ctrl+Shift+<letter>`, and `Ctrl+1/2/3` and `` Ctrl+` `` have no
 /// readline or tmux binding to lose.
+///
+/// The list is the whole cost, because [terminalPaneShortcuts] takes nothing
+/// further: copy and paste live on `Ctrl+Shift+C`/`Ctrl+Shift+V`.
 const List<ShellChord> shellChords = [
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.digit1, control: true),
@@ -262,6 +270,31 @@ const List<ShellChord> shellChords = [
 /// The bindings [ShellShortcuts] installs, derived from [shellChords].
 final Map<ShortcutActivator, Intent> shellShortcutMap = {
   for (final chord in shellChords) chord.activator: chord.intent,
+};
+
+/// What a terminal pane keeps for itself, replacing xterm's own defaults.
+///
+/// **The second claimant on a pane's keys.** `TerminalView` consults
+/// `onKeyEvent` first ([handleAppChordFromTerminal], the skip-list above), then
+/// its own `ShortcutManager`, and only then `Terminal.keyInput`. That manager's
+/// Windows defaults are `Ctrl+C`/`Ctrl+V`/`Ctrl+A` → copy/paste/select-all, and
+/// because neither `Ctrl+V` nor `Ctrl+A` is in [shellChords], `onPaneKey`
+/// answered `ignored` and xterm took them. So a pane could not type readline's
+/// `beginning-of-line` (`^A`) or `quoted-insert` (`^V`), could not use `Ctrl+A`
+/// as a tmux prefix — and, because those keys never passed through
+/// [ShellChord.claimedByApp], Settings could not hand them back either. They
+/// were the only chords the app took without saying so.
+///
+/// Copy and paste move to `Ctrl+Shift+C`/`Ctrl+Shift+V` — what every Linux
+/// terminal emulator uses, and a combination a terminal cannot encode, so the
+/// two verbs cost the shell nothing. Select-all is left to the mouse and the
+/// context menu: `Ctrl+Shift+A` is the attention inbox, and a terminal
+/// select-all is worth less than either of those.
+final Map<ShortcutActivator, Intent> terminalPaneShortcuts = {
+  const SingleActivator(LogicalKeyboardKey.keyC, control: true, shift: true):
+      CopySelectionTextIntent.copy,
+  const SingleActivator(LogicalKeyboardKey.keyV, control: true, shift: true):
+      const PasteTextIntent(SelectionChangedCause.keyboard),
 };
 
 /// How the chord bound to [T] is written, for tooltips and menu items, so no
