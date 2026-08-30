@@ -38,6 +38,8 @@ final Map<int, MigrationStep> schemaMigrations = {
   10: _migrateToV10,
   11: _migrateToV11,
   12: _migrateToV12,
+  13: _migrateToV13,
+  14: _migrateToV14,
 };
 
 void _migrateToV8(Database db) {
@@ -466,4 +468,92 @@ void _migrateToV12(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_fanout_candidates_session '
     'ON fanout_candidates (session_id);',
   );
+}
+
+void _migrateToV13(Database db) {
+  // The workspace-loss guard (Loop 53).
+  //
+  // `saveWorkspace` is a destructive full replace, so the one save that can
+  // never be taken back is the one that writes nothing over something. Loop 48
+  // watched that happen once in ten real runs and could not find the trigger.
+  //
+  // These two tables are a shadow copy taken *inside* that save's transaction,
+  // just before the delete: whatever the store held is still on disk afterwards.
+  // Deliberately plain mirrors — no foreign key, no cascade, no index. A backup
+  // that participates in the live schema's referential integrity is a backup
+  // that the next cascade can take with it, which is precisely the failure it
+  // exists to survive.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_tabs_backup (
+      id              TEXT PRIMARY KEY,
+      ordinal         INTEGER NOT NULL,
+      layout          TEXT NOT NULL,
+      focused_pane_id TEXT,
+      is_active       INTEGER NOT NULL,
+      detached        INTEGER NOT NULL DEFAULT 0,
+      updated_at      TEXT NOT NULL
+    );
+  ''');
+
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS terminal_panes_backup (
+      id                TEXT PRIMARY KEY,
+      tab_id            TEXT NOT NULL,
+      ordinal           INTEGER NOT NULL,
+      profile_id        TEXT NOT NULL,
+      title             TEXT NOT NULL,
+      working_directory TEXT,
+      scrollback        TEXT NOT NULL,
+      launch_command    TEXT,
+      updated_at        TEXT NOT NULL
+    );
+  ''');
+}
+
+void _migrateToV14(Database db) {
+  // Session checkpoints (Loop 53): what the working tree looked like when a
+  // turn ended, so it can be put back.
+  //
+  // The *content* is not here. A checkpoint is a git tree and the commit that
+  // anchors it, both in the repository's own object store, reachable from
+  // `refs/chitragupta/checkpoints/<session>` so `git gc` keeps them. This table
+  // is the index over them: which session, in which order, against which repo,
+  // and what a reader can be shown without shelling out to git.
+  //
+  // Deliberately no foreign key to `sessions`. A checkpoint is a recovery
+  // record for work in a *repository*; losing the way back to that work because
+  // the session row it was captured under went away is the wrong failure.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_checkpoints (
+      id                TEXT PRIMARY KEY,
+      session_id        TEXT NOT NULL,
+      environment_id    TEXT NOT NULL,
+      repository_path   TEXT NOT NULL,
+      sequence          INTEGER NOT NULL,
+      tree_sha          TEXT NOT NULL,
+      commit_sha        TEXT NOT NULL,
+      parent_commit_sha TEXT,
+      head_sha          TEXT,
+      reason            TEXT NOT NULL,
+      label             TEXT,
+      created_at        TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_checkpoints_session '
+    'ON session_checkpoints (session_id, sequence);',
+  );
+
+  // What changed between a checkpoint and the one before it, denormalised so a
+  // list of turns can be rendered without running git once per row.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_checkpoint_files (
+      checkpoint_id TEXT NOT NULL,
+      path          TEXT NOT NULL,
+      status        TEXT NOT NULL,
+      PRIMARY KEY (checkpoint_id, path),
+      FOREIGN KEY (checkpoint_id) REFERENCES session_checkpoints (id)
+        ON DELETE CASCADE
+    );
+  ''');
 }

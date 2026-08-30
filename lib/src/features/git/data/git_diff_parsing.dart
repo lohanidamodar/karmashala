@@ -98,3 +98,30 @@ List<DiffLine> parseUnifiedDiff(String diff) {
   }
   return lines;
 }
+
+/// Parses `git diff --name-status` output into [FileChange]s.
+///
+/// This is a comparison between two committed states, so nothing in it is
+/// "staged" or "unstaged" — both flags are false, and callers that care about
+/// the index use [parseGitStatus] instead.
+List<FileChange> parseNameStatus(String output) {
+  final changes = <FileChange>[];
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    if (line.isEmpty) continue;
+    final parts = line.split('\t');
+    if (parts.length < 2) continue;
+    final code = parts.first;
+    // R100 / C75 carry a similarity score and a second path.
+    final renamed = code.startsWith('R') || code.startsWith('C');
+    changes.add(
+      FileChange(
+        path: renamed && parts.length > 2 ? parts[2] : parts[1],
+        originalPath: renamed && parts.length > 2 ? parts[1] : null,
+        type: _typeOf(code[0]),
+        staged: false,
+        unstaged: false,
+      ),
+    );
+  }
+  return changes;
+}
