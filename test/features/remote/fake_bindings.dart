@@ -50,11 +50,23 @@ class FakeRemoteBindings {
     },
   );
 
-  void addSession(String id, {String title = 'Fix the tests'}) {
+  void addSession(
+    String id, {
+    String title = 'Fix the tests',
+    String status = 'running',
+    String? agentLabel,
+    String? whereabouts,
+    String? lastActivityAt,
+    bool imported = false,
+  }) {
     sessions[id] = RemoteSessionSnapshot(
       sessionId: id,
       title: title,
-      status: 'running',
+      status: status,
+      agentLabel: agentLabel,
+      whereabouts: whereabouts,
+      lastActivityAt: lastActivityAt,
+      imported: imported,
     );
   }
 }

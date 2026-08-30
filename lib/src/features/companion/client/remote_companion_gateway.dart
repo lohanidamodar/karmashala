@@ -12,9 +12,11 @@ import 'dart:async';
 import '../../remote/client/companion_client.dart';
 import '../../remote/client/companion_pairing_client.dart';
 import '../../remote/client/companion_store.dart' as stored;
+import '../../remote/client/lan_path.dart';
 import '../../remote/domain/remote_payloads.dart';
 import '../../remote/pairing/pairing_payload.dart';
 import '../../remote/protocol.dart';
+import '../../remote/transport/lan_beacon.dart';
 import '../../remote/transport/relay_transport.dart';
 import '../../remote/transport/remote_transport.dart';
 import 'companion_gateway.dart';
@@ -67,6 +69,8 @@ class RemoteCompanionGateway implements CompanionGateway {
     RelayTransportFactoryFn? relayFactory,
     this.requestTimeout = const Duration(seconds: 15),
     this.helloTimeout = const Duration(seconds: 8),
+    this.lan,
+    this.pushTokenSource,
     Backoff? reconnectBackoff,
     DateTime Function()? now,
     this.onLog,
@@ -91,6 +95,14 @@ class RemoteCompanionGateway implements CompanionGateway {
   final Duration requestTimeout;
   final Duration helloTimeout;
 
+  /// The LAN leg — beacon listening and direct dialling (design §3: direct
+  /// first, relay fallback). Null keeps the gateway relay-only.
+  final LanPathScout? lan;
+
+  /// Where a push token comes from once Loop D wires FCM. Null — or a null
+  /// answer — skips `notifications.register` gracefully.
+  final Future<({String token, String platform})?> Function()? pushTokenSource;
+
   /// Lifecycle only — never called with payload content.
   final void Function(String message)? onLog;
 
@@ -112,6 +124,7 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   final _pairing = _Watched<CompanionPairing?>(null);
   final _link = _Watched<CompanionLinkState>(CompanionLinkState.disconnected);
+  final _linkPath = _Watched<CompanionLinkPath?>(null);
   final _sessionChanges =
       StreamController<List<CompanionSessionSummary>>.broadcast(sync: true);
   final _attention = StreamController<CompanionAttentionEvent>.broadcast(
@@ -131,6 +144,13 @@ class RemoteCompanionGateway implements CompanionGateway {
   Completer<void>? _backoffWaiter;
   Future<void>? _refreshing;
 
+  /// A LAN transport this gateway dialled itself — the client never owns a
+  /// supplied transport, so teardown here must close it.
+  RemoteTransport? _ownedTransport;
+  bool _lanStarted = false;
+  StreamSubscription<DiscoveredHost>? _lanSightings;
+  Timer? _lanHealTimer;
+
   // ---------------------------------------------------------------- pairing
 
   @override
@@ -144,6 +164,12 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   Stream<CompanionLinkState> get linkStates => _link.stream;
+
+  @override
+  CompanionLinkPath? get linkPath => _linkPath.value;
+
+  @override
+  Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
 
   @override
   CapabilitySet get capabilities => _record?.capabilities ?? CapabilitySet.none;
@@ -344,7 +370,17 @@ class RemoteCompanionGateway implements CompanionGateway {
     _declareDead();
     final waiter = _backoffWaiter;
     if (waiter != null && !waiter.isCompleted) waiter.complete();
+    await _lanSightings?.cancel();
+    _lanSightings = null;
     await _teardownClient();
+    final scout = lan;
+    if (scout != null && _lanStarted) {
+      try {
+        await scout.stop();
+      } on Object catch (error) {
+        onLog?.call('lan scout stop failed: $error');
+      }
+    }
     _link.value = CompanionLinkState.disconnected;
     await _sessionChanges.close();
     await _attention.close();
@@ -369,31 +405,38 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   void _startLoop() {
     if (_loopRunning || _closed) return;
+    _ensureLanScout();
     _loopRunning = true;
     unawaited(_connectLoop());
+  }
+
+  /// Starts beacon listening once, the first time a pairing wants a link.
+  void _ensureLanScout() {
+    final scout = lan;
+    if (scout == null || _lanStarted) return;
+    _lanStarted = true;
+    unawaited(scout.start());
+    _lanSightings = scout.sightings.listen(_onLanSighting);
+  }
+
+  /// A beacon while the relay carries the link: re-dial, LAN first. Gateway
+  /// state survives — subscriptions rebuild, held transcripts re-read.
+  void _onLanSighting(DiscoveredHost host) {
+    final scout = lan;
+    if (scout == null || _closed || _record == null) return;
+    if (_link.value != CompanionLinkState.connected) return;
+    if (_linkPath.value != CompanionLinkPath.relay) return;
+    if (scout.inCooldown(host)) return;
+    onLog?.call('beacon sighted; switching the link to the LAN');
+    _declareDead();
   }
 
   Future<void> _connectLoop() async {
     try {
       while (!_closed && _record != null) {
         _link.value = CompanionLinkState.connecting;
-        final client = CompanionClient(
-          pairing: _record!,
-          store: store,
-          relayFactory: _captureFactory,
-          requestTimeout: requestTimeout,
-          onLog: onLog,
-        );
-        _client = client;
-        _clientEvents = client.events.listen(_onEvent);
-        var connected = false;
-        try {
-          await client.connect(helloTimeout: helloTimeout);
-          connected = true;
-        } on Object catch (error) {
-          onLog?.call('connect failed: $error');
-        }
-        if (connected && !_closed && _record != null) {
+        final client = await _dialAnyPath();
+        if (client != null && !_closed && _record != null) {
           // The client bumped and persisted the generation counter.
           _record = client.pairing;
           _backoff.reset();
@@ -407,6 +450,7 @@ class RemoteCompanionGateway implements CompanionGateway {
               onLog?.call('recover after connect failed: $error');
             }
           }());
+          unawaited(_registerPushToken(client));
           // Park here; blips are the transport's to heal. Only a request
           // nobody answered, a closed transport, unpair or close move on.
           await died.future;
@@ -430,6 +474,96 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
   }
 
+  /// Design §3's priority order: every fresh LAN candidate first, the relay
+  /// after. Returns a connected client, or null when nobody answered.
+  Future<CompanionClient?> _dialAnyPath() async {
+    final scout = lan;
+    if (scout != null) {
+      for (final host in scout.candidates.take(3).toList()) {
+        if (_closed || _record == null) return null;
+        final client = await _dialLan(scout, host);
+        if (client != null) return client;
+      }
+    }
+    if (_closed || _record == null) return null;
+    return _dialRelay();
+  }
+
+  Future<CompanionClient?> _dialLan(
+    LanPathScout scout,
+    DiscoveredHost host,
+  ) async {
+    final client = _newClient();
+    final transport = scout.dial(host);
+    _dialled = transport;
+    _ownedTransport = transport;
+    try {
+      await client.connect(
+        transport: transport,
+        helloTimeout: scout.attemptTimeout,
+      );
+      // The sealed hello round-tripped: this host holds the paired key. The
+      // beacon's cleartext was never trusted beyond "try dialling here".
+      scout.noteSuccess(host);
+      _linkPath.value = CompanionLinkPath.lan;
+      onLog?.call('connected over the LAN');
+      return client;
+    } on Object catch (error) {
+      // No sealed answer inside the timeout: a stranger, another pairing's
+      // host, or a stale advert. Cool it down and let the relay carry on.
+      onLog?.call('lan attempt failed: $error');
+      scout.noteFailure(host);
+      await _teardownClient();
+      return null;
+    }
+  }
+
+  Future<CompanionClient?> _dialRelay() async {
+    final client = _newClient();
+    try {
+      await client.connect(helloTimeout: helloTimeout);
+      _linkPath.value = CompanionLinkPath.relay;
+      return client;
+    } on Object catch (error) {
+      onLog?.call('connect failed: $error');
+      await _teardownClient();
+      return null;
+    }
+  }
+
+  CompanionClient _newClient() {
+    final client = CompanionClient(
+      pairing: _record!,
+      store: store,
+      relayFactory: _captureFactory,
+      requestTimeout: requestTimeout,
+      onLog: onLog,
+    );
+    _client = client;
+    _clientEvents = client.events.listen(_onEvent);
+    return client;
+  }
+
+  /// `notifications.register`, once per connection — only with the capability
+  /// granted and a token source wired (Loop D's FCM). No source, a null
+  /// token, or a refusal all skip silently: registration is plumbing.
+  Future<void> _registerPushToken(CompanionClient client) async {
+    final source = pushTokenSource;
+    final record = _record;
+    if (source == null || record == null) return;
+    if (!record.capabilities.has(Capability.receiveNotifications)) return;
+    try {
+      final token = await source();
+      if (token == null || _client != client || !client.isConnected) return;
+      await client.registerNotifications(
+        token: token.token,
+        platform: token.platform,
+      );
+    } on Object catch (error) {
+      onLog?.call('notifications.register failed: $error');
+    }
+  }
+
   RemoteTransport _captureFactory(Uri relay, RendezvousId rendezvous) {
     final transport = _relayFactory(relay, rendezvous);
     _dialled = transport;
@@ -445,6 +579,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       if (_client == null) return;
       switch (state) {
         case TransportState.connected:
+          _cancelLanHeal();
           _link.value = CompanionLinkState.connected;
         case TransportState.connecting:
         case TransportState.disconnected:
@@ -453,12 +588,32 @@ class RemoteCompanionGateway implements CompanionGateway {
           if (_link.value == CompanionLinkState.connected) {
             _link.value = CompanionLinkState.connecting;
           }
+          _armLanHeal();
         case TransportState.closed:
           _declareDead();
         case TransportState.idle:
           break;
       }
     });
+  }
+
+  /// A LAN link that dropped redials forever on its own — but the host may
+  /// simply be gone. Give it one attempt's grace, then declare the link dead
+  /// so the loop heals to the relay instead of showing "connecting" all day.
+  void _armLanHeal() {
+    final scout = lan;
+    if (scout == null || _linkPath.value != CompanionLinkPath.lan) return;
+    _lanHealTimer ??= Timer(scout.attemptTimeout * 2, () {
+      _lanHealTimer = null;
+      if (_closed || _link.value == CompanionLinkState.connected) return;
+      onLog?.call('lan link did not heal; falling back to the relay');
+      _declareDead();
+    });
+  }
+
+  void _cancelLanHeal() {
+    _lanHealTimer?.cancel();
+    _lanHealTimer = null;
   }
 
   Future<void> _recoverAfterConnect() async {
@@ -483,13 +638,17 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   Future<void> _teardownClient() async {
+    _cancelLanHeal();
     final events = _clientEvents;
     _clientEvents = null;
     final states = _transportStates;
     _transportStates = null;
     final client = _client;
     _client = null;
+    final owned = _ownedTransport;
+    _ownedTransport = null;
     _dialled = null;
+    _linkPath.value = null;
     _subscribed.clear();
     for (final state in _transcripts.values) {
       if (state.loaded) state.stale = true;
@@ -501,6 +660,14 @@ class RemoteCompanionGateway implements CompanionGateway {
         await client.close();
       } on Object catch (error) {
         onLog?.call('client close failed: $error');
+      }
+    }
+    if (owned != null) {
+      // A supplied (LAN) transport is never the client's to close.
+      try {
+        await owned.close();
+      } on Object catch (error) {
+        onLog?.call('lan transport close failed: $error');
       }
     }
   }
@@ -634,22 +801,12 @@ class RemoteCompanionGateway implements CompanionGateway {
       }
       changed = true;
       next.add(
-        CompanionSessionSummary(
-          id: session.id,
-          title: session.title,
-          agentLabel: session.agentLabel,
-          projectName: session.projectName,
-          projectPath: session.projectPath,
+        session.copyWith(
           status: switch (kind) {
             CompanionAttentionKind.needsYou => CompanionSessionStatus.needsYou,
             CompanionAttentionKind.failed => CompanionSessionStatus.failed,
             CompanionAttentionKind.finished => session.status,
           },
-          whereabouts: session.whereabouts,
-          branch: session.branch,
-          subPath: session.subPath,
-          worktree: session.worktree,
-          lastActivityAt: session.lastActivityAt,
           attention: CompanionAttention(kind: kind, at: _now().toUtc()),
         ),
       );
@@ -804,15 +961,24 @@ class RemoteCompanionGateway implements CompanionGateway {
     return CompanionSessionSummary(
       id: snapshot.sessionId,
       title: snapshot.title,
-      // The wire names no agent, so this line carries only the host's own
-      // status word — the phone never invents a claim about a process it
-      // cannot see.
-      agentLabel: snapshot.status.replaceAll('_', ' '),
+      // The host words the card's first line itself; an older host that
+      // sent no label leaves only its own status word — the phone never
+      // invents a claim about a process it cannot see.
+      agentLabel: snapshot.agentLabel ?? snapshot.status.replaceAll('_', ' '),
       projectName: snapshot.repositoryName ?? 'No project',
       status: _statusOf(snapshot),
+      whereabouts: snapshot.whereabouts,
+      lastActivityAt: _parseInstant(snapshot.lastActivityAt),
       attention: attention,
+      deliveryStage: snapshot.stage,
+      imported: snapshot.imported,
     );
   }
+
+  /// An ISO-8601 instant off the wire, or null for anything unreadable — a
+  /// missing age renders as nothing, never as a guess.
+  DateTime? _parseInstant(String? iso) =>
+      iso == null ? null : DateTime.tryParse(iso)?.toUtc();
 
   CompanionSessionStatus _statusOf(RemoteSessionSnapshot snapshot) {
     if (snapshot.attention == 'needs_approval') {

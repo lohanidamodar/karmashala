@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/companion/client/companion_gateway.dart';
 import '../../features/companion/client/remote_companion_gateway.dart';
 import '../../features/companion/client/secure_companion_store.dart';
+import '../../features/remote/client/lan_path.dart';
 import '../../features/companion/notifications/attention_notification.dart';
 import '../../features/companion/notifications/companion_notifier.dart';
 import '../../features/companion/presentation/session_view_screen.dart';
@@ -26,7 +27,15 @@ Future<void> runCompanionApp() async {
   final container = ProviderContainer(
     overrides: [
       companionGatewayProvider.overrideWith((ref) {
-        final gateway = RemoteCompanionGateway(store: SecureCompanionStore());
+        // The LAN scout dials the desktop directly when its beacon is heard,
+        // relay otherwise. The multicast lock is the no-op default until the
+        // device-acceptance pass wires a real Android holder; on networks
+        // that drop multicast the scout stays inert and the relay carries
+        // everything — best effort by design.
+        final gateway = RemoteCompanionGateway(
+          store: SecureCompanionStore(),
+          lan: LanPathScout(),
+        );
         ref.onDispose(() => unawaited(gateway.close()));
         return gateway;
       }),

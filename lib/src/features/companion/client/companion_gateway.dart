@@ -35,6 +35,18 @@ class PairingException extends GatewayException {
 /// Whether the phone can currently talk to the host it is paired with.
 enum CompanionLinkState { disconnected, connecting, connected }
 
+/// Which transport carries the link while it is connected: the direct LAN
+/// socket at home, or the relay from anywhere (design §3's priority order).
+enum CompanionLinkPath {
+  lan('Direct (LAN)'),
+  relay('Relay');
+
+  const CompanionLinkPath(this.label);
+
+  /// What the settings screen calls this path.
+  final String label;
+}
+
 /// What pairing established, kept for the settings screen.
 class CompanionPairing {
   const CompanionPairing({
@@ -96,6 +108,8 @@ class CompanionSessionSummary {
     this.worktree = false,
     this.lastActivityAt,
     this.attention,
+    this.deliveryStage,
+    this.imported = false,
   });
 
   final String id;
@@ -121,6 +135,36 @@ class CompanionSessionSummary {
 
   /// Set while this session is in the host's attention inbox.
   final CompanionAttention? attention;
+
+  /// How far the work has travelled (`DeliveryStage.name` on the desktop —
+  /// `working`, `pushed`, `merged`…), or null for "could not tell", which is
+  /// a first-class answer.
+  final String? deliveryStage;
+
+  /// True for CLI history the desktop imported: readable, never steerable.
+  final bool imported;
+
+  /// A narrow copy: only the facts that change while a session is listed.
+  CompanionSessionSummary copyWith({
+    CompanionSessionStatus? status,
+    CompanionAttention? attention,
+    DateTime? lastActivityAt,
+  }) => CompanionSessionSummary(
+    id: id,
+    title: title,
+    agentLabel: agentLabel,
+    projectName: projectName,
+    projectPath: projectPath,
+    status: status ?? this.status,
+    whereabouts: whereabouts,
+    branch: branch,
+    subPath: subPath,
+    worktree: worktree,
+    lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+    attention: attention ?? this.attention,
+    deliveryStage: deliveryStage,
+    imported: imported,
+  );
 }
 
 /// One transcript turn. Role vocabulary matches the desktop chat view:
@@ -203,6 +247,11 @@ abstract interface class CompanionGateway {
 
   CompanionLinkState get link;
   Stream<CompanionLinkState> get linkStates;
+
+  /// Which path carries the link — [CompanionLinkPath.lan] at home,
+  /// [CompanionLinkPath.relay] elsewhere — or null while not connected.
+  CompanionLinkPath? get linkPath;
+  Stream<CompanionLinkPath?> get linkPathStates;
 
   /// What the desktop granted at pairing; [CapabilitySet.none] when unpaired.
   CapabilitySet get capabilities;

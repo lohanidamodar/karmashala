@@ -40,6 +40,7 @@ class FakeCompanionGateway implements CompanionGateway {
   FakeCompanionGateway({
     CompanionPairing? pairing,
     CompanionLinkState link = CompanionLinkState.disconnected,
+    CompanionLinkPath? linkPath,
     List<CompanionSessionSummary> sessions = const [],
     Map<String, List<CompanionChatMessage>> transcripts = const {},
     Map<String, CompanionApproval> approvals = const {},
@@ -47,6 +48,11 @@ class FakeCompanionGateway implements CompanionGateway {
     CapabilitySet? grantOnPair,
   }) : _pairing = _Watched(pairing),
        _link = _Watched(link),
+       _linkPath = _Watched(
+         link == CompanionLinkState.connected
+             ? (linkPath ?? CompanionLinkPath.relay)
+             : null,
+       ),
        _sessions = _Watched(List.unmodifiable(sessions)),
        _grantOnPair = grantOnPair ?? CapabilitySet.all {
     transcripts.forEach(
@@ -62,6 +68,7 @@ class FakeCompanionGateway implements CompanionGateway {
     Map<String, List<CompanionChatMessage>> transcripts = const {},
     Map<String, CompanionApproval> approvals = const {},
     CompanionLinkState link = CompanionLinkState.connected,
+    CompanionLinkPath? linkPath,
     CapabilitySet? capabilities,
     String hostName = 'Desktop',
   }) => FakeCompanionGateway(
@@ -70,6 +77,7 @@ class FakeCompanionGateway implements CompanionGateway {
       hostName: hostName,
     ),
     link: link,
+    linkPath: linkPath,
     sessions: sessions,
     transcripts: transcripts,
     approvals: approvals,
@@ -81,6 +89,7 @@ class FakeCompanionGateway implements CompanionGateway {
   final CapabilitySet _grantOnPair;
   final _Watched<CompanionPairing?> _pairing;
   final _Watched<CompanionLinkState> _link;
+  final _Watched<CompanionLinkPath?> _linkPath;
   final _Watched<List<CompanionSessionSummary>> _sessions;
   final _transcripts = <String, _Watched<List<CompanionChatMessage>>>{};
   final _approvals = <String, _Watched<CompanionApproval?>>{};
@@ -117,6 +126,12 @@ class FakeCompanionGateway implements CompanionGateway {
 
   @override
   Stream<CompanionLinkState> get linkStates => _link.stream;
+
+  @override
+  CompanionLinkPath? get linkPath => _linkPath.value;
+
+  @override
+  Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
 
   @override
   CapabilitySet get capabilities =>
@@ -159,6 +174,7 @@ class FakeCompanionGateway implements CompanionGateway {
     );
     _pairing.value = paired;
     _link.value = CompanionLinkState.connected;
+    _linkPath.value ??= CompanionLinkPath.relay;
     return paired;
   }
 
@@ -166,12 +182,16 @@ class FakeCompanionGateway implements CompanionGateway {
   Future<void> unpair() async {
     _pairing.value = null;
     _link.value = CompanionLinkState.disconnected;
+    _linkPath.value = null;
   }
 
   @override
   Future<void> reconnect() async {
     reconnectRequests++;
-    if (_pairing.value != null) _link.value = CompanionLinkState.connected;
+    if (_pairing.value != null) {
+      _link.value = CompanionLinkState.connected;
+      _linkPath.value ??= CompanionLinkPath.relay;
+    }
   }
 
   // --------------------------------------------------------------- sessions
@@ -240,7 +260,17 @@ class FakeCompanionGateway implements CompanionGateway {
   void setSessions(List<CompanionSessionSummary> sessions) =>
       _sessions.value = List.unmodifiable(sessions);
 
-  void setLink(CompanionLinkState state) => _link.value = state;
+  void setLink(CompanionLinkState state) {
+    _link.value = state;
+    if (state != CompanionLinkState.connected) {
+      _linkPath.value = null;
+    } else {
+      _linkPath.value ??= CompanionLinkPath.relay;
+    }
+  }
+
+  /// Scripts which path the connected link claims to ride.
+  void setLinkPath(CompanionLinkPath? path) => _linkPath.value = path;
 
   void appendMessage(String sessionId, CompanionChatMessage message) {
     final watched = _transcriptOf(sessionId);
@@ -258,22 +288,13 @@ class FakeCompanionGateway implements CompanionGateway {
     _sessions.value = List.unmodifiable([
       for (final session in _sessions.value)
         if (session.id == event.sessionId)
-          CompanionSessionSummary(
-            id: session.id,
-            title: session.title,
-            agentLabel: session.agentLabel,
-            projectName: session.projectName,
-            projectPath: session.projectPath,
+          session.copyWith(
             status: switch (event.kind) {
               CompanionAttentionKind.needsYou =>
                 CompanionSessionStatus.needsYou,
               CompanionAttentionKind.failed => CompanionSessionStatus.failed,
               CompanionAttentionKind.finished => CompanionSessionStatus.idle,
             },
-            whereabouts: session.whereabouts,
-            branch: session.branch,
-            subPath: session.subPath,
-            worktree: session.worktree,
             lastActivityAt: event.at,
             attention: CompanionAttention(kind: event.kind, at: event.at),
           )
