@@ -11,6 +11,7 @@ import '../domain/mouse_wheel_reporter.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/terminal_profile.dart';
 import 'command_block_recorder.dart';
+import 'process_shutdown.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
 
@@ -164,7 +165,11 @@ class PtyTerminalInstance implements TerminalInstance {
     _coalescer.dispose();
     focusNode.dispose();
     scrollController.dispose();
-    _pty.kill();
+    // Ask the process to exit before destroying it. A bare kill is wrong for
+    // anything long-running — a build, a dev server, an ssh session, a database
+    // client mid-write — because the process never gets to flush or run its
+    // exit handlers. This runs on app quit as well as tab close.
+    unawaited(shutdownProcess(kill: _pty.kill, exitCode: _pty.exitCode));
   }
 }
 
