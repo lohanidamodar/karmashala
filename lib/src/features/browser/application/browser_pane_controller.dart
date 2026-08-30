@@ -139,6 +139,9 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
   /// Attaches to a browser on the pane's port, launching one if [spawn] and
   /// nothing is listening.
   Future<void> connect({bool spawn = true, String? url}) async {
+    // Stop watching the session we are about to replace: a teardown we asked
+    // for must not surface as "the browser disconnected".
+    await _stopWatching();
     state = state.copyWith(
       status: BrowserPaneStatus.connecting,
       clearError: true,
@@ -166,8 +169,7 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
   }
 
   Future<void> disconnect() async {
-    await _watch?.cancel();
-    _watch = null;
+    await _stopWatching();
     await _service.disconnect();
     state = BrowserPaneState(port: state.port);
   }
@@ -200,7 +202,7 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
       state = state.copyWith(
         status: BrowserPaneStatus.connected,
         capture: capture,
-        captureFile: await _writeScreenshot(capture),
+        captureFile: _writeScreenshot(capture),
         url: capture.pageUrl,
         title: capture.pageTitle,
       );
@@ -241,6 +243,7 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
   /// Drives a different tab in the same browser.
   Future<void> selectTab(String targetId) async {
     if (targetId == state.currentTargetId) return;
+    await _stopWatching();
     await _run(() async {
       final session = await _service.connect(
         port: state.port,
@@ -303,10 +306,15 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
     }
   }
 
+  Future<void> _stopWatching() async {
+    final watch = _watch;
+    _watch = null;
+    await watch?.cancel();
+  }
+
   /// Notices the browser going away, so the pane stops claiming a connection
   /// it no longer has.
   void _watchForDeath(BrowserSession session) {
-    _watch?.cancel();
     _watch = session.done.asStream().listen((_) {
       if (_service.isConnected) return;
       state = state.copyWith(
@@ -317,7 +325,10 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
     });
   }
 
-  Future<String?> _writeScreenshot(ElementCapture capture) async {
+  /// Written synchronously: it is a few kilobytes, and the pick's result
+  /// should land in one state change rather than leaving the pane in a
+  /// half-updated state while the disk catches up.
+  String? _writeScreenshot(ElementCapture capture) {
     final png = capture.screenshotPng;
     if (png == null) return null;
     try {
@@ -330,7 +341,7 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
         '${directory.path}${Platform.pathSeparator}'
         'element_${DateTime.now().microsecondsSinceEpoch}.png',
       );
-      await file.writeAsBytes(png, flush: true);
+      file.writeAsBytesSync(png, flush: true);
       return file.path;
     } on Object {
       return null;
@@ -343,10 +354,19 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
   };
 
   /// Lets the user type `localhost:3000` instead of a full URL.
+  ///
+  /// Note the `//`: a bare scheme test would read `localhost:3000` as the
+  /// scheme `localhost`, and the browser would refuse it. Only the schemes
+  /// that legitimately have no authority are listed separately.
   static String _normalizeUrl(String input) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return trimmed;
-    if (RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*:').hasMatch(trimmed)) return trimmed;
+    if (RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://').hasMatch(trimmed)) {
+      return trimmed;
+    }
+    for (final scheme in const ['about:', 'data:', 'chrome:', 'view-source:']) {
+      if (trimmed.toLowerCase().startsWith(scheme)) return trimmed;
+    }
     return 'http://$trimmed';
   }
 }
