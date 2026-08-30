@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/shell_integration.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -202,6 +204,60 @@ void main() {
     test('is wrapped so a failure can never break the shell', () {
       expect(script, contains('try {'));
       expect(script, contains('} catch {'));
+    });
+  });
+
+  group('the pane factory applies the same rule to the recorder', () {
+    const wsl = TerminalProfile(
+      id: 'wsl:Ubuntu',
+      label: 'Ubuntu (WSL)',
+      shell: TerminalShell.wsl,
+      wslDistribution: 'Ubuntu',
+    );
+
+    bool applies(TerminalProfile profile, {bool on = true}) =>
+        shellIntegrationApplies(
+          profile: profile,
+          shellIntegration: on,
+          agentLaunch: null,
+        );
+
+    test('a shell that cannot emit markers does not get a recorder', () {
+      // The factory used to gate on the setting alone, so with integration on
+      // every cmd.exe and WSL pane carried a live CommandBlockRecorder and a
+      // permanent onPrivateOSC listener that no marker could reach.
+      expect(applies(TerminalProfile.powerShell), isTrue);
+      expect(applies(TerminalProfile.commandPrompt), isFalse);
+      expect(applies(wsl), isFalse);
+    });
+
+    test('and those shells still start, byte-for-byte as before', () {
+      // The other half of the fix: withholding the recorder must not withhold
+      // the shell. cmd and WSL launch exactly as they do with the setting off.
+      for (final profile in const [TerminalProfile.commandPrompt, wsl]) {
+        final off = ptyLaunchFor(profile);
+        final on = ptyLaunchFor(profile, shellIntegration: true);
+        expect(on.executable, off.executable);
+        expect(on.arguments, off.arguments);
+      }
+    });
+
+    test('the setting still has to be on', () {
+      expect(applies(TerminalProfile.powerShell, on: false), isFalse);
+    });
+
+    test('an agent pane runs no shell, so it never records', () {
+      expect(
+        shellIntegrationApplies(
+          profile: TerminalProfile.powerShell,
+          shellIntegration: true,
+          agentLaunch: const AgentPaneLaunch(
+            agentId: 'claude-code',
+            executable: r'C:\bin\claude.exe',
+          ),
+        ),
+        isFalse,
+      );
     });
   });
 }

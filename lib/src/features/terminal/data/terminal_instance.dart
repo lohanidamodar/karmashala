@@ -11,6 +11,7 @@ import '../domain/agent_pane_launch.dart';
 import '../domain/mouse_wheel_reporter.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
+import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
@@ -442,6 +443,30 @@ class DormantTerminalInstance implements TerminalInstance {
   }
 }
 
+/// Whether a pane launched this way gets an OSC 133 [CommandBlockRecorder].
+///
+/// Three conditions, all of them necessary:
+///
+/// * an agent pane runs the agent CLI directly, so there is no shell and no
+///   prompt hook to emit markers;
+/// * the user's setting has to be on;
+/// * and the shell has to be one this app can make emit them
+///   ([shellSupportsIntegration] — PowerShell today).
+///
+/// `ptyLaunchFor` has always applied the third rule to the *launch*; until
+/// Loop 65 the factory did not apply it to the *recorder*, so every cmd.exe and
+/// WSL pane got a live recorder and a permanent `onPrivateOSC` listener that no
+/// marker could ever reach — and answered "yes" to *is this pane integrated?*,
+/// which is what [TerminalInstance.commandBlocks] being nullable exists to say.
+bool shellIntegrationApplies({
+  required TerminalProfile profile,
+  required bool shellIntegration,
+  required AgentPaneLaunch? agentLaunch,
+}) =>
+    agentLaunch == null &&
+    shellIntegration &&
+    shellSupportsIntegration(profile.shell);
+
 /// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the profile
 /// and spawns a [PtyTerminalInstance], degrading to an [ErrorTerminalInstance]
 /// (whose buffer shows the failure) if the PTY cannot be created.
@@ -460,7 +485,11 @@ TerminalInstance createPtyTerminalInstance({
   final PtyLaunch launch;
   final String title;
   final String profileId;
-  final integrate = agentLaunch == null && shellIntegration;
+  final integrate = shellIntegrationApplies(
+    profile: profile,
+    shellIntegration: shellIntegration,
+    agentLaunch: agentLaunch,
+  );
   if (agentLaunch != null) {
     launch = agentPtyLaunchFor(agentLaunch, onWindowsHost: Platform.isWindows);
     title = agentLaunch.title ?? agentLaunch.agentId;
