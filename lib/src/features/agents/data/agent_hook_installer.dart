@@ -24,6 +24,12 @@ class AgentHookInstaller {
   /// when the agent has no hook configuration to write into. Throws
   /// [FormatException] if the existing config is not a JSON object, leaving it
   /// untouched.
+  ///
+  /// **Idempotent to the byte.** An event whose entry already spells the exact
+  /// command for this [endpoint] is left alone, so a relaunch that happens to
+  /// bind the same port rewrites nothing — the file keeps whatever formatting
+  /// the user's editor gave it. The port is ephemeral, so this is rare; a
+  /// rewrite that changes nothing is still a write to somebody else's config.
   Future<bool> install({
     required AgentDescriptor descriptor,
     required String storeHome,
@@ -32,25 +38,34 @@ class AgentHookInstaller {
     final spec = descriptor.hooks;
     if (spec == null) return false;
 
-    return _rewrite(descriptor, storeHome, (hooks) {
+    await _rewrite(descriptor, storeHome, (hooks) {
+      var changed = false;
       for (final event in spec.eventStatus.keys) {
-        final kept = _withoutOurs(hooks[event]);
-        kept.add({
-          'hooks': [
-            {
-              'type': 'command',
-              'command': hookCommand(
-                descriptor: descriptor,
-                event: event,
-                endpoint: endpoint,
-              ),
-            },
-          ],
-        });
-        hooks[event] = kept;
+        final current = hooks[event];
+        // A shape we do not understand is left exactly as it is, the way
+        // [uninstall] leaves it — a hand-edited or future-shaped config is
+        // still the user's, and losing a value beats nothing we install.
+        if (current != null && current is! List) continue;
+        final entries = current is List ? current : const <Object?>[];
+        final command = hookCommand(
+          descriptor: descriptor,
+          event: event,
+          endpoint: endpoint,
+        );
+        if (_alreadyCurrent(entries, command)) continue;
+        hooks[event] = [
+          ..._withoutOurs(entries),
+          {
+            'hooks': [
+              {'type': 'command', 'command': command},
+            ],
+          },
+        ];
+        changed = true;
       }
-      return true;
+      return changed;
     });
+    return true;
   }
 
   /// Removes the entries this app installed. Returns whether anything changed.
@@ -64,9 +79,14 @@ class AgentHookInstaller {
     var changed = false;
     await _rewrite(descriptor, storeHome, (hooks) {
       for (final event in hooks.keys.toList()) {
-        final before = (hooks[event] as List?)?.length ?? 0;
-        final kept = _withoutOurs(hooks[event]);
-        if (kept.length != before) changed = true;
+        final current = hooks[event];
+        // Not a list: not a shape this app ever wrote, so there is nothing of
+        // ours in it and nothing to decide. Casting it would throw on a config
+        // we are only passing through.
+        if (current is! List) continue;
+        final kept = _withoutOurs(current);
+        if (kept.length == current.length) continue;
+        changed = true;
         if (kept.isEmpty) {
           hooks.remove(event);
         } else {
@@ -131,13 +151,24 @@ class AgentHookInstaller {
     return true;
   }
 
-  /// [value] as a mutable list with our own entries removed.
-  List<Object?> _withoutOurs(Object? value) {
-    if (value is! List) return [];
-    return [
-      for (final entry in value)
-        if (!_isOurs(entry)) entry,
-    ];
+  /// [entries] with our own entries removed. Everything else is carried over
+  /// untouched — the list belongs to the user, and only the entries carrying
+  /// [agentHookMarker] are ours to drop.
+  List<Object?> _withoutOurs(List<Object?> entries) => [
+    for (final entry in entries)
+      if (!_isOurs(entry)) entry,
+  ];
+
+  /// Whether [entries] already holds exactly one entry of ours and it spells
+  /// [command] — the case where installing again would rewrite the file to
+  /// produce the bytes it already has.
+  bool _alreadyCurrent(List<Object?> entries, String command) {
+    final ours = entries.where(_isOurs).toList();
+    if (ours.length != 1) return false;
+    final hooks = (ours.single as Map)['hooks'];
+    if (hooks is! List || hooks.length != 1) return false;
+    final hook = hooks.single;
+    return hook is Map && hook['command'] == command;
   }
 
   bool _isOurs(Object? entry) {

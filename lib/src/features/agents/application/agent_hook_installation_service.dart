@@ -4,6 +4,8 @@ import '../../../core/logging/app_logger.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../data/agent_hook_installer.dart';
+import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
 import 'agent_providers.dart';
 import 'agent_status_providers.dart';
@@ -41,10 +43,12 @@ class AgentHookInstallation {
 /// * **The file belongs to the user.** The installer splices only the `hooks`
 ///   value back in and marks its own entries, so hooks the user configured
 ///   survive an install, an uninstall and a re-install unchanged.
-/// * **The port is ephemeral**, so this runs on every launch rather than once.
-///   A hook left over from a previous run points at a port nothing is listening
-///   on and costs an immediate connection-refused, bounded by the `curl -m 2`
-///   in the command itself.
+/// * **The port is ephemeral**, so this runs on every launch rather than once —
+///   and [uninstallAll] runs on the way out, so nothing is left pointing at a
+///   port this app no longer owns. A stale entry costs an immediate
+///   connection-refused, bounded by the `curl -m 2` in the command itself, but
+///   it survives quitting *and* uninstalling the app, and hands its bearer
+///   token to whatever binds that port next.
 /// * **WSL cannot reach the endpoint.** Under WSL2's default NAT networking
 ///   `127.0.0.1` inside a distro is not the Windows host, so a hook installed
 ///   into a WSL config would fire on every tool call and never arrive. Those
@@ -57,9 +61,50 @@ class AgentHookInstallationService {
   final Ref _ref;
   final AppLogger _log;
 
-  Future<List<AgentHookInstallation>> installAll(
-    AgentHookEndpoint endpoint,
-  ) async {
+  Future<List<AgentHookInstallation>> installAll(AgentHookEndpoint endpoint) =>
+      _forEachStore(
+        verb: 'install',
+        skipUnreachable: true,
+        act: (installer, descriptor, home) => installer.install(
+          descriptor: descriptor,
+          storeHome: home,
+          endpoint: endpoint,
+        ),
+      );
+
+  /// Removes every hook [installAll] wrote, on the way out.
+  ///
+  /// The command names an **ephemeral** port and carries a bearer token, so an
+  /// entry left behind outlives the app that could answer it: every tool call
+  /// the user makes after quitting runs a `curl` at a port nothing owns, and
+  /// the entry survives uninstalling Chitragupta entirely. Bounded and
+  /// loopback-only, so this is hygiene rather than a hole — but it is hygiene
+  /// in somebody else's config file, which is the kind worth keeping.
+  ///
+  /// Unreachable environments are swept too, unlike [installAll]: they should
+  /// hold nothing of ours, and if an older build wrote one this is what removes
+  /// it. A config with no entry of ours is read and not written.
+  Future<List<AgentHookInstallation>> uninstallAll() => _forEachStore(
+    verb: 'uninstall',
+    skipUnreachable: false,
+    act: (installer, descriptor, home) =>
+        installer.uninstall(descriptor: descriptor, storeHome: home),
+  );
+
+  /// The install/uninstall walk: every located store, every hook-capable agent,
+  /// one result row each. Written once because the two directions have to visit
+  /// exactly the same files — a sweep that missed a store would leave the entry
+  /// it was built to remove.
+  Future<List<AgentHookInstallation>> _forEachStore({
+    required String verb,
+    required bool skipUnreachable,
+    required Future<bool> Function(
+      AgentHookInstaller installer,
+      AgentDescriptor descriptor,
+      String home,
+    )
+    act,
+  }) async {
     final results = <AgentHookInstallation>[];
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
     if (environments.isEmpty) return results;
@@ -78,7 +123,7 @@ class AgentHookInstallationService {
         if (descriptor.hooks == null) continue;
         final home = store.homesByAgentId[descriptor.id];
         if (home == null) continue;
-        if (!reachable) {
+        if (skipUnreachable && !reachable) {
           results.add(
             AgentHookInstallation(
               agentId: descriptor.id,
@@ -92,16 +137,12 @@ class AgentHookInstallationService {
           continue;
         }
         try {
-          final installed = await installer.install(
-            descriptor: descriptor,
-            storeHome: home,
-            endpoint: endpoint,
-          );
+          final applied = await act(installer, descriptor, home);
           results.add(
             AgentHookInstallation(
               agentId: descriptor.id,
               environmentId: store.environmentId,
-              installed: installed,
+              installed: applied,
             ),
           );
         } catch (error, stack) {
@@ -109,7 +150,7 @@ class AgentHookInstallationService {
           // is, and the app starts anyway — an agent whose status we cannot
           // observe is a much smaller problem than a rewritten settings file.
           _log.warning(
-            'Could not install ${descriptor.id} hooks in '
+            'Could not $verb ${descriptor.id} hooks in '
             '${store.environmentId}; leaving the config untouched.',
             error,
             stack,

@@ -146,6 +146,72 @@ void main() {
     expect(configFile().readAsStringSync(), contains('"model"'));
   });
 
+  test('installing an endpoint already in the file rewrites nothing', () async {
+    // The port is ephemeral, so a relaunch usually does change the command —
+    // but when it does not, the file must be left exactly as the user's editor
+    // left it. A no-op rewrite is still a write to somebody else's config.
+    final indented = const JsonEncoder.withIndent('    ').convert({
+      'hooks': {
+        for (final event in claude.hooks!.eventStatus.keys)
+          event: [
+            {
+              'hooks': [
+                {
+                  'type': 'command',
+                  'command': installer.hookCommand(
+                    descriptor: claude,
+                    event: event,
+                    endpoint: endpoint,
+                  ),
+                },
+              ],
+            },
+          ],
+      },
+    });
+    configFile().writeAsStringSync(indented);
+
+    final installed = await installer.install(
+      descriptor: claude,
+      storeHome: home.path,
+      endpoint: endpoint,
+    );
+
+    expect(installed, isTrue);
+    expect(configFile().readAsStringSync(), indented);
+  });
+
+  test(
+    'a hook value that is not a list is left alone, not discarded',
+    () async {
+      // A hand-edited or future-shaped config. Install and uninstall have to
+      // agree about it, and the only safe answer for both is "not mine".
+      configFile().writeAsStringSync('{"hooks": {"Stop": "run-my-thing"}}');
+
+      await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+      );
+
+      expect(hooks()['Stop'], 'run-my-thing');
+      // Every other declared event still got its entry.
+      expect(
+        commandsFor('PreToolUse').single['command'],
+        contains(agentHookMarker),
+      );
+
+      final removed = await installer.uninstall(
+        descriptor: claude,
+        storeHome: home.path,
+      );
+
+      expect(removed, isTrue);
+      expect(hooks()['Stop'], 'run-my-thing');
+      expect(configFile().readAsStringSync(), isNot(contains(agentHookMarker)));
+    },
+  );
+
   test('an agent with no hook spec installs nothing', () async {
     final installed = await installer.install(
       descriptor: antigravity,
