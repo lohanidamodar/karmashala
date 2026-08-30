@@ -95,11 +95,7 @@ class FakeCdpSocket implements CdpSocket {
   }) => emit(
     jsonEncode({
       'id': id,
-      'error': {
-        'code': code,
-        'message': message,
-        'data': ?data,
-      },
+      'error': {'code': code, 'message': message, 'data': ?data},
     }),
   );
 
