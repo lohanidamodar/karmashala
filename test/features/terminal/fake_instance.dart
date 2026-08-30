@@ -2,6 +2,7 @@ import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,6 +43,10 @@ class FakeTerminalInstance implements TerminalInstance {
   @override
   final ScrollController scrollController = ScrollController();
 
+  /// The fake never runs a shell, so it has no command boundaries.
+  @override
+  CommandBlockRecorder? get commandBlocks => null;
+
   bool disposed = false;
 
   @override
@@ -68,12 +73,16 @@ ProviderContainer fakeTerminalContainer({AppDatabase? database}) {
           cancel: (_) {},
         ),
       ),
+      // Off unless a test says otherwise; also keeps the terminal controller
+      // from pulling in settings (and therefore a database) just to open a pane.
+      shellIntegrationEnabledProvider.overrideWithValue(false),
       terminalInstanceFactoryProvider.overrideWithValue(
         ({
           required id,
           required profile,
           workingDirectory,
           restoredScrollback,
+          shellIntegration = false,
         }) => FakeTerminalInstance(
           id: id,
           title: profile.label,

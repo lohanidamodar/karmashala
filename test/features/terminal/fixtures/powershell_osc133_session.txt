@@ -1,0 +1,5 @@
+]133;APS [ok=True] C:\ws> ]133;Bcmd /c exit 0
+]133;C]133;D;0]133;APS [ok=True] C:\ws> ]133;Bcmd /c exit 7
+]133;C]133;D;7]133;APS [ok=False] C:\ws> ]133;BGet-Item nope
+]133;CGet-Item : Cannot find path.
+]133;D;7]133;APS [ok=False] C:\ws> ]133;B

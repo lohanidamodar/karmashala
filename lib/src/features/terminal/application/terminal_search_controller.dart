@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
 import '../domain/terminal_search.dart';
+import 'terminal_scroll.dart';
 import 'terminal_sessions_controller.dart';
 
 /// Colours for search hits. Defaults to the vendored theme's own values; the
@@ -209,28 +210,16 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _highlights.clear();
   }
 
-  /// Centres the current match in its pane.
-  ///
-  /// `RenderTerminal` sets content height to `lines.length * cellHeight` and the
-  /// viewport dimension to its own height, so the line height is exactly
-  /// `(maxScrollExtent + viewportDimension) / lines.length` — which is how this
-  /// scrolls to a line without reaching into the vendored render object.
+  /// Centres the current match in its pane, using the same line-to-offset
+  /// helper command navigation uses.
   void _scrollToCurrent() {
     if (_matches.isEmpty) return;
     final target = _target();
-    if (target == null || !target.scroll.hasClients) return;
-
-    final position = target.scroll.position;
-    final lineCount = target.terminal.buffer.lines.length;
-    if (position.maxScrollExtent <= 0 || lineCount == 0) return;
-
-    final lineHeight =
-        (position.maxScrollExtent + position.viewportDimension) / lineCount;
-    final line = _matches[state.currentIndex].line;
-    final offset =
-        line * lineHeight - position.viewportDimension / 2 + lineHeight / 2;
-    position.jumpTo(
-      offset.clamp(position.minScrollExtent, position.maxScrollExtent),
+    if (target == null) return;
+    scrollTerminalToLine(
+      target.scroll,
+      line: _matches[state.currentIndex].line,
+      lineCount: target.terminal.buffer.lines.length,
     );
   }
 }

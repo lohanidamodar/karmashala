@@ -2,12 +2,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../settings/application/settings_controller.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
 import '../domain/pane_layout.dart';
 import '../domain/terminal_profile.dart';
 import 'scrollback_autosave.dart';
+
+/// Whether new panes get OSC 133 shell integration.
+///
+/// A provider of its own rather than an inline settings read, so a test that
+/// only wants a terminal does not have to stand up a database to get one —
+/// the same seam `terminalInstanceFactoryProvider` already provides.
+final shellIntegrationEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(settingsControllerProvider).shellIntegrationEnabled,
+);
 
 /// The production factory: each pane is backed by a real ConPTY.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
@@ -321,6 +331,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               profile: profile,
               workingDirectory: pane.workingDirectory,
               restoredScrollback: pane.scrollback,
+              shellIntegration: _shellIntegrationEnabled,
             ),
           );
           live.add(pane.id);
@@ -361,6 +372,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   TerminalTab? get _activeTab => _tabById(_activeTabId);
 
+  /// Read per launch rather than watched, so toggling the setting affects new
+  /// panes only and never restarts a running shell underneath the user.
+  bool get _shellIntegrationEnabled =>
+      ref.read(shellIntegrationEnabledProvider);
+
   String _createPane(
     TerminalProfile profile, {
     String? workingDirectory,
@@ -374,6 +390,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         profile: profile,
         workingDirectory: workingDirectory,
         restoredScrollback: restoredScrollback,
+        shellIntegration: _shellIntegrationEnabled,
       ),
     );
     return paneId;

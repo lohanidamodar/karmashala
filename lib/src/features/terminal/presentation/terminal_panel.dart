@@ -11,11 +11,17 @@ import '../../environments/domain/environment_kind.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../application/terminal_scroll.dart';
+import '../application/terminal_theme_controller.dart';
 import '../application/terminal_search_controller.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../data/terminal_instance.dart';
+import '../data/theme_discovery.dart';
+import '../domain/command_blocks.dart';
+import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/terminal_profile.dart';
+import 'command_history_sheet.dart';
 import 'pane_layout_view.dart';
 import 'terminal_search_bar.dart';
 
@@ -97,6 +103,89 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
   ///
   /// All are `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`, `Ctrl+F` and `Ctrl+W`
   /// are live control characters a shell expects to receive.
+  /// The imported palette, or null when the user is on the built-in theme or
+  /// the stored theme no longer resolves.
+  TerminalPalette? _importedPalette() {
+    final result = ref.watch(importedTerminalThemeProvider);
+    return result is ThemeLoadOk ? result.palette : null;
+  }
+
+  /// The focused pane's live instance, if there is one.
+  TerminalInstance? _focusedInstance() {
+    final tab = ref.read(terminalSessionsControllerProvider).activeTab;
+    if (tab == null) return null;
+    return _sessions.instanceFor(tab.focusedPaneId);
+  }
+
+  /// The commands OSC 133 saw in the focused pane. Empty for any pane without
+  /// shell integration, which is what keeps every affordance invisible there.
+  List<CommandBlock> _focusedBlocks() {
+    final recorder = _focusedInstance()?.commandBlocks;
+    if (recorder == null) return const [];
+    recorder.tracker.pruneEvicted();
+    return recorder.tracker.blocks;
+  }
+
+  /// Scrolls the focused pane to the command before or after the one on screen.
+  void _jumpCommand({required bool forward}) {
+    final instance = _focusedInstance();
+    final recorder = instance?.commandBlocks;
+    if (instance == null || recorder == null) return;
+    recorder.tracker.pruneEvicted();
+
+    final scroll = instance.scrollController;
+    if (!scroll.hasClients) return;
+    final position = scroll.position;
+    final lineCount = instance.terminal.buffer.lines.length;
+    if (position.maxScrollExtent <= 0 || lineCount == 0) return;
+    final lineHeight =
+        (position.maxScrollExtent + position.viewportDimension) / lineCount;
+    final centreLine =
+        ((position.pixels + position.viewportDimension / 2) / lineHeight)
+            .floor();
+
+    final target = forward
+        ? recorder.tracker.nextAfter(centreLine)
+        : recorder.tracker.previousBefore(centreLine);
+    _scrollPaneTo(instance, target);
+  }
+
+  void _scrollPaneTo(TerminalInstance instance, CommandBlock? block) {
+    final line = block?.promptLine;
+    if (line == null) return;
+    scrollTerminalToLine(
+      instance.scrollController,
+      line: line,
+      lineCount: instance.terminal.buffer.lines.length,
+    );
+  }
+
+  Future<void> _showCommands() async {
+    final instance = _focusedInstance();
+    if (instance == null) return;
+    final picked = await showDialog<CommandBlock>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Commands'),
+        contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
+        content: SizedBox(
+          width: 560,
+          child: CommandHistorySheet(
+            blocks: _focusedBlocks(),
+            onSelect: (block) => Navigator.of(context).pop(block),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (picked != null) _scrollPaneTo(instance, picked);
+  }
+
   KeyEventResult _onPaneKey(FocusNode node, KeyEvent event) {
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed) return KeyEventResult.ignored;
@@ -117,6 +206,10 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
         action = _openSearch;
       } else if (key == LogicalKeyboardKey.keyT) {
         action = () => _open(_defaultProfile());
+      } else if (key == LogicalKeyboardKey.arrowUp) {
+        action = () => _jumpCommand(forward: false);
+      } else if (key == LogicalKeyboardKey.arrowDown) {
+        action = () => _jumpCommand(forward: true);
       }
     } else if (alt && !shift) {
       if (key == LogicalKeyboardKey.arrowLeft) {
@@ -164,6 +257,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
             onOpen: _open,
             onSplit: _split,
             onFind: _openSearch,
+            onCommands: _focusedBlocks().isEmpty ? null : _showCommands,
             maximized: ref.watch(terminalMaximizedProvider),
             onToggleMaximize: () =>
                 ref.read(terminalMaximizedProvider.notifier).toggle(),
@@ -238,7 +332,7 @@ class _TerminalPanelState extends ConsumerState<TerminalPanel> {
           controller: instance.controller,
           focusNode: instance.focusNode,
           scrollController: instance.scrollController,
-          theme: _terminalTheme(theme),
+          theme: _terminalTheme(theme, _importedPalette()),
           textStyle: const TerminalStyle(fontSize: 13, fontFamily: kMonoFamily),
           padding: const EdgeInsets.all(Insets.sm),
           autofocus: focused,
@@ -308,6 +402,7 @@ class _TabBar extends StatelessWidget {
     required this.onOpen,
     required this.onSplit,
     required this.onFind,
+    required this.onCommands,
     required this.maximized,
     required this.onToggleMaximize,
     required this.onHide,
@@ -322,6 +417,10 @@ class _TabBar extends StatelessWidget {
   final ValueChanged<TerminalProfile> onOpen;
   final void Function(SplitAxis axis) onSplit;
   final VoidCallback onFind;
+
+  /// Null when the focused pane reported no commands, which is also the case
+  /// for any shell without integration — the button simply is not there.
+  final VoidCallback? onCommands;
   final bool maximized;
   final VoidCallback onToggleMaximize;
   final VoidCallback onHide;
@@ -350,6 +449,12 @@ class _TabBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onCommands != null)
+            IconButton(
+              tooltip: 'Commands',
+              icon: const Icon(AppIcons.clockCounterClockwise, size: 15),
+              onPressed: onCommands,
+            ),
           IconButton(
             tooltip: 'Find in scrollback (Ctrl+Shift+F)',
             icon: const Icon(AppIcons.magnifyingGlass, size: 16),
@@ -467,15 +572,18 @@ class _Tab extends StatelessWidget {
   }
 }
 
-TerminalTheme _terminalTheme(ThemeData theme) {
+TerminalTheme _terminalTheme(ThemeData theme, TerminalPalette? imported) {
   // Keep xterm's well-tuned 16-colour palette; only align the background and
   // foreground with the app surface so the panel reads as one piece.
   final scheme = theme.colorScheme;
-  return TerminalThemes.defaultTheme.copyWith(
+  final base = TerminalThemes.defaultTheme.copyWith(
     background: scheme.surfaceContainerLowest,
     foreground: scheme.onSurface,
     cursor: scheme.tertiary,
   );
+  // An imported theme brings its own background: the user picked those colours
+  // deliberately, so they win over the app surface.
+  return imported?.applyTo(base) ?? base;
 }
 
 extension on TerminalTheme {

@@ -9,6 +9,88 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('shell integration setting', () {
+    test('is off by default', () {
+      // A shell that fails to start is much worse than a missing feature, so
+      // the injection is opt-in until the user asks for it.
+      expect(const Settings().shellIntegrationEnabled, isFalse);
+    });
+
+    test('survives a JSON round-trip', () {
+      const s = Settings(shellIntegrationEnabled: true);
+      expect(Settings.fromJson(s.toJson()).shellIntegrationEnabled, isTrue);
+      expect(Settings.fromJson(s.toJson()), s);
+    });
+
+    test('an absent key reads back as off', () {
+      expect(Settings.fromJson(const {}).shellIntegrationEnabled, isFalse);
+    });
+
+    test('participates in equality', () {
+      expect(
+        const Settings(shellIntegrationEnabled: true),
+        isNot(const Settings()),
+      );
+    });
+
+    test('the controller persists it', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(settingsControllerProvider.notifier)
+          .setShellIntegrationEnabled(true);
+
+      expect(
+        container.read(settingsControllerProvider).shellIntegrationEnabled,
+        isTrue,
+      );
+      expect(
+        SettingsRepository(db).load().shellIntegrationEnabled,
+        isTrue,
+        reason: 'the change must reach the database, not just the notifier',
+      );
+    });
+  });
+
+  group('terminal theme setting', () {
+    test('defaults to none, meaning the built-in theme', () {
+      expect(const Settings().terminalThemeSource, isNull);
+    });
+
+    test('survives a JSON round-trip', () {
+      const s = Settings(terminalThemeSource: r'warp:C:\themes\nord.yaml');
+      final restored = Settings.fromJson(s.toJson());
+      expect(restored.terminalThemeSource, r'warp:C:\themes\nord.yaml');
+      expect(restored, s);
+    });
+
+    test('the controller persists it, and can clear it again', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(settingsControllerProvider.notifier);
+
+      controller.setTerminalThemeSource(r'ghostty:C:\themes\Nord');
+      expect(
+        SettingsRepository(db).load().terminalThemeSource,
+        r'ghostty:C:\themes\Nord',
+      );
+
+      // Clearing must actually clear — a plain `?? this.x` copyWith cannot
+      // express "set this back to null".
+      controller.setTerminalThemeSource(null);
+      expect(SettingsRepository(db).load().terminalThemeSource, isNull);
+    });
+  });
+
   group('Settings model', () {
     test('defaults to ask permissions and no default agent', () {
       const s = Settings();

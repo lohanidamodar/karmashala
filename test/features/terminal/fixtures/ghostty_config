@@ -1,0 +1,13 @@
+# A user's ghostty config, with the awkward bits real files contain.
+font-size = 14 # this is the size
+background = #1a1a1a # dark theme
+foreground   =    #c5c8c6
+palette = 0="#000000" # quoted colour
+palette = 1=f00
+palette = 2=00FF00
+palette = 99=#123456
+palette = nonsense
+font-family = "JetBrains Mono"
+a line with no equals sign
+   = value with an empty key
+cursor-color = not-a-colour

@@ -25,6 +25,8 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../system/launcher_hotkey.dart';
 import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/application/terminal_theme_controller.dart';
+import '../../terminal/data/theme_discovery.dart';
 import '../../terminal/domain/terminal_profile.dart';
 import '../application/settings_controller.dart';
 import '../domain/app_theme_mode.dart';
@@ -147,27 +149,46 @@ class SettingsScreen extends ConsumerWidget {
               );
               return _Section(
                 title: 'DEFAULT TERMINAL',
-                child: DropdownButtonFormField<String>(
-                  initialValue: current.id,
-                  decoration: const InputDecoration(
-                    labelText: 'Shell new terminals open with',
-                  ),
-                  items: [
-                    for (final profile in profiles)
-                      DropdownMenuItem(
-                        value: profile.id,
-                        child: Text(profile.label),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: current.id,
+                      decoration: const InputDecoration(
+                        labelText: 'Shell new terminals open with',
                       ),
+                      items: [
+                        for (final profile in profiles)
+                          DropdownMenuItem(
+                            value: profile.id,
+                            child: Text(profile.label),
+                          ),
+                      ],
+                      onChanged: (id) {
+                        if (id != null) {
+                          controller.setDefaultTerminalProfile(id);
+                        }
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settings.shellIntegrationEnabled,
+                      onChanged: controller.setShellIntegrationEnabled,
+                      title: const Text('Shell integration'),
+                      subtitle: const Text(
+                        'Mark where each command starts and ends, so the '
+                        'terminal can show exit codes and durations and jump '
+                        'between commands. PowerShell only. Set up at launch — '
+                        'your profile is never modified — and applies to new '
+                        'terminals.',
+                      ),
+                    ),
                   ],
-                  onChanged: (id) {
-                    if (id != null) {
-                      controller.setDefaultTerminalProfile(id);
-                    }
-                  },
                 ),
               );
             },
           ),
+          const _TerminalThemeSection(),
           const _TerminalAppSection(),
           const _CodeEditorSection(),
           const _MiniLauncherSection(),
@@ -1512,4 +1533,87 @@ String _relativeExpiry(DateTime when) {
   if (diff.inHours >= 24) return 'expires in ${diff.inDays}d';
   if (diff.inHours >= 1) return 'expires in ${diff.inHours}h';
   return 'expires in ${diff.inMinutes}m';
+}
+
+/// Import a terminal colour theme from Ghostty or Warp.
+///
+/// The stored value is the theme's identity, not its colours, so editing the
+/// file is picked up. If it later disappears or breaks, the terminal keeps the
+/// built-in theme and the reason is shown here rather than anywhere near the
+/// terminal itself.
+class _TerminalThemeSection extends ConsumerWidget {
+  const _TerminalThemeSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final selected = ref.watch(settingsControllerProvider).terminalThemeSource;
+    final discovered = ref.watch(discoveredTerminalThemesProvider);
+    final loaded = ref.watch(importedTerminalThemeProvider);
+
+    // A stored theme whose file has since gone would leave the dropdown with a
+    // value none of its items carry, which makes it throw and flash red.
+    final ids = discovered.map((t) => t.id).toSet();
+    final value = selected != null && ids.contains(selected) ? selected : null;
+
+    return _Section(
+      title: 'TERMINAL THEME',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String?>(
+            isExpanded: true,
+            initialValue: value,
+            decoration: InputDecoration(
+              labelText: 'Colours',
+              helperText: discovered.isEmpty
+                  ? 'No Ghostty or Warp themes found on this machine.'
+                  : null,
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Built-in')),
+              for (final t in discovered)
+                DropdownMenuItem(
+                  value: t.id,
+                  child: Text('${t.name}  ·  ${t.format.name}'),
+                ),
+            ],
+            onChanged: (id) => controller.setTerminalThemeSource(id),
+          ),
+          if (selected != null && value == null)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.sm),
+              child: Text(
+                'The saved theme is no longer where it was; using the built-in '
+                'colours.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+          if (loaded is ThemeLoadError)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.sm),
+              child: Text(
+                '${loaded.reason} Using the built-in colours.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+          if (loaded is ThemeLoadOk && loaded.notes.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.sm),
+              child: Text(
+                loaded.notes.join(' '),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

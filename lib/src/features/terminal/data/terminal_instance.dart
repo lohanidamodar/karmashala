@@ -7,8 +7,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
+import '../domain/mouse_wheel_reporter.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/terminal_profile.dart';
+import 'command_block_recorder.dart';
+import 'process_shutdown.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
 
@@ -33,6 +36,12 @@ abstract class TerminalInstance {
   FocusNode get focusNode;
   ScrollController get scrollController;
 
+  /// OSC 133 command boundaries for this pane, or `null` when the shell was
+  /// not integrated. Null — not an empty tracker — so the UI can tell "no
+  /// integration" from "integrated, but nothing run yet" and stay invisible in
+  /// the first case.
+  CommandBlockRecorder? get commandBlocks;
+
   /// Tears down the backing process/streams. Safe to call more than once.
   void dispose();
 }
@@ -45,6 +54,7 @@ typedef TerminalInstanceFactory =
       required TerminalProfile profile,
       String? workingDirectory,
       String? restoredScrollback,
+      bool shellIntegration,
     });
 
 /// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
@@ -62,8 +72,17 @@ class PtyTerminalInstance implements TerminalInstance {
     required PtyLaunch launch,
     this.workingDirectory,
     String? restoredScrollback,
+    bool shellIntegration = false,
   }) {
-    terminal = Terminal(maxLines: kLiveScrollbackMaxLines);
+    terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
+      // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
+      // tmux (and anything else reading the modifier bits) from scrolling.
+      ..mouseHandler = const ChitraguptaMouseHandler();
+    // Attach before the process starts so no marker can be missed. When the
+    // shell is not integrated this stays null and nothing else changes.
+    if (shellIntegration) {
+      commandBlocks = CommandBlockRecorder(terminal)..attach();
+    }
     // Replay the previous session's scrollback *before* the shell starts, so
     // restored history sits above the new process's first output.
     writeRestoredScrollback(terminal, restoredScrollback);
@@ -130,6 +149,8 @@ class PtyTerminalInstance implements TerminalInstance {
   final FocusNode focusNode = FocusNode();
   @override
   final ScrollController scrollController = ScrollController();
+  @override
+  CommandBlockRecorder? commandBlocks;
 
   late final Pty _pty;
   late final PtyOutputCoalescer _coalescer;
@@ -144,7 +165,11 @@ class PtyTerminalInstance implements TerminalInstance {
     _coalescer.dispose();
     focusNode.dispose();
     scrollController.dispose();
-    _pty.kill();
+    // Ask the process to exit before destroying it. A bare kill is wrong for
+    // anything long-running — a build, a dev server, an ssh session, a database
+    // client mid-write — because the process never gets to flush or run its
+    // exit handlers. This runs on app quit as well as tab close.
+    unawaited(shutdownProcess(kill: _pty.kill, exitCode: _pty.exitCode));
   }
 }
 
@@ -235,6 +260,10 @@ class ErrorTerminalInstance implements TerminalInstance {
   @override
   final ScrollController scrollController = ScrollController();
 
+  /// An error pane never runs a shell, so it never has command boundaries.
+  @override
+  CommandBlockRecorder? get commandBlocks => null;
+
   bool _disposed = false;
 
   @override
@@ -254,6 +283,7 @@ TerminalInstance createPtyTerminalInstance({
   required TerminalProfile profile,
   String? workingDirectory,
   String? restoredScrollback,
+  bool shellIntegration = false,
 }) {
   // The terminal profiles (PowerShell/cmd/WSL) assume a Windows host. When the
   // app itself runs on Linux/macOS (e.g. inside WSL), `wsl.exe`/`powershell.exe`
@@ -261,7 +291,11 @@ TerminalInstance createPtyTerminalInstance({
   // shell in the working directory.
   final PtyLaunch launch;
   if (Platform.isWindows) {
-    launch = ptyLaunchFor(profile, workingDirectory: workingDirectory);
+    launch = ptyLaunchFor(
+      profile,
+      workingDirectory: workingDirectory,
+      shellIntegration: shellIntegration,
+    );
   } else {
     final shell = Platform.environment['SHELL'] ?? '/bin/bash';
     launch = PtyLaunch(executable: shell, workingDirectory: workingDirectory);
@@ -274,6 +308,7 @@ TerminalInstance createPtyTerminalInstance({
       launch: launch,
       workingDirectory: workingDirectory,
       restoredScrollback: restoredScrollback,
+      shellIntegration: shellIntegration && Platform.isWindows,
     );
   } catch (e) {
     final args = launch.arguments.join(' ');
