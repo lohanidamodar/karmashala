@@ -97,7 +97,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
     return ShellShortcuts(
       child: Scaffold(
-        appBar: const _ShellTitleBar(),
+        appBar: const ShellTitleBar(),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -218,65 +218,163 @@ class _ExplorerColumnState extends ConsumerState<_ExplorerColumn> {
   }
 }
 
-class _ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
-  const _ShellTitleBar();
+/// The window's one chrome row: the menus, the command field and the toggles
+/// for the two panes that can be hidden.
+///
+/// It used to be a Material `AppBar` 32px tall, against the 30px of every other
+/// chrome row in the window, in the same colour and with no rule under it — so
+/// the top-left of the window read as one 62px slab with `Workspace View Tools`
+/// sitting over `EXPLORER`. Six controls were parked at the right (a chat
+/// drawer, a mini launcher, settings, a divider and two toggles), which is
+/// where things go when nowhere else has claimed them.
+///
+/// Now it *is* the tab strip's row: the same height, the same
+/// `surfaceContainerLow`, the same hairline underneath, and the menus at the
+/// tab chips' size and weight instead of a step larger and brighter. Each pane
+/// toggle moved to the side of the window it controls, and it is drawn like a
+/// rail button, because that is the other place in the chrome where a glyph
+/// means "show me this".
+class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
+  const ShellTitleBar({super.key});
 
   @override
   Size get preferredSize => const Size.fromHeight(Chrome.titleBar);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     final panelOpen = ref.watch(sidePanelProvider) != null;
     final explorerVisible = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
-    // No app icon/name here — the OS title bar already shows those. Lead with
-    // the menu bar so the chrome reads like a native desktop menu bar.
-    return AppBar(
-      titleSpacing: Insets.xs,
-      title: const Row(
-        children: [
-          _DesktopMenuBar(),
-          SizedBox(width: Insets.sm),
-          // Quick open had no mouse affordance at all (Loop 50 §8.1): no
-          // button, no menu item, nothing to click. A search field beside the
-          // menus is where every desktop app of this shape puts it, and it is
-          // also the only place the chord can teach itself.
-          Flexible(child: QuickOpenButton()),
-        ],
+    // No app icon or name: the OS title bar already carries those.
+    return Material(
+      color: scheme.surfaceContainerLow,
+      child: Container(
+        height: Chrome.titleBar,
+        padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        ),
+        child: Row(
+          children: [
+            _ChromeToggle(
+              icon: AppIcons.treeStructure,
+              label: 'Show or hide the Explorer',
+              chord: shellChordLabel<ToggleExplorerPaneIntent>(),
+              note: 'Ctrl+B does it too, outside a terminal pane',
+              selected: explorerVisible,
+              onPressed: () => ref
+                  .read(shellControllerProvider.notifier)
+                  .toggleExplorerPane(),
+            ),
+            const SizedBox(width: Insets.xs),
+            const _DesktopMenuBar(),
+            const SizedBox(width: Insets.sm),
+            // Expanded, not Flexible-then-Spacer: the field takes its own
+            // width and the rest of the row is empty space the toggles are
+            // pushed to the far edge by.
+            const Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: QuickOpenButton(),
+              ),
+            ),
+            _ChromeToggle(
+              icon: AppIcons.sidebarSimple,
+              label: 'Show or hide the side panel',
+              chord: shellChordLabel<ToggleSidePanelIntent>(),
+              selected: panelOpen,
+              onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
+            ),
+            _ChromeToggle(
+              icon: AppIcons.gearSix,
+              label: 'Settings',
+              onPressed: () => SettingsScreen.show(context),
+            ),
+          ],
+        ),
       ),
-      actions: [
-        IconButton(
-          tooltip: 'Settings',
-          icon: const Icon(AppIcons.gearSix),
-          onPressed: () => SettingsScreen.show(context),
+    );
+  }
+}
+
+/// A title-bar glyph, drawn like a rail button so the two places in the chrome
+/// where an icon means "show me this" look like one control.
+class _ChromeToggle extends StatelessWidget {
+  const _ChromeToggle({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.chord,
+    this.note,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? chord;
+  final String? note;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: [
+        [label, ?chord].join('  ·  '),
+        ?note,
+      ].join('\n'),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(Radii.sm),
+          onTap: onPressed,
+          child: Container(
+            width: 26,
+            height: 24,
+            decoration: BoxDecoration(
+              color: selected
+                  ? scheme.primary.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+            child: Icon(
+              icon,
+              size: Chrome.icon,
+              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            ),
+          ),
         ),
-        const VerticalDivider(indent: 7, endIndent: 7, width: Insets.sm),
-        IconButton(
-          tooltip:
-              'Toggle Explorer  ·  '
-              '${shellChordLabel<ToggleExplorerPaneIntent>()}'
-              '  (Ctrl+B outside a terminal pane)',
-          isSelected: explorerVisible,
-          icon: const Icon(AppIcons.treeStructure),
-          onPressed: () =>
-              ref.read(shellControllerProvider.notifier).toggleExplorerPane(),
-        ),
-        IconButton(
-          tooltip:
-              'Toggle side panel  ·  ${shellChordLabel<ToggleSidePanelIntent>()}',
-          isSelected: panelOpen,
-          icon: const Icon(AppIcons.sidebarSimple),
-          onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
-        ),
-        const SizedBox(width: Insets.xs),
-      ],
+      ),
     );
   }
 }
 
 class _DesktopMenuBar extends ConsumerWidget {
   const _DesktopMenuBar();
+
+  /// The menu titles sit at the tab chips' size, weight and colour, and only
+  /// come up to full contrast under the pointer. They are chrome, not a
+  /// heading over the chrome: at `onSurface` they were the brightest thing in
+  /// the window's top-left corner, above the pane header they belong beside.
+  static ButtonStyle _titleStyle(ColorScheme scheme) => ButtonStyle(
+    foregroundColor: WidgetStateProperty.resolveWith(
+      (states) =>
+          states.contains(WidgetState.hovered) ||
+              states.contains(WidgetState.focused) ||
+              states.contains(WidgetState.pressed)
+          ? scheme.onSurface
+          : scheme.onSurfaceVariant,
+    ),
+    minimumSize: const WidgetStatePropertyAll(Size(0, 24)),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: Insets.sm),
+    ),
+  );
 
   void _showDetected(BuildContext context, WidgetRef ref) {
     ref.read(detectedProjectsControllerProvider.notifier).detect();
@@ -348,9 +446,11 @@ class _DesktopMenuBar extends ConsumerWidget {
     final shell = ref.watch(shellControllerProvider);
     final panel = ref.watch(sidePanelProvider);
     final zen = ref.watch(terminalMaximizedProvider);
+    final style = _titleStyle(Theme.of(context).colorScheme);
     return MenuBar(
       children: [
         SubmenuButton(
+          style: style,
           menuChildren: [
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.folderPlus),
@@ -400,6 +500,7 @@ class _DesktopMenuBar extends ConsumerWidget {
           child: const Text('Workspace'),
         ),
         SubmenuButton(
+          style: style,
           menuChildren: [
             CheckboxMenuButton(
               value: shell.explorerPaneVisible,
@@ -449,6 +550,7 @@ class _DesktopMenuBar extends ConsumerWidget {
           child: const Text('View'),
         ),
         SubmenuButton(
+          style: style,
           menuChildren: [
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.gearSix),

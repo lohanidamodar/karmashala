@@ -182,11 +182,14 @@ class Motion {
 class Chrome {
   const Chrome._();
 
-  /// The menu-bar row at the top of the window.
-  static const titleBar = 32.0;
-
-  /// The workbench tab strip and the side panel's header.
+  /// The workbench tab strip, the side panel's header and every pane header.
   static const tabStrip = 30.0;
+
+  /// The menu-bar row at the top of the window — deliberately *the same* row
+  /// as [tabStrip]. It was 32 against everything else's 30, which is enough to
+  /// see and not enough to look intended: the top-left of the window read as
+  /// one undifferentiated slab of chrome rather than two rows.
+  static const titleBar = tabStrip;
 
   /// The status bar along the bottom of the window.
   static const statusBar = 22.0;

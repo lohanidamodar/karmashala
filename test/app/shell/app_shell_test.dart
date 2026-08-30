@@ -7,6 +7,7 @@ import 'package:chitragupta/src/app/shell/side_panel.dart';
 import 'package:chitragupta/src/app/shell/side_panel_state.dart';
 import 'package:chitragupta/src/app/shell/status_bar.dart';
 import 'package:chitragupta/src/app/shell/workbench.dart';
+import 'package:chitragupta/src/app/theme/design_tokens.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
@@ -61,9 +62,10 @@ void main() {
   ) async {
     await pumpApp(tester, size: const Size(1440, 900));
 
-    // The app bar reads like a native menu bar (no app icon/name — the OS title
-    // bar carries those).
-    expect(find.byType(AppBar), findsOneWidget);
+    // One chrome row at the top, the tab strip's own height (no app icon or
+    // name — the OS title bar carries those).
+    expect(find.byType(ShellTitleBar), findsOneWidget);
+    expect(tester.getSize(find.byType(ShellTitleBar)).height, Chrome.titleBar);
     expect(find.text('EXPLORER'), findsOneWidget);
     // The terminal is the content area now, not a dock under it.
     expect(find.byType(WorkbenchView), findsOneWidget);
@@ -181,7 +183,7 @@ void main() {
   ) async {
     final container = await pumpApp(tester, size: const Size(640, 900));
 
-    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byType(ShellTitleBar), findsOneWidget);
     expect(find.byType(SegmentedButton<ShellPane>), findsOneWidget);
     // Explorer first, workbench on request — one pane at a time.
     expect(find.byType(ExplorerPanel), findsOneWidget);
