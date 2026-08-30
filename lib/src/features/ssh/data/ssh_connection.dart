@@ -8,6 +8,7 @@ import '../../environments/domain/environment_path.dart';
 import '../domain/ssh_connection_state.dart';
 import '../domain/ssh_host.dart';
 import '../domain/ssh_host_key.dart';
+import 'channel_limiter.dart';
 import 'resilient_ssh_socket.dart';
 import 'ssh_host_key_verifier.dart';
 
@@ -80,8 +81,11 @@ class SshConnection {
     this.keyReader = readLocalPrivateKey,
     this.connectTimeout = const Duration(seconds: 15),
     this.maxAttempts = 3,
+    int maxConcurrentCommands = 4,
+    this.channelOpenAttempts = 4,
     AppLogger? logger,
-  }) : _logger = logger ?? AppLogger.named('ssh.connection');
+  }) : _commandSlots = ChannelLimiter(maxConcurrentCommands),
+       _logger = logger ?? AppLogger.named('ssh.connection');
 
   final SshHost host;
   final SshHostKeyVerifier verifier;
@@ -94,6 +98,16 @@ class SshConnection {
   /// [reconnectBackoff] between them.
   final int maxAttempts;
 
+  /// How many times a refused channel open is retried before giving up.
+  ///
+  /// A server frees a finished session slightly after the client considers the
+  /// command done, so a burst of short commands can momentarily exceed the
+  /// server's session limit even under [runOnChannel]'s own cap. Waiting a few
+  /// milliseconds and asking again is the correct response; failing a probe
+  /// because the previous one had not finished being cleaned up is not.
+  final int channelOpenAttempts;
+
+  final ChannelLimiter _commandSlots;
   final AppLogger _logger;
 
   final StreamController<SshConnectionState> _states =
@@ -127,6 +141,44 @@ class SshConnection {
       _connecting = null;
     });
   }
+
+  /// Runs [body] on the live session while holding one of this connection's
+  /// channel slots.
+  ///
+  /// Run-to-completion commands go through here so a wide fan-out queues
+  /// instead of exhausting the server's session limit. Long-lived streaming
+  /// sessions deliberately do **not**: they are few, they are the user's
+  /// explicit intent, and queuing one behind another would deadlock.
+  Future<T> runOnChannel<T>(Future<T> Function(SSHClient client) body) =>
+      _commandSlots.withSlot(() => _withChannelRetry(body));
+
+  /// Retries [body] when the *channel open* is refused.
+  ///
+  /// Safe to retry because a refused open means nothing ran: `dartssh2` reports
+  /// it before the command is sent, so the body has had no effect.
+  Future<T> _withChannelRetry<T>(
+    Future<T> Function(SSHClient client) body,
+  ) async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await body(await client());
+      } on SSHChannelOpenError catch (e) {
+        if (attempt >= channelOpenAttempts) rethrow;
+        final wait = Duration(milliseconds: 25 << attempt);
+        _logger.debug(
+          '${host.address} refused a channel ($e); retrying in '
+          '${wait.inMilliseconds} ms.',
+        );
+        await Future<void>.delayed(wait);
+      }
+    }
+  }
+
+  /// How many command channels are open right now, and how many are queued.
+  (int inUse, int waiting) get channelPressure => (
+    _commandSlots.inUse,
+    _commandSlots.waiting,
+  );
 
   /// Drops the current session so the next [client] call reconnects. Used by a
   /// manual "reconnect" action and by tests.

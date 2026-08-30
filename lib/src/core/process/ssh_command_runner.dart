@@ -58,11 +58,23 @@ class SshCommandRunner implements CommandRunner {
 
   @override
   Future<CommandResult> run(CommandRequest request) async {
-    final client = await _client(request, verb: 'run');
     final line = buildRemoteCommandLine(request);
     final SSHRunResult result;
     try {
-      result = await client.runWithResult(line);
+      // Through the connection's channel limiter: a fan-out of probes queues
+      // rather than tripping the server's session limit.
+      result = await connection.runOnChannel(
+        (client) => client.runWithResult(line),
+      );
+    } on SshConnectionException catch (e) {
+      throw _unreachable(request, 'run', e);
+    } on SSHChannelOpenError catch (e) {
+      throw CommandException(
+        '${connection.host.address} refused another channel for '
+        '"${request.executable}"; its session limit (OpenSSH MaxSessions) is '
+        'reached',
+        cause: e,
+      );
     } on SSHError catch (e) {
       throw CommandException(
         'Failed to run "${request.executable}" on ${connection.host.address}',
@@ -116,13 +128,19 @@ class SshCommandRunner implements CommandRunner {
     try {
       return await connection.client();
     } on SshConnectionException catch (e) {
-      throw CommandException(
-        'Cannot $verb "${request.executable}" on '
-        '${connection.host.address}: ${e.message}',
-        cause: e.cause ?? e,
-      );
+      throw _unreachable(request, verb, e);
     }
   }
+
+  CommandException _unreachable(
+    CommandRequest request,
+    String verb,
+    SshConnectionException e,
+  ) => CommandException(
+    'Cannot $verb "${request.executable}" on ${connection.host.address}: '
+    '${e.message}',
+    cause: e.cause ?? e,
+  );
 
   static String _decode(List<int> bytes) =>
       const Utf8Decoder(allowMalformed: true).convert(bytes);
