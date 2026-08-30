@@ -76,6 +76,7 @@ class Settings {
     this.chatToggleShortcutJson,
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
+    this.shellIntegrationEnabled = false,
   });
 
   /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
@@ -166,6 +167,13 @@ class Settings {
   /// themselves stay sourced live from the CLI agents.
   final List<String> pinnedSessionIds;
 
+  /// Inject OSC 133 shell integration into new terminals, giving command
+  /// boundaries, exit codes and durations.
+  ///
+  /// Off by default and read at pane-launch time. A shell that fails to start
+  /// is a much worse outcome than a missing feature, so this stays opt-in.
+  final bool shellIntegrationEnabled;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   bool isSessionPinned(String sessionId) =>
@@ -201,6 +209,7 @@ class Settings {
     String? chatToggleShortcutJson,
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
+    bool? shellIntegrationEnabled,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -234,6 +243,8 @@ class Settings {
         chatToggleShortcutJson ?? this.chatToggleShortcutJson,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
+    shellIntegrationEnabled:
+        shellIntegrationEnabled ?? this.shellIntegrationEnabled,
   );
 
   Settings withPermissions(String agentId, AgentPermissions value) =>
@@ -268,6 +279,7 @@ class Settings {
       'chatToggleShortcutJson': chatToggleShortcutJson,
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
+    'shellIntegrationEnabled': shellIntegrationEnabled,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
@@ -345,6 +357,7 @@ class Settings {
       pinnedSessionIds: json['pinnedSessionIds'] is List
           ? (json['pinnedSessionIds'] as List).whereType<String>().toList()
           : const [],
+      shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
     );
   }
 
@@ -373,6 +386,7 @@ class Settings {
       other.launcherHotkeyJson == launcherHotkeyJson &&
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.chatToggleShortcutJson == chatToggleShortcutJson &&
+      other.shellIntegrationEnabled == shellIntegrationEnabled &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -404,6 +418,7 @@ class Settings {
       launcherHotkeyEnabled,
       defaultAgentInstallationId,
       chatToggleShortcutJson,
+      shellIntegrationEnabled,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

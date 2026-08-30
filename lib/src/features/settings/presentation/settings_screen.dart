@@ -147,23 +147,41 @@ class SettingsScreen extends ConsumerWidget {
               );
               return _Section(
                 title: 'DEFAULT TERMINAL',
-                child: DropdownButtonFormField<String>(
-                  initialValue: current.id,
-                  decoration: const InputDecoration(
-                    labelText: 'Shell new terminals open with',
-                  ),
-                  items: [
-                    for (final profile in profiles)
-                      DropdownMenuItem(
-                        value: profile.id,
-                        child: Text(profile.label),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: current.id,
+                      decoration: const InputDecoration(
+                        labelText: 'Shell new terminals open with',
                       ),
+                      items: [
+                        for (final profile in profiles)
+                          DropdownMenuItem(
+                            value: profile.id,
+                            child: Text(profile.label),
+                          ),
+                      ],
+                      onChanged: (id) {
+                        if (id != null) {
+                          controller.setDefaultTerminalProfile(id);
+                        }
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: settings.shellIntegrationEnabled,
+                      onChanged: controller.setShellIntegrationEnabled,
+                      title: const Text('Shell integration'),
+                      subtitle: const Text(
+                        'Mark where each command starts and ends, so the '
+                        'terminal can show exit codes and durations and jump '
+                        'between commands. PowerShell only. Set up at launch — '
+                        'your profile is never modified — and applies to new '
+                        'terminals.',
+                      ),
+                    ),
                   ],
-                  onChanged: (id) {
-                    if (id != null) {
-                      controller.setDefaultTerminalProfile(id);
-                    }
-                  },
                 ),
               );
             },

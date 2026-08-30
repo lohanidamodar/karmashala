@@ -163,6 +163,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setShellIntegrationEnabled(bool value) {
+    state = state.copyWith(shellIntegrationEnabled: value);
+    _save();
+  }
+
   void _save() => ref.read(settingsRepositoryProvider).save(state);
 }
 
