@@ -1,0 +1,216 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/theme/design_tokens.dart';
+import '../../git/data/git_diff_parsing.dart';
+import '../../git/domain/diff_line.dart';
+import '../application/checkpoint_providers.dart';
+import '../application/checkpoint_service.dart';
+import '../domain/checkpoint.dart';
+
+/// The checkpoints of a session, and the way back to one.
+///
+/// Deliberately plain. The place this belongs is beside the turn it belongs to,
+/// in the transcript — that is the sessions owner's surface, and a follow-up.
+/// Until then this is the honest minimum: a list you can read, a diff you can
+/// check, and a restore that tells you what it will cost before it does it.
+class CheckpointsView extends ConsumerStatefulWidget {
+  const CheckpointsView({super.key});
+
+  @override
+  ConsumerState<CheckpointsView> createState() => _CheckpointsViewState();
+}
+
+class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
+  String? _expandedId;
+  String? _busyId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final checkpoints = ref.watch(sessionCheckpointsProvider);
+
+    if (checkpoints.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.lg),
+          child: Text(
+            'No checkpoints yet. One is recorded each time an agent session '
+            'finishes a turn.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: checkpoints.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final checkpoint = checkpoints[index];
+        final expanded = _expandedId == checkpoint.id;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              dense: true,
+              title: Text(
+                checkpoint.label ??
+                    '${_reasonLabel(checkpoint.reason)} '
+                        '#${checkpoint.sequence}',
+                style: theme.textTheme.bodyMedium,
+              ),
+              subtitle: Text(
+                '${checkpoint.files.length} file'
+                '${checkpoint.files.length == 1 ? '' : 's'} · '
+                '${checkpoint.createdAt.toLocal()}',
+                style: theme.textTheme.bodySmall,
+              ),
+              onTap: () =>
+                  setState(() => _expandedId = expanded ? null : checkpoint.id),
+              trailing: _busyId == checkpoint.id
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton(
+                      onPressed: () => _restore(checkpoint),
+                      child: const Text('Restore'),
+                    ),
+            ),
+            if (expanded) _CheckpointDiff(checkpoint: checkpoint),
+          ],
+        );
+      },
+    );
+  }
+
+  String _reasonLabel(CheckpointReason reason) => switch (reason) {
+    CheckpointReason.turn => 'Turn',
+    CheckpointReason.safety => 'Before restore',
+    CheckpointReason.manual => 'Checkpoint',
+  };
+
+  Future<void> _restore(Checkpoint checkpoint, {bool confirm = false}) async {
+    setState(() => _busyId = checkpoint.id);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      final outcome = await ref
+          .read(checkpointServiceProvider)
+          .restore(checkpoint, confirm: confirm);
+      ref.read(checkpointsRevisionProvider.notifier).bump();
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            outcome.alreadyThere
+                ? 'The working tree already matched that checkpoint.'
+                : 'Restored ${outcome.files.length} file(s). '
+                      'Undo it by restoring checkpoint '
+                      '#${outcome.safetyCheckpoint?.sequence}.',
+          ),
+        ),
+      );
+    } on CheckpointConflict catch (conflict) {
+      if (!mounted) return;
+      final proceed = await _askToOverwrite(conflict);
+      if (proceed) {
+        await _restore(checkpoint, confirm: true);
+        return;
+      }
+    } catch (error) {
+      messenger?.showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
+  Future<bool> _askToOverwrite(CheckpointConflict conflict) async {
+    final answer = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard newer changes?'),
+        content: Text(
+          '${conflict.message}\n\nNothing is lost either way: the working tree '
+          'as it is now has just been checkpointed, so this is undoable.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Restore anyway'),
+          ),
+        ],
+      ),
+    );
+    return answer ?? false;
+  }
+}
+
+class _CheckpointDiff extends ConsumerWidget {
+  const _CheckpointDiff({required this.checkpoint});
+
+  final Checkpoint checkpoint;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return FutureBuilder<String>(
+      future: ref.read(checkpointServiceProvider).diffOf(checkpoint),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(Insets.md),
+            child: Text('${snapshot.error}', style: theme.textTheme.bodySmall),
+          );
+        }
+        final diff = snapshot.data;
+        if (diff == null) {
+          return const Padding(
+            padding: EdgeInsets.all(Insets.md),
+            child: LinearProgressIndicator(),
+          );
+        }
+        if (diff.trim().isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(Insets.md),
+            child: Text('Nothing changed.', style: theme.textTheme.bodySmall),
+          );
+        }
+        return Container(
+          width: double.infinity,
+          color: theme.colorScheme.surfaceContainerLowest,
+          padding: const EdgeInsets.all(Insets.sm),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SelectionArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final line in parseUnifiedDiff(diff))
+                    Text(
+                      line.text,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        color: switch (line.kind) {
+                          DiffLineKind.added => Colors.green.shade700,
+                          DiffLineKind.removed => Colors.red.shade700,
+                          DiffLineKind.meta || DiffLineKind.hunk =>
+                            theme.colorScheme.onSurfaceVariant,
+                          DiffLineKind.context => null,
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

@@ -25,6 +25,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v11** — Loop 53: a shadow copy of the terminal workspace, written
 ///   immediately before a save would empty it, so an emptying that should not
 ///   have happened is recoverable rather than final.
+/// * **v12** — Loop 53: session checkpoints — one row per captured turn,
+///   pointing at the git objects that hold what the working tree looked like.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -37,6 +39,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   9: _migrateToV9,
   10: _migrateToV10,
   11: _migrateToV11,
+  12: _migrateToV12,
 };
 
 void _migrateToV8(Database db) {
@@ -411,6 +414,54 @@ void _migrateToV11(Database db) {
       scrollback        TEXT NOT NULL,
       launch_command    TEXT,
       updated_at        TEXT NOT NULL
+    );
+  ''');
+}
+
+void _migrateToV12(Database db) {
+  // Session checkpoints (Loop 53): what the working tree looked like when a
+  // turn ended, so it can be put back.
+  //
+  // The *content* is not here. A checkpoint is a git tree and the commit that
+  // anchors it, both in the repository's own object store, reachable from
+  // `refs/chitragupta/checkpoints/<session>` so `git gc` keeps them. This table
+  // is the index over them: which session, in which order, against which repo,
+  // and what a reader can be shown without shelling out to git.
+  //
+  // Deliberately no foreign key to `sessions`. A checkpoint is a recovery
+  // record for work in a *repository*; losing the way back to that work because
+  // the session row it was captured under went away is the wrong failure.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_checkpoints (
+      id                TEXT PRIMARY KEY,
+      session_id        TEXT NOT NULL,
+      environment_id    TEXT NOT NULL,
+      repository_path   TEXT NOT NULL,
+      sequence          INTEGER NOT NULL,
+      tree_sha          TEXT NOT NULL,
+      commit_sha        TEXT NOT NULL,
+      parent_commit_sha TEXT,
+      head_sha          TEXT,
+      reason            TEXT NOT NULL,
+      label             TEXT,
+      created_at        TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_checkpoints_session '
+    'ON session_checkpoints (session_id, sequence);',
+  );
+
+  // What changed between a checkpoint and the one before it, denormalised so a
+  // list of turns can be rendered without running git once per row.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_checkpoint_files (
+      checkpoint_id TEXT NOT NULL,
+      path          TEXT NOT NULL,
+      status        TEXT NOT NULL,
+      PRIMARY KEY (checkpoint_id, path),
+      FOREIGN KEY (checkpoint_id) REFERENCES session_checkpoints (id)
+        ON DELETE CASCADE
     );
   ''');
 }
