@@ -15,6 +15,11 @@ final companionLinkProvider = StreamProvider<CompanionLinkState>(
   (ref) => ref.watch(companionGatewayProvider).linkStates,
 );
 
+/// Which path carries the link — Direct (LAN) or Relay — or null while down.
+final companionLinkPathProvider = StreamProvider<CompanionLinkPath?>(
+  (ref) => ref.watch(companionGatewayProvider).linkPathStates,
+);
+
 /// Every session the host holds, live.
 final companionSessionsProvider = StreamProvider<List<CompanionSessionSummary>>(
   (ref) => ref.watch(companionGatewayProvider).watchSessions(),

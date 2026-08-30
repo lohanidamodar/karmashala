@@ -41,9 +41,10 @@ class RemoteHostBindings {
   /// What `host.status` calls this desktop.
   final String hostName;
 
-  /// Every session the desktop would list, already shaped for the wire.
-  /// Stage is deliberately absent here — computing it costs a git/gh probe
-  /// per session, which a list must not pay; subscribed sessions get it.
+  /// Every session the desktop would list — imported CLI history included,
+  /// flagged — already shaped for the wire. Stage is deliberately absent
+  /// here (it costs a git/gh probe per session); [HostSessionApi] folds it
+  /// in via [deliveryStageFor] when it answers `sessions.list`.
   final List<RemoteSessionSnapshot> Function() listSessions;
 
   final RemoteSessionSnapshot? Function(String sessionId) sessionById;

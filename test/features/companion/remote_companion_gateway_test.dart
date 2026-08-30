@@ -5,6 +5,8 @@
 /// gateway surface and the desktop's provider seams.
 library;
 
+import 'dart:io';
+
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/remote_companion_gateway.dart';
@@ -12,15 +14,23 @@ import 'package:chitragupta/src/features/companion/client/secure_companion_store
 import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
 import 'package:chitragupta/src/features/remote/client/companion_store.dart'
     as stored;
+import 'package:chitragupta/src/features/remote/client/lan_path.dart';
 import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
 import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
 import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:chitragupta/src/features/remote/transport/lan_beacon.dart';
+import 'package:chitragupta/src/features/remote/transport/lan_transport.dart';
 import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
 import 'package:chitragupta_relay/chitragupta_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../remote/fake_bindings.dart';
 import '../remote/transport_harness.dart';
+
+/// A beacon group and port of this suite's own, so a real host on the LAN
+/// cannot leak into it (the lan_beacon_test convention).
+final _lanGroup = InternetAddress('239.255.42.202');
+const _lanPort = 47698;
 
 void main() {
   late AppDatabase db;
@@ -82,10 +92,15 @@ void main() {
     return started;
   }
 
-  RemoteCompanionGateway makeGateway() {
+  RemoteCompanionGateway makeGateway({
+    LanPathScout? lan,
+    Future<({String token, String platform})?> Function()? pushTokenSource,
+  }) {
     final gateway = RemoteCompanionGateway(
       store: store,
       deviceName: 'Test phone',
+      lan: lan,
+      pushTokenSource: pushTokenSource,
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),
@@ -99,11 +114,34 @@ void main() {
     return gateway;
   }
 
+  LanPathScout makeScout() => LanPathScout(
+    group: _lanGroup,
+    beaconPort: _lanPort,
+    attemptTimeout: const Duration(milliseconds: 800),
+    retryCooldown: const Duration(seconds: 30),
+    // The beacon's source address is whatever interface multicast rode in
+    // on; this suite's listeners sit on loopback, so dial there. Production
+    // keeps the datagram's own address.
+    dialer: (host, port) => LanTransport.dial(
+      host: '127.0.0.1',
+      port: port,
+      connectTimeout: const Duration(milliseconds: 800),
+      backoff: fastBackoff(),
+    ),
+  );
+
   Future<void> awaitLink(
     RemoteCompanionGateway gateway,
     CompanionLinkState wanted,
   ) => gateway.linkStates
       .firstWhere((state) => state == wanted)
+      .timeout(const Duration(seconds: 15));
+
+  Future<void> awaitPath(
+    RemoteCompanionGateway gateway,
+    CompanionLinkPath wanted,
+  ) => gateway.linkPathStates
+      .firstWhere((path) => path == wanted)
       .timeout(const Duration(seconds: 15));
 
   Future<CompanionPairing> pairPhone(RemoteCompanionGateway gateway) async {
@@ -342,4 +380,226 @@ void main() {
     expect(gateway.link, CompanionLinkState.disconnected);
     expect(gateway.capabilities, CapabilitySet.none);
   });
+
+  test('the LAN story: pair over the relay, see the beacon, switch to the '
+      'direct path, lose it, heal back to the relay', () async {
+    await startService();
+    final gateway = makeGateway(lan: makeScout());
+    await pairPhone(gateway);
+    expect(gateway.linkPath, CompanionLinkPath.relay);
+
+    // The desktop appears on this network — its beacon points at a proxy in
+    // front of the host's LAN listener, so the test can sever the LAN alone.
+    final proxy = await _TcpProxy.start(service!.lanPortBound!);
+    final beacon = await LanBeacon.advertise(
+      port: proxy.port,
+      tag: 'realhost00000001',
+      interval: const Duration(milliseconds: 100),
+      group: _lanGroup,
+      beaconPort: _lanPort,
+    );
+    addTearDown(beacon.stop);
+
+    await awaitPath(gateway, CompanionLinkPath.lan);
+    await awaitLink(gateway, CompanionLinkState.connected);
+
+    // Traffic over the direct path reaches the same desktop bindings.
+    await eventually(() async {
+      try {
+        await gateway.sendPrompt('s1', 'over the lan');
+        return true;
+      } on GatewayException {
+        return false;
+      }
+    }, reason: 'a prompt goes through over the LAN');
+    expect(fake.prompts, contains((sessionId: 's1', text: 'over the lan')));
+
+    // The LAN dies — host left the network; its beacon goes quiet too.
+    beacon.stop();
+    await proxy.kill();
+
+    await awaitPath(gateway, CompanionLinkPath.relay);
+    await awaitLink(gateway, CompanionLinkState.connected);
+    await eventually(() async {
+      try {
+        await gateway.sendPrompt('s1', 'healed to the relay');
+        return true;
+      } on GatewayException {
+        return false;
+      }
+    }, reason: 'a prompt goes through after healing to the relay');
+    expect(
+      fake.prompts,
+      contains((sessionId: 's1', text: 'healed to the relay')),
+    );
+  });
+
+  test('a beacon is only a hint: a host that cannot seal is a stranger, '
+      'and the relay carries the link', () async {
+    await startService();
+    // A stranger advertising a socket that accepts and answers nothing. It
+    // holds no paired key, so it can never produce the sealed host.status.
+    final rogue = await ServerSocket.bind('127.0.0.1', 0);
+    rogue.listen((socket) {
+      // Accept and stay silent — a stranger reading whatever arrives.
+    });
+    addTearDown(() => rogue.close());
+    final beacon = await LanBeacon.advertise(
+      port: rogue.port,
+      tag: 'rogue00000000001',
+      interval: const Duration(milliseconds: 100),
+      group: _lanGroup,
+      beaconPort: _lanPort,
+    );
+    addTearDown(beacon.stop);
+
+    final gateway = makeGateway(lan: makeScout());
+    await pairPhone(gateway);
+
+    await eventually(
+      () async =>
+          gateway.link == CompanionLinkState.connected &&
+          gateway.linkPath == CompanionLinkPath.relay,
+      reason: 'the relay carries the link past the stranger',
+    );
+    // And it stays there: the stranger is in cooldown, not in a dial loop.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(gateway.link, CompanionLinkState.connected);
+    expect(gateway.linkPath, CompanionLinkPath.relay);
+    expect((await gateway.listSessions()).single.id, 's1');
+  });
+
+  test('the list payload carries label, whereabouts, stage, activity and '
+      'the imported flag through the real gateway', () async {
+    fake.sessions.clear();
+    fake.addSession(
+      's1',
+      agentLabel: 'Claude Code  ·  running',
+      whereabouts: 'running here',
+      lastActivityAt: '2026-08-31T10:05:00.000Z',
+    );
+    fake.addSession(
+      'imp1',
+      title: 'Old CLI chat',
+      status: 'imported',
+      agentLabel: 'Claude Code  ·  imported',
+      imported: true,
+    );
+    fake.stages['s1'] = 'pushed';
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final sessions = await gateway.listSessions();
+
+    final live = sessions.singleWhere((s) => !s.imported);
+    expect(live.agentLabel, 'Claude Code  ·  running');
+    expect(live.whereabouts, 'running here');
+    expect(
+      live.deliveryStage,
+      'pushed',
+      reason: 'the list pays the same stage lookup the desktop strip pays',
+    );
+    expect(live.lastActivityAt, DateTime.utc(2026, 8, 31, 10, 5));
+
+    final imported = sessions.singleWhere((s) => s.imported);
+    expect(imported.title, 'Old CLI chat');
+    expect(imported.agentLabel, 'Claude Code  ·  imported');
+    expect(
+      imported.deliveryStage,
+      isNull,
+      reason: 'imported history has no delivery line',
+    );
+  });
+
+  test('notifications.register reaches the host from the pluggable token '
+      'source', () async {
+    await startService();
+    final gateway = makeGateway(
+      pushTokenSource: () async => (token: 'tok-123', platform: 'android'),
+    );
+    await pairPhone(gateway);
+
+    await eventually(
+      () async => fake.pushes.isNotEmpty,
+      reason: 'the token lands on the host store',
+    );
+    expect(fake.pushes.single.token, 'tok-123');
+    expect(fake.pushes.single.platform, 'android');
+  });
+
+  test('a withheld notifications grant skips registration without even '
+      'asking for a token', () async {
+    await startService();
+    var asked = false;
+    final gateway = makeGateway(
+      pushTokenSource: () async {
+        asked = true;
+        return (token: 'tok-999', platform: 'android');
+      },
+    );
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet.of(const [
+        Capability.viewSessions,
+        Capability.sendPrompt,
+      ]),
+    );
+    await gateway.pairWithQr(session.payload.encode());
+    await session.done;
+    await awaitLink(gateway, CompanionLinkState.connected);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(asked, isFalse);
+    expect(fake.pushes, isEmpty);
+  });
+}
+
+/// Forwards TCP to the host's LAN listener so a test can kill the LAN leg —
+/// listener and live sockets both — while the relay stays healthy.
+class _TcpProxy {
+  _TcpProxy._(this._server, this._target) {
+    _server.listen(_accept);
+  }
+
+  static Future<_TcpProxy> start(int targetPort) async {
+    final server = await ServerSocket.bind('127.0.0.1', 0);
+    return _TcpProxy._(server, targetPort);
+  }
+
+  final ServerSocket _server;
+  final int _target;
+  final List<Socket> _sockets = [];
+
+  int get port => _server.port;
+
+  Future<void> _accept(Socket inbound) async {
+    final Socket outbound;
+    try {
+      outbound = await Socket.connect('127.0.0.1', _target);
+    } on Object {
+      inbound.destroy();
+      return;
+    }
+    _sockets
+      ..add(inbound)
+      ..add(outbound);
+    inbound.listen(
+      outbound.add,
+      onDone: outbound.destroy,
+      onError: (Object _) => outbound.destroy(),
+    );
+    outbound.listen(
+      inbound.add,
+      onDone: inbound.destroy,
+      onError: (Object _) => inbound.destroy(),
+    );
+  }
+
+  Future<void> kill() async {
+    await _server.close();
+    for (final socket in _sockets.toList()) {
+      socket.destroy();
+    }
+    _sockets.clear();
+  }
 }

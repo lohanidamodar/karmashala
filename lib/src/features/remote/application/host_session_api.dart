@@ -91,11 +91,11 @@ class HostSessionApi {
     try {
       switch (type) {
         case FrameType.sessionsList:
-          await _result(envelope.id, {
-            'sessions': [
-              for (final snapshot in bindings.listSessions()) snapshot.toJson(),
-            ],
-          });
+          final rows = <Map<String, Object?>>[];
+          for (final snapshot in bindings.listSessions()) {
+            rows.add((await _withStage(snapshot)).toJson());
+          }
+          await _result(envelope.id, {'sessions': rows});
         case FrameType.sessionSubscribe:
           final sessionId = _requireSession(envelope);
           _subscribed.add(sessionId);
@@ -189,16 +189,25 @@ class HostSessionApi {
     }
   }
 
-  Future<void> _pushSnapshot(String sessionId) async {
-    final base = bindings.sessionById(sessionId);
-    if (base == null) return;
+  /// Folds the delivery stage into [snapshot] — the same lookup the desktop
+  /// strip pays. Imported history has no delivery line, so it is skipped.
+  Future<RemoteSessionSnapshot> _withStage(
+    RemoteSessionSnapshot snapshot,
+  ) async {
+    if (snapshot.imported) return snapshot;
     String? stage;
     try {
-      stage = await bindings.deliveryStageFor(sessionId);
+      stage = await bindings.deliveryStageFor(snapshot.sessionId);
     } on Object {
       stage = null; // "could not tell" is a first-class answer.
     }
-    final snapshot = base.copyWith(stage: stage);
+    return stage == null ? snapshot : snapshot.copyWith(stage: stage);
+  }
+
+  Future<void> _pushSnapshot(String sessionId) async {
+    final base = bindings.sessionById(sessionId);
+    if (base == null) return;
+    final snapshot = await _withStage(base);
     final encoded = jsonEncode(snapshot.toJson());
     if (_lastSnapshots[sessionId] == encoded) return;
     _lastSnapshots[sessionId] = encoded;

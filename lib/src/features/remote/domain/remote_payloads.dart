@@ -20,6 +20,10 @@ class RemoteSessionSnapshot {
     this.repositoryId,
     this.repositoryName,
     this.createdAt,
+    this.agentLabel,
+    this.whereabouts,
+    this.lastActivityAt,
+    this.imported = false,
   });
 
   final String sessionId;
@@ -43,6 +47,20 @@ class RemoteSessionSnapshot {
   /// ISO-8601 UTC, when known.
   final String? createdAt;
 
+  /// The desktop card's first line, worded by the host ("Claude Code ·
+  /// running") so the phone never invents a claim. Null from an older host.
+  final String? agentLabel;
+
+  /// The desktop's whereabouts clause, verbatim ("running here"), or null
+  /// when there is nothing worth saying — a first-class answer.
+  final String? whereabouts;
+
+  /// When the newest evidence about this session was produced, ISO-8601 UTC.
+  final String? lastActivityAt;
+
+  /// True for a CLI session imported as read-only history.
+  final bool imported;
+
   RemoteSessionSnapshot copyWith({String? attention, String? stage}) =>
       RemoteSessionSnapshot(
         sessionId: sessionId,
@@ -54,6 +72,10 @@ class RemoteSessionSnapshot {
         repositoryId: repositoryId,
         repositoryName: repositoryName,
         createdAt: createdAt,
+        agentLabel: agentLabel,
+        whereabouts: whereabouts,
+        lastActivityAt: lastActivityAt,
+        imported: imported,
       );
 
   Map<String, Object?> toJson() => {
@@ -66,6 +88,10 @@ class RemoteSessionSnapshot {
     if (repositoryId != null) 'repositoryId': repositoryId,
     if (repositoryName != null) 'repositoryName': repositoryName,
     if (createdAt != null) 'createdAt': createdAt,
+    if (agentLabel != null) 'agentLabel': agentLabel,
+    if (whereabouts != null) 'whereabouts': whereabouts,
+    if (lastActivityAt != null) 'lastActivityAt': lastActivityAt,
+    if (imported) 'imported': imported,
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -86,6 +112,10 @@ class RemoteSessionSnapshot {
       repositoryId: str(json['repositoryId']),
       repositoryName: str(json['repositoryName']),
       createdAt: str(json['createdAt']),
+      agentLabel: str(json['agentLabel']),
+      whereabouts: str(json['whereabouts']),
+      lastActivityAt: str(json['lastActivityAt']),
+      imported: json['imported'] == true,
     );
   }
 
@@ -100,7 +130,11 @@ class RemoteSessionSnapshot {
       other.stage == stage &&
       other.repositoryId == repositoryId &&
       other.repositoryName == repositoryName &&
-      other.createdAt == createdAt;
+      other.createdAt == createdAt &&
+      other.agentLabel == agentLabel &&
+      other.whereabouts == whereabouts &&
+      other.lastActivityAt == lastActivityAt &&
+      other.imported == imported;
 
   @override
   int get hashCode => Object.hash(
@@ -113,6 +147,10 @@ class RemoteSessionSnapshot {
     repositoryId,
     repositoryName,
     createdAt,
+    agentLabel,
+    whereabouts,
+    lastActivityAt,
+    imported,
   );
 }
 

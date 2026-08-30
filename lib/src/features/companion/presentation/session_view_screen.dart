@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/design_tokens.dart';
 import '../../remote/protocol.dart';
+import '../../sessions/domain/delivery_stage.dart';
 import '../../sessions/presentation/chat_transcript.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
@@ -18,6 +19,12 @@ class SessionViewScreen extends ConsumerWidget {
   const SessionViewScreen({required this.sessionId, super.key});
 
   final String sessionId;
+
+  /// The desktop's own wording for a stage name off the wire — rebuilt from
+  /// the typed enum, with the raw name as the honest fallback for a stage
+  /// this build predates.
+  static String _stageLabel(String stage) =>
+      DeliveryStage.values.asNameMap()[stage]?.label ?? stage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,6 +70,8 @@ class SessionViewScreen extends ConsumerWidget {
                     [
                       if (session?.agentLabel != null) session!.agentLabel,
                       if (session?.whereabouts != null) session!.whereabouts!,
+                      if (session?.deliveryStage != null)
+                        _stageLabel(session!.deliveryStage!),
                     ].join('  ·  '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

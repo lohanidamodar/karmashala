@@ -45,6 +45,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
     final link =
         ref.watch(companionLinkProvider).asData?.value ??
         CompanionLinkState.disconnected;
+    final path = ref.watch(companionLinkPathProvider).asData?.value;
 
     if (pairing == null) {
       // The shell shows the pairing flow before the tabs exist, so this is
@@ -60,9 +61,11 @@ class CompanionSettingsScreen extends ConsumerWidget {
     }
 
     final (linkIcon, linkLabel, linkColour) = switch (link) {
+      // Which path carries the link matters at home: the direct socket skips
+      // the relay entirely, and the user deserves to see that it did.
       CompanionLinkState.connected => (
         AppIcons.linkSimple,
-        'Connected',
+        path == null ? 'Connected' : 'Connected · ${path.label}',
         SemanticColors.of(context).idle,
       ),
       CompanionLinkState.connecting => (

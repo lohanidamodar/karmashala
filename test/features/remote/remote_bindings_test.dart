@@ -8,6 +8,8 @@ import 'dart:convert';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
+import 'package:chitragupta/src/features/cli_detection/data/imported_session_dao.dart';
+import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
@@ -55,6 +57,10 @@ void main() {
         ),
         remoteApprovalEvidenceProvider.overrideWithValue(
           (sessionId) async => null,
+        ),
+        remoteSessionPresenceProvider.overrideWithValue(
+          (sessionId) =>
+              (note: 'running here', lastSeen: DateTime.utc(2026, 8, 31, 9)),
         ),
       ],
     );
@@ -154,8 +160,112 @@ void main() {
     expect(sessions.single.status, 'running');
     expect(sessions.single.repositoryName, 'proj-repo');
     expect(sessions.single.attention, 'needs_approval');
+    // The desktop card's own wording, built host-side from typed fields:
+    // registry display name (raw id for an unknown agent) plus the status.
+    expect(sessions.single.agentLabel, 'mystery  ·  running');
+    expect(sessions.single.whereabouts, 'running here');
+    expect(sessions.single.lastActivityAt, '2026-08-31T09:00:00.000Z');
+    expect(sessions.single.imported, isFalse);
     expect(bindings.sessionById('s1'), isNotNull);
     expect(bindings.sessionById('nope'), isNull);
+  });
+
+  test('imported CLI sessions are listed, flagged, and read-only', () async {
+    seedWorkspace();
+    seedSession('s1');
+    ImportedSessionDao(db).insertIfAbsent(
+      ImportedSession(
+        id: 'imp1',
+        repositoryId: 'r1',
+        cli: 'mystery',
+        externalId: 'x1',
+        environmentId: 'windows',
+        filePath: r'C:\nowhere\imp1.jsonl',
+        storeHome: r'C:\nowhere',
+        isSubagent: false,
+        preview: 'an old conversation',
+        title: 'Old CLI chat',
+        createdAt: now,
+        updatedAt: DateTime.utc(2026, 8, 31, 8),
+      ),
+    );
+    container.read(sessionAttentionProvider.notifier).set([
+      SessionAttention(
+        session: const WatchedSession(
+          key: AgentSessionKey('mystery', 'x1'),
+          label: 'Old CLI chat',
+          openId: 'imp1',
+          imported: true,
+        ),
+        kind: AttentionKind.failed,
+      ),
+    ]);
+
+    final bindings = container.read(remoteHostBindingsProvider);
+    final sessions = bindings.listSessions();
+
+    expect(sessions, hasLength(2));
+    final imported = sessions.singleWhere((s) => s.imported);
+    expect(imported.sessionId, 'imp1');
+    expect(imported.title, 'Old CLI chat');
+    // The desktop's own imported wording; the raw status word degrades
+    // honestly on an old companion that shows it as the label.
+    expect(imported.agentLabel, 'mystery  ·  imported');
+    expect(imported.status, 'imported');
+    expect(imported.repositoryName, 'proj-repo');
+    // The store file's mtime, never our poll time.
+    expect(imported.lastActivityAt, '2026-08-31T08:00:00.000Z');
+    // Imported attention rows match only imported ids — never s1's.
+    expect(imported.attention, 'failed');
+    expect(sessions.singleWhere((s) => !s.imported).attention, isNull);
+
+    // Listed and subscribable, but never steerable.
+    expect(bindings.sessionById('imp1')?.imported, isTrue);
+    await expectLater(
+      bindings.sendPrompt('imp1', 'hi'),
+      throwsA(
+        isA<RemoteApiRefusal>().having(
+          (r) => r.code,
+          'code',
+          ErrorCode.badRequest,
+        ),
+      ),
+    );
+    await expectLater(
+      bindings.answerApproval('imp1', 'approve'),
+      throwsA(
+        isA<RemoteApiRefusal>().having(
+          (r) => r.code,
+          'code',
+          ErrorCode.badRequest,
+        ),
+      ),
+    );
+  });
+
+  test('an imported transcript whose store file is gone reads empty, '
+      'never throws', () async {
+    seedWorkspace();
+    ImportedSessionDao(db).insertIfAbsent(
+      ImportedSession(
+        id: 'imp2',
+        repositoryId: 'r1',
+        cli: 'mystery',
+        externalId: 'x2',
+        environmentId: 'windows',
+        filePath: r'C:\nowhere\gone.jsonl',
+        storeHome: r'C:\nowhere',
+        isSubagent: false,
+        preview: 'gone',
+        createdAt: now,
+      ),
+    );
+
+    final bindings = container.read(remoteHostBindingsProvider);
+    final page = await bindings.transcriptFor('imp2');
+
+    expect(page.sessionId, 'imp2');
+    expect(page.messages, isEmpty);
   });
 
   test('the event-log transcript mirrors the desktop chat mapping', () async {

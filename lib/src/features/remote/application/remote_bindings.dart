@@ -9,8 +9,11 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
+import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_status.dart';
+import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
+import '../../cli_detection/domain/imported_session.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/session_attention.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -19,6 +22,7 @@ import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_attribution.dart';
@@ -60,11 +64,34 @@ final remoteApprovalEvidenceProvider =
       };
     });
 
+/// The whereabouts-and-age lookup behind the list payload, split out like the
+/// stage lookup so tests can stub it: production reads
+/// [sessionWhereaboutsProvider] — the same value the desktop card reads —
+/// whose sources include the terminal grid and the agent status providers.
+final remoteSessionPresenceProvider =
+    Provider<({String? note, DateTime? lastSeen}) Function(String sessionId)>((
+      ref,
+    ) {
+      return (sessionId) {
+        try {
+          final whereabouts = ref.read(sessionWhereaboutsProvider(sessionId));
+          return (note: whereabouts.note, lastSeen: whereabouts.lastSeen);
+        } on Object {
+          return (note: null, lastSeen: null);
+        }
+      };
+    });
+
 final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
   RemoteSessionSnapshot snapshotOf(Session session) {
     final repository = ref
         .read(repositoryDaoProvider)
         .getById(session.repositoryId);
+    final agentId = ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+    final presence = ref.read(remoteSessionPresenceProvider)(session.id);
     return RemoteSessionSnapshot(
       sessionId: session.id,
       title: session.title,
@@ -74,28 +101,90 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       repositoryId: repository?.id,
       repositoryName: repository?.name,
       createdAt: session.createdAt.toUtc().toIso8601String(),
+      // The desktop card's own first line, worded here — never on the phone.
+      agentLabel: [
+        agentId == null
+            ? 'Agent'
+            : AgentRegistry.builtIn.displayNameFor(agentId),
+        session.status.name,
+      ].join('  ·  '),
+      whereabouts: presence.note,
+      // The desktop's `since`: the agent's own newest evidence, or failing
+      // that when the row was created — never the time of our last poll.
+      lastActivityAt: (presence.lastSeen ?? session.createdAt)
+          .toUtc()
+          .toIso8601String(),
     );
   }
+
+  RemoteSessionSnapshot importedSnapshotOf(ImportedSession session) {
+    final repository = ref
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId);
+    return RemoteSessionSnapshot(
+      sessionId: session.id,
+      title: session.displayTitle,
+      // An older companion renders the raw word as its label — still honest.
+      status: 'imported',
+      attention: _attentionFor(ref, session.id, imported: true),
+      repositoryId: repository?.id,
+      repositoryName: repository?.name,
+      createdAt: session.createdAt.toUtc().toIso8601String(),
+      // The desktop's own imported wording: "Claude Code  ·  imported".
+      agentLabel: [
+        AgentRegistry.builtIn.displayNameFor(session.cli),
+        'imported',
+      ].join('  ·  '),
+      // The store file's own mtime — the agent's writing, nothing inferred.
+      lastActivityAt: session.updatedAt?.toUtc().toIso8601String(),
+      imported: true,
+    );
+  }
+
+  ImportedSession? importedById(String sessionId) =>
+      ref.read(importedSessionDaoProvider).getById(sessionId);
 
   return RemoteHostBindings(
     hostName: Platform.localHostname,
     listSessions: () => [
       for (final session in ref.read(sessionDaoProvider).getAll())
         snapshotOf(session),
+      for (final session in ref.read(importedSessionDaoProvider).getAll())
+        importedSnapshotOf(session),
     ],
     sessionById: (sessionId) {
       final session = ref.read(sessionDaoProvider).getById(sessionId);
-      return session == null ? null : snapshotOf(session);
+      if (session != null) return snapshotOf(session);
+      final imported = importedById(sessionId);
+      return imported == null ? null : importedSnapshotOf(imported);
     },
     deliveryStageFor: (sessionId) =>
         ref.read(remoteDeliveryStageProvider)(sessionId),
     transcriptFor: (sessionId) => _transcriptFor(ref, sessionId),
     // The composer's own route: `continueSession` types into the live PTY or
     // resumes the engine session, exactly as the desktop send button does.
-    sendPrompt: (sessionId, text) =>
-        ref.read(sessionActionsProvider).continueSession(sessionId, text),
-    answerApproval: (sessionId, decision) =>
-        _answerApproval(ref, sessionId, decision),
+    // Async so an imported-session refusal is a failed future, never a
+    // synchronous escape past a caller's error handling.
+    sendPrompt: (sessionId, text) async {
+      if (importedById(sessionId) != null) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'this session was imported from the CLI — read-only here; '
+          'continue it in its own terminal',
+        );
+      }
+      return ref.read(sessionActionsProvider).continueSession(sessionId, text);
+    },
+    answerApproval: (sessionId, decision) async {
+      if (importedById(sessionId) != null) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'this session was imported from the CLI — answer it in its own '
+          'terminal',
+        );
+      }
+      return _answerApproval(ref, sessionId, decision);
+    },
     approvalEvidenceFor: (sessionId) => _approvalEvidenceFor(ref, sessionId),
     registerPush: (deviceId, token, platform) async {
       ref
@@ -106,9 +195,10 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
   );
 });
 
-String? _attentionFor(Ref ref, String sessionId) {
+String? _attentionFor(Ref ref, String sessionId, {bool imported = false}) {
   for (final attention in ref.read(sessionAttentionProvider)) {
-    if (attention.session.openId == sessionId && !attention.session.imported) {
+    if (attention.session.openId == sessionId &&
+        attention.session.imported == imported) {
       return attention.kind == AttentionKind.needsInput
           ? 'needs_approval'
           : 'failed';
@@ -125,6 +215,8 @@ String? _attentionFor(Ref ref, String sessionId) {
 Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) {
+    final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+    if (imported != null) return _importedTranscript(imported);
     throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
   }
   var messages = session.surface == SessionSurface.pane
@@ -147,6 +239,25 @@ Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
     sessionId: sessionId,
     messages: messages,
     cursor: messages.length,
+  );
+}
+
+/// An imported CLI session's transcript: the agent's own store file, exactly
+/// what the desktop's imported view reads. Tool rows dropped like the pane
+/// mapping; no attribution — an imported session has no parent of ours.
+Future<RemoteTranscriptPage> _importedTranscript(
+  ImportedSession session,
+) async {
+  final messages = await readCliTranscript(session.filePath, session.cli);
+  final mapped = [
+    for (final message in messages)
+      if (message.role != 'tool')
+        RemoteTranscriptMessage(role: message.role, text: message.text),
+  ];
+  return RemoteTranscriptPage(
+    sessionId: session.id,
+    messages: mapped,
+    cursor: mapped.length,
   );
 }
 

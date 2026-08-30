@@ -137,6 +137,79 @@ void main() {
     );
   });
 
+  group('link path', () {
+    test('unpaired means no path; pairing connects over the relay', () async {
+      final gateway = FakeCompanionGateway();
+      expect(gateway.linkPath, isNull);
+      expect(await gateway.linkPathStates.first, isNull);
+
+      await gateway.pairWithCode(gateway.validShortCode);
+
+      expect(gateway.linkPath, CompanionLinkPath.relay);
+    });
+
+    test(
+      'linkPathStates seed the current value and follow the lever',
+      () async {
+        final gateway = FakeCompanionGateway.paired(
+          linkPath: CompanionLinkPath.lan,
+        );
+        expect(await gateway.linkPathStates.first, CompanionLinkPath.lan);
+
+        gateway.setLinkPath(CompanionLinkPath.relay);
+
+        expect(gateway.linkPath, CompanionLinkPath.relay);
+      },
+    );
+
+    test('a dropped link clears the path; unpair clears it too', () async {
+      final gateway = FakeCompanionGateway.paired();
+      expect(gateway.linkPath, CompanionLinkPath.relay);
+
+      gateway.setLink(CompanionLinkState.disconnected);
+      expect(gateway.linkPath, isNull);
+
+      gateway.setLink(CompanionLinkState.connected);
+      expect(gateway.linkPath, CompanionLinkPath.relay);
+
+      await gateway.unpair();
+      expect(gateway.linkPath, isNull);
+    });
+
+    test('the two paths carry the words the settings screen shows', () {
+      expect(CompanionLinkPath.lan.label, 'Direct (LAN)');
+      expect(CompanionLinkPath.relay.label, 'Relay');
+    });
+  });
+
+  group('payload richness', () {
+    test('a summary carries stage and the imported flag through copyWith', () {
+      const summary = CompanionSessionSummary(
+        id: 'imp1',
+        title: 'old chat',
+        agentLabel: 'Claude Code  ·  imported',
+        projectName: 'popupbits',
+        whereabouts: 'running here',
+        deliveryStage: 'pushed',
+        imported: true,
+      );
+
+      final stamped = summary.copyWith(
+        status: CompanionSessionStatus.needsYou,
+        attention: CompanionAttention(
+          kind: CompanionAttentionKind.needsYou,
+          at: DateTime.utc(2026, 8, 31, 12),
+        ),
+      );
+
+      expect(stamped.deliveryStage, 'pushed');
+      expect(stamped.imported, isTrue);
+      expect(stamped.whereabouts, 'running here');
+      expect(stamped.agentLabel, 'Claude Code  ·  imported');
+      expect(stamped.status, CompanionSessionStatus.needsYou);
+    });
+  });
+
   group('attention', () {
     test('emitAttention delivers the event and stamps the session', () async {
       final gateway = FakeCompanionGateway.paired(sessions: [session('s1')]);
