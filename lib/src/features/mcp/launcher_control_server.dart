@@ -1655,8 +1655,10 @@ class LauncherControlServer {
     return null;
   }
 
+  /// Both callers are resuming a conversation the agent already has, so both
+  /// ask for the existing-session mode — through the launcher, which is the one
+  /// place that turns a purpose into a [PermissionMode].
   PermissionMode _permissionFor(String agentId) => _container
-      .read(settingsControllerProvider)
-      .permissionsFor(agentId)
-      .existingSessions;
+      .read(sessionLauncherProvider)
+      .permissionFor(agentId, SessionPurpose.existingSession);
 }

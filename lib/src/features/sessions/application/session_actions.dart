@@ -201,9 +201,8 @@ class SessionActions {
         );
       }
       final permission = _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .existingSessions;
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.existingSession);
       await engine.resume(
         session: session,
         workingDirectory: session.worktree ?? repo.path,
@@ -306,9 +305,8 @@ class SessionActions {
       cli: session.cli,
       externalId: session.externalId,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(session.cli)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(session.cli, SessionPurpose.existingSession),
       cwd: repo.path.path,
     );
   }
@@ -332,9 +330,8 @@ class SessionActions {
       cli: installation.agentId,
       externalId: session.externalSessionId,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.existingSession),
       cwd: (session.worktree ?? repo.path).path,
     );
   }
@@ -368,9 +365,8 @@ class SessionActions {
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .newSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.newSession),
       cwd: repo.path.path,
     );
   }
@@ -442,9 +438,8 @@ class SessionActions {
       environment: env,
       cwd: repo.path,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(session.cli)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(session.cli, SessionPurpose.existingSession),
     );
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host shells
     // take a start directory.
@@ -501,9 +496,8 @@ class SessionActions {
       environment: env,
       cwd: session.worktree ?? repo.path,
       permissionMode: _ref
-          .read(settingsControllerProvider)
-          .permissionsFor(installation.agentId)
-          .existingSessions,
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.existingSession),
     );
     final cwd = env.wslDistribution == null
         ? (session.worktree ?? repo.path).path
