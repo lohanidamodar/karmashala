@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
+import '../application/session_chat_source.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_providers.dart';
 import '../application/session_ui_providers.dart';
@@ -42,8 +44,25 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final transcript = ref.watch(sessionTranscriptProvider);
-    final active = ref.read(sessionEngineProvider).isActive(widget.sessionId);
+    ref.watch(sessionsRevisionProvider);
+    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    // A PTY-hosted session's conversation lives in the agent's own transcript,
+    // because an interactive agent has no structured stream on stdout to read
+    // (see `SessionTranscriptLocator`). A session from before the PTY runtime
+    // still renders from the engine's event log.
+    final fromPty = session?.surface == SessionSurface.pane;
+    final transcript = fromPty
+        ? ref
+              .watch(sessionChatTranscriptProvider(widget.sessionId))
+              .whenData(_fromTranscript)
+        : ref.watch(sessionTranscriptProvider).whenData(_toMessages);
+    final active =
+        fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
+    // Whether a chat rendering is possible at all for this agent — a registry
+    // question, not a runtime one. Antigravity and any agent added as data have
+    // the same PTY as Claude Code; they simply have no readable record of the
+    // conversation to draw a transcript from.
+    final chatAvailable = !fromPty || sessionHasChatView(ref, widget.sessionId);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -80,8 +99,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           child: transcript.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
-            data: (events) => ChatTranscriptView(
-              messages: _toMessages(events),
+            data: (messages) => ChatTranscriptView(
+              messages: messages,
               // The handoff row sits on the composer's channel: both send
               // through `continueSession`, so both are available in exactly the
               // same circumstances.
@@ -100,7 +119,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   ),
                 ],
               ),
-              emptyHint: active
+              emptyHint: !chatAvailable
+                  ? 'This agent keeps no transcript we can read, so there is no '
+                        'chat view for it. Its terminal is the session.'
+                  : fromPty
+                  ? 'Nothing in this session\'s transcript yet — it appears '
+                        'once the agent answers. The terminal shows it live.'
+                  : active
                   ? 'Session is running — say something to the agent.'
                   : 'No messages yet.',
             ),
@@ -109,6 +134,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       ],
     );
   }
+
+  /// The agent's own transcript as chat messages. Tool lines are dropped: the
+  /// terminal view already shows them, in the form the agent drew them.
+  List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) => [
+    for (final message in messages)
+      if (message.role != 'tool')
+        ChatMessage(role: message.role, text: message.text),
+  ];
 
   /// Maps the persisted event log to displayable chat messages, dropping
   /// lifecycle/status noise (verbose logs are not shown in the chat).
