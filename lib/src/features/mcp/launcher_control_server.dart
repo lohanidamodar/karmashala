@@ -54,6 +54,10 @@ import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
 import 'control_server_status.dart';
 import 'handshake_file_permissions.dart';
+import 'mcp_caller_registry.dart';
+import 'mcp_http_endpoint.dart';
+import 'mcp_protocol.dart';
+import 'mcp_tool_catalogue.dart';
 import 'tmux_orchestration.dart';
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
@@ -160,12 +164,34 @@ class LauncherControlServer {
   AgentHookEndpoint? _hookEndpoint;
   String? _publishedBridgePath;
   ControlServerStatus _status = ControlServerStatus.notStarted;
+  McpHttpEndpoint? _mcpEndpoint;
+
+  /// Which session each per-session MCP credential names. Survives the endpoint
+  /// so a config written before a restart keeps meaning what it meant.
+  final McpCallerRegistry _callers = McpCallerRegistry();
+
+  /// Where a session's own MCP URL is built from, and what mints the token in
+  /// it. Null until [start] has bound the port and the owner-only channel has
+  /// been established.
+  McpCallerRegistry get callers => _callers;
 
   /// What came up, and what did not. Mirrored into
   /// [controlServerStatusProvider] so the settings screen can say so.
   ControlServerStatus get status => _status;
 
   static const _maxRequestBytes = 1024 * 1024;
+
+  /// What `serverInfo` reports. Not the app's version: this is the version of
+  /// the *tool surface*, and it moves when the tools do.
+  static const String _serverVersion = '2.0.0';
+
+  /// The one paragraph a model reads before it has called anything.
+  static const String _instructions =
+      'These tools drive Chitragupta itself — the sessions, terminal tabs, '
+      'projects, notes, inbox and delivery state of the app this agent is '
+      'running inside. Tools that name a session default to the session '
+      'calling them, so omit sessionId to act on yourself. Anything Chitragupta '
+      'has not measured is reported as "not recorded" rather than guessed.';
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
   /// `null` before that. The hook installer writes this into the agent's own
@@ -212,6 +238,20 @@ class LauncherControlServer {
       port: server.port,
       token: _generateToken(),
     );
+    _mcpEndpoint = McpHttpEndpoint(
+      server: McpServer(
+        name: 'chitragupta',
+        version: _serverVersion,
+        // Read on every `tools/list` rather than captured, because the browser
+        // and verification tools come from services that may not be up yet.
+        catalogue: () => annotatedToolSchemas(toolSchemas),
+        invoke: (name, arguments, callerSessionId) =>
+            _dispatch(name, arguments, callerSessionId),
+        instructions: _instructions,
+      ),
+      callers: _callers,
+      logger: _logger,
+    );
 
     ControlServerFailureStage? stage;
     String? detail;
@@ -236,7 +276,16 @@ class LauncherControlServer {
     // A privileged credential is minted only where a privileged transport
     // actually came up — there is nothing for it to authenticate to otherwise,
     // and an unpublishable secret on disk is pure downside.
-    if (_socketServer != null || _httpRpcEnabled) _token = _generateToken();
+    if (_socketServer != null || _httpRpcEnabled) {
+      _token = _generateToken();
+      // `/mcp` is gated on the *same* prerequisite, and deliberately so. It is
+      // served over loopback, which the threat model above calls the weaker
+      // boundary; making it available when the owner-only channel could not be
+      // established would turn that weaker boundary into the only one, which is
+      // exactly the silent downgrade `_withholdPrivilegedRpc` exists to
+      // prevent. If nothing here can be hardened, nothing here is served.
+      _mcpEndpoint!.token = _generateToken();
+    }
 
     // Restrict the (still empty) handshake file before deciding what goes in
     // it, so a privileged token is never written under an ACL that was not
@@ -287,6 +336,7 @@ class LauncherControlServer {
     _socketServer = null;
     _token = null;
     _httpRpcEnabled = false;
+    _mcpEndpoint?.token = null;
   }
 
   void _publishStatus(ControlServerStatus status) {
@@ -363,6 +413,8 @@ class LauncherControlServer {
     _token = null;
     _hookEndpoint = null;
     _httpRpcEnabled = false;
+    _mcpEndpoint = null;
+    _callers.clear();
     _publishedBridgePath = null;
     _publishStatus(ControlServerStatus.notStarted);
   }
@@ -401,6 +453,11 @@ class LauncherControlServer {
         'hookToken': _hookEndpoint!.token,
         'token': ?_token,
         if (_socketServer case final socket?) 'socketPath': socket.path,
+        // The Streamable HTTP endpoint. Published under the same rule as the
+        // rest: present only when a credential for it actually exists.
+        'mcpToken': ?_mcpEndpoint?.token,
+        if (_mcpEndpoint?.token != null)
+          'mcpUrl': 'http://127.0.0.1:$port${McpHttpEndpoint.path}',
       }),
       flush: true,
     );
@@ -423,6 +480,13 @@ class LauncherControlServer {
   Future<void> _handle(HttpRequest request) async {
     if (request.uri.path == '/agent-hook') {
       await _handleAgentHook(request);
+      return;
+    }
+    // MCP proper, on its own single endpoint. It authenticates itself — with a
+    // different credential and a different rule about who the caller is — so it
+    // is routed before the `/rpc` bearer check rather than through it.
+    if (McpHttpEndpoint.handles(request.uri)) {
+      await _mcpEndpoint!.handle(request);
       return;
     }
     final response = request.response;
@@ -584,19 +648,8 @@ class LauncherControlServer {
     return utf8.decode(bytes);
   }
 
-  bool _constantTimeEquals(String? actual, String expected) {
-    if (actual == null) return false;
-    var difference = actual.length ^ expected.length;
-    final length = actual.length > expected.length
-        ? actual.length
-        : expected.length;
-    for (var i = 0; i < length; i++) {
-      final a = i < actual.length ? actual.codeUnitAt(i) : 0;
-      final b = i < expected.length ? expected.codeUnitAt(i) : 0;
-      difference |= a ^ b;
-    }
-    return difference == 0;
-  }
+  bool _constantTimeEquals(String? actual, String expected) =>
+      constantTimeEquals(actual, expected);
 
   Future<Object?> _dispatch(
     String? tool,
