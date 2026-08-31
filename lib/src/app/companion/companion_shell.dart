@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/companion/application/companion_providers.dart';
 import '../../features/companion/presentation/companion_settings_screen.dart';
+import '../../features/companion/presentation/host_switcher_bar.dart';
 import '../../features/companion/presentation/inbox_screen.dart';
 import '../../features/companion/presentation/link_banner.dart';
 import '../../features/companion/presentation/pairing/pairing_screen.dart';
@@ -43,7 +44,11 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Which desktop these sessions belong to, above the tab body but
+            // below the outage banner — an unreachable host is the more
+            // urgent fact of the two.
             const LinkBanner(),
+            if (_tab == 0) const HostSwitcherBar(),
             Expanded(
               child: IndexedStack(
                 index: _tab,

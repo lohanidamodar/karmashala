@@ -118,6 +118,46 @@ class CompanionPairing {
   final DeviceId? hostId;
 }
 
+/// One saved desktop pairing, as the Connections UI lists it. The phone can
+/// hold several; exactly one — the active one — carries the live link.
+class CompanionConnection {
+  const CompanionConnection({
+    required this.hostId,
+    required this.name,
+    required this.active,
+    this.lastConnectedAt,
+  });
+
+  /// The host's id in its wire (hex) form — the key [CompanionGateway.switchTo]
+  /// and [CompanionGateway.removeConnection] take.
+  final String hostId;
+
+  /// The desktop's self-reported name, or "Desktop" when it never sent one.
+  final String name;
+
+  /// Whether this is the desktop the link (and every session stream) is for.
+  final bool active;
+
+  /// When this phone last held a link to this desktop, UTC. Null for a
+  /// pairing that never connected.
+  final DateTime? lastConnectedAt;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CompanionConnection &&
+      other.hostId == hostId &&
+      other.name == name &&
+      other.active == active &&
+      other.lastConnectedAt == lastConnectedAt;
+
+  @override
+  int get hashCode => Object.hash(hostId, name, active, lastConnectedAt);
+
+  @override
+  String toString() =>
+      'CompanionConnection($name, $hostId${active ? ', active' : ''})';
+}
+
 /// One session's live status, in the terms the phone shows.
 enum CompanionSessionStatus { working, idle, needsYou, failed, unknown }
 
@@ -153,6 +193,7 @@ class CompanionSessionSummary {
     required this.title,
     required this.agentLabel,
     required this.projectName,
+    this.projectId,
     this.projectPath,
     this.status = CompanionSessionStatus.unknown,
     this.whereabouts,
@@ -163,6 +204,8 @@ class CompanionSessionSummary {
     this.attention,
     this.deliveryStage,
     this.imported = false,
+    this.archived = false,
+    this.folderMissing = false,
   });
 
   final String id;
@@ -173,6 +216,12 @@ class CompanionSessionSummary {
   final String agentLabel;
 
   final String projectName;
+
+  /// The repository's real identity on the host, so two checkouts that share a
+  /// folder name stay two projects. Null from a host too old to send one — the
+  /// list then falls back to grouping by [projectName].
+  final String? projectId;
+
   final String? projectPath;
   final CompanionSessionStatus status;
 
@@ -197,16 +246,25 @@ class CompanionSessionSummary {
   /// True for CLI history the desktop imported: readable, never steerable.
   final bool imported;
 
+  /// True once the desktop has archived this session. Listed, and said so —
+  /// the phone shows what the host holds rather than quietly hiding rows.
+  final bool archived;
+
+  /// True when the host says this session's folder is no longer on disk.
+  final bool folderMissing;
+
   /// A narrow copy: only the facts that change while a session is listed.
   CompanionSessionSummary copyWith({
     CompanionSessionStatus? status,
     CompanionAttention? attention,
     DateTime? lastActivityAt,
+    bool? archived,
   }) => CompanionSessionSummary(
     id: id,
     title: title,
     agentLabel: agentLabel,
     projectName: projectName,
+    projectId: projectId,
     projectPath: projectPath,
     status: status ?? this.status,
     whereabouts: whereabouts,
@@ -217,7 +275,13 @@ class CompanionSessionSummary {
     attention: attention ?? this.attention,
     deliveryStage: deliveryStage,
     imported: imported,
+    archived: archived ?? this.archived,
+    folderMissing: folderMissing,
   );
+
+  /// What the list groups by: the repository's real identity when the host
+  /// sent one, its display name otherwise.
+  String get projectKey => projectId ?? 'name:$projectName';
 }
 
 /// One transcript turn. Role vocabulary matches the desktop chat view:
@@ -276,12 +340,19 @@ class CompanionAttentionEvent {
     required this.sessionTitle,
     required this.kind,
     required this.at,
+    this.hostId,
   });
 
   final String sessionId;
   final String sessionTitle;
   final CompanionAttentionKind kind;
   final DateTime at;
+
+  /// Which desktop this news came from, so a notification that arrives around
+  /// a switch is never attributed to the wrong host. Only the ACTIVE host has
+  /// a live link in v1, so in practice this is always the active host's id;
+  /// it is carried anyway because the id is what makes that checkable.
+  final String? hostId;
 }
 
 /// What the companion UI can ask of a paired host.
@@ -310,10 +381,15 @@ abstract interface class CompanionGateway {
   CapabilitySet get capabilities;
 
   /// Pairs from a scanned QR payload (the JSON the desktop displays).
+  ///
+  /// A phone that is already paired ADDS the new desktop to its saved
+  /// connections and switches to it; pairing the SAME host again replaces
+  /// that one record and leaves the others alone.
   Future<CompanionPairing> pairWithQr(String qrPayload);
 
   /// Pairs from what the user typed or pasted: the grouped base32 code shown
   /// under the desktop's QR, or the full JSON payload — sniffed apart here.
+  /// Adds a connection, the way [pairWithQr] does.
   Future<CompanionPairing> pairWithCode(String shortCode);
 
   /// Stage-by-stage news about the pairing attempt in flight. Events only —
@@ -327,8 +403,31 @@ abstract interface class CompanionGateway {
   /// Configures [pairingRelay]; null returns to the default.
   Future<void> setPairingRelay(Uri? url);
 
+  /// Every desktop this phone has paired with, newest pairing last, with
+  /// exactly one flagged active (none when unpaired).
+  List<CompanionConnection> get connections;
+  Stream<List<CompanionConnection>> get connectionsStates;
+
+  /// Makes [hostId] the active desktop: the current link is dropped cleanly
+  /// and the chosen host dialled, with every derived state — sessions,
+  /// transcripts, subscriptions, pending approvals — rebuilt for it. Nothing
+  /// from the old host survives the switch.
+  ///
+  /// Throws [GatewayException] with a user-fit sentence when [hostId] names no
+  /// saved connection. A host that simply cannot be reached is not a failure
+  /// of the switch: the phone lands on it disconnected, and the link banner
+  /// says so, exactly as it would after a relaunch.
+  Future<void> switchTo(String hostId);
+
+  /// Forgets one saved desktop. Removing the active one falls back to the
+  /// most recently connected of the rest, or to unpaired when none remain.
+  Future<void> removeConnection(String hostId);
+
   /// Forgets the pairing on this phone. (Revoking the phone's key on the host
   /// is the desktop's verb, not this one.)
+  ///
+  /// Multi-host: this forgets the ACTIVE connection only — the same verb the
+  /// settings screen has always offered, now scoped to the desktop in use.
   Future<void> unpair();
 
   /// Asks the transport to try connecting now instead of waiting for backoff.

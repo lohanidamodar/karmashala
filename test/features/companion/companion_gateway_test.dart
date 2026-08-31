@@ -210,6 +210,115 @@ void main() {
     });
   });
 
+  group('connections', () {
+    test('an unpaired phone holds no connections', () async {
+      final gateway = FakeCompanionGateway();
+      expect(gateway.connections, isEmpty);
+      expect(await gateway.connectionsStates.first, isEmpty);
+    });
+
+    test('pairing ADDS a desktop and makes it active, keeping the ones '
+        'already saved', () async {
+      final gateway = FakeCompanionGateway();
+      await gateway.pairWithCode(gateway.validShortCode);
+      expect(gateway.connections, hasLength(1));
+      expect(gateway.connections.single.active, isTrue);
+
+      await gateway.pairWithCode(gateway.validShortCode);
+
+      expect(gateway.connections, hasLength(2));
+      expect(
+        gateway.connections.where((c) => c.active).length,
+        1,
+        reason: 'exactly one desktop carries the link',
+      );
+      expect(gateway.connections.last.active, isTrue);
+    });
+
+    test('switchTo makes another desktop active', () async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: [
+          CompanionConnection(hostId: 'h1', name: 'One', active: true),
+          const CompanionConnection(hostId: 'h2', name: 'Two', active: false),
+        ],
+      );
+
+      await gateway.switchTo('h2');
+
+      expect(gateway.connections.singleWhere((c) => c.active).hostId, 'h2');
+      expect(gateway.pairing?.hostName, 'Two');
+    });
+
+    test('switchTo a desktop this phone does not hold is refused with a '
+        'sentence', () {
+      final gateway = FakeCompanionGateway.paired(
+        connections: [
+          const CompanionConnection(hostId: 'h1', name: 'One', active: true),
+        ],
+      );
+      expect(
+        () => gateway.switchTo('nope'),
+        throwsA(
+          isA<GatewayException>().having(
+            (e) => e.message,
+            'message',
+            contains('no longer saved'),
+          ),
+        ),
+      );
+    });
+
+    test('removeConnection drops one desktop; removing the active one falls '
+        'back, and removing the last unpairs', () async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: [
+          const CompanionConnection(hostId: 'h1', name: 'One', active: true),
+          const CompanionConnection(hostId: 'h2', name: 'Two', active: false),
+        ],
+      );
+
+      await gateway.removeConnection('h1');
+      expect(gateway.connections.single.hostId, 'h2');
+      expect(gateway.connections.single.active, isTrue);
+      expect(gateway.pairing, isNotNull);
+
+      await gateway.removeConnection('h2');
+      expect(gateway.connections, isEmpty);
+      expect(gateway.pairing, isNull);
+      expect(gateway.link, CompanionLinkState.disconnected);
+    });
+
+    test('connectionsStates seed the current value on listen', () async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: [
+          const CompanionConnection(hostId: 'h1', name: 'One', active: true),
+        ],
+      );
+      expect((await gateway.connectionsStates.first).single.name, 'One');
+    });
+
+    test('a switch rebuilds the session list for the new desktop', () async {
+      final gateway = FakeCompanionGateway.paired(
+        sessions: [session('s-one')],
+        connections: [
+          const CompanionConnection(hostId: 'h1', name: 'One', active: true),
+          const CompanionConnection(hostId: 'h2', name: 'Two', active: false),
+        ],
+        sessionsByHost: {
+          'h2': [session('s-two')],
+        },
+      );
+
+      await gateway.switchTo('h2');
+
+      expect(
+        (await gateway.watchSessions().first).map((s) => s.id),
+        ['s-two'],
+        reason: "no session from the old desktop survives the switch",
+      );
+    });
+  });
+
   group('attention', () {
     test('emitAttention delivers the event and stamps the session', () async {
       final gateway = FakeCompanionGateway.paired(sessions: [session('s1')]);

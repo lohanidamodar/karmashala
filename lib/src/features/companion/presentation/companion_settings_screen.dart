@@ -5,37 +5,12 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'connections_section.dart';
 
 /// The companion's settings: who this phone is paired with, whether the link
 /// is up, what was granted, and the way out.
 class CompanionSettingsScreen extends ConsumerWidget {
   const CompanionSettingsScreen({super.key});
-
-  Future<void> _unpair(BuildContext context, WidgetRef ref) async {
-    final gateway = ref.read(companionGatewayProvider);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Unpair from this desktop?'),
-        content: const Text(
-          'This phone forgets the pairing and stops receiving sessions. To '
-          "also revoke this phone's key, use the desktop's Remote access "
-          'settings.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Unpair'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed ?? false) await gateway.unpair();
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,6 +35,8 @@ class CompanionSettingsScreen extends ConsumerWidget {
               color: scheme.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: Insets.lg),
+          const ConnectionsSection(),
           const SizedBox(height: Insets.lg),
           const _PairingRelayField(),
         ],
@@ -89,8 +66,12 @@ class CompanionSettingsScreen extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(Insets.md),
       children: [
+        // The saved desktops first: which one this phone is on is the fact
+        // every other row here is about.
+        const ConnectionsSection(),
+        const SizedBox(height: Insets.lg),
         Text(
-          'PAIRED DESKTOP',
+          'THIS CONNECTION',
           style: theme.textTheme.labelSmall?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
@@ -167,12 +148,6 @@ class CompanionSettingsScreen extends ConsumerWidget {
         ),
         const SizedBox(height: Insets.lg),
         const _PairingRelayField(),
-        const SizedBox(height: Insets.lg),
-        OutlinedButton.icon(
-          onPressed: () => _unpair(context, ref),
-          icon: const Icon(AppIcons.linkBreak, size: 14),
-          label: const Text('Unpair from this desktop'),
-        ),
         const SizedBox(height: Insets.lg),
         Text(
           'Chitragupta companion — a remote view of the sessions your '

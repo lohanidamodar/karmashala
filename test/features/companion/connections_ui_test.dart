@@ -1,0 +1,371 @@
+/// The Connections surfaces at phone size: the settings list of saved
+/// desktops (empty / one / many), the tap that switches, the per-host forget,
+/// and the switcher strip above the session list.
+library;
+
+import 'package:chitragupta/src/app/companion/companion_shell.dart';
+import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
+import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:chitragupta/src/features/companion/presentation/connections_section.dart';
+import 'package:chitragupta/src/features/companion/presentation/host_switcher_bar.dart';
+import 'package:chitragupta/src/features/companion/presentation/pairing/pairing_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'companion_test_support.dart';
+
+void main() {
+  final studio = fakeHostId(1);
+  final laptop = fakeHostId(2);
+
+  List<CompanionConnection> twoDesktops({String active = 'studio'}) => [
+    CompanionConnection(
+      hostId: studio,
+      name: 'Studio',
+      active: active == 'studio',
+      lastConnectedAt: DateTime.now().toUtc().subtract(
+        const Duration(hours: 3),
+      ),
+    ),
+    CompanionConnection(
+      hostId: laptop,
+      name: 'Laptop',
+      active: active == 'laptop',
+    ),
+  ];
+
+  group('the connections section', () {
+    testWidgets('one desktop reads as the paired desktop, with no switching '
+        'chrome it does not need', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: [
+          CompanionConnection(hostId: studio, name: 'Studio', active: true),
+        ],
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      expect(find.text('PAIRED DESKTOP'), findsOneWidget);
+      expect(find.text('Studio'), findsOneWidget);
+      expect(find.text('Active'), findsOneWidget);
+      expect(find.text('Add a desktop'), findsOneWidget);
+    });
+
+    testWidgets('many desktops list with their active badge and last use', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('Studio'), findsOneWidget);
+      expect(find.text('Laptop'), findsOneWidget);
+      // Exactly one active badge, and the other says when it was last used.
+      expect(find.text('Active'), findsOneWidget);
+      expect(find.text('Never connected'), findsOneWidget);
+    });
+
+    testWidgets('an unpaired phone says so and still offers the way in', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: FakeCompanionGateway(),
+        home: const ConnectionsSection(),
+      );
+
+      expect(find.textContaining('No desktops saved'), findsOneWidget);
+      expect(find.text('Add a desktop'), findsOneWidget);
+    });
+
+    testWidgets('tapping an inactive desktop switches to it', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+        sessionsByHost: {
+          laptop: [summary('s-laptop', title: 'Laptop work')],
+        },
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      await tester.tap(find.text('Laptop'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.switchRequests, [laptop]);
+      expect(gateway.connections.singleWhere((c) => c.active).name, 'Laptop');
+    });
+
+    testWidgets('the active desktop is not a switch target', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      await tester.tap(find.text('Studio'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.switchRequests, isEmpty);
+    });
+
+    testWidgets('a switch in flight shows progress and blocks a second tap', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+        switchDelay: const Duration(milliseconds: 300),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      await tester.tap(find.text('Laptop'));
+      await tester.pump();
+
+      expect(find.text('Connecting…'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      // A second tap while the first is in flight must not queue another.
+      await tester.tap(find.text('Laptop'), warnIfMissed: false);
+      await tester.pump();
+      expect(gateway.switchRequests, hasLength(1));
+
+      await tester.pumpAndSettle();
+      expect(find.text('Connecting…'), findsNothing);
+    });
+
+    testWidgets('forgetting one desktop asks first, then removes only it', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      await tester.tap(find.byTooltip('Forget Laptop'));
+      await tester.pumpAndSettle();
+      expect(find.text('Forget Laptop?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Forget'));
+      await tester.pumpAndSettle();
+
+      expect([for (final c in gateway.connections) c.name], ['Studio']);
+    });
+
+    testWidgets('cancelling the forget dialog keeps the desktop', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      await tester.tap(find.byTooltip('Forget Laptop'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(gateway.connections, hasLength(2));
+    });
+
+    testWidgets('"Add a desktop" opens the pairing flow', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      await tester.tap(find.text('Add a desktop'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PairingScreen), findsOneWidget);
+    });
+  });
+
+  group('the switcher strip above the sessions', () {
+    testWidgets('one desktop pays no chrome for a choice it does not have', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: [
+          CompanionConnection(hostId: studio, name: 'Studio', active: true),
+        ],
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const HostSwitcherBar(),
+      );
+
+      expect(find.text('Studio'), findsNothing);
+    });
+
+    testWidgets('two desktops name the active one and how many are saved', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const HostSwitcherBar(),
+      );
+
+      expect(find.text('Studio'), findsOneWidget);
+      expect(find.text('2 saved'), findsOneWidget);
+    });
+
+    testWidgets('the sheet switches desktops in one tap', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+        sessionsByHost: {
+          laptop: [summary('s-laptop', title: 'Laptop work')],
+        },
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const HostSwitcherBar(),
+      );
+
+      await tester.tap(find.text('Studio'));
+      await tester.pumpAndSettle();
+      // The sheet lists both; pick the other one.
+      await tester.tap(find.text('Laptop').last);
+      await tester.pumpAndSettle();
+
+      expect(gateway.switchRequests, [laptop]);
+    });
+
+    testWidgets('the sheet also offers the way to a new desktop', (
+      tester,
+    ) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const HostSwitcherBar(),
+      );
+
+      await tester.tap(find.text('Studio'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add a desktop'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PairingScreen), findsOneWidget);
+    });
+  });
+
+  group('in the shell', () {
+    testWidgets('the strip rides above the Sessions tab, and the session '
+        'list swaps with the desktop', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        sessions: [summary('s-studio', title: 'Studio work')],
+        connections: twoDesktops(),
+        sessionsByHost: {
+          laptop: [summary('s-laptop', title: 'Laptop work')],
+        },
+      );
+      await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
+
+      expect(find.byType(HostSwitcherBar), findsOneWidget);
+      expect(find.text('Studio work'), findsOneWidget);
+
+      await tester.tap(find.text('Studio').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Laptop').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Laptop work'), findsOneWidget);
+      expect(
+        find.text('Studio work'),
+        findsNothing,
+        reason: "the old desktop's sessions do not linger after a switch",
+      );
+    });
+
+    testWidgets('the settings tab lists the desktops', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        connections: twoDesktops(),
+      );
+      await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
+
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('Laptop'), findsOneWidget);
+      expect(find.text('THIS CONNECTION'), findsOneWidget);
+    });
+
+    testWidgets('a single-desktop phone shows no strip at all', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        sessions: [summary('s1')],
+        connections: [
+          CompanionConnection(hostId: studio, name: 'Studio', active: true),
+        ],
+      );
+      await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
+
+      expect(find.byType(HostSwitcherBar), findsOneWidget);
+      expect(find.text('2 saved'), findsNothing);
+      expect(find.text('Session s1'), findsOneWidget);
+    });
+  });
+
+  group('a switch that cannot reach its desktop', () {
+    testWidgets('lands on the chosen desktop and says the host is '
+        'unreachable — never silently back on the old one', (tester) async {
+      final gateway = FakeCompanionGateway.paired(
+        sessions: [summary('s-studio', title: 'Studio work')],
+        connections: twoDesktops(),
+        failSwitchTo: laptop,
+      );
+      await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
+
+      await tester.tap(find.text('Studio').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Laptop').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        gateway.connections.singleWhere((c) => c.active).name,
+        'Laptop',
+        reason: 'the phone is on the desktop the user chose',
+      );
+      expect(find.textContaining('Host unreachable'), findsOneWidget);
+      expect(find.text('Studio work'), findsNothing);
+    });
+  });
+}
