@@ -2272,6 +2272,10 @@ class LauncherControlServer implements SessionMcp {
       'opened': launched.session.title,
       'sessionId': launched.session.id,
       'reattached': false,
+      // A directory that has gone means the agent is resumed at the repository
+      // root instead, and its store is keyed by directory — so the caller is
+      // told, rather than being left to wonder why the conversation is empty.
+      'note': ?launched.workingDirectoryNotice,
     };
   }
 

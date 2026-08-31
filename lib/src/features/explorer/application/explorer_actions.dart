@@ -179,7 +179,14 @@ class ExplorerActions {
         ),
       );
       _ref.read(selectedSessionIdProvider.notifier).select(launched.session.id);
-      return const ExplorerResult(ExplorerOutcome.resumed);
+      // A session whose recorded directory has gone — an unmounted drive, a
+      // stopped distro — is resumed at the repository root instead. That is a
+      // different conversation to the agent, whose store is keyed by
+      // directory, so the one thing this must not do is happen quietly.
+      return ExplorerResult(
+        ExplorerOutcome.resumed,
+        message: launched.workingDirectoryNotice,
+      );
     } catch (error) {
       return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
     }
