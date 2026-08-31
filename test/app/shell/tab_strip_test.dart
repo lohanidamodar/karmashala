@@ -7,6 +7,8 @@ import 'package:chitragupta/src/features/environments/application/local_environm
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
+import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:chitragupta/src/core/process/command_runner_providers.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
@@ -22,6 +24,7 @@ import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -32,6 +35,45 @@ import '../../support/window_matrix.dart';
 import '../../support/fixtures.dart';
 
 void main() {
+  testWidgets('a tab\'s close button sits at its edge, not beside the text', (
+    tester,
+  ) async {
+    // Reported: "the tabs close button is aligned to text not to the tab pad
+    // itself". The strip lays tabs out at a uniform extent, so a short title
+    // left the row hugging its content and the X floating in the middle of the
+    // tab with empty space after it.
+    const key = Key('slot');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              key: key,
+              width: 220,
+              child: TerminalTabChip(
+                title: 'zsh',
+                liveness: PaneLiveness.live,
+                selected: true,
+                onTap: () {},
+                onClose: () {},
+                onEnd: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final slot = tester.getRect(find.byKey(key));
+    final button = tester.getRect(find.byType(IconButton));
+    expect(
+      slot.right - button.right,
+      lessThan(8),
+      reason: 'the X belongs to the tab, and the tab ends where the slot does',
+    );
+  });
+
   group('tabStripMetrics', () {
     test('one tab draws at its natural width, not the whole strip', () {
       final metrics = tabStripMetrics(1200, 1);
@@ -181,6 +223,43 @@ void main() {
     IconButton chevron(WidgetTester tester, String tip) => tester.widget(
       find.ancestor(of: find.byTooltip(tip), matching: find.byType(IconButton)),
     );
+
+    testWidgets('the + opens the default terminal, the caret offers the rest', (
+      tester,
+    ) async {
+      // Reported: "plus button with new terminal tab should open new default
+      // terminal, there should be another button to open different terminal
+      // like vs code provides". The + used to only ever open a menu.
+      openTabs(1);
+      await pump(tester);
+
+      await tester.tap(find.byTooltip(RegExp(r'^New terminal \(')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(PopupMenuItem<TerminalProfile>),
+        findsNothing,
+        reason: 'the common case must not cost a choice',
+      );
+      expect(
+        container.read(terminalSessionsControllerProvider).tabs,
+        hasLength(2),
+      );
+
+      await tester.tap(find.byTooltip('New terminal with a different profile'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PopupMenuItem<TerminalProfile>), findsWidgets);
+
+      // Dismissed before the tree goes: a menu route torn down with a focus
+      // change still in flight takes the focus manager with it, and the next
+      // test in the file is the one that reports it.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      // And the tree torn down while the binding is still alive: this is the
+      // only test here that opens a tab — and so focuses a new pane — with the
+      // widgets already mounted, and that focus change has to land somewhere.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
 
     testWidgets('a strip that fits offers nothing to fix it', (tester) async {
       openTabs(4);
@@ -337,7 +416,7 @@ void main() {
       await pump(tester, size: const Size(720, 560));
 
       expect(overflowButton(100), findsOneWidget);
-      expect(find.byTooltip('New terminal tab'), findsOneWidget);
+      expect(find.byTooltip(RegExp(r'^New terminal \(')), findsOneWidget);
       // Virtualised: a hundred tabs are not a hundred built chips.
       expect(find.textContaining('src/').evaluate().length, lessThan(100));
 

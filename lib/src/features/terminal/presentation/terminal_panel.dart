@@ -596,9 +596,22 @@ class TerminalToolbar extends ConsumerWidget {
           icon: const Icon(AppIcons.squareSplitVertical, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
         ),
-        PopupMenuButton<TerminalProfile>(
-          tooltip: 'New terminal tab',
+        // Two controls, the way VS Code splits them: the button opens the
+        // shell you nearly always want, and the caret beside it is where the
+        // other ones live. One button that could only ever open a menu made
+        // the common case cost a choice.
+        IconButton(
+          tooltip: 'New terminal${_chord(shellChordLabel<NewTerminalTabIntent>())}',
           icon: const Icon(AppIcons.plus, size: Chrome.icon),
+          onPressed: () => actions.open(actions.defaultProfile()),
+        ),
+        PopupMenuButton<TerminalProfile>(
+          tooltip: 'New terminal with a different profile',
+          icon: const Icon(AppIcons.caretDown, size: Chrome.iconSmall),
+          // The caret is a hair beside the +, not a second button's width away.
+          constraints: const BoxConstraints(minWidth: 180),
+          padding: EdgeInsets.zero,
+          iconSize: Chrome.iconSmall,
           onSelected: actions.open,
           itemBuilder: (context) => [
             for (final profile in actions.profiles())
@@ -619,6 +632,9 @@ class TerminalToolbar extends ConsumerWidget {
     );
   }
 }
+
+/// A chord in a tooltip, or nothing when the action has none.
+String _chord(String? label) => label == null ? '' : ' ($label)';
 
 /// One terminal tab, drawn as a chip in the workbench strip.
 class TerminalTabChip extends StatelessWidget {
@@ -743,11 +759,14 @@ class WorkbenchTabChip extends StatelessWidget {
               right: BorderSide(color: scheme.outlineVariant),
             ),
           ),
+          // Fills the slot the strip gave it rather than hugging its title:
+          // tabs are laid out at a uniform extent, so a short name left the X
+          // floating in the middle of the tab with empty space after it — "the
+          // tabs close button is aligned to text not to the tab pad itself".
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               ?leading,
-              Flexible(
+              Expanded(
                 child: Text(
                   label,
                   maxLines: 1,
