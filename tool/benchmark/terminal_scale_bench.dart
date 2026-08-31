@@ -5,6 +5,9 @@ import 'package:chitragupta/src/features/terminal/application/terminal_sessions_
 import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
 import 'package:chitragupta/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
+import 'package:chitragupta/src/features/terminal/presentation/terminal_pane_view.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -179,6 +182,104 @@ void main() {
     );
     probe.dispose();
     expect(after, greaterThan(0));
+  }, timeout: const Timeout(Duration(minutes: 20)));
+
+  testWidgets('mounted view cost curve at N = 1, 10, 100 tabs', (tester) async {
+    // T6: `IndexedStack` is preservation, not virtualization. Every open tab
+    // keeps a mounted `PaneLayoutView`/`TerminalView` subtree — render objects,
+    // layouts, focus and scroll clients — whether or not it can be seen. What
+    // is measured here is what that costs and what bounding it saves.
+    //
+    // `skipOffstage: false` is load-bearing: `_RawIndexedStackElement`
+    // overrides `debugVisitOnstageChildren` to visit only the selected child,
+    // so the default finder reports one mounted pane however many are really
+    // there. The render-object count is the honest second opinion.
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final chunk =
+        '${corpusText(PerfCorpus.plainLog, columns: 80, rows: 24)}\r\n';
+
+    Future<void> measure(int n, {required bool report}) async {
+      final database = AppDatabase.memory();
+      final container = fakeTerminalContainer(database: database);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final tabIds = <String>[];
+      for (var i = 0; i < n; i++) {
+        final tabId = controller.openTab(TerminalProfile.powerShell);
+        tabIds.add(tabId);
+        final paneId = container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .firstWhere((t) => t.id == tabId)
+            .layout
+            .panes
+            .single;
+        controller.instanceFor(paneId)?.terminal.write(chunk);
+      }
+
+      final first = Stopwatch()..start();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: TerminalPaneStack())),
+        ),
+      );
+      await tester.pump();
+      first.stop();
+
+      final mounted = tester
+          .widgetList(find.byType(TerminalPaneView, skipOffstage: false))
+          .length;
+      var renderObjects = 0;
+      void count(Element element) {
+        if (element.renderObject != null) renderObjects++;
+        element.visitChildren(count);
+      }
+
+      tester.binding.rootElement!.visitChildren(count);
+
+      // Switching round-robin from the back of the tab list: with a bounded
+      // mounted set this is the worst case, because every switch remounts.
+      final switches = <Duration>[];
+      for (var i = 0; i < 5; i++) {
+        final sw = Stopwatch()..start();
+        controller.activateTab(tabIds[(tabIds.length - 1 - i) % tabIds.length]);
+        await tester.pump();
+        sw.stop();
+        switches.add(sw.elapsed);
+      }
+
+      if (report) {
+        // ignore: avoid_print
+        print(
+          '${n.toString().padLeft(6)} | '
+          '${mounted.toString().padLeft(13)} | '
+          '${renderObjects.toString().padLeft(14)} | '
+          '${'${first.elapsedMilliseconds}ms'.padLeft(12)} | '
+          '${'${(median(switches).inMicroseconds / 1000).toStringAsFixed(2)}ms'.padLeft(10)}',
+        );
+      }
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      container.dispose();
+      database.close();
+    }
+
+    // Warm-up: the first pump of the process pays for font resolution and
+    // shader setup, which is not what any of these numbers are about.
+    await measure(2, report: false);
+
+    // ignore: avoid_print
+    print(
+      'N tabs | mounted views | render objects | first layout | tab switch',
+    );
+    for (final n in [1, 10, 100]) {
+      await measure(n, report: true);
+    }
   }, timeout: const Timeout(Duration(minutes: 20)));
 
   test('the coalescer does no work for a pane nobody is watching', () {
