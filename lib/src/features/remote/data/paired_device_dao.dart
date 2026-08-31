@@ -11,12 +11,36 @@ class PairedDeviceDao {
 
   final AppDatabase _db;
 
+  /// Saves a pairing, replacing the row this device already had.
+  ///
+  /// **An upsert on the device id, not a plain insert.** A phone re-pairs with
+  /// the same identity and brand-new key material, and it is the same phone:
+  /// it must refresh its row rather than arrive as a stranger and leave the
+  /// old one behind holding a key nobody will ever use again.
+  ///
+  /// What a re-pair replaces: the key, what was granted, the name, the relay
+  /// it came in on, its generation (a fresh key means a fresh rendezvous
+  /// series, so starting over carries nothing with it) and — because a
+  /// re-pair is not a revocation — the revoked flag. What it keeps: the row's
+  /// identity and `created_at`, which is when this desktop first met the
+  /// phone, and any push token, which stays valid until the phone re-registers
+  /// on its next connect.
   void insert(PairedDevice device) {
     _db.execute(
       'INSERT INTO paired_devices '
       '(id, name, device_key, capabilities, generation, revoked, '
       'push_token, push_platform, created_at, last_seen_at, relay_url) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
+      'ON CONFLICT(id) DO UPDATE SET '
+      'name = excluded.name, '
+      'device_key = excluded.device_key, '
+      'capabilities = excluded.capabilities, '
+      'generation = excluded.generation, '
+      'revoked = excluded.revoked, '
+      'relay_url = excluded.relay_url, '
+      'last_seen_at = COALESCE(excluded.last_seen_at, last_seen_at), '
+      'push_token = COALESCE(excluded.push_token, push_token), '
+      'push_platform = COALESCE(excluded.push_platform, push_platform);',
       [
         device.id,
         device.name,

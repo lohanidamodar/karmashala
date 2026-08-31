@@ -18,6 +18,13 @@ const Duration kDefaultHeartbeat = Duration(seconds: 25);
 /// How long one connection attempt may take before it counts as failed.
 const Duration kDefaultConnectTimeout = Duration(seconds: 15);
 
+/// The relay's "nobody was at the other end" close code — `kCloseNoPeer` in
+/// `packages/relay`, repeated here rather than imported so the phone's
+/// transport does not depend on the relay server. A wire constant, like an
+/// HTTP status: the relay sends it when a rendezvous has held a single lonely
+/// socket for its lone timeout.
+const int kRelayCloseNoPeer = 4408;
+
 /// An outbound WebSocket to a relay rendezvous, with reconnect and heartbeat.
 class RelayTransport extends ReconnectingTransport {
   RelayTransport({
@@ -71,6 +78,15 @@ class RelayTransport extends ReconnectingTransport {
     return relay.replace(scheme: scheme, path: '$base/v1/${rendezvous.value}');
   }
 
+  /// The code the relay last hung up with, or null while none has been seen.
+  ///
+  /// [kRelayCloseNoPeer] is information rather than a fault: the relay
+  /// disposes a rendezvous that has held one lonely socket for its lone
+  /// timeout, so that code means "nobody else was ever there" — a different
+  /// thing to tell a user than "the network failed".
+  int? get lastCloseCode => _lastCloseCode;
+  int? _lastCloseCode;
+
   @override
   Future<void> connectOnce() async {
     final socket = await WebSocket.connect(
@@ -112,6 +128,7 @@ class RelayTransport extends ReconnectingTransport {
     await ended.future;
     await subscription.cancel();
     _socket = null;
+    _lastCloseCode = socket.closeCode;
     onLog?.call('relay closed the connection (${socket.closeCode})');
   }
 

@@ -331,7 +331,7 @@ class RemoteHostService {
         );
         devices.insert(stamped);
         onDevicesChanged?.call();
-        await _ensureRuntime(stamped);
+        await _rebuildRuntime(stamped);
       },
     );
     _pairing = session;
@@ -437,6 +437,20 @@ class RemoteHostService {
   }
 
   // --- Wiring ----------------------------------------------------------------
+
+  /// Replaces whatever was listening for [device], because a pairing just
+  /// replaced its key.
+  ///
+  /// A runtime holds the device key and the rendezvous derived from it, so
+  /// after a re-pair the old one is listening at addresses nobody will ever
+  /// dial again. Nothing is carried across: a new key means a new rendezvous
+  /// series, a fresh channel and an empty replay window — which is precisely
+  /// what a re-pair is, and why restarting at the first generation is safe.
+  Future<void> _rebuildRuntime(PairedDevice device) async {
+    final previous = _runtimes.remove(device.id);
+    if (previous != null) await previous.close();
+    await _ensureRuntime(device);
+  }
 
   Future<void> _ensureRuntime(PairedDevice device) async {
     if (!_started) return;

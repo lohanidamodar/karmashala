@@ -23,12 +23,17 @@ const int kCompanionProbeWindow = 3;
 
 /// The host refused a request, or never answered.
 class RemoteApiException implements Exception {
-  const RemoteApiException(this.message, {this.code});
+  const RemoteApiException(this.message, {this.code, this.hostAbsent = false});
 
   final String message;
 
   /// The protocol error code, when the host sent one.
   final ErrorCode? code;
+
+  /// True when the failure is "nobody was at the rendezvous": the relay took
+  /// the socket and no host ever answered the hello. A different fact from a
+  /// refusal or a broken network, and the phone says so.
+  final bool hostAbsent;
 
   @override
   String toString() => 'RemoteApiException(${code?.wire}: $message)';
@@ -148,7 +153,10 @@ class CompanionClient {
         await dialled.close();
       }
     }
-    throw const RemoteApiException('the host did not answer on any rendezvous');
+    throw const RemoteApiException(
+      'the host did not answer on any rendezvous',
+      hostAbsent: true,
+    );
   }
 
   SecretKeyData get _key => SecretKeyData(_pairing.deviceKey);
@@ -172,6 +180,30 @@ class CompanionClient {
     final rendezvous = await rendezvousFor(_key, generation);
     transport.send(LinkHello(rendezvous).encode());
     return arrived.future.timeout(helloTimeout);
+  }
+
+  /// Re-proves the host is still at the far end of a socket that came back.
+  ///
+  /// A relay accepts a socket at a rendezvous whether or not anybody else is
+  /// there, so a reconnected transport says nothing about the host. This
+  /// re-sends [LinkHello] on the SAME channel and waits for a fresh
+  /// `host.status`: the host tolerates a repeat hello — it reattaches the
+  /// transport, keeps the channel and its sequences, and re-announces — so
+  /// nothing about the key schedule or the replay window moves.
+  ///
+  /// Throws [TimeoutException] when nobody answers, which is the caller's cue
+  /// that the link is dead however healthy the socket looks.
+  Future<RemoteHostStatus> rehandshake({
+    Duration timeout = const Duration(seconds: 8),
+  }) async {
+    final transport = _transport;
+    if (transport == null || _channel == null) {
+      throw StateError('not connected');
+    }
+    final arrived = _statusArrived = Completer<RemoteHostStatus>();
+    final rendezvous = await rendezvousFor(_key, _generation);
+    transport.send(LinkHello(rendezvous).encode());
+    return arrived.future.timeout(timeout);
   }
 
   Future<void> _detach() async {

@@ -206,6 +206,10 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
 
+  /// Settable, so a screen test can drive the banner's honest-reason line.
+  @override
+  String? linkTrouble;
+
   /// The fake has no relay of its own; the screens that read this simply
   /// render the path without naming one.
   @override
@@ -454,9 +458,25 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<List<CompanionSessionSummary>> watchSessions() => _sessions.stream;
 
+  /// Sessions whose transcript request fails, and with what — the host
+  /// refusing for want of a capability, or a link that dropped mid-request.
+  final Map<String, Object> transcriptFailures = {};
+
+  /// Sessions whose transcript never answers at all: the shape of a request
+  /// sent into a rendezvous nobody was at.
+  final Set<String> stalledTranscripts = {};
+
   @override
-  Stream<List<CompanionChatMessage>> transcript(String sessionId) =>
-      _transcriptOf(sessionId).stream;
+  Stream<List<CompanionChatMessage>> transcript(String sessionId) {
+    final failure = transcriptFailures[sessionId];
+    if (failure != null) return Stream<List<CompanionChatMessage>>.error(failure);
+    // Never emits and never closes: a screen must still find something to
+    // say, because a user cannot tell "slow" from "never" by looking.
+    if (stalledTranscripts.contains(sessionId)) {
+      return Stream<List<CompanionChatMessage>>.multi((_) {});
+    }
+    return _transcriptOf(sessionId).stream;
+  }
 
   @override
   Stream<CompanionApproval?> pendingApproval(String sessionId) =>
