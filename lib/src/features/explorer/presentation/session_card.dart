@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
-import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../sessions/domain/session_lineage.dart';
 import '../application/session_diff_stat.dart';
+import 'explorer_row.dart';
 
 /// A coarse age for a card's corner: `3m`, `22m`, `7h 59m`, `2d 4h`.
 ///
@@ -138,9 +138,11 @@ class SessionCard extends StatelessWidget {
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
 
-  /// Whether to draw the row's overflow menu.
+  /// Whether the row has an overflow menu at all.
   ///
-  /// The Explorer always does. The companion has no verbs to put in one — a
+  /// The Explorer does, and reserves its slot on every card — though on a
+  /// pointer surface the button itself only appears under the pointer or the
+  /// keyboard; see [ExplorerRow]. The companion has no verbs to put in one — a
   /// phone can open a session and nothing else — and an empty menu button is a
   /// target that does nothing.
   final bool showMenu;
@@ -157,68 +159,42 @@ class SessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     // One decision — a mouse or a thumb — and every measurement below follows
     // from it. `pointer` is the Explorer's own density, unchanged.
     final density = UiDensity.of(context);
     final muted = density.muted(theme);
 
-    return ContextMenuRegion(
+    // The tile, the indent, the selection rule, the right-click and the
+    // keyboard menu all belong to every row kind alike; see [ExplorerRow].
+    // Enter on a focused card does what a click does, so the tree is navigable
+    // without the mouse.
+    return ExplorerRow(
+      kind: ExplorerRowKind.session,
+      depth: depth,
+      selected: selected,
+      onTap: onTap,
       menuItems: menuItems,
-      onSelected: onMenu,
-      child: InkWell(
-        onTap: onTap,
-        // Enter on a focused card does what a click does — Flutter's own
-        // activate action on the ink well — so the tree is navigable without
-        // the mouse. The focus tint is what makes that visible.
-        focusColor: scheme.primary.withValues(alpha: 0.12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withValues(alpha: 0.10)
-                : Colors.transparent,
-            border: Border(
-              // Selection is carried by a rule in the accent, as on the
-              // workbench tabs: an outline is invisible against a neutral ramp.
-              left: BorderSide(
-                color: selected ? scheme.primary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          padding: EdgeInsets.fromLTRB(
-            density.padX + depth * 14,
-            density.padY,
-            density.isTouch ? density.padX : 4,
-            density.padY,
-          ),
-          // A floor, never a fixed height: the card still grows with its text
-          // at 200% scale instead of clipping it.
-          constraints: density.isTouch
-              ? const BoxConstraints(minHeight: Touch.target)
-              : null,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _line1(context, muted, density),
-              SizedBox(height: density.lineGap),
-              _line2(theme, density),
-              // A worktree session draws its third line even before git has
-              // answered: the glyph that says "this has its own checkout" is a
-              // persisted fact, and it must not blink into existence.
-              if (worktree ||
-                  branch != null ||
-                  subPath != null ||
-                  lineageBroken ||
-                  whereabouts != null ||
-                  !(stat?.isEmpty ?? true)) ...[
-                SizedBox(height: density.isTouch ? Insets.xs : 3),
-                _line3(context, muted, density),
-              ],
-            ],
-          ),
-        ),
+      onMenu: onMenu,
+      builder: (context, menuVisible) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _line1(context, muted, density),
+          SizedBox(height: density.lineGap),
+          _line2(theme, density, menuVisible: menuVisible),
+          // A worktree session draws its third line even before git has
+          // answered: the glyph that says "this has its own checkout" is a
+          // persisted fact, and it must not blink into existence.
+          if (worktree ||
+              branch != null ||
+              subPath != null ||
+              lineageBroken ||
+              whereabouts != null ||
+              !(stat?.isEmpty ?? true)) ...[
+            SizedBox(height: density.lineGap),
+            _line3(context, muted, density),
+          ],
+        ],
       ),
     );
   }
@@ -240,7 +216,7 @@ class SessionCard extends StatelessWidget {
                 size: density.icon,
                 color: agentColor ?? scheme.onSurfaceVariant,
               ),
-              SizedBox(width: density.isTouch ? Insets.sm : 5),
+              SizedBox(width: density.glyphGap),
               Flexible(
                 child: Text(
                   agentLabel,
@@ -252,9 +228,9 @@ class SessionCard extends StatelessWidget {
             ],
           ),
         ),
-        if (badge != null) ...[const SizedBox(width: 6), badge!],
+        if (badge != null) ...[SizedBox(width: density.glyphGap), badge!],
         if (age != null) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: density.glyphGap),
           if (ageTooltip == null)
             Text(age!, style: muted, maxLines: 1)
           else
@@ -267,7 +243,11 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  Widget _line2(ThemeData theme, UiDensity density) => Row(
+  Widget _line2(
+    ThemeData theme,
+    UiDensity density, {
+    required bool menuVisible,
+  }) => Row(
     children: [
       if (lineageBroken) ...[
         Tooltip(
@@ -281,7 +261,7 @@ class SessionCard extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: density.glyphGap),
       ] else if (link != null) ...[
         Tooltip(
           message: parentTitle == null
@@ -293,7 +273,7 @@ class SessionCard extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: density.glyphGap),
       ],
       if (pinned) ...[
         Icon(
@@ -301,7 +281,7 @@ class SessionCard extends StatelessWidget {
           size: density.iconSmall,
           color: theme.colorScheme.primary,
         ),
-        const SizedBox(width: 4),
+        SizedBox(width: density.glyphGap),
       ],
       Expanded(
         child: Text(
@@ -315,17 +295,11 @@ class SessionCard extends StatelessWidget {
         ),
       ),
       if (showMenu)
-        SizedBox(
-          width: density.isTouch ? Touch.target : 22,
-          height: density.isTouch ? Touch.target : 18,
-          child: PopupMenuButton<String>(
-            tooltip: 'Session actions',
-            padding: EdgeInsets.zero,
-            iconSize: density.isTouch ? Touch.icon : 15,
-            icon: const Icon(AppIcons.dotsThreeVertical),
-            onSelected: onMenu,
-            itemBuilder: (context) => menuItems,
-          ),
+        ExplorerRowMenuButton(
+          visible: menuVisible,
+          tooltip: 'Session actions',
+          items: menuItems,
+          onSelected: onMenu,
         ),
     ],
   );
@@ -347,7 +321,7 @@ class SessionCard extends StatelessWidget {
       children: [
         if (leading != null) ...[
           Icon(leading, size: density.iconSmall, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 4),
+          SizedBox(width: density.glyphGap),
         ],
         // The left half is the only thing on the card allowed to be long, so it
         // is the only thing that gives up width.
@@ -366,7 +340,7 @@ class SessionCard extends StatelessWidget {
           ),
         ),
         if (worktree) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: density.glyphGap),
           Tooltip(
             message: 'Runs in its own worktree',
             child: Icon(
@@ -377,7 +351,7 @@ class SessionCard extends StatelessWidget {
           ),
         ],
         if (stat != null && !stat!.isEmpty) ...[
-          const SizedBox(width: 8),
+          const SizedBox(width: Insets.sm),
           DiffStatLabel(stat: stat!),
         ],
       ],

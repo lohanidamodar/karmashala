@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
-import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/session_diff_stat.dart';
+import 'explorer_row.dart';
 import 'session_card.dart';
 
 /// A project, drawn to the same standard as the session cards beneath it.
@@ -87,65 +87,41 @@ class ProjectCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final density = UiDensity.of(context);
     final muted = density.muted(theme);
 
-    return ContextMenuRegion(
+    return ExplorerRow(
+      kind: ExplorerRowKind.project,
+      depth: 0,
+      selected: selected,
+      onTap: onTap,
       menuItems: menuItems,
-      onSelected: onMenu,
-      child: InkWell(
-        onTap: onTap,
-        focusColor: scheme.primary.withValues(alpha: 0.12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withValues(alpha: 0.10)
-                : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: selected ? scheme.primary : Colors.transparent,
-                width: 2,
-              ),
+      onMenu: onMenu,
+      builder: (context, menuVisible) => density.isTouch
+          ? _touchBody(context, muted, semantic, density, menuVisible)
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _line1(
+                      context,
+                      muted,
+                      semantic,
+                      density,
+                      wide: width >= aggregateWidth,
+                      roomy: width >= badgeWidth,
+                      menuVisible: menuVisible,
+                    ),
+                    SizedBox(height: density.lineGap),
+                    _line2(context, muted, density),
+                  ],
+                );
+              },
             ),
-          ),
-          padding: density.isTouch
-              ? EdgeInsets.fromLTRB(
-                  density.padX,
-                  density.padY,
-                  density.padX,
-                  density.padY,
-                )
-              : const EdgeInsets.fromLTRB(4, 5, 4, 5),
-          constraints: density.isTouch
-              ? const BoxConstraints(minHeight: Touch.target)
-              : null,
-          child: density.isTouch
-              ? _touchBody(context, muted, semantic, density)
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _line1(
-                          context,
-                          muted,
-                          semantic,
-                          density,
-                          wide: width >= aggregateWidth,
-                          roomy: width >= badgeWidth,
-                        ),
-                        const SizedBox(height: 1),
-                        _line2(context, muted, density),
-                      ],
-                    );
-                  },
-                ),
-        ),
-      ),
     );
   }
 
@@ -161,6 +137,7 @@ class ProjectCard extends StatelessWidget {
     TextStyle? muted,
     SemanticColors semantic,
     UiDensity density,
+    bool menuVisible,
   ) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -192,23 +169,17 @@ class ProjectCard extends StatelessWidget {
               _runningBadge(muted, semantic, density),
             ],
             if (onNewSession != null)
-              IconButton(
+              ExplorerRowAction(
                 tooltip: 'New session in this project',
-                icon: const Icon(AppIcons.plus),
+                icon: AppIcons.plus,
                 onPressed: onNewSession,
               ),
             if (showMenu)
-              SizedBox(
-                width: Touch.target,
-                height: Touch.target,
-                child: PopupMenuButton<String>(
-                  tooltip: 'Project actions',
-                  padding: EdgeInsets.zero,
-                  iconSize: Touch.icon,
-                  icon: const Icon(AppIcons.dotsThreeVertical),
-                  onSelected: onMenu,
-                  itemBuilder: (context) => menuItems,
-                ),
+              ExplorerRowMenuButton(
+                visible: menuVisible,
+                tooltip: 'Project actions',
+                items: menuItems,
+                onSelected: onMenu,
               ),
             const SizedBox(width: Insets.xs),
             // The affordance a phone reads as "this opens": the same caret the
@@ -269,6 +240,7 @@ class ProjectCard extends StatelessWidget {
     UiDensity density, {
     required bool wide,
     required bool roomy,
+    required bool menuVisible,
   }) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -277,16 +249,16 @@ class ProjectCard extends StatelessWidget {
       children: [
         Icon(
           expanded ? AppIcons.caretDown : AppIcons.caretRight,
-          size: 14,
+          size: density.icon,
           color: scheme.onSurfaceVariant,
         ),
         const SizedBox(width: 2),
         Icon(
           expanded ? AppIcons.folderOpen : AppIcons.folder,
-          size: Chrome.iconSmall,
+          size: density.icon,
           color: missing ? scheme.error : scheme.onSurfaceVariant,
         ),
-        const SizedBox(width: 6),
+        SizedBox(width: density.glyphGap),
         // Two measured children sharing the row, so neither can push the other
         // off the end: the name gives way first and the aggregate ellipsises
         // rather than overflowing. Fixed-width facts beside an `Expanded` name
@@ -301,11 +273,11 @@ class ProjectCard extends StatelessWidget {
           ),
         ),
         if (roomy && summary.running > 0) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: density.glyphGap),
           _runningBadge(muted, semantic, density),
         ],
         if (aggregate != null) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: density.glyphGap),
           Expanded(
             flex: 3,
             // Right-aligned so it sits against the buttons rather than leaving
@@ -317,38 +289,24 @@ class ProjectCard extends StatelessWidget {
           ),
         ],
         if (pinned && onTogglePin != null)
-          IconButton(
+          ExplorerRowAction(
             tooltip: 'Unpin',
-            visualDensity: VisualDensity.compact,
-            iconSize: 14,
-            constraints: const BoxConstraints.tightFor(width: 24, height: 22),
-            padding: EdgeInsets.zero,
+            icon: AppIcons.pushPinFill,
             color: scheme.tertiary,
-            icon: const Icon(AppIcons.pushPinFill),
             onPressed: onTogglePin,
           ),
         if (onNewSession != null)
-          IconButton(
+          ExplorerRowAction(
             tooltip: 'New session in this project',
-            visualDensity: VisualDensity.compact,
-            iconSize: 15,
-            constraints: const BoxConstraints.tightFor(width: 24, height: 22),
-            padding: EdgeInsets.zero,
-            icon: const Icon(AppIcons.plus),
+            icon: AppIcons.plus,
             onPressed: onNewSession,
           ),
         if (showMenu)
-          SizedBox(
-            width: 22,
-            height: 22,
-            child: PopupMenuButton<String>(
-              tooltip: 'Project actions',
-              padding: EdgeInsets.zero,
-              iconSize: 15,
-              icon: const Icon(AppIcons.dotsThreeVertical),
-              onSelected: onMenu,
-              itemBuilder: (context) => menuItems,
-            ),
+          ExplorerRowMenuButton(
+            visible: menuVisible,
+            tooltip: 'Project actions',
+            items: menuItems,
+            onSelected: onMenu,
           ),
       ],
     );
@@ -391,9 +349,14 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
+  /// The path, hanging under the **name** rather than under the caret: the two
+  /// glyphs and their gaps, measured, so the two lines share a left edge at any
+  /// density instead of at one hand-tuned width.
   Widget _line2(BuildContext context, TextStyle? muted, UiDensity density) =>
       Padding(
-        padding: const EdgeInsets.only(left: 22),
+        padding: EdgeInsets.only(
+          left: density.icon * 2 + 2 + density.glyphGap,
+        ),
         child: _pathLine(context, muted, density),
       );
 
@@ -412,7 +375,7 @@ class ProjectCard extends StatelessWidget {
             size: density.iconSmall,
             color: scheme.error,
           ),
-          const SizedBox(width: 4),
+          SizedBox(width: density.glyphGap),
         ],
         Expanded(
           child: Tooltip(
