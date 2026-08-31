@@ -4,6 +4,7 @@ import '../../../core/database/database_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/permission_mode.dart';
+import '../domain/relay_mode.dart';
 import '../domain/settings.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
@@ -187,6 +188,17 @@ class SettingsController extends Notifier<Settings> {
       remoteRelayUrl: url,
       clearRemoteRelayUrl: url == null,
     );
+    _save();
+  }
+
+  /// Chooses between the embedded local relay and a hosted one.
+  void setRemoteRelayMode(RelayMode mode) {
+    state = state.copyWith(remoteRelayMode: mode);
+    _save();
+  }
+
+  void setLocalRelayPort(int port) {
+    state = state.copyWith(localRelayPort: port);
     _save();
   }
 

@@ -4,14 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/domain/relay_mode.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/remote_access_controller.dart';
 import '../application/remote_providers.dart';
 import '../domain/paired_device.dart';
+import '../relay_local/local_relay_providers.dart';
+import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
 
-/// Settings → Remote access: the enable switch, the relay, the paired
-/// devices with last-seen and revoke, and the pairing button.
+/// Settings → Remote access: the enable switch, the one-click choice between
+/// the embedded local relay and a hosted one, the paired devices with
+/// last-seen and revoke, and the pairing button.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 
@@ -22,21 +26,32 @@ class RemoteAccessSection extends ConsumerStatefulWidget {
 
 class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
   final _relay = TextEditingController();
+  final _port = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _relay.text = ref.read(settingsControllerProvider).remoteRelayUrl ?? '';
+    final settings = ref.read(settingsControllerProvider);
+    _relay.text = settings.remoteRelayUrl ?? '';
+    _port.text = '${settings.localRelayPort}';
   }
 
   @override
   void dispose() {
     _relay.dispose();
+    _port.dispose();
     super.dispose();
   }
 
   void _setEnabled(bool value) {
     ref.read(settingsControllerProvider.notifier).setRemoteAccessEnabled(value);
+    ref.read(remoteAccessControllerProvider).sync();
+  }
+
+  /// The one-click switch: choosing "This computer" auto-starts the local
+  /// relay; the choice persists, so it auto-starts on later launches too.
+  void _setMode(RelayMode mode) {
+    ref.read(settingsControllerProvider.notifier).setRemoteRelayMode(mode);
     ref.read(remoteAccessControllerProvider).sync();
   }
 
@@ -50,6 +65,19 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
   /// The relay is redialled only when editing ends — not per keystroke.
   void _applyRelay() {
     _saveRelay(_relay.text);
+    ref.read(remoteAccessControllerProvider).sync();
+  }
+
+  /// The local port, applied when editing ends; junk snaps back.
+  void _applyPort() {
+    final settings = ref.read(settingsControllerProvider);
+    final parsed = int.tryParse(_port.text.trim());
+    if (parsed == null || parsed < 1 || parsed > 65535) {
+      _port.text = '${settings.localRelayPort}';
+      return;
+    }
+    if (parsed == settings.localRelayPort) return;
+    ref.read(settingsControllerProvider.notifier).setLocalRelayPort(parsed);
     ref.read(remoteAccessControllerProvider).sync();
   }
 
@@ -77,17 +105,60 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
           ),
           if (settings.remoteAccessEnabled) ...[
             const SizedBox(height: Insets.sm),
-            TextField(
-              controller: _relay,
-              decoration: const InputDecoration(
-                isDense: true,
-                labelText: 'Relay URL',
-                hintText: kDefaultRelayUrl,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<RelayMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: RelayMode.local,
+                    icon: Icon(AppIcons.terminalWindow, size: 16),
+                    label: Text('This computer (local network)'),
+                  ),
+                  ButtonSegment(
+                    value: RelayMode.hosted,
+                    icon: Icon(AppIcons.globe, size: 16),
+                    label: Text('Hosted relay (internet)'),
+                  ),
+                ],
+                selected: {settings.remoteRelayMode},
+                onSelectionChanged: (selection) => _setMode(selection.first),
               ),
-              onChanged: _saveRelay,
-              onSubmitted: (_) => _applyRelay(),
-              onEditingComplete: _applyRelay,
             ),
+            const SizedBox(height: Insets.sm),
+            if (settings.remoteRelayMode == RelayMode.local) ...[
+              const _LocalRelayStatusRow(),
+              const SizedBox(height: Insets.sm),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      controller: _port,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Port',
+                      ),
+                      onSubmitted: (_) => _applyPort(),
+                      onEditingComplete: _applyPort,
+                    ),
+                  ),
+                ],
+              ),
+            ] else
+              TextField(
+                controller: _relay,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'Relay URL',
+                  hintText: kDefaultRelayUrl,
+                  helperText:
+                      'Leave empty for the PopupBits relay, or point it at '
+                      'your own.',
+                ),
+                onChanged: _saveRelay,
+                onSubmitted: (_) => _applyRelay(),
+                onEditingComplete: _applyRelay,
+              ),
             const SizedBox(height: Insets.md),
             Row(
               children: [
@@ -116,6 +187,90 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// What the embedded relay is doing: the ws URL a phone dials, the other
+/// addresses, the bind error with a retry, and the firewall hint.
+class _LocalRelayStatusRow extends ConsumerWidget {
+  const _LocalRelayStatusRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final status = ref.watch(localRelayStatusProvider);
+    final primary = status.primaryUrl;
+
+    final (IconData icon, Color color, String message) = switch (status.state) {
+      LocalRelayState.running when primary != null => (
+        AppIcons.checkCircle,
+        scheme.primary,
+        'Relay running at $primary',
+      ),
+      LocalRelayState.running => (
+        AppIcons.warningCircle,
+        scheme.error,
+        'Relay running on port ${status.boundPort}, but this computer has no '
+            'local network address a phone could dial.',
+      ),
+      LocalRelayState.error => (
+        AppIcons.warningCircle,
+        scheme.error,
+        'Local relay: ${status.error}',
+      ),
+      LocalRelayState.stopped => (
+        AppIcons.pauseCircle,
+        scheme.onSurfaceVariant,
+        'Local relay is starting…',
+      ),
+    };
+
+    final others = [
+      for (final endpoint in status.endpoints)
+        if (!endpoint.primary) '${endpoint.url}',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: Insets.xs),
+            Expanded(child: Text(message, style: theme.textTheme.bodySmall)),
+            if (status.state == LocalRelayState.error)
+              TextButton(
+                onPressed: () =>
+                    ref.read(remoteAccessControllerProvider).sync(),
+                child: const Text('Retry'),
+              ),
+          ],
+        ),
+        if (others.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Text(
+              'Also reachable at ${others.join(', ')}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        if (status.firewallHint)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Text(
+              "If the phone can't connect, allow Chitragupta in Windows "
+              'Defender Firewall.',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

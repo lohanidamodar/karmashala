@@ -81,7 +81,7 @@ packages:
     source: path
     version: "0.2.0"
   chitragupta_relay:
-    dependency: "direct dev"
+    dependency: "direct main"
     description:
       path: "packages/relay"
       relative: true

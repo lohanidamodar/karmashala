@@ -6,6 +6,8 @@ import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/core/lifecycle/app_lifecycle.dart';
 import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:chitragupta/src/features/notifications/application/notification_providers.dart';
+import 'package:chitragupta/src/features/remote/relay_local/local_relay_providers.dart';
+import 'package:chitragupta/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
@@ -227,12 +229,40 @@ void main() {
     });
   });
 
+  group('the local relay it stops', () {
+    test(
+      'shutdown closes a running embedded relay and frees its port',
+      () async {
+        // Loopback and an empty interface list: nothing leaves this machine.
+        final relay = LocalRelayService(
+          bindAddress: '127.0.0.1',
+          interfaces: () async => [],
+        );
+        final container = ProviderContainer(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            localRelayServiceProvider.overrideWithValue(relay),
+          ],
+        );
+        final lifecycle = AppLifecycle(container);
+        await container.read(localRelayServiceProvider).ensureRunning(0);
+        final port = relay.status.boundPort!;
+
+        await lifecycle.shutdown();
+
+        expect(relay.status.state, LocalRelayState.stopped);
+        final rebound = await ServerSocket.bind('127.0.0.1', port);
+        await rebound.close();
+      },
+    );
+  });
+
   group('the budget', () {
     test('is the itemised sum of the steps, and both are pinned', () {
       // Pinned to literals on purpose. The two bounds this replaces were
       // written against `kShutdownBudget` itself, so widening the constant —
       // the exact regression they existed to catch — kept them green.
-      expect(kShutdownBudget, const Duration(milliseconds: 2450));
+      expect(kShutdownBudget, const Duration(milliseconds: 2550));
       expect(
         kShutdownStepBudgets.values.reduce((a, b) => a + b),
         kShutdownBudget,
@@ -242,7 +272,7 @@ void main() {
         kShutdownStepBudgets['terminal processes'],
         const Duration(milliseconds: 1500),
       );
-      expect(kShutdownStepBudgets, hasLength(8));
+      expect(kShutdownStepBudgets, hasLength(9));
     });
 
     test('a spent budget skips every step but still disposes', () async {
