@@ -11,6 +11,7 @@ import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/remote_companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/secure_companion_store.dart';
+import 'package:chitragupta/src/features/remote/application/host_bindings.dart';
 import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
 import 'package:chitragupta/src/features/remote/client/companion_store.dart'
     as stored;
@@ -379,6 +380,139 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('the workspace and a start, end to end over the relay', () async {
+    fake.addWorkspace();
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final projects = await gateway.listWorkspace();
+    expect(projects.single.projectId, 'p1');
+    final checkout = projects.single.checkouts.single;
+    final agent = checkout.agents.single;
+    expect(agent.name, 'Claude Code');
+    expect(agent.defaultMode, 'ask');
+    expect(agent.permissionModes.first.label, 'Ask every time');
+
+    final started = await gateway.startSession(
+      requestId: 'k1',
+      repositoryId: checkout.repositoryId,
+      installationId: agent.installationId,
+      permissionMode: 'bypass',
+      title: 'From the phone',
+      message: 'get started',
+    );
+
+    expect(started.title, 'From the phone');
+    expect(started.replayed, isFalse);
+    expect(fake.starts, hasLength(1));
+    expect(fake.starts.single.permissionMode, 'bypass');
+    expect(fake.starts.single.message, 'get started');
+    expect(
+      (await gateway.listSessions()).map((s) => s.id),
+      contains(started.sessionId),
+      reason: 'the phone can land on the session it just started',
+    );
+  });
+
+  test('a start resent after a re-dial costs one session, not two', () async {
+    fake.addWorkspace();
+    await startService();
+    final first = makeGateway();
+    await pairPhone(first);
+    final started = await first.startSession(
+      requestId: 'k1',
+      repositoryId: 'r1',
+      installationId: 'i1',
+      permissionMode: 'ask',
+      title: 'Only once',
+    );
+    // The answer never reached the phone and the app was relaunched: a fresh
+    // gateway over the same phone disk, which dials a NEW generation and so
+    // meets a brand-new HostSessionApi at the other end.
+    await first.close();
+    final again = makeGateway();
+    await awaitLink(again, CompanionLinkState.connected);
+
+    final retry = await again.startSession(
+      requestId: 'k1',
+      repositoryId: 'r1',
+      installationId: 'i1',
+      permissionMode: 'ask',
+      title: 'Only once',
+    );
+
+    expect(fake.starts, hasLength(1), reason: 'one intention, one session');
+    expect(retry.sessionId, started.sessionId);
+    expect(retry.replayed, isTrue);
+  });
+
+  test('a desktop that refuses a start says why, in its own words', () async {
+    fake
+      ..addWorkspace()
+      ..startError = const RemoteApiRefusal(
+        ErrorCode.badRequest,
+        'Antigravity takes no opening message on its command line',
+      );
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    await expectLater(
+      gateway.startSession(
+        requestId: 'k1',
+        repositoryId: 'r1',
+        installationId: 'i1',
+        permissionMode: 'ask',
+        message: 'go',
+      ),
+      throwsA(
+        isA<GatewayException>().having(
+          (e) => e.message,
+          'message',
+          contains('takes no opening message'),
+        ),
+      ),
+    );
+  });
+
+  test('a phone without the start grant is refused both verbs', () async {
+    fake.addWorkspace();
+    await startService();
+    final gateway = makeGateway();
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet(
+        CapabilitySet.all.bits & ~Capability.startSession.bit,
+      ),
+    );
+    await gateway.pairWithQr(session.payload.encode());
+    await session.done;
+    await awaitLink(gateway, CompanionLinkState.connected);
+
+    expect(gateway.capabilities.has(Capability.startSession), isFalse);
+    for (final refused in [
+      gateway.listWorkspace(),
+      gateway.startSession(
+        requestId: 'k1',
+        repositoryId: 'r1',
+        installationId: 'i1',
+        permissionMode: 'ask',
+      ),
+    ]) {
+      await expectLater(
+        refused,
+        throwsA(
+          isA<GatewayException>().having(
+            (e) => e.message,
+            'message',
+            contains('permission'),
+          ),
+        ),
+      );
+    }
+    expect(fake.starts, isEmpty);
   });
 
   test('a garbage QR payload is refused with a sentence and pairs '

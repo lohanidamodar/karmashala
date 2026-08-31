@@ -208,8 +208,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PairingDialog), findsOneWidget);
-    // All five capabilities offered, granted by default.
-    expect(find.byType(FilterChip), findsNWidgets(5));
+    // Every capability this build knows is offered, granted by default and
+    // untickable — including starting sessions, which is why the count is
+    // pinned to the enum rather than to a number.
+    expect(find.byType(FilterChip), findsNWidgets(Capability.values.length));
     for (final chip in tester.widgetList<FilterChip>(find.byType(FilterChip))) {
       expect(chip.selected, isTrue);
     }

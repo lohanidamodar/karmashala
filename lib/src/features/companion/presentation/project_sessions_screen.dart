@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_route.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
 import 'project_group.dart';
+import 'start_session_screen.dart';
 
 /// One project's sessions, under that project's own name.
 ///
@@ -109,6 +112,28 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
           canSwitch: canSwitch,
           onTap: canSwitch ? () => _switchProject(groups) : null,
         ),
+        actions: [
+          // Only when the desktop granted it: an action that can only ever be
+          // refused is worse than one that is not there.
+          if (ref
+              .watch(companionGatewayProvider)
+              .capabilities
+              .has(Capability.startSession))
+            IconButton(
+              icon: const Icon(AppIcons.plus),
+              tooltip: 'Start a session',
+              // The project this screen is already about, so the user is not
+              // asked a question they have answered by standing here.
+              onPressed: () => Navigator.of(context).push(
+                companionRoute<void>(
+                  context,
+                  (_) => StartSessionScreen(
+                    projectId: group?.projectId,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(

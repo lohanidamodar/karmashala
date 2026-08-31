@@ -40,6 +40,7 @@ import '../transport/remote_transport.dart';
 import '../transport/sealed_channel.dart';
 import 'host_bindings.dart';
 import 'host_session_api.dart';
+import 'session_start_ledger.dart';
 
 /// How many consecutive generations the host listens on per device. Covers a
 /// companion whose counter ran ahead (it bumps after pairing; the host adopts
@@ -560,6 +561,11 @@ class _DeviceRuntime {
   /// `Envelope.seq` always matches the sealed sequence.
   Future<void> _chain = Future<void>.value();
 
+  /// What this phone's `session.start` frames have already produced. Held here
+  /// rather than on the api because the retry it exists for arrives on a fresh
+  /// generation, and every generation gets a new api.
+  final SessionStartLedger _starts = SessionStartLedger();
+
   /// Runs [action] against the active api on the device's serial chain.
   Future<void> run(Future<void> Function(HostSessionApi api) action) {
     final result = _chain.then((_) async {
@@ -740,6 +746,7 @@ class _DeviceRuntime {
         device: device,
         bindings: service.bindings,
         onLog: service.onLog,
+        startLedger: _starts,
         // Read at announcement time, never captured: a relay toggled while
         // this link is up must be in the very next `host.status`.
         relays: () => service.announcedRelaysFor(device),

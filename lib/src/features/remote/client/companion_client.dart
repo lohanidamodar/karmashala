@@ -407,6 +407,45 @@ class CompanionClient {
     return pressed is String ? pressed : '';
   }
 
+  /// `workspace.list` — the projects, checkouts and installed agents a session
+  /// could be started in. A row this build cannot parse is dropped rather than
+  /// failing the whole listing.
+  Future<List<RemoteWorkspaceProject>> listWorkspace() async {
+    final payload = await _request(FrameType.workspaceList, const {});
+    final projects = payload['projects'];
+    return [
+      if (projects is List)
+        for (final entry in projects)
+          if (entry is Map<String, Object?>)
+            RemoteWorkspaceProject.fromJson(entry),
+    ];
+  }
+
+  /// `session.start`.
+  ///
+  /// [requestId] is the idempotency key. The SAME value must be resent for a
+  /// retry of the same intention — that is what makes a link that dropped
+  /// between the launch and the answer cost one session rather than two — and
+  /// a fresh one minted the moment the user changes what they are asking for.
+  Future<RemoteSessionStarted> startSession({
+    required String requestId,
+    required String repositoryId,
+    required String installationId,
+    required String permissionMode,
+    String? title,
+    String? message,
+  }) async {
+    final payload = await _request(FrameType.sessionStart, {
+      'requestId': requestId,
+      'repositoryId': repositoryId,
+      'installationId': installationId,
+      'permissionMode': permissionMode,
+      'title': ?title,
+      'message': ?message,
+    });
+    return RemoteSessionStarted.fromJson(payload);
+  }
+
   Future<void> registerNotifications({
     required String token,
     required String platform,

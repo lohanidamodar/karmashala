@@ -13,6 +13,7 @@ import '../domain/paired_device.dart';
 import '../domain/remote_payloads.dart';
 import '../protocol.dart';
 import 'host_bindings.dart';
+import 'session_start_ledger.dart';
 
 /// Seals and transmits one frame for the device this api serves. Supplied by
 /// the service, which owns the channel and the transport.
@@ -31,12 +32,18 @@ class HostSessionApi {
     this.onLog,
     this.relays,
     this.lanHint,
+    SessionStartLedger? startLedger,
     // ignore: prefer_initializing_formals — named `send` for callers.
-  }) : _send = send;
+  }) : _send = send,
+       _starts = startLedger ?? SessionStartLedger();
 
   final PairedDevice device;
   final RemoteHostBindings bindings;
   final RemoteSend _send;
+
+  /// What this device's `session.start` frames have already produced. Supplied
+  /// by the caller so it can outlive one connection — see [SessionStartLedger].
+  final SessionStartLedger _starts;
 
   /// Where this host can be met right now, read fresh at every announcement so
   /// a relay switched on mid-session is told to the phone at once. Null (and
@@ -169,6 +176,40 @@ class HostSessionApi {
           final platform = _requireString(envelope, 'platform');
           await bindings.registerPush(device.id, token, platform);
           await _result(envelope.id, const {});
+        case FrameType.workspaceList:
+          await _result(envelope.id, {
+            'projects': [
+              for (final project in bindings.listWorkspace()) project.toJson(),
+            ],
+          });
+        case FrameType.sessionStart:
+          // The idempotency key, first: a start that cannot be recognised on a
+          // second delivery is the one request this api must never take on
+          // faith. It is required rather than optional because no companion
+          // ever spoke this frame without one.
+          final key = _requireString(envelope, 'requestId');
+          if (key.length > kMaxSessionStartKeyLength) {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'requestId is too long',
+            );
+          }
+          final request = RemoteSessionStartRequest(
+            repositoryId: _requireString(envelope, 'repositoryId'),
+            installationId: _requireString(envelope, 'installationId'),
+            permissionMode: _requireString(envelope, 'permissionMode'),
+            title: _optionalString(envelope, 'title'),
+            message: _optionalString(envelope, 'message'),
+          );
+          final replayed = _starts.holds(key);
+          final started = await _starts.once(
+            key,
+            () => bindings.startSession(request),
+          );
+          await _result(envelope.id, {
+            ...started.toJson(),
+            if (replayed) 'replayed': true,
+          });
         // Host-only types cannot reach here: sentBy refused them above.
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:
@@ -277,6 +318,16 @@ class HostSessionApi {
       throw RemoteApiRefusal(ErrorCode.badRequest, 'missing $key');
     }
     return value;
+  }
+
+  /// A trimmed string field, or null when it is absent or says nothing. An
+  /// empty title is not a title, and an empty opening message is not one
+  /// either — both are "the user left it blank".
+  String? _optionalString(Envelope envelope, String key) {
+    final value = envelope.payload[key];
+    if (value is! String) return null;
+    final text = value.trim();
+    return text.isEmpty ? null : text;
   }
 
   String _requireSession(Envelope envelope) {

@@ -179,6 +179,8 @@ void main() {
         'prompt.send',
         'approval.answer',
         'notifications.register',
+        'workspace.list',
+        'session.start',
         'session.changed',
         'transcript.appended',
         'approval.requested',
@@ -198,6 +200,8 @@ void main() {
         FrameType.notificationsRegister.capability,
         Capability.receiveNotifications,
       );
+      expect(FrameType.workspaceList.capability, Capability.startSession);
+      expect(FrameType.sessionStart.capability, Capability.startSession);
     });
 
     test('host events need no capability and are host-sent', () {
@@ -250,6 +254,7 @@ void main() {
       expect(Capability.sendPrompt.bit, 4);
       expect(Capability.approve.bit, 8);
       expect(Capability.receiveNotifications.bit, 16);
+      expect(Capability.startSession.bit, 32);
       expect(
         Capability.values.map((c) => c.bit).toSet().length,
         Capability.values.length,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../explorer/presentation/project_card.dart';
+import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
 import 'companion_route.dart';
@@ -11,6 +12,7 @@ import 'companion_session_list.dart';
 import 'companion_states.dart';
 import 'project_group.dart';
 import 'project_sessions_screen.dart';
+import 'start_session_screen.dart';
 
 /// The phone's first tab: **the host's projects**, one per row, each opening
 /// its own sessions.
@@ -41,6 +43,33 @@ class SessionListScreen extends ConsumerWidget {
         ref.watch(companionPairingProvider).asData?.value?.hostName ??
         'your desktop';
 
+    // A Scaffold of its own so the tab can carry a floating action: the shell
+    // owns the app bar and the navigation, and this adds neither.
+    return Scaffold(
+      floatingActionButton:
+          ref
+              .watch(companionGatewayProvider)
+              .capabilities
+              .has(Capability.startSession)
+          ? FloatingActionButton.extended(
+              onPressed: () => Navigator.of(context).push(
+                companionRoute<void>(context, (_) => const StartSessionScreen()),
+              ),
+              icon: const Icon(AppIcons.plus),
+              label: const Text('New session'),
+            )
+          : null,
+      body: _body(context, ref, sessions, link, hostName),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<CompanionSessionSummary>> sessions,
+    CompanionLinkState? link,
+    String hostName,
+  ) {
     return companionAsync(
       sessions,
       loading: () => const CompanionSkeletonList(lines: 2),

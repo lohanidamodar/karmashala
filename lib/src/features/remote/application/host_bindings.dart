@@ -36,6 +36,8 @@ class RemoteHostBindings {
     required this.answerApproval,
     required this.approvalEvidenceFor,
     required this.registerPush,
+    required this.listWorkspace,
+    required this.startSession,
   });
 
   /// What `host.status` calls this desktop.
@@ -75,4 +77,27 @@ class RemoteHostBindings {
   /// Persists a push registration for [deviceId]. Delivery is Loop D.
   final Future<void> Function(String deviceId, String token, String platform)
   registerPush;
+
+  /// What could be started here: the desktop's projects, their checkouts, and
+  /// the agents actually installed where each checkout lives.
+  ///
+  /// Reported from the same DAOs the Explorer draws, so a checkout the desktop
+  /// does not hold is absent rather than guessed at from a session that
+  /// mentions it. Synchronous, like [listSessions], and for the same reason:
+  /// it must not start a process per repository.
+  final List<RemoteWorkspaceProject> Function() listWorkspace;
+
+  /// Starts a new session, through the one write path the desktop's own New
+  /// session dialog uses.
+  ///
+  /// Everything the launcher decides stays the launcher's: the permission
+  /// mode it stamps, the depth cap, the resume and fork guards, and the
+  /// refusal of an opening message an agent's CLI cannot take. Nothing here
+  /// re-implements any of it — this binding resolves the two ids, hands the
+  /// user's chosen mode over as the override, and turns whatever comes back
+  /// out into a [RemoteApiRefusal] the phone can read.
+  final Future<RemoteSessionStarted> Function(
+    RemoteSessionStartRequest request,
+  )
+  startSession;
 }
