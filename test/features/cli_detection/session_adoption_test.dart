@@ -81,7 +81,7 @@ DetectedSession detected(
   cli: cli,
   sessionId: sessionId,
   cwd: EnvironmentPath(environmentId: 'windows', path: path),
-  filePath: r'C:\store\' + sessionId + '.jsonl',
+  filePath: 'C:\\store\\$sessionId.jsonl',
   storeHome: r'C:\store',
   title: title,
   modifiedAt: modifiedAt,
