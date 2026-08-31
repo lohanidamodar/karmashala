@@ -101,6 +101,42 @@ void main() {
       expect(all.activeHostId?.value, hostA);
     });
 
+    test('a set that yields NO usable record still restores the mirrored '
+        'desktop', () async {
+      // Valid JSON, so the "corrupt set" path above never fires — but not one
+      // record survives parsing. Before this was fixed the phone came up
+      // unpaired with its active record sitting readable under the legacy
+      // key: paired on disk, forgotten in the app.
+      store.values[CompanionConnections.storeKey] = jsonEncode({
+        'active': hostA,
+        'records': [
+          {'hostId': 'not-a-host-id'},
+          {'nothing': 'useful'},
+        ],
+      });
+      store.values[CompanionPairing.storeKey] = jsonEncode(
+        record(hostA, name: 'Studio').toJson(),
+      );
+
+      final all = await CompanionConnections.load(store);
+
+      expect(all.records.single.hostId.value, hostA);
+      expect(all.active?.hostName, 'Studio');
+    });
+
+    test('an empty set with no mirror is still simply unpaired', () async {
+      // The other side of that coin: unpairing the last desktop writes an
+      // empty set and deletes the mirror, and must stay unpaired.
+      store.values[CompanionConnections.storeKey] = jsonEncode({
+        'records': <Object?>[],
+      });
+
+      final all = await CompanionConnections.load(store);
+
+      expect(all.records, isEmpty);
+      expect(all.active, isNull);
+    });
+
     test('one unreadable record does not sink the others', () async {
       store.values[CompanionConnections.storeKey] = jsonEncode({
         'active': hostB,

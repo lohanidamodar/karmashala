@@ -805,7 +805,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<void> _loadStoredPairing() async {
     // Migrates a pre-multi-host store transparently: the single record it
     // holds becomes the sole saved connection, active.
-    final all = await stored.CompanionConnections.load(store);
+    stored.CompanionConnections all;
+    try {
+      all = await stored.CompanionConnections.load(store);
+    } on Object catch (error) {
+      // Every public method awaits `_ready`, so a throw here would not merely
+      // leave the phone unpaired — it would leave it *unusable*, silently,
+      // for the rest of the launch. Start empty and say what happened.
+      onLog?.call('reading the saved pairings failed: $error');
+      all = stored.CompanionConnections();
+    }
     if (_closed) return;
     _all = all;
     final record = all.active;

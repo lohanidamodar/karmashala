@@ -287,7 +287,12 @@ class CompanionConnections {
     final raw = await store.read(storeKey);
     if (raw != null) {
       final parsed = _tryParse(raw);
-      if (parsed != null) return parsed;
+      // A set that produced records is the whole truth. A set that produced
+      // NONE — every record unreadable, or a half-written `{"records":[]}` —
+      // knows nothing the mirror does not, so the mirror still gets its say.
+      // Silently unpairing a phone whose active record is sitting readable
+      // under the legacy key is the worst outcome available here.
+      if (parsed != null && parsed.records.isNotEmpty) return parsed;
     }
     // No (readable) set: a first run, or a store the pre-multi-host build
     // wrote. The single record, if any, is the whole set.
