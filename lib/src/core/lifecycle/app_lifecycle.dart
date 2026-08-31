@@ -6,6 +6,7 @@ import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/remote/application/remote_access_controller.dart';
+import '../../features/remote/relay_local/local_relay_providers.dart';
 import '../../features/sessions/application/session_engine_provider.dart';
 import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
@@ -29,7 +30,7 @@ import '../logging/app_logger.dart';
 /// took the handshake deletion with it — the single step this owner exists for.
 /// Each step gets its own slice instead, so a hang costs that step and nothing
 /// else. [kShutdownStepBudgets] is that sum, itemised.
-const kShutdownBudget = Duration(milliseconds: 2450);
+const kShutdownBudget = Duration(milliseconds: 2550);
 
 /// What one shutdown step gets before it is abandoned.
 const _kStepBudget = Duration(milliseconds: 100);
@@ -61,6 +62,7 @@ const kShutdownStepBudgets = <String, Duration>{
   'agent hook uninstall': _kHookStepBudget,
   'background watchers': _kStepBudget,
   'remote access': _kStepBudget,
+  'local relay': _kStepBudget,
   'control server': _kStepBudget,
   'system integration': _kStepBudget,
   'terminal processes': _kTerminalStepBudget,
@@ -258,6 +260,15 @@ class AppLifecycle {
     await _step('remote access', watch, () async {
       if (_container.exists(remoteAccessControllerProvider)) {
         await _container.read(remoteAccessControllerProvider).shutdown();
+      }
+    });
+
+    // 2d. The embedded local relay (Loop 77), after the host service above
+    //     stopped dialling it: close the listening socket so the port is
+    //     free the moment the app is gone.
+    await _step('local relay', watch, () async {
+      if (_container.exists(localRelayServiceProvider)) {
+        await _container.read(localRelayServiceProvider).stop();
       }
     });
 

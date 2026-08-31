@@ -9,6 +9,10 @@ environment:
 dependencies:
   chitragupta_local_ipc:
     path: packages/local_ipc
+  # The relay server itself, embedded in the desktop app so "This computer
+  # (local network)" needs nothing hosted; also started in-process by tests.
+  chitragupta_relay:
+    path: packages/relay
   # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
   cryptography: ^2.9.0
   dartssh2: ^3.3.1
@@ -64,9 +68,6 @@ dependency_overrides:
     path: packages/flutter_secure_storage_windows_stub
 
 dev_dependencies:
-  # The relay server, started in-process by the transport conformance tests.
-  chitragupta_relay:
-    path: packages/relay
   flutter_test:
     sdk: flutter
   integration_test:

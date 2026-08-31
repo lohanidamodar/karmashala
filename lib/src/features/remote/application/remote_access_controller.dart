@@ -16,9 +16,12 @@ import '../../notifications/domain/inbox_item.dart';
 import '../../notifications/domain/session_attention.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/domain/relay_mode.dart';
+import '../../settings/domain/settings.dart';
 import '../domain/paired_device.dart';
 import '../pairing/host_pairing.dart';
 import '../protocol.dart';
+import '../relay_local/local_relay_providers.dart';
 import 'remote_bindings.dart';
 import 'remote_host_service.dart';
 import 'remote_providers.dart';
@@ -67,11 +70,12 @@ class RemoteAccessController {
 
   Future<void> _sync() async {
     final settings = _ref.read(settingsControllerProvider);
-    final relay = resolveRelayUri(settings.remoteRelayUrl);
     if (!settings.remoteAccessEnabled) {
       await _stopService();
+      await _stopLocalRelay();
       return;
     }
+    final relay = await _resolveRelay(settings);
     if (_service != null && _service!.relay == relay) return;
     await _stopService();
     final service =
@@ -93,6 +97,25 @@ class RemoteAccessController {
     _service = null;
     if (service != null) await service.stop();
   }
+
+  /// Local mode brings the embedded relay up first — its LAN URL is what the
+  /// QR and every phone must dial, so the host dials the same one. Hosted
+  /// mode stops it and uses the configured URL.
+  Future<Uri> _resolveRelay(Settings settings) async {
+    if (settings.remoteRelayMode != RelayMode.local) {
+      await _stopLocalRelay();
+      return resolveRelayUri(settings.remoteRelayUrl);
+    }
+    final localRelay = _ref.read(localRelayServiceProvider);
+    await localRelay.ensureRunning(settings.localRelayPort);
+    // No LAN address (or the bind failed, which the status row explains):
+    // loopback keeps the host consistent until the next sync retries.
+    return localRelay.status.primaryUrl ??
+        Uri(scheme: 'ws', host: '127.0.0.1', port: settings.localRelayPort);
+  }
+
+  Future<void> _stopLocalRelay() =>
+      _ref.read(localRelayServiceProvider).stop();
 
   /// Shows a new pairing code. Throws [StateError] while remote access is
   /// off — the dialog says so instead of pretending.

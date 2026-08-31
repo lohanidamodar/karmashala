@@ -1,5 +1,6 @@
 import 'app_theme_mode.dart';
 import 'permission_mode.dart';
+import 'relay_mode.dart';
 
 /// Per-agent permission preferences for new vs. existing sessions.
 class AgentPermissions {
@@ -76,6 +77,8 @@ class Settings {
     this.terminalThemeSource,
     this.remoteAccessEnabled = false,
     this.remoteRelayUrl,
+    this.remoteRelayMode = RelayMode.hosted,
+    this.localRelayPort = 8787,
   });
 
   /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
@@ -186,6 +189,14 @@ class Settings {
   /// text so this domain stays free of the remote feature.
   final String? remoteRelayUrl;
 
+  /// Whether remote access runs through the embedded local relay or a hosted
+  /// one. Hosted by default, matching what existed before the choice did.
+  final RelayMode remoteRelayMode;
+
+  /// The port the embedded local relay binds. The default matches the relay
+  /// package's own (pinned by a test there, so the two cannot drift).
+  final int localRelayPort;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   bool isSessionPinned(String sessionId) =>
@@ -224,6 +235,8 @@ class Settings {
     bool? remoteAccessEnabled,
     String? remoteRelayUrl,
     bool clearRemoteRelayUrl = false,
+    RelayMode? remoteRelayMode,
+    int? localRelayPort,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -263,6 +276,8 @@ class Settings {
     remoteRelayUrl: clearRemoteRelayUrl
         ? null
         : (remoteRelayUrl ?? this.remoteRelayUrl),
+    remoteRelayMode: remoteRelayMode ?? this.remoteRelayMode,
+    localRelayPort: localRelayPort ?? this.localRelayPort,
   );
 
   Settings withPermissions(String agentId, AgentPermissions value) =>
@@ -298,6 +313,8 @@ class Settings {
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
     'remoteAccessEnabled': remoteAccessEnabled,
     if (remoteRelayUrl != null) 'remoteRelayUrl': remoteRelayUrl,
+    'remoteRelayMode': remoteRelayMode.name,
+    'localRelayPort': localRelayPort,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
@@ -383,6 +400,13 @@ class Settings {
       remoteRelayUrl: json['remoteRelayUrl'] is String
           ? json['remoteRelayUrl'] as String
           : null,
+      remoteRelayMode: RelayMode.values.firstWhere(
+        (m) => m.name == json['remoteRelayMode'],
+        orElse: () => RelayMode.hosted,
+      ),
+      localRelayPort: json['localRelayPort'] is int
+          ? json['localRelayPort'] as int
+          : 8787,
     );
   }
 
@@ -412,6 +436,8 @@ class Settings {
       other.terminalThemeSource == terminalThemeSource &&
       other.remoteAccessEnabled == remoteAccessEnabled &&
       other.remoteRelayUrl == remoteRelayUrl &&
+      other.remoteRelayMode == remoteRelayMode &&
+      other.localRelayPort == localRelayPort &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -443,6 +469,8 @@ class Settings {
       terminalThemeSource,
       remoteAccessEnabled,
       remoteRelayUrl,
+      remoteRelayMode,
+      localRelayPort,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
