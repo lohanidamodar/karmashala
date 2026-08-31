@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 
+import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import 'companion_gateway.dart';
 
@@ -490,6 +491,85 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionApproval?> pendingApproval(String sessionId) =>
       _approvalOf(sessionId).stream;
+
+  /// What `workspace.list` answers with. Settable so a test can script a
+  /// desktop with several projects, or with none.
+  List<RemoteWorkspaceProject> workspace = const [];
+
+  /// Every start the UI asked for, in order — including the retries, so a test
+  /// can see the idempotency key the screen actually resent.
+  final startedSessions =
+      <
+        ({
+          String requestId,
+          String repositoryId,
+          String installationId,
+          String permissionMode,
+          String? title,
+          String? message,
+        })
+      >[];
+
+  /// When set, every start throws it instead of answering.
+  GatewayException? startFailure;
+
+  /// The sessions this fake has already handed back, by idempotency key — the
+  /// host's ledger, so a scripted retry behaves the way the real one does.
+  final Map<String, RemoteSessionStarted> _startsByKey = {};
+
+  @override
+  Future<List<RemoteWorkspaceProject>> listWorkspace() async {
+    _requireLink();
+    return List.unmodifiable(workspace);
+  }
+
+  @override
+  Future<RemoteSessionStarted> startSession({
+    required String requestId,
+    required String repositoryId,
+    required String installationId,
+    required String permissionMode,
+    String? title,
+    String? message,
+  }) async {
+    _requireLink();
+    startedSessions.add((
+      requestId: requestId,
+      repositoryId: repositoryId,
+      installationId: installationId,
+      permissionMode: permissionMode,
+      title: title,
+      message: message,
+    ));
+    final failure = startFailure;
+    if (failure != null) throw failure;
+    final remembered = _startsByKey[requestId];
+    if (remembered != null) {
+      return RemoteSessionStarted(
+        sessionId: remembered.sessionId,
+        title: remembered.title,
+        permissionMode: remembered.permissionMode,
+        replayed: true,
+      );
+    }
+    final started = RemoteSessionStarted(
+      sessionId: 'started-${_startsByKey.length + 1}',
+      title: title ?? 'Session',
+      permissionMode: permissionMode,
+    );
+    _startsByKey[requestId] = started;
+    setSessions([
+      ..._sessions.value,
+      CompanionSessionSummary(
+        id: started.sessionId,
+        title: started.title,
+        agentLabel: 'Agent  ·  running',
+        projectName: 'Demo',
+        status: CompanionSessionStatus.working,
+      ),
+    ]);
+    return started;
+  }
 
   @override
   Future<void> sendPrompt(String sessionId, String text) async {

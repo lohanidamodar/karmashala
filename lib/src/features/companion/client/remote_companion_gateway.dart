@@ -918,6 +918,41 @@ class RemoteCompanionGateway implements CompanionGateway {
       _approvalOf(sessionId).stream;
 
   @override
+  Future<List<RemoteWorkspaceProject>> listWorkspace() async {
+    await _ready;
+    final client = _requireClient();
+    return _mapRefusals(client.listWorkspace);
+  }
+
+  @override
+  Future<RemoteSessionStarted> startSession({
+    required String requestId,
+    required String repositoryId,
+    required String installationId,
+    required String permissionMode,
+    String? title,
+    String? message,
+  }) async {
+    await _ready;
+    final client = _requireClient();
+    final started = await _mapRefusals(
+      () => client.startSession(
+        requestId: requestId,
+        repositoryId: repositoryId,
+        installationId: installationId,
+        permissionMode: permissionMode,
+        title: title,
+        message: message,
+      ),
+    );
+    // Relist before answering, so the screen the caller pushes next finds the
+    // new session's row and its transcript subscription already there rather
+    // than waiting out a poll on an empty view.
+    await _refreshSessionsNow();
+    return started;
+  }
+
+  @override
   Future<void> sendPrompt(String sessionId, String text) async {
     await _ready;
     final client = _requireClient();

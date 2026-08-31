@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import 'fake_companion_gateway.dart';
 
@@ -464,6 +465,30 @@ abstract interface class CompanionGateway {
 
   /// The pending approval for one session, or null when nothing is waiting.
   Stream<CompanionApproval?> pendingApproval(String sessionId);
+
+  /// `workspace.list` — the desktop's projects, their checkouts and the agents
+  /// installed where each checkout lives.
+  ///
+  /// The host's own payload type, not a second vocabulary: unlike a session
+  /// row there is nothing here for the phone to re-word — the desktop already
+  /// wrote every label and every sentence, including what a permission mode
+  /// does to a given agent.
+  Future<List<RemoteWorkspaceProject>> listWorkspace();
+
+  /// `session.start` — starts a new session and answers with it.
+  ///
+  /// [requestId] is the phone's idempotency key: resend the SAME value to
+  /// retry a request whose answer never arrived, and mint a fresh one the
+  /// moment the user changes what they are asking for. [permissionMode] is
+  /// the mode the **user** picked from what [listWorkspace] offered.
+  Future<RemoteSessionStarted> startSession({
+    required String requestId,
+    required String repositoryId,
+    required String installationId,
+    required String permissionMode,
+    String? title,
+    String? message,
+  });
 
   /// `prompt.send`.
   Future<void> sendPrompt(String sessionId, String text);
