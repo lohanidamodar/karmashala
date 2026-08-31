@@ -1282,8 +1282,14 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// rendezvous. Neither is a network failure, and telling someone to check
   /// their wifi when their desktop is simply closed wastes their afternoon.
   String? _troubleFor([Object? error]) {
-    if (error is RemoteApiException && error.hostAbsent) {
-      return _kHostAbsentTrouble;
+    if (error is RemoteApiException) {
+      // "The relay would not take the socket" and "nobody was at the
+      // rendezvous" are different facts and deserve different sentences: one
+      // is about the meeting place, the other about the desktop. Telling
+      // someone to go and check a desktop that is awake is as useless as
+      // telling them to check a network that works.
+      if (error.relayUnreachable) return _kRelayUnreachableTrouble;
+      if (error.hostAbsent) return _kHostAbsentTrouble;
     }
     final transport = _dialled;
     if (transport is RelayTransport &&
@@ -1299,6 +1305,12 @@ class RemoteCompanionGateway implements CompanionGateway {
   static const String _kHostAbsentTrouble =
       'Your desktop is not answering on this relay — check that Chitragupta '
       'is running, and that it is set to the same relay.';
+
+  /// And what "the meeting place itself would not answer" reads like. Never
+  /// about the desktop: nothing here has learned anything about it yet.
+  static const String _kRelayUnreachableTrouble =
+      'This phone could not reach the relay your desktop uses. On mobile data '
+      'that usually means the desktop is only reachable on its own network.';
 
   void _noteTrouble(String? trouble) {
     if (_trouble == trouble) return;
