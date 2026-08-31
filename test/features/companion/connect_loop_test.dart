@@ -21,6 +21,7 @@ import 'package:chitragupta/src/features/remote/client/companion_store.dart'
     as stored;
 import 'package:chitragupta/src/features/remote/client/lan_path.dart';
 import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
+import 'package:chitragupta/src/features/remote/pairing/pairing_code.dart';
 import 'package:chitragupta/src/features/remote/protocol.dart';
 import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
 import 'package:chitragupta_relay/chitragupta_relay.dart';
@@ -37,11 +38,25 @@ class SlowStore implements stored.CompanionStore {
   final Map<String, String> disk;
   Duration writeCost = Duration.zero;
 
+  /// Held open, every write waits here. The keystore call the connect loop
+  /// makes from INSIDE its dial — persisting the generation counter — is the
+  /// one window in which a link can be torn down under a `connect()` that has
+  /// already been answered, so a test needs to be able to stand in it.
+  Completer<void>? gate;
+
+  /// How many writes the gate has held.
+  int gated = 0;
+
   @override
   Future<String?> read(String key) async => disk[key];
 
   @override
   Future<void> write(String key, String value) async {
+    final waiting = gate;
+    if (waiting != null) {
+      gated++;
+      await waiting.future;
+    }
     if (writeCost > Duration.zero) await Future<void>.delayed(writeCost);
     disk[key] = value;
   }
@@ -83,6 +98,9 @@ void main() {
 
   tearDown(() async {
     store.writeCost = Duration.zero;
+    // A held gate would deadlock the shutdown as surely as it holds the dial.
+    if (store.gate?.isCompleted == false) store.gate!.complete();
+    store.gate = null;
     for (final gateway in gateways.reversed.toList()) {
       await gateway.close();
     }
@@ -113,11 +131,15 @@ void main() {
     return started;
   }
 
-  RemoteCompanionGateway makeGateway({LanPathScout? scout}) {
+  RemoteCompanionGateway makeGateway({
+    LanPathScout? scout,
+    Duration pairingTimeout = const Duration(seconds: 20),
+  }) {
     final gateway = RemoteCompanionGateway(
       store: store,
       deviceName: 'Test phone',
       lan: scout,
+      pairingTimeout: pairingTimeout,
       relayFactory: (relay, rendezvous) {
         final transport = RelayTransport(
           endpoint: RelayTransport.endpointFor(relay, rendezvous),
@@ -142,6 +164,20 @@ void main() {
   }) => gateway.linkStates
       .firstWhere((state) => state == wanted)
       .timeout(timeout);
+
+  /// Polls until [check] holds, so a test can wait on a fact rather than on a
+  /// stream that seeds its current value and would answer instantly.
+  Future<void> until(
+    bool Function() check, {
+    Duration timeout = const Duration(seconds: 20),
+    required String reason,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (!check()) {
+      if (DateTime.now().isAfter(deadline)) fail('never happened: $reason');
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
 
   Future<RemoteCompanionGateway> pairedPhone({LanPathScout? scout}) async {
     final gateway = makeGateway(scout: scout);
@@ -206,4 +242,55 @@ void main() {
     expect((await gateway.listSessions()).single.id, 's1');
   });
 
+  test('a dial answered after its link was torn down is dropped, not adopted',
+      timeout: const Timeout(Duration(minutes: 3)), () async {
+    await startService();
+    // Pair, then let that gateway go: the record it leaves on the phone's
+    // disk is what the next one wakes up dialling, which is where the window
+    // this test stands in opens.
+    final first = await pairedPhone();
+    await first.close();
+
+    // Every keystore write now blocks. The first one a fresh gateway makes is
+    // the generation counter its dial persists AFTER the host has answered
+    // the hello — the one stretch of a dial that cannot be cancelled.
+    store.gate = Completer<void>();
+    final gateway = makeGateway(pairingTimeout: const Duration(seconds: 2));
+    await until(
+      () => store.gated > 0,
+      reason: 'the dial reaches the keystore write inside connect()',
+    );
+
+    // A typed code nobody is serving. It decodes, so the gateway drops the
+    // link it is holding before it goes looking — and that teardown lands
+    // under the dial that is still in flight.
+    final pairing = expectLater(
+      gateway.pairWithCode(PairingCode.encode(List<int>.generate(20, (i) => i))),
+      throwsA(isA<PairingException>()),
+    );
+    await until(
+      () => gateway.link == CompanionLinkState.disconnected,
+      reason: 'the pairing attempt tears the old link down first',
+    );
+
+    // Now let the dial finish. Nothing owns the client it answers with.
+    store.gate!.complete();
+    store.gate = null;
+    await pairing;
+
+    // Whatever the loop does next, "connected" has to mean a desktop this
+    // phone can actually ask for something. Adopting the orphaned client
+    // parks the loop on a completer nothing can fire, with `connected` on
+    // screen and no client behind it.
+    await awaitLink(
+      gateway,
+      CompanionLinkState.connected,
+      timeout: const Duration(seconds: 20),
+    );
+    expect(
+      (await gateway.listSessions()).single.id,
+      's1',
+      reason: 'a link that says connected must have a client behind it',
+    );
+  });
 }

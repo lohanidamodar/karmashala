@@ -31,6 +31,18 @@ const String _kNotPaired = 'This phone is not paired with a host.';
 const String _kUnreachable =
     'The host is unreachable right now, so nothing was sent.';
 
+/// How long a beacon host that refused a direct dial is left alone by the LAN
+/// *upgrade* — the one that spends a working link on the attempt.
+///
+/// Much longer than [kLanRetryCooldown] on purpose. The scout's two-minute
+/// grudge is about dialling, which costs one attempt timeout and only ever
+/// happens with the link already down; this one is about tearing a link that
+/// works down to try again, which is what the owner reported as "connection
+/// is not stable". But "never again" is not the answer either: whatever made
+/// the dial fail is a thing that gets fixed, and a phone that has to be
+/// force-quit to use its own LAN is not a phone that works.
+const Duration kLanUpgradeRefusalTtl = Duration(minutes: 30);
+
 /// A current value plus its changes. Streams emit the value on listen, then
 /// every set — the seeding the gateway contract asks for.
 class _Watched<T> {
@@ -229,15 +241,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   int _reproveAttempt = 0;
 
   /// The plainest true sentence about why the link is down, when there is one
-  /// worth adding to the banner's own words.
-  String? _trouble;
+  /// worth adding to the banner's own words. Watched, because it changes
+  /// without the link state changing with it.
+  final _trouble = _Watched<String?>(null);
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
   /// Runs while a dropped transport is being given its chance to come back.
   Timer? _healTimer;
 
-  /// Beacon hosts whose direct dial has failed since this phone last held a
-  /// LAN link, by [LanPathScout.keyOf].
+  /// Beacon hosts whose direct dial has failed, by [LanPathScout.keyOf], with
+  /// when — read only by the beacon's *upgrade*, never by the dial path.
   ///
   /// The beacon repeats every two seconds and the scout's grudge lasts two
   /// minutes, so a desktop that is audible but not dialable — a firewall on
@@ -245,7 +258,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// working relay link every two minutes, for ever. Trying once is right;
   /// trying again on a schedule, and paying for it with the link that works,
   /// is not.
-  final _lanUpgradeRefused = <String>{};
+  final _lanUpgradeRefused = <String, DateTime>{};
 
   // ---------------------------------------------------------------- pairing
 
@@ -260,7 +273,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   String? get linkTrouble =>
-      _link.value == CompanionLinkState.connected ? null : _trouble;
+      _link.value == CompanionLinkState.connected ? null : _trouble.value;
+
+  @override
+  Stream<String?> get linkTroubleStates => _trouble.stream;
 
   @override
   Stream<CompanionLinkState> get linkStates => _link.stream;
@@ -410,10 +426,18 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   Future<void> setPairingRelay(Uri? url) async {
-    if (url == null) {
-      await store.delete(kPairingRelayStoreKey);
-    } else {
-      await store.write(kPairingRelayStoreKey, url.toString());
+    try {
+      if (url == null) {
+        await store.delete(kPairingRelayStoreKey);
+      } else {
+        await store.write(kPairingRelayStoreKey, url.toString());
+      }
+    } on Object catch (error) {
+      onLog?.call('saving the pairing relay failed: $error');
+      throw const GatewayException(
+        "This phone could not save that relay to its secure storage, so the "
+        'setting is unchanged. Try again.',
+      );
     }
   }
 
@@ -457,12 +481,25 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Pairing a host this phone already holds replaces that record alone; the
   /// pairing client has already written it, so this re-reads the set.
   Future<CompanionPairing> _adoptPairing(stored.CompanionPairing record) async {
-    _all = await stored.CompanionConnections.mutate(store, (all) {
-      all
-        ..upsert(record)
-        ..activeHostId = record.hostId;
-      return all;
-    });
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        all
+          ..upsert(record)
+          ..activeHostId = record.hostId;
+        return all;
+      });
+    } on Object catch (error) {
+      // The desktop confirmed and the pairing client wrote its record; what
+      // failed is making it the active one. Escaping from here would be an
+      // unhandled async error with the progress stream still saying "proving".
+      onLog?.call('adopting the new pairing failed: $error');
+      const failure = PairingException(
+        'Your desktop confirmed the pairing, but this phone could not save '
+        'it to its secure storage. Try again.',
+      );
+      _emitPairing(CompanionPairingStage.failed, message: failure.message);
+      throw failure;
+    }
     _record = _all.active ?? record;
     final public = _publicPairing(_record!);
     _pairing.value = public;
@@ -505,10 +542,23 @@ class RemoteCompanionGateway implements CompanionGateway {
         'That desktop is no longer saved on this phone.',
       );
     }
-    _all = await stored.CompanionConnections.mutate(store, (all) {
-      if (all.byHost(hostId) != null) all.activeHostId = all.byHost(hostId)!.hostId;
-      return all;
-    });
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        if (all.byHost(hostId) != null) {
+          all.activeHostId = all.byHost(hostId)!.hostId;
+        }
+        return all;
+      });
+    } on Object catch (error) {
+      // The keystore can refuse, and since it gained a deadline it can also
+      // give up: an escaping `TimeoutException` is an unhandled async error
+      // that leaves the tap looking like it did nothing at all.
+      onLog?.call('switchTo failed: $error');
+      throw const GatewayException(
+        "This phone could not record which desktop to use, so it stayed on "
+        'the one it was on. Try again.',
+      );
+    }
     await _becomeActive(_all.active ?? target);
   }
 
@@ -563,6 +613,8 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   /// Everything the gateway holds that belongs to ONE host.
   void _resetHostState() {
+    // A verdict about reaching THAT desktop says nothing about this one.
+    _lanUpgradeRefused.clear();
     _sessions = null;
     _hostOrder.clear();
     if (!_sessionChanges.isClosed) _sessionChanges.add(const []);
@@ -1011,9 +1063,25 @@ class RemoteCompanionGateway implements CompanionGateway {
       return;
     }
     if (scout.inCooldown(host)) return;
-    if (_lanUpgradeRefused.contains(scout.keyOf(host))) return;
+    if (_lanUpgradeIsRefused(scout.keyOf(host))) return;
     onLog?.call('beacon sighted; switching the link to the LAN');
     _declareDead();
+  }
+
+  /// Whether the beacon's offer to upgrade to [key] is still refused.
+  ///
+  /// The refusal expires, because the verdict behind it does not last: a
+  /// firewall rule gets fixed, a desktop restarts with its LAN listener up,
+  /// and the key is an `address:port` that does not even survive the
+  /// desktop's next DHCP lease — so keys from every network the phone has
+  /// ever been on pile up in here. One blip used to pin a phone to the relay
+  /// until it was force-quit, which on Android can be days.
+  bool _lanUpgradeIsRefused(String key) {
+    final refusedAt = _lanUpgradeRefused[key];
+    if (refusedAt == null) return false;
+    if (_now().difference(refusedAt) < kLanUpgradeRefusalTtl) return true;
+    _lanUpgradeRefused.remove(key);
+    return false;
   }
 
   Future<void> _connectLoop() async {
@@ -1023,7 +1091,18 @@ class RemoteCompanionGateway implements CompanionGateway {
         _dialOvertaken = false;
         _link.value = CompanionLinkState.connecting;
         final client = await _dialAnyPath();
-        if (client != null && !_closed && _record != null) {
+        // A pass may adopt only the client it still OWNS. `_teardownClient`
+        // nulls `_client` the instant a pairing, a switch or an unpair picks
+        // a different desktop, and `CompanionClient.close()` cannot cancel a
+        // `connect()` that is already past the host's answer — so a dial can
+        // come back to a link that is nobody's any more. Adopting it would
+        // throw away the death that teardown raised, put the OLD host back in
+        // `_record`, bind a transport listener to nothing, declare `connected`
+        // and park on a completer nothing can ever fire: the phone reads
+        // "connected" with no client behind it, and every request fails.
+        if (client != null && !identical(_client, client)) {
+          await _closeStrayClient(client);
+        } else if (client != null && !_closed && _record != null) {
           // The window opens here: from now until the completer exists, a
           // death has nowhere to land, so it is remembered instead. Anything
           // raised while merely DIALLING is news about a link that was
@@ -1184,7 +1263,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // host, or a stale advert. Cool it down and let the relay carry on.
       onLog?.call('lan attempt failed: $error');
       scout.noteFailure(host);
-      _lanUpgradeRefused.add(scout.keyOf(host));
+      _lanUpgradeRefused[scout.keyOf(host)] = _now();
       await _teardownClient();
       return null;
     }
@@ -1211,7 +1290,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       await _noteRelayOutcome(url, ok: false);
       // Keep the last thing actually learned rather than replacing a real
       // reason with silence: the next candidate's transport has no story yet.
-      _noteTrouble(trouble ?? _trouble);
+      _noteTrouble(trouble ?? _trouble.value);
       return null;
     }
   }
@@ -1406,11 +1485,13 @@ class RemoteCompanionGateway implements CompanionGateway {
       'that usually means the desktop is only reachable on its own network.';
 
   void _noteTrouble(String? trouble) {
-    if (_trouble == trouble) return;
-    _trouble = trouble;
-    // The banner reads this when the link state changes, which it is about
-    // to; nudging the same value through keeps the two in step.
-    _link.value = _link.value;
+    if (_trouble.value == trouble) return;
+    // Said on its own stream, because it is learned on its own. A dial that
+    // failed while the phone was already `connecting` changes no link state,
+    // and re-emitting an unchanged one rebuilds nothing — so the first pass
+    // after launch used to show a bare "Connecting to your desktop…" with the
+    // reason already sitting in this field.
+    _trouble.value = trouble;
   }
 
   /// A transport that dropped redials its OWN endpoint forever, and that
@@ -1460,6 +1541,18 @@ class RemoteCompanionGateway implements CompanionGateway {
       } on Object catch (error) {
         onLog?.call('transcript recover for ${entry.key} failed: $error');
       }
+    }
+  }
+
+  /// Disposes of a client whose link was torn down while it was still
+  /// dialling. Nothing else holds it, and a socket left open at a rendezvous
+  /// keeps the relay believing this phone is still there.
+  Future<void> _closeStrayClient(CompanionClient client) async {
+    onLog?.call('a dial answered after its link was torn down; dropping it');
+    try {
+      await client.close();
+    } on Object catch (error) {
+      onLog?.call('stray client close failed: $error');
     }
   }
 

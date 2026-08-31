@@ -15,6 +15,15 @@ final companionLinkProvider = StreamProvider<CompanionLinkState>(
   (ref) => ref.watch(companionGatewayProvider).linkStates,
 );
 
+/// Why the link is not up, when the gateway has learned anything more exact
+/// than "connecting". Its own provider on purpose: the reason is learned by a
+/// dial that failed while the phone was already `connecting`, so there is no
+/// link-state change under it, and a surface that only re-reads the getter on
+/// rebuild shows a bare "Connecting…" for the whole first pass.
+final companionLinkTroubleProvider = StreamProvider<String?>(
+  (ref) => ref.watch(companionGatewayProvider).linkTroubleStates,
+);
+
 /// Every desktop this phone has paired with, one of them active.
 final companionConnectionsProvider =
     StreamProvider<List<CompanionConnection>>(
@@ -50,6 +59,11 @@ class CompanionSwitcher extends Notifier<String?> {
       await action();
     } on GatewayException catch (error) {
       lastError = error.message;
+    } on Object {
+      // Nothing may escape into an unhandled async error: the surfaces that
+      // offer these verbs show `lastError` and nothing else, so a refusal
+      // that gets past here is a tap that visibly did nothing.
+      lastError = 'That could not be done just now. Try again.';
     } finally {
       state = null;
     }

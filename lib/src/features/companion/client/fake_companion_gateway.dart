@@ -206,9 +206,18 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
 
-  /// Settable, so a screen test can drive the banner's honest-reason line.
+  /// Settable, so a screen test can drive the banner's honest-reason line —
+  /// and watched, because on a real phone the reason arrives on its own, with
+  /// no link-state change under it for a surface to rebuild on.
   @override
-  String? linkTrouble;
+  String? get linkTrouble => _trouble.value;
+
+  set linkTrouble(String? trouble) => _trouble.value = trouble;
+
+  @override
+  Stream<String?> get linkTroubleStates => _trouble.stream;
+
+  final _trouble = _Watched<String?>(null);
 
   /// The fake has no relay of its own; the screens that read this simply
   /// render the path without naming one.

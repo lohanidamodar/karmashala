@@ -4,6 +4,8 @@
 /// proven on the wire rather than against a script.
 library;
 
+import 'dart:async';
+
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/remote_companion_gateway.dart';
@@ -41,6 +43,15 @@ void main() {
   late Uri relayUri;
   late Map<String, String> phoneDisk;
   late SecureCompanionStore store;
+  /// Set, every keystore write hangs — which is how a real one fails when it
+  /// fails worst. [SecureCompanionStore] turns that into a `TimeoutException`
+  /// rather than holding the mutation chain open for the life of the process.
+  var writesHang = false;
+
+  /// Set to a host id, the write that makes a freshly paired desktop the
+  /// ACTIVE one hangs. That mirror write is the one keystore call in a
+  /// pairing that belongs to the gateway rather than to the pairing client.
+  String? hangOnActiveHost;
   final hosts = <_Host>[];
   final gateways = <RemoteCompanionGateway>[];
 
@@ -52,14 +63,31 @@ void main() {
     phoneDisk = {
       RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
     };
+    writesHang = false;
+    hangOnActiveHost = null;
     store = SecureCompanionStore.withBackend(
       read: (key) async => phoneDisk[key],
-      write: (key, value) async => phoneDisk[key] = value,
-      delete: (key) async => phoneDisk.remove(key),
+      write: (key, value) async {
+        final active = hangOnActiveHost;
+        if (writesHang ||
+            (active != null &&
+                key == stored.CompanionPairing.storeKey &&
+                value.contains(active))) {
+          await Completer<void>().future;
+        }
+        phoneDisk[key] = value;
+      },
+      delete: (key) async {
+        if (writesHang) await Completer<void>().future;
+        phoneDisk.remove(key);
+      },
+      timeout: const Duration(milliseconds: 200),
     );
   });
 
   tearDown(() async {
+    writesHang = false;
+    hangOnActiveHost = null;
     for (final gateway in gateways.reversed.toList()) {
       await gateway.close();
     }
@@ -323,6 +351,82 @@ void main() {
     expect(gateway.connections.single.active, isTrue);
     await awaitLink(gateway, CompanionLinkState.connected);
     expect((await gateway.listSessions()).single.id, 's-studio');
+  });
+
+  test('a keystore that stops answering refuses the switch in words, and '
+      'leaves the link it has alone', () async {
+    final studio = await startHost(
+      hostId: idA,
+      sessionId: 's-studio',
+      title: 'Studio work',
+    );
+    final laptop = await startHost(
+      hostId: idB,
+      sessionId: 's-laptop',
+      title: 'Laptop work',
+    );
+    final gateway = makeGateway();
+    await pairWith(gateway, studio);
+    await pairWith(gateway, laptop);
+
+    // Nothing the phone writes lands from here. The switch cannot happen —
+    // but it has to SAY so: a refusal that escapes as an unhandled async
+    // error is a tap that did nothing, with no message anywhere.
+    writesHang = true;
+    await expectLater(
+      gateway.switchTo(idA),
+      throwsA(
+        isA<GatewayException>().having(
+          (e) => e.message,
+          'message',
+          contains('Try again'),
+        ),
+      ),
+    );
+    await expectLater(
+      gateway.setPairingRelay(Uri.parse('wss://elsewhere.example')),
+      throwsA(isA<GatewayException>()),
+      reason: 'the same for the relay setting: refused, not silently lost',
+    );
+
+    writesHang = false;
+    expect(
+      gateway.connections.singleWhere((c) => c.active).hostId,
+      idB,
+      reason: 'the desktop it was on is the desktop it is still on',
+    );
+    expect(gateway.link, CompanionLinkState.connected);
+    expect((await gateway.listSessions()).single.id, 's-laptop');
+  });
+
+  test('a pairing this phone cannot record as the active one fails out loud',
+      () async {
+    final studio = await startHost(
+      hostId: idA,
+      sessionId: 's-studio',
+      title: 'Studio work',
+    );
+    final laptop = await startHost(
+      hostId: idB,
+      sessionId: 's-laptop',
+      title: 'Laptop work',
+    );
+    final gateway = makeGateway();
+    await pairWith(gateway, studio);
+
+    // The desktop confirms; what fails is the phone writing down which
+    // desktop to use from now on. Escaping from there is an unhandled async
+    // error and a pairing screen that never moves off "proving".
+    hangOnActiveHost = idB;
+    final session = await laptop.service.beginPairing(
+      capabilities: CapabilitySet.all,
+    );
+    await expectLater(
+      gateway.pairWithQr(session.payload.encode()),
+      throwsA(isA<PairingException>()),
+    );
+    await session.done;
+    hangOnActiveHost = null;
   });
 
   test('removing the LAST desktop leaves the phone unpaired', () async {
