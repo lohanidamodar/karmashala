@@ -93,7 +93,17 @@ enum Capability {
   readTranscript('read_transcript', 1 << 1),
   sendPrompt('send_prompt', 1 << 2),
   approve('approve', 1 << 3),
-  receiveNotifications('receive_notifications', 1 << 4);
+  receiveNotifications('receive_notifications', 1 << 4),
+
+  /// Read the desktop's projects and installed agents, and start a session in
+  /// one of them.
+  ///
+  /// The only capability that makes the desktop *originate* work rather than
+  /// observe or answer it, which is why it is its own bit rather than a second
+  /// meaning for [sendPrompt]: a phone paired before this existed holds a
+  /// bitset without it and is refused, in words, for ever — nothing already
+  /// granted quietly grows into permission to start processes.
+  startSession('start_session', 1 << 5);
 
   const Capability(this.wire, this.bit);
 
@@ -202,6 +212,24 @@ enum FrameType {
     'notifications.register',
     origin: FrameOrigin.companion,
     capability: Capability.receiveNotifications,
+  ),
+
+  /// What could be started here: projects, their checkouts, and the agents
+  /// actually installed where each checkout lives.
+  ///
+  /// Gated on [Capability.startSession] rather than on `view_sessions`
+  /// because it says more than the session rows do — every project on the
+  /// machine, whether or not anything has ever run in it — and it exists for
+  /// exactly one purpose, which is to make [sessionStart] a real choice.
+  workspaceList(
+    'workspace.list',
+    origin: FrameOrigin.companion,
+    capability: Capability.startSession,
+  ),
+  sessionStart(
+    'session.start',
+    origin: FrameOrigin.companion,
+    capability: Capability.startSession,
   ),
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),

@@ -26,6 +26,22 @@ class FakeRemoteBindings {
   /// which is a different thing from a desktop that is gone.
   Completer<void>? promptGate;
 
+  /// What `workspace.list` answers with.
+  final List<RemoteWorkspaceProject> workspace = [];
+
+  /// Every start the host actually carried out, in order. A retry that the
+  /// ledger absorbs must not add a row here.
+  final List<RemoteSessionStartRequest> starts = [];
+
+  /// When set, the next start throws it and is then cleared, so a test can
+  /// fail one attempt and let the retry through.
+  Object? startError;
+
+  /// When set, a start waits on it — a desktop mid-launch when the link drops.
+  Completer<void>? startGate;
+
+  int _startCounter = 0;
+
   late final RemoteHostBindings bindings = RemoteHostBindings(
     hostName: 'TestHost',
     listSessions: () => sessions.values.toList(),
@@ -55,7 +71,74 @@ class FakeRemoteBindings {
     registerPush: (deviceId, token, platform) async {
       pushes.add((deviceId: deviceId, token: token, platform: platform));
     },
+    listWorkspace: () => List.of(workspace),
+    startSession: (request) async {
+      final gate = startGate;
+      if (gate != null) await gate.future;
+      final failure = startError;
+      if (failure != null) {
+        startError = null;
+        throw failure;
+      }
+      starts.add(request);
+      final id = 'new${++_startCounter}';
+      addSession(id, title: request.title ?? 'Session');
+      return RemoteSessionStarted(
+        sessionId: id,
+        title: request.title ?? 'Session',
+        permissionMode: request.permissionMode,
+      );
+    },
   );
+
+  /// One project, one checkout, one agent — the smallest workspace a phone
+  /// can offer a real choice from.
+  void addWorkspace({
+    String projectId = 'p1',
+    String repositoryId = 'r1',
+    String installationId = 'i1',
+    bool acceptsOpeningMessage = true,
+  }) {
+    workspace.add(
+      RemoteWorkspaceProject(
+        projectId: projectId,
+        name: 'PopupBits',
+        path: r'C:\work',
+        checkouts: [
+          RemoteCheckoutOption(
+            repositoryId: repositoryId,
+            name: 'chitragupta',
+            path: r'C:\work\chitragupta',
+            branch: 'main',
+            agents: [
+              RemoteAgentOption(
+                installationId: installationId,
+                agentId: 'claude',
+                name: 'Claude Code',
+                defaultMode: 'ask',
+                acceptsOpeningMessage: acceptsOpeningMessage,
+                permissionModes: const [
+                  RemotePermissionOption(
+                    mode: 'ask',
+                    label: 'Ask every time',
+                    summary: 'Claude Code is told to use it.',
+                    selectable: true,
+                  ),
+                  RemotePermissionOption(
+                    mode: 'bypass',
+                    label: 'Bypass (full autonomy)',
+                    summary: 'Claude Code is told to use it.',
+                    selectable: true,
+                    dangerous: true,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   void addSession(
     String id, {

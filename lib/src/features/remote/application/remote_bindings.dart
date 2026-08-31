@@ -10,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/domain/agent_installation.dart';
+import '../../agents/domain/agent_permission_options.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -30,6 +32,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_chat_source.dart';
@@ -355,6 +358,96 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     return out;
   }
 
+  /// One installed agent, with everything the phone needs to offer it as a
+  /// real choice: its name, whether its command line can carry an opening
+  /// message, and every permission mode with how that mode reaches this agent.
+  ///
+  /// The modes come from [permissionOptionsFor] — the same table the desktop's
+  /// own permission control is built from — so a mode the descriptor cannot
+  /// express arrives marked `selectable: false` with the agent's own
+  /// explanation, rather than being hidden or, worse, offered and dropped.
+  RemoteAgentOption agentOption(AgentInstallation installation) {
+    final descriptor = ref.read(agentRegistryProvider).byId(installation.agentId);
+    final name = descriptor?.displayName ?? installation.agentId;
+    return RemoteAgentOption(
+      installationId: installation.id,
+      agentId: installation.agentId,
+      name: name,
+      version: installation.version,
+      // The desktop's own setting for a NEW session with this agent. The phone
+      // preselects it and the user may change it; nothing on the phone invents
+      // a default of its own.
+      defaultMode: ref
+          .read(sessionLauncherProvider)
+          .permissionFor(installation.agentId, SessionPurpose.newSession)
+          .name,
+      acceptsOpeningMessage: descriptor?.launch.acceptsPromptArgument ?? false,
+      permissionModes: [
+        for (final option in permissionOptionsFor(descriptor, agentName: name))
+          RemotePermissionOption(
+            mode: option.mode.name,
+            label: option.mode.label,
+            summary: option.summary,
+            selectable: option.isSelectable,
+            dangerous: option.mode.isDangerous,
+          ),
+      ],
+    );
+  }
+
+  /// What could be started here, in the Explorer's own order: projects as the
+  /// tree sorts them, checkouts by path, and under each checkout the agents
+  /// installed in the environment it lives in.
+  ///
+  /// A project with no checkout is omitted — there is nowhere in it to start
+  /// anything, and listing it would offer a choice that does not exist. Like
+  /// `sessions.list`, this reads only what the desktop already holds: the
+  /// branch comes from the cached checkout stat and no git is started.
+  List<RemoteWorkspaceProject> listWorkspace() {
+    final installations = ref.read(agentInstallationDaoProvider);
+    final byEnvironment = <String, List<RemoteAgentOption>>{};
+    List<RemoteAgentOption> agentsIn(String environmentId) =>
+        byEnvironment[environmentId] ??= [
+          for (final installation in installations.getByEnvironment(
+            environmentId,
+          ))
+            agentOption(installation),
+        ];
+
+    final out = <RemoteWorkspaceProject>[];
+    for (final project in ref.read(sortedProjectsProvider)) {
+      final repositories =
+          [...ref.read(repositoryDaoProvider).getByProject(project.id)]..sort(
+            (a, b) => canonicalPathKey(
+              a.path.path,
+            ).compareTo(canonicalPathKey(b.path.path)),
+          );
+      if (repositories.isEmpty) continue;
+      out.add(
+        RemoteWorkspaceProject(
+          projectId: project.id,
+          name: project.name,
+          path: project.root.path,
+          checkouts: [
+            for (final repository in repositories)
+              RemoteCheckoutOption(
+                repositoryId: repository.id,
+                name: repository.name,
+                path: repository.path.path,
+                subPath: relativeSubPath(project.root, repository.path),
+                branch: ref.read(remoteCheckoutBranchProvider)(repository.path),
+                folderMissing: ref.read(remoteFolderMissingProvider)(
+                  repository.path,
+                ),
+                agents: agentsIn(repository.environmentId),
+              ),
+          ],
+        ),
+      );
+    }
+    return out;
+  }
+
   return RemoteHostBindings(
     hostName: Platform.localHostname,
     listSessions: listSessionsInExplorerOrder,
@@ -398,6 +491,8 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
           .updatePush(deviceId, token: token, platform: platform);
       ref.read(pairedDevicesRevisionProvider.notifier).bump();
     },
+    listWorkspace: listWorkspace,
+    startSession: (request) => _startSession(ref, request),
   );
 });
 
@@ -602,3 +697,116 @@ Future<RemoteApprovalRequest> _approvalEvidenceFor(
     denyLabel: rules?.deny?.label,
   );
 }
+
+/// Starts a session the phone asked for, through [SessionLauncher.launch] and
+/// nothing else.
+///
+/// Everything that makes a launch safe already lives there — the permission
+/// mode it stamps, the depth cap, the resume and fork guards, the refusal of
+/// an opening message an agent cannot be handed — so this resolves the two ids
+/// the phone named, checks the mode is one the agent can actually be put into,
+/// and hands over.
+///
+/// Every way that can end badly leaves as a [RemoteApiRefusal] carrying the
+/// desktop's OWN sentence. `bad_request` is the code because that is the one
+/// the companion quotes verbatim, and a phone told "something went wrong"
+/// after asking for a session is told nothing it can act on.
+Future<RemoteSessionStarted> _startSession(
+  Ref ref,
+  RemoteSessionStartRequest request,
+) async {
+  final repository = ref
+      .read(repositoryDaoProvider)
+      .getById(request.repositoryId);
+  if (repository == null) {
+    throw const RemoteApiRefusal(
+      ErrorCode.notFound,
+      'this desktop no longer holds that checkout',
+    );
+  }
+  final installation = ref
+      .read(agentInstallationDaoProvider)
+      .getById(request.installationId);
+  if (installation == null) {
+    throw const RemoteApiRefusal(
+      ErrorCode.notFound,
+      'that agent is no longer installed on this desktop',
+    );
+  }
+  final descriptor = ref.read(agentRegistryProvider).byId(installation.agentId);
+  final agentName = descriptor?.displayName ?? installation.agentId;
+  // An installation is the pair (agent, environment): one installed in WSL
+  // cannot be started against a Windows checkout, and the launcher would build
+  // a command line for a path that environment cannot see.
+  if (installation.environmentId != repository.path.environmentId) {
+    throw RemoteApiRefusal(
+      ErrorCode.badRequest,
+      '$agentName is not installed where that checkout lives',
+    );
+  }
+
+  final mode = PermissionMode.values.asNameMap()[request.permissionMode];
+  if (mode == null) {
+    throw RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this desktop has no permission mode called '
+      '"${request.permissionMode}"',
+    );
+  }
+  // Loop 31 §4 option C, enforced and not merely offered: `workspace.list`
+  // already told the phone which modes this agent can be put into, so asking
+  // for another one is asking for something the desktop said does not exist.
+  // Refusing in the option's own words beats launching under the agent's
+  // default and reporting the mode the user picked.
+  //
+  // Deliberately not `carryPermission`: nothing is being carried here. That
+  // rule exists to move a mode from one agent to another when the user is
+  // choosing an *agent*; this user is choosing a mode, for one agent, and the
+  // safe answer to an impossible one is to say so.
+  final option = permissionOptionsFor(
+    descriptor,
+    agentName: agentName,
+  ).firstWhere((option) => option.mode == mode);
+  if (!option.isSelectable) {
+    throw RemoteApiRefusal(ErrorCode.badRequest, option.summary);
+  }
+
+  try {
+    final launched = await ref
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository,
+            installation: installation,
+            // Empty becomes "Session" in the launcher, which is the same name
+            // the desktop's own dialog falls back to.
+            title: request.title ?? '',
+            purpose: SessionPurpose.newSession,
+            firstMessage: request.message,
+            permissionOverride: mode,
+          ),
+        );
+    return RemoteSessionStarted(
+      sessionId: launched.session.id,
+      title: launched.session.title,
+      // What the row was actually stamped with, read back rather than echoed.
+      permissionMode: launched.session.permissionMode?.name,
+    );
+  } on RemoteApiRefusal {
+    rethrow;
+  } on Object catch (error) {
+    throw RemoteApiRefusal(ErrorCode.badRequest, _sayLaunchFailure(error));
+  }
+}
+
+/// The desktop's own words for a launch that did not happen — the same
+/// readings the Explorer's own error line takes, so a phone and the screen
+/// beside it never explain one failure two different ways.
+String _sayLaunchFailure(Object error) => switch (error) {
+  SessionLaunchRefused() => error.reason,
+  SessionDepthRefused() => error.depth.refusal,
+  SessionAlreadyRunning() => error.toString(),
+  StateError() => error.message,
+  ArgumentError() => '${error.message ?? error}',
+  _ => '$error',
+};

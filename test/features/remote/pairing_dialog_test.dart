@@ -139,6 +139,9 @@ void main() {
     expect(fake.lastPairing!.payload.relay, internet.url);
 
     final before = fake.lastPairing!.payload.typedSecret!;
+    // Six grants push the relay tabs below the fold of an 800x600 test window;
+    // the dialog scrolls, so scroll it.
+    await tester.ensureVisible(find.text('Local network'));
     await tester.tap(find.text('Local network'));
     await tester.pumpAndSettle();
 
@@ -159,6 +162,7 @@ void main() {
 
     expect(fake.localFlagsAsked, [false]);
 
+    await tester.ensureVisible(find.text('Local network'));
     await tester.tap(find.text('Local network'));
     await tester.pumpAndSettle();
 

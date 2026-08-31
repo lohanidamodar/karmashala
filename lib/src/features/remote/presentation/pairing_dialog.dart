@@ -26,7 +26,8 @@ class PairingDialog extends ConsumerStatefulWidget {
 }
 
 class _PairingDialogState extends ConsumerState<PairingDialog> {
-  /// Granted at pairing time; all five v1 capabilities by default.
+  /// Granted at pairing time; everything this build knows by default, and
+  /// every one of them untickable before the code is generated.
   final Set<Capability> _granted = {...Capability.values};
 
   /// Saved in [initState]: `ref` is unusable inside [dispose].
@@ -133,6 +134,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     Capability.sendPrompt => 'Send prompts',
     Capability.approve => 'Answer approvals',
     Capability.receiveNotifications => 'Notifications',
+    Capability.startSession => 'Start new sessions',
   };
 
   /// The local-vs-internet relay tabs. With one endpoint there is nothing to
