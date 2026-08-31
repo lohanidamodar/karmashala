@@ -9,6 +9,7 @@ import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,5 +117,29 @@ void main() {
     // Explorer's own selection in charge.
     terminals.openTab(TerminalProfile.powerShell);
     expect(container.read(activePaneSessionIdProvider), isNull);
+  });
+
+  test('splitting a session\'s tab does not lose the session', () {
+    // Reported as "once split, bottom statusbar is gone": splitting focuses the
+    // new pane, a new plain shell has no session, and everything keyed on the
+    // focused pane alone went away with it. A shell opened beside a session is
+    // still a shell opened beside that session.
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    terminals.openTab(TerminalProfile.powerShell);
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .layout
+        .panes
+        .single;
+    SessionDao(db)
+      ..insert(session(repositoryId: 'nested'))
+      ..updatePaneId('s1', paneId);
+
+    terminals.splitPane(SplitAxis.vertical, TerminalProfile.commandPrompt);
+
+    expect(container.read(activePaneSessionIdProvider), 's1');
   });
 }

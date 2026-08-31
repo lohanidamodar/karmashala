@@ -12,21 +12,37 @@ import 'picked_checkouts.dart';
 
 /// The session running in the pane the terminal is showing, or null.
 ///
-/// Keyed off the *pane on screen*, not off the Explorer's selection: switching
+/// Keyed off the *tab on screen*, not off the Explorer's selection: switching
 /// terminal tabs changes which agent you are looking at, and anything that
 /// followed the tree instead would describe a session the user is not in. A
-/// plain shell tab has no session row pointing at it and answers null, which is
-/// what leaves the Explorer's own selection in charge.
+/// plain shell tab has no session row pointing at any of its panes and answers
+/// null, which is what leaves the Explorer's own selection in charge.
+///
+/// **The focused pane first, then the rest of its tab.** Splitting focuses the
+/// new pane, and a new plain shell has no session — so keying this on the
+/// focused pane alone meant that splitting an agent's tab made the session's
+/// whole bottom bar disappear, which is what the owner reported as "once split,
+/// bottom statusbar is gone". A shell opened *beside* a session is still a
+/// shell opened beside that session, and the tab is still the session's
+/// workspace.
 final activePaneSessionIdProvider = Provider<String?>((ref) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
   ref.watch(sessionsRevisionProvider);
-  final paneId = terminals.activeTab?.focusedPaneId;
-  if (paneId == null) return null;
+  final tab = terminals.activeTab;
+  if (tab == null) return null;
+  final siblings = tab.layout.panes.toSet();
+  // One pass over the rows, which is the same cost the focused-pane lookup
+  // already paid: the focused pane wins outright, anything else in the tab is
+  // remembered as the fallback.
+  String? fallback;
   for (final record in ref.read(sessionDaoProvider).getAll()) {
-    if (record.paneId == paneId) return record.id;
+    final paneId = record.paneId;
+    if (paneId == null) continue;
+    if (paneId == tab.focusedPaneId) return record.id;
+    if (fallback == null && siblings.contains(paneId)) fallback = record.id;
   }
-  return null;
+  return fallback;
 });
 
 /// The repository whose checkout contains [sessionId]'s work.

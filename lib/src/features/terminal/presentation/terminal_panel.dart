@@ -468,6 +468,16 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     );
   }
 
+  /// Whether [paneId] shares its tab with another pane.
+  bool _isSplit(String paneId) {
+    for (final tab in ref.read(terminalSessionsControllerProvider).tabs) {
+      if (tab.layout.panes.contains(paneId)) {
+        return tab.layout.panes.length > 1;
+      }
+    }
+    return false;
+  }
+
   Future<void> _terminalMenu(
     BuildContext context,
     Offset position,
@@ -494,6 +504,11 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         const PopupMenuItem(value: 'paste', child: Text('Paste')),
         const PopupMenuItem(value: 'find', child: Text('Find…')),
         const PopupMenuDivider(),
+        // Only while there is a split to collapse, and only then: with one
+        // pane the tab strip's own close button is the way, and two words for
+        // one act in two places is how a menu stops being read.
+        if (_isSplit(paneId))
+          const PopupMenuItem(value: 'close', child: Text('Close pane')),
         // Closing the tab only detaches; this is how a session actually ends.
         const PopupMenuItem(value: 'end', child: Text('End session')),
       ],
@@ -511,6 +526,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         await pasteIntoTerminal(session.terminal, controller: session.controller);
       case 'find':
         _actions.openSearch();
+      case 'close':
+        _sessions.closePane(paneId);
       case 'end':
         _sessions.endSession(paneId);
     }

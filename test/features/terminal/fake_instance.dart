@@ -68,6 +68,17 @@ class FakeTerminalInstance
   ValueListenable<PaneLiveness> get liveness => livenessNotifier;
   final livenessNotifier = ValueNotifier(PaneLiveness.live);
 
+  /// What the process exited with, for the collapse-on-exit rule. Null — "we
+  /// never learned" — unless a test says otherwise, which is the safe default.
+  @override
+  int? exitCode;
+
+  /// Ends this pane the way a shell that was typed `exit` at ends: cleanly.
+  void exitCleanly() {
+    exitCode = 0;
+    livenessNotifier.value = PaneLiveness.exited;
+  }
+
   bool disposed = false;
 
   /// What the controller last told this pane about how visible it is, and every

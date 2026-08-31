@@ -1093,6 +1093,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // process death — not per frame — so this costs nothing.
     void onLiveness() {
       _livenessMutated();
+      if (instance.liveness.value == PaneLiveness.exited &&
+          _shouldCollapse(paneId, instance)) {
+        // Not inline: this runs from inside the notifier's own callback, and
+        // closing the pane disposes that notifier. One turn later it is a
+        // plain call, and `closePane` is a no-op if the pane has gone anyway.
+        Future.microtask(() => closePane(paneId, detach: false));
+        return;
+      }
       _publish();
     }
 
@@ -1145,6 +1153,20 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // Only when it actually changed: a TUI that repaints its title every frame
     // must not republish the whole workspace every frame.
     _publish();
+  }
+
+  /// Whether the pane that just exited should take itself off the screen.
+  ///
+  /// See [shouldCollapseOnExit] for the rule; this is only the part that has to
+  /// read the workspace to answer it.
+  bool _shouldCollapse(String paneId, TerminalInstance instance) {
+    final tab = _tabContaining(paneId);
+    if (tab == null) return false;
+    return shouldCollapseOnExit(
+      isSplit: tab.layout.panes.length > 1,
+      isAgentSession: instance.agentLaunch != null,
+      exitCode: instance.exitCode,
+    );
   }
 
   /// Detaches [paneId] if a process is still running behind it, and releases it

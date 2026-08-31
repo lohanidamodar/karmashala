@@ -50,6 +50,15 @@ abstract class TerminalInstance {
   /// process exits, without the controller polling for it.
   ValueListenable<PaneLiveness> get liveness;
 
+  /// The status the process exited with, once it has.
+  ///
+  /// Null while it is running, and null for a pane that never ran one — and
+  /// also for an instance that cannot know, which is why the default is here
+  /// rather than on every implementor. Read by the collapse-on-exit rule: a
+  /// clean exit is a shell being dismissed, a failure is output someone is
+  /// about to read.
+  int? get exitCode => null;
+
   /// Drives selection/scroll for the view — read to copy the current selection.
   TerminalController get controller;
 
@@ -207,6 +216,7 @@ class PtyTerminalInstance
 
     _pty.exitCode.then((code) {
       _exited = true;
+      _exitCode = code;
       if (_disposed) return;
       _emit('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
       // The buffer stays on screen, but the pane is no longer a terminal you
@@ -253,6 +263,11 @@ class PtyTerminalInstance
 
   @override
   ValueListenable<PaneLiveness> get liveness => _liveness;
+
+  int? _exitCode;
+
+  @override
+  int? get exitCode => _exitCode;
   final _liveness = ValueNotifier(PaneLiveness.live);
 
   late final Pty _pty;
@@ -482,6 +497,10 @@ class ErrorTerminalInstance implements TerminalInstance {
   @override
   CommandBlockRecorder? get commandBlocks => null;
 
+  /// Nothing ran here, so nothing exited.
+  @override
+  int? get exitCode => null;
+
   /// Nothing is running: the spawn failed. The pane therefore offers the same
   /// "start it" affordance a restored pane does, which doubles as a retry.
   @override
@@ -591,6 +610,10 @@ class DormantTerminalInstance implements TerminalInstance {
   /// scrollback is text, not a record of what produced it.
   @override
   CommandBlockRecorder? get commandBlocks => null;
+
+  /// Nothing ran here, so nothing exited.
+  @override
+  int? get exitCode => null;
 
   @override
   final ValueListenable<PaneLiveness> liveness = const _Constant(

@@ -56,3 +56,29 @@ bool shouldDetachOnClose({
   if (commandRunning != null) return commandRunning;
   return nonBlankLines > kIdleShellHistoryLines;
 }
+
+/// Whether a pane that has just exited should close itself and collapse.
+///
+/// The report: "how to close the split — even after terminal was exit with exit
+/// command the split pane was still there". Typing `exit` is a request to be
+/// done with that shell, and a pane in a split is a working surface rather than
+/// a record of one.
+///
+/// The exceptions are the ones this file already argues for, plus the one every
+/// other terminal has learned the hard way:
+///
+/// * **an agent session stays** — its scrollback is the point of the session,
+///   and an ended agent is exactly what [shouldDetachOnClose] keeps;
+/// * **the last pane in a tab stays** — it is where the output of the thing
+///   that just finished still is, the tab already marks itself as not running,
+///   and closing it would take a window away from under someone reading it;
+/// * **a failure stays** — a pane that exited non-zero is holding the error
+///   somebody split the window to watch for, and closing it would throw away
+///   the one thing they wanted. Only a clean exit is a shell being dismissed.
+///   An exit status we never learned counts as "not clean", which errs towards
+///   keeping.
+bool shouldCollapseOnExit({
+  required bool isSplit,
+  required bool isAgentSession,
+  required int? exitCode,
+}) => isSplit && !isAgentSession && exitCode == 0;

@@ -228,6 +228,9 @@ void main() {
 /// reads it once per `encodeScrollback` call and nothing else in the controller
 /// or the DAO touches the getter — so this counter *is* the encode count.
 class _CountingInstance implements TerminalInstance {
+  @override
+  int? get exitCode => null;
+
   _CountingInstance({
     required this.id,
     required this.title,
