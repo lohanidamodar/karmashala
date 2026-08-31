@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/app/shell/side_panel.dart';
+import 'package:chitragupta/src/app/shell/side_panel_context.dart';
 import 'package:chitragupta/src/app/shell/side_panel_state.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
