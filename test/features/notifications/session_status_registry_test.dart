@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:chitragupta/src/core/logging/app_logger.dart';
 import 'package:chitragupta/src/core/util/clock.dart';
 import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:chitragupta/src/features/agents/data/agent_state_file_status_source.dart';
@@ -11,6 +12,7 @@ import 'package:chitragupta/src/features/notifications/application/session_statu
 import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
 import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 import '../../support/fixtures.dart';
 
@@ -536,6 +538,115 @@ void main() {
       await registry.cycle();
 
       expect(scans, 0);
+    });
+  });
+
+  group('coverage is reported, not merely guaranteed', () {
+    // The registry already guarantees coverage by construction: membership is
+    // uncapped and the rotation reserves a share priority traffic cannot take.
+    // The 60-session cap survived to production because nobody could *tell*,
+    // and a guarantee nobody can observe is the same shape of bug.
+
+    test('a cycle says how much of the watch set it reached', () async {
+      addTranscriptSessions(100);
+      addHookedSessions(10);
+      final registry = build(probeBudget: 24);
+      addTearDown(registry.dispose);
+
+      final coverage = (await registry.cycle()).coverage;
+
+      expect(coverage.tracked, 110, reason: 'nothing is capped by position');
+      expect(
+        coverage.hookAnswered,
+        10,
+        reason: 'the primary path\'s actual share of the workspace',
+      );
+      expect(coverage.probeCandidates, 100);
+      expect(coverage.probed, 24);
+      expect(coverage.neverProbed, 76, reason: 'queued, not lost');
+      expect(coverage.probeFailures, 0);
+      expect(registry.coverage, coverage);
+    });
+
+    test('a session queued for a probe is not one we stopped watching', () {
+      // The distinction the whole registry turns on, stated as a number a
+      // human can read: 76 sessions with no transcript read yet is a healthy
+      // rotation mid-turn; 76 sessions *missing* would be the old bug.
+      const behind = SessionStatusCoverage(
+        tracked: 110,
+        hookAnswered: 10,
+        probeCandidates: 100,
+        probed: 24,
+        neverProbed: 76,
+        probeFailures: 0,
+        rotationPeriod: Duration(seconds: 16),
+      );
+      expect(behind.isBehind, isFalse);
+      expect(behind.toString(), contains('110 watched'));
+    });
+
+    test('the rotation reaches everyone inside the period it reports', () async {
+      // The reported period has to be a promise, not a decoration.
+      addTranscriptSessions(500);
+      final registry = build(probeBudget: 24);
+      addTearDown(registry.dispose);
+      final period = (await registry.cycle()).coverage.rotationPeriod!;
+      final cycles = period.inMilliseconds ~/ kStatusCycleInterval.inMilliseconds;
+
+      for (var i = 1; i < cycles; i++) {
+        clock.now = clock.now.add(kStatusCycleInterval);
+        await registry.cycle();
+      }
+
+      expect(
+        registry.entries.where((e) => e.lastProbedAt == null),
+        isEmpty,
+        reason: 'the reported rotation period must bound the real one',
+      );
+    });
+
+    test('a rotation that cannot keep up says so, once', () async {
+      final records = <LogRecord>[];
+      AppLogger.initialize(level: Level.ALL, onRecord: records.add);
+      // Restored to a sink that swallows rather than to the default one, which
+      // echoes to the console: there is no way to read back the handler this
+      // replaced, and the rest of this file cycles a great many registries.
+      addTearDown(() => AppLogger.initialize(onRecord: (_) {}));
+
+      // Far past the audit's top tier, with a budget that cannot walk it
+      // inside the ceiling.
+      addTranscriptSessions(2000);
+      final registry = build(probeBudget: 24);
+      addTearDown(registry.dispose);
+
+      for (var i = 0; i < 5; i++) {
+        clock.now = clock.now.add(kStatusCycleInterval);
+        await registry.cycle();
+      }
+
+      final warnings = records.where((r) => r.level >= Level.WARNING).toList();
+      expect(
+        warnings,
+        hasLength(1),
+        reason: 'edge-triggered: a line per 1.2 s cycle would bury the log',
+      );
+      expect(warnings.single.message, contains('2000'));
+      expect(
+        records.where((r) => r.message.contains('watching')),
+        hasLength(1),
+        reason: 'the watch set size is reported when it changes, not per cycle',
+      );
+
+      // And it says so again when it recovers, so a log that once warned is
+      // not evidence that it still is.
+      watched.removeRange(50, watched.length);
+      clock.now = clock.now.add(kStatusCycleInterval);
+      await registry.cycle();
+      expect(registry.coverage?.isBehind, isFalse);
+      expect(
+        records.where((r) => r.message.contains('keeping up')),
+        hasLength(1),
+      );
     });
   });
 

@@ -29,6 +29,18 @@ enum NotificationReason {
   /// Whether this is about delivery rather than about the agent's turn.
   bool get isDelivery =>
       this == checksFailed || this == changesRequested || this == readyToMerge;
+
+  /// Whether something is *stopped* until the user does something, as opposed
+  /// to merely having happened.
+  ///
+  /// The one table for that question. It decides which of the user's two
+  /// notification switches applies ([AgentNotificationPolicy._wanted]), how a
+  /// mixed burst is headlined ([NotificationCoalescer.summarize]) and how long
+  /// a toast may be held before it is delivered
+  /// (`NotificationDispatcher.windowFor`) — and those three must not drift,
+  /// because between them they decide whether an agent blocked on a permission
+  /// prompt is told about at all, described honestly, and told about in time.
+  bool get needsUser => this != finished;
 }
 
 /// Why a status change was *not* delivered. Recorded rather than discarded so
@@ -275,15 +287,10 @@ class AgentNotificationPolicy {
       (transition.from != null &&
           transition.from != AgentActivityStatus.unknown);
 
+  /// Delivery news is all "something wants you" — the same switch the user
+  /// already has, rather than a fourth setting nobody would find.
   bool _wanted(NotificationReason reason, NotificationSettings settings) =>
-      switch (reason) {
-        NotificationReason.finished => settings.notifyWhenFinished,
-        // Delivery news is all "something wants you" — the same switch the user
-        // already has, rather than a fourth setting nobody would find.
-        NotificationReason.needsInput ||
-        NotificationReason.failed ||
-        NotificationReason.checksFailed ||
-        NotificationReason.changesRequested ||
-        NotificationReason.readyToMerge => settings.notifyWhenAttentionNeeded,
-      };
+      reason.needsUser
+      ? settings.notifyWhenAttentionNeeded
+      : settings.notifyWhenFinished;
 }
