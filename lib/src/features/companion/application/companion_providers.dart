@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../remote/domain/remote_payloads.dart';
 import '../client/companion_gateway.dart';
 
 /// The pairing in effect, or null when this phone has never paired.
@@ -125,3 +126,13 @@ final companionSessionProvider = Provider.autoDispose
       }
       return null;
     });
+
+/// What could be started on the active desktop: its projects, their checkouts
+/// and the agents installed where each checkout lives.
+///
+/// A pull, not a subscription — projects and installations change when the
+/// user changes them on the desktop, not while a phone watches — so the start
+/// screen reads it once and `ref.invalidate` is the retry.
+final companionWorkspaceProvider = FutureProvider.autoDispose<
+  List<RemoteWorkspaceProject>
+>((ref) => ref.watch(companionGatewayProvider).listWorkspace());

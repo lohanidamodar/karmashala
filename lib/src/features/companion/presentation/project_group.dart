@@ -23,6 +23,10 @@ class CompanionProjectGroup {
 
   String get name => sessions.first.projectName;
 
+  /// The host's own id for this project, when it sent one — what a start
+  /// screen opened from here preselects.
+  String? get projectId => sessions.first.projectId;
+
   /// The folder on the host, or '' when the host is too old to send one.
   String get path => sessions.first.projectPath ?? '';
 
