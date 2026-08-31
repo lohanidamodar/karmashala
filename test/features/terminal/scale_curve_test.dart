@@ -449,7 +449,7 @@ void main() {
       paneId: 'pane-$i',
     );
 
-    test('a full session scan per exit is what a wide watch costs', () async {
+    test('a pane dying costs the session lookup nothing', () async {
       final scans = <int, int>{};
       final walked = <int, int>{};
       final wideNotifications = <int, int>{};
@@ -529,10 +529,10 @@ void main() {
         );
         expect(
           dao.scans,
-          lessThanOrEqualTo(dying),
+          0,
           reason:
-              'at most one scan per exit today, and fewer once the watch is '
-              'narrowed — this bound survives the fix',
+              'the narrowed watch is not told about liveness at all, so there '
+              'is nothing to recompute and nothing to scan',
         );
 
         onWide.close();
@@ -555,11 +555,18 @@ void main() {
         );
       }
 
-      // The shape, and the only claim that needs to hold: the *work* one
-      // background pane's death causes grows with the number of sessions, not
-      // with what changed. Three widgets watch the same wide state, so the
-      // notification column is paid three times over in the shell.
-      expect(walked[100]!, greaterThan(walked[10]!));
+      // The claim, now that the three watches are narrowed: a background pane
+      // dying costs the session lookup **nothing**, at any N. It used to cost
+      // one full scan of every session row per exit — ten scans over a
+      // thousand rows at N = 100 — for an answer that cannot have changed,
+      // because liveness says nothing about which pane is focused.
+      for (final n in scale) {
+        expect(
+          walked[n],
+          0,
+          reason: 'no session row is walked because a process somewhere died',
+        );
+      }
     });
   });
 }

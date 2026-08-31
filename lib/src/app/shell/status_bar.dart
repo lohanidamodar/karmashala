@@ -29,8 +29,14 @@ class ShellStatusBar extends ConsumerWidget {
         .where((r) => r.id == repoId)
         .firstOrNull;
     final branch = ref.watch(currentBranchProvider);
-    final terminals = ref.watch(terminalSessionsControllerProvider);
-    final detached = terminals.detached.length;
+    // Two counts, not the state: the status bar has no other interest in the
+    // terminal, and a process exiting anywhere used to repaint this whole row.
+    final detached = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.detached.length),
+    );
+    final openTabs = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.tabs.length),
+    );
     final panel = ref.watch(sidePanelProvider);
     final attention = ref.watch(attentionCountProvider);
 
@@ -71,8 +77,8 @@ class ShellStatusBar extends ConsumerWidget {
             _Item(
               icon: AppIcons.terminal,
               label:
-                  '${terminals.tabs.length} tab'
-                  '${terminals.tabs.length == 1 ? '' : 's'}',
+                  '$openTabs tab'
+                  '${openTabs == 1 ? '' : 's'}',
             ),
             if (detached > 0)
               _Item(

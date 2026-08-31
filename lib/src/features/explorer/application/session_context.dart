@@ -26,10 +26,16 @@ import 'picked_checkouts.dart';
 /// shell opened beside that session, and the tab is still the session's
 /// workspace.
 final activePaneSessionIdProvider = Provider<String?>((ref) {
-  final terminals = ref.watch(terminalSessionsControllerProvider);
+  // Which tab is active and what is in it — deliberately not the whole state.
+  // This answers by walking every session row, and it was recomputed whenever
+  // any pane's liveness moved: measured at ten scans over a thousand rows for
+  // ten background processes exiting, for an answer that cannot have changed.
+  // Liveness says nothing about which pane is focused.
+  final tab = ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.activeTab),
+  );
   // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
   ref.watch(sessionsRevisionProvider);
-  final tab = terminals.activeTab;
   if (tab == null) return null;
   final siblings = tab.layout.panes.toSet();
   // One pass over the rows, which is the same cost the focused-pane lookup

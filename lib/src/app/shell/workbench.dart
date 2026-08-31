@@ -249,8 +249,11 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.watch(sessionsRevisionProvider);
     // A pane appearing or ending changes whether this session has a terminal at
     // all, which is what decides whether the strip offers the toggle. Watched
-    // rather than read so the strip cannot keep offering a surface that is gone.
-    ref.watch(terminalSessionsControllerProvider);
+    // rather than read so the strip cannot keep offering a surface that is
+    // gone — but only the tab list, because a *process* dying somewhere else
+    // cannot change which panes exist, and at a hundred panes that was the
+    // common case.
+    ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs));
     final importedId = ref.watch(selectedImportedSessionIdProvider);
     if (importedId != null) {
       final imported = ref.read(importedSessionDaoProvider).getById(importedId);
