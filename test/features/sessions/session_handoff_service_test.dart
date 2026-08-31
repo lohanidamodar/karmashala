@@ -369,6 +369,68 @@ void main() {
       expect(launch.arguments, contains('--careful'));
     });
 
+    test('runs under the mode the user picked for the target', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take it from here.',
+            permissionMode: PermissionMode.bypass,
+          );
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      // The pick, not the source session's `ask`, is what reached the command
+      // line — which is the only place a permission mode is ever real.
+      expect(launch.arguments, contains('--trust-me'));
+      expect(launch.arguments, isNot(contains('--careful')));
+      // And it is stamped on the row, so the next resume runs under it too.
+      expect(
+        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        PermissionMode.bypass,
+      );
+    });
+
+    test('a picked mode the target cannot express is not escalated', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      // Forker has no accept-edits, and its only other mode is more permissive
+      // than the pick. The carry rule answers with the safest mode it does
+      // have rather than the nearest one.
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take it from here.',
+            permissionMode: PermissionMode.acceptEdits,
+          );
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, contains('--careful'));
+      expect(launch.arguments, isNot(contains('--trust-me')));
+      expect(
+        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        PermissionMode.ask,
+      );
+    });
+
     test('refuses a target that cannot receive the packet', () async {
       final h = harness();
       addTearDown(h.db.close);
@@ -453,6 +515,30 @@ void main() {
         expect(launch.arguments, isNot(contains('--session-id')));
       },
     );
+
+    test('a fork runs under the mode the user picked for it', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .forkSession(sessionId: 'src', permissionMode: PermissionMode.bypass);
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, contains('--trust-me'));
+      expect(launch.arguments, isNot(contains('--careful')));
+      // The branch runs under the picked mode; the session it came from is
+      // left on its own.
+      expect(
+        SessionDao(h.db).getById('src')!.permissionMode,
+        PermissionMode.ask,
+      );
+    });
 
     test('a second fork of the same conversation is numbered', () async {
       final h = harness();
