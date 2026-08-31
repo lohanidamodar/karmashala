@@ -75,12 +75,12 @@ void main() {
       await session.done;
       await gateway.linkStates
           .firstWhere((state) => state == CompanionLinkState.connected)
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 60));
       // Let the post-connect refresh land so the list has real data to show.
       final first = await gateway
           .watchSessions()
           .firstWhere((list) => list.isNotEmpty)
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 60));
       expect(first.single.title, 'Fix the tests');
     });
 

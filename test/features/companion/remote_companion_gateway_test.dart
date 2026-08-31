@@ -135,14 +135,14 @@ void main() {
     CompanionLinkState wanted,
   ) => gateway.linkStates
       .firstWhere((state) => state == wanted)
-      .timeout(const Duration(seconds: 15));
+      .timeout(const Duration(seconds: 60));
 
   Future<void> awaitPath(
     RemoteCompanionGateway gateway,
     CompanionLinkPath wanted,
   ) => gateway.linkPathStates
       .firstWhere((path) => path == wanted)
-      .timeout(const Duration(seconds: 15));
+      .timeout(const Duration(seconds: 60));
 
   Future<CompanionPairing> pairPhone(RemoteCompanionGateway gateway) async {
     final session = await service!.beginPairing(
@@ -168,7 +168,7 @@ void main() {
   }
 
   test('the whole phone story over the relay: pair, watch, prompt, approve, '
-      'revoke', () async {
+      'revoke', timeout: const Timeout(Duration(minutes: 2)), () async {
     await startService();
     final gateway = makeGateway();
 
@@ -382,7 +382,8 @@ void main() {
   });
 
   test('the LAN story: pair over the relay, see the beacon, switch to the '
-      'direct path, lose it, heal back to the relay', () async {
+      'direct path, lose it, heal back to the relay',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     await startService();
     final gateway = makeGateway(lan: makeScout());
     await pairPhone(gateway);

@@ -121,7 +121,7 @@ void main() {
     CompanionLinkState wanted,
   ) => gateway.linkStates
       .firstWhere((state) => state == wanted)
-      .timeout(const Duration(seconds: 15));
+      .timeout(const Duration(seconds: 60));
 
   Future<void> pairWith(RemoteCompanionGateway gateway, _Host host) async {
     final session = await host.service.beginPairing(

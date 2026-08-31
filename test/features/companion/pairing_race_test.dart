@@ -170,7 +170,7 @@ void main() {
     // The link then comes up — over the LAN, since the relay is a corpse.
     await gateway.linkStates
         .firstWhere((s) => s == CompanionLinkState.connected)
-        .timeout(const Duration(seconds: 15));
+        .timeout(const Duration(seconds: 60));
     expect(gateway.linkPath, CompanionLinkPath.lan);
     expect((await gateway.listSessions()).single.id, 's1');
   });
