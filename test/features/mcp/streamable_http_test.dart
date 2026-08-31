@@ -315,12 +315,44 @@ void main() {
       final response = await call(request.body, headers: request.headers);
       final result = resultOf(response.body);
       expect(result['resultType'], 'complete');
-      expect(result['supportedVersions'], kMcpSupportedVersions);
+      expect(result['supportedVersions'], kMcpAdvertisedVersions);
       expect(
         ((result['_meta']! as Map<String, Object?>)['io.modelcontextprotocol/serverInfo']!
             as Map<String, Object?>)['name'],
         'chitragupta',
       );
+    });
+
+    test('discovery does not advertise the modern revision', () async {
+      // Claude Code 2.1.251 reads this field, picks 2026-07-28, completes
+      // `server/discover` and `tools/list` against this server — and then
+      // registers **no tools at all**. Measured against a real CLI and
+      // reproduced against a hand-written server serving one trivial tool, so
+      // it is the client's modern path and not this catalogue. Advertising a
+      // revision that leaves the agent with an empty tool surface is worse than
+      // not advertising it: the session looks connected and can do nothing.
+      final request = modern('server/discover');
+      final response = await call(request.body, headers: request.headers);
+
+      expect(
+        resultOf(response.body)['supportedVersions'],
+        isNot(contains(kMcpModernVersion)),
+      );
+    });
+
+    test('a client that declares the modern revision anyway is served', () async {
+      // Not advertised is not unimplemented. Everything above this line in this
+      // group is a modern request, and each one is answered.
+      final request = modern('tools/list');
+      final response = await call(request.body, headers: request.headers);
+
+      expect(response.status, 200);
+      expect(resultOf(response.body)['resultType'], 'complete');
+      expect(resultOf(response.body)['tools'], isNotEmpty);
+    });
+
+    test('the versions that are advertised are all versions we serve', () async {
+      expect(kMcpSupportedVersions, containsAll(kMcpAdvertisedVersions));
     });
 
     test('a tool call carries resultType', () async {

@@ -39,11 +39,41 @@ library;
 
 import 'dart:convert';
 
-/// Revisions this server implements, newest first. The order is the order
-/// `server/discover` and `UnsupportedProtocolVersionError` advertise them in,
-/// so a client picking the first it recognises picks the best one.
+/// Revisions this server implements, newest first. A request declaring any of
+/// them is served; anything else gets `UnsupportedProtocolVersionError`, which
+/// lists these.
 const List<String> kMcpSupportedVersions = <String>[
   '2026-07-28',
+  '2025-11-25',
+  '2025-06-18',
+  '2025-03-26',
+];
+
+/// Revisions `server/discover` **offers**, newest first, so a client picking
+/// the first it recognises picks the best one it will actually work on.
+///
+/// **This is deliberately not [kMcpSupportedVersions], and the difference is
+/// one client's bug rather than a gap in this server.** Measured 2026-08-31
+/// against Claude Code 2.1.251, which is the CLI most of this app's sessions
+/// run: it probes `server/discover`, reads this field, selects `2026-07-28`,
+/// sends a modern `tools/list`, receives all 62 tools — and then registers
+/// **none of them**. The session reports the server as connected and the agent
+/// has an empty tool surface, which is a worse outcome than no server at all,
+/// because nothing about it looks broken.
+///
+/// It is the client's modern path and not this catalogue. The same run against
+/// a hand-written server serving one trivial tool registers nothing either;
+/// the same hand-written server, with `server/discover` answered `-32601` *or*
+/// advertising only the revisions below, registers `mcp__…__ping_it` at once.
+///
+/// So the narrowest fix is here: `server/discover` stays implemented and
+/// correct in shape, and offers the revisions a real client has been observed
+/// to finish a session on. `2026-07-28` is still served to any request that
+/// declares it — see [kMcpSupportedVersions] — it is simply not recommended to
+/// a client that asks what to pick. **Delete this constant and point
+/// `_discoverResult` back at [kMcpSupportedVersions] once a released client
+/// registers tools over the modern path.**
+const List<String> kMcpAdvertisedVersions = <String>[
   '2025-11-25',
   '2025-06-18',
   '2025-03-26',
@@ -346,7 +376,9 @@ class McpServer {
   }
 
   Map<String, Object?> _discoverResult() => <String, Object?>{
-    'supportedVersions': kMcpSupportedVersions,
+    // Advertised, not supported — see [kMcpAdvertisedVersions] for the
+    // measurement that separates the two.
+    'supportedVersions': kMcpAdvertisedVersions,
     'capabilities': <String, Object?>{'tools': <String, Object?>{}},
     '_meta': <String, Object?>{
       _serverInfoMetaKey: <String, Object?>{'name': name, 'version': version},
