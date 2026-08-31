@@ -114,8 +114,7 @@ class RemoteAccessController {
         Uri(scheme: 'ws', host: '127.0.0.1', port: settings.localRelayPort);
   }
 
-  Future<void> _stopLocalRelay() =>
-      _ref.read(localRelayServiceProvider).stop();
+  Future<void> _stopLocalRelay() => _ref.read(localRelayServiceProvider).stop();
 
   /// Shows a new pairing code. Throws [StateError] while remote access is
   /// off — the dialog says so instead of pretending.

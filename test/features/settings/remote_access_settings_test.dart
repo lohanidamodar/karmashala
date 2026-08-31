@@ -76,10 +76,7 @@ void main() {
         const Settings(remoteRelayMode: RelayMode.local),
         isNot(const Settings()),
       );
-      expect(
-        const Settings(localRelayPort: 9001),
-        isNot(const Settings()),
-      );
+      expect(const Settings(localRelayPort: 9001), isNot(const Settings()));
     });
 
     test('the controller persists the mode and the port', () {

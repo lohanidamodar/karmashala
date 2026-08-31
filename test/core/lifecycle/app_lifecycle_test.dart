@@ -230,28 +230,31 @@ void main() {
   });
 
   group('the local relay it stops', () {
-    test('shutdown closes a running embedded relay and frees its port', () async {
-      // Loopback and an empty interface list: nothing leaves this machine.
-      final relay = LocalRelayService(
-        bindAddress: '127.0.0.1',
-        interfaces: () async => [],
-      );
-      final container = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          localRelayServiceProvider.overrideWithValue(relay),
-        ],
-      );
-      final lifecycle = AppLifecycle(container);
-      await container.read(localRelayServiceProvider).ensureRunning(0);
-      final port = relay.status.boundPort!;
+    test(
+      'shutdown closes a running embedded relay and frees its port',
+      () async {
+        // Loopback and an empty interface list: nothing leaves this machine.
+        final relay = LocalRelayService(
+          bindAddress: '127.0.0.1',
+          interfaces: () async => [],
+        );
+        final container = ProviderContainer(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            localRelayServiceProvider.overrideWithValue(relay),
+          ],
+        );
+        final lifecycle = AppLifecycle(container);
+        await container.read(localRelayServiceProvider).ensureRunning(0);
+        final port = relay.status.boundPort!;
 
-      await lifecycle.shutdown();
+        await lifecycle.shutdown();
 
-      expect(relay.status.state, LocalRelayState.stopped);
-      final rebound = await ServerSocket.bind('127.0.0.1', port);
-      await rebound.close();
-    });
+        expect(relay.status.state, LocalRelayState.stopped);
+        final rebound = await ServerSocket.bind('127.0.0.1', port);
+        await rebound.close();
+      },
+    );
   });
 
   group('the budget', () {

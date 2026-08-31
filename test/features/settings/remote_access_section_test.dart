@@ -280,10 +280,7 @@ void main() {
     await tester.tap(find.text('This computer (local network)'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('Windows Defender Firewall'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Windows Defender Firewall'), findsOneWidget);
   });
 
   testWidgets('the port field persists when editing ends; junk snaps back', (
