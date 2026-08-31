@@ -304,12 +304,18 @@ class SessionHandoffService {
   /// leaving it exactly as it was is both possible and correct — the user
   /// decides whether to end it, and until they do the handoff is reversible by
   /// simply going back to it.
+  ///
+  /// [permissionMode] is the mode the user picked for *this* target in the
+  /// dialog. It is resolved against the target the same way the sentence they
+  /// read was, so a pick the target cannot express is downgraded rather than
+  /// dropped. Null means nobody picked, and the session's own mode is carried.
   Future<SessionLaunchResult> handoffTo({
     required String sessionId,
     required String targetInstallationId,
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
+    PermissionMode? permissionMode,
   }) => _continue(
     sessionId: sessionId,
     targetInstallationId: targetInstallationId,
@@ -317,6 +323,7 @@ class SessionHandoffService {
     unresolvedTasks: unresolvedTasks,
     intoNewWorktree: intoNewWorktree,
     link: SessionLink.handoff,
+    permissionMode: permissionMode,
   );
 
   /// Branches [sessionId] into a new session that shares its history.
@@ -330,6 +337,7 @@ class SessionHandoffService {
     String instruction = '',
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
+    PermissionMode? permissionMode,
   }) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -347,6 +355,7 @@ class SessionHandoffService {
         intoNewWorktree: intoNewWorktree,
         link: SessionLink.fork,
         isFork: true,
+        permissionMode: permissionMode,
       );
     }
 
@@ -368,12 +377,17 @@ class SessionHandoffService {
             parentLink: SessionLink.fork,
             useWorktree: intoNewWorktree,
             existingWorktree: intoNewWorktree ? null : session.worktree,
-            // The session's own mode, carried as-is: the fork runs the same
-            // agent, so there is nothing to translate.
-            permissionOverride: _ref
-                .read(sessionLauncherProvider)
-                .effectivePermissionFor(sessionId)
-                ?.mode,
+            // The session's own mode unless the user picked another for the
+            // branch. Still resolved rather than passed through: the fork runs
+            // the same agent, so a pick can only ever be one that agent
+            // expresses, but the resolution is where that stops being an
+            // assumption.
+            permissionOverride: _resolvePermission(
+              sessionId: sessionId,
+              descriptor: context.descriptor,
+              targetName: context.agentName,
+              chosen: permissionMode,
+            ).mode,
           ),
         );
   }
@@ -386,6 +400,7 @@ class SessionHandoffService {
     required bool intoNewWorktree,
     required SessionLink link,
     bool isFork = false,
+    PermissionMode? permissionMode,
   }) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -396,9 +411,8 @@ class SessionHandoffService {
       );
     }
     final context = _contextFor(session, targetInstallationId);
-    final registry = _ref.read(agentRegistryProvider);
-    final targetName = registry.displayNameFor(context.installation.agentId);
-    final descriptor = registry.byId(context.installation.agentId);
+    final targetName = context.agentName;
+    final descriptor = context.descriptor;
 
     final refusal = _refusalFor(descriptor, targetName);
     if (refusal != null) throw StateError(refusal);
@@ -411,18 +425,11 @@ class SessionHandoffService {
       isFork: isFork,
     );
 
-    // The mode is resolved *here*, once, and passed as an override, so the
-    // command line and the sentence the user was shown before launching come
-    // from the same call. Reading the target's default instead would silently
-    // ignore the session's own choice, which Loop 49 exists to have stopped.
-    final carried = carryPermission(
-      _ref
-              .read(sessionLauncherProvider)
-              .effectivePermissionFor(sessionId)
-              ?.mode ??
-          PermissionMode.ask,
-      descriptor,
+    final carried = _resolvePermission(
+      sessionId: sessionId,
+      descriptor: descriptor,
       targetName: targetName,
+      chosen: permissionMode,
     );
 
     return _ref
@@ -445,10 +452,38 @@ class SessionHandoffService {
         );
   }
 
-  ({Repository repository, AgentInstallation installation}) _contextFor(
-    Session session,
-    String installationId,
-  ) {
+  /// The mode a continuation of [sessionId] into [descriptor] will run under.
+  ///
+  /// Resolved *here*, once, and passed as an override, so the command line and
+  /// the sentence the user read before launching come from the same call —
+  /// [resolveContinuationPermission], which is also what the dialog's picker
+  /// renders. Reading the target's own default instead would silently ignore
+  /// both the session's mode and the user's pick, which is what Loop 49 exists
+  /// to have stopped.
+  ContinuationPermission _resolvePermission({
+    required String sessionId,
+    required AgentDescriptor? descriptor,
+    required String targetName,
+    required PermissionMode? chosen,
+  }) => resolveContinuationPermission(
+    sessionMode:
+        _ref
+            .read(sessionLauncherProvider)
+            .effectivePermissionFor(sessionId)
+            ?.mode ??
+        PermissionMode.ask,
+    target: descriptor,
+    chosen: chosen,
+    targetName: targetName,
+  );
+
+  ({
+    Repository repository,
+    AgentInstallation installation,
+    AgentDescriptor? descriptor,
+    String agentName,
+  })
+  _contextFor(Session session, String installationId) {
     final repository = _ref
         .read(repositoryDaoProvider)
         .getById(session.repositoryId);
@@ -464,7 +499,13 @@ class SessionHandoffService {
         'Settings.',
       );
     }
-    return (repository: repository, installation: installation);
+    final registry = _ref.read(agentRegistryProvider);
+    return (
+      repository: repository,
+      installation: installation,
+      descriptor: registry.byId(installation.agentId),
+      agentName: registry.displayNameFor(installation.agentId),
+    );
   }
 
   /// `Fix the parser` → `Fix the parser (fork)`, or `(fork 2)` for the second

@@ -108,4 +108,96 @@ void main() {
       }
     }
   });
+
+  group('the user picking a mode for the agent they chose', () {
+    const forker = AgentDescriptor(
+      id: 'forker',
+      displayName: 'Forker CLI',
+      binaries: AgentBinaries(windows: ['f'], posix: ['f']),
+      launch: AgentLaunchSpec(
+        permissionModes: {
+          PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+          PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
+        },
+      ),
+    );
+
+    test('no pick is exactly the carry rule, and says where it came from', () {
+      final resolved = resolveContinuationPermission(
+        sessionMode: PermissionMode.ask,
+        target: forker,
+      );
+      expect(resolved.mode, PermissionMode.ask);
+      expect(resolved.wasChosen, isFalse);
+      expect(resolved.carried.fit, PermissionModeFit.exact);
+      expect(resolved.explanation, startsWith('Carried from this session.'));
+      expect(resolved.explanation, contains('Forker CLI is told to use it'));
+    });
+
+    test('a pick the agent expresses is what runs', () {
+      final resolved = resolveContinuationPermission(
+        sessionMode: PermissionMode.ask,
+        target: forker,
+        chosen: PermissionMode.bypass,
+      );
+      expect(resolved.mode, PermissionMode.bypass);
+      expect(resolved.wasChosen, isTrue);
+      expect(resolved.carried.fit, PermissionModeFit.exact);
+      // The user chose it, so the line does not re-explain where it came from.
+      expect(resolved.explanation, isNot(contains('Carried from')));
+    });
+
+    test('a pick the agent cannot express falls downwards, never upwards', () {
+      // The property the picker must not become a way around: `acceptEdits`
+      // is not in Forker's vocabulary, and `bypass` — the only other mode it
+      // has — is more permissive, so the answer is the safest thing it does
+      // express rather than the nearest one.
+      final resolved = resolveContinuationPermission(
+        sessionMode: PermissionMode.bypass,
+        target: forker,
+        chosen: PermissionMode.acceptEdits,
+      );
+      expect(resolved.mode, PermissionMode.ask);
+      expect(resolved.carried.changed, isTrue);
+      expect(resolved.explanation, contains('no more permissive'));
+    });
+
+    test(
+      'the offered modes are the chosen agent\'s, in safest-first order',
+      () {
+        final resolved = resolveContinuationPermission(
+          sessionMode: PermissionMode.ask,
+          target: forker,
+        );
+        expect(resolved.options.map((o) => o.mode), PermissionMode.values);
+        // Loop 31 §4 option C, unchanged by there being a picker: a mode the
+        // descriptor cannot express is shown and not selectable.
+        expect(
+          {
+            for (final option in resolved.options)
+              option.mode: option.isSelectable,
+          },
+          {
+            PermissionMode.ask: true,
+            PermissionMode.acceptEdits: false,
+            PermissionMode.bypass: true,
+          },
+        );
+        expect(resolved.selected.mode, PermissionMode.ask);
+      },
+    );
+
+    test('an agent that can be told nothing still names its own default', () {
+      final resolved = resolveContinuationPermission(
+        sessionMode: PermissionMode.ask,
+        target: AgentRegistry.builtIn.byId(AgentIds.antigravity),
+      );
+      // Not escalated to bypass to have *something* selectable: the default
+      // stays the session's mode, unenforced, and the sentence says so.
+      expect(resolved.mode, PermissionMode.ask);
+      expect(resolved.carried.enforced, isFalse);
+      expect(resolved.explanation, contains('its own default'));
+      expect(resolved.selected.isSelectable, isFalse);
+    });
+  });
 }

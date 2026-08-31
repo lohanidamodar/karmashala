@@ -1,10 +1,12 @@
 import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
 import 'package:chitragupta/src/features/agents/domain/permission_carry.dart';
+import 'package:chitragupta/src/features/agents/presentation/permission_mode_picker.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
 import 'package:chitragupta/src/features/sessions/domain/handoff_packet.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
+import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
 import 'package:chitragupta/src/features/sessions/presentation/continue_with_dialog.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter/material.dart';
@@ -26,6 +28,21 @@ const _prompting = AgentDescriptor(
       resume: AgentResume.flag('--resume'),
       evidence: 'p --help',
     ),
+  ),
+);
+
+/// Expresses two modes, which is what makes the picker's rules visible: one
+/// the source session is already on, and one it is not.
+const _flexible = AgentDescriptor(
+  id: 'flexible',
+  displayName: 'Flexible CLI',
+  binaries: AgentBinaries(windows: ['f'], posix: ['f']),
+  launch: AgentLaunchSpec(
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
+    },
+    acceptsPromptArgument: true,
   ),
 );
 
@@ -65,6 +82,37 @@ class _RecordingService extends SessionHandoffService {
   String? packetFor;
   String? packetInstruction;
   bool packetWasFork = false;
+  String? handedOffTo;
+  PermissionMode? handedOffUnder;
+  bool forked = false;
+  PermissionMode? forkedUnder;
+
+  @override
+  Future<SessionLaunchResult> handoffTo({
+    required String sessionId,
+    required String targetInstallationId,
+    required String instruction,
+    List<String> unresolvedTasks = const [],
+    bool intoNewWorktree = false,
+    PermissionMode? permissionMode,
+  }) async {
+    handedOffTo = targetInstallationId;
+    handedOffUnder = permissionMode;
+    return SessionLaunchResult(session: session());
+  }
+
+  @override
+  Future<SessionLaunchResult> forkSession({
+    required String sessionId,
+    String instruction = '',
+    List<String> unresolvedTasks = const [],
+    bool intoNewWorktree = false,
+    PermissionMode? permissionMode,
+  }) async {
+    forked = true;
+    forkedUnder = permissionMode;
+    return SessionLaunchResult(session: session());
+  }
 
   @override
   Future<HandoffPacket> buildPacket({
@@ -91,20 +139,28 @@ class _RecordingService extends SessionHandoffService {
 }
 
 void main() {
-  late _RecordingService service;
+  // Null until the dialog reads the provider, which is itself the answer to
+  // "was anything launched": a test may ask before that has happened.
+  _RecordingService? service;
 
   Future<void> pump(
     WidgetTester tester, {
     required SessionContinuation continuation,
   }) async {
+    // A desktop window, which is where this dialog lives. At the test
+    // default's 600px it is taller than the screen and the segmented button
+    // scrolls out from under the pointer.
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           sessionContinuationProvider.overrideWith((ref, _) => continuation),
-          sessionHandoffServiceProvider.overrideWith((ref) {
-            service = _RecordingService(ref);
-            return service;
-          }),
+          sessionHandoffServiceProvider.overrideWith(
+            (ref) => service = _RecordingService(ref),
+          ),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ContinueWithDialog(sessionId: 's1')),
@@ -124,6 +180,7 @@ void main() {
         [
           _target(_prompting, id: 'a1', isSameAgent: true),
           _target(_mute, id: 'a2'),
+          _target(_flexible, id: 'a3'),
         ],
     plan: SessionForkPlan.decide(
       descriptor: forkAgent,
@@ -149,10 +206,115 @@ void main() {
     tester,
   ) async {
     await pump(tester, continuation: continuation());
+    // Twice, from one resolution: beside the target it belongs to, and again
+    // under the picker for the agent currently chosen.
     expect(
       find.textContaining('Prompting CLI is told to use it'),
-      findsOneWidget,
+      findsNWidgets(2),
     );
+    expect(find.textContaining('Carried from this session.'), findsOneWidget);
+  });
+
+  testWidgets('offers the chosen agent\'s modes, and nothing it lacks', (
+    tester,
+  ) async {
+    await pump(tester, continuation: continuation());
+
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+    // Prompting CLI has only `ask`, so the rest are listed and unselectable.
+    expect(
+      tester
+          .widget<PopupMenuItem<PermissionMode>>(
+            find.widgetWithText(
+              PopupMenuItem<PermissionMode>,
+              'Bypass (full autonomy)',
+            ),
+          )
+          .enabled,
+      isFalse,
+    );
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    // Choosing the other agent re-resolves what is on offer.
+    await tester.tap(find.text('Flexible CLI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<PopupMenuItem<PermissionMode>>(
+            find.widgetWithText(
+              PopupMenuItem<PermissionMode>,
+              'Bypass (full autonomy)',
+            ),
+          )
+          .enabled,
+      isTrue,
+    );
+  });
+
+  testWidgets('a mode the next agent cannot be put into does not survive the '
+      'change of agent', (tester) async {
+    await pump(tester, continuation: continuation());
+    await tester.tap(find.text('Flexible CLI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bypass (full autonomy)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bypass'), findsOneWidget);
+
+    // Prompting CLI has no bypass, and nothing more permissive may be
+    // substituted, so the selection falls to the safest mode it does have —
+    // and says that it did.
+    await tester.tap(find.text('Prompting CLI'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bypass'), findsNothing);
+    expect(find.text('Ask'), findsOneWidget);
+    expect(find.textContaining('no more permissive'), findsWidgets);
+  });
+
+  testWidgets('hands off under the mode picked for the chosen agent', (
+    tester,
+  ) async {
+    await pump(tester, continuation: continuation());
+    await tester.enterText(find.byType(TextField).first, 'Take it from here.');
+    await tester.tap(find.text('Flexible CLI'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bypass (full autonomy)'));
+    await tester.pumpAndSettle();
+
+    // Still nothing launched: picking a mode is not confirming the handoff.
+    expect(service?.handedOffTo, isNull);
+
+    await tester.tap(find.text('Hand off'));
+    await tester.pumpAndSettle();
+    expect(service!.handedOffTo, 'a3');
+    expect(service!.handedOffUnder, PermissionMode.bypass);
+  });
+
+  testWidgets('a fork runs under the mode picked for the same agent', (
+    tester,
+  ) async {
+    await pump(tester, continuation: continuation());
+    await tester.tap(find.text('Fork this one'));
+    await tester.enterText(find.byType(TextField).first, 'branch it');
+    await tester.pumpAndSettle();
+
+    // The agent is not in question here, only the mode it branches under.
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ask every time'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Fork'));
+    await tester.pumpAndSettle();
+    expect(service!.forked, isTrue);
+    expect(service!.forkedUnder, PermissionMode.ask);
   });
 
   testWidgets('will not start until the user has written an instruction', (
@@ -183,7 +345,7 @@ void main() {
       find.textContaining('This is exactly what the next agent receives'),
       findsOneWidget,
     );
-    expect(service.packetInstruction, 'Finish the parser.');
+    expect(service!.packetInstruction, 'Finish the parser.');
     // Nothing was launched by previewing.
     expect(find.text('Hand off'), findsOneWidget);
   });

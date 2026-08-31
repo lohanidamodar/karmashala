@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../agents/domain/permission_carry.dart';
+import '../../agents/presentation/permission_mode_picker.dart';
+import '../../settings/domain/permission_mode.dart';
 import '../application/session_handoff_service.dart';
 import '../domain/session_fork.dart';
 
@@ -21,6 +24,11 @@ import '../domain/session_fork.dart';
 /// * what the session's **permission mode** becomes on the way over (Loop 49's
 ///   fidelity, applied across a provider boundary), and
 /// * whether a fork is the CLI's own or a written substitute for one.
+///
+/// The mode is offered as a choice rather than only reported, because the
+/// answer is a property of the *pair*: the agent the user is picking decides
+/// which modes exist at all, so this is the first moment the question can be
+/// asked properly, and the last one before it is answered by a launch.
 class ContinueWithDialog extends ConsumerStatefulWidget {
   const ContinueWithDialog({required this.sessionId, super.key});
 
@@ -44,6 +52,14 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
 
   _Mode _mode = _Mode.handoff;
   String? _targetInstallationId;
+
+  /// The mode the user picked, or null while the session's own is being
+  /// carried. Kept as the raw pick rather than as the resolved mode, because
+  /// the resolution depends on the agent and the agent is still changeable:
+  /// [resolveContinuationPermission] is re-run on every build and again by the
+  /// service at launch, from this one value, so the two cannot disagree.
+  PermissionMode? _chosenMode;
+
   bool _newWorktree = false;
   bool _busy = false;
   String? _preview;
@@ -103,6 +119,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
           instruction: _instruction.text,
           unresolvedTasks: _taskLines,
           intoNewWorktree: _newWorktree,
+          permissionMode: _chosenMode,
         );
       } else {
         await service.handoffTo(
@@ -111,6 +128,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
           instruction: _instruction.text,
           unresolvedTasks: _taskLines,
           intoNewWorktree: _newWorktree,
+          permissionMode: _chosenMode,
         );
       }
       navigator.pop();
@@ -127,6 +145,25 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
   String _message(Object error) =>
       error is StateError ? error.message : '$error';
 
+  /// The agent the permission question is about: the one being handed to, or —
+  /// on the fork tab, where the agent is not in question — the session's own.
+  HandoffTarget? _agentInFocus(List<HandoffTarget> targets) =>
+      _mode == _Mode.fork
+      ? targets.where((t) => t.isSameAgent).firstOrNull
+      : _selected(targets);
+
+  /// What [target] will run under, given whatever has been picked so far.
+  ///
+  /// `target.permission.requested` is the source session's own mode, so the
+  /// dialog needs nothing else to ask this question of any target in the list.
+  ContinuationPermission _permissionFor(HandoffTarget target) =>
+      resolveContinuationPermission(
+        sessionMode: target.permission.requested,
+        target: target.descriptor,
+        chosen: _chosenMode,
+        targetName: target.agentName,
+      );
+
   HandoffTarget? _selected(List<HandoffTarget> targets) {
     for (final target in targets) {
       if (target.installation.id == _targetInstallationId) return target;
@@ -142,6 +179,8 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
     final targets = continuation.targets;
     final plan = continuation.plan;
     final target = _selected(targets);
+    final focus = _agentInFocus(targets);
+    final permission = focus == null ? null : _permissionFor(focus);
     final theme = Theme.of(context);
 
     final canStart =
@@ -182,6 +221,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                 _TargetPicker(
                   targets: targets,
                   selected: target,
+                  permissionFor: _permissionFor,
                   onChanged: (t) => setState(() {
                     _targetInstallationId = t.installation.id;
                     _preview = null;
@@ -189,6 +229,13 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                 )
               else
                 _PlanNote(plan: plan),
+              if (permission != null) ...[
+                const SizedBox(height: Insets.sm),
+                _PermissionRow(
+                  permission: permission,
+                  onChanged: (mode) => setState(() => _chosenMode = mode),
+                ),
+              ],
               const SizedBox(height: Insets.md),
               TextField(
                 controller: _instruction,
@@ -294,11 +341,18 @@ class _TargetPicker extends StatelessWidget {
   const _TargetPicker({
     required this.targets,
     required this.selected,
+    required this.permissionFor,
     required this.onChanged,
   });
 
   final List<HandoffTarget> targets;
   final HandoffTarget? selected;
+
+  /// Each row's permission sentence, resolved against the mode picked so far
+  /// rather than against the session's alone — otherwise the rows would answer
+  /// "what happens if I go here" for a mode the user has already changed.
+  final ContinuationPermission Function(HandoffTarget) permissionFor;
+
   final ValueChanged<HandoffTarget> onChanged;
 
   @override
@@ -345,17 +399,65 @@ class _TargetPicker extends StatelessWidget {
                 ],
               ],
             ),
-            subtitle: Text(
-              target.refusal ?? target.permission.summary,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: target.canReceive
-                    ? (target.permission.enforced
-                          ? theme.colorScheme.onSurfaceVariant
-                          : theme.colorScheme.error)
-                    : theme.colorScheme.error,
-              ),
+            subtitle: Builder(
+              builder: (context) {
+                final permission = permissionFor(target);
+                return Text(
+                  target.refusal ?? permission.carried.summary,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: target.canReceive
+                        ? (permission.carried.enforced
+                              ? theme.colorScheme.onSurfaceVariant
+                              : theme.colorScheme.error)
+                        : theme.colorScheme.error,
+                  ),
+                );
+              },
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// The mode the next session will run under, and where that answer came from.
+///
+/// It sits under the agent it belongs to, because the two questions are one
+/// question: the modes on offer are the chosen agent's, and choosing a
+/// different agent re-answers both.
+class _PermissionRow extends StatelessWidget {
+  const _PermissionRow({required this.permission, required this.onChanged});
+
+  final ContinuationPermission permission;
+  final ValueChanged<PermissionMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Text('Runs under', style: theme.textTheme.labelSmall),
+            const SizedBox(width: Insets.sm),
+            PermissionModePicker(
+              options: permission.options,
+              selected: permission.mode,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
+        const SizedBox(height: Insets.xs),
+        Text(
+          permission.explanation,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: permission.carried.enforced
+                ? theme.colorScheme.onSurfaceVariant
+                : theme.colorScheme.error,
+          ),
+        ),
       ],
     );
   }
