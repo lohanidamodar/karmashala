@@ -39,6 +39,10 @@ const _branchWeight = 8.0;
 const _agentWeight = 4.0;
 const _commandWeight = 2.0;
 
+/// Below a session, above a project: a shell tab is a place you are already
+/// working, but it is not a piece of work in its own right.
+const _tabWeight = 18.0;
+
 /// How much the most recent session is worth over the oldest.
 const _recencySpread = 12.0;
 
@@ -73,6 +77,7 @@ class QuickOpenSources {
     ..._commands(),
     ..._workspace(),
     ..._sessions(),
+    ..._openTabs(),
     ..._files(files, changedPaths),
     ..._repoFacts(),
     ..._agents(),
@@ -326,6 +331,50 @@ class QuickOpenSources {
       imported: imported,
     );
     ref.read(shellControllerProvider.notifier).focusPane(ShellPane.detail);
+  }
+
+  // --- open terminal tabs --------------------------------------------------
+
+  /// The terminal tabs nothing else here can reach.
+  ///
+  /// A tab running one of our sessions is *already* in this list as that
+  /// session — picking it reattaches and focuses its pane — so listing it again
+  /// would only put one destination in the results twice. What is left is the
+  /// tabs that are only tabs: a shell, a build, a dev server. Those had no entry
+  /// in quick open at all, which meant the tab strip was the one way to reach
+  /// one by name, and a strip is hopeless at a hundred.
+  ///
+  /// This is why the strip's own picker needed no chord of its own: `Ctrl+K`
+  /// was already the way to find things by name, and it now finds these too.
+  List<QuickOpenItem> _openTabs() {
+    final terminals = ref.read(terminalSessionsControllerProvider);
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final shell = ref.read(shellControllerProvider.notifier);
+    final sessionPanes = {
+      for (final record in ref.read(sessionDaoProvider).getAll())
+        ?record.paneId,
+    };
+    return [
+      for (final tab in terminals.tabs)
+        if (!sessionPanes.contains(tab.focusedPaneId))
+          QuickOpenItem(
+            id: 'tab/${tab.id}',
+            group: QuickOpenGroup.tabs,
+            title: sessions.titleForTab(tab.id),
+            // The directory is what tells two `zsh` tabs apart, here for the
+            // same reason it does in the strip's picker.
+            subtitle: sessions.instanceFor(tab.focusedPaneId)?.workingDirectory,
+            detail: tab.id == terminals.activeTabId ? 'current' : null,
+            icon: AppIcons.terminal,
+            keywords: const ['terminal', 'tab'],
+            weight: _tabWeight,
+            onSelect: () => dismiss(() {
+              sessions.activateTab(tab.id);
+              ref.read(terminalVisibleProvider.notifier).set(true);
+              shell.focusPane(ShellPane.detail);
+            }),
+          ),
+    ];
   }
 
   // --- files ---------------------------------------------------------------
