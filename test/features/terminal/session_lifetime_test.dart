@@ -30,7 +30,7 @@ void main() {
           .panes
           .single;
       final instance = controller.instanceFor(pane)!;
-      instance.terminal.write('a long build\r\n');
+      giveShellHistory(instance);
 
       controller.closeTab(tabId);
       final reattached = controller.reattachSession(pane);
@@ -107,6 +107,9 @@ void main() {
       );
       final first = controller.openTab(TerminalProfile.powerShell);
       final second = controller.openTab(TerminalProfile.commandPrompt);
+      for (final tab in container.read(terminalSessionsControllerProvider).tabs) {
+        giveShellHistory(controller.instanceFor(tab.layout.panes.single)!);
+      }
       controller
         ..closeTab(first)
         ..closeTab(second);
@@ -309,10 +312,8 @@ void main() {
           .layout
           .panes
           .single;
-      controller
-          .instanceFor(backgroundPane)!
-          .terminal
-          .write('a long build\r\n');
+      giveShellHistory(controller.instanceFor(backgroundPane)!);
+      controller.instanceFor(backgroundPane)!.terminal.write('a long build\r\n');
       controller.closeTab(closed);
       controller.persistWorkspace();
       first.dispose();
@@ -350,6 +351,7 @@ void main() {
           .layout
           .panes
           .single;
+      giveShellHistory(controller.instanceFor(pane)!);
       controller.closeTab(tabId);
       controller.persistWorkspace();
       first.dispose();

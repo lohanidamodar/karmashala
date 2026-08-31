@@ -102,6 +102,8 @@ void main() {
           .panes
           .single;
       final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
+      // A pane worth detaching: an idle plain shell is released on close.
+      giveShellHistory(instance);
 
       controller.closeTab(second);
 
@@ -157,6 +159,7 @@ void main() {
         TerminalProfile.commandPrompt,
       )!;
       final instance = controller.instanceFor(second)! as FakeTerminalInstance;
+      giveShellHistory(instance);
 
       controller.closePane(second);
 

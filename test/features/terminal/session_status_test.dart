@@ -11,6 +11,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_instance.dart';
 import 'terminal_panel_test.dart' show panelContainer, pumpPanel;
 
+/// The one pane of [tabId].
+String paneOf(ProviderContainer container, String tabId) => container
+    .read(terminalSessionsControllerProvider)
+    .tabs
+    .firstWhere((t) => t.id == tabId)
+    .layout
+    .panes
+    .single;
+
 void main() {
   group('PaneStatusBar', () {
     Future<void> pump(WidgetTester tester, PaneLiveness liveness) {
@@ -107,6 +116,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       final tabId = controller.openTab(TerminalProfile.powerShell);
+      giveShellHistory(controller.instanceFor(paneOf(container, tabId))!);
       controller.openTab(TerminalProfile.commandPrompt);
 
       await pumpPanel(tester, container);
@@ -133,6 +143,7 @@ void main() {
           .layout
           .panes
           .single;
+      giveShellHistory(controller.instanceFor(pane)!);
 
       await pumpPanel(tester, container);
       await tester.tap(find.byTooltip('Close tab (the session keeps running)'));
@@ -160,6 +171,7 @@ void main() {
           .layout
           .panes
           .single;
+      giveShellHistory(controller.instanceFor(pane)!);
       controller.closeTab(first);
 
       await pumpPanel(tester, container);
@@ -186,6 +198,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       final first = controller.openTab(TerminalProfile.powerShell);
+      giveShellHistory(controller.instanceFor(paneOf(container, first))!);
       controller.openTab(TerminalProfile.commandPrompt);
       controller.closeTab(first);
 

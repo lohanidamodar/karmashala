@@ -154,6 +154,18 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       final tabId = controller.openTab(TerminalProfile.powerShell);
+      // A shell with history: an idle one would be released on close, and this
+      // test is about what a *detached* session does to the stored workspace.
+      giveShellHistory(
+        controller.instanceFor(
+          container
+              .read(terminalSessionsControllerProvider)
+              .activeTab!
+              .layout
+              .panes
+              .single,
+        )!,
+      );
       controller.persistWorkspace();
       expect(db.query('SELECT id FROM terminal_tabs;'), isNotEmpty);
 

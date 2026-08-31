@@ -77,6 +77,8 @@ void main() {
     controller.openTab(TerminalProfile.commandPrompt);
     final detachedPane = onlyPaneOf(first);
     final instance = pane(detachedPane);
+    // A pane worth detaching: an idle plain shell is released on close.
+    giveShellHistory(instance);
 
     controller.closeTab(first);
 
@@ -92,6 +94,7 @@ void main() {
     controller.openTab(TerminalProfile.commandPrompt);
     final detachedPane = onlyPaneOf(first);
     final instance = pane(detachedPane);
+    giveShellHistory(instance);
     controller.closeTab(first);
     expect(instance.ingestTier, IngestTier.cold);
 

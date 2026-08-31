@@ -9,6 +9,7 @@ import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
 import '../domain/agent_pane_launch.dart';
+import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
@@ -908,7 +909,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _detachOrRelease(String paneId) {
     final instance = _instances[paneId];
     if (instance == null) return;
-    if (!instance.liveness.value.isLive) {
+    if (!_shouldDetach(instance)) {
       _releasePane(paneId);
       return;
     }
@@ -920,6 +921,46 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         detachedAt: ref.read(clockProvider).nowUtc(),
       ),
     );
+  }
+
+  /// Whether closing this pane keeps its process alive — [shouldDetachOnClose]
+  /// with the pane's own answers to its four questions.
+  bool _shouldDetach(TerminalInstance instance) {
+    final recorder = instance.commandBlocks;
+    return shouldDetachOnClose(
+      isLive: instance.liveness.value.isLive,
+      isAgentSession: instance.agentLaunch != null,
+      // Null means the shell is not instrumented and has told us nothing.
+      // `pending` is the block being typed *or* run; only one that has started
+      // is a command actually executing.
+      commandRunning: recorder == null
+          ? null
+          : recorder.tracker.pending?.hasStarted ?? false,
+      nonBlankLines: _nonBlankLines(
+        instance,
+        stopAt: kIdleShellHistoryLines + 1,
+      ),
+    );
+  }
+
+  /// Non-blank lines in [instance]'s buffer, giving up at [stopAt].
+  ///
+  /// Bounded because the answer is only ever compared against a threshold, and
+  /// a pane at the 10 000-line scrollback cap must not cost a full walk to
+  /// close.
+  int _nonBlankLines(TerminalInstance instance, {required int stopAt}) {
+    final lines = instance.terminal.buffer.lines;
+    var count = 0;
+    for (var i = 0; i < lines.length && count < stopAt; i++) {
+      final line = lines[i];
+      for (var cell = 0; cell < line.length; cell++) {
+        if (line.getCodePoint(cell) > 32) {
+          count++;
+          break;
+        }
+      }
+    }
+    return count;
   }
 
   /// Disposes the pane [paneId] owns and stops tracking it.
