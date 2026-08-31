@@ -377,6 +377,11 @@ class SessionHandoffService {
             parentLink: SessionLink.fork,
             useWorktree: intoNewWorktree,
             existingWorktree: intoNewWorktree ? null : session.worktree,
+            // The work is where it is. A session with no worktree can still be
+            // running in a subdirectory — an adopted one usually is — and
+            // `existingWorktree` cannot say so without also claiming a
+            // worktree the session does not have.
+            workingDirectory: intoNewWorktree ? null : session.workingDirectory,
             // The session's own mode unless the user picked another for the
             // branch. Still resolved rather than passed through: the fork runs
             // the same agent, so a pick can only ever be one that agent
@@ -447,6 +452,11 @@ class SessionHandoffService {
             parentLink: link,
             useWorktree: intoNewWorktree,
             existingWorktree: intoNewWorktree ? null : session.worktree,
+            // The work is where it is. A session with no worktree can still be
+            // running in a subdirectory — an adopted one usually is — and
+            // `existingWorktree` cannot say so without also claiming a
+            // worktree the session does not have.
+            workingDirectory: intoNewWorktree ? null : session.workingDirectory,
             permissionOverride: carried.mode,
           ),
         );

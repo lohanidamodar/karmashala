@@ -26,6 +26,7 @@ import 'session_engine_provider.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
+import 'session_working_directory.dart';
 
 /// Rename/delete operations available for **every** session in the app — native
 /// engine sessions and imported CLI sessions alike. Imported operations also
@@ -246,7 +247,15 @@ class SessionActions {
           );
       await engine.resume(
         session: session,
-        workingDirectory: session.worktree ?? repo.path,
+        // Where this session was actually running, when we know: the CLIs key
+        // their conversation stores by directory, so the root is a fallback
+        // rather than an answer. A directory that has gone away falls back to
+        // it rather than failing the resume.
+        workingDirectory: directoryOrFallback(
+          _ref,
+          directory: sessionWorkingDirectoryOf(_ref, session),
+          fallback: repo.path,
+        ).directory,
         installation: installation,
         permissionMode: permission,
         resumeSessionId: session.externalSessionId,
@@ -380,7 +389,10 @@ class SessionActions {
             // become since it started.
             sessionMode: session.permissionMode,
           ),
-      cwd: (session.worktree ?? repo.path).path,
+      // No existence check: nothing is being started, and a command the user
+      // copies for later should name the directory the conversation belongs
+      // to even if that folder is not mounted at this moment.
+      cwd: (sessionWorkingDirectoryOf(_ref, session) ?? repo.path).path,
     );
   }
 
@@ -531,12 +543,19 @@ class SessionActions {
     if (env == null) {
       throw StateError('The session\'s environment is unavailable.');
     }
+    // Resolved once and used twice: the command line's `cd` and the terminal's
+    // own start directory must never disagree.
+    final directory = directoryOrFallback(
+      _ref,
+      directory: sessionWorkingDirectoryOf(_ref, session),
+      fallback: repo.path,
+    ).directory;
     final command = resumeCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
       externalId: externalId,
       environment: env,
-      cwd: session.worktree ?? repo.path,
+      cwd: directory,
       permissionMode: _ref
           .read(sessionLauncherProvider)
           .permissionFor(
@@ -548,9 +567,9 @@ class SessionActions {
             sessionMode: session.permissionMode,
           ),
     );
-    final cwd = env.wslDistribution == null
-        ? (session.worktree ?? repo.path).path
-        : null;
+    // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host
+    // shells take a start directory.
+    final cwd = env.wslDistribution == null ? directory.path : null;
     await _ref
         .read(systemTerminalServiceProvider)
         .launch(terminal, command: command, workingDirectory: cwd);

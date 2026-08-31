@@ -71,3 +71,30 @@ final sessionDirectoryPresentProvider =
         }
       };
     });
+
+/// [directory] when it is still there, otherwise [fallback] and the plain words
+/// explaining the substitution.
+///
+/// The one place the fallback is decided, so a resume into a pane, a resume
+/// into an external terminal and a handoff all behave the same way and say the
+/// same thing. A `null` [directory] — a row from before schema v22 — is not a
+/// substitution and earns no notice: nothing was recorded, so nothing was
+/// replaced.
+({EnvironmentPath directory, String? notice}) directoryOrFallback(
+  Ref ref, {
+  required EnvironmentPath? directory,
+  required EnvironmentPath fallback,
+}) {
+  if (directory == null || directory == fallback) {
+    return (directory: fallback, notice: null);
+  }
+  if (ref.read(sessionDirectoryPresentProvider)(directory)) {
+    return (directory: directory, notice: null);
+  }
+  return (
+    directory: fallback,
+    notice:
+        '${directory.path} no longer exists, so this session starts in '
+        '${fallback.path} instead.',
+  );
+}

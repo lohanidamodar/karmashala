@@ -508,21 +508,18 @@ class SessionLauncher {
       // knows (a handoff, a fork) and otherwise from the row being resumed —
       // which is what makes a resume from the Explorer land in an adopted
       // session's own subdirectory without the Explorer having to say so.
-      final stated = request.workingDirectory ?? reused?.workingDirectory;
-      if (stated != null) {
-        if (_ref.read(sessionDirectoryPresentProvider)(stated)) {
-          workingDirectory = stated;
-        } else {
-          // Falling back rather than failing: a resume must still happen. The
-          // record is kept, because a missing folder is often temporary — an
-          // unmounted drive, a WSL distro that is not running — and forgetting
-          // it would turn that into permanent data loss.
-          recordDirectory = false;
-          workingDirectoryNotice =
-              '${stated.path} no longer exists, so this session starts in '
-              '${request.repository.path.path} instead.';
-        }
-      }
+      final resolved = directoryOrFallback(
+        _ref,
+        directory: request.workingDirectory ?? reused?.workingDirectory,
+        fallback: request.repository.path,
+      );
+      workingDirectory = resolved.directory;
+      // Falling back rather than failing: a resume must still happen. The
+      // record is kept when we fell back, because a missing folder is often
+      // temporary — an unmounted drive, a WSL distro that is not running — and
+      // forgetting it would turn that into permanent data loss.
+      workingDirectoryNotice = resolved.notice;
+      recordDirectory = resolved.notice == null;
     }
 
     // A resumed session already has a CLI id. A new one gets *ours* when the
