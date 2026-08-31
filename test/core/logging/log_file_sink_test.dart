@@ -6,6 +6,7 @@ import 'package:chitragupta/src/core/logging/log_entry.dart';
 import 'package:chitragupta/src/core/logging/log_file_sink.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
+import 'package:path/path.dart' as p;
 
 LogEntry entry(
   String message, {
@@ -27,6 +28,14 @@ void main() {
     dir = await Directory.systemTemp.createTemp('chitragupta-logs');
     previous = Diagnostics.instance;
   });
+
+  /// A directory that cannot exist, on every host: a child of a regular file.
+  /// A hardcoded `/proc/...` is writable on Windows, where it is just `C:\proc`.
+  Directory unwritable() {
+    File(p.join(dir.path, 'blocker')).writeAsStringSync('not a directory');
+    return Directory(p.join(dir.path, 'blocker', 'logs'));
+  }
+
   tearDown(() async {
     Diagnostics.instance = previous;
     Logger.root.level = Level.INFO;
@@ -103,7 +112,7 @@ void main() {
 
     test('the queue is bounded when the disk stops answering', () {
       final sink = LogFileSink(
-        directory: Directory('/proc/definitely-not-writable/logs'),
+        directory: unwritable(),
         maxPending: 10,
         flushInterval: const Duration(hours: 1),
       );
