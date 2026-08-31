@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../verification/domain/verdict_attribution.dart';
 import '../../verification/presentation/attribution_mark.dart';
+import '../application/comparison_providers.dart';
 import '../domain/comparison.dart';
 
 /// Small shared pieces of the comparison surface.
@@ -144,14 +146,15 @@ class VerdictChip extends StatelessWidget {
   }
 }
 
-/// The comparison's own state, as one word on the ramp.
-class OutcomeLabel extends StatelessWidget {
+/// The comparison's own state, as one word on the ramp — and who graded the
+/// candidate it settled on.
+class OutcomeLabel extends ConsumerWidget {
   const OutcomeLabel({required this.comparison, super.key});
 
   final Comparison comparison;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final semantic = SemanticColors.of(context);
     final theme = Theme.of(context);
     final (text, color) = switch (comparison.outcome) {
@@ -165,12 +168,32 @@ class OutcomeLabel extends StatelessWidget {
         semantic.attention,
       ),
     };
-    return Text(
-      text,
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: color,
-        fontFamily: kMonoFamily,
-      ),
+    // Who graded the winner, on the outcome itself. The comparisons list shows
+    // an outcome without any candidate's verdict chip, so without this a merge
+    // that rested on the candidate's own account of itself is indistinguishable
+    // from one that was independently checked. It states; it blocks nothing.
+    // Resolved live, through the same helper the candidate's chip uses: the
+    // list saying `self` beside a card saying `independent` would be worse
+    // than saying nothing.
+    final winner = comparison.winner;
+    final attribution = winner == null
+        ? null
+        : attributionShownFor(winner, ref.watch(candidateEvidenceProvider));
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          text,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: color,
+            fontFamily: kMonoFamily,
+          ),
+        ),
+        if (attribution != null) ...[
+          const SizedBox(width: Insets.xs),
+          AttributionMark(attribution: attribution),
+        ],
+      ],
     );
   }
 }

@@ -216,12 +216,19 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
   ) async {
     final result = results[candidate.id];
     if (result == null) return;
+    // The merge is the moment a verdict is acted on, so it is the moment worth
+    // naming the verifier: a pass the candidate awarded itself and a pass
+    // another session gave it are worth different amounts. Said, never
+    // enforced — G3 step 2 is where a self-graded verdict changes what is
+    // allowed, and blocking here would hide the fact behind a refusal.
     final confirmed = await _confirm(
       title: 'Merge ${candidate.agentId}?',
       body:
           'Its worktree must be clean and its work committed. '
           '${candidate.branch ?? 'The session branch'} will be merged into the '
-          'repository’s current branch.',
+          'repository’s current branch.\n\n'
+          'Verdict: '
+          '${attributionShownFor(candidate, ref.read(candidateEvidenceProvider)).label}.',
       action: 'Merge winner',
     );
     if (confirmed != true) return;
@@ -409,13 +416,10 @@ class _CandidateColumn extends ConsumerWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final isWinner = comparison.winnerCandidateId == candidate.id;
-    // A live verdict if anything offers one, otherwise the one stored with the
-    // candidate — which is all that is left once the run is pruned.
-    final evidence =
-        (candidate.sessionId == null
-            ? null
-            : ref.watch(candidateEvidenceProvider)(candidate.sessionId!)) ??
-        candidate.evidence;
+    final evidence = evidenceShownFor(
+      candidate,
+      ref.watch(candidateEvidenceProvider),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
