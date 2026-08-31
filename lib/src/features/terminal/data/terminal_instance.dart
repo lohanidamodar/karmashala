@@ -8,6 +8,7 @@ import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
 import '../domain/agent_pane_launch.dart';
+import '../domain/enter_key_encoding.dart';
 import '../domain/mouse_wheel_reporter.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
@@ -116,7 +117,10 @@ class PtyTerminalInstance
     terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
       // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
       // tmux (and anything else reading the modifier bits) from scrolling.
-      ..mouseHandler = const ChitraguptaMouseHandler();
+      ..mouseHandler = const ChitraguptaMouseHandler()
+      // ...and encodes every modified Enter as a bare CR, so Shift+Enter is
+      // indistinguishable from submit.
+      ..inputHandler = const ChitraguptaInputHandler();
     // Attach before the process starts so no marker can be missed. When the
     // shell is not integrated this stays null and nothing else changes.
     if (shellIntegration) {
@@ -391,7 +395,8 @@ class DormantTerminalInstance implements TerminalInstance {
     this.agentLaunch,
   }) {
     terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
-      ..mouseHandler = const ChitraguptaMouseHandler();
+      ..mouseHandler = const ChitraguptaMouseHandler()
+      ..inputHandler = const ChitraguptaInputHandler();
     if (restoredScrollback.isNotEmpty) terminal.write(restoredScrollback);
   }
 

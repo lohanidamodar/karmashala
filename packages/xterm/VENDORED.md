@@ -40,7 +40,7 @@ Runtime dependencies are unchanged (`convert`, `meta`, `quiver`, `equatable`,
 
 ## Files that diverge from upstream
 
-Three of the 77 `.dart` files under `lib/`, verified with `diff -rq` against the
+Four of the 77 `.dart` files under `lib/`, verified with `diff -rq` against the
 pub cache copy of the same version. Everything else is byte-identical; the only
 other differences are `pubspec.yaml` and `analysis_options.yaml` (packaging,
 above) and the five removed trees.
@@ -49,6 +49,7 @@ above) and the five removed trees.
 | --- | --- |
 | `lib/src/ui/painter.dart` | `paintLine` rewritten as two passes: one merged `drawRect` per run of equal background colour, then one `Paragraph` per run of cells sharing (foreground, background, flags). Adds a record-keyed LRU for run paragraphs beside the existing per-cell `ParagraphCache`, cleared in the same places. The original per-cell loop is kept verbatim as `paintLinePerCell` (`@visibleForTesting`) so `test/terminal/perf/pixel_equivalence_test.dart` can assert the two rasterise identically. |
 | `lib/ui.dart` | One added line: `export 'src/ui/painter.dart';`. Upstream keeps `TerminalPainter` package-private, which the app's perf and pixel-equivalence harness needs to reach. No other export changed. |
+| `lib/src/core/escape/parser.dart` | `_csiHandleSgr` returns immediately when the CSI carried a prefix. Upstream routes **every** `m` final byte to SGR regardless of prefix, but a prefixed `m` is not SGR: `CSI > 4 ; 2 m` is xterm's `modifyOtherKeys` and `CSI > 1 m` is `modifyKeyboard`. A program probing for modifier reporting therefore had its request parsed as SGR parameters 4 and 2 and left the pane **underlined and faint**. The parser already records `_csi.prefix` (`parser.dart:222`) and other handlers already branch on it (`:331`, `:394`); SGR simply did not. We do not implement the modes — this only stops them being misread as a colour change. Pinned by `test/features/terminal/enter_key_encoding_test.dart`. |
 | `lib/src/utils/circular_buffer.dart` | `_adoptChild` and `_moveChild` detach the outgoing occupant of a slot only if it is still homed there (`_isHomedAt`/`_evict`). Upstream detaches unconditionally, which detaches the aliases `Buffer.scrollUp` creates while they are still live at a lower index — a single line object is referenced from two slots between iterations of `lines[i] = lines[i + n]` — and the next `insert` then asserts `attached`. Real Codex TUI output trips it after 2 304 bytes. `_moveChild` also uses `_attach` rather than `_move`, which sets the same field without asserting the item is already attached. Measured: Loop 41 §6.1, with the fixture in `test/features/agents/fixtures/codex-tui.raw`; `test/features/terminal/command_blocks_terminal_test.dart` pins that a genuinely evicted line still detaches. |
 
 ### Rules the batched painter must keep
