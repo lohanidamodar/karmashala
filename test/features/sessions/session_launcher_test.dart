@@ -7,9 +7,11 @@ import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
+import 'package:chitragupta/src/features/sessions/application/session_working_directory.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
 import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
@@ -57,6 +59,7 @@ const _talkative = AgentDescriptor(
 ({ProviderContainer container, AppDatabase db}) harness({
   Settings settings = const Settings(),
   AgentRegistry registry = const AgentRegistry([_rover]),
+  Set<String> missingDirectories = const {},
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db)
@@ -75,6 +78,11 @@ const _talkative = AgentDescriptor(
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(registry),
       settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
+      // The filesystem seam. Nothing under `C:\src\demo` exists on a test
+      // machine, so the default would call every recorded directory gone.
+      sessionDirectoryPresentProvider.overrideWithValue(
+        (directory) => !missingDirectories.contains(directory.path),
+      ),
     ],
   );
   return (container: container, db: db);
@@ -503,5 +511,238 @@ void main() {
     );
 
     expect(SessionDao(h.db).getById(result.session.id), isNotNull);
+  });
+
+  group('the directory a session runs in', () {
+    const subdirectory = r'C:\src\demo\app\packages\ui';
+    const elsewhere = EnvironmentPath(
+      environmentId: 'windows',
+      path: subdirectory,
+    );
+
+    /// A session adopted out of a terminal pane: a real row, in a
+    /// subdirectory, with the CLI's own id and no pane of its own.
+    void adoptedIn(AppDatabase db, EnvironmentPath directory) {
+      SessionDao(db).insert(
+        session(
+          id: 'adopted-1',
+          title: 'Adopted',
+          workingDirectory: directory,
+        ).copyWith(externalSessionId: 'cli-abc'),
+      );
+    }
+
+    test('a launched session records where it was started', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final launched = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'Rover run',
+              purpose: SessionPurpose.newSession,
+            ),
+          );
+
+      // The same fact as an adopted session's, from the one place that already
+      // knew it. Two sources for it would drift.
+      final stored = SessionDao(h.db).getById(launched.session.id)!;
+      expect(stored.workingDirectory, repository().path);
+      expect(stored.worktree, isNull);
+      expect(stored.useWorktree, isFalse);
+    });
+
+    test('a session joining a worktree records the worktree', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      const worktree = EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\src\demo\.chitragupta-worktrees\app-s-1',
+      );
+
+      final launched = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'In a worktree',
+              purpose: SessionPurpose.newSession,
+              existingWorktree: worktree,
+            ),
+          );
+
+      final stored = SessionDao(h.db).getById(launched.session.id)!;
+      expect(stored.workingDirectory, worktree);
+      // And the worktree still says it is one, which the cwd never does.
+      expect(stored.worktree, worktree);
+      expect(stored.useWorktree, isTrue);
+    });
+
+    test('an adopted session in a subdirectory resumes in it', () async {
+      // The failure this closes: Claude Code and Codex key their conversation
+      // stores by working directory, so a resume from the repository root can
+      // silently start a *new* conversation wearing this row's title.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      adoptedIn(h.db, elsewhere);
+
+      final resumed = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'Adopted',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'cli-abc',
+              // Exactly what the Explorer passes: the row has no worktree, so
+              // nothing but the recorded directory can answer.
+            ),
+          );
+
+      expect(resumed.session.id, 'adopted-1');
+      final instance = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumed.paneId!)!;
+      expect(instance.agentLaunch!.workingDirectory, subdirectory);
+      expect(resumed.workingDirectoryNotice, isNull);
+    });
+
+    test('a resume with nothing recorded still starts at the root', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      SessionDao(h.db).insert(
+        session(id: 'old-1', title: 'Before v22')
+            .copyWith(externalSessionId: 'cli-old'),
+      );
+
+      final resumed = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'Before v22',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'cli-old',
+            ),
+          );
+
+      final instance = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumed.paneId!)!;
+      expect(instance.agentLaunch!.workingDirectory, repository().path.path);
+      expect(resumed.workingDirectoryNotice, isNull);
+    });
+
+    test('a resumed worktree row goes back to its worktree', () async {
+      // The MCP `open_session` tool resumes without naming a worktree at all,
+      // so before the row could answer, every resume from an agent put the
+      // session back in the repository root. A row written before v22 records
+      // no directory but does record its worktree, which is the same fact.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      const worktree = EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\src\demo\.chitragupta-worktrees\app-old',
+      );
+      SessionDao(h.db).insert(
+        session(id: 'wt-1', title: 'In a worktree', useWorktree: true,
+                worktree: worktree)
+            .copyWith(externalSessionId: 'cli-wt'),
+      );
+
+      final resumed = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'In a worktree',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'cli-wt',
+            ),
+          );
+
+      final instance = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumed.paneId!)!;
+      expect(instance.agentLaunch!.workingDirectory, worktree.path);
+    });
+
+    test('a stated directory beats the row and the repository', () async {
+      // What a handoff and a fork need: continue the work *where it is*.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      final launched = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'Handed over',
+              purpose: SessionPurpose.newSession,
+              workingDirectory: elsewhere,
+            ),
+          );
+
+      final instance = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(launched.paneId!)!;
+      expect(instance.agentLaunch!.workingDirectory, subdirectory);
+      expect(SessionDao(h.db).getById(launched.session.id)!.workingDirectory,
+          elsewhere);
+    });
+
+    test('a directory that has gone away falls back and says so', () async {
+      final h = harness(missingDirectories: const {subdirectory});
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      adoptedIn(h.db, elsewhere);
+
+      final resumed = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'Adopted',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'cli-abc',
+            ),
+          );
+
+      // It resumes rather than throwing, in the only directory left.
+      final instance = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumed.paneId!)!;
+      expect(instance.agentLaunch!.workingDirectory, repository().path.path);
+      // And it says so, naming both directories, rather than resuming
+      // somewhere else in silence.
+      expect(resumed.workingDirectoryNotice, contains(subdirectory));
+      expect(
+        resumed.workingDirectoryNotice,
+        contains(repository().path.path),
+      );
+
+      // The record is kept. A missing folder is often temporary — an unmounted
+      // drive, a WSL distro that is not running — and overwriting it would turn
+      // that into permanent data loss.
+      expect(
+        SessionDao(h.db).getById('adopted-1')!.workingDirectory,
+        elsewhere,
+      );
+    });
   });
 }

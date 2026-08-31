@@ -153,14 +153,22 @@ Harness harness({AppDatabase? database, bool installAgents = true}) {
 
 /// The two observations a real pane produces for one typed command: the prompt
 /// (block id, no text yet) and the command actually running.
-void typeCommand(Harness h, String paneId, String block, String line) {
+void typeCommand(
+  Harness h,
+  String paneId,
+  String block,
+  String line, {
+  String directory = _repoPath,
+}) {
   h.panes
     ..clear()
-    ..add(pane(paneId, commandId: block));
+    ..add(pane(paneId, directory: directory, commandId: block));
   h.service.observePanes();
   h.panes
     ..clear()
-    ..add(pane(paneId, commandId: block, commandLine: line));
+    ..add(
+      pane(paneId, directory: directory, commandId: block, commandLine: line),
+    );
   h.service.observePanes();
 }
 
@@ -718,6 +726,100 @@ void main() {
       h.service.observePanes();
 
       expect(h.sessions.getById(adopted.id)!.paneId, 'pane-9');
+    });
+  });
+
+  group('where the adopted session was actually running', () {
+    const subdirectory = r'C:\src\demo\app\packages\ui';
+
+    test('an agent started in a subdirectory records that subdirectory', () {
+      // The whole point of the column. Claude Code and Codex key their
+      // conversation stores by working directory, so a resume from the
+      // repository root may not find this conversation at all.
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude', directory: subdirectory);
+      h.service.onHook(
+        agentId: AgentIds.claudeCode,
+        sessionId: 'cli-abc',
+        cwd: subdirectory,
+      );
+
+      final row = h.sessions.getAll().single;
+      expect(row.workingDirectory?.path, subdirectory);
+      // Bound to the environment of the repository the pane was matched
+      // against — the same environment the match itself was made under, so the
+      // path means what it meant when it was compared.
+      expect(row.workingDirectory?.environmentId, 'windows');
+    });
+
+    test('the directory is never mistaken for a worktree', () {
+      // `worktree` drives `use_worktree` and `WorktreeService.remove`, which
+      // deletes the directory. A hand-started agent's cwd is the user's own
+      // checkout; recording it there would offer to delete it.
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude', directory: subdirectory);
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+
+      final row = h.sessions.getAll().single;
+      expect(row.worktree, isNull);
+      expect(row.useWorktree, isFalse);
+    });
+
+    test('a store-swept adoption records the pane it was swept for', () async {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'codex', directory: subdirectory);
+      h.store.add(
+        detected(
+          'codex-1',
+          cli: AgentIds.codex,
+          path: subdirectory,
+          modifiedAt: testTime,
+        ),
+      );
+
+      expect(await h.service.sweep(), 1);
+      expect(h.sessions.getAll().single.workingDirectory?.path, subdirectory);
+    });
+
+    test('rejoining a row that recorded no directory records this one', () {
+      // A row from before schema v22, or one whose agent was quit and started
+      // again in a different folder. It has no directory and the pane knows
+      // one, so recording it replaces nothing.
+      final h = harness();
+      h.sessions.insert(
+        session(id: 's-old', title: 'Earlier').copyWith(
+          externalSessionId: 'cli-abc',
+        ),
+      );
+
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude', directory: subdirectory);
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+
+      final row = h.sessions.getById('s-old')!;
+      expect(row.paneId, 'pane-1');
+      expect(row.workingDirectory?.path, subdirectory);
+    });
+
+    test('rejoining never overwrites a directory the row already has', () {
+      final h = harness();
+      h.sessions.insert(
+        session(
+          id: 's-old',
+          title: 'Earlier',
+          workingDirectory: const EnvironmentPath(
+            environmentId: 'windows',
+            path: r'C:\src\demo\app\tool',
+          ),
+        ).copyWith(externalSessionId: 'cli-abc'),
+      );
+
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude', directory: subdirectory);
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+
+      expect(
+        h.sessions.getById('s-old')!.workingDirectory?.path,
+        r'C:\src\demo\app\tool',
+      );
     });
   });
 }

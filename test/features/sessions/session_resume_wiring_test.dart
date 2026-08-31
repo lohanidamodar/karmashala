@@ -8,11 +8,13 @@ import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/session_actions.dart';
 import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
 import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/session_working_directory.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_resume.dart';
@@ -67,6 +69,7 @@ class _RecordingTerminals extends SystemTerminalService {
   _RecordingTerminals() : super(_DeadRunner());
 
   final launches = <List<String>>[];
+  final directories = <String?>[];
 
   @override
   Future<void> launch(
@@ -75,6 +78,7 @@ class _RecordingTerminals extends SystemTerminalService {
     String? workingDirectory,
   }) async {
     launches.add(command);
+    directories.add(workingDirectory);
   }
 }
 
@@ -101,7 +105,10 @@ typedef Harness = ({
   _RecordingTerminals terminals,
 });
 
-Harness harness(AgentDescriptor agent) {
+Harness harness(
+  AgentDescriptor agent, {
+  Set<String> missingDirectories = const {},
+}) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
   ProjectDao(db).insert(project());
@@ -117,6 +124,11 @@ Harness harness(AgentDescriptor agent) {
       agentRegistryProvider.overrideWithValue(AgentRegistry([agent])),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
       systemTerminalServiceProvider.overrideWithValue(terminals),
+      // The filesystem seam: nothing under `C:\src\demo` exists on a test
+      // machine, so the default would call every recorded directory gone.
+      sessionDirectoryPresentProvider.overrideWithValue(
+        (directory) => !missingDirectories.contains(directory.path),
+      ),
     ],
   );
   return (container: container, db: db, terminals: terminals);
@@ -388,6 +400,73 @@ void main() {
             ),
           );
       expect(other.session.externalSessionId, 'ext-2');
+    });
+  });
+
+  group('a session opens where it was actually running', () {
+    const subdirectory = r'C:\src\demo\app\packages\ui';
+    const elsewhere = EnvironmentPath(
+      environmentId: 'windows',
+      path: subdirectory,
+    );
+
+    /// An adopted row: the CLI's id, a recorded directory, and no pane.
+    void adopted(Harness h) {
+      SessionDao(h.db).insert(
+        session(
+          id: 'adopted-1',
+          title: 'Adopted',
+          workingDirectory: elsewhere,
+        ).copyWith(externalSessionId: 'ext-1'),
+      );
+    }
+
+    test('an external terminal starts in the recorded directory', () async {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      adopted(h);
+
+      await h.container
+          .read(sessionActionsProvider)
+          .openSessionInSystemTerminal('adopted-1', _terminal);
+
+      expect(h.terminals.directories.single, subdirectory);
+    });
+
+    test('the copied resume command cds where the agent ran', () {
+      final h = harness(_exclusive);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      adopted(h);
+
+      final command = h.container
+          .read(sessionActionsProvider)
+          .nativeResumeShellCommand('adopted-1');
+
+      expect(command, contains(subdirectory));
+    });
+
+    test('a directory that has gone away falls back to the repository', () async {
+      // The resume must still happen. A recorded folder can be missing for
+      // reasons that have nothing to do with the conversation — an unmounted
+      // drive, a deleted scratch folder — and refusing would be worse than
+      // starting one level up.
+      final h = harness(_exclusive, missingDirectories: const {subdirectory});
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      adopted(h);
+
+      await h.container
+          .read(sessionActionsProvider)
+          .openSessionInSystemTerminal('adopted-1', _terminal);
+
+      expect(h.terminals.directories.single, repository().path.path);
+      // And the row still remembers where it ran: the folder may come back.
+      expect(
+        SessionDao(h.db).getById('adopted-1')!.workingDirectory,
+        elsewhere,
+      );
     });
   });
 }

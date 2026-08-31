@@ -11,11 +11,13 @@ import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart
 import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_chat_source.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
+import 'package:chitragupta/src/features/sessions/application/session_working_directory.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
@@ -107,6 +109,7 @@ Harness harness({
     aheadOfBase: 3,
   ),
   String gitStatus = ' M lib/a.dart\nA  lib/b.dart\n?? notes.txt\n',
+  Set<String> missingDirectories = const {},
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -148,6 +151,11 @@ Harness harness({
       sessionDeliveryProvider.overrideWith(
         (ref, id) async => repoState ?? SessionDelivery.unknown,
       ),
+      // The filesystem seam: nothing under `C:\src\demo` exists on a test
+      // machine, so the default would call every recorded directory gone.
+      sessionDirectoryPresentProvider.overrideWithValue(
+        (directory) => !missingDirectories.contains(directory.path),
+      ),
     ],
   );
   return (container: container, db: db);
@@ -180,9 +188,14 @@ void seedSession(
   String id = 'src',
   String installationId = 'a1',
   String? externalSessionId = 'cli-1',
+  EnvironmentPath? workingDirectory,
 }) {
   SessionDao(db).insert(
-    session(id: id, agentInstallationId: installationId).copyWith(
+    session(
+      id: id,
+      agentInstallationId: installationId,
+      workingDirectory: workingDirectory,
+    ).copyWith(
       externalSessionId: externalSessionId,
       permissionMode: PermissionMode.ask,
     ),
@@ -669,6 +682,97 @@ void main() {
       // Phrased child-first so a sidebar can render it as a sentence without
       // the explorer having to know the enum.
       expect(child.parentLink!.phrase, 'handed off from');
+    });
+  });
+
+  group('where a continuation runs', () {
+    const subdirectory = r'C:\src\demo\app\packages\ui';
+    const elsewhere = EnvironmentPath(
+      environmentId: 'windows',
+      path: subdirectory,
+    );
+
+    test('a native fork continues in the source session\'s directory', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, workingDirectory: elsewhere);
+
+      final forked = await h.container
+          .read(sessionHandoffServiceProvider)
+          .forkSession(sessionId: 'src');
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(forked.paneId!)!
+          .agentLaunch!;
+      expect(launch.workingDirectory, subdirectory);
+      // A fork of a session that has no worktree still has none: the directory
+      // is where the work is, not a claim about how it is checked out.
+      final child = SessionDao(h.db).getById(forked.session.id)!;
+      expect(child.worktree, isNull);
+      expect(child.useWorktree, isFalse);
+      expect(child.workingDirectory, elsewhere);
+    });
+
+    test('a handoff continues in the source session\'s directory', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, workingDirectory: elsewhere);
+
+      final handed = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take over.',
+          );
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(handed.paneId!)!
+          .agentLaunch!;
+      expect(launch.workingDirectory, subdirectory);
+    });
+
+    test('a fork into a new worktree goes to the worktree, not here', () async {
+      // `intoNewWorktree` is the user asking for a clean checkout. Carrying the
+      // source directory across would put the branch back where it came from.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, workingDirectory: elsewhere);
+
+      final forked = await h.container
+          .read(sessionHandoffServiceProvider)
+          .forkSession(sessionId: 'src', intoNewWorktree: true);
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(forked.paneId!)!
+          .agentLaunch!;
+      expect(launch.workingDirectory, isNot(subdirectory));
+      expect(SessionDao(h.db).getById(forked.session.id)!.useWorktree, isTrue);
+    });
+
+    test('the packet names the directory the work is actually in', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, workingDirectory: elsewhere);
+
+      final packet = await h.container
+          .read(sessionHandoffServiceProvider)
+          .buildPacket(
+            sessionId: 'src',
+            targetAgentName: 'Forker CLI',
+            instruction: 'Take over.',
+          );
+
+      expect(packet.workingDirectory, subdirectory);
     });
   });
 }

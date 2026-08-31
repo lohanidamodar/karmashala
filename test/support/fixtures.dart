@@ -78,6 +78,7 @@ Session session({
   String title = 'Work',
   bool useWorktree = false,
   EnvironmentPath? worktree,
+  EnvironmentPath? workingDirectory,
   SessionStatus status = SessionStatus.created,
 }) => Session(
   id: id,
@@ -86,6 +87,7 @@ Session session({
   title: title,
   useWorktree: useWorktree,
   worktree: worktree,
+  workingDirectory: workingDirectory,
   status: status,
   createdAt: testTime,
 );

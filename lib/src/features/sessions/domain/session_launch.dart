@@ -86,6 +86,7 @@ class SessionLaunchRequest {
     this.surface = SessionSurface.pane,
     this.useWorktree = false,
     this.existingWorktree,
+    this.workingDirectory,
     this.additionalRepositories = const [],
     this.resumeExternalSessionId,
     this.firstMessage,
@@ -119,6 +120,20 @@ class SessionLaunchRequest {
   ///
   /// Mutually exclusive with [useWorktree]; the launcher refuses both.
   final EnvironmentPath? existingWorktree;
+
+  /// Run in this directory rather than the repository root, without claiming
+  /// it is a worktree.
+  ///
+  /// What a handoff, a fork and a resume of an adopted session all need: the
+  /// work is in a subdirectory, and Claude Code and Codex key their
+  /// conversation stores by working directory, so starting at the root can
+  /// silently open a *new* conversation instead of the one that was asked for.
+  ///
+  /// [existingWorktree] wins when both are set, because it is the stronger
+  /// statement — it says the directory is a worktree as well as where to run —
+  /// and the two can only ever name the same place.
+  final EnvironmentPath? workingDirectory;
+
   final List<Repository> additionalRepositories;
 
   /// The CLI's own session id to resume, when continuing one it already wrote.
