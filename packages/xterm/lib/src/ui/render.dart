@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:xterm/src/core/buffer/line.dart';
 import 'package:xterm/src/core/buffer/cell_offset.dart';
 import 'package:xterm/src/core/buffer/range.dart';
 import 'package:xterm/src/core/buffer/segment.dart';
@@ -185,6 +186,15 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   @override
+  void dispose() {
+    // DIVERGENCE (Chitragupta, Loop 84): the drag anchor is ours, so releasing
+    // it is ours too. See [_dragAnchor].
+    _dragAnchor?.dispose();
+    _dragAnchor = null;
+    super.dispose();
+  }
+
+  @override
   void detach() {
     super.detach();
     _offset.removeListener(_onScroll);
@@ -253,18 +263,59 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     );
   }
 
+  /// DIVERGENCE (Chitragupta, Loop 84): where a drag selection started, held as
+  /// a **buffer anchor** rather than re-derived from a screen position.
+  ///
+  /// `TerminalGestureHandler.onDragUpdate` passes the screen position the drag
+  /// began at on every update, and upstream fed it back through
+  /// [getCellOffset], which adds the *current* scroll offset. So the moment the
+  /// buffer moved under the pointer — new output arriving, or the view
+  /// scrolling — the start of the selection slid onto a different line, and
+  /// everything that had scrolled off the top silently fell out of it. Select a
+  /// build log while it is still printing and you got the last screen, not what
+  /// you dragged over.
+  ///
+  /// A [CellAnchor] is the buffer's own answer to this: it follows its line as
+  /// the buffer scrolls and reports itself detached once that line is evicted
+  /// from scrollback. Held separately from the selection's own anchors because
+  /// `setSelection` takes ownership of those and disposes them on the next
+  /// call. See packages/xterm/VENDORED.md.
+  CellAnchor? _dragAnchor;
+
+  /// Re-anchors a drag to [at] and returns where it now starts.
+  CellOffset _beginDragAt(CellOffset at) {
+    _dragAnchor?.dispose();
+    _dragAnchor = _terminal.buffer.createAnchorFromOffset(at);
+    return at;
+  }
+
+  /// Where the current drag started, in buffer coordinates.
+  ///
+  /// Clamped to the oldest surviving line once scrollback has evicted the line
+  /// it began on: a selection that runs off the top of history is truncated to
+  /// the history that is left, which is what the user can still see, rather
+  /// than being dropped.
+  CellOffset _dragStart(Offset fallback) {
+    final anchor = _dragAnchor;
+    if (anchor == null) return getCellOffset(fallback);
+    if (anchor.attached) return anchor.offset;
+    return CellOffset(anchor.x, 0);
+  }
+
   /// Selects entire words in the terminal that contains [from] and [to].
   void selectWord(Offset from, [Offset? to]) {
-    final fromOffset = getCellOffset(from);
-    final fromBoundary = _terminal.buffer.getWordBoundary(fromOffset);
-    if (fromBoundary == null) return;
     if (to == null) {
+      final fromOffset = _beginDragAt(getCellOffset(from));
+      final fromBoundary = _terminal.buffer.getWordBoundary(fromOffset);
+      if (fromBoundary == null) return;
       _controller.setSelection(
         _terminal.buffer.createAnchorFromOffset(fromBoundary.begin),
         _terminal.buffer.createAnchorFromOffset(fromBoundary.end),
         mode: SelectionMode.line,
       );
     } else {
+      final fromBoundary = _terminal.buffer.getWordBoundary(_dragStart(from));
+      if (fromBoundary == null) return;
       final toOffset = getCellOffset(to);
       final toBoundary = _terminal.buffer.getWordBoundary(toOffset);
       if (toBoundary == null) return;
@@ -280,13 +331,14 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   /// Selects characters in the terminal that starts from [from] to [to]. At
   /// least one cell is selected even if [from] and [to] are same.
   void selectCharacters(Offset from, [Offset? to]) {
-    final fromPosition = getCellOffset(from);
     if (to == null) {
+      final fromPosition = _beginDragAt(getCellOffset(from));
       _controller.setSelection(
         _terminal.buffer.createAnchorFromOffset(fromPosition),
         _terminal.buffer.createAnchorFromOffset(fromPosition),
       );
     } else {
+      final fromPosition = _dragStart(from);
       var toPosition = getCellOffset(to);
       if (toPosition.x >= fromPosition.x) {
         toPosition = CellOffset(toPosition.x + 1, toPosition.y);
