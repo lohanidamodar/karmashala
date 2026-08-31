@@ -191,6 +191,21 @@ void main() {
       .firstWhere((state) => state == wanted)
       .timeout(timeout);
 
+  /// Polls until [check] holds. Needed wherever the fact being waited for is
+  /// not a link-state CHANGE: `linkStates` seeds its current value, so waiting
+  /// on `connected` while the phone is already connected answers at once.
+  Future<void> until(
+    bool Function() check, {
+    Duration timeout = const Duration(seconds: 20),
+    required String reason,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (!check()) {
+      if (DateTime.now().isAfter(deadline)) fail('never happened: $reason');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  }
+
   Future<RemoteCompanionGateway> pairedPhone({LanPathScout? scout}) async {
     final gateway = makeGateway(scout: scout);
     final session = await service!.beginPairing(
@@ -291,6 +306,12 @@ void main() {
       reason: 'a path already proved unusable must not keep costing the link',
     );
     expect(gateway.link, CompanionLinkState.connected);
+    expect(
+      (await gateway.listSessions()).single.id,
+      's1',
+      reason: 'and the link that survived still answers — `connected` on its '
+          'own is a claim, not a link',
+    );
   });
 
   test('a resume asks the desktop to answer instead of trusting the socket',
@@ -407,12 +428,17 @@ void main() {
     // Nothing is touched on the phone. It must find the desktop again on its
     // own — the rendezvous comes from the device key, never from the URL, so
     // an address is only ever a place to meet.
-    await awaitLink(
-      gateway,
-      CompanionLinkState.connected,
+    //
+    // What is waited for is the MOVE, not the link state: the phone is still
+    // sitting on the old address at this point and still reads `connected`,
+    // so a `linkStates` wait — which seeds its current value — would answer
+    // instantly and prove nothing about the move.
+    await until(
+      () => gateway.activeRelay == movedUri &&
+          gateway.link == CompanionLinkState.connected,
       timeout: const Duration(seconds: 20),
+      reason: 'the phone follows the relay to its new address',
     );
-    expect(gateway.activeRelay, movedUri);
     expect((await gateway.listSessions()).single.id, 's1');
     expect(
       gateway.pairing?.hostId?.value,
