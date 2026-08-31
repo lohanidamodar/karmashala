@@ -194,7 +194,7 @@ class AttentionInbox {
     this._byId,
     this._conditions,
     this._openIds,
-    this.unseen,
+    this.pending,
   );
 
   /// Indexes one list of items — one pass, and the only place a new inbox is
@@ -205,19 +205,19 @@ class AttentionInbox {
     final byId = <String, InboxItem>{};
     final conditions = <InboxItem>[];
     final openIds = <String>{};
-    var unseen = 0;
+    final pending = <InboxItem>[];
     for (final item in kept) {
       byId[item.id] = item;
       if (item.kind.isCondition) conditions.add(item);
       openIds.add(item.session.openId);
-      if (!item.seen) unseen++;
+      if (!item.seen) pending.add(item);
     }
     return AttentionInbox._(
       List.unmodifiable(kept),
       byId,
       conditions,
       openIds,
-      unseen,
+      List.unmodifiable(pending),
     );
   }
 
@@ -237,21 +237,26 @@ class AttentionInbox {
   /// has none costs a set lookup rather than a walk.
   final Set<String> _openIds;
 
-  /// The number every surface agrees on: the status bar's count, the side
-  /// panel's badge and the tray's badge are all this.
+  /// Unseen items, newest first — what the tray menu lists.
   ///
-  /// Counted once when the inbox is built rather than by each consumer on each
-  /// read — three widgets and the tray asked for it, and each asked again on
-  /// every rebuild.
-  final int unseen;
+  /// Built once with the indexes rather than filtered per read. Two readers ask
+  /// for it and neither asks rarely: the tray rebuilds its menu from this on
+  /// every inbox change, and `projectSummaryProvider` is a `.family`, so it
+  /// walked the whole list once per project on every rebuild — and a project
+  /// header rebuilds when git answers, which is far more often than the inbox
+  /// changes.
+  final List<InboxItem> pending;
 
   static final empty = AttentionInbox();
 
   bool get isEmpty => items.isEmpty;
 
-  /// Unseen items, newest first — what the tray menu lists.
-  List<InboxItem> get pending =>
-      items.where((item) => !item.seen).toList(growable: false);
+  /// The number every surface agrees on: the status bar's count, the side
+  /// panel's badge and the tray's badge are all this.
+  ///
+  /// The length of [pending] rather than a second tally, so the badge cannot
+  /// come to disagree with the menu it opens.
+  int get unseen => pending.length;
 
   /// Folds one poll into the inbox.
   ///

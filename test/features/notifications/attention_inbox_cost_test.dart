@@ -131,6 +131,66 @@ void main() {
     });
   });
 
+  group('reading the inbox', () {
+    /// An inbox in the shape a busy workspace leaves behind: every session
+    /// blocked and already acknowledged, plus a cap's worth of finished turns
+    /// nobody has looked at. The filter behind `pending` therefore has real
+    /// work to do — it has to walk the conditions to reject them.
+    AttentionInbox busy(int count) {
+      final seen = AttentionInbox.empty.apply(waitingPoll(count), t0).markAllSeen();
+      return seen.apply(newsPoll(count, 1), t0.add(const Duration(minutes: 1)));
+    }
+
+    for (final count in [100, 500]) {
+      test('at $count sessions pending is read, not rebuilt', () {
+        final inbox = busy(count);
+        expect(inbox.unseen, greaterThan(0));
+        expect(
+          inbox.pending,
+          hasLength(inbox.unseen),
+          reason: 'the list and the count are the same fact',
+        );
+
+        // Warmed first: at 200 reps the JIT's first pass over the filter is
+        // most of the smaller case's time, and it is not what is being claimed.
+        const reps = 200;
+        for (var i = 0; i < reps; i++) {
+          _legacyPending(inbox.items);
+          inbox.pending;
+        }
+
+        final legacy = Stopwatch()..start();
+        for (var i = 0; i < reps; i++) {
+          _legacyPending(inbox.items);
+        }
+        legacy.stop();
+
+        final fast = Stopwatch()..start();
+        for (var i = 0; i < reps; i++) {
+          inbox.pending;
+        }
+        fast.stop();
+
+        // ignore: avoid_print
+        print(
+          'inbox pending · $count sessions · ${inbox.items.length} items'
+          ' · before ${(legacy.elapsedMicroseconds / reps).toStringAsFixed(2)}'
+          ' us/read · after'
+          ' ${(fast.elapsedMicroseconds / reps).toStringAsFixed(2)} us/read',
+        );
+
+        // The shape, not the number: the tray reads this on every inbox change
+        // and `projectSummaryProvider` reads it once per project on every
+        // rebuild, so it must not be O(items) per reader.
+        expect(
+          identical(inbox.pending, inbox.pending),
+          isTrue,
+          reason: 'two reads must be the same list, not two filters',
+        );
+      });
+    }
+  });
+
   group('what the inbox holds', () {
     for (final count in [100, 500]) {
       test('at $count sessions it stays within the cap', () {
@@ -198,3 +258,8 @@ List<InboxItem> _legacyApply(
   );
   return next;
 }
+
+/// `AttentionInbox.pending` as it was: a fresh filter and a fresh list, per
+/// read, per consumer.
+List<InboxItem> _legacyPending(List<InboxItem> items) =>
+    items.where((item) => !item.seen).toList(growable: false);
