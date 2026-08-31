@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
@@ -13,6 +17,7 @@ import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
+import '../domain/pane_title.dart';
 import '../domain/terminal_profile.dart';
 import 'scrollback_autosave.dart';
 
@@ -141,6 +146,20 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Per-pane liveness listeners, kept for the same reason.
   final Map<String, void Function()> _livenessListeners = {};
 
+  /// Titles panes have set for themselves with OSC 0/2, by pane id.
+  ///
+  /// A shell (or a TUI) naming its own window is the strongest signal there is
+  /// about what a plain terminal is doing, which is why it outranks the
+  /// directory. Agent panes are the exception — see [_titleForPane].
+  final Map<String, String> _oscTitles = {};
+
+  /// Resolved tab labels, cleared on every publish.
+  ///
+  /// A label can cost a database read (an agent pane resolves its session's
+  /// *current* name), and the tab strip asks for one per tab per build. Without
+  /// this, a hundred tabs would be a hundred queries a frame.
+  final Map<String, String> _titles = {};
+
   /// Whether the user has closed a tab, a pane or a session since the workspace
   /// was restored.
   ///
@@ -189,6 +208,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       persistWorkspace();
       _disposeAll();
     });
+    // A rename happens in the sessions feature and never touches a terminal, so
+    // nothing here would republish and the tab strip would keep the old name.
+    // `listen` rather than `watch`: re-running `build` would restore the
+    // workspace again.
+    ref.listen(sessionsRevisionProvider, (_, _) {
+      if (!_disposed) _publish();
+    });
     _restoreWorkspace();
     _autosave.start();
     return _snapshot();
@@ -224,6 +250,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   );
 
   void _publish() {
+    _titles.clear();
     _applyIngestTiers();
     state = _snapshot();
   }
@@ -460,13 +487,73 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// The label shown on tab [tabId]: the focused pane's title, plus the pane
   /// count once the tab holds more than one.
+  ///
+  /// Derived here rather than at each call site so the tab strip, the overflow
+  /// picker and anything else that names a tab agree by construction.
   String titleForTab(String tabId) {
     final tab = _tabById(tabId);
     if (tab == null) return 'Terminal';
-    final title = _instances[tab.focusedPaneId]?.title ?? 'Terminal';
+    final title = _titles.putIfAbsent(
+      tab.focusedPaneId,
+      () => _titleForPane(tab.focusedPaneId),
+    );
     final count = tab.layout.panes.length;
     return count > 1 ? '$title ($count)' : title;
   }
+
+  /// What one pane is called, in precedence order.
+  ///
+  /// 1. **An agent pane takes its session's current name.** The reported bug:
+  ///    "i opened archlinux terminal tab, then started claude session and then
+  ///    renamed the session, the tab doesn't update the title."
+  ///    `TerminalInstance.title` is a `final` field captured when the pane was
+  ///    created, so a rename could never reach it. Reading the session row at
+  ///    display time keeps one source of truth — the session's name is the
+  ///    session's, not a copy the terminal took once — and means a rename shows
+  ///    immediately, with no reopen and no restart. An agent pane deliberately
+  ///    outranks OSC: Claude Code and Codex both name their own window, and
+  ///    letting that win would put the rename back out of reach.
+  /// 2. **A shell that named its own window wins for a plain pane.** OSC 0/2 is
+  ///    the shell saying what it is doing, which beats any guess.
+  /// 3. **Otherwise the directory**, shortened — which is what a terminal tab
+  ///    is for, and far more use than five tabs all called "PowerShell".
+  /// 4. **Otherwise the profile label**, as before.
+  String _titleForPane(String paneId) {
+    final instance = _instances[paneId];
+    if (instance == null) return 'Terminal';
+
+    final sessionId = instance.agentLaunch?.sessionId;
+    if (sessionId != null) {
+      final title = _sessionTitle(sessionId);
+      if (title != null) return title;
+    }
+    if (instance.agentLaunch != null) return instance.title;
+
+    final osc = _oscTitles[paneId];
+    if (osc != null) return osc;
+
+    final directory = instance.workingDirectory;
+    if (directory != null && directory.isNotEmpty) {
+      return directoryLabel(directory, home: _homeDirectory);
+    }
+    return instance.title;
+  }
+
+  /// The current name of session [id], or null when there is no such session.
+  String? _sessionTitle(String id) {
+    try {
+      final title = ref.read(sessionDaoProvider).getById(id)?.title.trim();
+      return (title == null || title.isEmpty) ? null : title;
+    } catch (_) {
+      // No database in this container — a terminal-only test. The pane keeps
+      // the name it launched with.
+      return null;
+    }
+  }
+
+  /// Where `~` points. Read once: it cannot change while the app is running.
+  static final String? _homeDirectory =
+      Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
 
   /// The strongest liveness among tab [tabId]'s panes.
   ///
@@ -898,6 +985,24 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     void onLiveness() => _publish();
     _livenessListeners[paneId] = onLiveness;
     instance.liveness.addListener(onLiveness);
+    // Nothing else claims `onTitleChange`, so the controller owns it: the tab
+    // label is the controller's to derive, and the pane has no idea it is one.
+    instance.terminal.onTitleChange = (title) => _onPaneTitle(paneId, title);
+  }
+
+  /// A pane named its own window (OSC 0 or 2).
+  void _onPaneTitle(String paneId, String title) {
+    final trimmed = title.trim();
+    final current = _oscTitles[paneId];
+    if (trimmed.isEmpty ? current == null : current == trimmed) return;
+    if (trimmed.isEmpty) {
+      _oscTitles.remove(paneId);
+    } else {
+      _oscTitles[paneId] = trimmed;
+    }
+    // Only when it actually changed: a TUI that repaints its title every frame
+    // must not republish the whole workspace every frame.
+    _publish();
   }
 
   /// Detaches [paneId] if a process is still running behind it, and releases it
@@ -976,6 +1081,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Drops the listeners [_adopt] attached, so a disposed instance can never
   /// call back into the controller.
   void _unlisten(String paneId, TerminalInstance instance) {
+    instance.terminal.onTitleChange = null;
+    _oscTitles.remove(paneId);
     final dirty = _dirtyListeners.remove(paneId);
     if (dirty != null) instance.terminal.removeListener(dirty);
     final liveness = _livenessListeners.remove(paneId);
