@@ -44,7 +44,10 @@ class ScrollbackPark {
   /// Does nothing while a full-screen program owns the display. The alternate
   /// buffer is bounded to the viewport already, and there is no way to write a
   /// snapshot back into the main buffer while the alternate one is in front —
-  /// so such a pane keeps history it could not otherwise restore.
+  /// so such a pane keeps history it could not otherwise restore. [isParked] is
+  /// therefore also how `ColdScreen` knows to leave a TUI alone: its screen is
+  /// redrawn by the reattach replay, and a half-applied redraw underneath that
+  /// would only be applied twice.
   bool park() {
     if (_parked != null || terminal.isUsingAltBuffer) return false;
     _parked = encodeScrollback(
@@ -72,6 +75,9 @@ class ScrollbackPark {
     // `clear` leaves the cursor wherever the process had it; the replay has to
     // start at the top of the buffer it is filling.
     terminal.write('\x1b[H');
-    if (parked.isNotEmpty) terminal.write('$parked\r\n');
+    // Trailing reset: every encoded *line* opens with `ESC[0m`, but the last
+    // one can leave a colour in effect, and what follows this is live process
+    // output that never asked to be painted in it.
+    if (parked.isNotEmpty) terminal.write('$parked\x1b[0m\r\n');
   }
 }

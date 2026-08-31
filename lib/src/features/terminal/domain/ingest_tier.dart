@@ -28,8 +28,15 @@ enum IngestTier {
 
   /// Detached — running with no tab at all.
   ///
-  /// Not parsed. Its output goes straight into a bounded raw spool, which is
-  /// replayed into the buffer when the session is brought back. A cold pane
-  /// costs no parse, no buffer, no timer and no frame.
+  /// Its scrollback is not parsed: output goes into a bounded raw spool and is
+  /// replayed into the buffer only when the session is brought back. A cold
+  /// pane costs no buffer, no timer and no frame.
+  ///
+  /// Its *screen* is another matter. `terminalTailLines` reads the bottom of
+  /// the grid to tell whether an agent is waiting for approval, and a session
+  /// with no tab is exactly the session nobody is watching for — so a cold pane
+  /// redraws its screen, at most once a second, out of the same shared pool a
+  /// warm pane draws on, and trims straight back to the viewport. See
+  /// `ColdScreen`.
   cold,
 }

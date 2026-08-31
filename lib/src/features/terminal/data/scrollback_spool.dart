@@ -52,16 +52,33 @@ class ScrollbackSpool {
   /// [droppedBytes] is *not* reset: whether history was lost is a property of
   /// what is being replayed, and the caller reads it to decide whether to say
   /// so. Use [reset] to forget both.
-  Uint8List drain() {
-    if (_chunks.isEmpty) return Uint8List(0);
-    final out = Uint8List(_length);
+  Uint8List drain() => take(_length);
+
+  /// The first [maxBytes] held, in order, leaving the rest queued.
+  ///
+  /// For a caller draining under a budget it does not control — `ColdScreen`
+  /// takes what the shared pool allowed and comes back for the remainder — so
+  /// a partial grant leaves the spool consistent rather than forcing an
+  /// all-or-nothing drain.
+  Uint8List take(int maxBytes) {
+    final wanted = maxBytes < _length ? maxBytes : _length;
+    if (wanted <= 0) return Uint8List(0);
+    final out = Uint8List(wanted);
     var at = 0;
-    for (final chunk in _chunks) {
-      out.setRange(at, at + chunk.length, chunk);
-      at += chunk.length;
+    while (at < wanted) {
+      final chunk = _chunks.first;
+      final room = wanted - at;
+      if (chunk.length <= room) {
+        out.setRange(at, at + chunk.length, chunk);
+        at += chunk.length;
+        _chunks.removeAt(0);
+      } else {
+        out.setRange(at, wanted, Uint8List.sublistView(chunk, 0, room));
+        _chunks[0] = Uint8List.sublistView(chunk, room);
+        at = wanted;
+      }
     }
-    _chunks.clear();
-    _length = 0;
+    _length -= wanted;
     return out;
   }
 
