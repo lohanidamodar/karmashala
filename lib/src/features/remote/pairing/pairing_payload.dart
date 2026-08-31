@@ -8,6 +8,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import '../protocol.dart';
+import '../transport/key_schedule.dart';
 
 /// Bytes of pairing secret behind the QR code.
 const int kPairingSecretBytes = 32;
@@ -30,7 +31,11 @@ class PairingPayload {
     required this.hostId,
     required this.capabilities,
     this.version = kProtocolVersion,
-  }) : secret = Uint8List.fromList(secret) {
+    Uint8List? typedSecret,
+  }) : secret = Uint8List.fromList(secret),
+       typedSecret = typedSecret == null
+           ? null
+           : Uint8List.fromList(typedSecret) {
     if (secret.length < kPairingSecretBytes) {
       throw ArgumentError.value(
         secret.length,
@@ -60,6 +65,32 @@ class PairingPayload {
     );
   }
 
+  /// A fresh payload rooted in a typed code: 20 random bytes become the
+  /// typeable code, and the payload's 32-byte secret and its rendezvous are
+  /// both HKDF-derived from them — so a phone holding only the typed code can
+  /// reach the very same pairing session the QR names explicitly.
+  static Future<PairingPayload> generateWithCode({
+    required Uri relay,
+    required DeviceId hostId,
+    required CapabilitySet capabilities,
+    Random? random,
+  }) async {
+    final rng = random ?? Random.secure();
+    final typed = Uint8List.fromList([
+      for (var i = 0; i < kTypedCodeSecretBytes; i++) rng.nextInt(256),
+    ]);
+    final secret = await derivePairingSecret(typed);
+    final rendezvous = await derivePairingRendezvous(secret.bytes);
+    return PairingPayload(
+      relay: relay,
+      rendezvous: rendezvous,
+      secret: Uint8List.fromList(secret.bytes),
+      hostId: hostId,
+      capabilities: capabilities,
+      typedSecret: typed,
+    );
+  }
+
   final Uri relay;
 
   /// The relay path both ends meet on for the pairing conversation only.
@@ -72,6 +103,11 @@ class PairingPayload {
 
   /// What the host will grant, shown to the user on both screens.
   final CapabilitySet capabilities;
+
+  /// The typed code's 20 secret bytes when this payload was generated with
+  /// one — shown on the desktop, never encoded into the QR. Null for decoded
+  /// payloads and pre-typed-code generations.
+  final Uint8List? typedSecret;
 
   /// The QR code's text.
   String encode() => jsonEncode({

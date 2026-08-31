@@ -45,6 +45,7 @@ class FakeCompanionGateway implements CompanionGateway {
     Map<String, List<CompanionChatMessage>> transcripts = const {},
     Map<String, CompanionApproval> approvals = const {},
     this.validShortCode = 'ABCD1234',
+    this.pairDelay = Duration.zero,
     CapabilitySet? grantOnPair,
   }) : _pairing = _Watched(pairing),
        _link = _Watched(link),
@@ -86,7 +87,15 @@ class FakeCompanionGateway implements CompanionGateway {
   /// The one short code [pairWithCode] accepts.
   final String validShortCode;
 
+  /// A pause between pairing-progress stages, so a widget test can watch each
+  /// one render. Zero (the default) keeps pairing effectively synchronous.
+  final Duration pairDelay;
+
   final CapabilitySet _grantOnPair;
+  final _progress = StreamController<CompanionPairingProgress>.broadcast(
+    sync: true,
+  );
+  Uri _pairingRelay = Uri.parse(kDefaultCompanionRelayUrl);
   final _Watched<CompanionPairing?> _pairing;
   final _Watched<CompanionLinkState> _link;
   final _Watched<CompanionLinkPath?> _linkPath;
@@ -148,23 +157,90 @@ class FakeCompanionGateway implements CompanionGateway {
     if (decoded is! Map<String, Object?> ||
         decoded['secret'] is! String ||
         (decoded['secret'] as String).isEmpty) {
-      throw const PairingException(
-        'That is not a Chitragupta pairing code. Show the QR code from the '
-        "desktop's Remote access settings and scan it again.",
+      throw _refuse(
+        const PairingException(
+          'That is not a Chitragupta pairing code. Show the QR code from the '
+          "desktop's Remote access settings and scan it again.",
+        ),
       );
     }
-    return _pair();
+    return _pairStaged();
   }
 
   @override
   Future<CompanionPairing> pairWithCode(String shortCode) async {
+    // The same sniff the real gateway does: a pasted payload is JSON.
+    if (shortCode.trim().startsWith('{')) return pairWithQr(shortCode);
     if (shortCode.trim().toUpperCase() != validShortCode.toUpperCase()) {
-      throw const PairingException(
-        'The host did not recognise that code. Codes expire after five '
-        'minutes — show a fresh one on the desktop and try again.',
+      throw _refuse(
+        const PairingException(
+          'The host did not recognise that code. Codes expire after five '
+          'minutes — show a fresh one on the desktop and try again.',
+        ),
       );
     }
-    return _pair();
+    return _pairStaged();
+  }
+
+  @override
+  Stream<CompanionPairingProgress> get pairingProgress => _progress.stream;
+
+  @override
+  Future<Uri> pairingRelay() async => _pairingRelay;
+
+  @override
+  Future<void> setPairingRelay(Uri? url) async =>
+      _pairingRelay = url ?? Uri.parse(kDefaultCompanionRelayUrl);
+
+  PairingException _refuse(PairingException error) {
+    _emit(CompanionPairingStage.failed, message: error.message);
+    return error;
+  }
+
+  void _emit(
+    CompanionPairingStage stage, {
+    String? detail,
+    String? hostName,
+    CapabilitySet? capabilities,
+    String? message,
+  }) {
+    if (_progress.isClosed) return;
+    _progress.add(
+      CompanionPairingProgress(
+        stage: stage,
+        detail: detail,
+        hostName: hostName,
+        capabilities: capabilities,
+        message: message,
+      ),
+    );
+  }
+
+  Future<void> _gap() => pairDelay == Duration.zero
+      ? Future<void>.value()
+      : Future<void>.delayed(pairDelay);
+
+  Future<CompanionPairing> _pairStaged() async {
+    _emit(CompanionPairingStage.codeAccepted);
+    await _gap();
+    _emit(
+      CompanionPairingStage.searching,
+      detail: 'on this network and over the relay',
+    );
+    await _gap();
+    _emit(
+      CompanionPairingStage.proving,
+      hostName: 'Desktop',
+      capabilities: _grantOnPair,
+    );
+    await _gap();
+    final paired = _pair();
+    _emit(
+      CompanionPairingStage.paired,
+      hostName: 'Desktop',
+      capabilities: paired.capabilities,
+    );
+    return paired;
   }
 
   CompanionPairing _pair() {

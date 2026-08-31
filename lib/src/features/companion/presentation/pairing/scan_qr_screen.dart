@@ -4,6 +4,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../../app/theme/design_tokens.dart';
 import '../../client/companion_gateway.dart';
+import '../../client/pairing_input.dart';
+import 'pairing_progress_screen.dart';
 import 'short_code_screen.dart';
 
 /// Scans the pairing QR code the desktop displays.
@@ -31,6 +33,23 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
     // One attempt at a time, and never the same refused payload again — a
     // camera re-reads the same code many times a second.
     if (_busy || payload == _refused) return;
+    if (classifyPairingInput(payload) != PairingInputKind.unrecognised) {
+      // A real code: leave the camera and narrate the attempt. Marked refused
+      // so coming Back does not immediately re-push over the same frame.
+      setState(() {
+        _refused = payload;
+        _error = null;
+      });
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PairingProgressScreen(
+            attempt: (gateway) => gateway.pairWithQr(payload),
+          ),
+        ),
+      );
+      return;
+    }
+    // Not a pairing code at all: refuse inline and keep scanning.
     setState(() {
       _busy = true;
       _error = null;

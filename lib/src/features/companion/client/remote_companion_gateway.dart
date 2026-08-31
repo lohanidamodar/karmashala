@@ -14,8 +14,10 @@ import '../../remote/client/companion_pairing_client.dart';
 import '../../remote/client/companion_store.dart' as stored;
 import '../../remote/client/lan_path.dart';
 import '../../remote/domain/remote_payloads.dart';
+import '../../remote/pairing/pairing_code.dart';
 import '../../remote/pairing/pairing_payload.dart';
 import '../../remote/protocol.dart';
+import '../../remote/transport/key_schedule.dart';
 import '../../remote/transport/lan_beacon.dart';
 import '../../remote/transport/relay_transport.dart';
 import '../../remote/transport/remote_transport.dart';
@@ -69,6 +71,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     RelayTransportFactoryFn? relayFactory,
     this.requestTimeout = const Duration(seconds: 15),
     this.helloTimeout = const Duration(seconds: 8),
+    this.pairingTimeout = const Duration(seconds: 20),
     this.lan,
     this.pushTokenSource,
     Backoff? reconnectBackoff,
@@ -94,6 +97,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   final Duration requestTimeout;
   final Duration helloTimeout;
+
+  /// The window one pairing attempt gets before both legs — LAN and relay —
+  /// are declared failed together.
+  final Duration pairingTimeout;
 
   /// The LAN leg — beacon listening and direct dialling (design §3: direct
   /// first, relay fallback). Null keeps the gateway relay-only.
@@ -125,6 +132,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   final _pairing = _Watched<CompanionPairing?>(null);
   final _link = _Watched<CompanionLinkState>(CompanionLinkState.disconnected);
   final _linkPath = _Watched<CompanionLinkPath?>(null);
+  final _progress = StreamController<CompanionPairingProgress>.broadcast(
+    sync: true,
+  );
   final _sessionChanges =
       StreamController<List<CompanionSessionSummary>>.broadcast(sync: true);
   final _attention = StreamController<CompanionAttentionEvent>.broadcast(
@@ -181,18 +191,11 @@ class RemoteCompanionGateway implements CompanionGateway {
     try {
       payload = PairingPayload.decode(qrPayload.trim());
     } on ProtocolException {
-      throw const PairingException(
-        'That is not a Chitragupta pairing code. Scan the QR from the '
-        "desktop's Remote access settings, or copy its pairing code and "
-        'paste it here.',
-      );
+      throw _refusedPairingInput();
     } on ArgumentError {
-      throw const PairingException(
-        'That is not a Chitragupta pairing code. Scan the QR from the '
-        "desktop's Remote access settings, or copy its pairing code and "
-        'paste it here.',
-      );
+      throw _refusedPairingInput();
     }
+    _emitPairing(CompanionPairingStage.codeAccepted);
     // Re-pairing replaces the old host: drop the old link first so the new
     // record is the only one anything reads.
     await _dropLink();
@@ -200,32 +203,311 @@ class RemoteCompanionGateway implements CompanionGateway {
       store: store,
       deviceName: deviceName,
     );
-    final stored.CompanionPairing record;
+    final record = await _runPairing(
+      attempt: (link) => pairingClient.pair(
+        payload,
+        transport: link,
+        timeout: pairingTimeout,
+        onConfirm: _onPairingConfirm,
+      ),
+      relay: payload.relay,
+      rendezvous: payload.rendezvous,
+    );
+    return _adoptPairing(record);
+  }
+
+  /// The typed path: a grouped base32 code carrying only the secret, or a
+  /// pasted full payload — sniffed apart here. Full entropy (160 bits), so no
+  /// PAKE is needed the way a short code would; SPAKE2 remains descoped (no
+  /// vetted pure-Dart implementation).
+  @override
+  Future<CompanionPairing> pairWithCode(String shortCode) async {
+    await _ready;
+    final text = shortCode.trim();
+    if (text.startsWith('{')) return pairWithQr(text);
+    final codeSecret = PairingCode.tryDecode(text);
+    if (codeSecret == null) throw _refusedPairingInput();
+    _emitPairing(CompanionPairingStage.codeAccepted);
+    await _dropLink();
+    final relay = await pairingRelay();
+    // The code names no rendezvous; both ends derive it from the secret.
+    final rendezvous = await derivePairingRendezvous(
+      (await derivePairingSecret(codeSecret)).bytes,
+    );
+    final pairingClient = CompanionPairingClient(
+      store: store,
+      deviceName: deviceName,
+    );
+    final record = await _runPairing(
+      attempt: (link) => pairingClient.pairWithTypedCode(
+        codeSecret: codeSecret,
+        relay: relay,
+        transport: link,
+        timeout: pairingTimeout,
+        onConfirm: _onPairingConfirm,
+      ),
+      relay: relay,
+      rendezvous: rendezvous,
+    );
+    return _adoptPairing(record);
+  }
+
+  @override
+  Stream<CompanionPairingProgress> get pairingProgress => _progress.stream;
+
+  /// Where the typed code's relay setting lives in the phone's store.
+  static const String kPairingRelayStoreKey = 'chitragupta.companion.relay';
+
+  @override
+  Future<Uri> pairingRelay() async {
     try {
-      record = await pairingClient.pair(payload);
-    } on CompanionPairingException catch (error) {
-      throw PairingException(error.message);
+      final raw = await store.read(kPairingRelayStoreKey);
+      if (raw != null) {
+        final parsed = Uri.tryParse(raw.trim());
+        if (parsed != null && parsed.hasScheme) return parsed;
+      }
     } on Object catch (error) {
-      onLog?.call('pairing failed: $error');
-      throw const PairingException(
-        'Pairing failed before the desktop could confirm it. Check the '
-        'connection and scan a fresh code.',
-      );
+      onLog?.call('pairing relay read failed: $error');
     }
+    return Uri.parse(kDefaultCompanionRelayUrl);
+  }
+
+  @override
+  Future<void> setPairingRelay(Uri? url) async {
+    if (url == null) {
+      await store.delete(kPairingRelayStoreKey);
+    } else {
+      await store.write(kPairingRelayStoreKey, url.toString());
+    }
+  }
+
+  PairingException _refusedPairingInput() {
+    const refusal = PairingException(
+      'That is not a Chitragupta pairing code. Scan the QR from the '
+      "desktop's Remote access settings, type the code shown under it, or "
+      'paste its full pairing payload here.',
+    );
+    _emitPairing(CompanionPairingStage.failed, message: refusal.message);
+    return refusal;
+  }
+
+  void _onPairingConfirm(String hostName, CapabilitySet capabilities) =>
+      _emitPairing(
+        CompanionPairingStage.proving,
+        hostName: hostName,
+        capabilities: capabilities,
+      );
+
+  void _emitPairing(
+    CompanionPairingStage stage, {
+    String? detail,
+    String? hostName,
+    CapabilitySet? capabilities,
+    String? message,
+  }) {
+    if (_progress.isClosed) return;
+    _progress.add(
+      CompanionPairingProgress(
+        stage: stage,
+        detail: detail,
+        hostName: hostName,
+        capabilities: capabilities,
+        message: message,
+      ),
+    );
+  }
+
+  CompanionPairing _adoptPairing(stored.CompanionPairing record) {
     _record = record;
     final public = _publicPairing(record);
     _pairing.value = public;
+    _emitPairing(
+      CompanionPairingStage.paired,
+      hostName: public.hostName,
+      capabilities: record.capabilities,
+    );
     _backoff.reset();
     _startLoop();
     return public;
   }
 
-  @override
-  Future<CompanionPairing> pairWithCode(String shortCode) =>
-      // The desktop's copyable pairing code IS the QR payload (full-entropy,
-      // so no PAKE is needed the way a short code would). SPAKE2 short codes
-      // remain descoped: no maintained pure-Dart SPAKE2 with RFC vectors.
-      pairWithQr(shortCode);
+  /// Runs the race and rewrites every failure as a sentence, mirroring the
+  /// old single-path error mapping.
+  Future<stored.CompanionPairing> _runPairing({
+    required Future<stored.CompanionPairing> Function(RemoteTransport link)
+    attempt,
+    required Uri relay,
+    required RendezvousId rendezvous,
+  }) async {
+    try {
+      return await _pairOverAnyPath(
+        attempt: attempt,
+        relay: relay,
+        rendezvous: rendezvous,
+      );
+    } on PairingException catch (error) {
+      _emitPairing(CompanionPairingStage.failed, message: error.message);
+      rethrow;
+    } on Object catch (error) {
+      onLog?.call('pairing failed: $error');
+      const failure = PairingException(
+        'Pairing failed before the desktop could confirm it. Check the '
+        'connection and scan a fresh code.',
+      );
+      _emitPairing(CompanionPairingStage.failed, message: failure.message);
+      throw failure;
+    }
+  }
+
+  /// Design §3 applied to pairing itself: every fresh LAN candidate races the
+  /// relay, the first sealed round-trip wins and the loser's transport is
+  /// closed under it. A dead relay must not sink pairing when the desktop is
+  /// one Wi-Fi hop away — and a dark LAN must not sink it when the relay is
+  /// fine. Only when BOTH legs fail does one combined sentence say which
+  /// failed how.
+  Future<stored.CompanionPairing> _pairOverAnyPath({
+    required Future<stored.CompanionPairing> Function(RemoteTransport link)
+    attempt,
+    required Uri relay,
+    required RendezvousId rendezvous,
+  }) async {
+    final scout = lan;
+    _ensureLanScout();
+    _emitPairing(
+      CompanionPairingStage.searching,
+      detail: scout == null
+          ? 'over the relay'
+          : 'on this network and over the relay',
+    );
+    final outcome = Completer<stored.CompanionPairing>();
+    final open = <RemoteTransport>{};
+    var cancelled = false;
+    String? relayNote;
+    String? lanNote;
+    // A refusal with a story of its own (wrong protocol version, a desktop
+    // too old for typed codes) beats the generic connectivity sentence.
+    CompanionPairingException? sharp;
+
+    bool isSharp(CompanionPairingException error) =>
+        !error.message.contains('did not answer') &&
+        !error.message.contains('connection closed');
+
+    Future<void> closeTransport(RemoteTransport transport) async {
+      if (!open.remove(transport)) return;
+      try {
+        await transport.close();
+      } on Object catch (error) {
+        onLog?.call('pairing transport close failed: $error');
+      }
+    }
+
+    Future<void> relayLeg() async {
+      final transport = _relayFactory(relay, rendezvous);
+      open.add(transport);
+      var everConnected = false;
+      final states = transport.states.listen((state) {
+        if (state == TransportState.connected) everConnected = true;
+      });
+      try {
+        final record = await attempt(transport).timeout(pairingTimeout);
+        if (!outcome.isCompleted) outcome.complete(record);
+      } on CompanionPairingException catch (error) {
+        onLog?.call('relay pairing leg failed: $error');
+        if (isSharp(error)) sharp ??= error;
+        relayNote = everConnected
+            ? 'the relay was reached but the desktop never answered there'
+            : 'no relay was reachable';
+      } on Object catch (error) {
+        onLog?.call('relay pairing leg failed: $error');
+        relayNote = everConnected
+            ? 'the relay was reached but the desktop never answered there'
+            : 'no relay was reachable';
+      } finally {
+        await states.cancel();
+        await closeTransport(transport);
+      }
+    }
+
+    Future<void> lanLeg() async {
+      if (scout == null) {
+        lanNote = 'this phone cannot search this network for it';
+        return;
+      }
+      final deadline = _now().add(pairingTimeout);
+      final tried = <String>{};
+      var sawBeacon = false;
+      // A sharp refusal ends the search: the code itself is unusable.
+      while (!cancelled &&
+          !outcome.isCompleted &&
+          sharp == null &&
+          _now().isBefore(deadline)) {
+        DiscoveredHost? candidate;
+        for (final host in scout.candidates) {
+          if (tried.contains(scout.keyOf(host))) continue;
+          candidate = host;
+          break;
+        }
+        if (candidate == null) {
+          // No fresh candidate yet; the beacon repeats every two seconds.
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+          continue;
+        }
+        sawBeacon = true;
+        tried.add(scout.keyOf(candidate));
+        final transport = scout.dial(candidate);
+        open.add(transport);
+        try {
+          final record = await attempt(
+            transport,
+          ).timeout(scout.attemptTimeout * 4);
+          scout.noteSuccess(candidate);
+          if (!outcome.isCompleted) outcome.complete(record);
+          return;
+        } on CompanionPairingException catch (error) {
+          onLog?.call('lan pairing attempt failed: $error');
+          if (isSharp(error)) sharp ??= error;
+          // Deliberately no scout cooldown: the user's Retry should be free
+          // to dial the same desktop again right away.
+        } on Object catch (error) {
+          onLog?.call('lan pairing attempt failed: $error');
+        } finally {
+          await closeTransport(transport);
+        }
+      }
+      if (!outcome.isCompleted) {
+        lanNote = sawBeacon
+            ? 'a desktop was seen on this network but did not accept the code'
+            : 'no desktop was found on this network';
+      }
+    }
+
+    unawaited(
+      Future.wait([relayLeg(), lanLeg()]).then((_) {
+        if (outcome.isCompleted) return;
+        final specific = sharp;
+        if (specific != null) {
+          outcome.completeError(PairingException(specific.message));
+          return;
+        }
+        outcome.completeError(
+          PairingException(
+            'Could not find your desktop — '
+            '${relayNote ?? 'the relay was not tried'}, and '
+            '${lanNote ?? 'this network was not searched'}. Make sure the '
+            'pairing code is still on the desktop screen, then retry.',
+          ),
+        );
+      }),
+    );
+    try {
+      return await outcome.future;
+    } finally {
+      cancelled = true;
+      for (final transport in open.toList()) {
+        await closeTransport(transport);
+      }
+    }
+  }
 
   @override
   Future<void> unpair() async {
@@ -382,6 +664,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     _link.value = CompanionLinkState.disconnected;
     await _sessionChanges.close();
     await _attention.close();
+    await _progress.close();
   }
 
   // ------------------------------------------------------- connection loop

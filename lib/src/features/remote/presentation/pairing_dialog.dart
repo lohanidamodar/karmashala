@@ -7,7 +7,9 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/remote_access_controller.dart';
 import '../domain/paired_device.dart';
 import '../pairing/host_pairing.dart';
+import '../pairing/pairing_code.dart';
 import '../pairing/pairing_payload.dart';
+import '../pairing/pairing_relay_endpoints.dart';
 import '../protocol.dart';
 import 'qr_painter.dart';
 
@@ -36,6 +38,14 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
   bool _copied = false;
   bool _showCode = false;
 
+  /// Which relay endpoint tab the shown code is rooted in.
+  int _endpoint = 0;
+
+  /// Regenerating spends the old session, whose `done` then errors with
+  /// "pairing was cancelled" — that stale error must not paint over the
+  /// fresh code. Only the newest attempt may touch state.
+  int _beginSerial = 0;
+
   @override
   void initState() {
     super.initState();
@@ -52,7 +62,15 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     super.dispose();
   }
 
+  /// The endpoint the current tab names, or null when the list is empty.
+  PairingRelayEndpoint? _selectedEndpoint() {
+    final endpoints = ref.read(pairingRelayEndpointsProvider);
+    if (endpoints.isEmpty) return null;
+    return endpoints[_endpoint.clamp(0, endpoints.length - 1)];
+  }
+
   Future<void> _begin() async {
+    final serial = ++_beginSerial;
     setState(() {
       _session = null;
       _paired = null;
@@ -62,16 +80,21 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     try {
       final session = await _access.beginPairing(
         capabilities: CapabilitySet.of(_granted),
+        relay: _selectedEndpoint()?.url,
       );
-      if (!mounted) return;
+      if (!mounted || serial != _beginSerial) return;
       setState(() => _session = session);
       final device = await session.done;
-      if (!mounted) return;
+      if (!mounted || serial != _beginSerial) return;
       setState(() => _paired = device);
     } on StateError catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted && serial == _beginSerial) {
+        setState(() => _error = error.message);
+      }
     } on PairingException catch (error) {
-      if (mounted && _paired == null) setState(() => _error = error.message);
+      if (mounted && serial == _beginSerial && _paired == null) {
+        setState(() => _error = error.message);
+      }
     }
   }
 
@@ -84,6 +107,13 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     _begin();
   }
 
+  /// The 32 base32 characters as two typeable lines of four groups.
+  static String _typedCodeLines(List<int> typedSecret) {
+    final groups = PairingCode.groups(typedSecret);
+    final half = groups.length ~/ 2;
+    return '${groups.take(half).join('-')}\n${groups.skip(half).join('-')}';
+  }
+
   static String _label(Capability capability) => switch (capability) {
     Capability.viewSessions => 'View sessions',
     Capability.readTranscript => 'Read transcripts',
@@ -91,6 +121,35 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     Capability.approve => 'Answer approvals',
     Capability.receiveNotifications => 'Notifications',
   };
+
+  /// The local-vs-internet relay tabs. With one endpoint there is nothing to
+  /// choose, so no chrome at all — the dialog looks exactly as before.
+  Widget? _endpointTabs(List<PairingRelayEndpoint> endpoints) {
+    if (endpoints.length < 2) return null;
+    final selected = _endpoint.clamp(0, endpoints.length - 1);
+    return SegmentedButton<int>(
+      showSelectedIcon: false,
+      segments: [
+        for (var i = 0; i < endpoints.length; i++)
+          ButtonSegment<int>(
+            value: i,
+            icon: Icon(
+              endpoints[i].kind == PairingRelayKind.local
+                  ? AppIcons.linkSimple
+                  : AppIcons.globe,
+              size: 14,
+            ),
+            label: Text(endpoints[i].label),
+          ),
+      ],
+      selected: {selected},
+      onSelectionChanged: (choice) {
+        setState(() => _endpoint = choice.first);
+        // The shown code names the old relay; root a fresh one here.
+        _begin();
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +178,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
               if (_paired == null) ...[
                 Text(
                   'The phone may only do what you grant here. Scan with the '
-                  'Chitragupta companion app.',
+                  'Chitragupta companion app, or type the code.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -138,6 +197,11 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
                   ],
                 ),
                 const SizedBox(height: Insets.md),
+                if (_endpointTabs(ref.watch(pairingRelayEndpointsProvider))
+                    case final tabs?) ...[
+                  Center(child: tabs),
+                  const SizedBox(height: Insets.md),
+                ],
               ],
               Center(child: _body(theme)),
             ],
@@ -220,18 +284,47 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        if (session.payload.typedSecret case final typed?) ...[
+          const SizedBox(height: Insets.md),
+          Text(
+            'No camera? Type this code on the phone:',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: Insets.xs),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.md,
+              vertical: Insets.sm,
+            ),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(Radii.sm),
+            ),
+            // Two rows of four groups: big enough to read across the room.
+            child: SelectableText(
+              _typedCodeLines(typed),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontFamily: kMonoFamily,
+                letterSpacing: 1.5,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: Insets.sm),
-        // The same payload, for when a camera won't cooperate: reveal it here
-        // and type it into the phone's "Paste the code instead" screen (or
-        // copy it for a device that can receive a paste).
+        // The full QR payload, for a device that can receive a paste — the
+        // typed code above is the thing to key in by hand. A Wrap, not a Row:
+        // the two buttons overflow 340px in some locales/scales.
         Wrap(
           alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
           spacing: Insets.xs,
           children: [
             TextButton(
               onPressed: () => setState(() => _showCode = !_showCode),
-              child: Text(_showCode ? 'Hide code' : 'Show pairing code'),
+              child: Text(_showCode ? 'Hide payload' : 'Show full payload'),
             ),
             OutlinedButton.icon(
               icon: Icon(

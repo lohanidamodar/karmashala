@@ -52,10 +52,19 @@ class LinkHello {
 /// necessity — the device key cannot exist until both ends know both ids —
 /// and carrying nothing the sealed confirmation does not then prove.
 class PairHello {
-  const PairHello({required this.deviceId, required this.name});
+  const PairHello({
+    required this.deviceId,
+    required this.name,
+    this.needsHostIdentity = false,
+  });
 
   final DeviceId deviceId;
   final String name;
+
+  /// True on the typed-code path: the phone holds only the secret and asks the
+  /// host to deliver its identity in a confirm sealed by the secret alone.
+  /// Omitted from the wire when false, so QR-path bytes stay exactly as before.
+  final bool needsHostIdentity;
 
   Uint8List encode() => Uint8List.fromList(
     utf8.encode(
@@ -64,6 +73,7 @@ class PairHello {
         'device': deviceId.value,
         'name': name,
         'v': kProtocolVersion,
+        if (needsHostIdentity) 'needHost': true,
       }),
     ),
   );
@@ -81,7 +91,11 @@ class PairHello {
     } on ProtocolException {
       return null;
     }
-    return PairHello(deviceId: id, name: name);
+    return PairHello(
+      deviceId: id,
+      name: name,
+      needsHostIdentity: json['needHost'] == true,
+    );
   }
 }
 
@@ -97,12 +111,15 @@ class PairingMessage {
   static Uint8List encodeConfirm({
     required String hostName,
     required CapabilitySet capabilities,
+    DeviceId? hostId,
   }) => Uint8List.fromList(
     utf8.encode(
       jsonEncode({
         't': confirm,
         'host': hostName,
         'capabilities': capabilities.bits,
+        // Only the typed-code path asks for it; the QR carried it already.
+        if (hostId != null) 'hostId': hostId.value,
       }),
     ),
   );

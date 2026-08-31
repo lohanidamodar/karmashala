@@ -117,15 +117,17 @@ class RemoteAccessController {
   Future<void> _stopLocalRelay() => _ref.read(localRelayServiceProvider).stop();
 
   /// Shows a new pairing code. Throws [StateError] while remote access is
-  /// off — the dialog says so instead of pretending.
+  /// off — the dialog says so instead of pretending. [relay] carries the
+  /// dialog's endpoint choice; null keeps the service's configured relay.
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
+    Uri? relay,
   }) {
     final service = _service;
     if (service == null || !service.isRunning) {
       throw StateError('Turn on remote access first.');
     }
-    return service.beginPairing(capabilities: capabilities);
+    return service.beginPairing(capabilities: capabilities, relay: relay);
   }
 
   Future<void> cancelPairing() async {
