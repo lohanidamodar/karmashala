@@ -136,9 +136,9 @@ void main() {
 
   group('permissionArgsFor', () {
     test('an unrecognised agent never gets a guessed bypass flag', () {
-      // --yolo is Antigravity's flag. Guessing it for a binary we know nothing
-      // about may be wrong or may mean something else entirely; PRODUCT.md
-      // principle 5 puts that on the wrong side of "safety by default".
+      // Guessing any bypass flag for a binary we know nothing about may be
+      // wrong or may mean something else entirely; PRODUCT.md principle 5
+      // puts that on the wrong side of "safety by default".
       for (final mode in PermissionMode.values) {
         expect(
           permissionArgsFor('someAgentWeHaveNeverHeardOf', mode),
@@ -182,15 +182,17 @@ void main() {
         '--dangerously-bypass-approvals-and-sandbox',
       ]);
 
-      // Antigravity keeps --yolo because its descriptor actually declares it,
-      // not because it fell through a default arm.
+      // Antigravity's `ask` is empty because prompting is what an unflagged
+      // `agy` does — an exact mapping that needs no flag, not a mode we
+      // cannot express. The other two are the flags `agy --help` documents;
+      // `--yolo`, which this used to assert, is not a flag the CLI has.
       expect(permissionArgsFor('antigravity', PermissionMode.ask), isEmpty);
-      expect(
-        permissionArgsFor('antigravity', PermissionMode.acceptEdits),
-        isEmpty,
-      );
+      expect(permissionArgsFor('antigravity', PermissionMode.acceptEdits), [
+        '--mode',
+        'accept-edits',
+      ]);
       expect(permissionArgsFor('antigravity', PermissionMode.bypass), [
-        '--yolo',
+        '--dangerously-skip-permissions',
       ]);
     });
   });

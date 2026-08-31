@@ -79,37 +79,51 @@ void main() {
     );
   });
 
-  test('Antigravity offers only what it can be told', () {
-    // The second of Loop 31's two shapes, and the sharper one: a *registered*
-    // agent whose descriptor omits a mode. The mode being dropped here is the
-    // safe one, so this is the case where a silent no-op is worst.
-    final ask = option(AgentIds.antigravity, PermissionMode.ask);
+  test('Antigravity offers all three, now that the CLI has been read', () {
+    // This test used to be the sharpest example of Loop 31 §4's second shape: a
+    // registered agent whose descriptor omitted the *safe* modes, leaving
+    // bypass as the only selectable one. That was an artefact of never having
+    // run the CLI. `agy --help` documents `--mode accept-edits` and
+    // `--dangerously-skip-permissions`, and prompting is what it does unflagged,
+    // so all three map exactly and all three are selectable.
+    for (final mode in PermissionMode.values) {
+      final offered = option(AgentIds.antigravity, mode);
+      expect(offered.fit, PermissionModeFit.exact, reason: mode.name);
+      expect(offered.isSelectable, isTrue, reason: mode.name);
+    }
+  });
+
+  test('a mode the descriptor omits is listed, unselectable, and explained', () {
+    // The rule itself, which no shipped agent exercises any more. Antigravity
+    // was standing in for it; pinning it to whichever agent happened to be
+    // least understood made the test a fact about our research rather than
+    // about the rule.
+    const bypassOnly = AgentDescriptor(
+      id: 'bypassOnly',
+      displayName: 'Bypass-only CLI',
+      binaries: AgentBinaries(windows: ['b'], posix: ['b']),
+      launch: AgentLaunchSpec(
+        permissionModes: {
+          PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
+        },
+      ),
+    );
+    final options = permissionOptionsFor(bypassOnly);
+    final ask = options.firstWhere((o) => o.mode == PermissionMode.ask);
+
     expect(ask.fit, PermissionModeFit.none);
     expect(ask.isSelectable, isFalse);
     expect(ask.fitLabel, 'not enforced');
-    // The sentence names the agent, so the user reads it as a property of
-    // Antigravity rather than as Chitragupta being broken.
-    expect(ask.summary, contains('Antigravity'));
+    // The sentence names the agent, so the user reads it as a property of that
+    // CLI rather than as Chitragupta being broken.
+    expect(ask.summary, contains('Bypass-only CLI'));
     expect(ask.summary, contains('own default applies'));
-
-    expect(
-      option(AgentIds.antigravity, PermissionMode.acceptEdits).isSelectable,
-      isFalse,
-    );
-    expect(
-      option(AgentIds.antigravity, PermissionMode.bypass).isSelectable,
-      isTrue,
-    );
-
-    // Which leaves bypass as the only selectable mode. That is an uncomfortable
-    // control and an honest one: Chitragupta genuinely cannot govern this agent,
-    // and the old data claimed it could.
-    expect(
-      optionsFor(
-        AgentIds.antigravity,
-      ).where((o) => o.isSelectable).map((o) => o.mode),
-      [PermissionMode.bypass],
-    );
+    // Listed but not choosable — hiding it would leave the user wondering where
+    // the safe option went.
+    expect(options.map((o) => o.mode), PermissionMode.values);
+    expect(options.where((o) => o.isSelectable).map((o) => o.mode), [
+      PermissionMode.bypass,
+    ]);
   });
 
   test('selectable is exactly what the descriptor declares', () {

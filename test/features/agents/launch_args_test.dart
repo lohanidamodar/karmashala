@@ -66,16 +66,40 @@ void main() {
   });
 
   group('antigravityLaunchArgs', () {
-    test('adds --yolo only on bypass; resume adds --resume', () {
-      expect(antigravityLaunchArgs(launch()), isNot(contains('--yolo')));
+    test('an unflagged launch is how the CLI already asks', () {
+      // `agy` prompts before tool use unless told otherwise, so the safe mode
+      // is the empty command line rather than a missing flag.
+      expect(antigravityLaunchArgs(launch()), isEmpty);
+    });
+
+    test('accept-edits and bypass use the flags agy --help documents', () {
+      expect(
+        antigravityLaunchArgs(launch(permission: PermissionMode.acceptEdits)),
+        containsAllInOrder(['--mode', 'accept-edits']),
+      );
       expect(
         antigravityLaunchArgs(launch(permission: PermissionMode.bypass)),
-        contains('--yolo'),
+        contains('--dangerously-skip-permissions'),
       );
+    });
+
+    test('resume names the conversation by id', () {
       expect(
         antigravityLaunchArgs(launch(resume: 'sid')),
-        containsAllInOrder(['--resume', 'sid']),
+        containsAllInOrder(['--conversation', 'sid']),
       );
+    });
+
+    test('the retired guesses are gone', () {
+      // `--stdio`, `--yolo` and `--resume` were invented against a fake process
+      // and are not flags this CLI has. A wrong flag does not fail loudly — it
+      // makes the agent refuse to launch.
+      for (final mode in PermissionMode.values) {
+        final args = antigravityLaunchArgs(launch(permission: mode, resume: 's'));
+        expect(args, isNot(contains('--stdio')));
+        expect(args, isNot(contains('--yolo')));
+        expect(args, isNot(contains('--resume')));
+      }
     });
   });
 }

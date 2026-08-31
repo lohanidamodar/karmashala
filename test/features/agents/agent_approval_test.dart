@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
 import 'package:chitragupta/src/features/agents/data/terminal_grid_status_source.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
@@ -160,9 +161,24 @@ void main() {
     });
 
     test('an agent whose prompt we have never read declares nothing', () {
-      // Antigravity has no grid rules either, so no approval of its is ever
-      // detected — but if one were, this is what stops us pressing keys into
-      // it on a hunch.
+      // The rule, tested against a descriptor written for it rather than
+      // against whichever shipped agent happens to be least documented today.
+      // It used to be Antigravity, which has since told us its keys (below), so
+      // pinning the rule to that agent made it a fact about our research rather
+      // than about the default.
+      const unexamined = AgentDescriptor(
+        id: 'unexamined',
+        displayName: 'Unexamined Agent',
+        binaries: AgentBinaries(windows: ['x'], posix: ['x']),
+      );
+      expect(unexamined.approval.isEmpty, isTrue);
+    });
+
+    test('Antigravity declares nothing, on evidence rather than by default', () {
+      // Its 1.0.13 build wrote a `keybindings.json` binding `confirm.yes` to
+      // `y` and `confirm.no` to `n`, which briefly looked like the best-sourced
+      // approval keys in the registry. 1.1.22 ships no such file, so those keys
+      // describe a version nobody runs, and the honest answer is still none.
       expect(registry.byId(AgentIds.antigravity)!.approval.isEmpty, isTrue);
     });
 

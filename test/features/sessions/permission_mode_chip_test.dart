@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
@@ -29,11 +30,29 @@ class _StaticSettings extends SettingsController {
   Settings build() => _settings;
 }
 
+/// An agent whose only expressible mode is the most dangerous one.
+///
+/// Antigravity used to have this shape and no longer does — reading `agy
+/// --help` showed all three modes map exactly — so the two tests about a mode
+/// the descriptor *cannot* express need a descriptor written for them rather
+/// than whichever shipped agent is least understood.
+const _bypassOnly = AgentDescriptor(
+  id: 'bypassOnly',
+  displayName: 'Bypass-only CLI',
+  binaries: AgentBinaries(windows: ['b'], posix: ['b']),
+  launch: AgentLaunchSpec(
+    permissionModes: {
+      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
+    },
+  ),
+);
+
 /// A session row for [agentId], carrying [mode] (null = inherit).
 ({AppDatabase db, ProviderScope app}) harness({
   required String agentId,
   PermissionMode? mode,
   Settings settings = const Settings(),
+  AgentRegistry registry = AgentRegistry.builtIn,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -59,7 +78,7 @@ class _StaticSettings extends SettingsController {
       overrides: [
         // Already overrides `databaseProvider`; a second one asserts.
         ...fakeTerminalOverrides(database: db),
-        agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
+        agentRegistryProvider.overrideWithValue(registry),
         settingsControllerProvider.overrideWith(
           () => _StaticSettings(settings),
         ),
@@ -113,7 +132,11 @@ void main() {
   });
 
   testWidgets('says so when the agent cannot be told at all', (tester) async {
-    final h = harness(agentId: AgentIds.antigravity, mode: PermissionMode.ask);
+    final h = harness(
+      agentId: _bypassOnly.id,
+      mode: PermissionMode.ask,
+      registry: const AgentRegistry([_bypassOnly]),
+    );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
@@ -124,7 +147,11 @@ void main() {
   testWidgets('offers only the modes the descriptor can express', (
     tester,
   ) async {
-    final h = harness(agentId: AgentIds.antigravity, mode: PermissionMode.ask);
+    final h = harness(
+      agentId: _bypassOnly.id,
+      mode: PermissionMode.ask,
+      registry: const AgentRegistry([_bypassOnly]),
+    );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 

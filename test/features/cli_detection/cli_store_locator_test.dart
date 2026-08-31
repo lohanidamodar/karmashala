@@ -20,16 +20,31 @@ void main() {
     ).locate([windowsEnv(), wslEnv()]);
 
     final wsl = stores.firstWhere((s) => s.environmentId == 'wsl:Ubuntu');
-    // Antigravity declares no store, so it contributes no home.
-    expect(wsl.homesByAgentId.keys, ['claudeCode', 'codex']);
+    expect(wsl.homesByAgentId.keys, ['claudeCode', 'codex', 'antigravity']);
     expect(wsl.claudeHome, r'\\wsl.localhost\Ubuntu\home\me\.claude');
     expect(wsl.codexHome, r'\\wsl.localhost\Ubuntu\home\me\.codex');
+    // A home is located for an agent whose store we cannot *read*, which is the
+    // point of keeping location and format separate. The nested directory is
+    // also the first one in the registry, so this is where that is exercised.
+    expect(
+      wsl.homesByAgentId['antigravity'],
+      r'\\wsl.localhost\Ubuntu\home\me\.gemini/antigravity-cli',
+    );
   });
 
   test('a registry whose agents have no store yields empty homes', () async {
+    // A descriptor written for this rule. It used to be Antigravity, which now
+    // declares a store, and the rule under test is about a descriptor with no
+    // store at all rather than about any shipped agent.
+    const storeless = AgentDescriptor(
+      id: 'storeless',
+      displayName: 'Storeless Agent',
+      binaries: AgentBinaries(windows: ['s'], posix: ['s']),
+    );
+
     final stores = await CliStoreLocator(
       runnerFactory: _homeIs('/home/me'),
-      registry: AgentRegistry([AgentRegistry.builtIn.byId('antigravity')!]),
+      registry: const AgentRegistry([storeless]),
     ).locate([windowsEnv(), wslEnv()]);
 
     expect(stores, isNotEmpty);
