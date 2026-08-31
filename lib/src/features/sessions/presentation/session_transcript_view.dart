@@ -65,9 +65,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // the same PTY as Claude Code; they simply have no readable record of the
     // conversation to draw a transcript from.
     final chatAvailable = !fromPty || sessionHasChatView(ref, widget.sessionId);
-    // Whether there is a terminal to point at. The chat view is where the
-    // workbench lands a session that has none (Loop 85), so every sentence
-    // below that says "the terminal" has to be true when it is read.
+    // Whether there is a terminal to point at. Nothing lands a session here on
+    // its own any more — the workbench shows the terminal surface and says so
+    // there — but the user can always switch to the conversation, so every
+    // sentence below that says "the terminal" still has to be true when read.
     final hasTerminal = sessionTerminalPane(ref, widget.sessionId) != null;
 
     return Column(
@@ -144,10 +145,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   /// What to say when there is nothing to render.
   ///
-  /// Each branch is about what this session actually has. The one that used to
+  /// Each branch is about what this session actually has, read off the same
+  /// `sessionTerminalPane` the workbench's own empty state reads, so the two
+  /// surfaces cannot describe one session differently. The branch that used to
   /// be wrong: a session with no chat view *and* no pane was told "its terminal
-  /// is the session" while sitting on the surface the workbench falls back to
-  /// precisely because there is no terminal left.
+  /// is the session" when there was no terminal left.
   String _emptyHint({
     required bool chatAvailable,
     required bool fromPty,
