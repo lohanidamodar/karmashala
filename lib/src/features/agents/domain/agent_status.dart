@@ -155,6 +155,7 @@ class AgentHookSpec {
     required this.configFileName,
     this.configKey = 'hooks',
     this.sessionIdPath = const ['session_id'],
+    this.cwdPath = const ['cwd'],
     this.messagePath = const [],
     required this.eventStatus,
   });
@@ -167,6 +168,15 @@ class AgentHookSpec {
 
   /// Where the agent's session id sits in the hook payload.
   final List<String> sessionIdPath;
+
+  /// Where the directory the agent is working in sits in the payload, or empty
+  /// when this agent's hooks carry none.
+  ///
+  /// Only session *adoption* reads this, and only to tell one candidate pane
+  /// from another when more than one is running the same agent. A missing or
+  /// unreadable value costs precision, never correctness: adoption falls back
+  /// to the oldest unclaimed pane rather than refusing.
+  final List<String> cwdPath;
 
   /// Where a human-readable description of *what the agent wants* sits in the
   /// payload, or empty when this agent's hooks carry none.

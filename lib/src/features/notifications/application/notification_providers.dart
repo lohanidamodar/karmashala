@@ -181,6 +181,15 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
     // registry's own slow interval — not one per badge per tick.
     resolveTranscripts: () => ref.read(sessionTranscriptLocatorProvider).index(),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
+    // Session adoption rides the status cycle rather than starting a ticker of
+    // its own: watching panes for `claude` at a prompt is free and happens
+    // every cycle, and the CLI-store scan it falls back to shares the slow slot
+    // the transcript search already pays for.
+    onCycle: (mayScanStores) async {
+      final adoption = ref.read(sessionAdoptionServiceProvider);
+      adoption.observePanes();
+      if (mayScanStores) await adoption.sweep();
+    },
   );
   ref.onDispose(registry.dispose);
   return registry;

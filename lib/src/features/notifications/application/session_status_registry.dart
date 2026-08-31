@@ -132,6 +132,7 @@ class SessionStatusRegistry {
     this.readTail,
     this.resolveTranscripts,
     this.visibleSessionIds,
+    this.onCycle,
     this.stateFileSource = const AgentStateFileStatusSource(),
     this.probeBudget = kStatusProbeBudget,
     this.probeConcurrency = kStatusProbeConcurrency,
@@ -158,6 +159,18 @@ class SessionStatusRegistry {
   /// The CLI session ids and workspace row ids currently on screen.
   final Set<String> Function()? visibleSessionIds;
 
+  /// Work that wants this registry's cycle rather than a ticker of its own.
+  ///
+  /// Called once per cycle, after the statuses are published, with
+  /// `mayScanStores` true at most once per [transcriptSearchInterval] — the
+  /// same rationing the transcript search gets, because it is the same cost:
+  /// one pass over every CLI store on disk.
+  ///
+  /// Session adoption is the caller (`SessionAdoptionService`). It rides here
+  /// so that noticing a pane has become an agent session cannot become a second
+  /// polling loop beside the one this class exists to have removed.
+  final Future<void> Function(bool mayScanStores)? onCycle;
+
   final AgentStateFileStatusSource stateFileSource;
   final int probeBudget;
   final int probeConcurrency;
@@ -174,6 +187,7 @@ class SessionStatusRegistry {
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
   DateTime? _nextTranscriptSearch;
+  DateTime? _nextStoreSlot;
   Timer? _timer;
   bool _disposed = false;
   Future<SessionStatusCycle>? _inFlight;
@@ -194,6 +208,10 @@ class SessionStatusRegistry {
 
   /// Full CLI-store scans run to resolve transcript paths.
   int transcriptScans = 0;
+
+  /// Cycles on which [onCycle] was allowed to touch the CLI stores. The number
+  /// the adoption cost claim is asserted against.
+  int storeSlots = 0;
 
   /// The most recent cycle's entries.
   List<SessionStatusEntry> get entries => _last.entries;
@@ -319,7 +337,29 @@ class SessionStatusRegistry {
       scans: scans,
     );
     if (!_changes.isClosed) _changes.add(null);
+    await _runCycleWork(now);
     return _last;
+  }
+
+  /// Runs [onCycle], deciding whether this is the cycle that may pay for a
+  /// store scan.
+  ///
+  /// Wrapped, because the work here is a *passenger* on a status cycle: a
+  /// caller that throws must not stop badges updating.
+  Future<void> _runCycleWork(DateTime now) async {
+    final work = onCycle;
+    if (work == null || _disposed) return;
+    final next = _nextStoreSlot;
+    final mayScanStores = next == null || !now.isBefore(next);
+    if (mayScanStores) {
+      _nextStoreSlot = now.add(transcriptSearchInterval);
+      storeSlots++;
+    }
+    try {
+      await work(mayScanStores);
+    } on Object {
+      // Deliberately swallowed; see above.
+    }
   }
 
   /// Begins cycling. One timer for the whole app — the point of the exercise.
