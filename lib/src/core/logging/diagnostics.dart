@@ -2,6 +2,7 @@ import 'package:logging/logging.dart';
 
 import 'log_buffer.dart';
 import 'log_entry.dart';
+import 'log_redactor.dart';
 
 /// The app's log fan-out: the one handler installed on `Logger.root`.
 ///
@@ -11,18 +12,24 @@ import 'log_entry.dart';
 /// menu or the tray has neither — so every warning the app wrote went nowhere,
 /// and a pairing that failed in the field left no evidence at all.
 ///
-/// Every record is captured once into a [LogEntry] and then handed to each
-/// sink. Fanning out from a single captured entry (rather than letting each
-/// sink read the raw [LogRecord]) is what makes it impossible for one of them
-/// to skip a step the others took — redaction, most importantly.
+/// Every record is redacted once, captured into a [LogEntry], and then handed
+/// to each sink. Fanning out from a single sanitised entry (rather than letting
+/// each sink read the raw [LogRecord]) is what makes it structurally impossible
+/// for the panel, the clipboard, the report or the log file to be the one that
+/// leaks: none of them can reach the unredacted text, because it was never
+/// stored.
 ///
 /// **[handle] must never block the caller and never throw.** Logging sits
 /// inside pty reads, socket callbacks and status cycles; a sink that is slow or
 /// broken must cost the code that logged nothing more than a `try`. So each
 /// sink is guarded, and the only work done inline is a ring-buffer store.
 class Diagnostics {
-  Diagnostics({LogRingBuffer? buffer, this.echoToConsole = true})
-    : buffer = buffer ?? LogRingBuffer();
+  Diagnostics({
+    LogRingBuffer? buffer,
+    LogRedactor? redactor,
+    this.echoToConsole = true,
+  }) : buffer = buffer ?? LogRingBuffer(),
+       redactor = redactor ?? LogRedactor();
 
   /// The process-wide instance the root handler and the UI share.
   ///
@@ -32,6 +39,9 @@ class Diagnostics {
   /// The bounded tail of everything logged, and what the panel renders.
   final LogRingBuffer buffer;
 
+  /// Applied to every message, error and stack trace before anything stores it.
+  final LogRedactor redactor;
+
   /// Whether records are also printed. Free, and still the right sink under
   /// `flutter run`; invisible in a windowed release build, which is the whole
   /// reason the other sinks exist.
@@ -39,22 +49,24 @@ class Diagnostics {
 
   int _sequence = 0;
 
-  /// Captures [record] and offers it to every sink. Safe to call from anywhere.
+  /// Redacts [record], captures it and offers it to every sink. Safe to call
+  /// from anywhere: it is the only way into the sinks, so nothing can arrive
+  /// unredacted.
   void handle(LogRecord record) {
     final entry = LogEntry(
       sequence: _sequence++,
       time: record.time,
       level: record.level,
       channel: record.loggerName,
-      message: record.message,
-      error: record.error?.toString(),
-      stackTrace: record.stackTrace?.toString(),
+      message: redactor.apply(record.message),
+      error: redactor.applyOrNull(record.error?.toString()),
+      stackTrace: redactor.applyOrNull(record.stackTrace?.toString()),
     );
-    add(entry);
+    _fanOut(entry);
   }
 
-  /// Fans one already-captured entry out to the sinks, guarding each.
-  void add(LogEntry entry) {
+  /// Fans one sanitised entry out to the sinks, guarding each.
+  void _fanOut(LogEntry entry) {
     try {
       buffer.add(entry);
     } catch (_) {

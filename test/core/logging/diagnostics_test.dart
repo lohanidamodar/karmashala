@@ -91,6 +91,34 @@ void main() {
       ]);
     });
 
+    test('a token never reaches the buffer', () {
+      // The buffer is the source for the panel, the clipboard, the report and
+      // the log file, so this is the one place the invariant has to hold.
+      const token = 'sk-ant-api03-Zx9Qw8Lm2Nv4Bt7Rk1Cy6Hd0Sf3Jg5Pu-AA';
+      const hostKey =
+          'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH4tFbGqDLrRcYqPZ0mQeRs7WvKjBn';
+      final diagnostics = Diagnostics(echoToConsole: false);
+      Diagnostics.instance = diagnostics;
+      AppLogger.initialize(level: Level.ALL);
+
+      AppLogger.named('claude-auth').warning('refresh failed for $token');
+      AppLogger.named('ssh.hostkey').warning('mismatch', 'host key $hostKey');
+      AppLogger.named(
+        'remote',
+      ).warning('giving up', StateError(r'at C:\Users\dlohani\.chitragupta'));
+
+      final text = diagnostics.buffer
+          .snapshot()
+          .map((e) => e.format())
+          .join('\n');
+      expect(text, isNot(contains(token)));
+      expect(text, isNot(contains('AAAAC3NzaC1lZDI1NTE5')));
+      expect(text, isNot(contains('dlohani')));
+      expect(text, contains('[redacted:token]'));
+      expect(text, contains('[redacted:key]'));
+      expect(text, contains(r'C:\Users\<user>'));
+    });
+
     test(
       'a flood is absorbed at the bound without the caller paying for it',
       () {
