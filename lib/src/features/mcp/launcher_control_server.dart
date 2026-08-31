@@ -52,8 +52,16 @@ import '../terminal/data/system_terminal_service.dart';
 import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
+import 'attention_tools.dart';
 import 'control_server_status.dart';
 import 'handshake_file_permissions.dart';
+import 'mcp_caller_registry.dart';
+import 'mcp_http_endpoint.dart';
+import 'mcp_protocol.dart';
+import 'mcp_tool_catalogue.dart';
+import 'session_tools.dart';
+import 'terminal_tools.dart';
+import 'workspace_tools.dart';
 import 'tmux_orchestration.dart';
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
@@ -160,12 +168,57 @@ class LauncherControlServer {
   AgentHookEndpoint? _hookEndpoint;
   String? _publishedBridgePath;
   ControlServerStatus _status = ControlServerStatus.notStarted;
+  McpHttpEndpoint? _mcpEndpoint;
+
+  /// Which session each per-session MCP credential names. Survives the endpoint
+  /// so a config written before a restart keeps meaning what it meant.
+  final McpCallerRegistry _callers = McpCallerRegistry();
+
+  /// Where a session's own MCP URL is built from, and what mints the token in
+  /// it.
+  McpCallerRegistry get callers => _callers;
+
+  /// The MCP endpoint URL for an unattributed caller, or null when nothing is
+  /// served — the hardening failed, or the server is not started.
+  String? get mcpUrl {
+    final server = _server;
+    final token = _mcpEndpoint?.token;
+    if (server == null || token == null) return null;
+    return 'http://127.0.0.1:${server.port}${McpHttpEndpoint.path}/$token';
+  }
+
+  /// The MCP endpoint URL that says the caller **is** [sessionId].
+  ///
+  /// This is the whole identity mechanism on the HTTP side: the app mints an
+  /// opaque token for one session, writes this URL into that session's MCP
+  /// config, and the endpoint maps the token back. The agent never has to be
+  /// told its own id and cannot claim a different one, which is the same
+  /// property `CHITRAGUPTA_SESSION_ID` gives the stdio bridge — the app stamps
+  /// identity on the process, the model does not declare it.
+  String? mcpUrlFor(String sessionId) {
+    final server = _server;
+    if (server == null || _mcpEndpoint?.token == null) return null;
+    final token = _callers.tokenFor(sessionId);
+    return 'http://127.0.0.1:${server.port}${McpHttpEndpoint.path}/$token';
+  }
 
   /// What came up, and what did not. Mirrored into
   /// [controlServerStatusProvider] so the settings screen can say so.
   ControlServerStatus get status => _status;
 
   static const _maxRequestBytes = 1024 * 1024;
+
+  /// What `serverInfo` reports. Not the app's version: this is the version of
+  /// the *tool surface*, and it moves when the tools do.
+  static const String _serverVersion = '2.0.0';
+
+  /// The one paragraph a model reads before it has called anything.
+  static const String _instructions =
+      'These tools drive Chitragupta itself — the sessions, terminal tabs, '
+      'projects, notes, inbox and delivery state of the app this agent is '
+      'running inside. Tools that name a session default to the session '
+      'calling them, so omit sessionId to act on yourself. Anything Chitragupta '
+      'has not measured is reported as "not recorded" rather than guessed.';
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
   /// `null` before that. The hook installer writes this into the agent's own
@@ -212,6 +265,20 @@ class LauncherControlServer {
       port: server.port,
       token: _generateToken(),
     );
+    _mcpEndpoint = McpHttpEndpoint(
+      server: McpServer(
+        name: 'chitragupta',
+        version: _serverVersion,
+        // Read on every `tools/list` rather than captured, because the browser
+        // and verification tools come from services that may not be up yet.
+        catalogue: () => annotatedToolSchemas(toolSchemas),
+        invoke: (name, arguments, callerSessionId) =>
+            _dispatch(name, arguments, callerSessionId),
+        instructions: _instructions,
+      ),
+      callers: _callers,
+      logger: _logger,
+    );
 
     ControlServerFailureStage? stage;
     String? detail;
@@ -236,7 +303,16 @@ class LauncherControlServer {
     // A privileged credential is minted only where a privileged transport
     // actually came up — there is nothing for it to authenticate to otherwise,
     // and an unpublishable secret on disk is pure downside.
-    if (_socketServer != null || _httpRpcEnabled) _token = _generateToken();
+    if (_socketServer != null || _httpRpcEnabled) {
+      _token = _generateToken();
+      // `/mcp` is gated on the *same* prerequisite, and deliberately so. It is
+      // served over loopback, which the threat model above calls the weaker
+      // boundary; making it available when the owner-only channel could not be
+      // established would turn that weaker boundary into the only one, which is
+      // exactly the silent downgrade `_withholdPrivilegedRpc` exists to
+      // prevent. If nothing here can be hardened, nothing here is served.
+      _mcpEndpoint!.token = _generateToken();
+    }
 
     // Restrict the (still empty) handshake file before deciding what goes in
     // it, so a privileged token is never written under an ACL that was not
@@ -287,6 +363,7 @@ class LauncherControlServer {
     _socketServer = null;
     _token = null;
     _httpRpcEnabled = false;
+    _mcpEndpoint?.token = null;
   }
 
   void _publishStatus(ControlServerStatus status) {
@@ -363,6 +440,8 @@ class LauncherControlServer {
     _token = null;
     _hookEndpoint = null;
     _httpRpcEnabled = false;
+    _mcpEndpoint = null;
+    _callers.clear();
     _publishedBridgePath = null;
     _publishStatus(ControlServerStatus.notStarted);
   }
@@ -401,6 +480,11 @@ class LauncherControlServer {
         'hookToken': _hookEndpoint!.token,
         'token': ?_token,
         if (_socketServer case final socket?) 'socketPath': socket.path,
+        // The Streamable HTTP endpoint. Published under the same rule as the
+        // rest: present only when a credential for it actually exists.
+        'mcpToken': ?_mcpEndpoint?.token,
+        if (_mcpEndpoint?.token != null)
+          'mcpUrl': 'http://127.0.0.1:$port${McpHttpEndpoint.path}',
       }),
       flush: true,
     );
@@ -423,6 +507,13 @@ class LauncherControlServer {
   Future<void> _handle(HttpRequest request) async {
     if (request.uri.path == '/agent-hook') {
       await _handleAgentHook(request);
+      return;
+    }
+    // MCP proper, on its own single endpoint. It authenticates itself — with a
+    // different credential and a different rule about who the caller is — so it
+    // is routed before the `/rpc` bearer check rather than through it.
+    if (McpHttpEndpoint.handles(request.uri)) {
+      await _mcpEndpoint!.handle(request);
       return;
     }
     final response = request.response;
@@ -584,19 +675,8 @@ class LauncherControlServer {
     return utf8.decode(bytes);
   }
 
-  bool _constantTimeEquals(String? actual, String expected) {
-    if (actual == null) return false;
-    var difference = actual.length ^ expected.length;
-    final length = actual.length > expected.length
-        ? actual.length
-        : expected.length;
-    for (var i = 0; i < length; i++) {
-      final a = i < actual.length ? actual.codeUnitAt(i) : 0;
-      final b = i < expected.length ? expected.codeUnitAt(i) : 0;
-      difference |= a ^ b;
-    }
-    return difference == 0;
-  }
+  bool _constantTimeEquals(String? actual, String expected) =>
+      constantTimeEquals(actual, expected);
 
   Future<Object?> _dispatch(
     String? tool,
@@ -649,6 +729,7 @@ class LauncherControlServer {
           title: args['title'] as String?,
           prompt: args['prompt'] as String?,
           useWorktree: args['useWorktree'] == true,
+          permissionMode: args['permissionMode'] as String?,
           callerSessionId: callerSessionId,
         );
       case 'open_session':
@@ -728,6 +809,30 @@ class LauncherControlServer {
               const <String>[],
           name: args['name'] as String?,
         );
+      // Operating a session that already exists. Split out because these are
+      // the half that needs the caller's own identity: every one of them
+      // defaults to the session that called it.
+      case final String name when SessionControlTools.handles(name):
+        return SessionControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
+      // What is written down, and what is waiting on somebody.
+      case final String name when AttentionControlTools.handles(name):
+        return AttentionControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
+      // Where the work is: checkouts, and what one of them owes.
+      case final String name when WorkspaceControlTools.handles(name):
+        return WorkspaceControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
+      // The terminal workspace, through the same controller the tab bar uses,
+      // so an agent's pane is a pane the user can see and take over.
+      case final String name when TerminalControlTools.handles(name):
+        return TerminalControlTools(_container).call(name, args);
       // The browser tools live in features/browser and share the app's single
       // BrowserService with the browser pane, so an agent and the developer
       // drive the same page.
@@ -912,6 +1017,15 @@ class LauncherControlServer {
                 'Run in a dedicated Git worktree instead of the repository '
                 'itself. Use this when the new session will edit files and you '
                 'are still working in the same repository.',
+          },
+          'permissionMode': {
+            'type': 'string',
+            'enum': ['ask', 'acceptEdits', 'bypass'],
+            'description':
+                'How much the new agent may do without asking. Omit to use '
+                'the mode configured in Settings, which is what the '
+                'New-session dialog does. "bypass" skips every prompt and is '
+                'never a default; ask the user before choosing it for them.',
           },
         },
         'required': ['projectId'],
@@ -1348,6 +1462,10 @@ class LauncherControlServer {
         'required': ['ids'],
       },
     },
+    ...sessionControlToolSchemas,
+    ...terminalControlToolSchemas,
+    ...workspaceControlToolSchemas,
+    ...attentionControlToolSchemas,
     ...browserToolSchemas,
     ...verificationToolSchemas,
   ];
@@ -1566,6 +1684,24 @@ class LauncherControlServer {
     ];
   }
 
+  /// The permission mode named by a caller, or null to let the setting decide.
+  ///
+  /// Refuses an unknown name rather than falling back to the default. The
+  /// modes are already decided in `permission_carry.dart`, and a typo silently
+  /// becoming "ask" would look like the tool worked; a typo silently becoming
+  /// anything else would be worse.
+  PermissionMode? _parsePermissionMode(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final wanted = raw.trim();
+    for (final mode in PermissionMode.values) {
+      if (mode.name == wanted) return mode;
+    }
+    throw ArgumentError(
+      'Unknown permissionMode "$raw". One of: '
+      '${PermissionMode.values.map((m) => m.name).join(', ')}.',
+    );
+  }
+
   Future<Object?> _openNewSession({
     String? projectId,
     String? cli,
@@ -1574,6 +1710,7 @@ class LauncherControlServer {
     String? title,
     String? prompt,
     bool useWorktree = false,
+    String? permissionMode,
     String? callerSessionId,
   }) async {
     if (projectId == null) throw ArgumentError('Missing projectId.');
@@ -1656,6 +1793,7 @@ class LauncherControlServer {
           useWorktree: useWorktree,
           firstMessage: prompt,
           parentSessionId: callerSessionId,
+          permissionOverride: _parsePermissionMode(permissionMode),
         ),
       );
       return {
@@ -1665,6 +1803,7 @@ class LauncherControlServer {
         'repository': repo.name,
         'environmentId': repo.path.environmentId,
         'depth': launcher.depthForChildOf(callerSessionId).depth,
+        'permissionMode': launched.session.permissionMode?.name ?? 'not recorded',
         if (launched.session.worktree != null)
           'worktree': launched.session.worktree!.path,
       };
