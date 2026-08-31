@@ -94,4 +94,29 @@ void main() {
     // The fake reconnects at once, so the banner clears.
     expect(find.textContaining('Host unreachable'), findsNothing);
   });
+
+  testWidgets('a phone still dialling says WHY, and can be told to start '
+      'over', (tester) async {
+    // The state the owner was stuck in: "Connecting to your desktop…" with
+    // nothing to act on. Dialling is not a reason to withhold the reason, and
+    // not a reason to withhold the only control there is.
+    final gateway = FakeCompanionGateway.paired(sessions: [summary('s1')]);
+    await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
+
+    gateway
+      ..linkTrouble = 'Your desktop is not answering on this relay.'
+      ..setLink(CompanionLinkState.connecting);
+    await tester.pump();
+
+    expect(find.textContaining('Connecting to your desktop'), findsOneWidget);
+    expect(
+      find.text('Your desktop is not answering on this relay.'),
+      findsOneWidget,
+      reason: 'the gateway knows why; the banner must say it',
+    );
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    expect(gateway.reconnectRequests, 1);
+  });
 }
