@@ -42,7 +42,10 @@ final DateTime _unused = DateTime.utc(1970);
 /// * `~` resolves to nothing: the home directory it means belongs to whichever
 ///   user the program was running as, and the pane never learns it;
 /// * anything else is relative, and is joined onto [workingDirectory] in that
-///   directory's own flavour — the one thing a relative path in a pane can mean.
+///   directory's own flavour — the one thing a relative path in a pane can
+///   mean — and the join is then translated by the same rule as an absolute
+///   path, because a POSIX working directory is the pane's spelling and not
+///   the host's.
 String? hostPathForTerminalTarget(
   PathTarget target, {
   required String? workingDirectory,
@@ -64,9 +67,20 @@ String? hostPathForTerminalTarget(
 
   final base = workingDirectory;
   if (base == null || base.isEmpty) return null;
-  final context = _isWindowsPath(base) ? p.windows : p.posix;
-  final relative = context == p.windows ? raw.replaceAll('/', r'\') : raw;
-  return context.normalize(context.join(base, relative));
+  if (_isWindowsPath(base)) {
+    return p.windows.normalize(p.windows.join(base, raw.replaceAll('/', r'\')));
+  }
+  // A POSIX working directory is the pane's own spelling, not the host's — a
+  // WSL pane opened at `/mnt/c/src/app` or `/home/me/proj` says so in its own
+  // namespace. Joining onto it produces a path in that namespace, which then
+  // needs exactly the translation an absolute POSIX path already got: without
+  // it the join was handed to a Windows `stat`, which found nothing, so
+  // absolute paths were clickable and relative ones silently were not.
+  return _hostPathForPosix(
+    p.posix.join(base, raw),
+    profileId: profileId,
+    workingDirectory: base,
+  );
 }
 
 String? _hostPathForPosix(

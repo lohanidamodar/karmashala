@@ -94,6 +94,23 @@ void main() {
       );
     });
 
+    test('and against a POSIX one, which is what a WSL pane usually has', () {
+      // The reported bug: "terminal absolute file path working but not relative
+      // path". A WSL pane's working directory is its own spelling — `/mnt/c/…`
+      // or `/home/…` — and joining onto it produced a WSL path that was then
+      // handed to a Windows `stat`, which of course found nothing. An absolute
+      // POSIX path was translated; a relative one has to be too, once its
+      // directory is in front of it.
+      expect(
+        resolve('lib/main.dart', cwd: '/mnt/c/src/app', profile: wslProfile),
+        r'C:\src\app\lib\main.dart',
+      );
+      expect(
+        resolve('lib/main.dart', cwd: '/home/me/proj', profile: wslProfile),
+        r'\\wsl.localhost\Ubuntu\home\me\proj\lib\main.dart',
+      );
+    });
+
     test('joins in the flavour of the directory it is joined to', () {
       expect(
         resolve('lib/main.dart', cwd: '/home/me/proj'),
