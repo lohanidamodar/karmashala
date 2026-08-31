@@ -95,6 +95,30 @@ const _claudeCode = AgentDescriptor(
           'session ID instead of reusing the original (use with --resume or '
           '--continue)"',
     ),
+    // `--mcp-config` **merges** with the user's own servers; it does not
+    // replace them. That is the whole reason this is safe to pass on every
+    // launch, and it is verified rather than assumed — the sibling flag says
+    // so in its own words ("--strict-mcp-config  Only use MCP servers from
+    // --mcp-config, ignoring all other MCP configurations"), and a real run
+    // shows it:
+    //
+    //   $ claude --mcp-config=/tmp/c.json --output-format stream-json \
+    //       --verbose -p 'Reply with the single word OK'
+    //   …"mcp_servers":[{"name":"agent-browser"…},{"name":"dart"…},
+    //     {"name":"grafana"…},{"name":"chitragupta"…},
+    //     {"name":"claude.ai Google Drive"…}]
+    //
+    // Four of the user's five servers plus ours. `--strict-mcp-config` is
+    // therefore never passed: it would silently drop the user's MCP setup for
+    // every session Chitragupta opens.
+    mcp: AgentMcpSupport.configFile(
+      flag: '--mcp-config',
+      evidence:
+          'claude 2.1.251 --help: "--mcp-config <configs...>  Load MCP servers '
+          'from JSON files or strings (space-separated)"; merge verified by '
+          'the init message above listing our server alongside the four '
+          'already configured',
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -251,6 +275,42 @@ const _codex = AgentDescriptor(
           'codex fork --help: "Usage: codex fork [OPTIONS] [SESSION_ID] '
           '[PROMPT]"',
     ),
+    // Codex has no `--mcp-config`. It has `-c <dotted.key>=<value>`, which
+    // overrides one value that would otherwise come from `~/.codex/config.toml`
+    // and leaves the rest of that file — and the user's own servers — alone:
+    //
+    //   $ codex mcp list -c mcp_servers.chitragupta.url=http://…/mcp/TOK
+    //   Name           Command …
+    //   agent-browser  …/agent-browser.exe  mcp  …  enabled
+    //
+    //   Name         Url                       …
+    //   chitragupta  http://…/mcp/TOK          …  enabled
+    //
+    // **Writing the block into `config.toml` instead was rejected**, and not
+    // only because editing a user's config file is invasive. That file holds
+    // one `[mcp_servers.chitragupta]` for the whole machine, so it can carry
+    // exactly one URL — and the URL is what says *which session* is calling.
+    // Every Codex session would have spoken as whichever one wrote last, which
+    // is the one property this whole mechanism exists to provide.
+    //
+    // The cost, stated plainly: the session's capability token is in the
+    // process command line, where anything that can enumerate processes can
+    // read it (`/proc/<pid>/cmdline` inside a WSL distro is world-readable).
+    // Claude's file avoids that. Codex would too via
+    // `bearer_token_env_var`, which reads the credential from the environment
+    // — `/proc/<pid>/environ` is owner-only — but that needs the launch to
+    // carry an extra variable onto the agent process, which is
+    // `AgentPaneLaunch`'s to give and not this descriptor's.
+    mcp: AgentMcpSupport.inlineUrl(
+      flag: '-c',
+      urlKey: 'mcp_servers.chitragupta.url',
+      evidence:
+          'codex-cli 0.151.0 --help: "-c, --config <key=value>  Override a '
+          'configuration value that would otherwise be loaded from '
+          '`~/.codex/config.toml`"; `codex mcp add --url` documents `url` as '
+          'the streamable-HTTP key, and `codex mcp list -c '
+          'mcp_servers.chitragupta.url=…` lists it beside the user\'s own',
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.codex',
@@ -381,6 +441,21 @@ const _antigravity = AgentDescriptor(
     // `--continue` and `--conversation` both continue a conversation in place.
     // The handoff route is closed too, because a packet is quoted from a
     // transcript and this agent's are unreadable — see `store` below.
+    //
+    // `mcp` stays unsupported for the same kind of reason, and stating it is
+    // the point of this note. The CLI *has* MCP — `agy --help` lists an `mcp`
+    // subcommand, "Manage MCP servers (add, remove, list, enable, disable)" —
+    // but that edits its own config, and nothing in the option list (checked in
+    // full: --add-dir, --agent, -c/--continue, --conversation,
+    // --dangerously-skip-permissions, --disable-slash-commands, --effort,
+    // -i/--prompt-interactive, --input-format, --json-schema, --log-file,
+    // --mode, --model, --new-project, --output-format, -p/--print,
+    // --print-timeout, --project, --prompt, --sandbox) points a single launch
+    // at a server. Adding the block to the user's own config would be a machine
+    // -wide entry that cannot name a session, which is the same thing that
+    // ruled `config.toml` out for Codex. So Antigravity is launched exactly as
+    // it is today — a flag invented here is how this descriptor was wrong for
+    // months.
   ),
   // Where the CLI keeps its data, confirmed against a live install on both
   // sides of this machine. It is **not** `.antigravity`, which is the IDE's
