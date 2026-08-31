@@ -19,6 +19,7 @@ import '../domain/terminal_profile.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
+import 'scrollback_park.dart';
 import 'pty_output_coalescer.dart';
 import 'scrollback_spool.dart';
 import 'terminal_ingest_budget.dart';
@@ -105,6 +106,24 @@ abstract interface class TieredTerminalInstance {
   IngestTier get ingestTier;
 }
 
+/// A [TerminalInstance] that gives its scrollback back while it is cold.
+///
+/// The storage half of the ingest tiers, and a third narrow interface for the
+/// same reason as [ReapableTerminalInstance] and [TieredTerminalInstance]: only
+/// a pane with a live pipe behind it has a buffer worth parking. An error pane
+/// holds one line, a dormant pane *is* its stored text already, and a test fake
+/// has nothing to release.
+///
+/// While a pane is parked its parsed buffer holds only the screen, and the
+/// history above it lives here as encoded text. That makes this the pane's
+/// scrollback for as long as it lasts: the controller stores it verbatim rather
+/// than re-encoding a buffer that no longer has anything in it.
+abstract interface class ParkableTerminalInstance {
+  /// The encoded window held in place of a parsed buffer, or `null` when this
+  /// pane's scrollback is live.
+  String? get parkedScrollback;
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -128,7 +147,8 @@ class PtyTerminalInstance
     implements
         TerminalInstance,
         ReapableTerminalInstance,
-        TieredTerminalInstance {
+        TieredTerminalInstance,
+        ParkableTerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
@@ -188,7 +208,7 @@ class PtyTerminalInstance
     _pty.exitCode.then((code) {
       _exited = true;
       if (_disposed) return;
-      terminal.write('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
+      _emit('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
       // The buffer stays on screen, but the pane is no longer a terminal you
       // can type into — say so, so the UI can stop drawing it as one.
       _liveness.value = PaneLiveness.exited;
@@ -248,8 +268,14 @@ class PtyTerminalInstance
 
   IngestTier _tier = IngestTier.hot;
 
+  /// The scrollback this pane gives up while it is cold.
+  late final ScrollbackPark _park = ScrollbackPark(terminal);
+
   @override
   IngestTier get ingestTier => _tier;
+
+  @override
+  String? get parkedScrollback => _park.parked;
 
   /// Bytes the spool discarded while this pane was cold. Diagnostics, and what
   /// the replay reads to decide whether to admit to a gap.
@@ -279,9 +305,30 @@ class PtyTerminalInstance
       // Take what is already queued with us rather than parsing it on the way
       // out: going cold must not cost a flush.
       _spool.add(_coalescer.takePending());
+      if (_park.park()) {
+        // The blocks whose prompt line just went are what held those lines
+        // alive, through their anchors; dropping them is what actually releases
+        // the memory. A replayed window carries no OSC 133 markers anyway, so
+        // there is nothing left for them to point at when the pane comes back.
+        commandBlocks?.tracker.pruneEvicted();
+      }
     } else if (wasCold) {
+      _park.unpark();
       _replaySpool();
     }
+  }
+
+  /// Writes text the app generated wherever this pane's output is going.
+  ///
+  /// A cold pane is not parsing, so its notice belongs in the spool among the
+  /// process output it arrived with — writing it into a parked buffer would put
+  /// it above history that came before it.
+  void _emit(String text) {
+    if (_tier == IngestTier.cold) {
+      _spool.add(const Utf8Encoder().convert(text));
+      return;
+    }
+    terminal.write(text);
   }
 
   /// Writes what arrived while this pane was cold into its buffer.
@@ -484,12 +531,7 @@ class DormantTerminalInstance implements TerminalInstance {
     required this.restoredScrollback,
     this.workingDirectory,
     this.agentLaunch,
-  }) {
-    terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
-      ..mouseHandler = const ChitraguptaMouseHandler()
-      ..inputHandler = const ChitraguptaInputHandler();
-    if (restoredScrollback.isNotEmpty) terminal.write(restoredScrollback);
-  }
+  });
 
   @override
   final String id;
@@ -509,8 +551,35 @@ class DormantTerminalInstance implements TerminalInstance {
   /// round-trip through the codec and no duplicated restore marker.
   final String restoredScrollback;
 
+  /// Parsed only when something asks to see it.
+  ///
+  /// A restored workspace can hold a hundred of these, and every one used to
+  /// parse its stored scrollback into a 10 000-line `Terminal` during startup,
+  /// for tabs the user may never open. `late final` makes that the first
+  /// reader's cost instead — and since [restoredScrollback] is what the
+  /// controller stores and what starting the pane replays, most of them are
+  /// never built at all.
   @override
-  late final Terminal terminal;
+  late final Terminal terminal = _buildTerminal();
+
+  /// Whether anything has asked to see this pane yet.
+  ///
+  /// The restore path's own measurement: the point of the laziness is that most
+  /// panes of a restored workspace are never looked at, and `late final` cannot
+  /// be asked whether it has run.
+  @visibleForTesting
+  bool get bufferBuilt => _bufferBuilt;
+  bool _bufferBuilt = false;
+
+  Terminal _buildTerminal() {
+    _bufferBuilt = true;
+    final built = Terminal(maxLines: kLiveScrollbackMaxLines)
+      ..mouseHandler = const ChitraguptaMouseHandler()
+      ..inputHandler = const ChitraguptaInputHandler();
+    if (restoredScrollback.isNotEmpty) built.write(restoredScrollback);
+    return built;
+  }
+
   @override
   final TerminalController controller = TerminalController();
   @override

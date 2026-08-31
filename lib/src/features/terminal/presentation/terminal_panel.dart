@@ -19,6 +19,7 @@ import '../application/terminal_sessions_controller.dart';
 import '../data/terminal_instance.dart';
 import '../data/theme_discovery.dart';
 import '../domain/command_blocks.dart';
+import '../domain/mounted_tabs.dart';
 import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
@@ -145,10 +146,11 @@ class TerminalActions {
       context: context,
       builder: (context) => Consumer(
         builder: (context, ref, _) {
-          final state = ref.watch(terminalSessionsControllerProvider);
+          final detached = ref.watch(terminalDetachedProvider);
           return BackgroundSessionsDialog(
-            sessions: state.detached,
-            livenessOf: state.livenessOf,
+            sessions: detached,
+            livenessOf: (paneId) =>
+                ref.read(terminalPaneLivenessProvider(paneId)),
             onAttach: (paneId) {
               _sessions.reattachSession(paneId);
               Navigator.of(context).pop();
@@ -280,9 +282,18 @@ class TerminalActions {
 
 /// The terminal's panes: the search bar over the active tab's split tree.
 ///
-/// Inactive tabs stay alive inside an [IndexedStack], which paints only its
-/// active child — hidden tabs cost VT parsing but no painting, which is the
-/// property Loop 26's performance work depends on.
+/// A **bounded** set of tabs stays mounted inside an [IndexedStack], which
+/// paints only its active child — so a mounted-but-hidden tab costs no painting
+/// (the property Loop 26's performance work depends on) and an unmounted tab
+/// costs nothing at all.
+///
+/// The bound is the point. `IndexedStack` is preservation, not virtualization:
+/// it was handed every open tab, and each one kept its render objects, layouts
+/// and controllers alive for a pane nobody could see — 5 291 render objects and
+/// a 65 ms tab switch at 100 tabs. Only the last [kMountedTabBudget] tabs the
+/// user touched are built now; the rest are rebuilt on demand, against the same
+/// live `TerminalInstance`, so an unmounted tab keeps its process, its buffer
+/// and its scrollback and comes back unchanged. See [MountedTabs].
 class TerminalPaneStack extends ConsumerStatefulWidget {
   const TerminalPaneStack({super.key});
 
@@ -292,6 +303,11 @@ class TerminalPaneStack extends ConsumerStatefulWidget {
 
 class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   late final TerminalActions _actions = TerminalActions(ref);
+
+  /// The tabs with a mounted view. Widget-lifetime state, not workspace state:
+  /// which tabs happen to be built is nobody else's business, and publishing it
+  /// would put a rebuild of every consumer behind every tab switch.
+  final MountedTabs _mounted = MountedTabs();
 
   @override
   void initState() {
@@ -318,9 +334,21 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(terminalSessionsControllerProvider);
+    // Deliberately narrow: the topology and which tab is in front, not the
+    // whole workspace. A process exiting changes neither, so it no longer
+    // rebuilds the stack — the pane's own status bar watches its liveness.
+    final openTabs = ref.watch(terminalTabsProvider);
+    final activeTabId = ref.watch(terminalActiveTabIdProvider);
     final search = ref.watch(terminalSearchControllerProvider);
-    final activeIndex = state.tabs.indexWhere((t) => t.id == state.activeTabId);
+    _mounted.sync(
+      openTabIds: [for (final tab in openTabs) tab.id],
+      activeTabId: activeTabId,
+    );
+    final tabs = [
+      for (final tab in openTabs)
+        if (_mounted.contains(tab.id)) tab,
+    ];
+    final activeIndex = tabs.indexWhere((t) => t.id == activeTabId);
 
     return Material(
       color: theme.colorScheme.surfaceContainerLowest,
@@ -328,7 +356,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         children: [
           if (search.visible) const TerminalSearchBar(),
           Expanded(
-            child: state.tabs.isEmpty
+            child: openTabs.isEmpty
                 ? Center(
                     child: Text(
                       'Opening terminal…',
@@ -338,8 +366,11 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 : IndexedStack(
                     index: activeIndex < 0 ? 0 : activeIndex,
                     children: [
-                      for (final tab in state.tabs)
+                      for (final tab in tabs)
                         PaneLayoutView(
+                          // Keyed by tab, so evicting one does not hand its
+                          // element to whichever tab shifted into its slot.
+                          key: ValueKey(tab.id),
                           layout: tab.layout,
                           onResize: (splitId, index, delta) =>
                               _resize(tab, splitId, index, delta),
@@ -347,9 +378,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                             paneId,
                             focused:
                                 paneId == tab.focusedPaneId &&
-                                tab.id == state.activeTabId,
+                                tab.id == activeTabId,
                             showFocusRing: tab.layout.panes.length > 1,
-                            liveness: state.livenessOf(paneId),
                           ),
                         ),
                     ],
@@ -372,7 +402,6 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     String paneId, {
     required bool focused,
     required bool showFocusRing,
-    required PaneLiveness liveness,
   }) {
     final theme = Theme.of(context);
     final instance = _sessions.instanceFor(paneId);
@@ -400,13 +429,21 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         child: Column(
           children: [
             // A pane with no process behind it says so, rather than presenting
-            // an old prompt as a live one.
-            if (!liveness.isLive)
-              PaneStatusBar(
-                liveness: liveness,
-                workingDirectory: instance.workingDirectory,
-                onStart: () => _sessions.startPane(paneId),
-              ),
+            // an old prompt as a live one. In its own `Consumer` so a process
+            // exiting rebuilds this bar and nothing else.
+            Consumer(
+              builder: (context, ref, _) {
+                final liveness = ref.watch(
+                  terminalPaneLivenessProvider(paneId),
+                );
+                if (liveness.isLive) return const SizedBox.shrink();
+                return PaneStatusBar(
+                  liveness: liveness,
+                  workingDirectory: instance.workingDirectory,
+                  onStart: () => _sessions.startPane(paneId),
+                );
+              },
+            ),
             Expanded(
               child: TerminalPaneView(
                 // Starting a pane swaps its instance in place; without a key
@@ -490,9 +527,12 @@ class TerminalToolbar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final actions = TerminalActions(ref);
-    final state = ref.watch(terminalSessionsControllerProvider);
-    final backgroundCount = state.detached.length;
-    final hasTabs = state.tabs.isNotEmpty;
+    final backgroundCount = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.detached.length),
+    );
+    final hasTabs = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
+    );
     final hasCommands = actions.focusedBlocks().isNotEmpty;
 
     return Row(

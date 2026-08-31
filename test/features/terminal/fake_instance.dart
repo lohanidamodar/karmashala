@@ -4,6 +4,7 @@ import 'package:chitragupta/src/features/terminal/application/scrollback_autosav
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
+import 'package:chitragupta/src/features/terminal/data/scrollback_park.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/detach_policy.dart';
@@ -18,7 +19,10 @@ import 'package:xterm/xterm.dart';
 /// A process-free [TerminalInstance] so the controller can be tested without
 /// spawning a real PTY.
 class FakeTerminalInstance
-    implements TerminalInstance, TieredTerminalInstance {
+    implements
+        TerminalInstance,
+        TieredTerminalInstance,
+        ParkableTerminalInstance {
   FakeTerminalInstance({
     required this.id,
     required this.title,
@@ -67,17 +71,32 @@ class FakeTerminalInstance
   bool disposed = false;
 
   /// What the controller last told this pane about how visible it is, and every
-  /// value it has been told — a fake pane parses nothing, so the tier is the
-  /// only observable part of tiered ingestion at this level.
+  /// value it has been told — a fake pane has no pipe, so the tier is the only
+  /// observable part of *ingestion* at this level.
   @override
   IngestTier ingestTier = IngestTier.hot;
   final tierHistory = <IngestTier>[];
 
+  /// Storage, though, is real: the fake parks and unparks through the same
+  /// [ScrollbackPark] a PTY pane does, so the memory tiering is exercised by
+  /// every controller test and by the scale benchmark rather than only by a
+  /// pane nothing can construct without spawning a shell.
+  late final ScrollbackPark park = ScrollbackPark(terminal);
+
+  @override
+  String? get parkedScrollback => park.parked;
+
   @override
   void setIngestTier(IngestTier tier) {
     if (ingestTier == tier) return;
+    final wasCold = ingestTier == IngestTier.cold;
     ingestTier = tier;
     tierHistory.add(tier);
+    if (tier == IngestTier.cold) {
+      park.park();
+    } else if (wasCold) {
+      park.unpark();
+    }
   }
 
   @override

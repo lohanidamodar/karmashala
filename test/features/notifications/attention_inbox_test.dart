@@ -217,6 +217,170 @@ void main() {
     });
   });
 
+  group('the cap', () {
+    /// One poll's worth of finished turns for [count] fresh sessions.
+    AttentionInbox fill(
+      AttentionInbox inbox,
+      int count,
+      int minute, {
+      String prefix = 'f',
+    }) {
+      final sessions = [
+        for (var i = 0; i < count; i++) session('$prefix$minute-$i'),
+      ];
+      return inbox.apply(
+        InboxUpdate(
+          watched: {for (final s in sessions) s.key},
+          news: [
+            for (final s in sessions) news(s, NotificationReason.finished),
+          ],
+        ),
+        at(minute),
+      );
+    }
+
+    test('it never holds more than the cap, however hard it is pushed', () {
+      var inbox = AttentionInbox.empty;
+      for (var minute = 1; minute <= 10; minute++) {
+        inbox = fill(inbox, kAttentionInboxCap, minute);
+        expect(inbox.items.length, kAttentionInboxCap);
+      }
+    });
+
+    test('the oldest event is what goes', () {
+      // A full inbox of finished turns, then one more arrives. The newest
+      // survives and the oldest pays, which is the order a work queue wants.
+      var inbox = fill(AttentionInbox.empty, kAttentionInboxCap, 1);
+      final oldest = inbox.items.last;
+      final newest = inbox.items.first;
+      inbox = fill(inbox, 1, 2, prefix: 'new');
+
+      expect(inbox.items.length, kAttentionInboxCap);
+      expect(inbox.items.first.id, isNot(oldest.id));
+      expect(
+        inbox.items.map((item) => item.id),
+        isNot(contains(oldest.id)),
+        reason: 'the oldest event is the least useful thing in the list',
+      );
+      expect(inbox.items.map((item) => item.id), contains(newest.id));
+    });
+
+    test('an unresolved request survives a flood of finished turns', () {
+      final blocked = session('blocked');
+      var inbox = AttentionInbox.empty.apply(
+        InboxUpdate(watched: {blocked.key}, waiting: [waiting(blocked)]),
+        t0,
+      );
+
+      // Ten times the cap in ordinary news, arriving after it.
+      for (var minute = 1; minute <= 10; minute++) {
+        inbox = fill(inbox, kAttentionInboxCap, minute);
+      }
+
+      expect(
+        inbox.items.length,
+        kAttentionInboxCap + 1,
+        reason: 'the cap counts events; the one live condition is exempt',
+      );
+      final approval = inbox.items.where(
+        (item) => item.session.key == blocked.key,
+      );
+      expect(
+        approval.single.kind,
+        InboxItemKind.needsApproval,
+        reason: 'the one thing the user actually has to answer is not evicted',
+      );
+      expect(approval.single.seen, isFalse);
+    });
+
+    test('read is evicted before unread, and events before conditions', () {
+      // Four items, one of each rank, then the cap is pushed down to them by
+      // filling the rest with news that is newer than all four.
+      final seenEvent = session('seen-event');
+      final unseenEvent = session('unseen-event');
+      final seenCondition = session('seen-condition');
+      final unseenCondition = session('unseen-condition');
+
+      var inbox = AttentionInbox.empty.apply(
+        InboxUpdate(
+          watched: {
+            seenEvent.key,
+            unseenEvent.key,
+            seenCondition.key,
+            unseenCondition.key,
+          },
+          waiting: [waiting(seenCondition), waiting(unseenCondition)],
+          news: [
+            news(seenEvent, NotificationReason.finished),
+            news(unseenEvent, NotificationReason.finished),
+          ],
+        ),
+        t0,
+      );
+      inbox = inbox.viewed({'row-seen-event', 'row-seen-condition'});
+      // The viewed event left; re-file it as a read one the poll cannot retire.
+      expect(inbox.items.length, 3);
+
+      List<String> survivorsAfter(int newer) {
+        var pushed = inbox;
+        for (var i = 0; i < newer; i++) {
+          pushed = fill(pushed, kAttentionInboxCap ~/ 2, i + 1, prefix: 'p$i');
+        }
+        return [
+          for (final item in pushed.items)
+            if (item.session.openId.startsWith('row-unseen') ||
+                item.session.openId.startsWith('row-seen'))
+              item.session.openId,
+        ];
+      }
+
+      // Enough newer news to evict everything evictable.
+      expect(survivorsAfter(4), [
+        'row-unseen-condition',
+        'row-seen-condition',
+      ], reason: 'conditions outlast events; unread outlasts read');
+    });
+
+    test('five hundred sessions all blocked are all listed, and stably', () {
+      // The cap counts events. Making conditions evictable would also make the
+      // list churn: an evicted condition is re-filed by the next poll with a
+      // fresh arrival time, so it would displace a survivor, forever.
+      final sessions = [for (var i = 0; i < 500; i++) session('w$i')];
+      final poll = InboxUpdate(
+        watched: {for (final s in sessions) s.key},
+        waiting: [for (final s in sessions) waiting(s)],
+      );
+      final inbox = AttentionInbox.empty.apply(poll, t0);
+      expect(inbox.items, hasLength(500));
+      expect(inbox.unseen, 500);
+      expect(
+        identical(inbox.apply(poll, at(5)), inbox),
+        isTrue,
+        reason: 'saying the same thing again rebuilds nothing',
+      );
+    });
+
+    test('the cap does not lose an item the inbox still needs to retire', () {
+      // Eviction must not leave a condition listed-but-forgotten: what is
+      // dropped is dropped from the index too, so a later poll retiring it is
+      // a no-op rather than a rebuild.
+      final blocked = session('blocked');
+      var inbox = AttentionInbox.empty.apply(
+        InboxUpdate(watched: {blocked.key}, waiting: [waiting(blocked)]),
+        t0,
+      );
+      for (var minute = 1; minute <= 3; minute++) {
+        inbox = fill(inbox, kAttentionInboxCap, minute);
+      }
+      inbox = inbox.apply(InboxUpdate(watched: {blocked.key}), at(20));
+      expect(
+        inbox.items.where((item) => item.session.key == blocked.key),
+        isEmpty,
+        reason: 'the agent stopped waiting, so the condition retires',
+      );
+    });
+  });
+
   test('the menu label says what is waiting and why', () {
     final a = session('a', label: 'Fix login');
     final inbox = AttentionInbox.empty.apply(

@@ -2,9 +2,11 @@ import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_search_controller.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/mounted_tabs.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/pane_layout_view.dart';
+import 'package:chitragupta/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:chitragupta/src/features/terminal/presentation/terminal_search_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -60,6 +62,75 @@ void main() {
     expect(
       container.read(terminalSessionsControllerProvider).activeTabId,
       second,
+    );
+  });
+
+  testWidgets('mounts no more than the tab budget however many are open', (
+    tester,
+  ) async {
+    final container = panelContainer();
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    for (var i = 0; i < kMountedTabBudget + 12; i++) {
+      controller.openTab(TerminalProfile.powerShell);
+    }
+
+    await pumpPanel(tester, container);
+
+    // `skipOffstage: false`, because `IndexedStack` hides its unselected
+    // children from the default finder — which would make this pass by
+    // counting one pane whether or not the rest were mounted.
+    expect(
+      tester
+          .widgetList(find.byType(TerminalPaneView, skipOffstage: false))
+          .length,
+      kMountedTabBudget,
+    );
+    expect(
+      container.read(terminalSessionsControllerProvider).tabs.length,
+      kMountedTabBudget + 12,
+      reason: 'the tabs all still exist — only their views are bounded',
+    );
+  });
+
+  testWidgets('switching to an unmounted tab shows its own buffer', (
+    tester,
+  ) async {
+    final container = panelContainer();
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final first = controller.openTab(TerminalProfile.powerShell);
+    final firstPane = container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .first
+        .layout
+        .panes
+        .single;
+    controller.instanceFor(firstPane)!.terminal.write('marker-from-tab-one');
+    for (var i = 0; i < kMountedTabBudget + 4; i++) {
+      controller.openTab(TerminalProfile.powerShell);
+    }
+
+    await pumpPanel(tester, container);
+    // Evicted: the budget is full of tabs opened after it.
+    expect(find.text('marker-from-tab-one', skipOffstage: false), findsNothing);
+
+    controller.activateTab(first);
+    await tester.pump();
+
+    // The same instance came back — the process and its scrollback never went
+    // anywhere, only the widgets did.
+    expect(controller.instanceFor(firstPane), isNotNull);
+    expect(
+      controller.instanceFor(firstPane)!.terminal.buffer.getText(),
+      contains('marker-from-tab-one'),
+    );
+    expect(
+      container.read(terminalSessionsControllerProvider).activeTabId,
+      first,
     );
   });
 

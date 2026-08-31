@@ -15,6 +15,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../data/notification_presenter.dart';
 import '../data/notification_settings_repository.dart';
 import '../data/desktop_notification_presenter.dart';
+import '../domain/agent_session_key.dart';
 import '../domain/notification_settings.dart';
 import '../domain/session_attention.dart';
 import 'agent_status_watcher.dart';
@@ -212,6 +213,25 @@ final agentStatusWatcherProvider = Provider<AgentStatusWatcher>((ref) {
   ref.onDispose(watcher.dispose);
   return watcher;
 });
+
+/// Hands one hook callback to the status registry, which is what makes hooks
+/// the primary status path rather than something a poll later discovers.
+///
+/// Called by `/agent-hook` once the receiver has recorded the report. Reading
+/// the registry starts nothing — it cycles only once `AgentStatusWatcher`
+/// starts it — so this is safe on a callback that must never block the agent
+/// that fired it. Takes a container for the same reason
+/// [visibleAgentSessionIds] does: the caller holds one, not a `Ref`.
+void reportAgentHook(
+  ProviderContainer container, {
+  required String agentId,
+  required String sessionId,
+}) {
+  if (sessionId.isEmpty) return;
+  container
+      .read(sessionStatusRegistryProvider)
+      .hookReported(AgentSessionKey(agentId, sessionId));
+}
 
 /// The session ids currently rendered in the app, in every key the status
 /// pipeline might hold them under.
