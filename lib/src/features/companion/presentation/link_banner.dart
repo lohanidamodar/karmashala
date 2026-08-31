@@ -32,6 +32,17 @@ class LinkBanner extends ConsumerWidget {
     final density = UiDensity.of(context);
     final connecting = link == CompanionLinkState.connecting;
     final tone = connecting ? semantic.working : semantic.attention;
+    // What the phone is doing, and — when it has learned anything — WHY it is
+    // still doing it. "Connecting…" on its own is the state the owner was
+    // stuck in with nothing to act on: no reason, and no way to try again.
+    final headline = connecting
+        ? 'Connecting to your desktop…'
+        : 'Host unreachable';
+    final detail =
+        trouble ??
+        (connecting
+            ? null
+            : 'Check that Chitragupta is running on your desktop.');
 
     return Material(
       // The word carries the meaning and the tint only supports it, so the
@@ -53,27 +64,39 @@ class LinkBanner extends ConsumerWidget {
             ),
             SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
             Expanded(
-              child: Text(
-                connecting
-                    ? 'Connecting to your desktop…'
-                    // The gateway's own sentence when it knows something more
-                    // exact than "unreachable" — a relay that hung up saying
-                    // nobody was there is not a broken network.
-                    : trouble ??
-                          'Host unreachable — check that Chitragupta is '
-                              'running on your desktop.',
-                style: (density.isTouch
-                    ? theme.textTheme.bodyMedium
-                    : theme.textTheme.bodySmall)?.copyWith(
-                  color: scheme.onSurface,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    headline,
+                    style: (density.isTouch
+                        ? theme.textTheme.bodyMedium
+                        : theme.textTheme.bodySmall)?.copyWith(
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  // The gateway's own sentence when it knows something more
+                  // exact — a relay that hung up saying nobody was there is
+                  // not a broken network, and a relay this phone could not
+                  // reach is not a claim about the desktop at all.
+                  if (detail != null)
+                    Text(
+                      detail,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
               ),
             ),
-            if (!connecting)
-              TextButton(
-                onPressed: () => ref.read(companionGatewayProvider).reconnect(),
-                child: const Text('Retry'),
-              ),
+            // Always offered, dialling included: a phone that has been
+            // "connecting" for a minute needs a way to start over as much as
+            // one that has given up.
+            TextButton(
+              onPressed: () => ref.read(companionGatewayProvider).reconnect(),
+              child: const Text('Retry'),
+            ),
           ],
         ),
       ),

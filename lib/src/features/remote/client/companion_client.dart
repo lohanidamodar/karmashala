@@ -23,7 +23,12 @@ const int kCompanionProbeWindow = 3;
 
 /// The host refused a request, or never answered.
 class RemoteApiException implements Exception {
-  const RemoteApiException(this.message, {this.code, this.hostAbsent = false});
+  const RemoteApiException(
+    this.message, {
+    this.code,
+    this.hostAbsent = false,
+    this.relayUnreachable = false,
+  });
 
   final String message;
 
@@ -34,6 +39,11 @@ class RemoteApiException implements Exception {
   /// the socket and no host ever answered the hello. A different fact from a
   /// refusal or a broken network, and the phone says so.
   final bool hostAbsent;
+
+  /// True when the relay itself never took the socket. A different fact
+  /// again: the desktop may be perfectly awake, and the phone must not tell
+  /// its owner to go and check it.
+  final bool relayUnreachable;
 
   @override
   String toString() => 'RemoteApiException(${code?.wire}: $message)';
@@ -75,6 +85,7 @@ class CompanionClient {
     required this.store,
     RelayTransportFactoryFn? relayFactory,
     this.requestTimeout = const Duration(seconds: 15),
+    this.storeTimeout = const Duration(seconds: 5),
     this.onLog,
     // ignore: prefer_initializing_formals — mutable field, named for callers.
   }) : _pairing = pairing,
@@ -87,6 +98,10 @@ class CompanionClient {
 
   final CompanionStore store;
   final Duration requestTimeout;
+
+  /// The longest a write to the phone's keystore may hold up a connection.
+  final Duration storeTimeout;
+
   final void Function(String message)? onLog;
   final RelayTransportFactoryFn _relayFactory;
 
@@ -143,14 +158,31 @@ class CompanionClient {
       final g = _pairing.generation + probe;
       final rendezvous = await rendezvousFor(_key, g);
       final dialled = _relayFactory(_pairing.relay, rendezvous);
+      // Probing forward only means anything once this relay has actually
+      // taken a socket. A relay nobody can reach is silent at every
+      // generation, and waiting out the hello window three times over turns
+      // one unreachable address into a minute of "Connecting…".
+      var socketOpened = false;
+      final watching = dialled.states.listen((state) {
+        if (state == TransportState.connected) socketOpened = true;
+      });
       try {
         final status = await _attach(dialled, g, true, helloTimeout);
         await _persistNextCounter(g);
         return status;
       } on TimeoutException {
-        onLog?.call('no host at generation $g; probing forward');
         await _detach();
         await dialled.close();
+        if (!socketOpened) {
+          onLog?.call('the relay never took the socket; not probing forward');
+          throw const RemoteApiException(
+            'this relay could not be reached',
+            relayUnreachable: true,
+          );
+        }
+        onLog?.call('no host at generation $g; probing forward');
+      } finally {
+        await watching.cancel();
       }
     }
     throw const RemoteApiException(
@@ -217,7 +249,16 @@ class CompanionClient {
   Future<void> _persistNextCounter(int usedGeneration) async {
     // Bump after a connection pairs (loop 64): the next session dials fresh.
     _pairing = _pairing.withGeneration(usedGeneration + 1);
-    await _pairing.save(store);
+    try {
+      await _pairing.save(store).timeout(storeTimeout);
+    } on Object catch (error) {
+      // A counter that did not stick costs a probe forward on the next dial,
+      // which is exactly what the probe window is for. A keystore that stalls
+      // or refuses must never cost the link that is already up — that trade
+      // is what leaves a phone reading "Connecting…" with a live host at the
+      // other end.
+      onLog?.call('could not persist the generation counter: $error');
+    }
   }
 
   Future<void> _onFrame(Uint8List frame) async {

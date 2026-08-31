@@ -1,7 +1,7 @@
 import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -34,13 +34,22 @@ Future<void> runCompanionApp() async {
         // WifiManager.MulticastLock, held via the runner's own channel; on
         // networks that still drop it the scout stays inert and the relay
         // carries everything — best effort by design.
+        //
+        // `onLog` is wired here and nowhere else. Every diagnostic line the
+        // gateway, the protocol client and the transports already write went
+        // nowhere in a release build, so a phone that would not connect
+        // offered no evidence at all — which is how "it just says connecting"
+        // became the whole of a bug report. Lifecycle only: none of these
+        // calls is ever handed a payload, a key or a rendezvous.
         final gateway = RemoteCompanionGateway(
           store: SecureCompanionStore(),
           lan: LanPathScout(
             lock: !kIsWeb && Platform.isAndroid
                 ? ChannelMulticastLock()
                 : const NoopMulticastLock(),
+            onLog: (message) => debugPrint('[companion lan] $message'),
           ),
+          onLog: (message) => debugPrint('[companion] $message'),
         );
         ref.onDispose(() => unawaited(gateway.close()));
         return gateway;
@@ -77,6 +86,7 @@ Future<void> runCompanionApp() async {
   // link simply rests — an FCM wake is the design's background answer.
   CompanionLifecycleReconnector(
     container.read(companionGatewayProvider),
+    onLog: (message) => debugPrint('[companion lifecycle] $message'),
   ).attach();
 
   runApp(

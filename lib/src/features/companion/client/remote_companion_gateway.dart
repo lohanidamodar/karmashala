@@ -167,6 +167,24 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// an outage to back off from.
   bool _switching = false;
   Completer<void>? _died;
+
+  /// A death declared while the loop was between two of its own awaits, with
+  /// no [_died] in existence to complete.
+  ///
+  /// The loop creates [_died] only after the dial has returned AND two awaited
+  /// keystore writes have finished. Everything that can kill a link — a
+  /// re-proof that found nobody, the LAN heal, a beacon, a request the host
+  /// never answered, the user's own Retry — could land in that window and be
+  /// thrown away, leaving the loop parked on a completer nothing would ever
+  /// finish and the phone reading "Connecting…" until it was force-quit.
+  bool _deathPending = false;
+
+  /// Set when the pass in flight has been overtaken: the user asked to retry,
+  /// or a pairing, a switch or an unpair has already chosen a different
+  /// desktop. Distinct from [_deathPending] on purpose — a request that found
+  /// the link down is news about the link, not a reason to abandon the dial
+  /// that is busy fixing it.
+  bool _dialOvertaken = false;
   Completer<void>? _backoffWaiter;
   Future<void>? _refreshing;
 
@@ -193,6 +211,17 @@ class RemoteCompanionGateway implements CompanionGateway {
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
   Timer? _lanHealTimer;
+
+  /// Beacon hosts whose direct dial has failed since this phone last held a
+  /// LAN link, by [LanPathScout.keyOf].
+  ///
+  /// The beacon repeats every two seconds and the scout's grudge lasts two
+  /// minutes, so a desktop that is audible but not dialable — a firewall on
+  /// its LAN port is the ordinary cause — used to make the phone throw away a
+  /// working relay link every two minutes, for ever. Trying once is right;
+  /// trying again on a schedule, and paying for it with the link that works,
+  /// is not.
+  final _lanUpgradeRefused = <String>{};
 
   // ---------------------------------------------------------------- pairing
 
@@ -733,8 +762,14 @@ class RemoteCompanionGateway implements CompanionGateway {
       _startLoop();
       return;
     }
-    // Mid-cycle: a link that does not look healthy is torn down and re-dialled.
-    if (_link.value != CompanionLinkState.connected) _declareDead();
+    // Mid-cycle: a link that does not look healthy is torn down and
+    // re-dialled — including one still dialling, which abandons the
+    // candidates it has left rather than making the user wait them out.
+    if (_link.value != CompanionLinkState.connected) {
+      _backoff.reset();
+      _dialOvertaken = true;
+      _declareDead();
+    }
   }
 
   // --------------------------------------------------------------- sessions
@@ -938,6 +973,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (_link.value != CompanionLinkState.connected) return;
     if (_linkPath.value != CompanionLinkPath.relay) return;
     if (scout.inCooldown(host)) return;
+    if (_lanUpgradeRefused.contains(scout.keyOf(host))) return;
     onLog?.call('beacon sighted; switching the link to the LAN');
     _declareDead();
   }
@@ -945,9 +981,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<void> _connectLoop() async {
     try {
       while (!_closed && _record != null) {
+        // A pass that was overtaken is over; the next one starts clean.
+        _dialOvertaken = false;
         _link.value = CompanionLinkState.connecting;
         final client = await _dialAnyPath();
         if (client != null && !_closed && _record != null) {
+          // The window opens here: from now until the completer exists, a
+          // death has nowhere to land, so it is remembered instead. Anything
+          // raised while merely DIALLING is news about a link that was
+          // already down, and the dial that just answered is the reply to it.
+          _deathPending = false;
           // The client bumped and persisted the generation counter — and, for
           // a relay path, the winning relay as the record's `relay`.
           _record = client.pairing;
@@ -971,6 +1014,9 @@ class RemoteCompanionGateway implements CompanionGateway {
             }
           }());
           unawaited(_registerPushToken(client));
+          // Anything that declared this link dead while it was still coming
+          // up had nowhere to land; honour it now rather than parking on it.
+          if (_deathPending) _declareDead();
           // Park here; blips are the transport's to heal. Only a request
           // nobody answered, a closed transport, unpair or close move on.
           await died.future;
@@ -1019,7 +1065,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (scout != null) {
       var triedLan = false;
       for (final host in scout.candidates.take(3).toList()) {
-        if (_closed || _record == null) return null;
+        if (_abandonDial) return null;
         triedLan = true;
         final client = await _dialLan(scout, host);
         if (client != null) return client;
@@ -1027,19 +1073,24 @@ class RemoteCompanionGateway implements CompanionGateway {
       if (!triedLan) {
         final hinted = _lanHintHost(scout);
         if (hinted != null) {
-          if (_closed || _record == null) return null;
+          if (_abandonDial) return null;
           final client = await _dialLan(scout, hinted);
           if (client != null) return client;
         }
       }
     }
     for (final url in await _relayOrder()) {
-      if (_closed || _record == null) return null;
+      if (_abandonDial) return null;
       final client = await _dialRelay(url);
       if (client != null) return client;
     }
     return null;
   }
+
+  /// Whether the pass in flight is still worth finishing. A Retry, an unpair
+  /// or a host switch arriving mid-dial must not have to wait out every
+  /// remaining candidate before the loop starts again.
+  bool get _abandonDial => _closed || _record == null || _dialOvertaken;
 
   /// The relays to try, in order. Falls back to the phone's configured relay
   /// setting, which is also what a typed-code pairing dials.
@@ -1085,6 +1136,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // The sealed hello round-tripped: this host holds the paired key. The
       // beacon's cleartext was never trusted beyond "try dialling here".
       scout.noteSuccess(host);
+      _lanUpgradeRefused.clear();
       _linkPath.value = CompanionLinkPath.lan;
       onLog?.call('connected over the LAN');
       return client;
@@ -1093,6 +1145,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // host, or a stale advert. Cool it down and let the relay carry on.
       onLog?.call('lan attempt failed: $error');
       scout.noteFailure(host);
+      _lanUpgradeRefused.add(scout.keyOf(host));
       await _teardownClient();
       return null;
     }
@@ -1282,8 +1335,14 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// rendezvous. Neither is a network failure, and telling someone to check
   /// their wifi when their desktop is simply closed wastes their afternoon.
   String? _troubleFor([Object? error]) {
-    if (error is RemoteApiException && error.hostAbsent) {
-      return _kHostAbsentTrouble;
+    if (error is RemoteApiException) {
+      // "The relay would not take the socket" and "nobody was at the
+      // rendezvous" are different facts and deserve different sentences: one
+      // is about the meeting place, the other about the desktop. Telling
+      // someone to go and check a desktop that is awake is as useless as
+      // telling them to check a network that works.
+      if (error.relayUnreachable) return _kRelayUnreachableTrouble;
+      if (error.hostAbsent) return _kHostAbsentTrouble;
     }
     final transport = _dialled;
     if (transport is RelayTransport &&
@@ -1299,6 +1358,12 @@ class RemoteCompanionGateway implements CompanionGateway {
   static const String _kHostAbsentTrouble =
       'Your desktop is not answering on this relay — check that Chitragupta '
       'is running, and that it is set to the same relay.';
+
+  /// And what "the meeting place itself would not answer" reads like. Never
+  /// about the desktop: nothing here has learned anything about it yet.
+  static const String _kRelayUnreachableTrouble =
+      'This phone could not reach the relay your desktop uses. On mobile data '
+      'that usually means the desktop is only reachable on its own network.';
 
   void _noteTrouble(String? trouble) {
     if (_trouble == trouble) return;
@@ -1389,6 +1454,10 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// owns it, and must not flash "host unreachable" on its way to the desktop
   /// the user just chose.
   Future<void> _dropLink({bool keepState = false}) async {
+    // Deliberate: whoever called this has already chosen a different desktop
+    // (or none), so a pass still working through the old one's candidates is
+    // finished with.
+    _dialOvertaken = true;
     _declareDead();
     final waiter = _backoffWaiter;
     if (waiter != null && !waiter.isCompleted) waiter.complete();
@@ -1398,7 +1467,13 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   void _declareDead() {
     final died = _died;
-    if (died != null && !died.isCompleted) died.complete();
+    if (died != null) {
+      if (!died.isCompleted) died.complete();
+      return;
+    }
+    // No completer to take it. Remember, so the loop honours it rather than
+    // parking on a link that was already declared dead before the park.
+    _deathPending = true;
   }
 
   // ------------------------------------------------------------ host events
