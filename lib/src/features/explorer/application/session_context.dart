@@ -8,6 +8,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'checkout.dart';
+import 'picked_checkouts.dart';
 
 /// The session running in the pane the terminal is showing, or null.
 ///
@@ -84,8 +85,20 @@ class SessionContext {
   ///
   /// Returns the repository it landed on, or null when the session names none.
   Repository? follow(String sessionId) {
-    final repository = repositoryForSession(_ref, sessionId);
+    // A checkout picked while working in this session outranks the one its
+    // launch directory computes to: the user has already said where the work
+    // is, and recomputing it on every tab switch is how a pick stopped meaning
+    // anything. See [PickedCheckouts].
+    final picked = _ref.read(pickedCheckoutsProvider.notifier).forSession(
+      sessionId,
+    );
+    final remembered = picked == null
+        ? null
+        : _ref.read(repositoryDaoProvider).getById(picked);
+    final repository = remembered ?? repositoryForSession(_ref, sessionId);
     if (repository == null) return null;
+    // What a pick made from here on will be filed against.
+    _ref.read(followedSessionProvider.notifier).set(sessionId);
     _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);
     _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
     return repository;

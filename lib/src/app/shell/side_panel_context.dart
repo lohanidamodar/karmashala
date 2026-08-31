@@ -7,18 +7,69 @@ import '../theme/design_tokens.dart';
 import '../../features/explorer/application/checkout.dart';
 import '../../features/explorer/application/checkout_picker.dart';
 import '../../features/projects/application/project_providers.dart';
+import '../../features/projects/application/projects_controller.dart';
 import '../../features/repositories/domain/repository.dart';
+
+/// Asks for a rescan of the project's folder from the picker.
+class _RescanChoice {
+  const _RescanChoice();
+}
 
 /// Which checkout the panel is describing, and the picker that moves it.
 ///
 /// The selection moves on its own — it follows the terminal tab — so the
 /// surfaces have to name it; making that same line open the list of checkouts
-/// costs no extra chrome. One checkout in the project means no picker at all.
-class SidePanelContextLine extends ConsumerWidget {
+/// costs no extra chrome.
+///
+/// **The menu is offered even when the project has one checkout**, and that is
+/// the fix for the complaint made three times from the shipped app: "github
+/// panel only shows popupbits/popupbits even though this session is also
+/// working on the sub folder". The project had exactly one recorded checkout —
+/// its own root, written the day it was added — so this line drew no caret and
+/// no menu, and there was nothing to click and nothing to say why. A list of
+/// one is still worth opening when the thing you actually need is the
+/// **Rescan** under it.
+class SidePanelContextLine extends ConsumerStatefulWidget {
   const SidePanelContextLine({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SidePanelContextLine> createState() =>
+      _SidePanelContextLineState();
+}
+
+class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
+  /// What the last rescan said, shown until the picker is opened again.
+  String? _rescanResult;
+  bool _rescanning = false;
+
+  Future<void> _rescan(String projectId) async {
+    if (_rescanning) return;
+    setState(() => _rescanning = true);
+    try {
+      final added = await ref
+          .read(projectsControllerProvider.notifier)
+          .rediscover(projectId);
+      if (!mounted) return;
+      setState(() {
+        _rescanResult = added.isEmpty
+            ? 'No new checkouts found'
+            : 'Found ${added.length} '
+                  'checkout${added.length == 1 ? '' : 's'}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(
+        () => _rescanResult = error is StateError
+            ? error.message
+            : 'Could not rescan: $error',
+      );
+    } finally {
+      if (mounted) setState(() => _rescanning = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final repository = ref.watch(selectedCheckoutProvider);
     if (repository == null) return const SizedBox.shrink();
     final checkouts = ref.watch(projectCheckoutsProvider);
@@ -30,22 +81,23 @@ class SidePanelContextLine extends ConsumerWidget {
     final line = _ContextLineBody(
       repository: repository,
       within: within,
-      pickable: checkouts.length > 1,
+      pickable: true,
     );
-    if (checkouts.length < 2) {
-      return Tooltip(message: repository.path.path, child: line);
-    }
-    return PopupMenuButton<Repository>(
+    return PopupMenuButton<Object>(
       tooltip:
           '${repository.path.path}\n'
-          'Switch to another checkout in this project',
+          'Switch to another checkout in this project, or rescan for new ones',
       position: PopupMenuPosition.under,
       padding: EdgeInsets.zero,
-      onSelected: (picked) =>
-          ref.read(checkoutPickerProvider).select(picked),
+      onSelected: (picked) => switch (picked) {
+        final Repository checkout => ref
+            .read(checkoutPickerProvider)
+            .select(checkout),
+        _ => _rescan(repository.projectId),
+      },
       itemBuilder: (context) => [
         for (final checkout in checkouts)
-          PopupMenuItem<Repository>(
+          PopupMenuItem<Object>(
             value: checkout,
             height: 44,
             child: _CheckoutMenuRow(
@@ -56,6 +108,26 @@ class SidePanelContextLine extends ConsumerWidget {
               selected: checkout.id == repository.id,
             ),
           ),
+        const PopupMenuDivider(),
+        PopupMenuItem<Object>(
+          value: const _RescanChoice(),
+          enabled: !_rescanning,
+          height: 36,
+          child: Row(
+            children: [
+              const Icon(AppIcons.arrowsClockwise, size: Chrome.iconSmall),
+              const SizedBox(width: Insets.sm),
+              // Says what it is for, because the reason to reach for it is a
+              // checkout that is missing rather than one that is wrong.
+              Expanded(
+                child: Text(
+                  _rescanResult ?? 'Rescan for checkouts',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
       child: line,
     );

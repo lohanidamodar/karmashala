@@ -138,27 +138,53 @@ class ProjectService {
   /// spellings would insert a second row for a repository that is already
   /// there. "Rescan for repositories" is a menu item now, so that duplicate is
   /// one click away rather than hypothetical. See [Checkout].
+  ///
+  /// **Scans on the host, records in the project's environment**, exactly as
+  /// [createProjectForEnvironment] does. This used to hand `project.root`
+  /// straight to discovery, and discovery is `dart:io` on the Windows host —
+  /// so for a project rooted in WSL, which is every project launched from a
+  /// WSL shell in this workspace, the scan asked Windows for
+  /// `/mnt/c/Users/…` and threw "Folder does not exist" every single time.
+  /// A rescan that always fails is why a repository cloned into a project
+  /// after it was added stayed invisible for good: the row could never be
+  /// written, so the checkout picker kept offering the one folder recorded on
+  /// the day the project was created.
   Future<List<Repository>> rediscover(
     Project project, {
+    required ExecutionEnvironment projectEnvironment,
+    required ExecutionEnvironment windows,
     int maxDepth = 5,
   }) async {
     final existing = repositoryDao
         .getByProject(project.id)
         .map((r) => Checkout(r.path))
         .toSet();
-    final discovered = await discovery.discover(
-      project.root,
-      maxDepth: maxDepth,
-    );
+    final scanRoot = projectEnvironment.id == windows.id
+        ? project.root
+        : translator.translate(
+            project.root,
+            from: projectEnvironment,
+            to: windows,
+          );
+    final discovered = await discovery.discover(scanRoot, maxDepth: maxDepth);
+    EnvironmentPath toProject(EnvironmentPath hostPath) =>
+        projectEnvironment.id == windows.id
+        ? hostPath
+        : translator.translate(
+            hostPath,
+            from: windows,
+            to: projectEnvironment,
+          );
     final now = clock.nowUtc();
     final added = <Repository>[];
     for (final d in discovered) {
-      if (existing.contains(Checkout(d.path))) continue;
+      final path = toProject(d.path);
+      if (existing.contains(Checkout(path))) continue;
       final repo = Repository(
         id: ids.newId(),
         projectId: project.id,
         name: d.name,
-        path: d.path,
+        path: path,
         createdAt: now,
       );
       repositoryDao.insert(repo);

@@ -152,7 +152,22 @@ class ProjectsController extends Notifier<List<Project>> {
     if (project == null) {
       throw StateError('This project is no longer in the workspace.');
     }
-    final added = await ref.read(projectServiceProvider).rediscover(project);
+    // The same pair `createInEnvironment` resolves, and for the same reason:
+    // the scan runs on the Windows host, the rows belong to the project's own
+    // environment.
+    final dao = ref.read(executionEnvironmentDaoProvider);
+    final windows = dao.getById(localWindowsEnvironmentId);
+    final environment = dao.getById(project.root.environmentId) ?? windows;
+    if (windows == null || environment == null) {
+      throw StateError('No execution environments available.');
+    }
+    final added = await ref
+        .read(projectServiceProvider)
+        .rediscover(
+          project,
+          projectEnvironment: environment,
+          windows: windows,
+        );
     if (added.isNotEmpty) {
       // New repositories may already have CLI history behind them, and the
       // tree's providers all hang off the revision.

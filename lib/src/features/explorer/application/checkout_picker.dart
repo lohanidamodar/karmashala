@@ -8,6 +8,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'checkout.dart';
+import 'picked_checkouts.dart';
 
 /// The checkout the repository-scoped surfaces are currently describing.
 final selectedCheckoutProvider = Provider<Repository?>((ref) {
@@ -99,14 +100,21 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
 
 /// Points the repository-scoped surfaces at a checkout the user picked.
 ///
-/// Another *explicit* writer of the existing precedence rule: a pick holds
-/// until the active session changes, exactly as an Explorer click does.
+/// Another *explicit* writer of the existing precedence rule — and, since the
+/// pick is remembered against the session it was made in, one the context can
+/// give back. See [PickedCheckouts] for why it has to.
 class CheckoutPicker {
   const CheckoutPicker(this._ref);
 
   final Ref _ref;
 
   void select(Repository repository) {
+    final sessionId = _ref.read(followedSessionProvider);
+    if (sessionId != null) {
+      _ref
+          .read(pickedCheckoutsProvider.notifier)
+          .remember(sessionId, repository.id);
+    }
     // Only when it differs: selecting a project kicks off a CLI-store scan.
     if (_ref.read(selectedProjectIdProvider) != repository.projectId) {
       _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);

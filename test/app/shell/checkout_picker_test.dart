@@ -250,7 +250,14 @@ void main() {
       expect(find.text('wt-relay'), findsOneWidget);
     });
 
-    testWidgets('a project with one checkout shows no picker', (tester) async {
+    testWidgets('a project with one checkout still offers the rescan', (
+      tester,
+    ) async {
+      // This used to draw no menu at all, and it is the whole of the owner's
+      // complaint: a project whose only recorded checkout is its own root gave
+      // no caret, nothing to click, and no way to say that the clone inside it
+      // was simply never scanned for. A list of one is worth opening when the
+      // thing under it is Rescan.
       RepositoryDao(db).insert(
         repository(id: 'hub', name: 'demo', path: hubPath),
       );
@@ -258,10 +265,11 @@ void main() {
       container.read(selectedRepositoryIdProvider.notifier).select('hub');
       await pump(tester, container);
 
-      // Exactly what it drew before there was a picker.
       expect(find.text('demo'), findsOneWidget);
-      expect(find.byType(PopupMenuButton<Repository>), findsNothing);
-      expect(find.byIcon(AppIcons.caretDown), findsNothing);
+      expect(find.byIcon(AppIcons.caretDown), findsOneWidget);
+
+      await openPicker(tester);
+      expect(find.text('Rescan for checkouts'), findsOneWidget);
     });
   });
 
@@ -352,6 +360,64 @@ void main() {
       container.read(sessionContextProvider).follow('s-hub');
       expect(container.read(selectedRepositoryIdProvider), 'hub');
     });
+  });
+
+  testWidgets('a pick made in a session is given back when it returns', (
+    tester,
+  ) async {
+    // The other half of the owner's report. The context recomputes the checkout
+    // from the session's launch directory every time the active session
+    // changes, so picking the clone the agents work in and then switching
+    // terminal tabs put the panel back on the hub — which reads exactly like
+    // the pick never happened.
+    insertAllCheckouts();
+    SessionDao(db).insert(
+      Session(
+        id: 's-hub',
+        repositoryId: 'hub',
+        agentInstallationId: 'a1',
+        title: 'Rooted at the hub',
+        useWorktree: false,
+        status: SessionStatus.running,
+        createdAt: testTime,
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: git),
+        ),
+        autoImportRunnerProvider.overrideWithValue(
+          (repos) async => const ImportSummary(),
+        ),
+        repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+        deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(selectedRepositoryIdProvider.notifier).select('hub');
+    await pump(tester, container);
+    // The panel is showing s-hub's context, which is what a pick is filed
+    // against.
+    container.read(sessionContextProvider).follow('s-hub');
+    await tester.pumpAndSettle();
+
+    await openPicker(tester);
+    await tester.tap(find.text('app'));
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'app');
+
+    // Another tab, then back: the session's own launch directory says 'hub',
+    // and the pick says otherwise.
+    container.read(sessionContextProvider).follow('s-hub');
+    expect(
+      container.read(selectedRepositoryIdProvider),
+      'app',
+      reason: 'a pick that a tab switch forgets is not a choice',
+    );
   });
 
   testWidgets('a worktree created while the app runs appears after a rescan', (
