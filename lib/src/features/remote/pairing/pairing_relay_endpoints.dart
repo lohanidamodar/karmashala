@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../application/remote_access_controller.dart';
+import '../relay_local/relay_endpoints.dart';
 
 /// Where an endpoint's relay lives, which decides its icon and its story.
 enum PairingRelayKind { local, internet }
@@ -46,10 +47,27 @@ class PairingRelayEndpoint {
   String toString() => 'PairingRelayEndpoint($label, $url, ${kind.name})';
 }
 
-/// The endpoints the dialog shows, in tab order. Never empty.
+/// The endpoints the dialog shows, in tab order. Never empty: what the
+/// embedded local relay currently offers ([relayEndpointsProvider]), or the
+/// configured internet relay when that list is empty (remote access off, or
+/// the local relay still coming up — a code must still be showable).
 final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
   ref,
 ) {
+  final offered = ref.watch(relayEndpointsProvider);
+  if (offered.isNotEmpty) {
+    return [
+      for (final option in offered)
+        PairingRelayEndpoint(
+          label: option.label,
+          url: option.url,
+          kind: switch (option.kind) {
+            RelayEndpointKind.local => PairingRelayKind.local,
+            RelayEndpointKind.internet => PairingRelayKind.internet,
+          },
+        ),
+    ];
+  }
   final settings = ref.watch(settingsControllerProvider);
   return [
     PairingRelayEndpoint(
