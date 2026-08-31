@@ -9,7 +9,9 @@ import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/execution_environment.dart';
 import '../../git/application/git_providers.dart';
+import '../../mcp/session_mcp.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -620,6 +622,7 @@ class SessionLauncher {
     if (environment == null) {
       throw StateError('The repository\'s environment is unavailable.');
     }
+    final mcp = _mcpAccessFor(session, descriptor, environment);
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,
       executable: request.installation.executable.path,
@@ -630,6 +633,8 @@ class SessionLauncher {
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
+        mcpUrl: mcp?.url,
+        mcpConfigPath: mcp?.configPath,
       ),
       workingDirectory: workingDirectory.path,
       wslDistribution: environment.wslDistribution,
@@ -669,6 +674,7 @@ class SessionLauncher {
     if (terminal == null) {
       throw StateError('No external terminal is configured.');
     }
+    final mcp = _mcpAccessFor(session, descriptor, environment);
     final agentCommand = [
       request.installation.executable.path,
       ...agentPaneArguments(
@@ -678,6 +684,8 @@ class SessionLauncher {
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
+        mcpUrl: mcp?.url,
+        mcpConfigPath: mcp?.configPath,
       ),
     ];
     final distro = environment.wslDistribution;
@@ -699,6 +707,43 @@ class SessionLauncher {
           workingDirectory: distro == null ? workingDirectory.path : null,
         );
     return SessionLaunchResult(session: session);
+  }
+
+  /// How this session will reach Chitragupta's own tools, or `null` when it
+  /// will not.
+  ///
+  /// Both surfaces call this and then hand the result to [agentPaneArguments],
+  /// which is the same reason they share that function: "open this in Windows
+  /// Terminal instead" must produce the same agent, on the same endpoint,
+  /// speaking as the same session.
+  ///
+  /// `null` is the ordinary answer and never an error. The control server is
+  /// not up; the agent has no verified convention; the session runs over SSH,
+  /// or in WSL on a host with no switch to dial; the config directory could not
+  /// be locked down. In every case the launch is byte-identical to the one that
+  /// happened before any of this existed — which is the property that matters
+  /// most, because a session that opens without its tools is a smaller loss
+  /// than a session that does not open.
+  SessionMcpAccess? _mcpAccessFor(
+    Session session,
+    AgentDescriptor? descriptor,
+    ExecutionEnvironment environment,
+  ) {
+    try {
+      final mcp = _ref.read(sessionMcpProvider);
+      final support = descriptor?.launch.mcp;
+      if (mcp == null || support == null || !support.isSupported) return null;
+      return mcp.accessFor(
+        sessionId: session.id,
+        environment: environment,
+        withConfigFile: support.needsConfigFile,
+      );
+    } on Object {
+      // Wiring an agent to the tool surface is an enhancement. Nothing about it
+      // is worth failing a launch over, so the one thing this must not do is
+      // throw into the caller.
+      return null;
+    }
   }
 
   /// The attribution for a session spawned by [parentSessionId], or `null` for
@@ -777,10 +822,10 @@ class SessionLauncher {
 /// "open this in Windows Terminal instead" must produce the same agent, in the
 /// same mode, on the same conversation.
 ///
-/// Order matters and is the order the shipped agents want: global flags, then
-/// the session-id flag, then the resume convention (which for Codex is a
-/// *subcommand* and must follow the globals), then the prompt as a positional
-/// argument.
+/// Order matters and is the order the shipped agents want: the MCP flag, then
+/// global flags, then the session-id flag, then the resume convention (which
+/// for Codex is a *subcommand* and must follow the globals), then the prompt as
+/// a positional argument.
 /// [forkSessionId] **replaces** the resume convention rather than adding to it:
 /// Codex forks with a `fork` subcommand *instead of* `resume`, and emitting
 /// both would put two subcommands on one command line. Claude's fork is its own
@@ -793,11 +838,19 @@ List<String> agentPaneArguments(
   String? resumeSessionId,
   String? forkSessionId,
   String? prompt,
+  String? mcpUrl,
+  String? mcpConfigPath,
 }) {
   final launch = descriptor?.launch;
   final trimmedPrompt = prompt?.trim();
   final forking = forkSessionId != null && forkSessionId.isNotEmpty;
   return [
+    // First, because Codex's `-c` is a global option and its resume is a
+    // *subcommand*: everything global has to be on the left of it. Nothing
+    // here is variadic — Claude's config flag is deliberately one
+    // `--flag=value` token — so nothing downstream can be swallowed.
+    if (mcpUrl != null && mcpUrl.isNotEmpty)
+      ...?launch?.mcp.argumentsFor(url: mcpUrl, configPath: mcpConfigPath),
     ...?launch?.permissionArgumentsFor(permissionMode),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),

@@ -1,0 +1,219 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/core/logging/app_logger.dart';
+import 'package:chitragupta/src/core/util/clock_provider.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:chitragupta/src/features/mcp/handshake_file_permissions.dart';
+import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+
+/// The address each kind of session is told to dial, and what that address
+/// answers.
+///
+/// A WSL2 distribution has its own network namespace, so the loopback URL the
+/// endpoint shipped with is refused from inside it — which made the whole
+/// control surface unreachable for most of this owner's sessions. The fix is a
+/// second listener on the WSL virtual switch's host address, and the cases
+/// below pin both halves of it: the right URL comes out per environment, and
+/// the second listener serves `/mcp` and nothing else.
+///
+/// `127.0.0.2` stands in for the switch address. It is a real second address on
+/// a real second socket — Windows accepts binds anywhere in `127.0.0.0/8` — so
+/// these are genuine two-interface tests, and they run on a machine with no WSL
+/// installed.
+void main() {
+  late Directory tmp;
+  late ProviderContainer container;
+  late LauncherControlServer server;
+
+  final wslStandIn = InternetAddress('127.0.0.2');
+
+  Future<LauncherControlServer> startServer({
+    Future<InternetAddress?> Function()? wslHostAddress,
+  }) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    container = ProviderContainer(
+      overrides: [
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        databaseProvider.overrideWithValue(db),
+      ],
+    );
+    final started = LauncherControlServer(container);
+    await started.start(
+      bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
+      socketDirectory: p.join(tmp.path, 'ipc'),
+      wslHostAddress: wslHostAddress ?? () async => null,
+    );
+    addTearDown(() async {
+      await started.stop();
+      container.dispose();
+    });
+    return started;
+  }
+
+  setUp(() {
+    tmp = Directory.systemTemp.createTempSync('chitra_mcp_reach_');
+    addTearDown(() {
+      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    });
+  });
+
+  group('the URL a session is given', () {
+    test('a Windows session keeps loopback', () async {
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+
+      expect(
+        server.mcpUrlFor('s1', environment: EnvironmentKind.windowsNative),
+        startsWith('http://127.0.0.1:'),
+      );
+    });
+
+    test('a WSL session is given the switch address instead', () async {
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+
+      final url = server.mcpUrlFor('s1', environment: EnvironmentKind.wsl)!;
+      expect(url, startsWith('http://127.0.0.2:'));
+      // The same port and the same session credential — one server, two doors.
+      expect(
+        Uri.parse(url).port,
+        Uri.parse(
+          server.mcpUrlFor('s1', environment: EnvironmentKind.windowsNative)!,
+        ).port,
+      );
+      expect(
+        server.callers.sessionFor(Uri.parse(url).pathSegments.last),
+        's1',
+      );
+    });
+
+    test('a WSL session on a host with no switch is given nothing', () async {
+      // Rather than the loopback URL, which is refused from inside a
+      // distribution: a session that cannot be wired launches as it always did.
+      server = await startServer(wslHostAddress: () async => null);
+
+      expect(server.mcpUrlFor('s1', environment: EnvironmentKind.wsl), isNull);
+      expect(
+        server.mcpUrlFor('s1', environment: EnvironmentKind.windowsNative),
+        isNotNull,
+      );
+    });
+
+    test('an SSH session is given nothing, on purpose', () async {
+      // Every address this server listens on is local to the machine. Reaching
+      // a remote host would mean binding an interface the LAN can see, and the
+      // token in the URL opens the app's whole tool surface.
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+
+      expect(server.mcpUrlFor('s1', environment: EnvironmentKind.ssh), isNull);
+    });
+
+    test('nothing is offered anywhere when the endpoint has no credential', () async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final closedContainer = ProviderContainer(
+        overrides: [
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          databaseProvider.overrideWithValue(db),
+        ],
+      );
+      final closed = LauncherControlServer(
+        closedContainer,
+        permissions: _RefusingPermissions(),
+      );
+      await closed.start(
+        bridgeFilePath: p.join(tmp.path, 'closed.json'),
+        socketDirectory: p.join(tmp.path, 'closed-ipc'),
+        wslHostAddress: () async => wslStandIn,
+      );
+      addTearDown(() async {
+        await closed.stop();
+        closedContainer.dispose();
+      });
+
+      expect(closed.mcpUrlFor('s1', environment: EnvironmentKind.wsl), isNull);
+      // And the widened address is never even bound: an endpoint that serves
+      // nothing must not grow a second door for nothing to be served through.
+      expect(closed.wslHost, isNull);
+    });
+  });
+
+  group('the second listener', () {
+    test('answers /mcp', () async {
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+      final url = server.mcpUrlFor('s1', environment: EnvironmentKind.wsl)!;
+
+      final response = await post(Uri.parse(url), <String, Object?>{
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'tools/list',
+        '_meta': <String, Object?>{
+          'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        },
+      });
+
+      expect(response.status, 200);
+      final result =
+          (jsonDecode(response.body) as Map<String, Object?>)['result']!
+              as Map<String, Object?>;
+      expect(result['tools'], isA<List<Object?>>());
+    });
+
+    test('answers 404 to everything else', () async {
+      // The privileged `/rpc` envelope and the agent-hook route stay on
+      // loopback. Widening the address is a decision about one endpoint, and
+      // this is where that stays true.
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+      final port = Uri.parse(
+        server.mcpUrlFor('s1', environment: EnvironmentKind.wsl)!,
+      ).port;
+
+      for (final path in ['/rpc', '/agent-hook', '/']) {
+        final response = await post(
+          Uri.parse('http://127.0.0.2:$port$path'),
+          const <String, Object?>{},
+        );
+        expect(response.status, 404, reason: path);
+      }
+    });
+  });
+}
+
+/// One JSON POST, returning the status and the body.
+Future<({int status, String body})> post(Uri uri, Object? body) async {
+  final client = HttpClient();
+  try {
+    final request = await client.postUrl(uri);
+    request.headers.contentType = ContentType.json;
+    request.headers.set(
+      HttpHeaders.acceptHeader,
+      'application/json, text/event-stream',
+    );
+    request.write(jsonEncode(body));
+    final response = await request.close();
+    return (
+      status: response.statusCode,
+      body: await response.transform(utf8.decoder).join(),
+    );
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Hardening that never applies, so nothing privileged is minted or served.
+class _RefusingPermissions extends HandshakePermissions {
+  @override
+  Future<bool> restrictDirectory(Directory dir, {AppLogger? logger}) async =>
+      false;
+
+  @override
+  Future<bool> restrictFile(File file, {AppLogger? logger}) async => false;
+}

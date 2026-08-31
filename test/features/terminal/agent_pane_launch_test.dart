@@ -447,4 +447,117 @@ void main() {
       );
     });
   });
+
+  /// Being told where Chitragupta's own tools are, in each agent's own words.
+  ///
+  /// Every claim here was read off a real `--help` or a real run; the point of
+  /// the group is that an agent with no verified convention gets **nothing**,
+  /// which is what the Antigravity descriptor got wrong for months.
+  group('the MCP endpoint on the command line', () {
+    const registry = AgentRegistry.builtIn;
+    const url = 'http://172.18.240.1:51234/mcp/tok-en';
+    const configPath = '/mnt/c/Users/d/AppData/Roaming/x/mcp/session-s1.json';
+
+    test('Claude Code is pointed at a config file, in one token', () {
+      // One token because `--mcp-config <configs...>` is variadic: given a
+      // space, it eats the opening prompt below as a second config file.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.claudeCode),
+          PermissionMode.ask,
+          sessionId: 'uuid',
+          prompt: 'do the thing',
+          mcpUrl: url,
+          mcpConfigPath: configPath,
+        ),
+        [
+          '--mcp-config=$configPath',
+          '--permission-mode',
+          'manual',
+          '--session-id',
+          'uuid',
+          'do the thing',
+        ],
+      );
+    });
+
+    test('Claude Code is never given --strict-mcp-config', () {
+      // It would drop the user's own MCP servers for every session the app
+      // opens. The default merges, which is the whole reason this is safe.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.claudeCode),
+          PermissionMode.ask,
+          mcpUrl: url,
+          mcpConfigPath: configPath,
+        ),
+        isNot(contains('--strict-mcp-config')),
+      );
+    });
+
+    test('Codex is given the URL inline, and no file', () {
+      // Before its `resume` subcommand, because `-c` is a global option.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.codex),
+          PermissionMode.ask,
+          resumeSessionId: 'sid',
+          mcpUrl: url,
+        ),
+        [
+          '-c',
+          'mcp_servers.chitragupta.url=$url',
+          '--ask-for-approval',
+          'on-request',
+          'resume',
+          'sid',
+        ],
+      );
+    });
+
+    test('Antigravity is given nothing, because nothing was verified', () {
+      // `agy --help` names an `mcp` subcommand for editing its own config and
+      // no launch option at all.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.acceptEdits,
+          mcpUrl: url,
+          mcpConfigPath: configPath,
+        ),
+        ['--mode', 'accept-edits'],
+      );
+    });
+
+    test('an agent nobody has checked is launched exactly as before', () {
+      expect(
+        agentPaneArguments(null, PermissionMode.ask, mcpUrl: url),
+        isEmpty,
+      );
+    });
+
+    test('no endpoint means no flag', () {
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.claudeCode),
+          PermissionMode.ask,
+        ),
+        isNot(contains(startsWith('--mcp-config'))),
+      );
+    });
+
+    test('a config that could not be written means no flag either', () {
+      // Not `--mcp-config=` with nothing after it: Claude would refuse to start
+      // on a config file that is not there, so a launch that would have worked
+      // would fail instead.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.claudeCode),
+          PermissionMode.ask,
+          mcpUrl: url,
+        ),
+        ['--permission-mode', 'manual'],
+      );
+    });
+  });
 }

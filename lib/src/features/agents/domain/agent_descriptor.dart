@@ -119,6 +119,113 @@ class AgentForkSupport {
       : const [];
 }
 
+/// How an agent CLI is told, at launch, where Chitragupta's own tools are.
+enum AgentMcpStyle {
+  /// A flag naming a config file the agent reads — Claude Code's
+  /// `--mcp-config`.
+  configFile,
+
+  /// A flag setting one config value inline, with no file — Codex's
+  /// `-c <dotted.key>=<value>`.
+  inlineUrl,
+
+  /// No convention we have verified. Nothing is passed. **The default.**
+  unsupported,
+}
+
+/// Whether one agent can be pointed at an MCP server on its command line, and
+/// how.
+///
+/// Modelled exactly like [AgentForkSupport] — declared data on the descriptor,
+/// [evidence] required, defaulting to the conservative answer — and for the
+/// same reason. Antigravity's descriptor was wrong for months because a flag
+/// nobody had run was written down as if it were known; `agy --help` (1.1.22)
+/// names an `mcp` *subcommand* for editing its own config and no launch option
+/// at all, so Antigravity is given nothing here rather than something plausible.
+///
+/// Note what this is not: it is not "does the agent support MCP". All three
+/// support it. It is "can this launch, without touching the user's own files,
+/// add one more server for one session" — and that is a narrower question with
+/// a different answer per CLI.
+class AgentMcpSupport {
+  /// The agent reads a config file named by [flag].
+  ///
+  /// Emitted as a **single `--flag=value` token**, not as two arguments, and
+  /// that is load-bearing rather than cosmetic. Claude Code declares
+  /// `--mcp-config <configs...>` — variadic, "space-separated" — so a
+  /// space-separated value swallows every following non-flag argument,
+  /// including the opening prompt this launcher passes as a positional:
+  ///
+  ///   $ claude --mcp-config /tmp/c.json mcp list
+  ///   Error: Invalid MCP configuration:
+  ///   MCP config file not found: …/mcp
+  ///   MCP config file not found: …/list
+  ///   $ claude --mcp-config=/tmp/c.json mcp list
+  ///   claude.ai Google Drive: … ✔ Connected      # ran the subcommand
+  ///
+  /// Verified against 2.1.251.
+  const AgentMcpSupport.configFile({
+    required this.flag,
+    required this.evidence,
+  }) : style = AgentMcpStyle.configFile,
+       urlKey = '';
+
+  /// The agent takes the URL on its command line, as `[flag] <urlKey>=<url>`.
+  ///
+  /// No file is written, so nothing has to be readable from the agent's
+  /// filesystem — which is why this is the shape Codex gets even though it also
+  /// has a config file: `~/.codex/config.toml` is the *user's*, holds one
+  /// `[mcp_servers.chitragupta]` block for the whole machine, and so could
+  /// never carry a **per-session** URL. Identity is the point of the URL, so a
+  /// convention that cannot be per-session is not a weaker version of this one,
+  /// it is a different and wrong thing.
+  const AgentMcpSupport.inlineUrl({
+    required this.flag,
+    required this.urlKey,
+    required this.evidence,
+  }) : style = AgentMcpStyle.inlineUrl;
+
+  /// Nothing is known to work. The default.
+  const AgentMcpSupport.unsupported()
+    : style = AgentMcpStyle.unsupported,
+      flag = '',
+      urlKey = '',
+      evidence = '';
+
+  final AgentMcpStyle style;
+
+  /// The option itself, e.g. `--mcp-config` or `-c`.
+  final String flag;
+
+  /// For [AgentMcpStyle.inlineUrl], the dotted config key the URL is assigned
+  /// to. Empty otherwise.
+  final String urlKey;
+
+  /// Where this was verified — the `--help` line or the transcript it was read
+  /// off, so a future CLI version can be re-checked rather than trusted.
+  final String evidence;
+
+  bool get isSupported => style != AgentMcpStyle.unsupported;
+
+  /// Whether a config file has to exist before [argumentsFor] can say anything.
+  bool get needsConfigFile => style == AgentMcpStyle.configFile;
+
+  /// The arguments that point this agent at [url], or nothing when it cannot be
+  /// told.
+  ///
+  /// A [AgentMcpStyle.configFile] agent with no [configPath] gets **nothing**,
+  /// not a flag with an empty value: the file could not be written, and a flag
+  /// naming a file that is not there is a launch that fails where the launch
+  /// without it would have succeeded.
+  List<String> argumentsFor({required String url, String? configPath}) =>
+      switch (style) {
+        AgentMcpStyle.configFile =>
+          configPath == null ? const [] : ['$flag=$configPath'],
+        AgentMcpStyle.inlineUrl => [flag, '$urlKey=$url'],
+        AgentMcpStyle.unsupported => const [],
+      };
+}
+
 /// Executable base names to probe, per execution-environment kind. Each list is
 /// tried in order and the first hit wins.
 ///
@@ -228,6 +335,7 @@ class AgentLaunchSpec {
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.fork = const AgentForkSupport.unsupported(),
+    this.mcp = const AgentMcpSupport.unsupported(),
   });
 
   final List<String> baseArguments;
@@ -272,6 +380,10 @@ class AgentLaunchSpec {
   /// Whether this agent can start a new conversation from an existing one's
   /// history, and how. Defaults to [AgentForkStyle.unsupported].
   final AgentForkSupport fork;
+
+  /// Whether this agent can be pointed at Chitragupta's own MCP endpoint on its
+  /// command line, and how. Defaults to [AgentMcpStyle.unsupported].
+  final AgentMcpSupport mcp;
 
   /// Whether this agent will accept a session id we choose. See
   /// [AgentSessionIdAssignment].

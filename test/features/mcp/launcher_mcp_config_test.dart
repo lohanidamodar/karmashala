@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:chitragupta/src/features/mcp/handshake_file_permissions.dart';
 import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:chitragupta/src/features/mcp/launcher_mcp.dart';
@@ -41,6 +42,9 @@ void main() {
     await server.start(
       bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
       socketDirectory: p.join(tmp.path, 'ipc'),
+      // No second interface: this file is about the URL's *contents*, and the
+      // address per environment is `mcp_reachability_test.dart`'s subject.
+      wslHostAddress: () async => null,
     );
   });
 
@@ -51,20 +55,25 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
+  /// The URL a Windows-native pane is given. The address per environment is
+  /// `mcp_reachability_test.dart`'s subject; here it is only a way to get one.
+  String? urlFor(String sessionId) =>
+      server.mcpUrlFor(sessionId, environment: EnvironmentKind.windowsNative);
+
   group('the URL carries who is calling', () {
     test('a session\'s URL resolves back to that session', () async {
-      final url = server.mcpUrlFor('s1')!;
+      final url = urlFor('s1')!;
       final token = Uri.parse(url).pathSegments.last;
 
       expect(server.callers.sessionFor(token), 's1');
     });
 
     test('two sessions never share a URL', () {
-      expect(server.mcpUrlFor('s1'), isNot(server.mcpUrlFor('s2')));
+      expect(urlFor('s1'), isNot(urlFor('s2')));
     });
 
     test('a session\'s URL is stable, so a rewritten config still works', () {
-      expect(server.mcpUrlFor('s1'), server.mcpUrlFor('s1'));
+      expect(urlFor('s1'), urlFor('s1'));
     });
 
     test('the unattributed URL names no session', () {
@@ -73,7 +82,7 @@ void main() {
     });
 
     test('a retired session\'s token stops speaking for it', () {
-      final token = Uri.parse(server.mcpUrlFor('s1')!).pathSegments.last;
+      final token = Uri.parse(urlFor('s1')!).pathSegments.last;
       server.callers.forget('s1');
       expect(server.callers.sessionFor(token), isNull);
     });
@@ -82,7 +91,7 @@ void main() {
   group('the written config', () {
     test('points at the HTTP endpoint when there is one', () async {
       final path = await const LauncherMcp().ensureConfig(
-        url: server.mcpUrlFor('s1'),
+        url: urlFor('s1'),
         directory: tmp.path,
       );
 
@@ -93,7 +102,7 @@ void main() {
               as Map<String, Object?>;
 
       expect(entry['type'], 'http');
-      expect(entry['url'], server.mcpUrlFor('s1'));
+      expect(entry['url'], urlFor('s1'));
       // The credential is in the URL, not in headers: Claude Code does not
       // attach configured headers to a Streamable HTTP server's requests.
       expect(entry.containsKey('headers'), isFalse);
@@ -102,12 +111,12 @@ void main() {
 
     test('a per-session file does not overwrite another session\'s', () async {
       await const LauncherMcp().ensureConfig(
-        url: server.mcpUrlFor('s1'),
+        url: urlFor('s1'),
         directory: tmp.path,
         fileName: 's1.json',
       );
       await const LauncherMcp().ensureConfig(
-        url: server.mcpUrlFor('s2'),
+        url: urlFor('s2'),
         directory: tmp.path,
         fileName: 's2.json',
       );
@@ -142,7 +151,7 @@ void main() {
     });
 
     test('Codex gets the same URL in the shape its TOML wants', () {
-      final url = server.mcpUrlFor('s1')!;
+      final url = urlFor('s1')!;
       final toml = LauncherMcp.codexServerToml(url);
 
       expect(toml, contains('[mcp_servers.chitragupta]'));
@@ -204,6 +213,7 @@ void main() {
     await closed.start(
       bridgeFilePath: p.join(other.path, 'mcp_bridge.json'),
       socketDirectory: p.join(other.path, 'ipc'),
+      wslHostAddress: () async => null,
     );
     addTearDown(() async {
       await closed.stop();
@@ -213,7 +223,10 @@ void main() {
     // Fail closed all the way out to the config: an agent is not handed a URL
     // that answers 401 to everything.
     expect(closed.mcpUrl, isNull);
-    expect(closed.mcpUrlFor('s1'), isNull);
+    expect(
+      closed.mcpUrlFor('s1', environment: EnvironmentKind.windowsNative),
+      isNull,
+    );
   });
 }
 
