@@ -1096,7 +1096,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     instance.liveness.addListener(onLiveness);
     // Nothing else claims `onTitleChange`, so the controller owns it: the tab
     // label is the controller's to derive, and the pane has no idea it is one.
-    instance.terminal.onTitleChange = (title) => _onPaneTitle(paneId, title);
+    //
+    // Not for a dormant pane: no process ever ran there, so it cannot name its
+    // own window — and `terminal` is the `late final` whose first read parses
+    // the stored scrollback, which is the cost restore exists to avoid.
+    if (instance is! DormantTerminalInstance) {
+      instance.terminal.onTitleChange = (title) => _onPaneTitle(paneId, title);
+    }
   }
 
   /// A pane named its own window (OSC 0 or 2).
@@ -1192,7 +1198,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Drops the listeners [_adopt] attached, so a disposed instance can never
   /// call back into the controller.
   void _unlisten(String paneId, TerminalInstance instance) {
-    instance.terminal.onTitleChange = null;
+    if (instance is! DormantTerminalInstance) {
+      instance.terminal.onTitleChange = null;
+    }
     _oscTitles.remove(paneId);
     final dirty = _dirtyListeners.remove(paneId);
     if (dirty != null) instance.terminal.removeListener(dirty);

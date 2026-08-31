@@ -233,7 +233,7 @@ void main() {
 
       expect(find.byType(TabPicker), findsOneWidget);
       expect(find.text('30 tabs'), findsOneWidget);
-      // Thirty tabs called PowerShell, told apart by where they are.
+      // Thirty shells, each now named for the directory it sits in.
       await tester.enterText(find.byType(TextField), 'p27');
       await tester.pumpAndSettle();
       expect(find.text('1 tab'), findsOneWidget);
@@ -257,7 +257,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'p27');
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Close PowerShell'));
+      await tester.tap(find.byTooltip(r'Close src/p27'));
       await tester.pumpAndSettle();
 
       final open = container
@@ -339,7 +339,7 @@ void main() {
       expect(overflowButton(100), findsOneWidget);
       expect(find.byTooltip('New terminal tab'), findsOneWidget);
       // Virtualised: a hundred tabs are not a hundred built chips.
-      expect(find.text('PowerShell').evaluate().length, lessThan(100));
+      expect(find.textContaining('src/').evaluate().length, lessThan(100));
 
       await tester.tap(overflowButton(100));
       await tester.pumpAndSettle();
