@@ -154,12 +154,13 @@ void main() {
   }
 
   /// The stack holding the two surfaces: index 0 is the terminal, 1 the chat.
-  IndexedStack surfaces(WidgetTester tester) => tester.widget<IndexedStack>(
-    find.ancestor(
-      of: find.byType(TerminalPaneStack, skipOffstage: false),
-      matching: find.byType(IndexedStack),
-    ),
-  );
+  ///
+  /// Found by key rather than through the pane stack: the terminal surface does
+  /// not always contain one — a session with no pane of ours gets its empty
+  /// state there instead — and a finder that assumed it did could not tell that
+  /// case from "the chat is up", which is the whole question here.
+  IndexedStack surfaces(WidgetTester tester) =>
+      tester.widget<IndexedStack>(find.byKey(kWorkbenchSurfaces));
 
   /// A session running in a pane of ours — the only kind that has two views.
   String seedSessionInAPane({
@@ -262,21 +263,27 @@ void main() {
     );
   });
 
-  testWidgets('a session with no pane of ours lands on its conversation', (
+  testWidgets('a session with no pane of ours still lands on the terminal', (
     tester,
   ) async {
     // An imported session resumed elsewhere, a session opened in an external
-    // terminal, or one whose pane has been ended: there is no terminal to
-    // switch to, so the fallback is the surface that does have something.
+    // terminal, or one whose pane has been ended. This used to fall back to the
+    // conversation, which is how a tap could open the chat interface; the
+    // terminal surface now says what is true instead of showing a tab that
+    // belongs to some other session.
     SessionDao(db).insert(session(title: 'Read the report'));
     await pump(tester);
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpAndSettle();
 
-    expect(container.read(terminalVisibleProvider), isFalse);
-    expect(find.byType(SessionTranscriptView), findsOneWidget);
-    // Nothing to toggle to, so no toggle is offered.
-    expect(find.byTooltip('Terminal view'), findsNothing);
+    expect(container.read(terminalVisibleProvider), isTrue);
+    expect(find.byType(TerminalPaneStack), findsNothing);
+    expect(
+      find.textContaining('No terminal of ours is running this session'),
+      findsOneWidget,
+    );
+    // ...and the conversation is still one labelled tap away.
+    expect(find.byTooltip('Chat view'), findsOneWidget);
   });
 
   testWidgets('a pane that has been ended stops being a surface', (
@@ -301,8 +308,11 @@ void main() {
           .instanceFor(paneId),
       isNull,
     );
-    expect(container.read(terminalVisibleProvider), isFalse);
-    expect(find.byType(SessionTranscriptView), findsOneWidget);
+    expect(container.read(terminalVisibleProvider), isTrue);
+    expect(
+      find.textContaining('No terminal of ours is running this session'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the toggle is labelled, and still reaches the conversation', (
@@ -340,12 +350,8 @@ void main() {
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
 
-    IndexedStack surfaces() => tester.widget<IndexedStack>(
-      find.ancestor(
-        of: find.byType(TerminalPaneStack, skipOffstage: false),
-        matching: find.byType(IndexedStack),
-      ),
-    );
+    IndexedStack surfaces() =>
+        tester.widget<IndexedStack>(find.byKey(kWorkbenchSurfaces));
 
     expect(surfaces().children.length, 2, reason: 'both surfaces stay alive');
     expect(surfaces().index, 0, reason: 'the terminal is showing');
@@ -623,8 +629,8 @@ void main() {
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpAndSettle();
     expect(
-      find.byType(SessionTranscriptView),
-      findsOneWidget,
+      find.byType(TerminalPaneStack),
+      findsNothing,
       reason: 'nothing of ours is running it yet',
     );
 
@@ -651,11 +657,12 @@ void main() {
     expect(surfaces(tester).index, 0);
   });
 
-  testWidgets('the selected session losing its pane returns it to chat', (
+  testWidgets('the selected session losing its pane stays on the terminal', (
     tester,
   ) async {
-    // The same rule read the other way: the surface follows the session, so a
-    // pane ended under it leaves the conversation as the only thing it has.
+    // The workbench never moves the user to the conversation by itself, not
+    // even here. The pane going away changes what the terminal surface *says*,
+    // not which surface is up.
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
@@ -669,8 +676,11 @@ void main() {
         );
     await tester.pumpAndSettle();
 
-    expect(surfaces(tester).index, 1);
-    expect(find.byTooltip('Terminal view'), findsNothing);
+    expect(surfaces(tester).index, 0);
+    expect(
+      find.textContaining('No terminal of ours is running this session'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a session selected at mount never paints its chat first', (
@@ -689,19 +699,21 @@ void main() {
     expect(surfaces(tester).index, 0);
   });
 
-  testWidgets('a paneless session selected at mount paints chat first', (
+  testWidgets('a paneless session selected at mount paints no chat either', (
     tester,
   ) async {
-    // The other half of the same guard, and what stops the fix being "always
-    // show the terminal": a session with nothing of ours running it must not
-    // flash a terminal it does not own on the way to its conversation.
+    // The other half of the same guard. It used to be the case that stopped the
+    // fix being "always show the terminal" — a paneless session had to reach
+    // its conversation. It reaches the terminal's own empty state instead, and
+    // never the chat surface, on the first frame or any after it.
     SessionDao(db).insert(session(title: 'Read the report'));
     container.read(selectedSessionIdProvider.notifier).select('s1');
 
     await pumpOneFrame(tester);
 
-    expect(surfaces(tester).index, 1, reason: 'the very first frame');
+    expect(surfaces(tester).index, 0, reason: 'the very first frame');
     await tester.pumpAndSettle();
-    expect(surfaces(tester).index, 1);
+    expect(surfaces(tester).index, 0);
+    expect(find.byType(TerminalPaneStack), findsNothing);
   });
 }

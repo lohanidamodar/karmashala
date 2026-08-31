@@ -6,6 +6,7 @@ import '../theme/design_tokens.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/detail/presentation/workbench_session_view.dart';
+import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
@@ -20,6 +21,10 @@ import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
 import 'tab_picker.dart';
+
+/// The switcher between the two surfaces. Named so a test can read which one is
+/// painted on a given frame without going through whatever either one renders.
+const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 
 /// The primary content area: one tab strip across the top, the work underneath.
 ///
@@ -43,14 +48,22 @@ import 'tab_picker.dart';
 /// composed around it from the same widgets the conversation uses — see
 /// [_TerminalSurface]. Chat is one labelled tap, or `` Ctrl+` ``, away.
 ///
-/// **The surface follows the session, not the tap.** Loop 85 decided it once,
-/// on the selection changing — but the Explorer selects a session *before* it
-/// reveals or resumes it, so that decision was made while the session still had
-/// no pane and the terminal arrived after the conversation had already been
-/// painted. One tap, two surfaces, which is what the user reported twice. The
-/// same question is now re-asked whenever its inputs move (see
-/// `_followSessionPane`), and the resting state is the terminal rather than
-/// something every path has to switch to.
+/// **Nothing here ever switches itself to chat.** Loop 85 landed a session on
+/// the terminal *when it had a pane* and fell back to the conversation when it
+/// did not; Loop 86 kept the fallback and re-asked the question whenever a pane
+/// arrived. Both left the tap deciding "chat" first and something else undoing
+/// it, and every outcome where nothing undid it — a row whose CLI id we never
+/// learned, an agent that refuses a second writer, a launch that threw — landed
+/// on the conversation for good. So a tap opened the chat interface, or a
+/// terminal, depending on the row. The rule is now unconditional: **a selection
+/// shows the session's terminal**, and `terminalVisibleProvider` is set to
+/// `false` in exactly one place — the labelled Chat half of [_ViewToggle],
+/// which `` Ctrl+` `` also reaches.
+///
+/// A session with no pane of ours is not a reason to show something else: the
+/// terminal surface draws [_NoPaneForSession] for it, which names the session,
+/// says nothing of ours is running it and offers the two honest ways on. That
+/// keeps "always the terminal" from meaning "somebody else's terminal tab".
 class WorkbenchView extends ConsumerStatefulWidget {
   const WorkbenchView({super.key});
 
@@ -64,31 +77,21 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// publish that changes nothing about *this* session costs one lookup.
   String? _shownPane;
 
-  /// The surface the mount catch-up is *about* to select, until it has.
-  ///
-  /// Riverpod forbids writing a provider from `initState` — two widgets in one
-  /// frame would read different states — and reattaching a pane there would
-  /// republish the terminal while the tree around us is still building. So the
-  /// catch-up runs after the frame. Which leaves the frame itself: whatever the
-  /// provider happens to hold gets painted, and is then replaced. That is one
-  /// tap showing two surfaces, so the first build **reads** the answer the
-  /// catch-up will write instead of waiting for it.
-  bool? _surfaceOnMount;
-
   @override
   void initState() {
     super.initState();
     // A session can already be selected when the workbench mounts — the shell
     // rebuilding around it, or a selection made by something that ran first.
-    // The listener in `build` only fires on a *change*, so without this the
-    // one case the whole loop is about would be the case that lands on chat.
+    // The listener in `build` only fires on a *change*, so the mount has to
+    // catch up by hand. There is no first-frame flash to guard against any
+    // more: nothing below ever writes `false`, and the provider rests on
+    // `true`, so the frame this defers past already shows the terminal.
     final selected = ref.read(selectedSessionIdProvider);
     final active = ref.read(activePaneSessionIdProvider);
     if (selected == null && active == null) return;
-    if (selected != null) {
-      _shownPane = sessionTerminalPane(ref, selected);
-      _surfaceOnMount = _shownPane != null;
-    }
+    if (selected != null) _shownPane = sessionTerminalPane(ref, selected);
+    // Riverpod forbids writing a provider from `initState`, and reattaching a
+    // pane there would republish the terminal while the tree is still building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // A restored workspace can put an agent pane on screen before anything is
@@ -96,13 +99,12 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // Explorer happens to highlight first.
       if (active != null) ref.read(sessionContextProvider).follow(active);
       if (selected != null) _showSurfaceFor(_shownPane);
-      // Cleared through `setState` rather than on the back of the write above:
-      // the write is a no-op whenever it agrees with what the provider already
-      // held, and this must stop standing in for it either way.
-      setState(() => _surfaceOnMount = null);
     });
   }
 
+  /// **The only write of `false` in the app.** Wired to the labelled Chat half
+  /// of the strip's toggle and to nothing else, which is what makes "a tap
+  /// never opens the conversation" a property rather than a race won.
   void _showChat() => ref.read(terminalVisibleProvider.notifier).set(false);
 
   /// Reveals the pane the selected session is already running in. Starts and
@@ -121,47 +123,41 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 
   /// Opens [sessionId] on the surface a session *is*: its terminal.
   ///
-  /// Falls back to the conversation only when there is genuinely no pane to
-  /// show — an imported CLI session, one opened in an external terminal, or one
-  /// whose pane the user has ended. Landing on an empty terminal, or on some
-  /// other session's tab, would be worse than the secondary view.
-  void _openSession(String sessionId) {
-    // `sessionTerminalPane` is the one answer to "has it got a terminal", and
-    // the conversation's empty state reads it too, so the fallback and what the
-    // fallback then says cannot contradict each other.
-    _showSurfaceFor(sessionTerminalPane(ref, sessionId));
-  }
+  /// No branch on whether it has a pane. `sessionTerminalPane` is still asked,
+  /// but only to decide *which* pane to focus — a session that has none gets
+  /// the terminal surface with [_NoPaneForSession] on it, which is the one
+  /// place that says so, in the same words the conversation's own empty hint
+  /// reads off the same helper.
+  void _openSession(String sessionId) =>
+      _showSurfaceFor(sessionTerminalPane(ref, sessionId));
 
-  /// Keeps the surface on the selected session's *eventual* state.
+  /// Follows the selected session onto the pane it acquires, or loses.
   ///
-  /// The fallback above is answered at the moment of the tap, and at that
-  /// moment the answer is often provisional: `ExplorerActions.openNative`
-  /// selects the row **before** it reveals or resumes it, so a session being
-  /// brought back has no pane yet when the surface is chosen. Deciding once and
-  /// leaving it there is what made one tap open the conversation and then the
-  /// terminal — from the user's seat, both.
+  /// The Explorer selects a row **before** it reveals or resumes it, so at the
+  /// moment of the tap a session being brought back has no pane yet; the pane
+  /// that arrives a moment later has to be focused or the terminal on screen
+  /// would be some other session's. Both inputs are watched: the terminal's own
+  /// state (a pane created, adopted, restored, detached or ended) and
+  /// `sessions.pane_id` (which a launch rewrites, then bumps the revision).
   ///
-  /// So the same question is asked again whenever its two inputs move: the
-  /// terminal's own state (a pane created, adopted, restored, detached or
-  /// ended) and `sessions.pane_id` (which a launch rewrites, then bumps the
-  /// revision). Memoised on [_shownPane], so a publish that changes nothing
-  /// about this session changes nothing here — in particular it never overrules
-  /// a user who has deliberately switched to the conversation.
+  /// Memoised on [_shownPane], so a publish about some other session costs one
+  /// lookup — and, because this no longer chooses a *surface*, a user who has
+  /// deliberately switched to the conversation is not thrown back to the
+  /// terminal by a pane appearing somewhere else.
   void _followSessionPane() {
     final sessionId = ref.read(selectedSessionIdProvider);
     if (sessionId == null) return;
     final paneId = sessionTerminalPane(ref, sessionId);
     if (paneId == _shownPane) return;
-    _showSurfaceFor(paneId);
+    _shownPane = paneId;
+    // Losing a pane is not a reason to move: the terminal surface says what
+    // happened. Gaining one is, or the session would be off screen.
+    if (paneId != null) _showTerminalFor(paneId);
   }
 
   void _showSurfaceFor(String? paneId) {
     _shownPane = paneId;
-    if (paneId == null) {
-      _showChat();
-    } else {
-      _showTerminalFor(paneId);
-    }
+    _showTerminalFor(paneId);
   }
 
   @override
@@ -173,8 +169,10 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       if (next != null) _openSession(next);
     });
     ref.listen(selectedImportedSessionIdProvider, (_, next) {
-      // An imported CLI session has no pane of ours; the transcript we read out
-      // of the CLI's own store is the only surface it has.
+      // An imported CLI session has no pane of ours *yet* — the tap that
+      // selected it is already resuming it into one (`openImported`). This used
+      // to switch straight to the transcript, which is how the one path the
+      // user could not miss opened the chat interface every single time.
       if (next != null) _showSurfaceFor(null);
     });
     // ...and the pane the selected session has can arrive after the tap that
@@ -195,10 +193,9 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 
     final scheme = Theme.of(context).colorScheme;
     final session = _selectedSession();
-    final wantsTerminal = ref.watch(terminalVisibleProvider);
     // With nothing to read, the workbench is the terminal — an empty middle
     // would be worse than the surface the app is primarily about.
-    final onTerminal = (_surfaceOnMount ?? wantsTerminal) || session == null;
+    final onTerminal = ref.watch(terminalVisibleProvider) || session == null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -220,10 +217,11 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
             child: session == null
                 ? const _TerminalSurface()
                 : IndexedStack(
+                    key: kWorkbenchSurfaces,
                     index: onTerminal ? 0 : 1,
-                    children: const [
-                      _TerminalSurface(),
-                      WorkbenchSessionView(),
+                    children: [
+                      _TerminalSurface(session: session),
+                      const WorkbenchSessionView(),
                     ],
                   ),
           ),
@@ -292,17 +290,133 @@ class _WorkbenchSession {
 /// agent's prompt is drawn at the bottom of its terminal, so the buttons that
 /// answer it are the next thing under it rather than a header the eye has to
 /// travel back up to.
+/// With a session selected that has **no pane of ours**, the panes are not what
+/// this surface should show — the tab on screen would be some other session's.
+/// [_NoPaneForSession] takes their place and says so.
 class _TerminalSurface extends StatelessWidget {
-  const _TerminalSurface();
+  const _TerminalSurface({this.session});
+
+  final _WorkbenchSession? session;
 
   @override
   Widget build(BuildContext context) {
+    final selected = session;
+    if (selected != null && selected.paneId == null) {
+      return _NoPaneForSession(session: selected);
+    }
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(child: TerminalPaneStack()),
         _PaneSessionDock(),
       ],
+    );
+  }
+}
+
+/// What the terminal surface shows for a session nothing of ours is running.
+///
+/// This is what lets "a tap always lands on the terminal" be honest rather than
+/// a lie told by showing an unrelated tab. Every sentence is read off
+/// `sessionTerminalPane` and the row itself, which is the same pair the
+/// conversation's empty hint reads, so the two surfaces cannot describe one
+/// session differently.
+class _NoPaneForSession extends ConsumerWidget {
+  const _NoPaneForSession({required this.session});
+
+  final _WorkbenchSession session;
+
+  /// Whether resuming is something we could actually do. A native row needs the
+  /// CLI's own id — without it a "resume" would start a *new* conversation
+  /// wearing this row's title, which is the one thing the Explorer refuses to
+  /// do (see `ExplorerActions.openNative`). An imported row is nothing but that
+  /// id, so it always can.
+  bool _canResume(WidgetRef ref) {
+    if (!session.native) return true;
+    final id = ref
+        .read(sessionDaoProvider)
+        .getById(session.id)
+        ?.externalSessionId;
+    return id != null && id.isNotEmpty;
+  }
+
+  Future<void> _resume(WidgetRef ref) async {
+    final actions = ref.read(explorerActionsProvider);
+    final result = session.native
+        ? await actions.openNative(session.id)
+        : await () async {
+            final record = ref
+                .read(importedSessionDaoProvider)
+                .getById(session.id);
+            return record == null
+                ? const ExplorerResult(ExplorerOutcome.selected)
+                : await actions.openImported(record);
+          }();
+    final message = result.message;
+    if (message == null || !ref.context.mounted) return;
+    ScaffoldMessenger.of(
+      ref.context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final canResume = _canResume(ref);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(Insets.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(AppIcons.terminal, size: 32, color: scheme.onSurfaceVariant),
+              const SizedBox(height: Insets.md),
+              Text(
+                session.title,
+                style: theme.textTheme.titleMedium,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: Insets.xs),
+              Text(
+                canResume
+                    ? 'No terminal of ours is running this session. Resume it '
+                          'to pick the conversation up in one.'
+                    : 'No terminal of ours is running this session, and we '
+                          'never learned the conversation\'s own id — so it '
+                          'cannot be resumed from here. "Copy resume command" '
+                          'in the session menu is the way back into it.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Insets.md),
+              Wrap(
+                spacing: Insets.sm,
+                alignment: WrapAlignment.center,
+                children: [
+                  if (canResume)
+                    FilledButton.tonalIcon(
+                      onPressed: () => _resume(ref),
+                      icon: const Icon(AppIcons.playCircle, size: 16),
+                      label: const Text('Resume in a terminal'),
+                    ),
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(terminalVisibleProvider.notifier).set(false),
+                    child: const Text('Read the conversation'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -403,6 +517,13 @@ class _TabStrip extends ConsumerWidget {
   final VoidCallback onShowSession;
   final ValueChanged<String?> onShowTerminal;
 
+  /// Whether the terminal surface is actually showing **panes**. A selected
+  /// session with no pane of ours gets the surface's empty state instead, and
+  /// while that is up no terminal tab is on screen — so none of them may draw
+  /// as the active one, and the pane's permission chip has no pane to describe.
+  bool get _showingPanes =>
+      onTerminal && (session == null || session!.paneId != null);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
@@ -428,8 +549,13 @@ class _TabStrip extends ConsumerWidget {
           // was readable on one view and invisible on the other; this is the
           // same widget reading the same `effectivePermissionFor`, so the two
           // views cannot disagree.
-          if (onTerminal) const _PanePermissionChip(),
-          if (session?.paneId != null)
+          if (_showingPanes) const _PanePermissionChip(),
+          // Offered for **every** selected session, including one with no pane
+          // of ours. It used to appear only when there was a pane, which was
+          // fine while a paneless session landed on its conversation anyway —
+          // now that nothing lands there on its own, this is the labelled way
+          // in, and hiding it would leave the transcript unreachable.
+          if (session != null)
             _ViewToggle(
               onTerminal: onTerminal,
               onChat: onShowSession,
@@ -483,11 +609,11 @@ class _TabStrip extends ConsumerWidget {
         ),
       for (final tab in terminals.tabs)
         _StripTab(
-          active: onTerminal && tab.id == active,
+          active: _showingPanes && tab.id == active,
           chip: () => TerminalTabChip(
             title: sessions.titleForTab(tab.id),
             liveness: sessions.livenessForTab(tab.id),
-            selected: onTerminal && tab.id == active,
+            selected: _showingPanes && tab.id == active,
             onTap: () => _activate(sessions, tab.id),
             onClose: () => sessions.closeTab(tab.id),
             onEnd: () => sessions.closeTab(tab.id, detach: false),
@@ -537,7 +663,7 @@ class _TabStrip extends ConsumerWidget {
             icon: AppIcons.terminal,
             onSelect: () => _activate(sessions, tab.id),
           ),
-          active: onTerminal && tab.id == active,
+          active: _showingPanes && tab.id == active,
           onClose: () => sessions.closeTab(tab.id),
         ),
     ];
