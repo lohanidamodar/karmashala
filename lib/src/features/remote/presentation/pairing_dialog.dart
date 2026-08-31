@@ -224,8 +224,10 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
         // The same payload, for when a camera won't cooperate: reveal it here
         // and type it into the phone's "Paste the code instead" screen (or
         // copy it for a device that can receive a paste).
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: Insets.xs,
           children: [
             TextButton(
               onPressed: () => setState(() => _showCode = !_showCode),
