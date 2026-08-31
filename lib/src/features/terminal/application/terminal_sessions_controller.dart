@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
@@ -168,9 +169,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// expects back.
   bool _processesShutDown = false;
 
+  /// Set on teardown, so a post-frame callback that outlives the container
+  /// cannot touch a disposed pane. See [_afterFrame].
+  bool _disposed = false;
+
   @override
   TerminalSessionsState build() {
     ref.onDispose(() {
+      _disposed = true;
       _autosave.stop();
       if (_processesShutDown) return;
       persistWorkspace();
@@ -251,6 +257,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _activeTabId = tabId;
     _publish();
     persistWorkspace();
+    _focusActivePane();
     return tabId;
   }
 
@@ -319,6 +326,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
     _publish();
     persistWorkspace();
+    // Closing the active tab hands the keyboard to whichever tab took its
+    // place, rather than leaving it nowhere.
+    _focusActivePane();
   }
 
   /// Splits the active tab's focused pane along [axis], running [profile] in the
@@ -391,7 +401,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (tab == null) return;
     _activeTabId = tab.id;
     _replaceTab(tab.copyWith(focusedPaneId: paneId));
-    _instances[paneId]?.focusNode.requestFocus();
+    _focusActivePane();
   }
 
   /// Moves focus to the pane adjacent to the focused one in [direction].
@@ -532,7 +542,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     );
     _publish();
     persistWorkspace();
-    _instances[paneId]?.focusNode.requestFocus();
+    _focusActivePane();
   }
 
   // --- persistence -----------------------------------------------------------
@@ -891,10 +901,66 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     activateTab(_tabs[(index + by + _tabs.length) % _tabs.length].id);
   }
 
+  /// Gives the active tab's focused pane the keyboard, so a pane that has just
+  /// become the active one is typable without a click.
+  ///
+  /// **Deferred to after the frame, and that is the whole point.** The panes
+  /// live in an [IndexedStack], which wraps every child but the selected one in
+  /// an `ExcludeFocus` (`packages/flutter/lib/src/widgets/indexed_stack.dart:108`).
+  /// Publishing a new active tab only marks the widget tree dirty, so at the
+  /// moment these callers run, the pane being switched *to* is still inside
+  /// that `ExcludeFocus` and `requestFocus()` is silently dropped. Waiting for
+  /// the rebuild that selects it is what makes the request stick.
+  ///
+  /// The pane is re-resolved inside the callback, so a burst of tab switches
+  /// leaves the keyboard on the tab the user actually landed on.
   void _focusActivePane() {
-    final tab = _activeTab;
-    if (tab == null) return;
-    _instances[tab.focusedPaneId]?.focusNode.requestFocus();
+    _afterFrame(() {
+      final tab = _activeTab;
+      if (tab == null) return;
+      final node = _instances[tab.focusedPaneId]?.focusNode;
+      if (node == null || node.hasFocus) return;
+      // Never out of a text field the user is typing in — quick open, the
+      // search bar, a composer, a dialog. Opening or closing a terminal tab is
+      // not worth taking the keyboard away from what someone is writing.
+      if (_keyboardIsInATextField()) return;
+      node.requestFocus();
+    });
+  }
+
+  /// Runs [action] once the pending rebuild has been laid out.
+  ///
+  /// A no-op with no binding at all, which is what a controller-only test is:
+  /// there is no widget tree, so there is no focus to move. A post-frame
+  /// callback, unlike a timer, does not trip `flutter_test`'s pending-work
+  /// checks when no frame ever comes.
+  void _afterFrame(void Function() action) {
+    final binding = _bindingOrNull();
+    if (binding == null) return;
+    binding.addPostFrameCallback((_) {
+      if (_disposed) return;
+      action();
+    });
+  }
+
+  /// The widget binding, or null when there is none.
+  ///
+  /// `WidgetsBinding.instance` throws rather than returning null, and the
+  /// controller is deliberately usable without a widget tree — most of its own
+  /// tests drive it that way — so the throw is the check.
+  static WidgetsBinding? _bindingOrNull() {
+    try {
+      return WidgetsBinding.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Whether the keyboard currently belongs to a text field.
+  static bool _keyboardIsInATextField() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (context == null) return false;
+    return context.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 }
 
