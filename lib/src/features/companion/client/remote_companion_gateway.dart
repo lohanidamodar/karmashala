@@ -31,6 +31,18 @@ const String _kNotPaired = 'This phone is not paired with a host.';
 const String _kUnreachable =
     'The host is unreachable right now, so nothing was sent.';
 
+/// How long a beacon host that refused a direct dial is left alone by the LAN
+/// *upgrade* — the one that spends a working link on the attempt.
+///
+/// Much longer than [kLanRetryCooldown] on purpose. The scout's two-minute
+/// grudge is about dialling, which costs one attempt timeout and only ever
+/// happens with the link already down; this one is about tearing a link that
+/// works down to try again, which is what the owner reported as "connection
+/// is not stable". But "never again" is not the answer either: whatever made
+/// the dial fail is a thing that gets fixed, and a phone that has to be
+/// force-quit to use its own LAN is not a phone that works.
+const Duration kLanUpgradeRefusalTtl = Duration(minutes: 30);
+
 /// A current value plus its changes. Streams emit the value on listen, then
 /// every set — the seeding the gateway contract asks for.
 class _Watched<T> {
@@ -236,8 +248,8 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Runs while a dropped transport is being given its chance to come back.
   Timer? _healTimer;
 
-  /// Beacon hosts whose direct dial has failed since this phone last held a
-  /// LAN link, by [LanPathScout.keyOf].
+  /// Beacon hosts whose direct dial has failed, by [LanPathScout.keyOf], with
+  /// when — read only by the beacon's *upgrade*, never by the dial path.
   ///
   /// The beacon repeats every two seconds and the scout's grudge lasts two
   /// minutes, so a desktop that is audible but not dialable — a firewall on
@@ -245,7 +257,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// working relay link every two minutes, for ever. Trying once is right;
   /// trying again on a schedule, and paying for it with the link that works,
   /// is not.
-  final _lanUpgradeRefused = <String>{};
+  final _lanUpgradeRefused = <String, DateTime>{};
 
   // ---------------------------------------------------------------- pairing
 
@@ -563,6 +575,8 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   /// Everything the gateway holds that belongs to ONE host.
   void _resetHostState() {
+    // A verdict about reaching THAT desktop says nothing about this one.
+    _lanUpgradeRefused.clear();
     _sessions = null;
     _hostOrder.clear();
     if (!_sessionChanges.isClosed) _sessionChanges.add(const []);
@@ -1011,9 +1025,25 @@ class RemoteCompanionGateway implements CompanionGateway {
       return;
     }
     if (scout.inCooldown(host)) return;
-    if (_lanUpgradeRefused.contains(scout.keyOf(host))) return;
+    if (_lanUpgradeIsRefused(scout.keyOf(host))) return;
     onLog?.call('beacon sighted; switching the link to the LAN');
     _declareDead();
+  }
+
+  /// Whether the beacon's offer to upgrade to [key] is still refused.
+  ///
+  /// The refusal expires, because the verdict behind it does not last: a
+  /// firewall rule gets fixed, a desktop restarts with its LAN listener up,
+  /// and the key is an `address:port` that does not even survive the
+  /// desktop's next DHCP lease — so keys from every network the phone has
+  /// ever been on pile up in here. One blip used to pin a phone to the relay
+  /// until it was force-quit, which on Android can be days.
+  bool _lanUpgradeIsRefused(String key) {
+    final refusedAt = _lanUpgradeRefused[key];
+    if (refusedAt == null) return false;
+    if (_now().difference(refusedAt) < kLanUpgradeRefusalTtl) return true;
+    _lanUpgradeRefused.remove(key);
+    return false;
   }
 
   Future<void> _connectLoop() async {
@@ -1195,7 +1225,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // host, or a stale advert. Cool it down and let the relay carry on.
       onLog?.call('lan attempt failed: $error');
       scout.noteFailure(host);
-      _lanUpgradeRefused.add(scout.keyOf(host));
+      _lanUpgradeRefused[scout.keyOf(host)] = _now();
       await _teardownClient();
       return null;
     }

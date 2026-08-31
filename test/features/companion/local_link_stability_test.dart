@@ -111,7 +111,12 @@ void main() {
   const heartbeat = Duration(milliseconds: 300);
   const beaconInterval = Duration(milliseconds: 200);
 
+  /// How far the phone's clock is pushed forward. Some of what the gateway
+  /// forgets, it forgets on a half-hour scale, and no test may wait that out.
+  var clockShift = Duration.zero;
+
   setUp(() async {
+    clockShift = Duration.zero;
     db = AppDatabase.memory();
     dao = PairedDeviceDao(db);
     fake = FakeRemoteBindings()..addSession('s1');
@@ -178,6 +183,7 @@ void main() {
       helloTimeout: const Duration(milliseconds: 400),
       linkHealGrace: const Duration(milliseconds: 800),
       reconnectBackoff: backoff ?? fastBackoff(),
+      now: () => DateTime.now().add(clockShift),
     );
     gateways.add(gateway);
     return gateway;
@@ -312,6 +318,66 @@ void main() {
       reason: 'and the link that survived still answers — `connected` on its '
           'own is a claim, not a link',
     );
+  });
+
+  test('a desktop refused once is worth one more try when the refusal has '
+      'expired — never again is not an answer', timeout: const Timeout(
+    Duration(minutes: 3),
+  ), () async {
+    await startService();
+    final scout = ScriptedScout(
+      attemptTimeout: const Duration(milliseconds: 100),
+      dialer: (host, port) => RelayTransport(
+        endpoint: Uri.parse('ws://127.0.0.1:1'),
+        backoff: fastBackoff(),
+        connectTimeout: const Duration(milliseconds: 50),
+      )..start(),
+    );
+    final gateway = await pairedPhone(scout: scout);
+
+    final elsewhere = DiscoveredHost(
+      address: InternetAddress('192.168.99.99'),
+      advert: const LanAdvert(port: 41234, tag: 'test'),
+      seenAt: DateTime.now(),
+    );
+    final states = <CompanionLinkState>[];
+    final watch = gateway.linkStates.listen(states.add);
+    addTearDown(watch.cancel);
+
+    Future<void> beaconRepeatedly() async {
+      for (var i = 0; i < 6; i++) {
+        scout.hear(elsewhere);
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
+    }
+
+    await beaconRepeatedly();
+    expect(
+      states.where((s) => s == CompanionLinkState.connecting),
+      hasLength(1),
+      reason: 'six sightings, one attempt — the refusal holds while it is '
+          'fresh',
+    );
+
+    // Half an hour on. The firewall rule was fixed, or the desktop restarted
+    // with its LAN listener up, or this is a different network wearing the
+    // same address — an `address:port` is not an identity, and the phone has
+    // no way to tell any of those apart except by trying again.
+    clockShift = kLanUpgradeRefusalTtl + const Duration(minutes: 1);
+    await beaconRepeatedly();
+    await watch.cancel();
+
+    expect(
+      states.where((s) => s == CompanionLinkState.connecting),
+      hasLength(2),
+      reason: 'the refusal expires: one blip must not pin this phone to the '
+          'relay for as long as the app happens to stay alive',
+    );
+    await until(
+      () => gateway.link == CompanionLinkState.connected,
+      reason: 'and the relay carries the link through both attempts',
+    );
+    expect((await gateway.listSessions()).single.id, 's1');
   });
 
   test('a resume asks the desktop to answer instead of trusting the socket',
