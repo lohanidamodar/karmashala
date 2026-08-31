@@ -271,9 +271,13 @@ void main() {
   });
 
   group('terminalVisibleProvider', () {
-    test('toggles visibility', () {
+    test('rests on the terminal, and toggles off it', () {
+      // The app is terminal-primary, so the terminal is the resting state
+      // rather than something every path has to switch to.
       final container = ProviderContainer();
       addTearDown(container.dispose);
+      expect(container.read(terminalVisibleProvider), isTrue);
+      container.read(terminalVisibleProvider.notifier).toggle();
       expect(container.read(terminalVisibleProvider), isFalse);
       container.read(terminalVisibleProvider.notifier).toggle();
       expect(container.read(terminalVisibleProvider), isTrue);
