@@ -7,7 +7,8 @@ import '../domain/ingest_tier.dart';
 /// the same code path with the same numbers.
 const int kIngestHotReserveBytes = 256 * 1024;
 
-/// Bytes **every hidden pane put together** may decode per refill.
+/// Bytes **every hidden pane put together** may decode per refill — warm panes
+/// draining their queues and cold panes redrawing their screens alike.
 ///
 /// This is the whole point. The old design gave each pane its own 256 KiB
 /// flush cap, so a synchronised round of a hundred panes could offer 25 MiB of
@@ -87,10 +88,12 @@ class TerminalIngestBudget {
       // pool: the user is waiting on this one.
       IngestTier.hot => wanted < hotReserveBytes ? wanted : hotReserveBytes,
       IngestTier.warm => _takeFromPool(wanted),
-      // A cold pane is not parsed at all — its bytes go to a spool instead, so
-      // it should never be asking. Answering zero rather than asserting keeps
-      // a mis-tiered pane merely idle rather than crashed.
-      IngestTier.cold => 0,
+      // A cold pane parses only enough to keep its *screen* readable to the
+      // status sources (see `ColdScreen`), at most once a second. That is
+      // background work exactly as a warm pane's parse is, so it comes out of
+      // the same pool rather than a second one: what makes this budget global
+      // is that everything nobody is looking at shares one number.
+      IngestTier.cold => _takeFromPool(wanted),
     };
     granted[tier] = granted[tier]! + allowed;
     return allowed;

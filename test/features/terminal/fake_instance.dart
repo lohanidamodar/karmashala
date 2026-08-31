@@ -1,10 +1,15 @@
+import 'dart:convert';
+
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/data/cold_screen.dart';
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/scrollback_park.dart';
+import 'package:chitragupta/src/features/terminal/data/scrollback_spool.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_ingest_budget.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/detach_policy.dart';
@@ -88,14 +93,39 @@ class FakeTerminalInstance
   IngestTier ingestTier = IngestTier.hot;
   final tierHistory = <IngestTier>[];
 
-  /// Storage, though, is real: the fake parks and unparks through the same
-  /// [ScrollbackPark] a PTY pane does, so the memory tiering is exercised by
-  /// every controller test and by the scale benchmark rather than only by a
-  /// pane nothing can construct without spawning a shell.
+  /// Storage, though, is real: the fake parks, spools and refreshes its screen
+  /// through the same [ScrollbackPark], [ScrollbackSpool] and [ColdScreen] a
+  /// PTY pane does, so the tiering is exercised by every controller test and by
+  /// the scale benchmark rather than only by a pane nothing can construct
+  /// without spawning a shell.
   late final ScrollbackPark park = ScrollbackPark(terminal);
+  final ScrollbackSpool spool = ScrollbackSpool();
+
+  /// Its own budget, and no throttle: a fake pane's output arrives one `receive`
+  /// at a time because a test said so, so rationing it would only make tests
+  /// wait. What the interval and the shared pool actually do is pinned by
+  /// `cold_screen_test.dart`.
+  late final ColdScreen coldScreen = ColdScreen(
+    terminal: terminal,
+    park: park,
+    budget: TerminalIngestBudget(),
+    refreshInterval: Duration.zero,
+  );
 
   @override
   String? get parkedScrollback => park.parked;
+
+  /// Output arriving from the process this pane does not have, through the same
+  /// tiering a real pane's bytes go through.
+  void receive(String text) {
+    if (ingestTier == IngestTier.cold) {
+      final bytes = const Utf8Encoder().convert(text);
+      spool.add(bytes);
+      coldScreen.add(bytes);
+      return;
+    }
+    terminal.write(text);
+  }
 
   @override
   void setIngestTier(IngestTier tier) {
@@ -106,7 +136,13 @@ class FakeTerminalInstance
     if (tier == IngestTier.cold) {
       park.park();
     } else if (wasCold) {
+      coldScreen.reset();
       park.unpark();
+      final replay = spool.drain();
+      spool.reset();
+      if (replay.isNotEmpty) {
+        terminal.write(const Utf8Decoder(allowMalformed: true).convert(replay));
+      }
     }
   }
 

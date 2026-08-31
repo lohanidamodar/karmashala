@@ -72,15 +72,38 @@ void main() {
       expect(budget.refills, 1);
     });
 
-    test('a cold pane is never granted anything', () {
+    test('a cold pane draws on the same pool, not one of its own', () {
       final budget = TerminalIngestBudget();
 
+      // A cold pane parses only its screen, and only once a second, but that
+      // parse is background work like any other: giving it a second pool would
+      // mean the background's cost was two pools rather than one.
+      expect(budget.take(IngestTier.cold, 1024), 1024);
+      expect(budget.warmPoolRemaining, kIngestWarmPoolBytes - 1024);
+
+      // And it can be emptied by the warm panes, which is what sharing means.
+      budget.take(IngestTier.warm, kIngestWarmPoolBytes);
       expect(budget.take(IngestTier.cold, 1024), 0);
       expect(
-        budget.warmPoolRemaining,
-        kIngestWarmPoolBytes,
-        reason: 'and it does not consume the pool by asking',
+        budget.take(IngestTier.hot, 1024),
+        1024,
+        reason: 'the reserve is still nobody else\'s to spend',
       );
+    });
+
+    test('a hundred cold panes cost one pool between them', () {
+      var now = Duration.zero;
+      final budget = TerminalIngestBudget(
+        warmPoolBytes: 1000,
+        clock: () => now,
+      );
+
+      var granted = 0;
+      for (var i = 0; i < 100; i++) {
+        granted += budget.take(IngestTier.cold, 500);
+      }
+
+      expect(granted, 1000);
     });
   });
 
@@ -221,6 +244,41 @@ void main() {
       expect(delays, [kHiddenCoalescerWatchdog, const Duration(milliseconds: 16)]);
     });
 
+    test('a pane cycled between tiers keeps one watchdog, not a hundred', () {
+      // Switching tabs re-arms the watchdog so an activated pane does not wait
+      // out a hidden pane's cadence. Re-arming without cancelling is how that
+      // becomes a timer leak, and a workspace switched between two tabs all day
+      // is the shape that would find it.
+      var armed = 0;
+      var cancelled = 0;
+      final coalescer = PtyOutputCoalescer(
+        onData: (_) {},
+        budget: TerminalIngestBudget(warmPoolBytes: 0),
+        tier: IngestTier.warm,
+        scheduleFrameCallback: (_) {},
+        scheduleWatchdog: (delay, callback) {
+          armed++;
+          return Object();
+        },
+        cancelWatchdog: (_) => cancelled++,
+        idleThreshold: const Duration(days: 1),
+      );
+      coalescer.add(bytes(1));
+
+      for (var i = 0; i < 100; i++) {
+        coalescer.tier = IngestTier.hot;
+        coalescer.tier = IngestTier.warm;
+      }
+
+      expect(
+        armed - cancelled,
+        1,
+        reason: 'one pane, one live timer, however many times it changed tier',
+      );
+      coalescer.dispose();
+      expect(armed - cancelled, 0, reason: 'and none once the pane is gone');
+    });
+
     test('taking the queue leaves nothing behind to parse', () {
       final pane = make(
         budget: TerminalIngestBudget(),
@@ -267,6 +325,18 @@ void main() {
 
       expect(String.fromCharCodes(spool.drain()), 'def');
       expect(spool.droppedBytes, 3);
+    });
+
+    test('a partial take leaves the remainder queued, in order', () {
+      // What a cold pane's screen refresh does: it is granted part of what it
+      // asked for out of the shared pool and comes back for the rest.
+      final spool = ScrollbackSpool(maxBytes: 100)
+        ..add(Uint8List.fromList('abc'.codeUnits))
+        ..add(Uint8List.fromList('def'.codeUnits));
+
+      expect(String.fromCharCodes(spool.take(4)), 'abcd');
+      expect(spool.length, 2);
+      expect(String.fromCharCodes(spool.drain()), 'ef');
     });
 
     test('reset forgets the loss as well as the bytes', () {

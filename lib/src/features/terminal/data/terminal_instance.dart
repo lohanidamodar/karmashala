@@ -16,6 +16,7 @@ import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
+import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
@@ -208,6 +209,11 @@ class PtyTerminalInstance
       onData: terminal.write,
       budget: ingestBudget,
     );
+    _coldScreen = ColdScreen(
+      terminal: terminal,
+      park: _park,
+      budget: ingestBudget,
+    );
     _outputSubscription = _pty.output.listen(_onPtyBytes);
 
     // Captured while the process is certainly alive: `pid` is only safe to act
@@ -286,6 +292,10 @@ class PtyTerminalInstance
   /// The scrollback this pane gives up while it is cold.
   late final ScrollbackPark _park = ScrollbackPark(terminal);
 
+  /// What keeps the pane's *screen* current while its scrollback is parked, so
+  /// a detached session does not go dark for the status sources.
+  late final ColdScreen _coldScreen;
+
   @override
   IngestTier get ingestTier => _tier;
 
@@ -305,6 +315,9 @@ class PtyTerminalInstance
     if (_disposed) return;
     if (_tier == IngestTier.cold) {
       _spool.add(bytes);
+      // The spool is what the pane replays when it comes back; this is what
+      // anyone reading the grid meanwhile sees.
+      _coldScreen.add(bytes);
       return;
     }
     _coalescer.add(bytes);
@@ -328,6 +341,9 @@ class PtyTerminalInstance
         commandBlocks?.tracker.pruneEvicted();
       }
     } else if (wasCold) {
+      // Before the replay, not after: what the screen refresh drew is about to
+      // be written again, in order, from the spool.
+      _coldScreen.reset();
       _park.unpark();
       _replaySpool();
     }
@@ -341,6 +357,9 @@ class PtyTerminalInstance
   void _emit(String text) {
     if (_tier == IngestTier.cold) {
       _spool.add(const Utf8Encoder().convert(text));
+      // "[process exited]" is the one notice that cannot wait for an interval:
+      // nothing further is ever going to arrive to carry it.
+      _coldScreen.write(text);
       return;
     }
     terminal.write(text);
@@ -357,9 +376,12 @@ class PtyTerminalInstance
     _spool.reset();
     if (bytes.isEmpty && dropped == 0) return;
     if (dropped > 0) {
+      // Bytes below a kibibyte rather than a rounded-down "0 KiB", which reads
+      // as a bug in the notice rather than as a small gap in the output.
+      final lost = dropped >= 1024 ? '${dropped ~/ 1024} KiB' : '$dropped bytes';
       terminal.write(
-        '\r\n\x1b[90m[\u2026 ${dropped ~/ 1024} KiB of output while '
-        'detached was dropped]\x1b[0m\r\n',
+        '\r\n\x1b[90m[\u2026 $lost of output while detached was '
+        'dropped]\x1b[0m\r\n',
       );
     }
     if (bytes.isNotEmpty) {
