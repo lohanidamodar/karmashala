@@ -33,24 +33,31 @@ import '../../test/support/fixtures.dart';
 ///
 /// * **wall time per status cycle** — what `WatchedSessionLoader.load()` costs
 ///   on the 1.2-second cycle, measured across two full cold-recheck windows.
-///   The interesting statistic is not the median, it is the *max*: every cold
-///   transcript is marked cold in the same cycle and given the same deadline,
-///   so they all come due together. Fifty-nine free cycles, then one that
-///   stats the entire workspace, once a minute, forever.
+///   The interesting statistic was never the median, it was the *max*. Before
+///   Loop 90 every cold transcript was found cold in the same cycle and given
+///   the same deadline, so they all came due together: fifty-nine free cycles,
+///   then one that stat-ed the entire workspace, once a minute, forever
+///   (median 1.08 ms, max 15.72 ms, two bursts in a hundred cycles). It is now
+///   ~0.6 ms flat, because `load()` reads a sample rather than the disk.
 ///
 /// * **the store multiplier** — the same measurement is 17× cheaper here than
 ///   on the owner's machine, and the benchmark cannot show that on its own:
 ///   64 of their 107 transcripts live under `\\wsl.localhost\archlinux\...`,
 ///   where one `existsSync` + `lastModifiedSync` pair measures **1.19 ms**
-///   against **0.07 ms** for the same pair on local NTFS. Point
+///   against **0.07 ms** for the same pair on local NTFS. That is what turned
+///   a 16 ms burst here into a **67 ms** one there. Point
 ///   `CHITRAGUPTA_BENCH_TRANSCRIPT_DIR` at a real store to measure it directly
 ///   rather than reading the multiplier off this comment.
 ///
-/// * **sync versus async** — the same sweep, done with `File.stat()` instead of
-///   `existsSync()`/`lastModifiedSync()`, costs the event loop nothing:
-///   `dart:io`'s asynchronous file calls run on the IO thread pool and only
-///   their completions come back to the isolate. This is the measurement the
-///   fix rests on, so it is made rather than asserted.
+/// * **which tick actually stalls the event loop** — measured against an idle
+///   floor, because a stall number with no floor under it says nothing. The
+///   synchronous sweep costs several times the floor; the same sweep with
+///   `File.stat()` costs the floor, because `dart:io`'s asynchronous file calls
+///   run on its thread pool and only their completions come back. Seventeen
+///   process spawns — the 2-minute delivery poll's worst case — cost more than
+///   either, which is why that poll was the leading suspect until
+///   `delivery_providers_test.dart` showed a tick spends *one* `gh`, not
+///   seventeen.
 void main() {
   /// The owner's workspace, as of the hunt.
   const importedCount = 107;
@@ -142,16 +149,23 @@ void main() {
     const cycles = 100;
     final costs = <int>[];
     for (var i = 0; i < cycles; i++) {
+      // Only `load()` is timed: it is the part that runs on the UI isolate.
+      // The sampling pass it starts is awaited *outside* the stopwatch,
+      // because that work is on `dart:io`'s thread pool and the isolate pays
+      // for it only in completions.
       final sw = Stopwatch()..start();
       loader.load();
-      // BASELINE: no async sampler yet.
       costs.add(sw.elapsedMicroseconds);
+      await loader.settle();
       clock.now = clock.now.add(kStatusCycleInterval);
     }
 
     final sorted = [...costs]..sort();
     final median = sorted[cycles ~/ 2];
-    final bursts = costs.where((c) => c > median * 4 + 2000).length;
+    final bursts = <int>[
+      for (var i = 0; i < cycles; i++)
+        if (costs[i] > median * 4 + 2000) i,
+    ];
     String ms(int us) => '${(us / 1000).toStringAsFixed(2)}ms';
     // ignore: avoid_print
     print(
@@ -161,7 +175,11 @@ void main() {
       '  median  ${ms(median)}\n'
       '  p90     ${ms(sorted[(cycles * 0.9).floor()])}\n'
       '  max     ${ms(sorted.last)}\n'
-      '  bursts  $bursts of $cycles cycles cost >4x the median',
+      '  bursts  ${bursts.length} of $cycles cycles cost >4x the median, '
+      'at ${bursts.isEmpty ? 'no cycle' : bursts.join(', ')}'
+      '${bursts.map((i) => '\n          cycle $i: ${ms(costs[i])}').join()}\n'
+      '          (cycle 0 is JIT warm-up; a burst at ~50 is the cold recheck '
+      'coming due all at once)',
     );
     expect(costs, hasLength(cycles));
   });

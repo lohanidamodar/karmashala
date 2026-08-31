@@ -10,6 +10,7 @@ import 'package:chitragupta/src/features/cli_detection/data/imported_session_dao
 import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/notifications/application/watched_session_loader.dart';
+import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
@@ -63,6 +64,18 @@ void main() {
     clock: FixedClock(testTime),
   );
 
+  /// The workspace, once the sampler has read the transcripts.
+  ///
+  /// `load()` reports the last *sample* of a transcript's timestamp rather than
+  /// stat-ing it, so the first call over a path it has not seen starts the read
+  /// and the second reports it. Production never waits: the next status cycle
+  /// is 1.2 seconds away and reads whatever finished in the meantime.
+  Future<List<WatchedSession>> settled(WatchedSessionLoader subject) async {
+    subject.load();
+    await subject.settle();
+    return subject.load();
+  }
+
   /// Writes a transcript file whose last-modified time is [age] before now.
   String transcript(String name, {Duration age = Duration.zero}) {
     final path = p.join(temp.path, '$name.jsonl');
@@ -92,14 +105,90 @@ void main() {
     ),
   );
 
-  test('a transcript that changed recently is watched', () {
+  test('reading the workspace never stats a transcript synchronously', () async {
+    // The periodic hitch of Loop 90. `load()` runs on the UI isolate every 1.2
+    // seconds, and it used to `existsSync()` + `lastModifiedSync()` every
+    // imported transcript that was due a recheck. On the owner's machine 64 of
+    // those files live under `\\wsl.localhost\...`, where the pair measured
+    // 1.19 ms against 0.07 ms on local NTFS — 67 ms of blocked UI thread for
+    // one sweep, once a minute.
+    for (var i = 0; i < 60; i++) {
+      addImported(
+        'i$i',
+        externalId: 'cli-$i',
+        filePath: transcript('t$i', age: const Duration(minutes: 1)),
+      );
+    }
+    final tally = _Tally();
+    final subject = loader();
+
+    await IOOverrides.runZoned(
+      () async {
+        subject.load();
+        await subject.settle();
+        subject.load();
+      },
+      createFile: (path) => _CountingFile(path, tally),
+    );
+
+    expect(tally.sync, 0, reason: 'a synchronous stat is a blocked frame');
+    expect(tally.async, greaterThanOrEqualTo(60));
+  });
+
+  test('the cold recheck is spread across its window, not paid in one cycle', () async {
+    // The other half of the hitch. Every cold transcript used to be found cold
+    // in the same cycle and given the same deadline, so a minute later they all
+    // came due at once: fifty-nine free ticks and then one that swept the whole
+    // workspace. Spreading the deadlines turns that burst into a hum.
+    const count = 100;
+    for (var i = 0; i < count; i++) {
+      addImported(
+        'i$i',
+        externalId: 'cli-$i',
+        filePath: transcript('t$i', age: const Duration(hours: 6)),
+      );
+    }
+    final clock = _MovableClock(testTime);
+    final subject = WatchedSessionLoader(
+      sessionDao: sessions,
+      importedSessionDao: imported,
+      installationDao: installations,
+      hookReports: reports,
+      clock: clock,
+      coldRecheck: const Duration(minutes: 1),
+    );
+    await settled(subject);
+
+    // Two recheck windows at the real status-cycle rate.
+    var worst = 0;
+    for (var i = 0; i < 100; i++) {
+      clock.now = clock.now.add(const Duration(milliseconds: 1200));
+      final tally = _Tally();
+      await IOOverrides.runZoned(
+        () async {
+          subject.load();
+          await subject.settle();
+        },
+        createFile: (path) => _CountingFile(path, tally),
+      );
+      if (tally.async > worst) worst = tally.async;
+    }
+
+    expect(
+      worst,
+      lessThan(count ~/ 4),
+      reason: 'no single cycle may re-read a quarter of the workspace',
+    );
+  });
+
+  test('a transcript that changed recently is watched', () async {
     addImported(
       'i1',
       externalId: 'cli-1',
       filePath: transcript('a', age: const Duration(minutes: 2)),
     );
 
-    final watched = loader().load();
+    final watched = await settled(loader());
 
     expect(watched, hasLength(1));
     expect(watched.single.key.sessionId, 'cli-1');
@@ -108,17 +197,17 @@ void main() {
     expect(watched.single.openId, 'i1');
   });
 
-  test('a cold transcript is history, not something to watch', () {
+  test('a cold transcript is history, not something to watch', () async {
     addImported(
       'i1',
       externalId: 'cli-1',
       filePath: transcript('a', age: const Duration(hours: 6)),
     );
 
-    expect(loader().load(), isEmpty);
+    expect(await settled(loader()), isEmpty);
   });
 
-  test('a cold transcript a hook has spoken about is watched anyway', () {
+  test('a cold transcript a hook has spoken about is watched anyway', () async {
     // The agent told us about it, so the file's age says nothing useful.
     addImported(
       'i1',
@@ -135,23 +224,23 @@ void main() {
       ),
     );
 
-    expect(loader().load(), hasLength(1));
+    expect(await settled(loader()), hasLength(1));
   });
 
-  test('a missing transcript file is skipped', () {
+  test('a missing transcript file is skipped', () async {
     addImported(
       'i1',
       externalId: 'cli-1',
       filePath: p.join(temp.path, 'gone.jsonl'),
     );
 
-    expect(loader().load(), isEmpty);
+    expect(await settled(loader()), isEmpty);
   });
 
-  test('a native session with a CLI id is watched', () {
+  test('a native session with a CLI id is watched', () async {
     sessions.insert(session(id: 's1').copyWith(externalSessionId: 'cli-9'));
 
-    final watched = loader().load();
+    final watched = await settled(loader());
 
     expect(watched, hasLength(1));
     expect(watched.single.key.agentId, AgentIds.claudeCode);
@@ -160,7 +249,7 @@ void main() {
     expect(watched.single.stateFilePath, isNull);
   });
 
-  test('a native session the CLI has not named yet is watched anyway', () {
+  test('a native session the CLI has not named yet is watched anyway', () async {
     // Rewritten in Loop 87. It used to assert this session was skipped, on the
     // reasoning that a status can only come from a hook and a hook is keyed by
     // the CLI's own id. That stopped being true when the terminal grid became a
@@ -170,7 +259,7 @@ void main() {
     // ended up reporting `unknown` for a session the badge beside it could read.
     sessions.insert(session(id: 's1'));
 
-    final watched = loader().load();
+    final watched = await settled(loader());
 
     expect(watched, hasLength(1));
     expect(watched.single.key.sessionId, 's1', reason: 'keyed by our own id');
@@ -178,7 +267,7 @@ void main() {
     expect(watched.single.stateFilePath, isNull);
   });
 
-  test('a finished native session can no longer produce status', () {
+  test('a finished native session can no longer produce status', () async {
     for (final status in [
       SessionStatus.completed,
       SessionStatus.cancelled,
@@ -192,36 +281,40 @@ void main() {
       );
     }
 
-    expect(loader().load(), isEmpty);
+    expect(await settled(loader()), isEmpty);
   });
 
-  test('a cold transcript is left alone until the recheck window passes', () {
-    // The saving that keeps a 5-second poll off a workspace with hundreds of
-    // archived sessions; the cost is this much latency waking one back up.
-    final clock = _MovableClock(testTime);
-    final loader = WatchedSessionLoader(
-      sessionDao: sessions,
-      importedSessionDao: imported,
-      installationDao: installations,
-      hookReports: reports,
-      clock: clock,
-      coldRecheck: const Duration(minutes: 1),
-    );
-    final path = transcript('a', age: const Duration(hours: 6));
-    addImported('i1', externalId: 'cli-1', filePath: path);
+  test(
+    'a cold transcript is left alone until the recheck window passes',
+    () async {
+      // The saving that keeps a 5-second poll off a workspace with hundreds of
+      // archived sessions; the cost is this much latency waking one back up.
+      final clock = _MovableClock(testTime);
+      final subject = WatchedSessionLoader(
+        sessionDao: sessions,
+        importedSessionDao: imported,
+        installationDao: installations,
+        hookReports: reports,
+        clock: clock,
+        coldRecheck: const Duration(minutes: 1),
+      );
+      final path = transcript('a', age: const Duration(hours: 6));
+      addImported('i1', externalId: 'cli-1', filePath: path);
 
-    expect(loader.load(), isEmpty);
+      expect(await settled(subject), isEmpty);
 
-    // The agent wakes up and writes, but we are inside the recheck window.
-    File(path).setLastModifiedSync(clock.now);
-    expect(loader.load(), isEmpty);
+      // The agent wakes up and writes, but we are inside the recheck window.
+      File(path).setLastModifiedSync(clock.now);
+      expect(await settled(subject), isEmpty);
 
-    clock.now = testTime.add(const Duration(minutes: 2));
-    File(path).setLastModifiedSync(clock.now);
-    expect(loader.load(), hasLength(1));
-  });
+      // Two windows on, past the longest offset the jitter can add.
+      clock.now = testTime.add(const Duration(minutes: 2));
+      File(path).setLastModifiedSync(clock.now);
+      expect(await settled(subject), hasLength(1));
+    },
+  );
 
-  test('live sessions come back newest first', () {
+  test('live sessions come back newest first', () async {
     // Rewritten in Loop 87. It used to pass `limit: 2` and assert that the two
     // newest sessions were the only ones returned — the 60-session cap that
     // made session 61 invisible to notifications forever. Recency is still the
@@ -236,7 +329,7 @@ void main() {
       );
     }
 
-    final watched = loader().load();
+    final watched = await settled(loader());
 
     expect(watched.map((s) => s.key.sessionId), [
       'cli-0',
@@ -248,7 +341,7 @@ void main() {
   });
 
   for (final count in [100, 500]) {
-    test('all $count live sessions are watched, not the first 60', () {
+    test('all $count live sessions are watched, not the first 60', () async {
       for (var i = 0; i < count; i++) {
         addImported(
           'i$i',
@@ -258,7 +351,7 @@ void main() {
         );
       }
 
-      final watched = loader().load();
+      final watched = await settled(loader());
 
       expect(watched, hasLength(count));
       expect(
@@ -268,14 +361,14 @@ void main() {
     });
   }
 
-  test('every native session is watched however many there are', () {
+  test('every native session is watched however many there are', () async {
     for (var i = 0; i < 200; i++) {
       sessions.insert(
         session(id: 's$i').copyWith(externalSessionId: 'cli-$i'),
       );
     }
 
-    final watched = loader().load();
+    final watched = await settled(loader());
 
     expect(watched, hasLength(200));
     expect(
@@ -284,4 +377,57 @@ void main() {
       reason: 'the old cap kept the newest 60 and forgot the rest',
     );
   });
+}
+
+/// Counts what a `File` is asked to do, so a test can say whether a code path
+/// stats the disk synchronously — which on the UI isolate is a blocked frame —
+/// or asynchronously, which costs the isolate only a completion.
+///
+/// Answers from `FileStat`'s statics rather than by delegating to a real
+/// `File`, because a delegate constructed inside the override zone would be
+/// this class again.
+class _CountingFile implements File {
+  _CountingFile(this.path, this._tally);
+
+  @override
+  final String path;
+  final _Tally _tally;
+
+  @override
+  bool existsSync() {
+    _tally.sync++;
+    return FileStat.statSync(path).type != FileSystemEntityType.notFound;
+  }
+
+  @override
+  DateTime lastModifiedSync() {
+    _tally.sync++;
+    final stat = FileStat.statSync(path);
+    if (stat.type == FileSystemEntityType.notFound) {
+      throw FileSystemException('no such file', path);
+    }
+    return stat.modified;
+  }
+
+  @override
+  Future<FileStat> stat() {
+    _tally.async++;
+    return FileStat.stat(path);
+  }
+
+  @override
+  FileStat statSync() {
+    _tally.sync++;
+    return FileStat.statSync(path);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
+    'the loader is not expected to call ${invocation.memberName}',
+  );
+}
+
+class _Tally {
+  int sync = 0;
+  int async = 0;
 }
