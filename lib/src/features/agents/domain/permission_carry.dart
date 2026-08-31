@@ -1,5 +1,6 @@
 import '../../settings/domain/permission_mode.dart';
 import 'agent_descriptor.dart';
+import 'agent_permission_options.dart';
 
 /// What happens to a session's permission mode when the work moves to a
 /// different agent.
@@ -125,5 +126,90 @@ CarriedPermission carryPermission(
     mode: requested,
     fit: PermissionModeFit.none,
     targetAgentName: name,
+  );
+}
+
+/// Where the mode a continuation launches under came from.
+enum PermissionChoiceOrigin {
+  /// Nobody picked one: the source session's mode, put through
+  /// [carryPermission].
+  carried,
+
+  /// The user picked it, for the agent they had chosen at the time.
+  chosen,
+}
+
+/// The permission decision for one continuation target: the modes that agent
+/// can be put into, the one it will launch under, and where that came from.
+///
+/// One value rather than a mode sitting beside a list in the dialog's state,
+/// because all three answers change together the moment the user picks a
+/// different agent — a selection that outlived the agent it was made for is
+/// exactly the bug this shape makes unrepresentable.
+class ContinuationPermission {
+  const ContinuationPermission({
+    required this.carried,
+    required this.options,
+    required this.origin,
+  });
+
+  /// How the selected mode reaches the target: the same [carryPermission]
+  /// answer the target row shows, re-run against whatever the user picked.
+  final CarriedPermission carried;
+
+  /// Every mode with how it maps onto this agent, safest first. A mode the
+  /// descriptor cannot express is present and **not selectable** — a picker
+  /// changes nothing about Loop 31 §4 option C.
+  final List<AgentPermissionOption> options;
+
+  final PermissionChoiceOrigin origin;
+
+  /// The mode the launch will request.
+  PermissionMode get mode => carried.mode;
+
+  bool get wasChosen => origin == PermissionChoiceOrigin.chosen;
+
+  /// The selected mode's own row, so a control renders the selection through
+  /// the same option the menu offers rather than a second description of it.
+  AgentPermissionOption get selected =>
+      options.firstWhere((option) => option.mode == mode);
+
+  /// The line under the picker: where this mode came from, and what it does to
+  /// this agent.
+  ///
+  /// Only the default needs its origin stated. A mode the user picked is not a
+  /// surprise to them; the default is one they never made, so it says so —
+  /// including when the carry rule had to change it, which
+  /// [CarriedPermission.summary] already explains in the agent's own terms.
+  String get explanation => switch (origin) {
+    PermissionChoiceOrigin.chosen => carried.summary,
+    PermissionChoiceOrigin.carried =>
+      'Carried from this session. ${carried.summary}',
+  };
+}
+
+/// What continuing a session that runs under [sessionMode] in [target] will
+/// launch under, given whatever the user picked for that agent.
+///
+/// [chosen] does not step around [carryPermission], it **replaces its input**.
+/// A pick is a request like any other and gets the same downwards-only
+/// treatment, so offering a picker cannot become a way around the one rule
+/// this file exists for. It is also what makes changing the agent safe: a mode
+/// picked while one agent was selected falls to the safest thing the next agent
+/// does express, rather than staying selected and being silently dropped at
+/// launch.
+ContinuationPermission resolveContinuationPermission({
+  required PermissionMode sessionMode,
+  required AgentDescriptor? target,
+  PermissionMode? chosen,
+  String? targetName,
+}) {
+  final name = targetName ?? target?.displayName ?? 'This agent';
+  return ContinuationPermission(
+    carried: carryPermission(chosen ?? sessionMode, target, targetName: name),
+    options: permissionOptionsFor(target, agentName: name),
+    origin: chosen == null
+        ? PermissionChoiceOrigin.carried
+        : PermissionChoiceOrigin.chosen,
   );
 }
