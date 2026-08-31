@@ -54,6 +54,18 @@ class SessionTranscriptLocator {
     required String externalSessionId,
   }) async {
     if (externalSessionId.isEmpty) return null;
+    return (await index())['$agentId/$externalSessionId'];
+  }
+
+  /// Every transcript one scan can find, as `'<agentId>/<sessionId>' → path`.
+  ///
+  /// The bulk form, and the one the status registry uses. The scan costs the
+  /// same whether it answers for one session or five hundred, so asking it once
+  /// per session — which is what a per-card poller did — was paying for the
+  /// same walk over and over. An empty map is the same answer as a store we
+  /// cannot read.
+  Future<Map<String, String>> index() async {
+    final found = <String, String>{};
     try {
       final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
       final stores = await _ref
@@ -68,16 +80,13 @@ class SessionTranscriptLocator {
           ...project.sessions,
           ...project.subagentSessions,
         ]) {
-          if (session.cli == agentId &&
-              session.sessionId == externalSessionId) {
-            return session.filePath;
-          }
+          found['${session.cli}/${session.sessionId}'] = session.filePath;
         }
       }
     } catch (_) {
       // A store we cannot read is the same answer as one with nothing in it.
     }
-    return null;
+    return found;
   }
 }
 

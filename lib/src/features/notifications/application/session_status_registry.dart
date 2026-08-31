@@ -135,6 +135,7 @@ class SessionStatusRegistry {
     this.stateFileSource = const AgentStateFileStatusSource(),
     this.probeBudget = kStatusProbeBudget,
     this.probeConcurrency = kStatusProbeConcurrency,
+    this.interval = kStatusCycleInterval,
     this.transcriptSearchInterval = kTranscriptSearchInterval,
     this.recentlyActiveWindow = kStatusRecentlyActiveWindow,
   });
@@ -160,6 +161,11 @@ class SessionStatusRegistry {
   final AgentStateFileStatusSource stateFileSource;
   final int probeBudget;
   final int probeConcurrency;
+
+  /// How often [start] cycles. Faster than the notification pass on purpose:
+  /// a status badge is what the user is looking at, and a toast is not.
+  final Duration interval;
+
   final Duration transcriptSearchInterval;
   final Duration recentlyActiveWindow;
 
@@ -168,6 +174,8 @@ class SessionStatusRegistry {
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
   DateTime? _nextTranscriptSearch;
+  Timer? _timer;
+  bool _disposed = false;
   Future<SessionStatusCycle>? _inFlight;
   SessionStatusCycle _last = const SessionStatusCycle(
     entries: [],
@@ -288,6 +296,8 @@ class SessionStatusRegistry {
 
     // 2. One store scan for everyone still missing a transcript path.
     final scans = await _resolvePaths(now);
+    // A shutdown can land inside that scan; nothing below may touch the app.
+    if (_disposed) return _last;
 
     // 3. The rationed half.
     final candidates = [
@@ -312,7 +322,25 @@ class SessionStatusRegistry {
     return _last;
   }
 
+  /// Begins cycling. One timer for the whole app — the point of the exercise.
+  ///
+  /// Started by `AgentStatusWatcher`, which is started by the app's system
+  /// integration. A rendered badge never calls this: subscribing to a status
+  /// must not be what makes the app do work.
+  void start() {
+    if (_timer != null) return;
+    _timer = Timer.periodic(interval, (_) => unawaited(cycle()));
+    unawaited(cycle());
+  }
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
   void dispose() {
+    _disposed = true;
+    stop();
     _tracked.clear();
     _byOpenId.clear();
     unawaited(_changes.close());
@@ -387,7 +415,7 @@ class SessionStatusRegistry {
   /// scan shared by all of them. Returns how many scans ran (0 or 1).
   Future<int> _resolvePaths(DateTime now) async {
     final resolve = resolveTranscripts;
-    if (resolve == null) return 0;
+    if (resolve == null || _disposed) return 0;
     final pending = [
       for (final tracked in _tracked.values)
         if (tracked.wantsProbe &&
@@ -407,6 +435,7 @@ class SessionStatusRegistry {
       // A store we cannot read is the same answer as one with nothing in it.
       return 1;
     }
+    if (_disposed) return 1;
     for (final tracked in pending) {
       final path = index[tracked.session.key.toString()];
       if (path == null) continue;
