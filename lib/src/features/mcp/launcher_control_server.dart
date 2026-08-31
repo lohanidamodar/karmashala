@@ -138,14 +138,18 @@ import 'wsl_host_address.dart';
 /// pipe running failing to exit at all on quit (>120 s), against 322 ms for the
 /// same build without it.
 ///
-/// Agent hooks remain on loopback HTTP, deliberately. The hook command is
-/// `curl -sS -m 2 -X POST … http://127.0.0.1:<port>/agent-hook`, written into
-/// third-party agents' own config files and run by whatever `curl` those agents
-/// find — including agents running in WSL or over SSH, for which a Windows
-/// socket path is not a reachable name at all. Their token is separate and
-/// low-privilege (status reports only), and is already public to anything that
-/// can list process command lines; that is the threat model above, and moving
-/// the route would not improve it.
+/// Agent hooks remain on HTTP, deliberately. The hook command is
+/// `curl -sS -m 2 -X POST … /agent-hook`, written into third-party agents' own
+/// config files and run by whatever `curl` those agents find — including agents
+/// running in WSL or over SSH, for which a Windows socket path is not a
+/// reachable name at all. Their token is separate and low-privilege (status
+/// reports only), and is already public to anything that can list process
+/// command lines; that is the threat model above, and moving the route would
+/// not improve it.
+///
+/// The route answers on **both** doors: loopback for a Windows-native agent,
+/// and the WSL switch address for one inside a distribution, which cannot dial
+/// loopback at all. See [_bindWslInterface].
 class LauncherControlServer implements SessionMcp {
   LauncherControlServer(
     this._container, {
@@ -441,15 +445,24 @@ class LauncherControlServer implements SessionMcp {
   /// network namespace refuses. [wslHostAddressAmong] records the measurement
   /// and why this address rather than `0.0.0.0`.
   ///
-  /// Three rules hold it to the narrowest thing that works:
+  /// Two rules hold it to the narrowest thing that works:
   ///
-  /// * **Only where something is served.** No MCP credential means the endpoint
-  ///   answers `401` to everything, so a second door onto it would be a widened
-  ///   attack surface in exchange for nothing. Same fail-closed rule as the
-  ///   rest of `start`.
-  /// * **Only `/mcp`.** [_handleMcpOnly], not [_handle]: the privileged `/rpc`
-  ///   envelope and the agent-hook route are not part of this decision and stay
-  ///   where they were.
+  /// * **Only what an agent in a distribution needs**, which is `/mcp` and
+  ///   `/agent-hook`: [_handleWslInterface], not [_handle], so the privileged
+  ///   `/rpc` envelope is not part of this decision and stays where it was.
+  ///   The hook route belongs here for exactly the reason `/mcp` does — a hook
+  ///   installed in a distro posting to `127.0.0.1` never arrives — and it is
+  ///   the deliberately low-privilege half: it can report status and nothing
+  ///   else, behind its own separate bearer token.
+  ///
+  ///   That is also why this is bound whether or not an MCP credential exists.
+  ///   `/agent-hook` fails *open* when hardening fails — the rest of `start`
+  ///   says why: an agent that cannot report status is a worse outcome than one
+  ///   that cannot drive a device — and it would be a strange reading of that
+  ///   rule to honour it for Windows panes and quietly drop it for the
+  ///   environment most sessions run in. `/mcp` is unaffected: with no
+  ///   credential it answers `401` here exactly as it does on loopback, so a
+  ///   withheld credential stays withheld on both doors.
   /// * **Never fatal.** The port is already taken on that address, the switch
   ///   went away between the lookup and the bind, a future Windows renames the
   ///   adapter — each of those costs WSL sessions their tools and costs nothing
@@ -458,15 +471,22 @@ class LauncherControlServer implements SessionMcp {
     int port,
     Future<InternetAddress?> Function() lookup,
   ) async {
-    if (_mcpEndpoint?.token == null) return;
     try {
       final host = await lookup();
       if (host == null) return;
       final server = await HttpServer.bind(host, port);
       _wslServer = server;
       _wslHost = host;
+      // The installer writes this address into agents' own config files, so it
+      // has to be the address that was actually bound — published only after
+      // the bind succeeded, never on the strength of the lookup alone.
+      _hookEndpoint = AgentHookEndpoint(
+        port: port,
+        token: _hookEndpoint!.token,
+        wslHost: host.address,
+      );
       server.listen(
-        _handleMcpOnly,
+        _handleWslInterface,
         onError: (Object e) => _logger.warning('$e'),
       );
       _logger.info('MCP also on ${host.address}:$port, for WSL sessions.');
@@ -670,8 +690,13 @@ class LauncherControlServer implements SessionMcp {
     return base64Url.encode(bytes);
   }
 
-  /// The WSL listener's whole routing table: `/mcp`, and `404` for the rest.
-  Future<void> _handleMcpOnly(HttpRequest request) async {
+  /// The WSL listener's whole routing table: the two routes an agent inside a
+  /// distribution has to reach, and `404` for the rest.
+  Future<void> _handleWslInterface(HttpRequest request) async {
+    if (request.uri.path == '/agent-hook') {
+      await _handleAgentHook(request);
+      return;
+    }
     if (McpHttpEndpoint.handles(request.uri)) {
       await _mcpEndpoint!.handle(request);
       return;

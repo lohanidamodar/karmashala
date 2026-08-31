@@ -9,6 +9,7 @@ import 'package:chitragupta/src/features/mcp/handshake_file_permissions.dart';
 import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -148,7 +149,11 @@ void main() {
       final client = HttpClient();
       addTearDown(() => client.close(force: true));
       final request = await client.postUrl(
-        endpoint.uriFor(agentId: 'claudeCode', event: 'Stop'),
+        endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        environment: EnvironmentKind.windowsNative,
+      )!,
       );
       request.headers.set(
         HttpHeaders.authorizationHeader,

@@ -8,6 +8,7 @@ import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart'
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -70,7 +71,11 @@ void main() {
     expect(endpoint.port, greaterThan(0));
     expect(endpoint.token, isNotEmpty);
     expect(
-      endpoint.uriFor(agentId: 'claudeCode', event: 'Stop').host,
+      endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        environment: EnvironmentKind.windowsNative,
+      )!.host,
       '127.0.0.1',
     );
   });
@@ -88,7 +93,11 @@ void main() {
 
   test('an authenticated callback reaches the receiver', () async {
     final response = await post(
-      endpoint.uriFor(agentId: 'claudeCode', event: 'Stop'),
+      endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        environment: EnvironmentKind.windowsNative,
+      )!,
       token: endpoint.token,
     );
 
@@ -101,7 +110,11 @@ void main() {
 
   test('an unknown event is accepted but records nothing', () async {
     final response = await post(
-      endpoint.uriFor(agentId: 'claudeCode', event: 'Whatever'),
+      endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Whatever',
+        environment: EnvironmentKind.windowsNative,
+      )!,
       token: endpoint.token,
     );
 
@@ -112,7 +125,11 @@ void main() {
 
   test('a wrong token is rejected and records nothing', () async {
     final response = await post(
-      endpoint.uriFor(agentId: 'claudeCode', event: 'Stop'),
+      endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        environment: EnvironmentKind.windowsNative,
+      )!,
       token: 'not-the-token',
     );
 
@@ -122,7 +139,11 @@ void main() {
 
   test('a missing token is rejected', () async {
     final response = await post(
-      endpoint.uriFor(agentId: 'claudeCode', event: 'Stop'),
+      endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        environment: EnvironmentKind.windowsNative,
+      )!,
     );
 
     expect(response.statusCode, HttpStatus.unauthorized);
@@ -140,7 +161,11 @@ void main() {
 
   test('the wrong method on the hook route is a 404', () async {
     final response = await post(
-      endpoint.uriFor(agentId: 'claudeCode', event: 'Stop'),
+      endpoint.uriFor(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        environment: EnvironmentKind.windowsNative,
+      )!,
       token: endpoint.token,
       method: 'GET',
     );

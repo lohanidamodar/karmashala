@@ -49,11 +49,15 @@ class AgentHookInstallation {
 ///   connection-refused, bounded by the `curl -m 2` in the command itself, but
 ///   it survives quitting *and* uninstalling the app, and hands its bearer
 ///   token to whatever binds that port next.
-/// * **WSL cannot reach the endpoint.** Under WSL2's default NAT networking
-///   `127.0.0.1` inside a distro is not the Windows host, so a hook installed
-///   into a WSL config would fire on every tool call and never arrive. Those
-///   environments are skipped explicitly and fall back to the state-file and
-///   terminal-grid sources, which need no callback.
+/// * **The address depends on where the agent runs, and some agents cannot be
+///   reached at all.** `127.0.0.1` inside a WSL2 distribution is that
+///   distribution's own loopback, so a loopback hook installed there would fire
+///   on every tool call and never arrive. It is the host side of the WSL
+///   virtual switch that works, and [AgentHookEndpoint] carries it — so a WSL
+///   store is installed when this launch bound that address and skipped when it
+///   did not. An SSH host is on another machine and is always skipped. Skipped
+///   environments fall back to the state-file and terminal-grid sources, which
+///   need no callback.
 class AgentHookInstallationService {
   AgentHookInstallationService(this._ref, {AppLogger? logger})
     : _log = logger ?? AppLogger.named('agent-hooks');
@@ -65,10 +69,14 @@ class AgentHookInstallationService {
       _forEachStore(
         verb: 'install',
         skipUnreachable: true,
-        act: (installer, descriptor, home) => installer.install(
+        endpoint: endpoint,
+        act: (installer, descriptor, home, kind) => installer.install(
           descriptor: descriptor,
           storeHome: home,
           endpoint: endpoint,
+          // Never null here: a store whose environment has no row is
+          // unreachable by the rule below, and install skips the unreachable.
+          environment: kind!,
         ),
       );
 
@@ -82,12 +90,17 @@ class AgentHookInstallationService {
   /// in somebody else's config file, which is the kind worth keeping.
   ///
   /// Unreachable environments are swept too, unlike [installAll]: they should
-  /// hold nothing of ours, and if an older build wrote one this is what removes
+  /// hold nothing of ours, and if an older build wrote one — or this launch
+  /// wrote one and the next one finds no switch address — this is what removes
   /// it. A config with no entry of ours is read and not written.
+  ///
+  /// The sweep matches on [agentHookMarker] and never on the URL, which is what
+  /// makes it survive an ephemeral port *and* a switch address that moved
+  /// between boots.
   Future<List<AgentHookInstallation>> uninstallAll() => _forEachStore(
     verb: 'uninstall',
     skipUnreachable: false,
-    act: (installer, descriptor, home) =>
+    act: (installer, descriptor, home, _) =>
         installer.uninstall(descriptor: descriptor, storeHome: home),
   );
 
@@ -98,10 +111,12 @@ class AgentHookInstallationService {
   Future<List<AgentHookInstallation>> _forEachStore({
     required String verb,
     required bool skipUnreachable,
+    AgentHookEndpoint? endpoint,
     required Future<bool> Function(
       AgentHookInstaller installer,
       AgentDescriptor descriptor,
       String home,
+      EnvironmentKind? kind,
     )
     act,
   }) async {
@@ -117,8 +132,11 @@ class AgentHookInstallationService {
     final registry = _ref.read(agentRegistryProvider);
 
     for (final store in stores) {
-      final environment = byId[store.environmentId];
-      final reachable = environment?.kind == EnvironmentKind.windowsNative;
+      final kind = byId[store.environmentId]?.kind;
+      // An environment we have no row for is treated as unreachable rather than
+      // guessed at: the wrong address here is a hook in someone's config that
+      // silently never arrives.
+      final reachable = kind != null && (endpoint?.reaches(kind) ?? false);
       for (final descriptor in registry.descriptors) {
         if (descriptor.hooks == null) continue;
         final home = store.homesByAgentId[descriptor.id];
@@ -130,14 +148,14 @@ class AgentHookInstallationService {
               environmentId: store.environmentId,
               installed: false,
               skippedBecause:
-                  'the loopback endpoint is not reachable from this '
-                  'environment; status falls back to the state file',
+                  'no callback address this app binds is reachable from '
+                  'this environment; status falls back to the state file',
             ),
           );
           continue;
         }
         try {
-          final applied = await act(installer, descriptor, home);
+          final applied = await act(installer, descriptor, home, kind);
           results.add(
             AgentHookInstallation(
               agentId: descriptor.id,

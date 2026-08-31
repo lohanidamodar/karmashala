@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:chitragupta/src/features/agents/data/agent_hook_installer.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -37,6 +38,7 @@ void main() {
       descriptor: claude,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
 
     expect(installed, isTrue);
@@ -61,6 +63,7 @@ void main() {
       descriptor: claude,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
 
     final raw = configFile().readAsStringSync();
@@ -88,6 +91,7 @@ void main() {
       descriptor: claude,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
 
     final commands = commandsFor('Stop').map((h) => h['command']).toList();
@@ -100,11 +104,13 @@ void main() {
       descriptor: claude,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
     await installer.install(
       descriptor: claude,
       storeHome: home.path,
       endpoint: const AgentHookEndpoint(port: 5555, token: 'tok2'),
+      environment: EnvironmentKind.windowsNative,
     );
 
     final commands = commandsFor('Stop');
@@ -132,6 +138,7 @@ void main() {
       descriptor: claude,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
 
     final removed = await installer.uninstall(
@@ -162,6 +169,7 @@ void main() {
                     descriptor: claude,
                     event: event,
                     endpoint: endpoint,
+                    environment: EnvironmentKind.windowsNative,
                   ),
                 },
               ],
@@ -175,6 +183,7 @@ void main() {
       descriptor: claude,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
 
     expect(installed, isTrue);
@@ -192,6 +201,7 @@ void main() {
         descriptor: claude,
         storeHome: home.path,
         endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
       );
 
       expect(hooks()['Stop'], 'run-my-thing');
@@ -217,6 +227,7 @@ void main() {
       descriptor: antigravity,
       storeHome: home.path,
       endpoint: endpoint,
+      environment: EnvironmentKind.windowsNative,
     );
 
     expect(installed, isFalse);
@@ -231,6 +242,7 @@ void main() {
         descriptor: claude,
         storeHome: home.path,
         endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
       ),
       throwsA(isA<FormatException>()),
     );
@@ -248,4 +260,151 @@ void main() {
     expect(removed, isFalse);
     expect(configFile().readAsStringSync(), '{"model": "opus"}');
   });
+
+  group('the environment decides the address', () {
+    const reachableWsl = AgentHookEndpoint(
+      port: 4242,
+      token: 'tok',
+      wslHost: '172.18.240.1',
+    );
+
+    test('a WSL agent is given the switch address, not loopback', () async {
+      final installed = await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: reachableWsl,
+        environment: EnvironmentKind.wsl,
+      );
+
+      expect(installed, isTrue);
+      final command = commandsFor('Stop').single['command'] as String;
+      expect(command, contains('172.18.240.1:4242/agent-hook'));
+      expect(
+        command,
+        isNot(contains('127.0.0.1')),
+        reason:
+            "127.0.0.1 inside a distribution is the distribution's own "
+            'loopback, and a hook that cannot arrive is worse than one that '
+            'was skipped — nothing reports the silence',
+      );
+    });
+
+    test('an unreachable environment is refused, not written', () async {
+      // A WSL host with no switch address and an SSH host are the same case:
+      // nothing this app binds can be dialled from there.
+      for (final (endpoint, kind) in [
+        (const AgentHookEndpoint(port: 4242, token: 'tok'), EnvironmentKind.wsl),
+        (reachableWsl, EnvironmentKind.ssh),
+      ]) {
+        final installed = await installer.install(
+          descriptor: claude,
+          storeHome: home.path,
+          endpoint: endpoint,
+          environment: kind,
+        );
+
+        expect(installed, isFalse, reason: '$kind');
+        expect(
+          configFile().existsSync(),
+          isFalse,
+          reason: 'a refused install must not so much as create the file',
+        );
+      }
+    });
+
+    test('hookCommand says so rather than spelling a dead URL', () {
+      expect(
+        installer.hookCommand(
+          descriptor: claude,
+          event: 'Stop',
+          endpoint: const AgentHookEndpoint(port: 4242, token: 'tok'),
+          environment: EnvironmentKind.wsl,
+        ),
+        isNull,
+      );
+    });
+
+    test('the command survives the distribution\'s shell verbatim', () {
+      // It is written into the agent's config and run by whatever `sh` the
+      // distro has. Everything variable — the token and the whole URL — has to
+      // sit inside double quotes with no character the shell would expand.
+      final command = installer.hookCommand(
+        descriptor: claude,
+        event: 'Stop',
+        endpoint: const AgentHookEndpoint(
+          port: 4242,
+          token: 'Ab-_9=',
+          wslHost: '172.18.240.1',
+        ),
+        environment: EnvironmentKind.wsl,
+      )!;
+
+      expect(command, contains('"Authorization: Bearer Ab-_9="'));
+      expect(
+        command,
+        contains(
+          '"http://172.18.240.1:4242/agent-hook?agent=claudeCode&event=Stop'
+          '&marker=$agentHookMarker"',
+        ),
+      );
+      // `&` unquoted would background the curl; `$` and a backtick would
+      // substitute. None of them may appear outside the two quoted spans.
+      expect(command.split('"')[0], isNot(contains(RegExp(r'[&$`]'))));
+      expect(command, isNot(contains(r'$')));
+      expect(command, isNot(contains('`')));
+      // It names no path of its own, so nothing in it has to be translated
+      // between the Windows and the distribution filesystem.
+      expect(command, isNot(contains(RegExp(r'[A-Za-z]:\\'))));
+    });
+  });
+
+  group('a config the agent can still parse', () {
+    test('a finished install leaves no scratch file behind', () async {
+      configFile().writeAsStringSync('{"model": "opus"}');
+
+      await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(
+        home.listSync().map((e) => p.basename(e.path)).toList(),
+        ['settings.json'],
+      );
+    });
+
+    test('a replace that fails leaves the original whole', () async {
+      // The new content is staged beside the config and moved onto it, so the
+      // step that can fail is a rename and never a half-written settings.json.
+      // Killed mid-install, the agent still starts.
+      const original = '{"model": "opus", "hooks": {"Stop": []}}';
+      configFile().writeAsStringSync(original);
+      const failing = AgentHookInstaller(replace: _refuseToReplace);
+
+      await expectLater(
+        failing.install(
+          descriptor: claude,
+          storeHome: home.path,
+          endpoint: endpoint,
+          environment: EnvironmentKind.windowsNative,
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+
+      expect(configFile().readAsStringSync(), original);
+      expect(jsonDecode(configFile().readAsStringSync()), isA<Map>());
+      expect(
+        home.listSync().map((e) => p.basename(e.path)).toList(),
+        ['settings.json'],
+        reason: 'the staged file is cleaned up even when the move fails',
+      );
+    });
+  });
 }
+
+/// A replace step that never happens, standing in for the process dying between
+/// staging the new config and moving it into place.
+Future<void> _refuseToReplace(File staged, File destination) =>
+    throw const FileSystemException('replace refused');
