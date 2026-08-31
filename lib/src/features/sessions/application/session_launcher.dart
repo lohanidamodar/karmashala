@@ -52,6 +52,20 @@ class SessionDepthRefused implements Exception {
   String toString() => depth.refusal;
 }
 
+/// Raised when a launch was asked to carry an opening message that the agent's
+/// command line cannot take.
+///
+/// Its own type for the same reason as [SessionDepthRefused]: the MCP surface
+/// and fan-out both need to fail the caller with the explanation, rather than
+/// starting an agent that never hears the instruction and reporting success.
+class SessionLaunchRefused implements Exception {
+  const SessionLaunchRefused(this.reason);
+  final String reason;
+
+  @override
+  String toString() => reason;
+}
+
 /// Raised when a resume would start a **second** agent on a conversation whose
 /// first one is still running, **and that agent will not share it**.
 ///
@@ -411,6 +425,26 @@ class SessionLauncher {
     final descriptor = _ref
         .read(agentRegistryProvider)
         .byId(request.installation.agentId);
+    // A first message an agent cannot be handed is a refusal, not a launch.
+    //
+    // `agentPaneArguments` drops the prompt when the CLI takes none, and every
+    // caller above then reports success: fan-out records the candidate as
+    // `started`, and the MCP `spawn` tool answers "opened a new session", so a
+    // model believes its instruction landed when the agent came up bare. This
+    // was unreachable while Antigravity was discovered under a name nothing
+    // installs; correcting that name made it live. Refusing here closes
+    // fan-out and MCP together, which is why it is not a guard at either.
+    final message = request.firstMessage?.trim();
+    if (message != null &&
+        message.isNotEmpty &&
+        !(descriptor?.launch.acceptsPromptArgument ?? false)) {
+      throw SessionLaunchRefused(
+        '${descriptor?.displayName ?? request.installation.agentId} takes no '
+        'opening message on its command line, so this one would be dropped '
+        'without a word. Start it and say it in the session instead.',
+      );
+    }
+
     final permissionMode =
         request.permissionOverride ??
         permissionFor(request.installation.agentId, request.purpose);

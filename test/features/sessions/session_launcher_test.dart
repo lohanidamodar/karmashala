@@ -40,6 +40,20 @@ const _rover = AgentDescriptor(
   ),
 );
 
+/// The same agent, but one whose CLI takes an opening message.
+const _talkative = AgentDescriptor(
+  id: 'roverCli',
+  displayName: 'Rover CLI',
+  binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
+  launch: AgentLaunchSpec(
+    baseArguments: ['--headless'],
+    acceptsPromptArgument: true,
+    permissionModes: {
+      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
+    },
+  ),
+);
+
 ({ProviderContainer container, AppDatabase db}) harness({
   Settings settings = const Settings(),
   AgentRegistry registry = const AgentRegistry([_rover]),
@@ -443,5 +457,51 @@ void main() {
     expect(launcher.answerPrompt(launched.session.id, ''), isFalse);
     expect(launcher.answerPrompt('no-such-session', '\r'), isFalse);
     expect(written, isEmpty);
+  });
+
+  test('a first message an agent cannot take refuses the launch', () async {
+    // `agentPaneArguments` drops the prompt when the CLI takes none, and every
+    // caller above reported success anyway: fan-out recorded the candidate as
+    // started, and the MCP spawn tool answered "opened a new session" — so a
+    // model believed its instruction had landed at an agent that came up bare.
+    final h = harness();
+    addTearDown(h.container.dispose);
+    addTearDown(h.db.close);
+
+    await expectLater(
+      h.container.read(sessionLauncherProvider).launch(
+        SessionLaunchRequest(
+          repository: repository(),
+          installation: agentInstallation(agentId: 'roverCli'),
+          title: 'Rover run',
+          purpose: SessionPurpose.newSession,
+          firstMessage: 'compare these two approaches',
+        ),
+      ),
+      throwsA(isA<SessionLaunchRefused>()),
+    );
+    expect(
+      SessionDao(h.db).getAll(),
+      isEmpty,
+      reason: 'refused before anything was written',
+    );
+  });
+
+  test('an agent that does take one is launched with it', () async {
+    final h = harness(registry: const AgentRegistry([_talkative]));
+    addTearDown(h.container.dispose);
+    addTearDown(h.db.close);
+
+    final result = await h.container.read(sessionLauncherProvider).launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Rover run',
+        purpose: SessionPurpose.newSession,
+        firstMessage: 'compare these two approaches',
+      ),
+    );
+
+    expect(SessionDao(h.db).getById(result.session.id), isNotNull);
   });
 }
