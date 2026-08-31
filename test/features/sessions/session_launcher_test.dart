@@ -643,6 +643,42 @@ void main() {
       expect(resumed.workingDirectoryNotice, isNull);
     });
 
+    test('a resumed worktree row goes back to its worktree', () async {
+      // The MCP `open_session` tool resumes without naming a worktree at all,
+      // so before the row could answer, every resume from an agent put the
+      // session back in the repository root. A row written before v22 records
+      // no directory but does record its worktree, which is the same fact.
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      const worktree = EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\src\demo\.chitragupta-worktrees\app-old',
+      );
+      SessionDao(h.db).insert(
+        session(id: 'wt-1', title: 'In a worktree', useWorktree: true,
+                worktree: worktree)
+            .copyWith(externalSessionId: 'cli-wt'),
+      );
+
+      final resumed = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'In a worktree',
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: 'cli-wt',
+            ),
+          );
+
+      final instance = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumed.paneId!)!;
+      expect(instance.agentLaunch!.workingDirectory, worktree.path);
+    });
+
     test('a stated directory beats the row and the repository', () async {
       // What a handoff and a fork need: continue the work *where it is*.
       final h = harness();

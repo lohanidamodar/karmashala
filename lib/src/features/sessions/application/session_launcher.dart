@@ -510,7 +510,14 @@ class SessionLauncher {
       // session's own subdirectory without the Explorer having to say so.
       final resolved = directoryOrFallback(
         _ref,
-        directory: request.workingDirectory ?? reused?.workingDirectory,
+        // The row's worktree is the same fact for a row written before schema
+        // v22, which recorded no directory but did record where it ran. It is
+        // read here and not turned into `worktree`: the reused row already
+        // carries that, and a launch must not invent one.
+        directory:
+            request.workingDirectory ??
+            reused?.workingDirectory ??
+            reused?.worktree,
         fallback: request.repository.path,
       );
       workingDirectory = resolved.directory;
