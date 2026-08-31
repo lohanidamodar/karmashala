@@ -11,12 +11,16 @@ import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_ui_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/data/terminal_grid_text.dart';
 import '../data/cli_session_mutator.dart';
 import '../data/imported_session_dao.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'cli_detection_service.dart';
 import 'project_import_service.dart';
+import 'session_adoption_service.dart';
 import 'session_auto_import_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
@@ -57,6 +61,75 @@ typedef AutoImportRunner =
 final autoImportRunnerProvider = Provider<AutoImportRunner>(
   (ref) => ref.read(sessionAutoImportServiceProvider).importForRepositories,
 );
+
+/// Adopts agent sessions the user started by hand in one of our own panes.
+///
+/// Cycled by `SessionStatusRegistry` (see `sessionStatusRegistryProvider`) and
+/// poked by `/agent-hook`; it starts nothing itself.
+final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
+  return SessionAdoptionService(
+    sessionDao: ref.watch(sessionDaoProvider),
+    importedSessionDao: ref.watch(importedSessionDaoProvider),
+    repositoryDao: ref.watch(repositoryDaoProvider),
+    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    installationDao: ref.watch(agentInstallationDaoProvider),
+    linkDao: ref.watch(sessionRepositoryDaoProvider),
+    agents: ref.watch(agentRegistryProvider),
+    ids: ref.watch(idGeneratorProvider),
+    clock: ref.watch(clockProvider),
+    readPanes: () => adoptablePanes(ref),
+    readPaneTail: (paneId, lines) {
+      final instance = ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId);
+      if (instance == null || !instance.liveness.value.isLive) return const [];
+      return terminalTailLines(instance.terminal, lines: lines);
+    },
+    scanStores: () => scanCliStores(ref),
+    // A row appearing in the tree is exactly what the revision counter is for.
+    onAdopted: (_) => ref.read(sessionsRevisionProvider.notifier).bump(),
+  );
+});
+
+/// Every tracked pane, in the shape adoption reads them.
+///
+/// Read-only over the terminal workspace's own published state: adoption never
+/// holds a pane, opens one or changes one.
+List<AdoptablePane> adoptablePanes(Ref ref) {
+  final controller = ref.read(terminalSessionsControllerProvider.notifier);
+  final state = ref.read(terminalSessionsControllerProvider);
+  return [
+    for (final paneId in state.liveness.keys)
+      if (controller.instanceFor(paneId) case final instance?)
+        AdoptablePane(
+          paneId: paneId,
+          workingDirectory: instance.workingDirectory,
+          isLive: instance.liveness.value.isLive,
+          // A pane the app opened to run an agent already has a session row;
+          // adopting it would be inventing a second one for the same process.
+          hostsLaunchedSession: instance.agentLaunch != null,
+          lastCommandId: instance.commandBlocks?.tracker.latest?.id,
+          lastCommandLine: instance.commandBlocks?.tracker.latest?.command,
+        ),
+  ];
+}
+
+/// One pass over every CLI store, flattened to the sessions it found.
+Future<List<DetectedSession>> scanCliStores(Ref ref) async {
+  final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+  final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
+  final byId = {for (final e in environments) e.id: e};
+  final projects = await ref.read(cliDetectionServiceProvider).detect(
+    stores,
+    byId,
+  );
+  return [
+    for (final project in projects) ...[
+      ...project.sessions,
+      ...project.subagentSessions,
+    ],
+  ];
+}
 
 final cliStoreLocatorProvider = Provider<CliStoreLocator>(
   (ref) => CliStoreLocator(

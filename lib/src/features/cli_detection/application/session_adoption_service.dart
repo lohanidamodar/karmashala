@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../../core/process/path_translator.dart';
 import '../../../core/util/clock.dart';
 import '../../../core/util/id_generator.dart';
@@ -251,6 +253,43 @@ class SessionAdoptionService {
     // moment from now, and the next callback is a set lookup away.
     if (candidate == null) return;
     _adopt(candidate: candidate, externalSessionId: sessionId);
+  }
+
+  /// One hook callback, still in the shape the agent posted it.
+  ///
+  /// The transport hands over the raw body rather than a parsed one because the
+  /// only extra field adoption wants — the directory the agent is working in —
+  /// is declared per agent on [AgentHookSpec.cwdPath], and the endpoint has no
+  /// business knowing that.
+  void onHookPayload({
+    required String agentId,
+    required String sessionId,
+    required String body,
+  }) {
+    if (agentId.isEmpty || sessionId.isEmpty) return;
+    if (_settled.contains('$agentId/$sessionId')) return;
+    final path = agents.byId(agentId)?.hooks?.cwdPath ?? const <String>[];
+    onHook(
+      agentId: agentId,
+      sessionId: sessionId,
+      cwd: path.isEmpty ? '' : _stringAt(path, body),
+    );
+  }
+
+  /// The string at [path] in the JSON [body], or `''` for anything else — a
+  /// missing key, a non-string value, or a body that is not JSON at all.
+  String _stringAt(List<String> path, String body) {
+    Object? value;
+    try {
+      value = jsonDecode(body);
+    } on FormatException {
+      return '';
+    }
+    for (final segment in path) {
+      if (value is! Map) return '';
+      value = value[segment];
+    }
+    return value is String ? value : '';
   }
 
   /// The rationed half: look at pane screens, then at the CLI stores.

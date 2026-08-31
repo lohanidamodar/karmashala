@@ -528,6 +528,22 @@ class LauncherControlServer {
             event: request.uri.queryParameters['event'],
             body: body,
           );
+      // A callback naming a session we have no row for may be one the user
+      // started by hand in one of our own panes. Synchronous and O(1) once a
+      // session has been decided about, so a busy agent's stream of hooks costs
+      // a set lookup — and wrapped, because adoption must never be able to fail
+      // the callback and stall the agent that fired it.
+      try {
+        _container
+            .read(sessionAdoptionServiceProvider)
+            .onHookPayload(
+              agentId: report.agentId,
+              sessionId: report.sessionId,
+              body: body,
+            );
+      } on Object catch (error) {
+        _logger.warning('Session adoption from a hook failed: $error');
+      }
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never block the agent that fired it.
       response.headers.contentType = ContentType.json;
