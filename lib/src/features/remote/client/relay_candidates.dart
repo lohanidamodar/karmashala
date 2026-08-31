@@ -204,6 +204,42 @@ List<Uri> relayUrisFrom(Object? json) {
   return List.unmodifiable(urls.values);
 }
 
+/// Whether [url] names a relay on the phone's own network: loopback, a private
+/// IPv4 range, or a link-local or unique-local IPv6 address.
+///
+/// **Not a trust judgement of any kind.** This file's header says why: a relay
+/// is a meeting place, never an identity, and nothing here may ever let a URL
+/// feed key derivation or trust. This answers one operational question — how
+/// far away the meeting place is — because the wait before dialling a desktop
+/// on the same table again should not be the wait an internet relay deserves.
+bool isLocalRelay(Uri url) {
+  final host = url.host.toLowerCase();
+  if (host.isEmpty) return false;
+  if (host == 'localhost' || host == '::1' || host == '[::1]') return true;
+  final v6 = host.startsWith('[') && host.endsWith(']')
+      ? host.substring(1, host.length - 1)
+      : host;
+  if (v6.contains(':')) {
+    // fe80::/10 link-local and fc00::/7 unique-local — the IPv6 spellings of
+    // "this network".
+    return v6.startsWith('fe8') ||
+        v6.startsWith('fe9') ||
+        v6.startsWith('fea') ||
+        v6.startsWith('feb') ||
+        v6.startsWith('fc') ||
+        v6.startsWith('fd');
+  }
+  final parts = host.split('.');
+  if (parts.length != 4) return false;
+  final octets = [for (final part in parts) int.tryParse(part)];
+  if (octets.any((o) => o == null || o < 0 || o > 255)) return false;
+  final [a!, b!, _, _] = octets;
+  if (a == 127 || a == 10) return true;
+  if (a == 192 && b == 168) return true;
+  if (a == 169 && b == 254) return true;
+  return a == 172 && b >= 16 && b <= 31;
+}
+
 /// A `host:port` LAN hint as the host announced it, or null when it is not one.
 ///
 /// A discovery hint only — it may be stale the moment DHCP moves, and proving

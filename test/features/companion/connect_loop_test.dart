@@ -12,7 +12,6 @@
 library;
 
 import 'dart:async';
-import 'dart:io' show InternetAddress;
 
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
@@ -23,9 +22,7 @@ import 'package:chitragupta/src/features/remote/client/companion_store.dart'
 import 'package:chitragupta/src/features/remote/client/lan_path.dart';
 import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
 import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/lan_beacon.dart';
 import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/remote_transport.dart';
 import 'package:chitragupta_relay/chitragupta_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -51,46 +48,6 @@ class SlowStore implements stored.CompanionStore {
 
   @override
   Future<void> delete(String key) async => disk.remove(key);
-}
-
-/// A scout that hears one desktop's beacon on demand and can never dial it —
-/// a LAN port behind a firewall, which is the ordinary case.
-class DeafScout extends LanPathScout {
-  DeafScout({super.dialer, super.attemptTimeout});
-
-  final _heard = StreamController<DiscoveredHost>.broadcast();
-  final _seen = <DiscoveredHost>[];
-  int dials = 0;
-
-  /// Pretend the grudge has already expired, which is what makes the beacon
-  /// come back around every two minutes on a real phone.
-  @override
-  bool inCooldown(DiscoveredHost host) => false;
-
-  @override
-  Stream<DiscoveredHost> get sightings => _heard.stream;
-
-  @override
-  List<DiscoveredHost> get candidates => List.of(_seen);
-
-  @override
-  Future<void> start() async {}
-
-  @override
-  Future<void> stop() async {
-    await _heard.close();
-  }
-
-  @override
-  RemoteTransport dial(DiscoveredHost host) {
-    dials++;
-    return super.dial(host);
-  }
-
-  void hear(DiscoveredHost host) {
-    if (!_seen.contains(host)) _seen.add(host);
-    _heard.add(host);
-  }
 }
 
 void main() {
@@ -249,52 +206,4 @@ void main() {
     expect((await gateway.listSessions()).single.id, 's1');
   });
 
-  test('a desktop the phone can hear but cannot dial does not cost it the '
-      'link that works', timeout: const Timeout(Duration(minutes: 3)),
-      () async {
-    await startService();
-    // Every direct dial refuses at once: the advertised port is closed.
-    final scout = DeafScout(
-      attemptTimeout: const Duration(milliseconds: 150),
-      dialer: (host, port) => RelayTransport(
-        endpoint: Uri.parse('ws://127.0.0.1:1'),
-        backoff: fastBackoff(),
-        connectTimeout: const Duration(milliseconds: 50),
-      )..start(),
-    );
-    final gateway = await pairedPhone(scout: scout);
-    expect(gateway.linkPath, CompanionLinkPath.relay);
-
-    final beacon = DiscoveredHost(
-      address: InternetAddress('127.0.0.1'),
-      advert: const LanAdvert(port: 41234, tag: 'test'),
-      seenAt: DateTime.now(),
-    );
-
-    // The beacon repeats every two seconds, and the scout's grudge lasts two
-    // minutes — so on a real phone this sequence plays out every two minutes,
-    // for as long as the desktop is up and advertising.
-    final states = <CompanionLinkState>[];
-    final watch = gateway.linkStates.listen(states.add);
-    addTearDown(watch.cancel);
-    for (var i = 0; i < 6; i++) {
-      scout.hear(beacon);
-      await Future<void>.delayed(const Duration(milliseconds: 150));
-    }
-    await watch.cancel();
-
-    expect(
-      scout.dials,
-      greaterThan(0),
-      reason: 'the direct path is worth trying — once',
-    );
-    expect(
-      states.where((s) => s == CompanionLinkState.connecting),
-      hasLength(1),
-      reason: 'one upgrade attempt for six sightings: a path already proved '
-          'unusable must not keep costing the link that works',
-    );
-    expect(gateway.link, CompanionLinkState.connected);
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
 }

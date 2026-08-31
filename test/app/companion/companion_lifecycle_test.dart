@@ -17,14 +17,21 @@ void main() {
     expect(gateway.reconnectRequests, 1);
   });
 
-  test('resume with a healthy link leaves it alone', () async {
+  test('resume asks even when the link SAYS it is up — a socket nobody '
+      'watched is a claim, not a fact', () async {
+    // The old rule was to leave a healthy-looking link alone. But after the
+    // app has been frozen, "connected" describes a socket Android may have
+    // torn down without telling anyone, and the transport does not find out
+    // until its next heartbeat — twenty-five seconds of a dead link on
+    // screen. `reconnect()` proves a link that claims to be up, so the answer
+    // is definite either way within one hello.
     final gateway = FakeCompanionGateway.paired();
     final reconnector = CompanionLifecycleReconnector(gateway);
 
     reconnector.didChangeAppLifecycleState(AppLifecycleState.resumed);
     await Future<void>.delayed(Duration.zero);
 
-    expect(gateway.reconnectRequests, 0);
+    expect(gateway.reconnectRequests, 1);
   });
 
   test('pausing never dials — the link rests until resume or FCM', () async {
@@ -58,6 +65,10 @@ void main() {
     gateway.setLink(CompanionLinkState.disconnected);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(gateway.reconnectRequests, 1);
+    // And a pause still dials nothing at all.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     expect(gateway.reconnectRequests, 1);
   });

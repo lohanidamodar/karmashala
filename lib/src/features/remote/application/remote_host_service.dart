@@ -212,15 +212,19 @@ class RemoteHostService {
     }
     _localRelayUrl = localRelayUrl;
     _hostedEnabled = hostedEnabled;
-    for (final runtime in _runtimes.values.toList()) {
-      await runtime.syncRelayListeners();
-    }
-    // Connected phones learn the change now rather than at their next dial —
-    // this is what makes "I turned the hosted relay on" heal by itself.
+    // The announcement goes FIRST, on the links that are still up. Re-pointing
+    // the listeners closes the very socket a connected phone is holding — when
+    // the local relay's address moves under the desktop (a DHCP renew, a
+    // Wi-Fi band switch, a VPN coming up), announcing afterwards would be
+    // shouting the new address down a line that had just been cut, and the
+    // phone would be left dialling an address nobody is at.
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
         runtime.run((api) => api.sendHostStatus()),
     ]);
+    for (final runtime in _runtimes.values.toList()) {
+      await runtime.syncRelayListeners();
+    }
   }
 
   /// Fired when the device list changed (paired, revoked, seen).
