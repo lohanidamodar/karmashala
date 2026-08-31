@@ -30,6 +30,7 @@ import '../application/project_tree.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_forest.dart';
 import 'checkout_row.dart';
+import 'explorer_row.dart';
 import 'project_card.dart';
 import 'session_card.dart';
 import '../../../core/util/clock_provider.dart';
@@ -769,13 +770,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         noteTooltip:
             'An agent is working here, but the workspace has no repository '
             'record for this folder. Rescan the project to add one.',
-        extraAction: IconButton(
+        extraAction: ExplorerRowAction(
           tooltip: 'Rescan for repositories',
-          visualDensity: VisualDensity.compact,
-          iconSize: 14,
-          constraints: const BoxConstraints.tightFor(width: 22, height: 20),
-          padding: EdgeInsets.zero,
-          icon: const Icon(AppIcons.arrowsClockwise),
+          icon: AppIcons.arrowsClockwise,
           onPressed: () => _rescan(project),
         ),
         onTap: () => _toggleRow(key, defaultOpen: true),
@@ -970,7 +967,14 @@ class _TreeHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(8.0 + depth * 14 + 20, 4, 8, 8),
+      // Lined up with the text of a row at the same depth, so the hint reads as
+      // sitting inside the node it is about rather than beside it.
+      padding: EdgeInsets.fromLTRB(
+        Insets.xs + depth * ExplorerRow.indent + Insets.lg,
+        Insets.xs,
+        Insets.sm,
+        Insets.sm,
+      ),
       child: Text(
         message,
         style: theme.textTheme.bodySmall?.copyWith(

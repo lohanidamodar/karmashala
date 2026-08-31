@@ -12,6 +12,7 @@ import 'package:chitragupta/src/features/cli_detection/application/cli_detection
 import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/explorer/presentation/checkout_row.dart';
 import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:chitragupta/src/features/explorer/presentation/project_card.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
@@ -25,6 +26,7 @@ import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -445,6 +447,15 @@ void main() {
   });
 
   group('keyboard and menus', () {
+    /// The desktop gesture. The overflow button on a pointer surface is only
+    /// drawn under the pointer or the keyboard (see `explorer_row_test.dart`),
+    /// and a right-click is what it duplicates — so the menu's *contents* are
+    /// asserted through the gesture that always works.
+    Future<void> openMenu(WidgetTester tester, Finder row) async {
+      await tester.tap(row, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('Enter on a focused project card expands it', (tester) async {
       addSession('s1', repositoryId: 'r1', title: 'Reachable');
       await pump(tester, expand: false);
@@ -460,8 +471,7 @@ void main() {
 
     testWidgets('a repository row offers reveal and copy path', (tester) async {
       await pump(tester);
-      await tester.tap(find.byTooltip('Folder actions').first);
-      await tester.pumpAndSettle();
+      await openMenu(tester, find.byType(CheckoutRow).first);
 
       expect(find.text('Open in File Explorer'), findsOneWidget);
       expect(find.text('Copy path'), findsOneWidget);
@@ -477,8 +487,7 @@ void main() {
     ) async {
       revealHost.throwError = CommandException('explorer.exe not found');
       await pump(tester);
-      await tester.tap(find.byTooltip('Folder actions').first);
-      await tester.pumpAndSettle();
+      await openMenu(tester, find.byType(CheckoutRow).first);
 
       await tester.tap(find.text('Open in File Explorer'));
       await tester.pumpAndSettle();
@@ -515,16 +524,13 @@ void main() {
       );
       await pump(tester, expand: false);
 
-      await tester.tap(
-        find.descendant(
-          of: find.ancestor(
-            of: find.text('Remote'),
-            matching: find.byType(ProjectCard),
-          ),
-          matching: find.byTooltip('Project actions'),
+      await openMenu(
+        tester,
+        find.ancestor(
+          of: find.text('Remote'),
+          matching: find.byType(ProjectCard),
         ),
       );
-      await tester.pumpAndSettle();
 
       expect(find.text('Copy path'), findsOneWidget);
       expect(find.text('Open in File Explorer'), findsNothing);
@@ -532,9 +538,26 @@ void main() {
 
     testWidgets('the project menu can rescan for repositories', (tester) async {
       await pump(tester, expand: false);
-      await tester.tap(find.byTooltip('Project actions'));
-      await tester.pumpAndSettle();
+      await openMenu(tester, find.byType(ProjectCard));
       expect(find.text('Rescan for repositories'), findsOneWidget);
+    });
+
+    testWidgets('Shift+F10 opens a row menu with no pointer at all', (
+      tester,
+    ) async {
+      // The keyboard's own path to the same menu, in the panel rather than in
+      // a hosted row: hiding the overflow button until it is wanted is only
+      // honest while this works.
+      await pump(tester);
+      Focus.of(tester.element(find.text('hub').first)).requestFocus();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copy path'), findsOneWidget);
     });
   });
 

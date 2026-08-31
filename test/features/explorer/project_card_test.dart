@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/app/theme/app_theme.dart';
 import 'package:chitragupta/src/features/explorer/application/session_diff_stat.dart';
 import 'package:chitragupta/src/features/explorer/presentation/project_card.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -152,9 +153,23 @@ void main() {
       );
     });
 
-    testWidgets('the + and the menu are always reachable', (tester) async {
+    testWidgets('the + stays reachable even at the pane minimum', (
+      tester,
+    ) async {
+      // The verb the row exists for is never hidden. The overflow beside it is
+      // — a right-click and Shift+F10 already open the same menu, and a
+      // permanent button on every row was the clutter the owner reported. It
+      // comes back under the pointer.
       await pump(tester, width: 200);
       expect(find.byTooltip('New session in this project'), findsOneWidget);
+      expect(find.byTooltip('Project actions'), findsNothing);
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(() => gesture.removePointer());
+      await gesture.moveTo(tester.getCenter(find.byType(ProjectCard)));
+      await tester.pumpAndSettle();
+
       expect(find.byTooltip('Project actions'), findsOneWidget);
     });
   });
