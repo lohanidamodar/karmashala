@@ -23,11 +23,7 @@ class ToolsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TerminalAppSection(),
-        CodeEditorSection(),
-        McpBridgeSection(),
-      ],
+      children: [TerminalAppSection(), CodeEditorSection(), McpBridgeSection()],
     );
   }
 }

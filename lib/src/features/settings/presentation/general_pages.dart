@@ -84,7 +84,8 @@ class AppearancePage extends ConsumerWidget {
               ),
               SettingsSwitchRow(
                 label: 'Compact density',
-                help: 'Denser lists and controls. Turn off for a roomier '
+                help:
+                    'Denser lists and controls. Turn off for a roomier '
                     'layout.',
                 value: settings.compactDensity,
                 onChanged: controller.setCompactDensity,

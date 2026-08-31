@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
+import '../../../core/logging/diagnostics_bootstrap.dart';
+import '../../../core/logging/diagnostics_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
+import '../domain/diagnostics_settings.dart';
 import '../domain/permission_mode.dart';
 import '../domain/relay_mode.dart';
 import '../domain/settings.dart';
@@ -15,6 +18,42 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
 class SettingsController extends Notifier<Settings> {
   @override
   Settings build() => ref.watch(settingsRepositoryProvider).load();
+
+  /// Turns debug mode on or off. Raises the root logger to `ALL` while on and
+  /// puts it back to `INFO` when off; also what makes the Logs panel appear.
+  void setDebugMode(bool value) {
+    state = state.copyWith(debugMode: value);
+    _save();
+    applyDiagnostics();
+  }
+
+  void setLogVerbosity(LogVerbosity value) {
+    state = state.copyWith(logVerbosity: value);
+    _save();
+    applyDiagnostics();
+  }
+
+  void setLogToFile(bool value) {
+    state = state.copyWith(logToFile: value);
+    _save();
+    applyDiagnostics();
+  }
+
+  void setLogBufferSize(int value) {
+    state = state.copyWith(logBufferSize: value);
+    _save();
+    applyDiagnostics();
+  }
+
+  /// Pushes the persisted diagnostics preferences at the live sinks. Called on
+  /// every change, and once at bootstrap so a restart restores them.
+  void applyDiagnostics() => applyDiagnosticsSettings(
+    ref.read(diagnosticsProvider),
+    debugMode: state.debugMode,
+    fileLevel: state.logVerbosity.level,
+    logToFile: state.logToFile,
+    bufferSize: state.logBufferSize,
+  );
 
   void setThemeMode(AppThemeMode mode) {
     state = state.copyWith(themeMode: mode);
@@ -59,7 +98,10 @@ class SettingsController extends Notifier<Settings> {
   /// Sets the overall UI text scale, clamped to the supported 90%–150%.
   void setUiTextScale(double scale) {
     state = state.copyWith(
-      uiTextScale: scale.clamp(Settings.minUiTextScale, Settings.maxUiTextScale),
+      uiTextScale: scale.clamp(
+        Settings.minUiTextScale,
+        Settings.maxUiTextScale,
+      ),
     );
     _save();
   }

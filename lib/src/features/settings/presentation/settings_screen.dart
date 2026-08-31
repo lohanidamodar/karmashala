@@ -8,6 +8,7 @@ import '../../remote/presentation/remote_access_section.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
 import 'agents_pages.dart';
+import 'diagnostics_page.dart';
 import 'general_pages.dart';
 import 'settings_nav.dart';
 import 'terminal_pages.dart';
@@ -168,5 +169,6 @@ class _SectionContent extends StatelessWidget {
       children: [SshHostsSection(), KnownHostsSection()],
     ),
     SettingsSectionId.remote => const RemoteAccessSection(),
+    SettingsSectionId.diagnostics => const DiagnosticsPage(),
   };
 }

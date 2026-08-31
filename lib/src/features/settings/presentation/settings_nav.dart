@@ -75,6 +75,15 @@ enum SettingsSectionId {
     'pairing',
     'relay',
     'devices',
+  ]),
+  diagnostics('Diagnostics', AppIcons.listMagnifyingGlass, [
+    'logs',
+    'log file',
+    'debug',
+    'debug mode',
+    'verbose',
+    'troubleshoot',
+    'report',
   ]);
 
   const SettingsSectionId(this.label, this.icon, this.keywords);
