@@ -549,7 +549,11 @@ class _DesktopMenuBar extends ConsumerWidget {
             const Divider(height: 1),
             // The surfaces the panel can show, so every tool is reachable from
             // the menu bar and not only from a glyph on the rail.
-            for (final surface in SidePanelSurface.values)
+            for (final surface in SidePanelSurface.offered(
+              debugMode: ref.watch(
+                settingsControllerProvider.select((s) => s.debugMode),
+              ),
+            ))
               MenuItemButton(
                 leadingIcon: Icon(SidePanel.iconFor(surface)),
                 onPressed: () =>

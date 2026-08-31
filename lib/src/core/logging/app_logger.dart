@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:logging/logging.dart';
+
+import 'diagnostics.dart';
 
 /// Central logging abstraction for the application.
 ///
@@ -20,30 +24,23 @@ class AppLogger {
   /// Installs a single root logging handler for the whole application.
   ///
   /// Call once during bootstrap, before any logging occurs. [level] controls the
-  /// minimum severity that is emitted.
+  /// minimum severity that is emitted; [onRecord] replaces the default fan-out
+  /// (a test collecting records, and nothing else).
+  ///
+  /// Calling it again replaces the previous handler rather than adding a second
+  /// one, so a re-initialise cannot double every line.
   static void initialize({
     Level level = Level.INFO,
     void Function(LogRecord record)? onRecord,
   }) {
     Logger.root.level = level;
-    Logger.root.onRecord.listen(onRecord ?? _defaultHandler);
+    unawaited(_subscription?.cancel());
+    _subscription = Logger.root.onRecord.listen(
+      onRecord ?? Diagnostics.instance.handle,
+    );
   }
 
-  static void _defaultHandler(LogRecord record) {
-    final buffer = StringBuffer()
-      ..write('[${record.level.name}] ')
-      ..write('${record.loggerName}: ')
-      ..write(record.message);
-    if (record.error != null) {
-      buffer.write(' | error=${record.error}');
-    }
-    // ignore: avoid_print — this is the single sanctioned output sink.
-    print(buffer.toString());
-    if (record.stackTrace != null) {
-      // ignore: avoid_print
-      print(record.stackTrace);
-    }
-  }
+  static StreamSubscription<LogRecord>? _subscription;
 
   void debug(String message) => _logger.fine(message);
 

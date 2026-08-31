@@ -16,6 +16,7 @@ import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/domain/session.dart';
 import '../../../features/sessions/domain/session_launch.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
+import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
@@ -147,7 +148,9 @@ class QuickOpenSources {
         shortcut: 'Ctrl+3',
         onSelect: panel.toggle,
       ),
-      for (final surface in SidePanelSurface.values)
+      for (final surface in SidePanelSurface.offered(
+        debugMode: ref.read(settingsControllerProvider).debugMode,
+      ))
         _command(
           surface.label,
           subtitle: 'Side panel',

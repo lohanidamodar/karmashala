@@ -19,12 +19,18 @@ enum SidePanelSurface {
 
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
   /// the branch and worktree list nobody could find lives in here.
-  repository('Repository', scopedToRepository: true);
+  repository('Repository', scopedToRepository: true),
+
+  /// The app's own log tail. Hidden unless debug mode is on: it is a
+  /// diagnostic, not a tool, and a rail glyph nobody needs is a rail glyph in
+  /// the way of the seven that are used every day.
+  logs('Logs', requiresDebugMode: true);
 
   const SidePanelSurface(
     this.label, {
     this.drawsOwnHeader = false,
     this.scopedToRepository = false,
+    this.requiresDebugMode = false,
   });
 
   final String label;
@@ -40,6 +46,17 @@ enum SidePanelSurface {
   /// active terminal tab changes, so these are the surfaces that have to say
   /// which checkout they are describing.
   final bool scopedToRepository;
+
+  /// Whether the surface only exists while debug mode is on.
+  final bool requiresDebugMode;
+
+  /// The surfaces to offer — on the rail, in the View menu and in quick open —
+  /// for the current debug-mode setting. One list, so a surface cannot be
+  /// hidden from the rail and still reachable from a menu.
+  static List<SidePanelSurface> offered({required bool debugMode}) => [
+    for (final surface in values)
+      if (debugMode || !surface.requiresDebugMode) surface,
+  ];
 }
 
 /// Which side-panel surface is open, or `null` when the panel is collapsed.

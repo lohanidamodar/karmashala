@@ -12,6 +12,8 @@ import 'src/core/database/app_database.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/logging/app_logger.dart';
+import 'src/core/logging/diagnostics.dart';
+import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/process/windows_command_runner.dart';
 import 'src/core/util/clock.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
@@ -39,6 +41,13 @@ Future<void> main() async {
   final logger = AppLogger.named('bootstrap');
 
   logger.info('Starting Chitragupta.');
+  // Opening the file needs `path_provider`, which is hundreds of milliseconds
+  // into the launch — so it backfills the buffer rather than starting blank,
+  // and the launch does not wait for it.
+  // Awaited, not fired and forgotten: `AppDatabase.open()` on the next line
+  // asks `path_provider` the same question, so this costs nothing, and it means
+  // the file is open before anything interesting has had a chance to fail.
+  await attachDefaultLogFile(Diagnostics.instance);
   final database = await AppDatabase.open();
   bootstrapMetadata(database, logger: logger);
 
@@ -61,6 +70,10 @@ Future<void> main() async {
   final container = ProviderContainer(
     overrides: [databaseProvider.overrideWithValue(database)],
   );
+
+  // The persisted diagnostics preferences: debug mode's root level, the buffer
+  // bound, and whether the file is written at all.
+  container.read(settingsControllerProvider.notifier).applyDiagnostics();
 
   // First run (or if it has never completed): probe every environment for
   // installed agents once, in the background so it doesn't delay window show.

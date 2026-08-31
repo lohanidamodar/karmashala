@@ -13,6 +13,7 @@ import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../logging/app_logger.dart';
+import '../logging/diagnostics.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless.
@@ -327,6 +328,14 @@ class AppLifecycle {
     watch.stop();
     lastShutdownDuration = watch.elapsed;
     _logger.info('lifecycle: shutdown in ${watch.elapsedMilliseconds} ms.');
+    // Last, so the line above makes the file: the log sink batches, and a quit
+    // that loses its own last 400 ms is a quit whose failures are invisible.
+    await _step(
+      'log flush',
+      watch,
+      () => Diagnostics.instance.file?.flush() ?? Future<void>.value(),
+      cap: const Duration(seconds: 1),
+    );
   }
 
   /// Starts the teardowns that container disposal would otherwise fire and

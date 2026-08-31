@@ -1,4 +1,6 @@
+import '../../../core/logging/log_buffer.dart';
 import 'app_theme_mode.dart';
+import 'diagnostics_settings.dart';
 import 'permission_mode.dart';
 import 'relay_mode.dart';
 
@@ -81,6 +83,10 @@ class Settings {
     this.localRelayPort = 8787,
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
+    this.debugMode = kDefaultDebugMode,
+    this.logVerbosity = LogVerbosity.normal,
+    this.logToFile = true,
+    this.logBufferSize = kDefaultLogBufferCapacity,
   });
 
   /// The terminal font size the app shipped with — the hardcoded 13 the pane
@@ -219,6 +225,23 @@ class Settings {
   /// terminal density and UI legibility are different preferences.
   final double terminalFontSize;
 
+  /// Whether debug mode is on: the root logger drops to `ALL` and the Logs
+  /// panel appears on the side-panel rail.
+  ///
+  /// It does **not** control whether logging happens — warnings and errors are
+  /// recorded either way, because a buffer that starts filling when you open
+  /// the panel is a buffer that makes you reproduce the bug first.
+  final bool debugMode;
+
+  /// How much of the log is written to the file on disk.
+  final LogVerbosity logVerbosity;
+
+  /// Whether the rotating log file is written at all.
+  final bool logToFile;
+
+  /// How many records the in-memory tail keeps.
+  final int logBufferSize;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   bool isSessionPinned(String sessionId) =>
@@ -261,6 +284,10 @@ class Settings {
     int? localRelayPort,
     double? uiTextScale,
     double? terminalFontSize,
+    bool? debugMode,
+    LogVerbosity? logVerbosity,
+    bool? logToFile,
+    int? logBufferSize,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -304,6 +331,10 @@ class Settings {
     localRelayPort: localRelayPort ?? this.localRelayPort,
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
+    debugMode: debugMode ?? this.debugMode,
+    logVerbosity: logVerbosity ?? this.logVerbosity,
+    logToFile: logToFile ?? this.logToFile,
+    logBufferSize: logBufferSize ?? this.logBufferSize,
   );
 
   Settings withPermissions(String agentId, AgentPermissions value) =>
@@ -343,6 +374,10 @@ class Settings {
     'localRelayPort': localRelayPort,
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
+    'debugMode': debugMode,
+    'logVerbosity': logVerbosity.name,
+    'logToFile': logToFile,
+    'logBufferSize': logBufferSize,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
@@ -446,6 +481,18 @@ class Settings {
             minTerminalFontSize,
             maxTerminalFontSize,
           ),
+      debugMode: json['debugMode'] is bool
+          ? json['debugMode'] as bool
+          : kDefaultDebugMode,
+      logVerbosity: LogVerbosity.fromName(json['logVerbosity']),
+      logToFile: json['logToFile'] is bool ? json['logToFile'] as bool : true,
+      // Clamped on read for the same reason as the text scale: a hand-edited
+      // 5,000,000 would be a 40 MB array allocated at launch.
+      logBufferSize:
+          (json['logBufferSize'] is int
+                  ? json['logBufferSize'] as int
+                  : kDefaultLogBufferCapacity)
+              .clamp(kMinLogBufferCapacity, kMaxLogBufferCapacity),
     );
   }
 
@@ -479,6 +526,10 @@ class Settings {
       other.localRelayPort == localRelayPort &&
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
+      other.debugMode == debugMode &&
+      other.logVerbosity == logVerbosity &&
+      other.logToFile == logToFile &&
+      other.logBufferSize == logBufferSize &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -514,6 +565,10 @@ class Settings {
       localRelayPort,
       uiTextScale,
       terminalFontSize,
+      debugMode,
+      logVerbosity,
+      logToFile,
+      logBufferSize,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
