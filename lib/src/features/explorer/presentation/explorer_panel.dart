@@ -336,7 +336,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       );
     } else {
       body = ListView(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+        // The same gap the rows put between themselves, above the first and
+        // below the last, so the column has one rhythm from end to end.
+        padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
         children: [for (final project in projects) ..._projectNodes(project)],
       );
     }
@@ -382,7 +384,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         children: [
           if (allProjects.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+              // Inset to the row tiles' own edges: the field and the rows
+              // beneath it are one column, not two things that nearly line up.
+              padding: const EdgeInsets.fromLTRB(
+                Insets.xs,
+                Insets.sm,
+                Insets.xs,
+                Insets.xs,
+              ),
               child: TextField(
                 decoration: const InputDecoration(
                   isDense: true,

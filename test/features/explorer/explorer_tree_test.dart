@@ -561,6 +561,28 @@ void main() {
     });
   });
 
+  group('the pane reads as one column', () {
+    testWidgets('the search field is inset to the row tiles\' own edges', (
+      tester,
+    ) async {
+      await pump(tester);
+      // The tile is the outermost decorated box in a row; see
+      // `explorer_row_test.dart`.
+      final tile = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(ProjectCard),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      final field = tester.getRect(find.byType(TextField));
+
+      expect(field.left, tile.left);
+      expect(field.right, tile.right);
+    });
+  });
+
   group('at the pane\'s own minimum width', () {
     testWidgets('nothing overflows and the aggregate is dropped', (
       tester,
