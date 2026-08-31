@@ -172,8 +172,9 @@ void main() {
       // A resume reads the CLI's own store, which is real I/O: `runAsync` lets
       // it complete, and the next `pump` flushes the continuations it queued
       // back into the test's zone. Without both halves the action never ends.
-      if (!done)
+      if (!done) {
         await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      }
     }
     await tester.pumpAndSettle();
     seen.add(surface(tester));
