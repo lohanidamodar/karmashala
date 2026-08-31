@@ -1023,7 +1023,18 @@ class RemoteCompanionGateway implements CompanionGateway {
         _dialOvertaken = false;
         _link.value = CompanionLinkState.connecting;
         final client = await _dialAnyPath();
-        if (client != null && !_closed && _record != null) {
+        // A pass may adopt only the client it still OWNS. `_teardownClient`
+        // nulls `_client` the instant a pairing, a switch or an unpair picks
+        // a different desktop, and `CompanionClient.close()` cannot cancel a
+        // `connect()` that is already past the host's answer — so a dial can
+        // come back to a link that is nobody's any more. Adopting it would
+        // throw away the death that teardown raised, put the OLD host back in
+        // `_record`, bind a transport listener to nothing, declare `connected`
+        // and park on a completer nothing can ever fire: the phone reads
+        // "connected" with no client behind it, and every request fails.
+        if (client != null && !identical(_client, client)) {
+          await _closeStrayClient(client);
+        } else if (client != null && !_closed && _record != null) {
           // The window opens here: from now until the completer exists, a
           // death has nowhere to land, so it is remembered instead. Anything
           // raised while merely DIALLING is news about a link that was
@@ -1460,6 +1471,18 @@ class RemoteCompanionGateway implements CompanionGateway {
       } on Object catch (error) {
         onLog?.call('transcript recover for ${entry.key} failed: $error');
       }
+    }
+  }
+
+  /// Disposes of a client whose link was torn down while it was still
+  /// dialling. Nothing else holds it, and a socket left open at a rendezvous
+  /// keeps the relay believing this phone is still there.
+  Future<void> _closeStrayClient(CompanionClient client) async {
+    onLog?.call('a dial answered after its link was torn down; dropping it');
+    try {
+      await client.close();
+    } on Object catch (error) {
+      onLog?.call('stray client close failed: $error');
     }
   }
 
