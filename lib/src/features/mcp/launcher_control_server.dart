@@ -52,6 +52,7 @@ import '../terminal/data/system_terminal_service.dart';
 import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
+import 'attention_tools.dart';
 import 'control_server_status.dart';
 import 'handshake_file_permissions.dart';
 import 'mcp_caller_registry.dart';
@@ -793,6 +794,12 @@ class LauncherControlServer {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // What is written down, and what is waiting on somebody.
+      case final String name when AttentionControlTools.handles(name):
+        return AttentionControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // Where the work is: checkouts, and what one of them owes.
       case final String name when WorkspaceControlTools.handles(name):
         return WorkspaceControlTools(
@@ -1435,6 +1442,7 @@ class LauncherControlServer {
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
     ...workspaceControlToolSchemas,
+    ...attentionControlToolSchemas,
     ...browserToolSchemas,
     ...verificationToolSchemas,
   ];

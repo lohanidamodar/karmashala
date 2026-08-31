@@ -51,6 +51,8 @@ void main() {
       'session_answer',
       'terminal_run',
       'terminal_close',
+      'note_delete',
+      'inbox_dismiss',
       'device_stop_emulator',
       'device_tap',
       'browser_evaluate',

@@ -125,6 +125,17 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // see which argument was passed.
       'terminal_close': McpToolAnnotations(destructive: true),
 
+      // Notes and the inbox.
+      'notes_list': McpToolAnnotations.read,
+      'inbox_list': McpToolAnnotations.read,
+      'note_add': McpToolAnnotations(),
+      'note_delete': McpToolAnnotations(destructive: true),
+      'inbox_open': McpToolAnnotations(idempotent: true),
+      // An item for an event is gone for good; one for a condition that still
+      // holds is re-filed by the next poll. The annotation describes the worse
+      // of the two, because the caller cannot know which it has.
+      'inbox_dismiss': McpToolAnnotations(destructive: true, idempotent: true),
+
       // Fan-out.
       'fanout_list': McpToolAnnotations.read,
       'fanout_get': McpToolAnnotations.read,
