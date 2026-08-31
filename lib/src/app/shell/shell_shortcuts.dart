@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_state.dart';
 import 'side_panel_state.dart';
@@ -60,6 +61,23 @@ class TerminalFontSizeIntent extends Intent {
 
   /// Points to add, or 0 for "back to the default".
   final double delta;
+}
+
+/// Terminal tabs, from anywhere in the app — not only a focused pane.
+class NewTerminalTabIntent extends Intent {
+  const NewTerminalTabIntent();
+}
+
+/// Closes the focused pane, which closes its tab when it is the last one.
+class CloseTerminalTabIntent extends Intent {
+  const CloseTerminalTabIntent();
+}
+
+class StepTerminalTabIntent extends Intent {
+  const StepTerminalTabIntent.next() : forward = true;
+  const StepTerminalTabIntent.previous() : forward = false;
+
+  final bool forward;
 }
 
 /// One entry in the application's keyboard map.
@@ -284,6 +302,54 @@ const List<ShellChord> shellChords = [
   ),
   // The zoom chords every browser and editor taught. Contested (no Shift), so
   // Settings offers each one back to the shell like the rest.
+  // Tabs. Every terminal app binds these with Shift because a shell already
+  // owns the bare keys — ^W deletes a word, ^T transposes two characters. The
+  // bare pair is offered too, but the shell keeps it unless Settings says
+  // otherwise, so nobody loses a key they were using by upgrading.
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.keyT, control: true, shift: true),
+    intent: NewTerminalTabIntent(),
+    label: 'Ctrl+Shift+T',
+    does: 'New terminal tab',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.keyW, control: true, shift: true),
+    intent: CloseTerminalTabIntent(),
+    label: 'Ctrl+Shift+W',
+    does: 'Close the terminal pane, or its tab when it is the last',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.keyT, control: true),
+    intent: NewTerminalTabIntent(),
+    label: 'Ctrl+T',
+    does: 'New terminal tab',
+    shellCost: 'readline transpose-chars (^T)',
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.keyW, control: true),
+    intent: CloseTerminalTabIntent(),
+    label: 'Ctrl+W',
+    does: 'Close the terminal pane, or its tab when it is the last',
+    shellCost: 'readline delete previous word (^W)',
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.pageDown, control: true),
+    intent: StepTerminalTabIntent.next(),
+    label: 'Ctrl+PageDown',
+    does: 'Next terminal tab',
+    skipsShell: true,
+    shellCost: 'a page-down some full-screen programs read',
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.pageUp, control: true),
+    intent: StepTerminalTabIntent.previous(),
+    label: 'Ctrl+PageUp',
+    does: 'Previous terminal tab',
+    skipsShell: true,
+    shellCost: 'a page-up some full-screen programs read',
+  ),
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.equal, control: true),
     intent: TerminalFontSizeIntent.increase(),
@@ -468,6 +534,30 @@ class ShellShortcuts extends ConsumerWidget {
           ToggleFocusModeIntent: CallbackAction<ToggleFocusModeIntent>(
             onInvoke: (intent) {
               ref.read(terminalMaximizedProvider.notifier).toggle();
+              return null;
+            },
+          ),
+          NewTerminalTabIntent: CallbackAction<NewTerminalTabIntent>(
+            onInvoke: (intent) {
+              final terminal = TerminalActions(ref);
+              terminal.open(terminal.defaultProfile());
+              return null;
+            },
+          ),
+          CloseTerminalTabIntent: CallbackAction<CloseTerminalTabIntent>(
+            // The pane's verb, which closes the tab with its last pane —
+            // one implementation, whichever way the chord arrives.
+            onInvoke: (intent) {
+              TerminalActions(ref).closeFocusedPane();
+              return null;
+            },
+          ),
+          StepTerminalTabIntent: CallbackAction<StepTerminalTabIntent>(
+            onInvoke: (intent) {
+              final sessions = ref.read(
+                terminalSessionsControllerProvider.notifier,
+              );
+              intent.forward ? sessions.nextTab() : sessions.previousTab();
               return null;
             },
           ),

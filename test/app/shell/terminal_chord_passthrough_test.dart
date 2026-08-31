@@ -246,16 +246,20 @@ void main() {
     }
   });
 
-  test('Ctrl+B is the one chord given back to the shell', () {
+  test('the chords left to the shell are named, and no others', () {
     // Every chord is either claimed inside a terminal pane or deliberately
     // left to the process; there is no third state and no second list to
-    // forget to update. The one exception has to be spelled out here, so
+    // forget to update. The exceptions have to be spelled out here, so
     // moving a chord in or out of the skip-list is never silent.
     final kept = [
       for (final chord in shellChords)
         if (!chord.skipsShell) chord.label,
     ];
-    expect(kept, ['Ctrl+B']);
+    // Ctrl+B is tmux's prefix. Ctrl+T and Ctrl+W are readline's transpose and
+    // delete-word: the tab chords are offered on the bare keys too, but a
+    // shell keeps them until Settings says otherwise, so upgrading takes no
+    // key away from anyone. Ctrl+Shift+T and Ctrl+Shift+W always reach the app.
+    expect(kept, ['Ctrl+B', 'Ctrl+T', 'Ctrl+W']);
     // And the map the Shortcuts widget installs is the same list.
     expect(shellShortcutMap.length, shellChords.length);
   });
@@ -270,7 +274,33 @@ void main() {
     // `Ctrl+-` joined them in Loop 79: a terminal encodes it as ^_, which is
     // readline's undo. `Ctrl+=` and `Ctrl+0` have no control character at all,
     // so the zoom chords are not uniformly free and must not claim to be.
-    expect(costly, {'Ctrl+\\', 'Ctrl+K', 'Ctrl+P', 'Ctrl+-'});
+    expect(costly, {
+      'Ctrl+\\',
+      'Ctrl+K',
+      'Ctrl+P',
+      'Ctrl+-',
+      // The tab chords, which a shell and a full-screen program do read.
+      'Ctrl+T',
+      'Ctrl+W',
+      'Ctrl+PageUp',
+      'Ctrl+PageDown',
+    });
+  });
+
+  test('the tab chords are bound, both ways round', () {
+    // The user's report: Ctrl+Shift+T and Ctrl+Shift+W did nothing unless a
+    // terminal pane had focus, because the pane handled them itself and the
+    // app's map never knew them. Binding them here is what makes them work
+    // from the Explorer, the chat view, or anywhere else.
+    expect(shellChordLabel<NewTerminalTabIntent>(), 'Ctrl+Shift+T');
+    expect(shellChordLabel<CloseTerminalTabIntent>(), 'Ctrl+Shift+W');
+    expect(shellChordLabel<StepTerminalTabIntent>(), 'Ctrl+PageDown');
+    // Both spellings of each verb are installed, so the bare keys work too
+    // wherever a shell is not listening.
+    final labels = [for (final c in shellChords) c.label];
+    for (final label in ['Ctrl+T', 'Ctrl+W', 'Ctrl+PageUp']) {
+      expect(labels, contains(label));
+    }
   });
 
   test('the Explorer advertises the chord that survives a terminal', () {
