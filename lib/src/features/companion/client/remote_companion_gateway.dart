@@ -241,8 +241,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   int _reproveAttempt = 0;
 
   /// The plainest true sentence about why the link is down, when there is one
-  /// worth adding to the banner's own words.
-  String? _trouble;
+  /// worth adding to the banner's own words. Watched, because it changes
+  /// without the link state changing with it.
+  final _trouble = _Watched<String?>(null);
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
   /// Runs while a dropped transport is being given its chance to come back.
@@ -272,7 +273,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   String? get linkTrouble =>
-      _link.value == CompanionLinkState.connected ? null : _trouble;
+      _link.value == CompanionLinkState.connected ? null : _trouble.value;
+
+  @override
+  Stream<String?> get linkTroubleStates => _trouble.stream;
 
   @override
   Stream<CompanionLinkState> get linkStates => _link.stream;
@@ -1252,7 +1256,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       await _noteRelayOutcome(url, ok: false);
       // Keep the last thing actually learned rather than replacing a real
       // reason with silence: the next candidate's transport has no story yet.
-      _noteTrouble(trouble ?? _trouble);
+      _noteTrouble(trouble ?? _trouble.value);
       return null;
     }
   }
@@ -1447,11 +1451,13 @@ class RemoteCompanionGateway implements CompanionGateway {
       'that usually means the desktop is only reachable on its own network.';
 
   void _noteTrouble(String? trouble) {
-    if (_trouble == trouble) return;
-    _trouble = trouble;
-    // The banner reads this when the link state changes, which it is about
-    // to; nudging the same value through keeps the two in step.
-    _link.value = _link.value;
+    if (_trouble.value == trouble) return;
+    // Said on its own stream, because it is learned on its own. A dial that
+    // failed while the phone was already `connecting` changes no link state,
+    // and re-emitting an unchanged one rebuilds nothing — so the first pass
+    // after launch used to show a bare "Connecting to your desktop…" with the
+    // reason already sitting in this field.
+    _trouble.value = trouble;
   }
 
   /// A transport that dropped redials its OWN endpoint forever, and that

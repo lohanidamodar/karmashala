@@ -15,6 +15,15 @@ final companionLinkProvider = StreamProvider<CompanionLinkState>(
   (ref) => ref.watch(companionGatewayProvider).linkStates,
 );
 
+/// Why the link is not up, when the gateway has learned anything more exact
+/// than "connecting". Its own provider on purpose: the reason is learned by a
+/// dial that failed while the phone was already `connecting`, so there is no
+/// link-state change under it, and a surface that only re-reads the getter on
+/// rebuild shows a bare "Connecting…" for the whole first pass.
+final companionLinkTroubleProvider = StreamProvider<String?>(
+  (ref) => ref.watch(companionGatewayProvider).linkTroubleStates,
+);
+
 /// Every desktop this phone has paired with, one of them active.
 final companionConnectionsProvider =
     StreamProvider<List<CompanionConnection>>(

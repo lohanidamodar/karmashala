@@ -372,14 +372,22 @@ abstract interface class CompanionGateway {
   CompanionLinkState get link;
   Stream<CompanionLinkState> get linkStates;
 
-  /// Which path carries the link — [CompanionLinkPath.lan] at home,
-  /// [CompanionLinkPath.relay] elsewhere — or null while not connected.
   /// One plain sentence about why the link is not up, when the gateway knows
   /// something the banner's own words do not say — "the relay hung up because
   /// nobody else was there" is a different fact from "the network failed".
   /// Null while connected, and whenever there is nothing to add.
   String? get linkTrouble;
 
+  /// [linkTrouble] as it changes, seeded on listen like the rest.
+  ///
+  /// A surface that re-reads the getter only when the link STATE changes
+  /// never shows the reason on the first pass: the reason is learned by a
+  /// dial that failed while the phone was already `connecting`, so there is
+  /// no state change behind it to rebuild on.
+  Stream<String?> get linkTroubleStates;
+
+  /// Which path carries the link — [CompanionLinkPath.lan] at home,
+  /// [CompanionLinkPath.relay] elsewhere — or null while not connected.
   CompanionLinkPath? get linkPath;
   Stream<CompanionLinkPath?> get linkPathStates;
 

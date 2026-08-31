@@ -25,7 +25,10 @@ class LinkBanner extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final trouble = ref.read(companionGatewayProvider).linkTrouble;
+    // Watched, not read: the reason usually arrives with no link-state change
+    // behind it, and a `ref.read` here only ever refreshes on somebody else's
+    // rebuild — which on the first pass after launch never comes.
+    final trouble = ref.watch(companionLinkTroubleProvider).asData?.value;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);

@@ -103,9 +103,16 @@ void main() {
     final gateway = FakeCompanionGateway.paired(sessions: [summary('s1')]);
     await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
 
-    gateway
-      ..linkTrouble = 'Your desktop is not answering on this relay.'
-      ..setLink(CompanionLinkState.connecting);
+    // The order is the real one, and it is the whole point: the phone starts
+    // dialling FIRST and learns why only when a candidate fails — with the
+    // link already `connecting`, so nothing about the link state changes when
+    // the reason arrives. Setting the reason first would pass against a
+    // banner that can only ever show it by accident.
+    gateway.setLink(CompanionLinkState.connecting);
+    await tester.pump();
+    expect(find.textContaining('Connecting to your desktop'), findsOneWidget);
+
+    gateway.linkTrouble = 'Your desktop is not answering on this relay.';
     await tester.pump();
 
     expect(find.textContaining('Connecting to your desktop'), findsOneWidget);
