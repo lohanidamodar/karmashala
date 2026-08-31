@@ -34,6 +34,7 @@ import '../terminal/fake_instance.dart';
   required String agentId,
   required AgentStatusReport report,
   bool live = true,
+  bool hostedOnTerminal = false,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -81,8 +82,13 @@ import '../terminal/fake_instance.dart';
     container: container,
     app: UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
-        home: Scaffold(body: ApprovalRequestCard(sessionId: 's1')),
+      child: MaterialApp(
+        home: Scaffold(
+          body: ApprovalRequestCard(
+            sessionId: 's1',
+            hostedOnTerminal: hostedOnTerminal,
+          ),
+        ),
       ),
     ),
   );
@@ -243,5 +249,34 @@ void main() {
 
     expect(find.textContaining('no live terminal here'), findsOneWidget);
     expect(find.byType(FilledButton), findsNothing);
+  });
+
+  testWidgets('hosted on the terminal, it stops pointing at the terminal', (
+    tester,
+  ) async {
+    // Loop 85 hosts this same card under the terminal as well as in the
+    // conversation. Everything it can only say from the conversation — "open
+    // the terminal view", and the button that does it — would send the user to
+    // where they already are.
+    final h = harness(
+      agentId: AgentIds.codex,
+      report: report(agentId: AgentIds.codex),
+      hostedOnTerminal: true,
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextButton, 'Terminal view'), findsNothing);
+    expect(
+      find.textContaining('Read the prompt in the terminal above'),
+      findsOneWidget,
+    );
+    // Codex names no way to decline, and the refusal route is the terminal it
+    // is already sitting under.
+    expect(find.textContaining('type into the terminal above'), findsOneWidget);
+    // What it does offer is unchanged: the answer the agent itself named.
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
   });
 }

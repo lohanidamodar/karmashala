@@ -6,11 +6,15 @@ import '../theme/design_tokens.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/detail/presentation/workbench_session_view.dart';
+import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/sessions/presentation/agent_status_badge.dart';
+import '../../features/sessions/presentation/approval_request_card.dart';
+import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
+import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 
@@ -27,6 +31,14 @@ import '../../features/terminal/presentation/terminal_panel.dart';
 /// switch reattaches and focuses rather than starting anything. Which surface is
 /// showing is [terminalVisibleProvider]: `true` is the terminal, `false` is the
 /// conversation. Nothing else needed a new provider.
+///
+/// **The terminal is the one you land on.** Until Loop 85 selecting a session
+/// switched the workbench to its *chat*, which made the secondary view the
+/// default one and left every session action (handoff, fork, the delivery
+/// lifecycle, an approval that is blocking the agent) reachable only from
+/// there. Now a selection opens the session's pane, and those controls are
+/// composed around it from the same widgets the conversation uses — see
+/// [_TerminalSurface]. Chat is one labelled tap, or `` Ctrl+` ``, away.
 class WorkbenchView extends ConsumerStatefulWidget {
   const WorkbenchView({super.key});
 
@@ -35,7 +47,27 @@ class WorkbenchView extends ConsumerStatefulWidget {
 }
 
 class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
-  void _showSession() => ref.read(terminalVisibleProvider.notifier).set(false);
+  @override
+  void initState() {
+    super.initState();
+    // A session can already be selected when the workbench mounts — the shell
+    // rebuilding around it, or a selection made by something that ran first.
+    // The listener in `build` only fires on a *change*, so without this the
+    // one case the whole loop is about would be the case that lands on chat.
+    final selected = ref.read(selectedSessionIdProvider);
+    final active = ref.read(activePaneSessionIdProvider);
+    if (selected == null && active == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // A restored workspace can put an agent pane on screen before anything is
+      // selected; the side panel should describe that session, not the row the
+      // Explorer happens to highlight first.
+      if (active != null) ref.read(sessionContextProvider).follow(active);
+      if (selected != null) _openSession(selected);
+    });
+  }
+
+  void _showChat() => ref.read(terminalVisibleProvider.notifier).set(false);
 
   /// Reveals the pane the selected session is already running in. Starts and
   /// stops nothing: a detached pane comes back as a tab, one already in a tab is
@@ -51,17 +83,43 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.read(terminalVisibleProvider.notifier).set(true);
   }
 
+  /// Opens [sessionId] on the surface a session *is*: its terminal.
+  ///
+  /// Falls back to the conversation only when there is genuinely no pane to
+  /// show — an imported CLI session, one opened in an external terminal, or one
+  /// whose pane the user has ended. Landing on an empty terminal, or on some
+  /// other session's tab, would be worse than the secondary view.
+  void _openSession(String sessionId) {
+    // `sessionTerminalPane` is the one answer to "has it got a terminal", and
+    // the conversation's empty state reads it too, so the fallback and what the
+    // fallback then says cannot contradict each other.
+    final paneId = sessionTerminalPane(ref, sessionId);
+    if (paneId == null) {
+      _showChat();
+    } else {
+      _showTerminalFor(paneId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Picking a session in the Explorer is a request to read it, so the
-    // workbench comes back to the conversation. Kept as a listener rather than
-    // a build-time branch so the user can still switch to the terminal and stay
-    // there.
+    // Picking a session in the Explorer is a request to *work in* it, and the
+    // session is its terminal. Kept as a listener rather than a build-time
+    // branch so the user can switch to the conversation and stay there.
     ref.listen(selectedSessionIdProvider, (_, next) {
-      if (next != null) _showSession();
+      if (next != null) _openSession(next);
     });
     ref.listen(selectedImportedSessionIdProvider, (_, next) {
-      if (next != null) _showSession();
+      // An imported CLI session has no pane of ours; the transcript we read out
+      // of the CLI's own store is the only surface it has.
+      if (next != null) _showChat();
+    });
+    // The side panel describes the session you are in. Driven by the pane on
+    // screen rather than by the selection, so activating another terminal tab
+    // moves the changes, worktree and GitHub surfaces with it; a tab with no
+    // session writes nothing and leaves the Explorer's choice alone.
+    ref.listen(activePaneSessionIdProvider, (_, next) {
+      if (next != null) ref.read(sessionContextProvider).follow(next);
     });
 
     final scheme = Theme.of(context).colorScheme;
@@ -78,7 +136,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
           session: session,
           onTerminal: onTerminal,
           terminals: terminals,
-          onShowSession: _showSession,
+          onShowSession: _showChat,
           onShowTerminal: _showTerminalFor,
         ),
         const Divider(height: 1),
@@ -90,11 +148,11 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
             // and — the Loop 26 property — the hidden one paints nothing. With
             // one surface there is nothing to keep alive, so it is not paid for.
             child: session == null
-                ? const TerminalPaneStack()
+                ? const _TerminalSurface()
                 : IndexedStack(
                     index: onTerminal ? 0 : 1,
                     children: const [
-                      TerminalPaneStack(),
+                      _TerminalSurface(),
                       WorkbenchSessionView(),
                     ],
                   ),
@@ -125,7 +183,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     return _WorkbenchSession(
       id: sessionId,
       title: record?.title ?? 'Session',
-      paneId: record?.paneId,
+      paneId: sessionTerminalPane(ref, sessionId),
       native: true,
     );
   }
@@ -142,11 +200,65 @@ class _WorkbenchSession {
   final String id;
   final String title;
 
-  /// The pane this session runs in, when it runs in one of ours. Null for an
-  /// imported CLI session or one opened in an external terminal — those have a
+  /// The pane this session can be *shown* in — it runs in one of ours and that
+  /// pane is still there. Null for an imported CLI session, one opened in an
+  /// external terminal, and one whose pane has been ended: those have a
   /// conversation to read but no terminal of ours to switch to.
   final String? paneId;
   final bool native;
+}
+
+/// The terminal rendering of a session: the panes, and the controls that belong
+/// to whichever session is running in the pane on screen.
+///
+/// The controls are the chat view's own widgets, not lookalikes — one
+/// [ApprovalRequestCard] and one [DeliveryStrip] exist in the app, so the two
+/// views cannot offer different answers or different next steps. They sit
+/// *below* the panes because that is where the thing they respond to is: an
+/// agent's prompt is drawn at the bottom of its terminal, so the buttons that
+/// answer it are the next thing under it rather than a header the eye has to
+/// travel back up to.
+class _TerminalSurface extends StatelessWidget {
+  const _TerminalSurface();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: TerminalPaneStack()),
+        _PaneSessionDock(),
+      ],
+    );
+  }
+}
+
+/// The session controls under the terminal, for the focused pane's session.
+///
+/// Every part of it is conditional and each decides for itself, using the rule
+/// it already had: the approval card draws nothing unless that session is
+/// blocked on a prompt, and the delivery strip nothing unless it has a stage,
+/// an action or a handoff to offer. A shell tab has no session at all and gets
+/// no dock. Nothing here reserves height for something it might later say.
+class _PaneSessionDock extends ConsumerWidget {
+  const _PaneSessionDock();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionId = ref.watch(activePaneSessionIdProvider);
+    if (sessionId == null) return const SizedBox.shrink();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Above the delivery row for the same reason it is above it in the
+        // conversation: it is the thing blocking the session, and nothing else
+        // offered here will be read until the agent's prompt is answered.
+        ApprovalRequestCard(sessionId: sessionId, hostedOnTerminal: true),
+        DeliveryStrip(sessionId: sessionId),
+      ],
+    );
+  }
 }
 
 class _TabStrip extends ConsumerWidget {
@@ -234,7 +346,7 @@ class _TabStrip extends ConsumerWidget {
           // was readable on one view and invisible on the other; this is the
           // same widget reading the same `effectivePermissionFor`, so the two
           // views cannot disagree.
-          if (onTerminal) _PanePermissionChip(terminals: terminals),
+          if (onTerminal) const _PanePermissionChip(),
           if (session?.paneId != null)
             _ViewToggle(
               onTerminal: onTerminal,
@@ -252,34 +364,28 @@ class _TabStrip extends ConsumerWidget {
 
 /// The permission chip for the agent pane the terminal view is showing.
 ///
-/// Keyed off the *pane on screen*, not off the Explorer's selection: switching
-/// terminal tabs changes which agent you are looking at, and a chip that
-/// followed the tree selection would name a different session than the one
-/// under it. A shell tab has no session row pointing at it and draws nothing.
+/// Follows the focused pane rather than the tree, for the reason given on
+/// [activePaneSessionIdProvider]. A shell tab draws nothing.
 class _PanePermissionChip extends ConsumerWidget {
-  const _PanePermissionChip({required this.terminals});
-
-  final TerminalSessionsState terminals;
+  const _PanePermissionChip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final paneId = terminals.activeTab?.focusedPaneId;
-    if (paneId == null) return const SizedBox.shrink();
-    // Adopting a pane, or launching into one, rewrites `paneId` on the row.
-    ref.watch(sessionsRevisionProvider);
-    for (final record in ref.read(sessionDaoProvider).getAll()) {
-      if (record.paneId != paneId) continue;
-      return Padding(
-        padding: const EdgeInsets.only(right: Insets.sm),
-        child: PermissionModeChip(sessionId: record.id),
-      );
-    }
-    return const SizedBox.shrink();
+    final sessionId = ref.watch(activePaneSessionIdProvider);
+    if (sessionId == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: Insets.sm),
+      child: PermissionModeChip(sessionId: sessionId),
+    );
   }
 }
 
 /// The two renderings of one session. Not a navigation control: both sides show
 /// the same record, the same PTY and the same lifecycle.
+///
+/// Labelled in words as well as icons. The terminal is where a session opens
+/// now, so the way back to its conversation cannot be a chord and a hover — it
+/// has to be a thing on the strip that says what it is.
 class _ViewToggle extends StatelessWidget {
   const _ViewToggle({
     required this.onTerminal,
@@ -293,8 +399,16 @@ class _ViewToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    Widget half(IconData icon, String tip, bool selected, VoidCallback onTap) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    Widget half(
+      IconData icon,
+      String label,
+      String tip,
+      bool selected,
+      VoidCallback onTap,
+    ) {
+      final colour = selected ? scheme.primary : scheme.onSurfaceVariant;
       return Tooltip(
         message: tip,
         child: Semantics(
@@ -304,15 +418,21 @@ class _ViewToggle extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Container(
-              width: 26,
               height: 22,
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
               color: selected
                   ? scheme.primary.withValues(alpha: 0.14)
                   : Colors.transparent,
-              child: Icon(
-                icon,
-                size: Chrome.iconSmall,
-                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: Chrome.iconSmall, color: colour),
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    label,
+                    style: theme.textTheme.labelSmall?.copyWith(color: colour),
+                  ),
+                ],
               ),
             ),
           ),
@@ -332,12 +452,19 @@ class _ViewToggle extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              half(AppIcons.chatCircle, 'Chat view', !onTerminal, onChat),
               half(
                 AppIcons.terminal,
+                'Terminal',
                 'Terminal view',
                 onTerminal,
                 onTerminalView,
+              ),
+              half(
+                AppIcons.chatCircle,
+                'Chat',
+                'Chat view',
+                !onTerminal,
+                onChat,
               ),
             ],
           ),

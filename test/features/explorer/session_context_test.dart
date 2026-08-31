@@ -1,0 +1,120 @@
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/explorer/application/session_context.dart';
+import 'package:chitragupta/src/features/git/application/changes_providers.dart';
+import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
+import 'package:chitragupta/src/features/projects/data/project_dao.dart';
+import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../support/fixtures.dart';
+import '../terminal/fake_instance.dart';
+
+/// Which checkout a session's work belongs to, and what follows it.
+///
+/// The bug this answers: the side panel described whatever row was last clicked
+/// in the Explorer, so a user typing into an agent that runs three folders down
+/// a hub project was shown the hub's diff, branch and forge links.
+void main() {
+  late AppDatabase db;
+  late ProviderContainer container;
+
+  /// A hub project holding two checkouts: the hub itself, and a clone nested
+  /// inside it — the shape that made the reported bug visible.
+  const hub = r'C:\src\demo';
+  const nested = r'C:\src\demo\projects\app\app';
+
+  setUp(() {
+    db = AppDatabase.memory();
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    ProjectDao(db).insert(project(path: hub));
+    RepositoryDao(db)
+      ..insert(repository(id: 'hub', name: 'demo', path: hub))
+      ..insert(repository(id: 'nested', name: 'app', path: nested));
+    AgentInstallationDao(db).insert(agentInstallation());
+    container = ProviderContainer(
+      overrides: fakeTerminalOverrides(database: db),
+    );
+    addTearDown(container.dispose);
+  });
+  tearDown(() => db.close());
+
+  SessionContext context() => container.read(sessionContextProvider);
+
+  test('a session resolves to the deepest checkout that contains it', () {
+    // The row says "hub" — that is the repository it was created against — but
+    // the agent is working in the clone underneath. The deeper checkout is the
+    // one whose diff, branch and remote the user means.
+    SessionDao(db).insert(
+      session(
+        repositoryId: 'hub',
+        useWorktree: true,
+        worktree: const EnvironmentPath(environmentId: 'windows', path: nested),
+      ),
+    );
+
+    expect(context().follow('s1')?.id, 'nested');
+    expect(container.read(selectedRepositoryIdProvider), 'nested');
+    // And the project above it, or the tree would still be pointing elsewhere.
+    expect(container.read(selectedProjectIdProvider), 'p1');
+  });
+
+  test('a session no checkout contains keeps its own repository', () {
+    // A different environment: paths are never compared across two, so nothing
+    // contains this and the row's own repository is the honest answer.
+    SessionDao(db).insert(
+      session(
+        repositoryId: 'nested',
+        useWorktree: true,
+        worktree: const EnvironmentPath(
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/work',
+        ),
+      ),
+    );
+
+    expect(context().follow('s1')?.id, 'nested');
+  });
+
+  test('a session with no worktree resolves through its repository', () {
+    SessionDao(db).insert(session(repositoryId: 'nested'));
+
+    expect(context().follow('s1')?.id, 'nested');
+  });
+
+  test('following a session that does not exist changes nothing', () {
+    container.read(selectedRepositoryIdProvider.notifier).select('hub');
+
+    expect(context().follow('gone'), isNull);
+    expect(container.read(selectedRepositoryIdProvider), 'hub');
+  });
+
+  test('the active session is the one in the pane on screen', () {
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    terminals.openTab(TerminalProfile.powerShell);
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .layout
+        .panes
+        .single;
+    SessionDao(db)
+      ..insert(session(repositoryId: 'nested'))
+      ..updatePaneId('s1', paneId);
+
+    expect(container.read(activePaneSessionIdProvider), 's1');
+
+    // A plain shell tab is not a session, and answering null is what leaves the
+    // Explorer's own selection in charge.
+    terminals.openTab(TerminalProfile.powerShell);
+    expect(container.read(activePaneSessionIdProvider), isNull);
+  });
+}

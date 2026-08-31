@@ -32,9 +32,20 @@ import '../application/session_status_providers.dart';
 /// no way to decline, so Codex gets no Deny button — not an Esc we assumed
 /// would work.
 class ApprovalRequestCard extends ConsumerWidget {
-  const ApprovalRequestCard({required this.sessionId, super.key});
+  const ApprovalRequestCard({
+    required this.sessionId,
+    this.hostedOnTerminal = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// Whether the card is drawn under the session's terminal rather than in its
+  /// conversation (Loop 85). One parameter, not a second widget: it only moves
+  /// where the card points. On the terminal the prompt it is talking about is
+  /// the thing directly above it, so "open the terminal view" would send the
+  /// user to where they already are, and the button that does it is dropped.
+  final bool hostedOnTerminal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,7 +69,11 @@ class ApprovalRequestCard extends ConsumerWidget {
         ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      // Clear of the terminal's last row when it sits under one; flush with the
+      // composer stack when it sits in the conversation.
+      margin: hostedOnTerminal
+          ? const EdgeInsets.fromLTRB(8, 6, 8, 6)
+          : const EdgeInsets.fromLTRB(8, 0, 8, 6),
       padding: const EdgeInsets.all(Insets.sm),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
@@ -82,13 +97,18 @@ class ApprovalRequestCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: Insets.xs),
-          _Evidence(report: report, agentName: agentName),
+          _Evidence(
+            report: report,
+            agentName: agentName,
+            hostedOnTerminal: hostedOnTerminal,
+          ),
           const SizedBox(height: Insets.sm),
           _Answers(
             sessionId: sessionId,
             rules: rules,
             agentName: agentName,
             canAnswer: canAnswer,
+            hostedOnTerminal: hostedOnTerminal,
           ),
         ],
       ),
@@ -98,10 +118,15 @@ class ApprovalRequestCard extends ConsumerWidget {
 
 /// What the agent said, quoted, or an admission that we do not know.
 class _Evidence extends StatelessWidget {
-  const _Evidence({required this.report, required this.agentName});
+  const _Evidence({
+    required this.report,
+    required this.agentName,
+    required this.hostedOnTerminal,
+  });
 
   final AgentStatusReport report;
   final String agentName;
+  final bool hostedOnTerminal;
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +139,7 @@ class _Evidence extends StatelessWidget {
       // "needs your input in the terminal" is the complete truth here.
       return Text(
         'We can tell $agentName is asking for something, but not what. '
-        'Open the terminal view to read the prompt.',
+        '${hostedOnTerminal ? 'Read the prompt in the terminal above.' : 'Open the terminal view to read the prompt.'}',
         style: theme.textTheme.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant,
         ),
@@ -165,12 +190,14 @@ class _Answers extends ConsumerWidget {
     required this.rules,
     required this.agentName,
     required this.canAnswer,
+    required this.hostedOnTerminal,
   });
 
   final String sessionId;
   final AgentApprovalRules rules;
   final String agentName;
   final bool canAnswer;
+  final bool hostedOnTerminal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -204,11 +231,12 @@ class _Answers extends ConsumerWidget {
                 onPressed: () => _press(context, ref, rules.approve!),
                 child: Text(rules.approve!.label),
               ),
-            TextButton.icon(
-              onPressed: () => _openTerminal(ref),
-              icon: const Icon(AppIcons.terminal, size: 13),
-              label: const Text('Terminal view'),
-            ),
+            if (!hostedOnTerminal)
+              TextButton.icon(
+                onPressed: () => _openTerminal(ref),
+                icon: const Icon(AppIcons.terminal, size: 13),
+                label: const Text('Terminal view'),
+              ),
           ],
         ),
         const SizedBox(height: 2),
@@ -226,13 +254,13 @@ class _Answers extends ConsumerWidget {
         if (rules.isEmpty)
           Text(
             '$agentName has not told us which keys answer its prompts, so '
-            'answer it in the terminal.',
+            'answer it ${hostedOnTerminal ? 'in the terminal above' : 'in the terminal'}.',
             style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
           )
         else if (rules.deny == null)
           Text(
-            "$agentName's prompt names no way to decline. To refuse, use the "
-            'terminal view.',
+            "$agentName's prompt names no way to decline. To refuse, "
+            '${hostedOnTerminal ? 'type into the terminal above.' : 'use the terminal view.'}',
             style: theme.textTheme.labelSmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),

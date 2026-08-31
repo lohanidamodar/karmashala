@@ -10,18 +10,22 @@ enum SidePanelSurface {
   /// First on the rail because it is the thing you check first: everything
   /// pending, in one list, whichever pane owns the thing that is waiting.
   inbox('Inbox', drawsOwnHeader: true),
-  changes('Changes', drawsOwnHeader: true),
-  github('GitHub', drawsOwnHeader: true),
-  files('Files', drawsOwnHeader: true),
+  changes('Changes', drawsOwnHeader: true, scopedToRepository: true),
+  github('GitHub', drawsOwnHeader: true, scopedToRepository: true),
+  files('Files', drawsOwnHeader: true, scopedToRepository: true),
   device('Device'),
   browser('Browser'),
   verification('Verification'),
 
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
   /// the branch and worktree list nobody could find lives in here.
-  repository('Repository');
+  repository('Repository', scopedToRepository: true);
 
-  const SidePanelSurface(this.label, {this.drawsOwnHeader = false});
+  const SidePanelSurface(
+    this.label, {
+    this.drawsOwnHeader = false,
+    this.scopedToRepository = false,
+  });
 
   final String label;
 
@@ -29,6 +33,13 @@ enum SidePanelSurface {
   /// own actions in the same row, and stacking the panel's header on top of
   /// that was two rows of chrome saying one word.
   final bool drawsOwnHeader;
+
+  /// Whether the surface describes **one checkout** — the diff, the branch and
+  /// worktree list, the forge links, the file tree. All four read the same
+  /// selection, and since Loop 85 that selection moves on its own when the
+  /// active terminal tab changes, so these are the surfaces that have to say
+  /// which checkout they are describing.
+  final bool scopedToRepository;
 }
 
 /// Which side-panel surface is open, or `null` when the panel is collapsed.
