@@ -34,6 +34,9 @@ typedef MigrationStep = void Function(Database db);
 /// * **v19** — Loop 80: which relay each paired device was paired through
 ///   (`paired_devices.relay_url`), so the host can serve local-relay and
 ///   hosted-relay devices side by side.
+/// * **v20** — G3 step 1: who produced a verdict — the session behind a
+///   `verification_runs` row and behind a `fanout_candidates` verdict — so a
+///   self-graded pass can be told from an independently checked one.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -54,7 +57,39 @@ final Map<int, MigrationStep> schemaMigrations = {
   17: _migrateToV17,
   18: _migrateToV18,
   19: _migrateToV19,
+  20: _migrateToV20,
 };
+
+void _migrateToV20(Database db) {
+  // Who produced the verdict (G3 step 1).
+  //
+  // `verification_runs.session_id` already says whose *work* a run is about.
+  // Nothing said who graded it, and in practice the agent calling
+  // `verification_start`/`verification_finish` is the agent that wrote the
+  // code — a self-graded exam with a very good transcript. Recording the
+  // producer is what lets a surface derive `producer == subject` and say so.
+  //
+  // Two columns rather than one shared table: fan-out stores a *copy* of the
+  // verdict precisely so an old comparison still reads after the run behind it
+  // is pruned, and a copied verdict that loses its attribution on the way is
+  // the thing this migration exists to prevent.
+  db.execute(
+    'ALTER TABLE verification_runs ADD COLUMN produced_by_session_id TEXT;',
+  );
+  db.execute(
+    'ALTER TABLE fanout_candidates '
+    'ADD COLUMN verdict_producer_session_id TEXT;',
+  );
+
+  // Deliberately **not** backfilled, unlike v16's `parent_link_kind`.
+  //
+  // There the backfill was a fact: one writer, one possible value. Here there
+  // is no fact to recover. Copying `session_id` across would assert that every
+  // historical verdict was self-reported, and leaving it to be read as
+  // independent would assert the opposite; both invent a producer nobody
+  // recorded. Null means "not recorded", and the domain keeps that as its own
+  // third state rather than collapsing it into either neighbour.
+}
 
 void _migrateToV19(Database db) {
   // Which relay this device's frames travel through (Loop 80): the literal

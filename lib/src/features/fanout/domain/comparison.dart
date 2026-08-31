@@ -1,4 +1,5 @@
 import '../../environments/domain/environment_path.dart';
+import '../../verification/domain/verdict_attribution.dart';
 
 /// What happened to a comparison in the end.
 enum ComparisonOutcome {
@@ -93,7 +94,12 @@ class CandidateDiffStat {
 /// and a human label, never the run itself, so the two features stay separable
 /// and an old comparison keeps its verdict after the run is pruned.
 class CandidateEvidence {
-  const CandidateEvidence({required this.verdict, this.label, this.runId});
+  const CandidateEvidence({
+    required this.verdict,
+    this.label,
+    this.runId,
+    this.producerSessionId,
+  });
 
   final EvidenceVerdict verdict;
 
@@ -103,15 +109,33 @@ class CandidateEvidence {
   /// The verification run this came from, when one is known.
   final String? runId;
 
+  /// The session that produced the verdict, or null when nobody recorded one.
+  ///
+  /// Copied alongside the verdict for the same reason the verdict itself is
+  /// copied: the run behind it can be pruned, and a verdict that outlives its
+  /// attribution is exactly the self-graded pass this records against.
+  final String? producerSessionId;
+
+  /// Whether the candidate's own session produced this verdict.
+  ///
+  /// Takes the subject rather than storing it, because the candidate already
+  /// holds it — see [ComparisonCandidate.evidenceAttribution].
+  VerdictAttribution attributionFor(String? subjectSessionId) =>
+      VerdictAttribution.of(
+        producerSessionId: producerSessionId,
+        subjectSessionId: subjectSessionId,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is CandidateEvidence &&
       other.verdict == verdict &&
       other.label == label &&
-      other.runId == runId;
+      other.runId == runId &&
+      other.producerSessionId == producerSessionId;
 
   @override
-  int get hashCode => Object.hash(verdict, label, runId);
+  int get hashCode => Object.hash(verdict, label, runId, producerSessionId);
 
   @override
   String toString() => 'CandidateEvidence(${verdict.name}, $label)';
@@ -173,6 +197,10 @@ class ComparisonCandidate {
   final String? notes;
 
   bool get started => launch == CandidateLaunchState.started;
+
+  /// Who graded this candidate: itself, another session, or nobody recorded.
+  VerdictAttribution get evidenceAttribution =>
+      evidence?.attributionFor(sessionId) ?? VerdictAttribution.notRecorded;
 
   /// Whether there is still a directory to diff, merge or open.
   bool get hasLiveWorktree => worktree != null && !worktreeRemoved;

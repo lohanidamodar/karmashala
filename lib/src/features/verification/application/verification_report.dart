@@ -51,6 +51,12 @@ String renderVerificationReport(
       '(`${run.sessionId}`) |',
     );
   }
+  // Who graded it, on the same table as what was graded: a report that says
+  // PASS without saying who decided is the self-graded exam G3 names.
+  out.writeln(
+    '| Verifier | ${run.attribution.label}'
+    '${run.producedBySessionId == null ? '' : ' (`${run.producedBySessionId}`)'} |',
+  );
   out
     ..writeln('| Started | ${run.startedAt.toIso8601String()} |')
     ..writeln(

@@ -45,6 +45,7 @@ final candidateEvidenceProvider = Provider<CandidateEvidenceLookup>((ref) {
         },
         label: reason == null || reason.isEmpty ? run.title : reason,
         runId: run.id,
+        producerSessionId: run.producedBySessionId,
       );
     }
     return null;

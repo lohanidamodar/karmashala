@@ -48,8 +48,10 @@ class ComparisonDao {
       '(id, comparison_id, position, session_id, installation_id, agent_id, '
       'worktree_environment_id, worktree_path, branch, launch, failure, '
       'files_changed, insertions, deletions, commits, diff_captured_at, '
-      'worktree_removed, verdict, verdict_label, verdict_run_id, notes) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'worktree_removed, verdict, verdict_label, verdict_run_id, '
+      'verdict_producer_session_id, notes) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '
+      '?);',
       [
         candidate.id,
         candidate.comparisonId,
@@ -71,6 +73,7 @@ class ComparisonDao {
         candidate.evidence?.verdict.name,
         candidate.evidence?.label,
         candidate.evidence?.runId,
+        candidate.evidence?.producerSessionId,
         candidate.notes,
       ],
     );
@@ -104,8 +107,14 @@ class ComparisonDao {
   void updateEvidence(String candidateId, CandidateEvidence? evidence) {
     _db.execute(
       'UPDATE fanout_candidates SET verdict = ?, verdict_label = ?, '
-      'verdict_run_id = ? WHERE id = ?;',
-      [evidence?.verdict.name, evidence?.label, evidence?.runId, candidateId],
+      'verdict_run_id = ?, verdict_producer_session_id = ? WHERE id = ?;',
+      [
+        evidence?.verdict.name,
+        evidence?.label,
+        evidence?.runId,
+        evidence?.producerSessionId,
+        candidateId,
+      ],
     );
   }
 
@@ -265,6 +274,8 @@ class ComparisonDao {
               ),
               label: row['verdict_label'] as String?,
               runId: row['verdict_run_id'] as String?,
+              producerSessionId:
+                  row['verdict_producer_session_id'] as String?,
             ),
       notes: row['notes'] as String?,
     );

@@ -1,6 +1,8 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
+import 'package:chitragupta/src/features/fanout/data/comparison_dao.dart';
+import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_list.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_view.dart';
 import 'package:flutter/material.dart';
@@ -59,8 +61,54 @@ void main() {
       findsOneWidget,
     );
 
-    // The verdict sits beside the diff stat.
+    // The verdict sits beside the diff stat, and says who produced it —
+    // here nobody did, which reads as its own answer.
     expect(find.text('12 tests, 0 failed'), findsOneWidget);
+    expect(find.text('unattributed'), findsOneWidget);
+  });
+
+  /// Rewrites `cand-win`'s verdict so only the producer differs, and renders.
+  Future<void> pumpWithProducer(
+    WidgetTester tester,
+    AppDatabase db,
+    String? producerSessionId,
+  ) async {
+    ComparisonDao(db).updateEvidence(
+      'cand-win',
+      CandidateEvidence(
+        verdict: EvidenceVerdict.passed,
+        label: '12 tests, 0 failed',
+        producerSessionId: producerSessionId,
+      ),
+    );
+    await pump(
+      tester,
+      db,
+      ComparisonView(comparisonId: 'cmp-1', onBack: () {}),
+    );
+  }
+
+  testWidgets('a candidate that graded its own work is labelled self', (
+    tester,
+  ) async {
+    final db = seedDatabase();
+    addTearDown(db.close);
+    // s-win is cand-win's own session.
+    await pumpWithProducer(tester, db, 's-win');
+
+    expect(find.text('self'), findsOneWidget);
+    expect(find.text('independent'), findsNothing);
+  });
+
+  testWidgets('a verdict from another session is labelled independent', (
+    tester,
+  ) async {
+    final db = seedDatabase();
+    addTearDown(db.close);
+    await pumpWithProducer(tester, db, 's-lost');
+
+    expect(find.text('independent'), findsOneWidget);
+    expect(find.text('self'), findsNothing);
   });
 
   testWidgets('a candidate with nothing left offers no destructive action', (

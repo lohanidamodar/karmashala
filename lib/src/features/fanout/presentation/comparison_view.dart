@@ -461,7 +461,10 @@ class _CandidateColumn extends ConsumerWidget {
           DiffStatLine(stat: candidate.diff),
           if (evidence != null) ...[
             const SizedBox(height: Insets.xs),
-            VerdictChip(evidence: evidence),
+            VerdictChip(
+              evidence: evidence,
+              attribution: evidence.attributionFor(candidate.sessionId),
+            ),
           ],
           const SizedBox(height: Insets.xs),
           _state(context),
