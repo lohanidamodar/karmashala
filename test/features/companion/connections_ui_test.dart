@@ -3,16 +3,33 @@
 /// and the switcher strip above the session list.
 library;
 
+import 'dart:async';
+
 import 'package:chitragupta/src/app/companion/companion_shell.dart';
+import 'package:chitragupta/src/features/companion/application/companion_providers.dart';
 import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/presentation/connections_section.dart';
 import 'package:chitragupta/src/features/companion/presentation/host_switcher_bar.dart';
 import 'package:chitragupta/src/features/companion/presentation/pairing/pairing_screen.dart';
+import 'package:chitragupta/src/features/remote/protocol.dart' show CapabilitySet;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
+
+/// A gateway whose switch fails in a way the switcher has no name for. A
+/// keystore that stopped answering throws `TimeoutException`, and every
+/// surface that offers this verb shows `lastError` and nothing else.
+class _WedgedGateway extends FakeCompanionGateway {
+  _WedgedGateway({required super.connections})
+    : super(pairing: CompanionPairing(capabilities: CapabilitySet.all));
+
+  @override
+  Future<void> switchTo(String hostId) =>
+      throw TimeoutException('the keystore never answered');
+}
 
 void main() {
   final studio = fakeHostId(1);
@@ -367,5 +384,31 @@ void main() {
       expect(find.textContaining('Host unreachable'), findsOneWidget);
       expect(find.text('Studio work'), findsNothing);
     });
+  });
+
+  test('a refusal the switcher has no name for still leaves the user '
+      'something to read', () async {
+    final container = ProviderContainer(
+      overrides: [
+        companionGatewayProvider.overrideWithValue(
+          _WedgedGateway(connections: twoDesktops()),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final switcher = container.read(companionSwitchingProvider.notifier);
+    await switcher.switchTo(laptop);
+
+    expect(
+      switcher.lastError,
+      isNotNull,
+      reason: 'a tap that silently does nothing is the worst outcome here',
+    );
+    expect(
+      container.read(companionSwitchingProvider),
+      isNull,
+      reason: 'and the switch is over, so the next tap is not swallowed',
+    );
   });
 }

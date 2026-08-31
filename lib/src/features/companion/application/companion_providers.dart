@@ -59,6 +59,11 @@ class CompanionSwitcher extends Notifier<String?> {
       await action();
     } on GatewayException catch (error) {
       lastError = error.message;
+    } on Object {
+      // Nothing may escape into an unhandled async error: the surfaces that
+      // offer these verbs show `lastError` and nothing else, so a refusal
+      // that gets past here is a tap that visibly did nothing.
+      lastError = 'That could not be done just now. Try again.';
     } finally {
       state = null;
     }

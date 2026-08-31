@@ -426,10 +426,18 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   Future<void> setPairingRelay(Uri? url) async {
-    if (url == null) {
-      await store.delete(kPairingRelayStoreKey);
-    } else {
-      await store.write(kPairingRelayStoreKey, url.toString());
+    try {
+      if (url == null) {
+        await store.delete(kPairingRelayStoreKey);
+      } else {
+        await store.write(kPairingRelayStoreKey, url.toString());
+      }
+    } on Object catch (error) {
+      onLog?.call('saving the pairing relay failed: $error');
+      throw const GatewayException(
+        "This phone could not save that relay to its secure storage, so the "
+        'setting is unchanged. Try again.',
+      );
     }
   }
 
@@ -473,12 +481,25 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Pairing a host this phone already holds replaces that record alone; the
   /// pairing client has already written it, so this re-reads the set.
   Future<CompanionPairing> _adoptPairing(stored.CompanionPairing record) async {
-    _all = await stored.CompanionConnections.mutate(store, (all) {
-      all
-        ..upsert(record)
-        ..activeHostId = record.hostId;
-      return all;
-    });
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        all
+          ..upsert(record)
+          ..activeHostId = record.hostId;
+        return all;
+      });
+    } on Object catch (error) {
+      // The desktop confirmed and the pairing client wrote its record; what
+      // failed is making it the active one. Escaping from here would be an
+      // unhandled async error with the progress stream still saying "proving".
+      onLog?.call('adopting the new pairing failed: $error');
+      const failure = PairingException(
+        'Your desktop confirmed the pairing, but this phone could not save '
+        'it to its secure storage. Try again.',
+      );
+      _emitPairing(CompanionPairingStage.failed, message: failure.message);
+      throw failure;
+    }
     _record = _all.active ?? record;
     final public = _publicPairing(_record!);
     _pairing.value = public;
@@ -521,10 +542,23 @@ class RemoteCompanionGateway implements CompanionGateway {
         'That desktop is no longer saved on this phone.',
       );
     }
-    _all = await stored.CompanionConnections.mutate(store, (all) {
-      if (all.byHost(hostId) != null) all.activeHostId = all.byHost(hostId)!.hostId;
-      return all;
-    });
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        if (all.byHost(hostId) != null) {
+          all.activeHostId = all.byHost(hostId)!.hostId;
+        }
+        return all;
+      });
+    } on Object catch (error) {
+      // The keystore can refuse, and since it gained a deadline it can also
+      // give up: an escaping `TimeoutException` is an unhandled async error
+      // that leaves the tap looking like it did nothing at all.
+      onLog?.call('switchTo failed: $error');
+      throw const GatewayException(
+        "This phone could not record which desktop to use, so it stayed on "
+        'the one it was on. Try again.',
+      );
+    }
     await _becomeActive(_all.active ?? target);
   }
 
