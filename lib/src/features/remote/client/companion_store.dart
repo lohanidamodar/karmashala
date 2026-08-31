@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../protocol.dart';
+import 'relay_candidates.dart';
 
 /// A tiny async key/value store for the companion's secrets and counters.
 abstract interface class CompanionStore {
@@ -41,7 +42,14 @@ class CompanionPairing {
     required this.generation,
     required this.hostName,
     this.lastConnectedAt,
-  }) : deviceKey = Uint8List.fromList(deviceKey);
+    List<RelayCandidate>? candidates,
+    this.lanHint,
+  }) : deviceKey = Uint8List.fromList(deviceKey),
+       // A record always knows at least the relay it paired through, so the
+       // dial order below never has to special-case an empty set.
+       candidates = candidates == null || candidates.isEmpty
+           ? candidatesFrom(relay, const [])
+           : List.unmodifiable(candidates);
 
   /// Where the ACTIVE pairing lives in the [CompanionStore] — the key every
   /// pre-multi-host build read and wrote. [CompanionConnections] keeps it as a
@@ -53,7 +61,23 @@ class CompanionPairing {
   final DeviceId deviceId;
   final Uint8List deviceKey;
   final CapabilitySet capabilities;
+
+  /// The relay to dial FIRST — the last one that actually worked, kept here
+  /// under the name every earlier build reads so a downgrade still connects.
+  /// Not an identity: see `relay_candidates.dart` for why any of
+  /// [candidates] is equally safe to try.
   final Uri relay;
+
+  /// Every relay this host has been reachable at, with per-relay health. A
+  /// record written before Loop 83 has exactly one entry, [relay], rebuilt on
+  /// read — no pairing is ever lost to the new shape.
+  final List<RelayCandidate> candidates;
+
+  /// `host:port` where the host's LAN listener was last announced — a
+  /// discovery hint for a network that swallows multicast, nothing more. It
+  /// may be stale (DHCP moves), and the sealed hello is still what proves who
+  /// answered there.
+  final String? lanHint;
 
   /// The rendezvous generation counter — the companion's copy of the one
   /// number both ends persist. Bumped after a session pairs.
@@ -65,38 +89,48 @@ class CompanionPairing {
   /// Connections list and picks the fallback after an active unpair.
   final DateTime? lastConnectedAt;
 
-  CompanionPairing withGeneration(int next) => CompanionPairing(
+  CompanionPairing copyWith({
+    Uri? relay,
+    int? generation,
+    DateTime? lastConnectedAt,
+    List<RelayCandidate>? candidates,
+    String? lanHint,
+  }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
     deviceKey: deviceKey,
     capabilities: capabilities,
-    relay: relay,
-    generation: next,
+    relay: relay ?? this.relay,
+    generation: generation ?? this.generation,
     hostName: hostName,
-    lastConnectedAt: lastConnectedAt,
+    lastConnectedAt: lastConnectedAt ?? this.lastConnectedAt,
+    candidates: candidates ?? this.candidates,
+    lanHint: lanHint ?? this.lanHint,
   );
 
-  CompanionPairing withLastConnected(DateTime at) => CompanionPairing(
-    hostId: hostId,
-    deviceId: deviceId,
-    deviceKey: deviceKey,
-    capabilities: capabilities,
-    relay: relay,
-    generation: generation,
-    hostName: hostName,
-    lastConnectedAt: at.toUtc(),
-  );
+  CompanionPairing withGeneration(int next) => copyWith(generation: next);
+
+  CompanionPairing withLastConnected(DateTime at) =>
+      copyWith(lastConnectedAt: at.toUtc());
+
+  /// Points the record at the relay a dial just succeeded on, so the next
+  /// reconnect — and any older build reading the mirror — starts there.
+  CompanionPairing withRelay(Uri url) => copyWith(relay: url);
 
   Map<String, Object?> toJson() => {
     'hostId': hostId.value,
     'deviceId': deviceId.value,
     'deviceKey': base64Url.encode(deviceKey),
     'capabilities': capabilities.bits,
+    // Kept first-class and singular: a pre-Loop-83 build reads this key alone
+    // and still finds the relay that worked most recently.
     'relay': relay.toString(),
     'generation': generation,
     'hostName': hostName,
     if (lastConnectedAt != null)
       'lastConnectedAt': lastConnectedAt!.toIso8601String(),
+    'relays': [for (final candidate in candidates) candidate.toJson()],
+    if (lanHint != null) 'lanHint': lanHint,
   };
 
   static CompanionPairing fromJson(Map<String, Object?> json) {
@@ -113,6 +147,7 @@ class CompanionPairing {
       throw const ProtocolException('stored pairing is malformed');
     }
     final lastConnected = json['lastConnectedAt'];
+    final lanHint = json['lanHint'];
     return CompanionPairing(
       hostId: DeviceId.parse(hostId),
       deviceId: DeviceId.parse(deviceId),
@@ -124,7 +159,23 @@ class CompanionPairing {
       lastConnectedAt: lastConnected is String
           ? DateTime.tryParse(lastConnected)?.toUtc()
           : null,
+      // The migration, done on every read: a legacy record carries no
+      // `relays`, so its single relay becomes the one-entry set. An unreadable
+      // entry is skipped, and a set that ends up empty falls back to `relay`
+      // in the constructor — a pairing is never lost to a bad candidate.
+      candidates: _candidatesFromJson(json['relays']),
+      lanHint: lanHint is String && lanHint.isNotEmpty ? lanHint : null,
     );
+  }
+
+  static List<RelayCandidate>? _candidatesFromJson(Object? json) {
+    if (json is! List) return null;
+    final out = <RelayCandidate>[];
+    for (final row in json) {
+      final candidate = RelayCandidate.tryFromJson(row);
+      if (candidate != null) out.add(candidate);
+    }
+    return out.isEmpty ? null : out;
   }
 
   /// Upserts this record into the saved set (keyed by host id). The first
@@ -236,7 +287,12 @@ class CompanionConnections {
     final raw = await store.read(storeKey);
     if (raw != null) {
       final parsed = _tryParse(raw);
-      if (parsed != null) return parsed;
+      // A set that produced records is the whole truth. A set that produced
+      // NONE — every record unreadable, or a half-written `{"records":[]}` —
+      // knows nothing the mirror does not, so the mirror still gets its say.
+      // Silently unpairing a phone whose active record is sitting readable
+      // under the legacy key is the worst outcome available here.
+      if (parsed != null && parsed.records.isNotEmpty) return parsed;
     }
     // No (readable) set: a first run, or a store the pre-multi-host build
     // wrote. The single record, if any, is the whole set.

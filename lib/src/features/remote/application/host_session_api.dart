@@ -29,12 +29,23 @@ class HostSessionApi {
     required this.bindings,
     required RemoteSend send,
     this.onLog,
+    this.relays,
+    this.lanHint,
     // ignore: prefer_initializing_formals — named `send` for callers.
   }) : _send = send;
 
   final PairedDevice device;
   final RemoteHostBindings bindings;
   final RemoteSend _send;
+
+  /// Where this host can be met right now, read fresh at every announcement so
+  /// a relay switched on mid-session is told to the phone at once. Null (and
+  /// an empty answer) simply says nothing, which is what an older host did.
+  final List<Uri> Function()? relays;
+
+  /// `host:port` of the direct LAN listener, when there is a LAN address to
+  /// name — a discovery hint the phone may try, never an identity.
+  final String? Function()? lanHint;
 
   /// Lifecycle only — never called with payload content.
   final void Function(String message)? onLog;
@@ -46,12 +57,15 @@ class HostSessionApi {
   Set<String> get subscribedSessions => Set.unmodifiable(_subscribed);
 
   /// The `host.status` greeting: the supported version range, so a companion
-  /// outside it knows to update.
+  /// outside it knows to update — and, since Loop 83, where this host can be
+  /// reached, so a phone's saved relay set heals itself over the live link.
   Future<void> sendHostStatus() => _send(
     FrameType.hostStatus,
     payload: RemoteHostStatus(
       versions: kSupportedVersions,
       hostName: bindings.hostName,
+      relays: relays?.call() ?? const [],
+      lanHint: lanHint?.call(),
     ).toJson(),
   );
 

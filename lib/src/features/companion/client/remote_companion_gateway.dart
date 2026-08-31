@@ -8,11 +8,13 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import '../../remote/client/companion_client.dart';
 import '../../remote/client/companion_pairing_client.dart';
 import '../../remote/client/companion_store.dart' as stored;
 import '../../remote/client/lan_path.dart';
+import '../../remote/client/relay_candidates.dart';
 import '../../remote/domain/remote_payloads.dart';
 import '../../remote/pairing/pairing_code.dart';
 import '../../remote/pairing/pairing_payload.dart';
@@ -171,6 +173,15 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// A LAN transport this gateway dialled itself — the client never owns a
   /// supplied transport, so teardown here must close it.
   RemoteTransport? _ownedTransport;
+
+  /// The relay carrying the link right now, or null on the LAN path and while
+  /// nothing is connected. Read by the settings screen, and stamped as the
+  /// last-known-good once the link comes up.
+  Uri? _activeRelay;
+
+  /// The newest `host.status` this link carried, applied to the saved
+  /// candidates once the connection has settled.
+  RemoteHostStatus? _lastHostStatus;
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
   Timer? _lanHealTimer;
@@ -194,6 +205,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
+
+  @override
+  Uri? get activeRelay =>
+      _linkPath.value == CompanionLinkPath.relay ? _activeRelay : null;
 
   @override
   CapabilitySet get capabilities => _record?.capabilities ?? CapabilitySet.none;
@@ -790,7 +805,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<void> _loadStoredPairing() async {
     // Migrates a pre-multi-host store transparently: the single record it
     // holds becomes the sole saved connection, active.
-    final all = await stored.CompanionConnections.load(store);
+    stored.CompanionConnections all;
+    try {
+      all = await stored.CompanionConnections.load(store);
+    } on Object catch (error) {
+      // Every public method awaits `_ready`, so a throw here would not merely
+      // leave the phone unpaired — it would leave it *unusable*, silently,
+      // for the rest of the launch. Start empty and say what happened.
+      onLog?.call('reading the saved pairings failed: $error');
+      all = stored.CompanionConnections();
+    }
     if (_closed) return;
     _all = all;
     final record = all.active;
@@ -870,13 +894,20 @@ class RemoteCompanionGateway implements CompanionGateway {
         _link.value = CompanionLinkState.connecting;
         final client = await _dialAnyPath();
         if (client != null && !_closed && _record != null) {
-          // The client bumped and persisted the generation counter.
+          // The client bumped and persisted the generation counter — and, for
+          // a relay path, the winning relay as the record's `relay`.
           _record = client.pairing;
+          final won = _activeRelay;
+          if (won != null) await _noteRelayOutcome(won, ok: true);
           _switching = false;
           unawaited(_noteConnected(client.pairing));
           _backoff.reset();
           _bindTransport(_dialled);
           _link.value = CompanionLinkState.connected;
+          // Now that the client has written its own record, the host's
+          // greeting can safely rewrite the saved relay set.
+          final greeting = _lastHostStatus;
+          if (greeting != null) await _applyHostStatus(greeting);
           final died = _died = Completer<void>();
           unawaited(() async {
             try {
@@ -916,19 +947,72 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
   }
 
-  /// Design §3's priority order: every fresh LAN candidate first, the relay
-  /// after. Returns a connected client, or null when nobody answered.
+  /// Design §3's priority order, widened by Loop 83 to a *set* of relays:
+  ///
+  /// 1. every fresh LAN candidate the beacon found;
+  /// 2. the host's own LAN hint from `host.status`, when the beacon found
+  ///    nothing — a network that eats multicast still has a direct path;
+  /// 3. the last relay that actually worked;
+  /// 4. the rest of the saved relays, skipping any still cooling from a recent
+  ///    failure;
+  /// 5. the app's configured default hosted relay, as a last resort.
+  ///
+  /// First success wins and is remembered as the last-known-good; each loser
+  /// is torn down before the next is tried, so only one dial is ever in
+  /// flight. Returns a connected client, or null when nobody answered.
   Future<CompanionClient?> _dialAnyPath() async {
     final scout = lan;
     if (scout != null) {
+      var triedLan = false;
       for (final host in scout.candidates.take(3).toList()) {
         if (_closed || _record == null) return null;
+        triedLan = true;
         final client = await _dialLan(scout, host);
         if (client != null) return client;
       }
+      if (!triedLan) {
+        final hinted = _lanHintHost(scout);
+        if (hinted != null) {
+          if (_closed || _record == null) return null;
+          final client = await _dialLan(scout, hinted);
+          if (client != null) return client;
+        }
+      }
     }
-    if (_closed || _record == null) return null;
-    return _dialRelay();
+    for (final url in await _relayOrder()) {
+      if (_closed || _record == null) return null;
+      final client = await _dialRelay(url);
+      if (client != null) return client;
+    }
+    return null;
+  }
+
+  /// The relays to try, in order. Falls back to the phone's configured relay
+  /// setting, which is also what a typed-code pairing dials.
+  Future<List<Uri>> _relayOrder() async {
+    final record = _record;
+    if (record == null) return const [];
+    return orderRelayCandidates(
+      record.candidates,
+      fallback: await pairingRelay(),
+      now: _now(),
+    );
+  }
+
+  /// The host's announced LAN address as something [LanPathScout] can dial.
+  /// A hint, not an identity: it may name a machine DHCP has since moved, and
+  /// only the sealed hello decides whether whoever answers is the host.
+  DiscoveredHost? _lanHintHost(LanPathScout scout) {
+    final hint = parseLanHint(_record?.lanHint);
+    if (hint == null) return null;
+    final address = InternetAddress.tryParse(hint.host);
+    if (address == null) return null;
+    final candidate = DiscoveredHost(
+      address: address,
+      advert: LanAdvert(port: hint.port, tag: 'hint'),
+      seenAt: _now(),
+    );
+    return scout.inCooldown(candidate) ? null : candidate;
   }
 
   Future<CompanionClient?> _dialLan(
@@ -960,22 +1044,32 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
   }
 
-  Future<CompanionClient?> _dialRelay() async {
-    final client = _newClient();
+  /// One relay attempt. A failure stamps the candidate so the next reconnect
+  /// skips it while it cools; a success is stamped by [_connectLoop] once the
+  /// client has persisted its own generation bump.
+  Future<CompanionClient?> _dialRelay(Uri url) async {
+    final client = _newClient(relay: url);
     try {
       await client.connect(helloTimeout: helloTimeout);
       _linkPath.value = CompanionLinkPath.relay;
+      _activeRelay = url;
       return client;
     } on Object catch (error) {
-      onLog?.call('connect failed: $error');
+      onLog?.call('connect over $url failed: $error');
       await _teardownClient();
+      await _noteRelayOutcome(url, ok: false);
       return null;
     }
   }
 
-  CompanionClient _newClient() {
+  /// Builds the client for one attempt. [relay] points the stored record at
+  /// the candidate being tried — the client dials `pairing.relay` and, on
+  /// success, persists that record, so the winner becomes the saved
+  /// last-known-good with no extra write of our own.
+  CompanionClient _newClient({Uri? relay}) {
+    final record = _record!;
     final client = CompanionClient(
-      pairing: _record!,
+      pairing: relay == null ? record : record.withRelay(relay),
       store: store,
       relayFactory: _captureFactory,
       requestTimeout: requestTimeout,
@@ -984,6 +1078,44 @@ class RemoteCompanionGateway implements CompanionGateway {
     _client = client;
     _clientEvents = client.events.listen(_onEvent);
     return client;
+  }
+
+  /// Records how one relay behaved. Best-effort: a store that refuses the
+  /// write costs the phone a little ordering, never a working link.
+  Future<void> _noteRelayOutcome(Uri url, {required bool ok}) async {
+    final record = _record;
+    if (record == null) return;
+    final at = _now();
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        final saved = all.byHost(record.hostId.value);
+        if (saved == null) return all;
+        final key = url.toString();
+        final next = <RelayCandidate>[];
+        var found = false;
+        for (final candidate in saved.candidates) {
+          if (candidate.key != key) {
+            next.add(candidate);
+            continue;
+          }
+          found = true;
+          next.add(ok ? candidate.succeededAt(at) : candidate.failedAt(at));
+        }
+        if (!found) {
+          // The configured fallback is tried without being saved; it earns a
+          // place in the set only by actually working.
+          if (!ok) return all;
+          next.add(RelayCandidate(url: url).succeededAt(at));
+        }
+        all.upsert(saved.copyWith(candidates: next));
+        return all;
+      });
+      if (_all.activeHostId?.value == record.hostId.value) {
+        _record = _all.active ?? _record;
+      }
+    } on Object catch (error) {
+      onLog?.call('relay outcome stamp failed: $error');
+    }
   }
 
   /// `notifications.register`, once per connection — only with the capability
@@ -1091,6 +1223,8 @@ class RemoteCompanionGateway implements CompanionGateway {
     _ownedTransport = null;
     _dialled = null;
     _linkPath.value = null;
+    _activeRelay = null;
+    _lastHostStatus = null;
     _subscribed.clear();
     for (final state in _transcripts.values) {
       if (state.loaded) state.stale = true;
@@ -1140,8 +1274,53 @@ class RemoteCompanionGateway implements CompanionGateway {
         _applyAppended(page);
       case ApprovalRequestedEvent(:final request):
         _applyApproval(request);
-      case HostStatusEvent():
-        break;
+      case HostStatusEvent(:final status):
+        _lastHostStatus = status;
+        // The greeting that opens a connection arrives while the client is
+        // still about to persist its own copy of the record; applying it here
+        // would be overwritten by that write. The connect loop applies it once
+        // the link is up. A later announcement — the host toggled a relay
+        // under us — is applied at once, which is the whole point of it.
+        if (_link.value == CompanionLinkState.connected) {
+          unawaited(_applyHostStatus(status));
+        }
+    }
+  }
+
+  /// The refresh that removes re-pairing for good: the host says where it can
+  /// be met, and this phone's saved candidates become that — health carried
+  /// over for the relays that survive. A DHCP move retires the stale
+  /// `ws://<old-ip>:<port>`; a hosted relay switched on months later simply
+  /// shows up. An empty announcement (an older host) changes nothing, and a
+  /// set that has not moved is not re-written.
+  Future<void> _applyHostStatus(RemoteHostStatus status) async {
+    final record = _record;
+    if (record == null || _closed) return;
+    if (status.relays.isEmpty && status.lanHint == null) return;
+    final merged = mergeRelayCandidates(record.candidates, status.relays);
+    final sameRelays =
+        merged.length == record.candidates.length &&
+        !merged.indexed.any((e) => e.$2.key != record.candidates[e.$1].key);
+    final hint = status.lanHint ?? record.lanHint;
+    if (sameRelays && hint == record.lanHint) return;
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        final saved = all.byHost(record.hostId.value);
+        if (saved == null) return all;
+        all.upsert(
+          saved.copyWith(
+            candidates: mergeRelayCandidates(saved.candidates, status.relays),
+            lanHint: hint,
+          ),
+        );
+        return all;
+      });
+      if (_all.activeHostId?.value == record.hostId.value) {
+        _record = _all.active ?? _record;
+      }
+      onLog?.call('saved relay candidates refreshed from host.status');
+    } on Object catch (error) {
+      onLog?.call('relay candidate refresh failed: $error');
     }
   }
 

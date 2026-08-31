@@ -54,7 +54,13 @@ void main() {
     relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
     // The phone's "keystore": the secure store over a plain map backend, so
     // the record's whole journey through SecureCompanionStore is real.
-    phoneDisk = {};
+    phoneDisk = {
+      // The last resort in Loop 83's dial order is the phone's CONFIGURED
+      // relay, which defaults to the public PopupBits one. Point it at this
+      // suite's in-process relay so a failed re-dial never reaches the
+      // internet from a test.
+      RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
+    };
     store = SecureCompanionStore.withBackend(
       read: (key) async => phoneDisk[key],
       write: (key, value) async => phoneDisk[key] = value,
@@ -389,7 +395,9 @@ void main() {
       ),
     );
     expect(gateway.pairing, isNull);
-    expect(phoneDisk, isEmpty);
+    // Nothing about a pairing was written — the only key on this phone's
+    // "disk" is the relay setting the suite seeded before any of this.
+    expect(phoneDisk.keys, [RemoteCompanionGateway.kPairingRelayStoreKey]);
   });
 
   test(

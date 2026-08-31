@@ -377,6 +377,11 @@ abstract interface class CompanionGateway {
   CompanionLinkPath? get linkPath;
   Stream<CompanionLinkPath?> get linkPathStates;
 
+  /// The relay the link is running through right now, or null on the LAN path
+  /// and while nothing is connected. A phone may hold several saved relays, so
+  /// "Relay" alone no longer says which one — this names it.
+  Uri? get activeRelay;
+
   /// What the desktop granted at pairing; [CapabilitySet.none] when unpaired.
   CapabilitySet get capabilities;
 

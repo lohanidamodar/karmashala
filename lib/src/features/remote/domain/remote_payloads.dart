@@ -5,6 +5,7 @@
 /// so the phone can render values this build has never heard of.
 library;
 
+import '../client/relay_candidates.dart';
 import '../protocol.dart';
 
 /// What one session looks like from a phone: `sessions.list` rows and the
@@ -348,16 +349,36 @@ class RemoteApprovalRequest {
   }
 }
 
-/// What `host.status` carries on connect.
+/// What `host.status` carries on connect — and, since Loop 83, again whenever
+/// the host's relays change under a live link.
 class RemoteHostStatus {
-  const RemoteHostStatus({required this.versions, required this.hostName});
+  const RemoteHostStatus({
+    required this.versions,
+    required this.hostName,
+    this.relays = const [],
+    this.lanHint,
+  });
 
   final VersionRange versions;
   final String hostName;
 
+  /// Every relay this host is serving right now. The phone replaces its saved
+  /// candidate set with this, which is how a hosted relay switched on months
+  /// later — or a desktop whose LAN address moved — heals with no re-pairing.
+  /// Additive: an older host sends none, and the phone keeps what it has.
+  final List<Uri> relays;
+
+  /// `host:port` of the host's direct LAN listener, when it has a LAN address
+  /// to name. A **discovery hint** — it goes stale the moment DHCP moves, and
+  /// the sealed hello remains the only proof of who answered.
+  final String? lanHint;
+
   Map<String, Object?> toJson() => {
     'versions': versions.toJson(),
     'host': hostName,
+    if (relays.isNotEmpty)
+      'relays': [for (final url in relays) url.toString()],
+    if (lanHint != null) 'lan': lanHint,
   };
 
   static RemoteHostStatus fromJson(Map<String, Object?> json) {
@@ -365,9 +386,12 @@ class RemoteHostStatus {
     if (versions is! Map<String, Object?>) {
       throw const ProtocolException('bad host status');
     }
+    final lan = json['lan'];
     return RemoteHostStatus(
       versions: VersionRange.fromJson(versions),
       hostName: json['host'] is String ? json['host']! as String : '',
+      relays: relayUrisFrom(json['relays']),
+      lanHint: lan is String && lan.isNotEmpty ? lan : null,
     );
   }
 }

@@ -56,6 +56,11 @@ void main() {
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     relayUri = Uri.parse('http://127.0.0.1:${relay!.port}');
     store = stored.InMemoryCompanionStore();
+    // Loop 83's last-resort relay is the phone's configured one, which
+    // defaults to the public PopupBits relay — point it here instead. The
+    // tests that care set their own over the top.
+    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] = relayUri
+        .toString();
   });
 
   tearDown(() async {
