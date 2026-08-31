@@ -21,6 +21,10 @@ enum SidePanelSurface {
   /// the branch and worktree list nobody could find lives in here.
   repository('Repository', scopedToRepository: true),
 
+  /// Ideas kept out of a conversation instead of acted on, and sent back to an
+  /// agent when the user is ready for them. Hidden when Notes is switched off.
+  notes('Notes', drawsOwnHeader: true, requiresNotes: true),
+
   /// The app's own log tail. Hidden unless debug mode is on: it is a
   /// diagnostic, not a tool, and a rail glyph nobody needs is a rail glyph in
   /// the way of the seven that are used every day.
@@ -31,6 +35,7 @@ enum SidePanelSurface {
     this.drawsOwnHeader = false,
     this.scopedToRepository = false,
     this.requiresDebugMode = false,
+    this.requiresNotes = false,
   });
 
   final String label;
@@ -50,12 +55,25 @@ enum SidePanelSurface {
   /// Whether the surface only exists while debug mode is on.
   final bool requiresDebugMode;
 
-  /// The surfaces to offer — on the rail, in the View menu and in quick open —
-  /// for the current debug-mode setting. One list, so a surface cannot be
-  /// hidden from the rail and still reachable from a menu.
-  static List<SidePanelSurface> offered({required bool debugMode}) => [
+  /// Whether the surface only exists while the Notes feature is on.
+  final bool requiresNotes;
+
+  /// Whether this surface exists for the settings given. The one answer, so
+  /// the rail, the menus and the "close what is open" check in [SidePanel]
+  /// cannot disagree about whether a surface is there.
+  bool isOffered({required bool debugMode, bool notesEnabled = true}) =>
+      (debugMode || !requiresDebugMode) && (notesEnabled || !requiresNotes);
+
+  /// The surfaces to offer — on the rail, in the View menu and in quick open.
+  /// One list, so a surface cannot be hidden from the rail and still reachable
+  /// from a menu.
+  static List<SidePanelSurface> offered({
+    required bool debugMode,
+    bool notesEnabled = true,
+  }) => [
     for (final surface in values)
-      if (debugMode || !surface.requiresDebugMode) surface,
+      if (surface.isOffered(debugMode: debugMode, notesEnabled: notesEnabled))
+        surface,
   ];
 }
 

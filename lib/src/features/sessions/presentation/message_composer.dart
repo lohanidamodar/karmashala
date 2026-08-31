@@ -24,6 +24,7 @@ class MessageComposer extends StatefulWidget {
     required this.hintText,
     this.enabled = true,
     this.chips = const [],
+    this.controller,
     super.key,
   });
 
@@ -38,12 +39,17 @@ class MessageComposer extends StatefulWidget {
   /// class builds, so the composer keeps knowing nothing about sessions.
   final List<Widget> chips;
 
+  /// The text box's controller, when the caller needs to put something in it —
+  /// a note being sent back to this session. Supplied means owned: the caller
+  /// disposes it. Omitted, the composer makes and disposes its own.
+  final TextEditingController? controller;
+
   @override
   State<MessageComposer> createState() => _MessageComposerState();
 }
 
 class _MessageComposerState extends State<MessageComposer> {
-  final _input = TextEditingController();
+  late final _input = widget.controller ?? TextEditingController();
   final _attachments = <_Attachment>[];
   bool _busy = false;
   late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKey);
@@ -51,7 +57,7 @@ class _MessageComposerState extends State<MessageComposer> {
   @override
   void dispose() {
     _focusNode.dispose();
-    _input.dispose();
+    if (widget.controller == null) _input.dispose();
     super.dispose();
   }
 

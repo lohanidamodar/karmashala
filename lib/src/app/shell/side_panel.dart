@@ -17,6 +17,8 @@ import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
 import '../../features/github/presentation/github_view.dart';
 import '../../features/notifications/application/attention_inbox.dart';
+import '../../features/notes/application/notes_providers.dart';
+import '../../features/notes/presentation/notes_view.dart';
 import '../../features/notifications/presentation/attention_inbox_view.dart';
 import '../../features/settings/application/settings_controller.dart';
 
@@ -48,6 +50,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.verification => AppIcons.checkCircle,
     SidePanelSurface.browser => AppIcons.globe,
     SidePanelSurface.repository => AppIcons.bookBookmark,
+    SidePanelSurface.notes => AppIcons.note,
     SidePanelSurface.logs => AppIcons.article,
   };
 
@@ -56,10 +59,16 @@ class SidePanel extends ConsumerWidget {
     final debugMode = ref.watch(
       settingsControllerProvider.select((s) => s.debugMode),
     );
+    final notesEnabled = ref.watch(notesEnabledProvider);
     final selected = ref.watch(sidePanelProvider);
-    // Turning debug mode off while the Logs surface is open must close it, not
+    // Switching a feature off while its surface is open must close it, not
     // leave a body behind a glyph that is no longer on the rail.
-    final open = selected != null && selected.requiresDebugMode && !debugMode
+    final open =
+        selected != null &&
+            !selected.isOffered(
+              debugMode: debugMode,
+              notesEnabled: notesEnabled,
+            )
         ? null
         : selected;
     return Row(
@@ -67,17 +76,26 @@ class SidePanel extends ConsumerWidget {
       children: [
         // Collapsed costs nothing but the rail: no divider, no reserved body.
         if (open != null) _SidePanelBody(surface: open),
-        _SidePanelRail(open: open, debugMode: debugMode),
+        _SidePanelRail(
+          open: open,
+          debugMode: debugMode,
+          notesEnabled: notesEnabled,
+        ),
       ],
     );
   }
 }
 
 class _SidePanelRail extends ConsumerWidget {
-  const _SidePanelRail({required this.open, required this.debugMode});
+  const _SidePanelRail({
+    required this.open,
+    required this.debugMode,
+    required this.notesEnabled,
+  });
 
   final SidePanelSurface? open;
   final bool debugMode;
+  final bool notesEnabled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -91,7 +109,10 @@ class _SidePanelRail extends ConsumerWidget {
       child: Column(
         children: [
           const SizedBox(height: Insets.xs),
-          for (final surface in SidePanelSurface.offered(debugMode: debugMode))
+          for (final surface in SidePanelSurface.offered(
+            debugMode: debugMode,
+            notesEnabled: notesEnabled,
+          ))
             _RailButton(
               surface: surface,
               selected: surface == open,
@@ -278,6 +299,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.browser => const BrowserPane(),
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
+    SidePanelSurface.notes => const NotesView(),
     SidePanelSurface.logs => const LogsPanel(),
   };
 }

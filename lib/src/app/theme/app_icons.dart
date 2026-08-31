@@ -271,6 +271,18 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData note = IconData(
+    0xe348,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData notePencil = IconData(
+    0xe34c,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData paperPlaneRight = IconData(
     0xe396,
     fontFamily: 'PhosphorRegular',
