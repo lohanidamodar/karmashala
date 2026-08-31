@@ -11,7 +11,6 @@ import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
-import '../../features/sessions/presentation/agent_status_badge.dart';
 import '../../features/sessions/presentation/approval_request_card.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
@@ -35,10 +34,18 @@ const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 ///
 /// **One session, two views.** A session that runs in one of our panes is not
 /// two things. Its chat rendering and its terminal are two surfaces of the same
-/// record, switched by the toggle at the right of the strip — which is why the
-/// switch reattaches and focuses rather than starting anything. Which surface is
-/// showing is [terminalVisibleProvider]: `true` is the terminal, `false` is the
-/// conversation. Nothing else needed a new provider.
+/// record, switched by the toggle at the right of the bar beneath them — which
+/// is why the switch reattaches and focuses rather than starting anything.
+/// Which surface is showing is [terminalVisibleProvider]: `true` is the
+/// terminal, `false` is the conversation. Nothing else needed a new provider.
+///
+/// **The strip is tabs; the bar is this session.** A selection used to add a
+/// conversation *tab* as well as offer the toggle, so one tap in the Explorer
+/// grew a second tab and a switch that did the same job — and the permission
+/// chip sat up in the strip while every other session control was under the
+/// terminal. There is no conversation tab any more, and everything that belongs
+/// to the session on screen is in [_SessionBar]: the window reads chrome, work,
+/// chrome.
 ///
 /// **The terminal is the one you land on.** Until Loop 85 selecting a session
 /// switched the workbench to its *chat*, which made the secondary view the
@@ -46,7 +53,7 @@ const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 /// lifecycle, an approval that is blocking the agent) reachable only from
 /// there. Now a selection opens the session's pane, and those controls are
 /// composed around it from the same widgets the conversation uses — see
-/// [_TerminalSurface]. Chat is one labelled tap, or `` Ctrl+` ``, away.
+/// [_SessionBar]. Chat is one labelled tap, or `` Ctrl+` ``, away.
 ///
 /// **Nothing here ever switches itself to chat.** Loop 85 landed a session on
 /// the terminal *when it had a pane* and fell back to the conversation when it
@@ -103,8 +110,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   }
 
   /// **The only write of `false` in the app.** Wired to the labelled Chat half
-  /// of the strip's toggle and to nothing else, which is what makes "a tap
-  /// never opens the conversation" a property rather than a race won.
+  /// of the bar's toggle and to nothing else, which is what makes "a tap never
+  /// opens the conversation" a property rather than a race won.
   void _showChat() => ref.read(terminalVisibleProvider.notifier).set(false);
 
   /// Reveals the pane the selected session is already running in. Starts and
@@ -200,12 +207,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TabStrip(
-          session: session,
-          onTerminal: onTerminal,
-          onShowSession: _showChat,
-          onShowTerminal: _showTerminalFor,
-        ),
+        const _TabStrip(),
         const Divider(height: 1),
         Expanded(
           child: ColoredBox(
@@ -225,6 +227,16 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
                     ],
                   ),
           ),
+        ),
+        // Outside the stack, because the toggle is the way *back* from the
+        // conversation as well as the way to it: hosted on the terminal surface
+        // it would be built and unreachable for exactly the surface that has no
+        // other way home.
+        _SessionBar(
+          session: session,
+          onTerminal: onTerminal,
+          onChat: _showChat,
+          onTerminalView: () => _showTerminalFor(session?.paneId),
         ),
       ],
     );
@@ -280,16 +292,17 @@ class _WorkbenchSession {
   final bool native;
 }
 
-/// The terminal rendering of a session: the panes, and the controls that belong
-/// to whichever session is running in the pane on screen.
+/// The terminal rendering of a session: the panes, and the one thing that has
+/// to be answered before anything else offered around them will be read.
 ///
-/// The controls are the chat view's own widgets, not lookalikes — one
-/// [ApprovalRequestCard] and one [DeliveryStrip] exist in the app, so the two
-/// views cannot offer different answers or different next steps. They sit
-/// *below* the panes because that is where the thing they respond to is: an
-/// agent's prompt is drawn at the bottom of its terminal, so the buttons that
-/// answer it are the next thing under it rather than a header the eye has to
-/// travel back up to.
+/// The approval card is the chat view's own widget, not a lookalike — one
+/// [ApprovalRequestCard] exists in the app, so the two views cannot offer
+/// different answers. It sits *below* the panes because that is where the thing
+/// it responds to is: an agent's prompt is drawn at the bottom of its terminal,
+/// so the buttons that answer it are the next thing under it rather than a
+/// header the eye has to travel back up to. Everything else that belongs to the
+/// session is one row further down, in [_SessionBar].
+///
 /// With a session selected that has **no pane of ours**, the panes are not what
 /// this surface should show — the tab on screen would be some other session's.
 /// [_NoPaneForSession] takes their place and says so.
@@ -308,7 +321,7 @@ class _TerminalSurface extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(child: TerminalPaneStack()),
-        _PaneSessionDock(),
+        _PaneApproval(),
       ],
     );
   }
@@ -421,29 +434,113 @@ class _NoPaneForSession extends ConsumerWidget {
   }
 }
 
-/// The session controls under the terminal, for the focused pane's session.
+/// The approval blocking the pane on screen, drawn under it.
 ///
-/// Every part of it is conditional and each decides for itself, using the rule
-/// it already had: the approval card draws nothing unless that session is
-/// blocked on a prompt, and the delivery strip nothing unless it has a stage,
-/// an action or a handoff to offer. A shell tab has no session at all and gets
-/// no dock. Nothing here reserves height for something it might later say.
-class _PaneSessionDock extends ConsumerWidget {
-  const _PaneSessionDock();
+/// Above the session bar for the same reason it is above the delivery row in
+/// the conversation: it is the thing blocking the session, and nothing else
+/// offered here will be read until the agent's prompt is answered. It follows
+/// the focused pane, so a shell tab has nothing to answer and draws nothing —
+/// and it draws nothing until there *is* an approval, because nothing here may
+/// reserve terminal rows for something it might one day have to say.
+class _PaneApproval extends ConsumerWidget {
+  const _PaneApproval();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessionId = ref.watch(activePaneSessionIdProvider);
     if (sessionId == null) return const SizedBox.shrink();
+    return ApprovalRequestCard(sessionId: sessionId, hostedOnTerminal: true);
+  }
+}
+
+/// The chrome under the surface: what belongs to the session on screen, on a
+/// bar of its own.
+///
+/// The controls used to be split between the two ends of the window — the
+/// permission chip up in the tab strip, the delivery actions loose under the
+/// terminal on no surface at all. One rule instead: the strip is tabs, and this
+/// is the session. It is built like the strip (the same rule, the same
+/// [Chrome.tabStrip] floor, the same [ColorScheme.surfaceContainerLow]) so the
+/// two read as the same kind of thing at either end of the work.
+///
+/// **What it speaks for is what is on screen.** That is the focused pane's
+/// session — [activePaneSessionIdProvider], for the reason given there — not
+/// the Explorer's selection, or switching terminal tabs would leave these
+/// controls acting on a session the user is no longer looking at. The one
+/// exception is [_NoPaneForSession]: no pane is on screen there at all, so the
+/// session the bar is about is the selected one, which is also what keeps the
+/// toggle — the only way to that session's transcript — from disappearing on
+/// exactly the surface that offers nothing else.
+///
+/// While the conversation is up its composer already carries the permission
+/// chip and the delivery strip, so the bar is down to the toggle rather than a
+/// second copy of them.
+class _SessionBar extends ConsumerWidget {
+  const _SessionBar({
+    required this.session,
+    required this.onTerminal,
+    required this.onChat,
+    required this.onTerminalView,
+  });
+
+  final _WorkbenchSession? session;
+  final bool onTerminal;
+  final VoidCallback onChat;
+  final VoidCallback onTerminalView;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = session;
+    final sessionId = !onTerminal
+        ? null
+        : selected != null && selected.paneId == null
+        ? selected.id
+        : ref.watch(activePaneSessionIdProvider);
+    // A shell tab with nothing selected has neither a session to describe nor a
+    // surface to switch to, and an empty bar would be 30 pixels of nothing.
+    if (sessionId == null && selected == null) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Above the delivery row for the same reason it is above it in the
-        // conversation: it is the thing blocking the session, and nothing else
-        // offered here will be read until the agent's prompt is answered.
-        ApprovalRequestCard(sessionId: sessionId, hostedOnTerminal: true),
-        DeliveryStrip(sessionId: sessionId),
+        const Divider(height: 1),
+        Container(
+          constraints: const BoxConstraints(minHeight: Chrome.tabStrip),
+          color: scheme.surfaceContainerLow,
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.sm,
+            vertical: 2,
+          ),
+          child: Row(
+            children: [
+              if (sessionId == null)
+                const Spacer()
+              else ...[
+                Padding(
+                  padding: const EdgeInsets.only(right: Insets.sm),
+                  child: PermissionModeChip(sessionId: sessionId),
+                ),
+                // The delivery lifecycle takes the room the other two do not:
+                // it is the part that has something new to say as the work
+                // moves, and the part that wraps when there is no room left.
+                Expanded(
+                  child: DeliveryStrip(
+                    sessionId: sessionId,
+                    hostedOnTerminal: true,
+                  ),
+                ),
+              ],
+              if (selected != null)
+                _ViewToggle(
+                  onTerminal: onTerminal,
+                  onChat: onChat,
+                  onTerminalView: onTerminalView,
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -500,29 +597,16 @@ class _StripTab {
 /// complaint — that reaching a tab two along needed a horizontal mouse wheel —
 /// and they only earn their place while the overflow is mild.
 ///
-/// Everything to the right of the tabs — the permission chip, the view toggle,
-/// the terminal's own toolbar with **new tab** in it, focus mode — sits outside
-/// the scrolling region, so no number of tabs can push the way to make another
-/// one off the end of the strip.
+/// **Only tabs.** A selected session used to get a conversation chip here as
+/// well as a toggle in the same row, so one tap in the Explorer looked like two
+/// things opening. Its controls live under the surface now (see [_SessionBar]);
+/// this is terminal tabs and nothing else.
+///
+/// What is left beside them — the terminal's own toolbar with **new tab** in
+/// it, focus mode — sits outside the scrolling region, so no number of tabs can
+/// push the way to make another one off the end of the strip.
 class _TabStrip extends ConsumerWidget {
-  const _TabStrip({
-    required this.session,
-    required this.onTerminal,
-    required this.onShowSession,
-    required this.onShowTerminal,
-  });
-
-  final _WorkbenchSession? session;
-  final bool onTerminal;
-  final VoidCallback onShowSession;
-  final ValueChanged<String?> onShowTerminal;
-
-  /// Whether the terminal surface is actually showing **panes**. A selected
-  /// session with no pane of ours gets the surface's empty state instead, and
-  /// while that is up no terminal tab is on screen — so none of them may draw
-  /// as the active one, and the pane's permission chip has no pane to describe.
-  bool get _showingPanes =>
-      onTerminal && (session == null || session!.paneId != null);
+  const _TabStrip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -540,27 +624,9 @@ class _TabStrip extends ConsumerWidget {
                 tabs: tabs,
                 width: constraints.maxWidth,
                 activeIndex: tabs.indexWhere((tab) => tab.active),
-                entries: _entries,
               ),
             ),
           ),
-          // The permission mode belongs to the session, not to one of its two
-          // renderings. It was on the chat composer only, so the same control
-          // was readable on one view and invisible on the other; this is the
-          // same widget reading the same `effectivePermissionFor`, so the two
-          // views cannot disagree.
-          if (_showingPanes) const _PanePermissionChip(),
-          // Offered for **every** selected session, including one with no pane
-          // of ours. It used to appear only when there was a pane, which was
-          // fine while a paneless session landed on its conversation anyway —
-          // now that nothing lands there on its own, this is the labelled way
-          // in, and hiding it would leave the transcript unreachable.
-          if (session != null)
-            _ViewToggle(
-              onTerminal: onTerminal,
-              onChat: onShowSession,
-              onTerminalView: () => onShowTerminal(session!.paneId),
-            ),
           const TerminalToolbar(),
           const _ZenButton(),
           const SizedBox(width: Insets.xs),
@@ -569,133 +635,113 @@ class _TabStrip extends ConsumerWidget {
     );
   }
 
-  /// Every tab in the strip, left to right: the selected session's conversation
-  /// when there is one, then the terminal tabs.
+  /// Every tab in the strip, left to right.
   ///
   /// Deliberately cheap — a title and a liveness per tab, no database. It runs
   /// on every terminal state publish, which at a hundred panes is often.
   List<_StripTab> _tabs(WidgetRef ref) {
     final terminals = ref.watch(terminalSessionsControllerProvider);
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final onPanes = _showingPanes(ref);
     final active = terminals.activeTabId;
     return [
-      if (session != null)
-        _StripTab(
-          active: !onTerminal,
-          chip: () => WorkbenchTabChip(
-            selected: !onTerminal,
-            onTap: onShowSession,
-            label: session!.title,
-            tooltip: 'Conversation · ${session!.title}',
-            leading: Padding(
-              padding: const EdgeInsets.only(right: Insets.sm),
-              child: session!.native
-                  ? AgentStatusBadge(sessionId: session!.id)
-                  : const Icon(
-                      AppIcons.clockCounterClockwise,
-                      size: Chrome.iconSmall,
-                    ),
-            ),
-            trailing: IconButton(
-              tooltip: 'Close conversation',
-              iconSize: Chrome.iconSmall,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-              padding: EdgeInsets.zero,
-              icon: const Icon(AppIcons.x),
-              onPressed: () => _closeConversation(ref),
-            ),
-          ),
-        ),
       for (final tab in terminals.tabs)
         _StripTab(
-          active: _showingPanes && tab.id == active,
+          active: onPanes && tab.id == active,
           chip: () => TerminalTabChip(
             title: sessions.titleForTab(tab.id),
             liveness: sessions.livenessForTab(tab.id),
-            selected: _showingPanes && tab.id == active,
-            onTap: () => _activate(sessions, tab.id),
+            selected: onPanes && tab.id == active,
+            onTap: () => activateTerminalTab(ref, tab.id),
             onClose: () => sessions.closeTab(tab.id),
             onEnd: () => sessions.closeTab(tab.id, detach: false),
           ),
         ),
     ];
   }
+}
 
-  /// The same tabs as [_tabs], as [TabPicker] lists them.
-  ///
-  /// Built only while the picker is open, because this is the expensive half:
-  /// telling two `zsh` tabs apart means knowing which session runs in which
-  /// pane, and that is a query the strip itself never needs.
-  List<TabEntry> _entries(WidgetRef ref) {
-    final terminals = ref.watch(terminalSessionsControllerProvider);
-    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-    // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
-    ref.watch(sessionsRevisionProvider);
-    final titles = <String, String>{
-      for (final record in ref.read(sessionDaoProvider).getAll())
-        if (record.paneId != null) record.paneId!: record.title,
-    };
-    final active = terminals.activeTabId;
-    return [
-      if (session != null)
-        TabEntry(
-          item: QuickOpenItem(
-            id: 'conversation/${session!.id}',
-            group: QuickOpenGroup.tabs,
-            title: session!.title,
-            subtitle: 'Conversation',
-            icon: AppIcons.chatCircle,
-            onSelect: onShowSession,
-          ),
-          active: !onTerminal,
+/// Whether the workbench is showing terminal **panes** right now.
+///
+/// Two surfaces can be up instead: the conversation, and the empty state a
+/// selected session with no pane of ours gets. While either is, no terminal tab
+/// is on screen at all — so none of them may draw as the active one, in the
+/// strip or in the picker.
+bool _showingPanes(WidgetRef ref) {
+  // A pane appearing or ending changes the answer, and so does the launch that
+  // rewrites `pane_id` on the row.
+  ref.watch(terminalSessionsControllerProvider);
+  ref.watch(sessionsRevisionProvider);
+  final imported = ref.watch(selectedImportedSessionIdProvider);
+  final selected = ref.watch(selectedSessionIdProvider);
+  // With nothing selected the workbench is the terminal, whatever the flag
+  // says — there is no second surface to be on.
+  if (imported == null && selected == null) return true;
+  if (!ref.watch(terminalVisibleProvider)) return false;
+  // An imported CLI session has no pane of ours by definition.
+  return imported == null && sessionTerminalPane(ref, selected!) != null;
+}
+
+/// Brings [tabId] to the front and makes sure the terminal is what the
+/// workbench is showing: picking a tab from a strip or a list is a request to
+/// *see* it, and it may well have been picked from the conversation.
+void activateTerminalTab(WidgetRef ref, String tabId) {
+  ref.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
+  ref.read(terminalVisibleProvider.notifier).set(true);
+}
+
+/// Every terminal tab, as [TabPicker] lists them.
+///
+/// Top-level because two things open that picker on the same list: the strip's
+/// overflow button, and quick open's "Switch terminal tab…". Built only while
+/// the picker is up, because this is the expensive half — telling two `zsh`
+/// tabs apart means knowing which session runs in which pane, and that is a
+/// query the strip itself never needs.
+List<TabEntry> terminalTabEntries(WidgetRef ref) {
+  final terminals = ref.watch(terminalSessionsControllerProvider);
+  final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+  // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
+  ref.watch(sessionsRevisionProvider);
+  final titles = <String, String>{
+    for (final record in ref.read(sessionDaoProvider).getAll())
+      if (record.paneId != null) record.paneId!: record.title,
+  };
+  final onPanes = _showingPanes(ref);
+  final active = terminals.activeTabId;
+  return [
+    for (final tab in terminals.tabs)
+      TabEntry(
+        item: QuickOpenItem(
+          id: 'tab/${tab.id}',
+          group: QuickOpenGroup.tabs,
+          title: sessions.titleForTab(tab.id),
+          subtitle: _whereabouts(tab, titles, sessions),
+          detail: sessions.livenessForTab(tab.id).isLive ? null : 'not running',
+          icon: AppIcons.terminal,
+          onSelect: () => activateTerminalTab(ref, tab.id),
         ),
-      for (final tab in terminals.tabs)
-        TabEntry(
-          item: QuickOpenItem(
-            id: 'tab/${tab.id}',
-            group: QuickOpenGroup.tabs,
-            title: sessions.titleForTab(tab.id),
-            subtitle: _whereabouts(tab, titles, sessions),
-            detail: sessions.livenessForTab(tab.id).isLive
-                ? null
-                : 'not running',
-            icon: AppIcons.terminal,
-            onSelect: () => _activate(sessions, tab.id),
-          ),
-          active: _showingPanes && tab.id == active,
-          onClose: () => sessions.closeTab(tab.id),
-        ),
-    ];
-  }
+        active: onPanes && tab.id == active,
+        onClose: () => sessions.closeTab(tab.id),
+      ),
+  ];
+}
 
-  /// Where a tab is: the session running in its focused pane, the directory
-  /// that pane is in, or both.
-  ///
-  /// Without it a window full of `zsh` tabs is a list of identical rows, and a
-  /// picker you cannot pick from is not an answer to anything.
-  static String? _whereabouts(
-    TerminalTab tab,
-    Map<String, String> sessionTitles,
-    TerminalSessionsController sessions,
-  ) {
-    final paneId = tab.focusedPaneId;
-    final parts = [
-      ?sessionTitles[paneId],
-      ?sessions.instanceFor(paneId)?.workingDirectory,
-    ];
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
-
-  void _activate(TerminalSessionsController sessions, String tabId) {
-    sessions.activateTab(tabId);
-    onShowTerminal(null);
-  }
-
-  void _closeConversation(WidgetRef ref) {
-    ref.read(selectedSessionIdProvider.notifier).select(null);
-    ref.read(selectedImportedSessionIdProvider.notifier).select(null);
-  }
+/// Where a tab is: the session running in its focused pane, the directory
+/// that pane is in, or both.
+///
+/// Without it a window full of `zsh` tabs is a list of identical rows, and a
+/// picker you cannot pick from is not an answer to anything.
+String? _whereabouts(
+  TerminalTab tab,
+  Map<String, String> sessionTitles,
+  TerminalSessionsController sessions,
+) {
+  final paneId = tab.focusedPaneId;
+  final parts = [
+    ?sessionTitles[paneId],
+    ?sessions.instanceFor(paneId)?.workingDirectory,
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
 }
 
 /// The scrolling part of the strip, and the affordances for what will not fit.
@@ -704,7 +750,6 @@ class _TabRail extends StatefulWidget {
     required this.tabs,
     required this.width,
     required this.activeIndex,
-    required this.entries,
   });
 
   final List<_StripTab> tabs;
@@ -715,7 +760,6 @@ class _TabRail extends StatefulWidget {
   final double width;
 
   final int activeIndex;
-  final List<TabEntry> Function(WidgetRef ref) entries;
 
   @override
   State<_TabRail> createState() => _TabRailState();
@@ -812,7 +856,7 @@ class _TabRailState extends State<_TabRail> {
         _chevron(forward: false),
         Expanded(child: list),
         _chevron(forward: true),
-        _OverflowButton(count: widget.tabs.length, entries: widget.entries),
+        _OverflowButton(count: widget.tabs.length),
       ],
     );
   }
@@ -854,10 +898,9 @@ class _TabRailState extends State<_TabRail> {
 /// The way to every tab the strip cannot show, and the only affordance here
 /// that still works at a hundred.
 class _OverflowButton extends ConsumerWidget {
-  const _OverflowButton({required this.count, required this.entries});
+  const _OverflowButton({required this.count});
 
   final int count;
-  final List<TabEntry> Function(WidgetRef ref) entries;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -868,7 +911,7 @@ class _OverflowButton extends ConsumerWidget {
       // only how many there are.
       message: 'All $count tabs — filter and switch',
       child: InkWell(
-        onTap: () => TabPicker.show(context, entries),
+        onTap: () => TabPicker.show(context, terminalTabEntries),
         child: Container(
           height: Chrome.tabStrip,
           padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
@@ -898,30 +941,13 @@ class _OverflowButton extends ConsumerWidget {
   }
 }
 
-/// The permission chip for the agent pane the terminal view is showing.
-///
-/// Follows the focused pane rather than the tree, for the reason given on
-/// [activePaneSessionIdProvider]. A shell tab draws nothing.
-class _PanePermissionChip extends ConsumerWidget {
-  const _PanePermissionChip();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = ref.watch(activePaneSessionIdProvider);
-    if (sessionId == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(right: Insets.sm),
-      child: PermissionModeChip(sessionId: sessionId),
-    );
-  }
-}
-
 /// The two renderings of one session. Not a navigation control: both sides show
 /// the same record, the same PTY and the same lifecycle.
 ///
-/// Labelled in words as well as icons. The terminal is where a session opens
-/// now, so the way back to its conversation cannot be a chord and a hover — it
-/// has to be a thing on the strip that says what it is.
+/// Labelled in words as well as icons, and the only way to the conversation now
+/// that no tab stands for it. The terminal is where a session opens, so the way
+/// back to its transcript cannot be a chord and a hover — it has to be a thing
+/// on the chrome that says what it is.
 class _ViewToggle extends StatelessWidget {
   const _ViewToggle({
     required this.onTerminal,
@@ -977,7 +1003,7 @@ class _ViewToggle extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+      padding: const EdgeInsets.only(left: Insets.sm),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(Radii.sm),
         child: DecoratedBox(

@@ -363,9 +363,11 @@ void main() {
       );
     });
 
-    testWidgets('the conversation is a tab in the list like any other', (
-      tester,
-    ) async {
+    testWidgets('a selected session adds no row to the list', (tester) async {
+      // The conversation used to be listed here as a thirty-first tab, and
+      // drawn in the strip as a chip, while the toggle beside it did the same
+      // job. The list is the terminal's tabs; the conversation is a view of
+      // the session, reached from the bar under the surface.
       openTabs(30);
       final paneId = container
           .read(terminalSessionsControllerProvider)
@@ -378,10 +380,14 @@ void main() {
       container.read(selectedSessionIdProvider.notifier).select('s1');
       await pump(tester);
 
-      // The conversation chip is one more tab, so the count is 31.
-      await tester.tap(overflowButton(31));
+      await tester.tap(overflowButton(30));
       await tester.pumpAndSettle();
-      expect(find.text('Conversation'), findsOneWidget);
+
+      expect(find.text('30 tabs'), findsOneWidget);
+      expect(find.text('Conversation'), findsNothing);
+      // The session is still what its own tab is named by, which is the half
+      // of this that was never the complaint.
+      expect(find.textContaining('Read the report'), findsOneWidget);
     });
   });
 }

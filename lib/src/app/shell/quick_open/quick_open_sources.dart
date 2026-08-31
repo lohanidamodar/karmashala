@@ -25,6 +25,8 @@ import '../../theme/app_icons.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
 import '../side_panel_state.dart';
+import '../tab_picker.dart';
+import '../workbench.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
 import 'repo_file_index.dart';
@@ -136,6 +138,18 @@ class QuickOpenSources {
         icon: AppIcons.terminal,
         shortcut: 'Ctrl+`',
         onSelect: () => ref.read(terminalVisibleProvider.notifier).set(true),
+      ),
+      // The tabs listed below are only the ones that are *nothing but* tabs
+      // (see [_openTabs]), and finding one that way means knowing its name.
+      // This is the other question — "show me my tabs" — and it opens the
+      // strip's own picker, which holds every tab including the ones running a
+      // session.
+      _command(
+        'Switch terminal tab…',
+        subtitle: 'Every open tab, by name, session or directory',
+        icon: AppIcons.listMagnifyingGlass,
+        keywords: const ['tabs', 'terminal', 'switch', 'window'],
+        onSelect: () => TabPicker.show(context, terminalTabEntries),
       ),
       _command(
         'Toggle Explorer',

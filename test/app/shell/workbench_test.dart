@@ -36,6 +36,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/window_matrix.dart';
 
 void main() {
   late AppDatabase db;
@@ -162,6 +163,26 @@ void main() {
   IndexedStack surfaces(WidgetTester tester) =>
       tester.widget<IndexedStack>(find.byKey(kWorkbenchSurfaces));
 
+  /// The delivery strip in the session bar. The conversation has one of its
+  /// own on its composer, and only one of the two is ever on screen — the
+  /// hidden surface of an IndexedStack is offstage to a finder — but the flag
+  /// says which host is which without depending on that.
+  final hostedStrip = find.byWidgetPredicate(
+    (widget) => widget is DeliveryStrip && widget.hostedOnTerminal,
+  );
+
+  /// Asserts [control] is drawn under the terminal rather than up in the tab
+  /// strip, which is the whole of the reported complaint about the chip.
+  void expectBelowTheTerminal(WidgetTester tester, Finder control) {
+    expect(
+      tester.getTopLeft(control).dy,
+      greaterThanOrEqualTo(
+        tester.getBottomLeft(find.byType(TerminalPaneStack)).dy,
+      ),
+      reason: 'this belongs to the bar under the terminal, not to the strip',
+    );
+  }
+
   /// A session running in a pane of ours — the only kind that has two views.
   String seedSessionInAPane({
     String id = 's1',
@@ -202,15 +223,19 @@ void main() {
     expect(find.byTooltip('Hide terminal (Ctrl+`)'), findsNothing);
   });
 
-  testWidgets('a selected session gets a tab beside the terminal tabs', (
-    tester,
-  ) async {
+  testWidgets('a selected session adds no tab of its own', (tester) async {
+    // The report: one tap in the Explorer grew a conversation tab *and* a
+    // Terminal/Chat switch — two pieces of chrome for one thing, in the same
+    // row. The strip is terminal tabs; the way to the conversation is the
+    // labelled toggle in the bar under the surface.
     seedSessionInAPane(title: 'Refactor the parser');
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
 
-    expect(find.text('Refactor the parser'), findsOneWidget);
     expect(find.text('PowerShell'), findsOneWidget);
+    expect(find.byTooltip('Conversation · Refactor the parser'), findsNothing);
+    expect(find.byTooltip('Close conversation'), findsNothing);
+    expect(find.byTooltip('Chat view'), findsOneWidget);
   });
 
   testWidgets('selecting a session opens its terminal, not its chat', (
@@ -282,8 +307,16 @@ void main() {
       find.textContaining('No terminal of ours is running this session'),
       findsOneWidget,
     );
-    // ...and the conversation is still one labelled tap away.
+    // ...and the conversation is still one labelled tap away. The bar is
+    // offered for a selected session with no pane of ours precisely because
+    // nothing lands on the transcript by itself any more: keyed off the pane
+    // the way the rest of the bar is, this session would have no way to it.
     expect(find.byTooltip('Chat view'), findsOneWidget);
+    expect(tester.widget<DeliveryStrip>(hostedStrip).sessionId, 's1');
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+    expect(surfaces(tester).index, 1);
   });
 
   testWidgets('a pane that has been ended stops being a surface', (
@@ -327,6 +360,9 @@ void main() {
     expect(find.widgetWithText(Tooltip, 'Chat'), findsOneWidget);
     expect(find.widgetWithText(Tooltip, 'Terminal'), findsOneWidget);
     expect(container.read(terminalVisibleProvider), isTrue);
+    // And it is chrome under the surface now, beside the rest of this
+    // session's controls, rather than a switch in the row of tabs.
+    expectBelowTheTerminal(tester, find.byTooltip('Chat view'));
 
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
@@ -375,17 +411,20 @@ void main() {
     );
   });
 
-  testWidgets('an agent pane carries its permission chip on the strip', (
+  testWidgets('an agent pane carries its permission chip under the terminal', (
     tester,
   ) async {
     // No selection: this is the terminal view on its own, which is where the
     // chip did not exist. The mode was readable only from the chat composer,
     // so the one control the user needs before letting an agent run was
-    // invisible on the surface they were watching it on.
+    // invisible on the surface they were watching it on. It then sat in the
+    // tab strip — the one session control up there while every other one was
+    // below — which is the second half of the report.
     seedSessionInAPane();
     await pump(tester);
 
     expect(find.byType(PermissionModeChip), findsOneWidget);
+    expectBelowTheTerminal(tester, find.byType(PermissionModeChip));
 
     // A plain shell tab has no agent and no mode, so it draws nothing.
     container
@@ -447,6 +486,69 @@ void main() {
     // Handoff and fork, the two the brief named, behind the same one dialog the
     // conversation opens.
     expect(find.text('Continue with…'), findsOneWidget);
+  });
+
+  testWidgets('the delivery row is one row of chrome, not chips on the pane', (
+    tester,
+  ) async {
+    // The report: the actions were drawn straight onto the terminal's own
+    // background, under a rule of their own, at the size a chip is in a
+    // message column. They are the bar's now — and the state line shares the
+    // row with them rather than reserving one above it.
+    delivery = const SessionDelivery(
+      branch: 'work',
+      baseBranch: 'origin/main',
+      hasRemote: true,
+      dirtyFiles: 2,
+      hasWorktree: true,
+    );
+    continuation = possible;
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    expect(tester.widget<DeliveryStrip>(hostedStrip).hostedOnTerminal, isTrue);
+    expectBelowTheTerminal(tester, find.text('Commit'));
+    // Where the work stands and what to do about it are on the same line —
+    // one Wrap holds both, so the bar spends a second row only when it has run
+    // out of width, never on a state line that is usually four words.
+    final line = tester.getCenter(find.text('Working')).dy;
+    expect(
+      tester.getCenter(find.text('work')).dy,
+      moreOrLessEquals(line, epsilon: 1),
+    );
+    expect(
+      tester.getCenter(find.text('Commit')).dy,
+      moreOrLessEquals(line, epsilon: 1),
+    );
+  });
+
+  testWidgets('the bar survives the minimum window and larger text', (
+    tester,
+  ) async {
+    // Everything the bar can hold at once: a permission mode, a stage, a
+    // branch, five actions and the toggle. It wraps rather than clipping, and
+    // every control in it still has a name for Narrator to read.
+    delivery = const SessionDelivery(
+      branch: 'session/fix-the-login',
+      baseBranch: 'origin/main',
+      hasRemote: true,
+      dirtyFiles: 2,
+      aheadOfBase: 3,
+      hasWorktree: true,
+    );
+    continuation = possible;
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+      ),
+      because: 'the bar is the busiest row of chrome in the window',
+    );
   });
 
   testWidgets('an agent blocked on a prompt is answerable from the terminal', (

@@ -31,9 +31,23 @@ import 'continue_with_dialog.dart';
 /// archiving the worktree is a destructive local operation that asks first and
 /// reports what it did.
 class DeliveryStrip extends ConsumerStatefulWidget {
-  const DeliveryStrip({required this.sessionId, super.key});
+  const DeliveryStrip({
+    required this.sessionId,
+    this.hostedOnTerminal = false,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// Whether the strip is drawn in the session bar under the terminal rather
+  /// than above the conversation's composer. One parameter, not a second
+  /// widget: it only changes how the strip is dressed.
+  ///
+  /// The bar is already chrome — it draws the rule above itself and the surface
+  /// behind it — so the strip brings neither, and the state line and the
+  /// actions become one [Wrap] instead of two rows, which is what keeps the bar
+  /// one row deep at the widths a window is usually at.
+  final bool hostedOnTerminal;
 
   @override
   ConsumerState<DeliveryStrip> createState() => _DeliveryStripState();
@@ -178,6 +192,49 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     if (actions.isEmpty && !canContinue && delivery == null) {
       return const SizedBox.shrink();
     }
+    final compact = widget.hostedOnTerminal;
+    final buttons = [
+      for (final offered in actions)
+        _ActionChip(
+          offered: offered,
+          compact: compact,
+          onPressed: _busy || !offered.isEnabled
+              ? null
+              : () => _press(offered.action, delivery),
+        ),
+      if (canContinue)
+        ActionChip(
+          avatar: const Icon(AppIcons.arrowBendDownRight, size: 14),
+          label: const Text('Continue with…'),
+          tooltip:
+              'Move this session to another agent, or fork it. '
+              'Nothing is launched until you have seen what the next '
+              'agent will be told.',
+          visualDensity: compact ? VisualDensity.compact : null,
+          materialTapTargetSize: compact
+              ? MaterialTapTargetSize.shrinkWrap
+              : null,
+          labelStyle: compact ? Theme.of(context).textTheme.labelSmall : null,
+          onPressed: _busy
+              ? null
+              : () => ContinueWithDialog.show(context, widget.sessionId),
+        ),
+    ];
+
+    if (compact) {
+      // One run: where the work stands reads as the first thing on the row and
+      // the next steps follow it, and a narrow window wraps the row rather than
+      // reserving a second one for a state line that is usually five words.
+      return Wrap(
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (delivery != null) ..._deliveryFacts(context, delivery),
+          ...buttons,
+        ],
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -193,28 +250,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
           child: Wrap(
             spacing: Insets.sm,
             runSpacing: Insets.xs,
-            children: [
-              for (final offered in actions)
-                _ActionChip(
-                  offered: offered,
-                  onPressed: _busy || !offered.isEnabled
-                      ? null
-                      : () => _press(offered.action, delivery),
-                ),
-              if (canContinue)
-                ActionChip(
-                  avatar: const Icon(AppIcons.arrowBendDownRight, size: 14),
-                  label: const Text('Continue with…'),
-                  tooltip:
-                      'Move this session to another agent, or fork it. '
-                      'Nothing is launched until you have seen what the next '
-                      'agent will be told.',
-                  onPressed: _busy
-                      ? null
-                      : () =>
-                            ContinueWithDialog.show(context, widget.sessionId),
-                ),
-            ],
+            children: buttons,
           ),
         ),
       ],
@@ -229,114 +265,137 @@ class _DeliveryState extends StatelessWidget {
   final SessionDelivery delivery;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
-    final label = theme.textTheme.labelSmall;
-    final muted = label?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    final stage = delivery.stage;
-    final pr = delivery.pullRequest;
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.sm, 0),
+    child: Wrap(
+      spacing: Insets.sm,
+      runSpacing: Insets.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: _deliveryFacts(context, delivery),
+    ),
+  );
+}
 
-    final colour = switch (stage) {
-      DeliveryStage.checksFailing => semantic.failure,
-      DeliveryStage.checksPassing || DeliveryStage.merged => semantic.idle,
-      DeliveryStage.prOpen => semantic.attention,
-      _ => semantic.neutral,
-    };
+/// What the state line is made of, as separate pieces.
+///
+/// A list rather than a widget because the session bar pours them into the same
+/// [Wrap] as the actions: nested, the whole state would break to a run of its
+/// own long before it had run out of room.
+List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
+  final theme = Theme.of(context);
+  final semantic = SemanticColors.of(context);
+  final label = theme.textTheme.labelSmall;
+  final muted = label?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+  final stage = delivery.stage;
+  final pr = delivery.pullRequest;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.sm, 0),
-      child: Wrap(
-        spacing: Insets.sm,
-        runSpacing: Insets.xs,
-        crossAxisAlignment: WrapCrossAlignment.center,
+  final colour = switch (stage) {
+    DeliveryStage.checksFailing => semantic.failure,
+    DeliveryStage.checksPassing || DeliveryStage.merged => semantic.idle,
+    DeliveryStage.prOpen => semantic.attention,
+    _ => semantic.neutral,
+  };
+
+  return [
+    // A dot as well as a colour: state must never be carried by colour
+    // alone, and the stage's own name is beside it regardless.
+    Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(_stageIcon(stage), size: 12, color: colour),
+        const SizedBox(width: 4),
+        Text(stage.label, style: label?.copyWith(color: colour)),
+      ],
+    ),
+    if (delivery.branch case final branch?)
+      Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // A dot as well as a colour: state must never be carried by colour
-          // alone, and the stage's own name is beside it regardless.
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(_stageIcon(stage), size: 12, color: colour),
-              const SizedBox(width: 4),
-              Text(stage.label, style: label?.copyWith(color: colour)),
-            ],
+          Icon(
+            AppIcons.gitBranch,
+            size: 12,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
-          if (delivery.branch case final branch?)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  AppIcons.gitBranch,
-                  size: 12,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 160),
-                  child: RemoteLink(
-                    text: branch,
-                    url: delivery.remote?.branchUrl(branch),
-                    style: muted,
-                  ),
-                ),
-              ],
-            ),
-          if (delivery.lineLabel case final lines?) Text(lines, style: muted),
-          if (delivery.isDirty)
-            Text('${delivery.dirtyFiles} uncommitted', style: muted),
-          if ((delivery.aheadOfBase ?? 0) > 0 && delivery.baseBranch != null)
-            Text(
-              '${delivery.aheadOfBase} ahead of ${delivery.baseBranch}',
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 160),
+            child: RemoteLink(
+              text: branch,
+              url: delivery.remote?.branchUrl(branch),
               style: muted,
             ),
-          if (pr != null)
-            RemoteLink(
-              text: '#${pr.number}',
-              url: pr.url,
-              style: label,
-              tooltip: pr.title.isEmpty ? pr.url : pr.title,
-              icon: true,
-            ),
-          if (pr?.checks.label case final checks?)
-            Text(
-              checks,
-              style: label?.copyWith(
-                color: pr!.checks.state == ChecksState.failing
-                    ? semantic.failure
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+          ),
         ],
       ),
-    );
-  }
+    if (delivery.lineLabel case final lines?) Text(lines, style: muted),
+    if (delivery.isDirty)
+      Text('${delivery.dirtyFiles} uncommitted', style: muted),
+    if ((delivery.aheadOfBase ?? 0) > 0 && delivery.baseBranch != null)
+      Text(
+        '${delivery.aheadOfBase} ahead of ${delivery.baseBranch}',
+        style: muted,
+      ),
+    if (pr != null)
+      RemoteLink(
+        text: '#${pr.number}',
+        url: pr.url,
+        style: label,
+        tooltip: pr.title.isEmpty ? pr.url : pr.title,
+        icon: true,
+      ),
+    if (pr?.checks.label case final checks?)
+      Text(
+        checks,
+        style: label?.copyWith(
+          color: pr!.checks.state == ChecksState.failing
+              ? semantic.failure
+              : theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+  ];
 }
 
 /// One action, primary or not, enabled or not with the reason attached.
 class _ActionChip extends StatelessWidget {
-  const _ActionChip({required this.offered, required this.onPressed});
+  const _ActionChip({
+    required this.offered,
+    required this.onPressed,
+    this.compact = false,
+  });
 
   final OfferedAction offered;
   final VoidCallback? onPressed;
+
+  /// Sized for chrome rather than for a message column: in the session bar a
+  /// chip sits beside the permission mode and the view toggle, and a full-size
+  /// Material chip there reads as a button that landed on the wrong surface.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final action = offered.action;
+    // The primary action keeps its weight and its container in either host —
+    // which of these to press next is the one thing the strip is saying.
+    final base = compact
+        ? theme.textTheme.labelSmall
+        : theme.textTheme.labelLarge;
     final chip = ActionChip(
       avatar: Icon(_actionIcon(action), size: 14),
       label: Text(action.label),
+      visualDensity: compact ? VisualDensity.compact : null,
+      materialTapTargetSize: compact ? MaterialTapTargetSize.shrinkWrap : null,
       backgroundColor: offered.isPrimary && offered.isEnabled
           ? theme.colorScheme.primaryContainer
           : null,
       labelStyle: offered.isPrimary
-          ? theme.textTheme.labelLarge?.copyWith(
+          ? base?.copyWith(
               fontWeight: FontWeight.w600,
               color: offered.isEnabled
                   ? theme.colorScheme.onPrimaryContainer
                   : theme.colorScheme.onSurfaceVariant,
             )
-          : null,
+          : (compact ? base : null),
       onPressed: onPressed,
     );
     return Tooltip(
