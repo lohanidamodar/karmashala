@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import '../client/relay_candidates.dart';
 import '../protocol.dart';
 import '../transport/key_schedule.dart';
 
@@ -32,10 +33,14 @@ class PairingPayload {
     required this.capabilities,
     this.version = kProtocolVersion,
     Uint8List? typedSecret,
+    List<Uri> relays = const [],
   }) : secret = Uint8List.fromList(secret),
        typedSecret = typedSecret == null
            ? null
-           : Uint8List.fromList(typedSecret) {
+           : Uint8List.fromList(typedSecret),
+       relays = List.unmodifiable([
+         for (final candidate in candidatesFrom(relay, relays)) candidate.url,
+       ]) {
     if (secret.length < kPairingSecretBytes) {
       throw ArgumentError.value(
         secret.length,
@@ -52,6 +57,7 @@ class PairingPayload {
     required DeviceId hostId,
     required CapabilitySet capabilities,
     Random? random,
+    List<Uri> relays = const [],
   }) {
     final rng = random ?? Random.secure();
     Uint8List bytes(int n) =>
@@ -62,6 +68,7 @@ class PairingPayload {
       secret: bytes(kPairingSecretBytes),
       hostId: hostId,
       capabilities: capabilities,
+      relays: relays,
     );
   }
 
@@ -74,6 +81,7 @@ class PairingPayload {
     required DeviceId hostId,
     required CapabilitySet capabilities,
     Random? random,
+    List<Uri> relays = const [],
   }) async {
     final rng = random ?? Random.secure();
     final typed = Uint8List.fromList([
@@ -88,10 +96,21 @@ class PairingPayload {
       hostId: hostId,
       capabilities: capabilities,
       typedSecret: typed,
+      relays: relays,
     );
   }
 
+  /// The relay the shown tab chose — and the one an older companion, which
+  /// reads this field alone, will dial.
   final Uri relay;
+
+  /// Every relay the host is serving right now, [relay] first. Additive on the
+  /// wire (`relays`): an older companion ignores the key and pairs on [relay],
+  /// while a newer one saves the whole set and can reach the desktop later
+  /// through whichever of them is up. A relay is only a meeting place — the
+  /// rendezvous and every key come from the device key, never from a URL — so
+  /// carrying several costs nothing in trust.
+  final List<Uri> relays;
 
   /// The relay path both ends meet on for the pairing conversation only.
   /// Random and carried here — unlike a session rendezvous, nothing derives it.
@@ -117,6 +136,10 @@ class PairingPayload {
     'secret': base64Url.encode(secret),
     'hostId': hostId.value,
     'capabilities': capabilities.bits,
+    // Only when there is something to add: a one-relay host's QR stays byte
+    // for byte what it was before this loop.
+    if (relays.length > 1)
+      'relays': [for (final url in relays) url.toString()],
   });
 
   /// Parses a scanned QR string. Throws [ProtocolException] on anything that
@@ -156,6 +179,9 @@ class PairingPayload {
       secret: secretBytes,
       hostId: DeviceId.parse(hostId),
       capabilities: CapabilitySet.fromJson(json['capabilities'] ?? 0),
+      // Absent (an older host, or a single-relay one) leaves the set as just
+      // `relay`; a garbled entry costs its own relay and nothing else.
+      relays: relayUrisFrom(json['relays']),
     );
   }
 }

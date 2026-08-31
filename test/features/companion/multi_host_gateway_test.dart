@@ -47,7 +47,11 @@ void main() {
   setUp(() async {
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
-    phoneDisk = {};
+    // Loop 83's last-resort relay is the phone's configured one, which
+    // defaults to the public PopupBits relay — point it here instead.
+    phoneDisk = {
+      RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
+    };
     store = SecureCompanionStore.withBackend(
       read: (key) async => phoneDisk[key],
       write: (key, value) async => phoneDisk[key] = value,

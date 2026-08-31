@@ -206,6 +206,11 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<CompanionLinkPath?> get linkPathStates => _linkPath.stream;
 
+  /// The fake has no relay of its own; the screens that read this simply
+  /// render the path without naming one.
+  @override
+  Uri? get activeRelay => null;
+
   @override
   CapabilitySet get capabilities =>
       _pairing.value?.capabilities ?? CapabilitySet.none;

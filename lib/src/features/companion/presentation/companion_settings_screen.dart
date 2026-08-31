@@ -22,6 +22,9 @@ class CompanionSettingsScreen extends ConsumerWidget {
         ref.watch(companionLinkProvider).asData?.value ??
         CompanionLinkState.disconnected;
     final path = ref.watch(companionLinkPathProvider).asData?.value;
+    // A phone now keeps several relays and picks one per reconnect, so
+    // "Relay" alone stopped being an answer — name the one in use.
+    final relayHost = ref.read(companionGatewayProvider).activeRelay?.host;
 
     if (pairing == null) {
       // The shell shows the pairing flow before the tabs exist, so this is
@@ -44,7 +47,11 @@ class CompanionSettingsScreen extends ConsumerWidget {
       // the relay entirely, and the user deserves to see that it did.
       CompanionLinkState.connected => (
         AppIcons.linkSimple,
-        path == null ? 'Connected' : 'Connected · ${path.label}',
+        switch ((path, relayHost)) {
+          (null, _) => 'Connected',
+          (final p?, final host?) => 'Connected · ${p.label} ($host)',
+          (final p?, _) => 'Connected · ${p.label}',
+        },
         SemanticColors.of(context).idle,
       ),
       CompanionLinkState.connecting => (
