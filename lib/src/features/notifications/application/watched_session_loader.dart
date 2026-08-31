@@ -9,12 +9,19 @@ import '../../sessions/domain/session_status.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/watched_session.dart';
 
-/// Picks the sessions worth asking the status pipeline about.
+/// Every session worth holding a status for.
 ///
-/// Reading a status is not free — a state-file lookup tails the transcript from
-/// disk — so this is a filter, not an enumeration. A session qualifies when
-/// either an agent hook has already reported on it (in-memory, always cheap) or
-/// its transcript changed recently enough to still be live.
+/// An enumeration with one liveness filter, not a ranking. Until Loop 87 this
+/// also truncated its own answer at 60 entries, newest first — which meant a
+/// workspace with more than sixty live sessions silently stopped watching the
+/// rest, and a session that dropped out of the capped set and came back looked
+/// like a first observation, so its transition was suppressed. The cap is gone:
+/// what a status *costs* is now rationed by `SessionStatusRegistry`'s probe
+/// budget, which spends it on the disk reads rather than on membership.
+///
+/// The one filter that remains is liveness, and it is about the filesystem, not
+/// about count: an imported transcript nothing has touched for half an hour is
+/// history, and history does not raise toasts.
 class WatchedSessionLoader {
   WatchedSessionLoader({
     required this.sessionDao,
@@ -24,7 +31,6 @@ class WatchedSessionLoader {
     required this.clock,
     this.activeWindow = const Duration(minutes: 30),
     this.coldRecheck = const Duration(minutes: 1),
-    this.limit = 60,
   });
 
   final SessionDao sessionDao;
@@ -45,11 +51,6 @@ class WatchedSessionLoader {
   /// skips the check entirely.
   final Duration coldRecheck;
 
-  /// Upper bound on sessions watched per poll, newest first. A workspace with
-  /// thousands of imported sessions must not turn a 5-second tick into a
-  /// filesystem sweep.
-  final int limit;
-
   /// Cold transcripts, and the instant each becomes worth checking again.
   final Map<String, DateTime> _coldUntil = {};
 
@@ -64,15 +65,22 @@ class WatchedSessionLoader {
     final candidates = <(WatchedSession, DateTime)>[];
 
     for (final session in sessionDao.getAll()) {
-      final externalId = session.externalSessionId;
       final agentId = agentIdByInstallation[session.agentInstallationId];
-      if (externalId == null || agentId == null) continue;
+      if (agentId == null) continue;
       if (_isOver(session.status)) continue;
-      // Native sessions carry no transcript path, so their status can only come
-      // from hooks — an in-memory lookup, cheap enough to always include.
+      // The CLI's own id when it has announced one — the key hooks and state
+      // files share — and our row id when it has not. A session the agent has
+      // not named yet still has a screen, and the screen is a status source:
+      // keying it by the row id is exactly what the per-card badge always did,
+      // and it is why the ambient pipeline used to report `unknown` for a
+      // session the visible badge could read perfectly well.
+      final externalId = session.externalSessionId;
       candidates.add((
         WatchedSession(
-          key: AgentSessionKey(agentId, externalId),
+          key: AgentSessionKey(
+            agentId,
+            externalId == null || externalId.isEmpty ? session.id : externalId,
+          ),
           label: session.title,
           openId: session.id,
           imported: false,
@@ -107,8 +115,10 @@ class WatchedSessionLoader {
       ));
     }
 
+    // Newest first. Ordering, not selection: nothing is dropped for sorting
+    // late any more. It decides which waiting session the tray names first.
     candidates.sort((a, b) => b.$2.compareTo(a.$2));
-    return [for (final candidate in candidates.take(limit)) candidate.$1];
+    return [for (final candidate in candidates) candidate.$1];
   }
 
   bool _stillCold(String path, DateTime now) {
