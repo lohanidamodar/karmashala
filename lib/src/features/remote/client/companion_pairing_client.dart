@@ -14,6 +14,7 @@ import '../transport/relay_transport.dart';
 import '../transport/remote_transport.dart';
 import '../transport/sealed_channel.dart';
 import 'companion_store.dart';
+import 'relay_candidates.dart';
 
 /// Pairing failed; [message] is safe to show the user.
 class CompanionPairingException implements Exception {
@@ -104,6 +105,10 @@ class CompanionPairingClient {
         deviceKey: Uint8List.fromList(key.bytes),
         capabilities: capabilities,
         relay: payload.relay,
+        // Everything the host said it is serving, not just the tab that was
+        // on screen — so a phone paired at home can still find the desktop
+        // from a train without being re-paired.
+        candidates: candidatesFrom(payload.relay, payload.relays),
         generation: kFirstSessionGeneration,
         hostName: hostName,
       );
@@ -197,6 +202,10 @@ class CompanionPairingClient {
       link.send(await channel.seal(PairingMessage.encodeAck()));
       await _awaitSealed(frames, channel, PairingMessage.done, timeout);
 
+      // A typed code carries no relay set — the code is the secret and
+      // nothing else — so this record starts with the one relay the phone
+      // dialled. The host's first `host.status` replaces it with the real
+      // set, so a typed pairing is multi-relay from its very first session.
       final pairing = CompanionPairing(
         hostId: hostId,
         deviceId: deviceId,

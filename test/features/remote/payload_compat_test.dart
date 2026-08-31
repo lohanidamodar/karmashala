@@ -207,4 +207,59 @@ void main() {
       expect(staged.branch, 'feature/x');
     });
   });
+
+  group("loop 83's host.status relays are additive the same way", () {
+    // A relay set is a hint about WHERE to meet, never about WHO answers: the
+    // rendezvous is derived from the device key, so an old build that ignores
+    // these keys loses a convenience and nothing else.
+    final announced = RemoteHostStatus(
+      versions: kSupportedVersions,
+      hostName: 'Desktop',
+      relays: [
+        Uri.parse('ws://192.168.1.20:8787'),
+        Uri.parse('wss://relay.popupbits.com'),
+      ],
+      lanHint: '192.168.1.20:47653',
+    );
+
+    test('old companion, new host: the greeting still decodes to a version '
+        'range and a name', () {
+      final decoded = Envelope.fromBytes(
+        Envelope.of(FrameType.hostStatus, seq: 1, payload: announced.toJson())
+            .toBytes(),
+      );
+
+      // Exactly the two keys a pre-Loop-83 build reads.
+      expect(decoded.payload['versions'], isA<Map<String, Object?>>());
+      expect(decoded.payload['host'], 'Desktop');
+    });
+
+    test('new companion, old host: no relays means none are invented', () {
+      final decoded = Envelope.fromBytes(
+        Envelope.of(
+          FrameType.hostStatus,
+          seq: 1,
+          payload: {'versions': kSupportedVersions.toJson(), 'host': 'Desktop'},
+        ).toBytes(),
+      );
+
+      final status = RemoteHostStatus.fromJson(decoded.payload);
+
+      expect(status.relays, isEmpty);
+      expect(status.lanHint, isNull);
+      expect(status.hostName, 'Desktop');
+    });
+
+    test('the whole announcement survives the envelope', () {
+      final decoded = Envelope.fromBytes(
+        Envelope.of(FrameType.hostStatus, seq: 9, payload: announced.toJson())
+            .toBytes(),
+      );
+
+      final status = RemoteHostStatus.fromJson(decoded.payload);
+
+      expect(status.relays, announced.relays);
+      expect(status.lanHint, announced.lanHint);
+    });
+  });
 }

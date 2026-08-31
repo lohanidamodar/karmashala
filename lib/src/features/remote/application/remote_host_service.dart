@@ -145,17 +145,64 @@ class RemoteHostService {
     }
   }
 
-  /// The relay [device]'s frames travel through right now, or null while that
-  /// relay is off — the device is then parked: LAN routing stays, relay
-  /// listeners close, and it is picked back up the moment the relay returns.
+  /// The relay [device]'s **pushes** go to: the one it paired through, which
+  /// is the only relay its phone is known to poll. Null while that relay is
+  /// off — a push nobody can collect is not worth posting.
   Uri? relayUrlFor(PairedDevice device) {
     if (device.pairedViaLocalRelay) return _localRelayUrl;
     if (!_hostedEnabled) return null;
     return device.hostedRelayUri ?? relay;
   }
 
-  /// Points the service at the currently active relays. Parks and unparks
-  /// device runtimes to match; rendezvous generations are untouched.
+  /// Every relay this host is *listening* for [device] on right now.
+  ///
+  /// Since Loop 83 that is every active relay, not only the one the device
+  /// paired through: the phone chooses its own path from its saved candidates,
+  /// so wherever it turns up the host is already waiting. Safe because a relay
+  /// is a meeting place, never an identity — the rendezvous comes from the
+  /// device key and every frame is sealed under it, so an extra listener can
+  /// only ever be met by the one phone that holds that key.
+  ///
+  /// Empty means *parked*: no relay is on, and only a direct LAN link reaches
+  /// this device until one returns.
+  List<Uri> activeRelayUrlsFor(PairedDevice device) {
+    final urls = <String, Uri>{};
+    final local = _localRelayUrl;
+    if (local != null) urls[local.toString()] = local;
+    if (_hostedEnabled) {
+      // The relay it paired on AND the configured one, so a phone falling
+      // back to the app default still finds somebody listening.
+      final own = device.hostedRelayUri;
+      if (own != null) urls[own.toString()] = own;
+      urls[relay.toString()] = relay;
+    }
+    return List.unmodifiable(urls.values);
+  }
+
+  /// The relay set announced in `host.status` — what a phone should save as
+  /// its candidates. The same list the listeners are open on, so the phone can
+  /// never be told about a relay nobody is waiting at.
+  List<Uri> announcedRelaysFor(PairedDevice device) =>
+      activeRelayUrlsFor(device);
+
+  /// `host:port` of the direct LAN listener, when this machine has a LAN
+  /// address to name — taken from the local relay's own URL, which is where
+  /// the address was already discovered. A **hint** for a network that eats
+  /// multicast; loopback is never announced (a phone dialling 127.0.0.1 would
+  /// be dialling itself), and it may be stale the moment DHCP moves.
+  String? get lanHint {
+    final port = _lanServer?.port;
+    final host = _localRelayUrl?.host;
+    if (port == null || host == null || host.isEmpty) return null;
+    if (host == '127.0.0.1' || host == 'localhost' || host == '::1') {
+      return null;
+    }
+    return '$host:$port';
+  }
+
+  /// Points the service at the currently active relays. Opens and closes
+  /// device listeners to match, and tells every live phone the new set so its
+  /// saved candidates heal without a re-pair; generations are untouched.
   Future<void> updateRelays({
     required Uri? localRelayUrl,
     required bool hostedEnabled,
@@ -168,6 +215,12 @@ class RemoteHostService {
     for (final runtime in _runtimes.values.toList()) {
       await runtime.syncRelayListeners();
     }
+    // Connected phones learn the change now rather than at their next dial —
+    // this is what makes "I turned the hosted relay on" heal by itself.
+    await Future.wait([
+      for (final runtime in _runtimes.values.toList())
+        runtime.run((api) => api.sendHostStatus()),
+    ]);
   }
 
   /// Fired when the device list changed (paired, revoked, seen).
@@ -263,6 +316,10 @@ class RemoteHostService {
       relay: pairingRelay,
       hostId: hostId,
       capabilities: capabilities,
+      // The tab's relay stays the payload's `relay` — an older companion
+      // reads that alone — while the QR also names every other relay this
+      // host is serving, so the phone leaves with a set, not one address.
+      relays: [?_localRelayUrl, if (_hostedEnabled) this.relay],
     );
     final session = HostPairingSession(
       payload: payload,
@@ -446,9 +503,9 @@ class _LanRoute {
   final void Function(Uint8List frame) forward;
 }
 
-/// Everything live for one paired device: its relay listeners across the
-/// generation window, and — once traffic arrives — the sealed channel, the
-/// session api and the transport that carries its frames.
+/// Everything live for one paired device: its relay listeners — one per
+/// generation in the window, per ACTIVE relay — and, once traffic arrives, the
+/// sealed channel, the session api and the transport that carries its frames.
 class _DeviceRuntime {
   _DeviceRuntime(this.service, this.device, this.key);
 
@@ -456,16 +513,20 @@ class _DeviceRuntime {
   PairedDevice device;
   final SecretKeyData key;
 
-  final Map<int, RemoteTransport> _listeners = {};
-  final Map<int, StreamSubscription<Uint8List>> _listenerSubscriptions = {};
+  /// generation → relay URL text → the listener waiting there. The device's
+  /// phone may show up at any of them; whichever carries a frame becomes the
+  /// active link, exactly as a single listener did before.
+  final Map<int, Map<String, RemoteTransport>> _listeners = {};
+  final Map<int, Map<String, StreamSubscription<Uint8List>>>
+  _listenerSubscriptions = {};
   final Map<int, String> _rendezvousHexByGeneration = {};
 
-  /// Which relay [_listeners] are dialling, or null while parked.
-  Uri? _listenerUrl;
+  /// Which relays [_listeners] are dialling; empty while parked.
+  List<Uri> _listenerUrls = const [];
 
-  /// True while this device's relay is off: LAN still works, the relay
-  /// listeners are closed, and the settings list can say so.
-  bool get parked => _listenerUrl == null;
+  /// True while EVERY relay this device could be met on is off: LAN still
+  /// works, the relay listeners are closed, and the settings list can say so.
+  bool get parked => _listenerUrls.isEmpty;
 
   _ActiveLink? _active;
   bool _closed = false;
@@ -534,47 +595,56 @@ class _DeviceRuntime {
     await syncRelayListeners();
   }
 
-  /// Brings the relay listeners in line with the device's relay: open across
-  /// the window while it is active, closed — the device is *parked* — while
-  /// it is not. The active sealed channel and the LAN routes survive parking,
-  /// so a phone on the same network keeps working and a relay that returns
-  /// picks the device back up without touching generations.
+  /// Brings the relay listeners in line with the relays that are up: one per
+  /// generation in the window on EVERY active relay, so whichever candidate
+  /// the phone dials, somebody is already there. A relay that goes away has
+  /// only its own listeners closed; a device is *parked* only when none are
+  /// left. The active sealed channel and the LAN routes survive all of it, so
+  /// a phone on the same network keeps working and a relay that returns picks
+  /// the device back up without touching generations.
   Future<void> syncRelayListeners() async {
     if (_closed) return;
-    final url = service.relayUrlFor(device);
-    if (_listenerUrl != url) {
-      // The relay moved (or went away): listeners dialling the old one are
-      // dead weight either way.
-      for (final g in _listeners.keys.toList()) {
-        await _closeRelayListener(g);
+    final urls = service.activeRelayUrlsFor(device);
+    final want = {for (final url in urls) url.toString(): url};
+    for (final g in _listeners.keys.toList()) {
+      for (final key in _listeners[g]!.keys.toList()) {
+        if (want.containsKey(key)) continue;
+        // That relay is off (or moved): its listener is dead weight either way.
+        await _closeRelayListener(g, key);
       }
-      _listenerUrl = url;
     }
-    if (url == null) return;
+    _listenerUrls = urls;
     for (final entry in _rendezvousHexByGeneration.entries.toList()) {
       final g = entry.key;
-      if (_listeners.containsKey(g)) continue;
-      final transport = service._relayFactory(
-        url,
-        RendezvousId.parse(entry.value),
-      );
-      _listeners[g] = transport;
-      _listenerSubscriptions[g] = transport.frames.listen(
-        (frame) => enqueueFrame(g, transport, frame),
-      );
+      final open = _listeners.putIfAbsent(g, () => {});
+      for (final url in want.entries) {
+        if (open.containsKey(url.key)) continue;
+        final transport = service._relayFactory(
+          url.value,
+          RendezvousId.parse(entry.value),
+        );
+        open[url.key] = transport;
+        _listenerSubscriptions.putIfAbsent(g, () => {})[url.key] = transport
+            .frames
+            .listen((frame) => enqueueFrame(g, transport, frame));
+      }
     }
   }
 
-  Future<void> _closeRelayListener(int generation) async {
-    await _listenerSubscriptions.remove(generation)?.cancel();
-    final transport = _listeners.remove(generation);
+  Future<void> _closeRelayListener(int generation, String url) async {
+    await _listenerSubscriptions[generation]?.remove(url)?.cancel();
+    final transport = _listeners[generation]?.remove(url);
     if (transport != null) await transport.close();
   }
 
   Future<void> _closeGeneration(int generation) async {
     final hex = _rendezvousHexByGeneration.remove(generation);
     if (hex != null) service._lanRoutes.remove(hex);
-    await _closeRelayListener(generation);
+    for (final url in _listeners[generation]?.keys.toList() ?? const <String>[]) {
+      await _closeRelayListener(generation, url);
+    }
+    _listeners.remove(generation);
+    _listenerSubscriptions.remove(generation);
   }
 
   Future<void> _onFrame(
@@ -652,6 +722,10 @@ class _DeviceRuntime {
         device: device,
         bindings: service.bindings,
         onLog: service.onLog,
+        // Read at announcement time, never captured: a relay toggled while
+        // this link is up must be in the very next `host.status`.
+        relays: () => service.announcedRelaysFor(device),
+        lanHint: () => service.lanHint,
         send: (type, {id, payload = const {}}) =>
             _sealAndSend(created, type, id, payload),
       );
@@ -693,16 +767,21 @@ class _DeviceRuntime {
     try {
       active.transport.send(sealed);
     } on TransportException {
-      // The link the phone last used is gone; the relay listener for this
-      // generation still queues for the next reconnect.
-      final fallback = _listeners[active.generation];
-      if (fallback != null && !identical(fallback, active.transport)) {
+      // The link the phone last used is gone; the relay listeners for this
+      // generation still queue for the next reconnect. Any of them may be the
+      // one the phone comes back on, so try each until one takes the frame.
+      for (final fallback
+          in _listeners[active.generation]?.values.toList() ??
+              const <RemoteTransport>[]) {
+        if (identical(fallback, active.transport)) continue;
         try {
           fallback.send(sealed);
+          return;
         } on TransportException {
-          service.onLog?.call('no transport could carry a frame');
+          continue;
         }
       }
+      service.onLog?.call('no transport could carry a frame');
     }
   }
 
@@ -715,7 +794,7 @@ class _DeviceRuntime {
     for (final generation in _rendezvousHexByGeneration.keys.toList()) {
       await _closeGeneration(generation);
     }
-    _listenerUrl = null;
+    _listenerUrls = const [];
     _active = null;
   }
 }

@@ -47,7 +47,11 @@ void main() {
   setUp(() async {
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
-    phoneDisk = {};
+    // Loop 83's last-resort relay is the phone's configured one, which
+    // defaults to the public PopupBits relay — point it here instead.
+    phoneDisk = {
+      RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
+    };
     store = SecureCompanionStore.withBackend(
       read: (key) async => phoneDisk[key],
       write: (key, value) async => phoneDisk[key] = value,
@@ -507,4 +511,94 @@ void main() {
     final saved = await stored.CompanionConnections.load(store);
     expect(saved.records.single.lastConnectedAt, isNotNull);
   });
+
+  test('a relaunch restores the saved SET and reconnects to the active '
+      'desktop, with nothing left in memory to help it', () async {
+    // The bug this pins: a phone pairs, the app is killed, and on the next
+    // launch it neither remembers the desktop nor connects. Everything below
+    // the gateway is real — the secure store over a persistent backend, both
+    // storage keys, two records — and every object that saw the pairing is
+    // thrown away before the "relaunch".
+    final studio = await startHost(
+      hostId: idA,
+      sessionId: 's-studio',
+      title: 'Studio work',
+    );
+    final laptop = await startHost(
+      hostId: idB,
+      sessionId: 's-laptop',
+      title: 'Laptop work',
+    );
+    final first = makeGateway();
+    await pairWith(first, studio);
+    await pairWith(first, laptop);
+    await first.close();
+
+    // Both keys are on "disk", the way a real phone's keystore holds them.
+    expect(phoneDisk, contains(stored.CompanionConnections.storeKey));
+    expect(phoneDisk, contains(stored.CompanionPairing.storeKey));
+
+    // The relaunch: a brand-new store object over the same bytes, and a
+    // brand-new gateway over that. No in-memory state survives.
+    store = SecureCompanionStore.withBackend(
+      read: (key) async => phoneDisk[key],
+      write: (key, value) async => phoneDisk[key] = value,
+      delete: (key) async => phoneDisk.remove(key),
+    );
+    final again = makeGateway();
+
+    expect(
+      await again.pairingStates
+          .firstWhere((pairing) => pairing != null)
+          .timeout(const Duration(seconds: 5)),
+      isNotNull,
+      reason: 'the phone remembers the desktop it paired with',
+    );
+    // It dials on its own — no tap, no re-pair.
+    await awaitLink(again, CompanionLinkState.connected);
+    expect(again.connections, hasLength(2), reason: 'the whole set survives');
+    expect(again.connections.singleWhere((c) => c.active).hostId, idB);
+    expect((await again.listSessions()).single.title, 'Laptop work');
+  });
+
+  test('a keystore that fails outright leaves the phone unpaired but '
+      'ALIVE — never a launch that half-works', () async {
+    // What a rotated Android master key looks like from here: reads throw.
+    // `SecureCompanionStore` turns that into null, but nothing below it
+    // should be able to poison the launch either.
+    final gateway = RemoteCompanionGateway(
+      store: _ThrowingStore(),
+      deviceName: 'Test phone',
+      relayFactory: (relay, rendezvous) => RelayTransport(
+        endpoint: RelayTransport.endpointFor(relay, rendezvous),
+        backoff: fastBackoff(),
+      )..start(),
+      requestTimeout: const Duration(milliseconds: 200),
+      helloTimeout: const Duration(milliseconds: 200),
+      reconnectBackoff: fastBackoff(),
+    );
+    gateways.add(gateway);
+
+    expect(await gateway.pairingStates.first, isNull);
+    expect(gateway.connections, isEmpty);
+    // Usable, not wedged: the refusal is the gateway's own sentence about
+    // being unpaired, not a storage error escaping from the constructor.
+    await expectLater(
+      gateway.listSessions(),
+      throwsA(isA<GatewayException>()),
+    );
+  });
+}
+
+/// A store whose every read fails — the platform keystore refusing to
+/// decrypt what it holds.
+class _ThrowingStore implements stored.CompanionStore {
+  @override
+  Future<String?> read(String key) async => throw StateError('keystore says no');
+
+  @override
+  Future<void> write(String key, String value) async {}
+
+  @override
+  Future<void> delete(String key) async {}
 }

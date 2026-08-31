@@ -51,7 +51,11 @@ void main() {
       );
       await service.start();
 
-      final disk = <String, String>{};
+      // Loop 83's last-resort relay is the phone's configured one, which
+      // defaults to the public PopupBits relay — point it here instead.
+      final disk = <String, String>{
+        RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
+      };
       gateway = RemoteCompanionGateway(
         store: SecureCompanionStore.withBackend(
           read: (key) async => disk[key],

@@ -10,6 +10,7 @@ library;
 // initializing-formals lint cannot express.
 // ignore_for_file: prefer_initializing_formals
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../remote/client/companion_store.dart';
@@ -30,12 +31,20 @@ typedef SecureDelete = Future<void> Function(String key);
 /// persisted has to fail out loud, not pretend it stuck.
 class SecureCompanionStore implements CompanionStore {
   /// The real plugin-backed store the companion bootstrap uses.
-  factory SecureCompanionStore() {
+  ///
+  /// [onLog] defaults to [debugPrint] on purpose. A read that fails answers
+  /// null, which the gateway reads as "unpaired" — indistinguishable, from
+  /// the outside, from a phone that never paired at all. That is the right
+  /// behaviour and the wrong silence: when a keystore stops decrypting what
+  /// it holds (an app update that rotated the master key is the usual way),
+  /// the only evidence is this line.
+  factory SecureCompanionStore({void Function(String message)? onLog}) {
     const storage = FlutterSecureStorage();
     return SecureCompanionStore.withBackend(
       read: (key) => storage.read(key: key),
       write: (key, value) => storage.write(key: key, value: value),
       delete: (key) => storage.delete(key: key),
+      onLog: onLog ?? (message) => debugPrint('[companion store] $message'),
     );
   }
 

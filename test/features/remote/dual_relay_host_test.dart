@@ -88,13 +88,17 @@ void main() {
     );
   }
 
-  Future<void> startService({bool hostedEnabled = true, Uri? local}) async {
+  Future<void> startService({
+    bool hostedEnabled = true,
+    bool localEnabled = true,
+    Uri? local,
+  }) async {
     service = RemoteHostService(
       devices: dao,
       hostId: _hostId,
       bindings: fake.bindings,
       relay: hostedUri,
-      localRelayUrl: local ?? localUri,
+      localRelayUrl: localEnabled ? (local ?? localUri) : null,
       hostedEnabled: hostedEnabled,
       lanPort: 0,
       advertise: false,
@@ -165,27 +169,49 @@ void main() {
     ]);
   });
 
-  test('the local phone dials only the local relay', () async {
+  test('one device, both relays: whichever it reaches, the host is '
+      'waiting there', () async {
+    // Loop 83 replaces Loop 80's one-listener-per-device topology. The phone
+    // now picks its own path from a saved candidate set, so the host waits on
+    // EVERY active relay — including the one this device did not pair on.
     await pair(_localPhone, relayUrl: kLocalRelayMarker);
     await startService();
 
-    // The hosted relay has no listener for this device: it was paired on the
-    // other one, and the host does not double-listen.
-    final strayPath = await clientFor(_localPhone, relay: hostedUri);
-    await expectLater(
-      strayPath.connect(helloTimeout: const Duration(milliseconds: 700)),
-      throwsA(isA<RemoteApiException>()),
+    // The relay it never paired on serves it anyway. Safe by construction:
+    // the rendezvous comes from the device key, so only the phone holding
+    // that key can meet the host here.
+    final onHosted = await clientFor(_localPhone, relay: hostedUri);
+    expect(
+      (await onHosted.connect(helloTimeout: const Duration(seconds: 5)))
+          .hostName,
+      'TestHost',
     );
+    expect((await onHosted.listSessions()).single.sessionId, 's1');
 
-    final proper = await clientFor(_localPhone, relay: localUri);
-    final status = await proper.connect(
-      helloTimeout: const Duration(seconds: 5),
+    // And the relay it did pair on is still there — WITHOUT tearing the first
+    // link down, so both listeners are proven open at the same moment. (One
+    // device still has one live sealed link: a real phone dials one candidate
+    // at a time, and the host keeps one active channel per device.) The next
+    // session takes the next generation, exactly as a real companion's counter
+    // bump does — the relay it arrives on changes nothing about the schedule.
+    final onLocal = await clientFor(
+      _localPhone,
+      relay: localUri,
+      generation: kFirstSessionGeneration + 1,
     );
-    expect(status.hostName, 'TestHost');
+    expect(
+      (await onLocal.connect(helloTimeout: const Duration(seconds: 5)))
+          .hostName,
+      'TestHost',
+    );
+    expect((await onLocal.listSessions()).single.sessionId, 's1');
+    final row = dao.getById(_localPhone.value)!;
+    expect(row.revoked, isFalse);
+    expect(row.deviceKey, isNotEmpty);
   });
 
-  test('switching the local relay off parks its device and leaves the '
-      'hosted one serving', () async {
+  test('switching the local relay off leaves its device reachable on the '
+      'hosted one — no re-pair, no parking', () async {
     await pair(_localPhone, relayUrl: kLocalRelayMarker);
     await pair(_hostedPhone, relayUrl: hostedUri.toString());
     await startService();
@@ -194,30 +220,43 @@ void main() {
 
     await service.updateRelays(localRelayUrl: null, hostedEnabled: true);
 
-    expect(service.isParked(_localPhone.value), isTrue);
+    // Neither device is parked: a relay is still up, and both are served on it.
+    expect(service.isParked(_localPhone.value), isFalse);
     expect(service.isParked(_hostedPhone.value), isFalse);
-    // The parked device's relay listeners are gone…
-    final parked = await clientFor(_localPhone, relay: localUri);
+    // The local relay's own listeners are gone…
+    final gone = await clientFor(_localPhone, relay: localUri);
     await expectLater(
-      parked.connect(helloTimeout: const Duration(milliseconds: 700)),
+      gone.connect(helloTimeout: const Duration(milliseconds: 700)),
       throwsA(isA<RemoteApiException>()),
     );
-    // …while the other phone never noticed a thing.
+    // …but the phone that lost its relay simply meets the host on the other.
+    final rerouted = await clientFor(_localPhone, relay: hostedUri);
+    expect(
+      (await rerouted.connect(helloTimeout: const Duration(seconds: 5)))
+          .hostName,
+      'TestHost',
+    );
+    // And the phone that never moved noticed nothing.
     expect((await hosted.listSessions()).single.sessionId, 's1');
-    // Parking is not revocation: the row keeps its key and its generation.
     final row = dao.getById(_localPhone.value)!;
     expect(row.revoked, isFalse);
     expect(row.deviceKey, isNotEmpty);
-    expect(row.generation, kFirstSessionGeneration);
   });
 
-  test('the relay coming back un-parks the device — no re-pair', () async {
+  test('parking needs EVERY relay off, and a relay coming back un-parks — '
+      'no re-pair', () async {
     await pair(_localPhone, relayUrl: kLocalRelayMarker);
     await startService();
-    await service.updateRelays(localRelayUrl: null, hostedEnabled: true);
-    expect(service.isParked(_localPhone.value), isTrue);
 
-    await service.updateRelays(localRelayUrl: localUri, hostedEnabled: true);
+    await service.updateRelays(localRelayUrl: null, hostedEnabled: false);
+    expect(service.isParked(_localPhone.value), isTrue);
+    // Parking is not revocation: the row keeps its key and its generation.
+    final parkedRow = dao.getById(_localPhone.value)!;
+    expect(parkedRow.revoked, isFalse);
+    expect(parkedRow.deviceKey, isNotEmpty);
+    expect(parkedRow.generation, kFirstSessionGeneration);
+
+    await service.updateRelays(localRelayUrl: localUri, hostedEnabled: false);
 
     expect(service.isParked(_localPhone.value), isFalse);
     final phone = await clientFor(_localPhone, relay: localUri);
@@ -228,18 +267,79 @@ void main() {
     expect((await phone.listSessions()).single.sessionId, 's1');
   });
 
-  test('switching the hosted relay off parks only hosted devices', () async {
+  test('switching the hosted relay off leaves every device on the local '
+      'one', () async {
     await pair(_localPhone, relayUrl: kLocalRelayMarker);
     await pair(_hostedPhone, relayUrl: hostedUri.toString());
     await startService();
 
     await service.updateRelays(localRelayUrl: localUri, hostedEnabled: false);
 
-    expect(service.isParked(_hostedPhone.value), isTrue);
+    expect(service.isParked(_hostedPhone.value), isFalse);
     expect(service.isParked(_localPhone.value), isFalse);
     final local = await clientFor(_localPhone, relay: localUri);
     await local.connect(helloTimeout: const Duration(seconds: 5));
     expect((await local.listSessions()).single.sessionId, 's1');
+    // The hosted-paired phone, whose own relay just went away, is met on the
+    // local one instead — the candidate set is what makes that reachable.
+    final stranded = await clientFor(_hostedPhone, relay: localUri);
+    expect(
+      (await stranded.connect(helloTimeout: const Duration(seconds: 5)))
+          .hostName,
+      'TestHost',
+    );
+  });
+
+  test('host.status announces every active relay and the LAN hint', () async {
+    await pair(_hostedPhone, relayUrl: hostedUri.toString());
+    // A LAN address for the local relay is what the LAN hint is derived from.
+    final lanish = Uri.parse('ws://192.168.5.9:${localRelay.port}');
+    await startService(local: lanish);
+
+    final phone = await clientFor(_hostedPhone, relay: hostedUri);
+    final status = await phone.connect(
+      helloTimeout: const Duration(seconds: 5),
+    );
+
+    expect(status.relays, containsAll(<Uri>[lanish, hostedUri]));
+    expect(status.lanHint, startsWith('192.168.5.9:'));
+  });
+
+  test('a relay switched on under a live link is announced at once', () async {
+    await pair(_hostedPhone, relayUrl: hostedUri.toString());
+    await startService(localEnabled: false);
+    final phone = await clientFor(_hostedPhone, relay: hostedUri);
+    final first = await phone.connect(
+      helloTimeout: const Duration(seconds: 5),
+    );
+    expect(first.relays, [hostedUri]);
+    final announcements = phone.events
+        .where((event) => event is HostStatusEvent)
+        .cast<HostStatusEvent>()
+        .map((event) => event.status)
+        .first;
+
+    await service.updateRelays(localRelayUrl: localUri, hostedEnabled: true);
+
+    final refreshed = await announcements.timeout(const Duration(seconds: 5));
+    expect(refreshed.relays, containsAll(<Uri>[localUri, hostedUri]));
+  });
+
+  test('the QR carries every active relay, and the tab stays first', () async {
+    await startService();
+
+    final session = await service.beginPairing(
+      capabilities: CapabilitySet.all,
+      relay: hostedUri,
+    );
+
+    expect(session.payload.relay, hostedUri);
+    expect(session.payload.relays.first, hostedUri);
+    expect(session.payload.relays, containsAll(<Uri>[hostedUri, localUri]));
+    // And it survives the QR text an old build would read as one relay.
+    final decoded = PairingPayload.decode(session.payload.encode());
+    expect(decoded.relay, hostedUri);
+    expect(decoded.relays, session.payload.relays);
   });
 
   test('a device paired before v19 falls back to the configured hosted '
