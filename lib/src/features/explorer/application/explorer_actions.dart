@@ -108,7 +108,18 @@ class ExplorerActions {
       // here would be a *new* conversation wearing this row's title. The menu's
       // "Copy resume command" is the honest way out, and the row is selected so
       // its transcript is on screen.
-      return const ExplorerResult(ExplorerOutcome.selected);
+      //
+      // With a *reason*, because silence is indistinguishable from a dead
+      // click — and for an agent whose CLI assigns no id at all (Antigravity
+      // today) every stopped row lands here, so every click did nothing and
+      // said nothing. The words are the ones `resumeSession` already uses.
+      return const ExplorerResult(
+        ExplorerOutcome.selected,
+        message:
+            'No resumable CLI session id was recorded for this one. For an '
+            'older session, open its imported CLI history entry instead; new '
+            'sessions capture their id automatically.',
+      );
     }
 
     final installation = _ref

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../../app/theme/app_icons.dart';
@@ -21,6 +22,14 @@ enum ExplorerRowKind {
     ExplorerRowKind.project => scheme.surfaceContainerHigh,
     ExplorerRowKind.checkout => scheme.surfaceContainer,
     ExplorerRowKind.session => scheme.surfaceContainerLow,
+  };
+
+  /// What the row's menu is called, in the same words the button's tooltip
+  /// uses, so a screen reader and a pointer are told the same thing.
+  String get menuLabel => switch (this) {
+    ExplorerRowKind.project => 'Project actions',
+    ExplorerRowKind.checkout => 'Folder actions',
+    ExplorerRowKind.session => 'Session actions',
   };
 }
 
@@ -252,6 +261,27 @@ class _ExplorerRowState extends State<ExplorerRow> {
         menuItems: widget.menuItems,
         onSelected: widget.onMenu!,
         child: tile,
+      );
+      // The menu as a semantics action on the row itself, not only as a button
+      // that appears under a pointer.
+      //
+      // Revealing the button on hover took the control out of the semantics
+      // tree: a screen reader's browse mode does not move Flutter's focus, so
+      // there was no "Session actions" to find anywhere in the pane — the menu
+      // existed for a mouse and for a keyboard, and for nothing else. A custom
+      // action restores it for every row without putting a hundred more
+      // widgets and focus nodes back on the list.
+      // The value, not the variable: the closure would otherwise read `tile`
+      // after this assignment and build itself for ever.
+      final withMenu = tile;
+      tile = Builder(
+        builder: (context) => Semantics(
+          customSemanticsActions: {
+            CustomSemanticsAction(label: widget.kind.menuLabel):
+                () => _openMenu(context),
+          },
+          child: withMenu,
+        ),
       );
     }
 

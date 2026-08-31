@@ -64,8 +64,8 @@ class CarriedPermission {
     };
     if (!changed) return '${mode.label} — $about';
     return '${requested.label} is not something $targetAgentName can be put '
-        'into, so it starts under the closest mode that is no more permissive: '
-        '${mode.label}. $about';
+        'into, so it starts under the safest mode it does express, which is '
+        'no more permissive than what you asked for: ${mode.label}. $about';
   }
 }
 

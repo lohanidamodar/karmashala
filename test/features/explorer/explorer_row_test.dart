@@ -9,6 +9,7 @@ import 'package:chitragupta/src/features/explorer/presentation/project_card.dart
 import 'package:chitragupta/src/features/explorer/presentation/session_card.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -332,6 +333,42 @@ void main() {
         findsNothing,
         reason: 'latching it open must not leave it latched',
       );
+    });
+
+    testWidgets('a screen reader can reach it without a pointer', (
+      tester,
+    ) async {
+      // Revealing the button on hover took the control out of the semantics
+      // tree entirely: browse mode does not move Flutter's focus, so there was
+      // no "Session actions" to find anywhere in the pane. The row carries the
+      // menu as a custom action, in the same words the tooltip uses.
+      final handle = tester.ensureSemantics();
+      await pump(tester);
+
+      // Walked from the root: a `Semantics` carrying only actions is merged
+      // into a neighbouring node, so asking one widget's node is not the same
+      // question as "can an assistive technology find this anywhere".
+      final labels = <String>[];
+      void visit(SemanticsNode node) {
+        for (final id in node.getSemanticsData().customSemanticsActionIds ??
+            const <int>[]) {
+          final label = CustomSemanticsAction.getAction(id)?.label;
+          if (label != null) labels.add(label);
+        }
+        node.visitChildren((child) {
+          visit(child);
+          return true;
+        });
+      }
+
+      visit(tester.getSemantics(find.byType(MaterialApp)));
+
+      expect(
+        labels,
+        containsAll(['Session actions', 'Project actions', 'Folder actions']),
+        reason: 'every row kind offers its menu without a pointer',
+      );
+      handle.dispose();
     });
 
     testWidgets('a touch-width surface draws it at rest', (tester) async {
