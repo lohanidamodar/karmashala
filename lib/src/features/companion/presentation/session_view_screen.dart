@@ -9,6 +9,7 @@ import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
 import 'companion_approval_card.dart';
 import 'companion_composer.dart';
+import 'companion_states.dart';
 import 'companion_status_badge.dart';
 import 'link_banner.dart';
 
@@ -29,7 +30,7 @@ class SessionViewScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     final gateway = ref.read(companionGatewayProvider);
     final session = ref.watch(companionSessionProvider(sessionId));
     final transcript = ref.watch(companionTranscriptProvider(sessionId));
@@ -42,6 +43,9 @@ class SessionViewScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: density.isTouch
+            ? Touch.appBarOf(context)
+            : Chrome.titleBarOf(context),
         title: Text(
           session?.title ?? 'Session',
           maxLines: 1,
@@ -54,11 +58,9 @@ class SessionViewScreen extends ConsumerWidget {
           const LinkBanner(),
           // What only this session can answer: its status, and where it is.
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.md,
-              Insets.xs,
-              Insets.md,
-              Insets.xs,
+            padding: EdgeInsets.symmetric(
+              horizontal: density.padX,
+              vertical: density.isTouch ? Insets.sm : Insets.xs,
             ),
             child: Row(
               children: [
@@ -76,10 +78,7 @@ class SessionViewScreen extends ConsumerWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      letterSpacing: 0,
-                    ),
+                    style: density.muted(theme),
                   ),
                 ),
               ],
@@ -89,17 +88,12 @@ class SessionViewScreen extends ConsumerWidget {
           Expanded(
             child: transcript.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(Insets.xl),
-                  child: Text(
-                    '$e',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: scheme.error,
-                    ),
-                  ),
-                ),
+              error: (e, _) => CompanionNotice.failure(
+                error: e,
+                onRetry: () {
+                  gateway.reconnect();
+                  ref.invalidate(companionTranscriptProvider(sessionId));
+                },
               ),
               data: (messages) => ChatTranscriptView(
                 messages: [

@@ -22,6 +22,7 @@ class ConnectionsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     final connections = ref.watch(companionConnectionsProvider).asData?.value;
     final switching = ref.watch(companionSwitchingProvider);
 
@@ -34,25 +35,24 @@ class ConnectionsSection extends ConsumerWidget {
       children: [
         Text(
           connections.length > 1 ? 'DESKTOPS' : 'PAIRED DESKTOP',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+          style: theme.textTheme.labelSmall,
         ),
-        const SizedBox(height: Insets.xs),
+        const SizedBox(height: Insets.sm),
         if (connections.isEmpty)
           Text(
             'No desktops saved on this phone yet.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            style: density.muted(theme),
           )
         else
           Container(
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(Radii.sm),
+              borderRadius: BorderRadius.circular(
+                density.isTouch ? Radii.lg : Radii.sm,
+              ),
               border: Border.all(color: scheme.outlineVariant),
             ),
+            clipBehavior: Clip.antiAlias,
             child: Column(
               children: [
                 for (final connection in connections)
@@ -76,7 +76,7 @@ class ConnectionsSection extends ConsumerWidget {
                       builder: (_) => const PairingScreen(),
                     ),
                   ),
-            icon: const Icon(AppIcons.plus, size: 14),
+            icon: const Icon(AppIcons.plus),
             label: const Text('Add a desktop'),
           ),
         ),
@@ -138,6 +138,7 @@ class _ConnectionRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
+    final density = UiDensity.of(context);
     final now = ref.read(clockProvider).nowUtc();
     final at = connection.lastConnectedAt;
 
@@ -161,11 +162,14 @@ class _ConnectionRow extends ConsumerWidget {
                   .read(companionSwitchingProvider.notifier)
                   .switchTo(connection.hostId),
         child: Container(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.md,
-            Insets.sm,
-            Insets.sm,
-            Insets.sm,
+          constraints: density.isTouch
+              ? const BoxConstraints(minHeight: Touch.target)
+              : null,
+          padding: EdgeInsets.fromLTRB(
+            density.padX,
+            density.padY,
+            density.isTouch ? Insets.sm : Insets.sm,
+            density.padY,
           ),
           decoration: last
               ? null
@@ -177,20 +181,20 @@ class _ConnectionRow extends ConsumerWidget {
           child: Row(
             children: [
               if (busy)
-                const SizedBox(
-                  width: Chrome.icon,
-                  height: Chrome.icon,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                SizedBox(
+                  width: density.icon,
+                  height: density.icon,
+                  child: const CircularProgressIndicator(strokeWidth: 2),
                 )
               else
                 Icon(
                   AppIcons.deviceMobile,
-                  size: Chrome.icon,
+                  size: density.icon,
                   color: connection.active
                       ? semantic.idle
                       : scheme.onSurfaceVariant,
                 ),
-              const SizedBox(width: Insets.sm),
+              SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,9 +206,7 @@ class _ConnectionRow extends ConsumerWidget {
                             connection.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: density.title(theme),
                           ),
                         ),
                         if (connection.active) ...[
@@ -213,20 +215,17 @@ class _ConnectionRow extends ConsumerWidget {
                         ],
                       ],
                     ),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
+                    Text(subtitle, style: density.muted(theme)),
                   ],
                 ),
               ),
               IconButton(
                 onPressed: anyBusy ? null : () => _forget(context, ref),
-                icon: const Icon(AppIcons.linkBreak, size: Chrome.icon),
+                icon: const Icon(AppIcons.linkBreak),
                 tooltip: 'Forget ${connection.name}',
-                visualDensity: VisualDensity.compact,
+                visualDensity: density.isTouch
+                    ? VisualDensity.standard
+                    : VisualDensity.compact,
               ),
             ],
           ),

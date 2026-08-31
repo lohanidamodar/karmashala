@@ -33,7 +33,9 @@ void main() {
     await tester.pump();
 
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Sessions'), findsWidgets);
+    // The first tab is named for what it lists: the host's projects, each of
+    // which opens its own sessions (Loop 82).
+    expect(find.text('Projects'), findsWidgets);
     expect(find.text('Inbox'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
@@ -52,7 +54,11 @@ void main() {
     );
     await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
     expect(find.byType(Badge), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
+    // Scoped to the badge: the project header also carries a count of its own.
+    expect(
+      find.descendant(of: find.byType(Badge), matching: find.text('1')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('tabs switch between the three screens', (tester) async {

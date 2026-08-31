@@ -32,15 +32,19 @@ class HostSwitcherBar extends ConsumerWidget {
               ListTile(
                 leading: Icon(
                   connection.active ? AppIcons.check : AppIcons.deviceMobile,
-                  size: Chrome.icon,
                 ),
-                title: Text(connection.name),
+                title: Text(
+                  connection.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: connection.active ? const Text('Active') : null,
+                selected: connection.active,
                 onTap: () => Navigator.of(context).pop(connection.hostId),
               ),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(AppIcons.plus, size: Chrome.icon),
+              leading: const Icon(AppIcons.plus),
               title: const Text('Add a desktop'),
               onTap: () => Navigator.of(context).pop(''),
             ),
@@ -67,6 +71,7 @@ class HostSwitcherBar extends ConsumerWidget {
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     final switching = ref.watch(companionSwitchingProvider);
     final active = connections.where((c) => c.active).firstOrNull;
 
@@ -76,26 +81,29 @@ class HostSwitcherBar extends ConsumerWidget {
         onTap: switching != null
             ? null
             : () => _choose(context, ref, connections),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.md,
-            vertical: Insets.sm,
+        child: Container(
+          constraints: density.isTouch
+              ? const BoxConstraints(minHeight: Touch.target)
+              : null,
+          padding: EdgeInsets.symmetric(
+            horizontal: density.padX,
+            vertical: density.padY,
           ),
           child: Row(
             children: [
               if (switching != null)
-                const SizedBox(
-                  width: Chrome.icon,
-                  height: Chrome.icon,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                SizedBox(
+                  width: density.icon,
+                  height: density.icon,
+                  child: const CircularProgressIndicator(strokeWidth: 2),
                 )
               else
                 Icon(
                   AppIcons.deviceMobile,
-                  size: Chrome.icon,
+                  size: density.icon,
                   color: scheme.onSurfaceVariant,
                 ),
-              const SizedBox(width: Insets.sm),
+              SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
               Expanded(
                 child: Text(
                   switching != null
@@ -103,21 +111,17 @@ class HostSwitcherBar extends ConsumerWidget {
                       : active?.name ?? 'No desktop',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: density.title(theme),
                 ),
               ),
               Text(
                 '${connections.length} saved',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: density.muted(theme),
               ),
               const SizedBox(width: Insets.xs),
               Icon(
                 AppIcons.caretDown,
-                size: Chrome.iconSmall,
+                size: density.iconSmall,
                 color: scheme.onSurfaceVariant,
               ),
             ],

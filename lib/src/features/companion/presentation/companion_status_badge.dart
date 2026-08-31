@@ -31,21 +31,38 @@ class CompanionStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
     final appearance = agentStatusAppearance(agentStatusOf(status));
-    final colour = appearance.colour(SemanticColors.of(context));
+    final semantic = SemanticColors.of(context);
+    final colour = appearance.colour(semantic);
+    // `neutral` is the one semantic colour that cannot hold 4.5:1 as small
+    // text on a light card (3.9:1 measured), so the word borrows the text
+    // ramp. The glyph keeps the semantic grey — icons need 3:1, and it has it.
+    final wordColour = colour == semantic.neutral
+        ? theme.colorScheme.onSurfaceVariant
+        : colour;
     return Semantics(
       label: 'Session status: ${appearance.label}',
+      excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(appearance.icon, size: 13, color: colour),
+          Icon(
+            appearance.icon,
+            size: density.isTouch ? Touch.iconSmall : 13,
+            color: colour,
+          ),
           if (showLabel) ...[
             const SizedBox(width: 4),
             Text(
               appearance.label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: colour),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: (density.isTouch
+                      ? theme.textTheme.bodySmall
+                      : theme.textTheme.labelSmall)
+                  ?.copyWith(color: wordColour, fontWeight: FontWeight.w600),
             ),
           ],
         ],

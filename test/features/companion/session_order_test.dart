@@ -10,6 +10,7 @@ import 'package:chitragupta/src/features/companion/client/companion_gateway.dart
 import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/remote_companion_gateway.dart';
 import 'package:chitragupta/src/features/companion/client/secure_companion_store.dart';
+import 'package:chitragupta/src/features/companion/presentation/project_sessions_screen.dart';
 import 'package:chitragupta/src/features/companion/presentation/session_list_screen.dart';
 import 'package:chitragupta/src/features/explorer/presentation/session_card.dart';
 import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
@@ -329,12 +330,26 @@ void main() {
         home: const SessionListScreen(),
       );
 
+      // Loop 82 put the two levels on two screens, so the whole order is read
+      // by walking it: the projects in the order the index lists them, and
+      // inside each, the sessions in the order that project's screen lists
+      // them. The assertion below is the one this file has always made.
+      final titles = <String>[];
+      for (final project in ['alpha', 'beta']) {
+        await tester.tap(find.text(project));
+        await tester.pumpAndSettle();
+        titles.addAll(
+          tester
+              .widgetList<SessionCard>(find.byType(SessionCard))
+              .map((card) => card.title),
+        );
+        expect(find.byType(ProjectSessionsScreen), findsOneWidget);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+      }
+
       // alpha first (it held the first row), with its two rows in host order,
       // then beta — and never an alphabetical re-sort.
-      final titles = tester
-          .widgetList<SessionCard>(find.byType(SessionCard))
-          .map((card) => card.title)
-          .toList();
       expect(titles, ['Zebra', 'Mango', 'Apple']);
       expect(find.text('2 sessions'), findsOneWidget);
     });
