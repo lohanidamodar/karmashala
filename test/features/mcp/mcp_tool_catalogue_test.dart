@@ -49,6 +49,8 @@ void main() {
       'checkpoint_restore',
       'session_end',
       'session_answer',
+      'terminal_run',
+      'terminal_close',
       'device_stop_emulator',
       'device_tap',
       'browser_evaluate',

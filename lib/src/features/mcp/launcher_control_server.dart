@@ -59,6 +59,7 @@ import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
 import 'mcp_tool_catalogue.dart';
 import 'session_tools.dart';
+import 'terminal_tools.dart';
 import 'tmux_orchestration.dart';
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
@@ -791,6 +792,10 @@ class LauncherControlServer {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // The terminal workspace, through the same controller the tab bar uses,
+      // so an agent's pane is a pane the user can see and take over.
+      case final String name when TerminalControlTools.handles(name):
+        return TerminalControlTools(_container).call(name, args);
       // The browser tools live in features/browser and share the app's single
       // BrowserService with the browser pane, so an agent and the developer
       // drive the same page.
@@ -1421,6 +1426,7 @@ class LauncherControlServer {
       },
     },
     ...sessionControlToolSchemas,
+    ...terminalControlToolSchemas,
     ...browserToolSchemas,
     ...verificationToolSchemas,
   ];

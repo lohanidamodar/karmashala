@@ -106,6 +106,19 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'session_fork': McpToolAnnotations(),
       'open_sessions_in_tmux': McpToolAnnotations(),
 
+      // Terminal.
+      'terminal_list': McpToolAnnotations.read,
+      'terminal_output': McpToolAnnotations.read,
+      'terminal_open': McpToolAnnotations(),
+      // Types a command the caller composed into a live shell. Whether that is
+      // destructive is the command's business, not this tool's, and a tool that
+      // cannot tell must not claim it is safe.
+      'terminal_run': McpToolAnnotations(destructive: true),
+      // Detaches by default and can be told to kill. The annotation describes
+      // the worst it does, because a client deciding whether to confirm cannot
+      // see which argument was passed.
+      'terminal_close': McpToolAnnotations(destructive: true),
+
       // Fan-out.
       'fanout_list': McpToolAnnotations.read,
       'fanout_get': McpToolAnnotations.read,
