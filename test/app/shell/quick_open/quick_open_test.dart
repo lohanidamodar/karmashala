@@ -1,4 +1,5 @@
 import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
+import 'package:chitragupta/src/app/shell/tab_picker.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
@@ -314,6 +315,43 @@ void main() {
 
     expect(find.text('SESSIONS'), findsOneWidget);
     expect(find.text('OPEN TABS'), findsNothing);
+  });
+
+  testWidgets('a command opens the picker with every tab in it', (
+    tester,
+  ) async {
+    // The tabs quick open lists itself are only the ones that are *nothing
+    // but* tabs, and reaching one that way means already knowing its name.
+    // This is the other question — "show me my tabs" — and it hands over to
+    // the strip's own picker rather than growing a second one.
+    await open(tester, before: (container) {
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      SessionDao(db).updatePaneId(
+        's1',
+        container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .single
+            .focusedPaneId,
+      );
+      terminals.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\dev-server',
+      );
+    });
+
+    await type(tester, 'switch terminal tab');
+    await tester.tap(find.text('Switch terminal tab…'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TabPicker), findsOneWidget);
+    // Both of them, including the one running a session — which quick open's
+    // own list leaves out because the session already stands for it.
+    expect(find.text('2 tabs'), findsOneWidget);
+    expect(find.textContaining('Fix login redirect'), findsOneWidget);
   });
 
   testWidgets('opening it never starts a network or git call', (tester) async {
