@@ -187,7 +187,10 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         const Divider(height: 1),
         if (delivery != null) _DeliveryState(delivery: delivery),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, Insets.xs, 8, 0),
+          // Padded on all four sides since Loop 85: the strip is hosted under
+          // the terminal as well as above the composer, and there it is the
+          // last thing in the column with nothing below to give it room.
+          padding: const EdgeInsets.fromLTRB(8, Insets.xs, 8, Insets.xs),
           child: Wrap(
             spacing: Insets.sm,
             runSpacing: Insets.xs,

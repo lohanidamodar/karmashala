@@ -2,14 +2,21 @@ import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
 import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
+import 'package:chitragupta/src/features/sessions/presentation/approval_request_card.dart';
+import 'package:chitragupta/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:chitragupta/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:chitragupta/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -31,12 +38,38 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
 
+  /// What the status pipeline says about every session, and what git says about
+  /// the one on screen. Mutable so a test can set them *before* the first pump,
+  /// which is when the overridden providers are first read.
+  late AgentActivityStatus agentStatus;
+  late List<String> agentEvidence;
+  late SessionDelivery delivery;
+  late SessionContinuation continuation;
+
+  /// A session that can be handed off or forked — Claude Code forks natively,
+  /// so the plan is not a refusal and the strip offers "Continue with…".
+  final possible = SessionContinuation(
+    targets: const [],
+    plan: SessionForkPlan.decide(
+      descriptor: AgentRegistry.builtIn.byId(AgentIds.claudeCode),
+      agentName: 'Claude Code',
+      externalSessionId: 'ext-1',
+    ),
+  );
+
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
+    agentStatus = AgentActivityStatus.idle;
+    agentEvidence = const [];
+    delivery = SessionDelivery.unknown;
+    continuation = SessionContinuation(
+      targets: const [],
+      plan: SessionForkPlan.decide(descriptor: null, agentName: 'Test CLI'),
+    );
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
@@ -51,14 +84,19 @@ void main() {
           (ref) async => const <SystemTerminal>[],
         ),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+        // The delivery strip is on both surfaces now, so what git and `gh` are
+        // asked is answered here instead of on the host.
+        sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
+        sessionContinuationProvider.overrideWith((ref, _) => continuation),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => Stream.value(
             AgentStatusReport(
               agentId: AgentIds.claudeCode,
               sessionId: id,
-              status: AgentActivityStatus.idle,
+              status: agentStatus,
               observedAt: testTime,
-              source: AgentStatusSource.none,
+              source: AgentStatusSource.terminalGrid,
+              evidence: agentEvidence,
             ),
           ),
         ),
@@ -85,7 +123,7 @@ void main() {
   }
 
   /// A session running in a pane of ours — the only kind that has two views.
-  String seedSessionInAPane() {
+  String seedSessionInAPane({String id = 's1', String title = 'Session'}) {
     final terminals = container.read(
       terminalSessionsControllerProvider.notifier,
     );
@@ -97,8 +135,8 @@ void main() {
         .panes
         .single;
     final dao = SessionDao(db);
-    dao.insert(session(title: 'Refactor the parser'));
-    dao.updatePaneId('s1', paneId);
+    dao.insert(session(id: id, title: title));
+    dao.updatePaneId(id, paneId);
     return paneId;
   }
 
@@ -116,7 +154,7 @@ void main() {
   testWidgets('a selected session gets a tab beside the terminal tabs', (
     tester,
   ) async {
-    seedSessionInAPane();
+    seedSessionInAPane(title: 'Refactor the parser');
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
 
@@ -124,32 +162,121 @@ void main() {
     expect(find.text('PowerShell'), findsOneWidget);
   });
 
-  testWidgets('the view toggle swaps the two renderings of one session', (
+  testWidgets('selecting a session opens its terminal, not its chat', (
     tester,
   ) async {
-    final paneId = seedSessionInAPane();
-    container.read(selectedSessionIdProvider.notifier).select('s1');
+    // The Loop 85 inversion. This used to assert the opposite: a selection
+    // switched the workbench to the conversation, which made the secondary
+    // view the one every session opened on.
+    final paneId = seedSessionInAPane(title: 'Refactor the parser');
     await pump(tester);
-
-    // Selecting a session lands on its conversation.
-    expect(container.read(terminalVisibleProvider), isFalse);
-    expect(find.byTooltip('Terminal view'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Terminal view'));
+    container.read(selectedSessionIdProvider.notifier).select('s1');
     await tester.pumpAndSettle();
 
     expect(container.read(terminalVisibleProvider), isTrue);
-    // The switch is a rendering change, not a lifecycle one: the pane it named
-    // is still the same live instance.
+    // Not merely "the terminal is up": the session's own pane is the focused
+    // one, so what is on screen is that session.
+    expect(
+      container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .focusedPaneId,
+      paneId,
+    );
+    // A rendering choice, never a lifecycle one.
     final instance = container
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(paneId);
-    expect(instance, isNotNull);
     expect((instance! as FakeTerminalInstance).disposed, isFalse);
+  });
+
+  testWidgets('selecting a session reaches its pane in a background tab', (
+    tester,
+  ) async {
+    final paneId = seedSessionInAPane();
+    // Another tab on top of it: the selection has to walk back to the session's
+    // own pane rather than leave whatever was showing.
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+
+    expect(
+      container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .focusedPaneId,
+      paneId,
+    );
+  });
+
+  testWidgets('a session with no pane of ours lands on its conversation', (
+    tester,
+  ) async {
+    // An imported session resumed elsewhere, a session opened in an external
+    // terminal, or one whose pane has been ended: there is no terminal to
+    // switch to, so the fallback is the surface that does have something.
+    SessionDao(db).insert(session(title: 'Read the report'));
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+
+    expect(container.read(terminalVisibleProvider), isFalse);
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+    // Nothing to toggle to, so no toggle is offered.
+    expect(find.byTooltip('Terminal view'), findsNothing);
+  });
+
+  testWidgets('a pane that has been ended stops being a surface', (
+    tester,
+  ) async {
+    // The row keeps its `pane_id` after the pane is gone, so the id alone would
+    // send the workbench to a terminal that is not there.
+    final paneId = seedSessionInAPane();
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .closeTab(
+          container.read(terminalSessionsControllerProvider).tabs.single.id,
+          detach: false,
+        );
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+
+    expect(
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId),
+      isNull,
+    );
+    expect(container.read(terminalVisibleProvider), isFalse);
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+  });
+
+  testWidgets('the toggle is labelled, and still reaches the conversation', (
+    tester,
+  ) async {
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    // Words, not only a chord and a hover: the terminal is where a session
+    // opens now, so the way to its conversation has to be readable.
+    expect(find.widgetWithText(Tooltip, 'Chat'), findsOneWidget);
+    expect(find.widgetWithText(Tooltip, 'Terminal'), findsOneWidget);
+    expect(container.read(terminalVisibleProvider), isTrue);
 
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
+
     expect(container.read(terminalVisibleProvider), isFalse);
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Terminal view'));
+    await tester.pumpAndSettle();
+    expect(container.read(terminalVisibleProvider), isTrue);
   });
 
   testWidgets('the two surfaces switch inside one IndexedStack', (
@@ -171,11 +298,11 @@ void main() {
     );
 
     expect(surfaces().children.length, 2, reason: 'both surfaces stay alive');
-    expect(surfaces().index, 1, reason: 'the conversation is showing');
+    expect(surfaces().index, 0, reason: 'the terminal is showing');
 
-    await tester.tap(find.byTooltip('Terminal view'));
+    await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
-    expect(surfaces().index, 0, reason: 'now the terminal is');
+    expect(surfaces().index, 1, reason: 'now the conversation is');
   });
 
   testWidgets('with one surface there is no stack to pay for', (tester) async {
@@ -219,8 +346,6 @@ void main() {
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
-    await tester.tap(find.byTooltip('Terminal view'));
-    await tester.pumpAndSettle();
 
     String shownSessionId() => tester
         .widget<PermissionModeChip>(find.byType(PermissionModeChip))
@@ -235,5 +360,113 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(shownSessionId(), 's1');
+  });
+
+  testWidgets('the terminal carries the delivery lifecycle, handoff and fork', (
+    tester,
+  ) async {
+    // The reason the chat view could not stay the primary surface: everything
+    // you do *with* a session — commit, push, hand it to another agent, fork it
+    // — lived only there, so the terminal was a session you could watch and not
+    // steer.
+    delivery = const SessionDelivery(
+      branch: 'work',
+      baseBranch: 'origin/main',
+      hasRemote: true,
+      dirtyFiles: 2,
+      aheadOfBase: 3,
+      hasWorktree: true,
+    );
+    continuation = possible;
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    expect(container.read(terminalVisibleProvider), isTrue);
+    expect(find.byType(DeliveryStrip), findsOneWidget);
+    expect(find.text('Working'), findsOneWidget);
+    expect(find.text('work'), findsOneWidget);
+    expect(find.text('2 uncommitted'), findsOneWidget);
+    expect(find.text('Commit'), findsOneWidget);
+    // Handoff and fork, the two the brief named, behind the same one dialog the
+    // conversation opens.
+    expect(find.text('Continue with…'), findsOneWidget);
+  });
+
+  testWidgets('an agent blocked on a prompt is answerable from the terminal', (
+    tester,
+  ) async {
+    agentStatus = AgentActivityStatus.awaitingApproval;
+    agentEvidence = const ['Do you want to make this edit to main.dart?'];
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    expect(find.byType(ApprovalRequestCard), findsOneWidget);
+    expect(find.textContaining('is waiting for you'), findsOneWidget);
+    // The agent's own words, and the buttons its descriptor names.
+    expect(
+      find.textContaining('Do you want to make this edit'),
+      findsOneWidget,
+    );
+    expect(find.byType(FilledButton), findsWidgets);
+    // The card's "Terminal view" button is the one thing that makes no sense
+    // here: it is hosted *on* the terminal.
+    expect(find.widgetWithText(TextButton, 'Terminal view'), findsNothing);
+  });
+
+  testWidgets('the approval card takes no height until there is an approval', (
+    tester,
+  ) async {
+    // The rule for everything in the dock: it must not reserve terminal rows
+    // for something it might one day have to say.
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    expect(tester.getSize(find.byType(ApprovalRequestCard)).height, 0);
+  });
+
+  testWidgets('a shell tab gets no session controls at all', (tester) async {
+    // The dock follows the pane on screen, like the permission chip: a plain
+    // shell has no session, so there is nothing to draw and nothing to hide.
+    seedSessionInAPane();
+    await pump(tester);
+    expect(find.byType(DeliveryStrip), findsOneWidget);
+
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DeliveryStrip), findsNothing);
+    expect(find.byType(ApprovalRequestCard), findsNothing);
+  });
+
+  testWidgets('the dock follows the terminal tab, not the tree selection', (
+    tester,
+  ) async {
+    // Two sessions, each in its own tab. Switching tabs changes which agent is
+    // on screen, so the controls under it have to change with it or they would
+    // act on a session the user is not looking at.
+    seedSessionInAPane(id: 's1', title: 'First');
+    final second = seedSessionInAPane(id: 's2', title: 'Second');
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    expect(
+      tester.widget<DeliveryStrip>(find.byType(DeliveryStrip)).sessionId,
+      's1',
+    );
+
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .focusPane(second);
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<DeliveryStrip>(find.byType(DeliveryStrip)).sessionId,
+      's2',
+    );
   });
 }

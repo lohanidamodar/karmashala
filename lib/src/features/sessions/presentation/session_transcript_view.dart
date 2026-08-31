@@ -8,6 +8,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../terminal/application/system_terminal_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
@@ -64,6 +65,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // the same PTY as Claude Code; they simply have no readable record of the
     // conversation to draw a transcript from.
     final chatAvailable = !fromPty || sessionHasChatView(ref, widget.sessionId);
+    // Whether there is a terminal to point at. The chat view is where the
+    // workbench lands a session that has none (Loop 85), so every sentence
+    // below that says "the terminal" has to be true when it is read.
+    final hasTerminal = sessionTerminalPane(ref, widget.sessionId) != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -124,20 +129,49 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   ),
                 ],
               ),
-              emptyHint: !chatAvailable
-                  ? 'This agent keeps no transcript we can read, so there is no '
-                        'chat view for it. Its terminal is the session.'
-                  : fromPty
-                  ? 'Nothing in this session\'s transcript yet — it appears '
-                        'once the agent answers. The terminal shows it live.'
-                  : active
-                  ? 'Session is running — say something to the agent.'
-                  : 'No messages yet.',
+              emptyHint: _emptyHint(
+                chatAvailable: chatAvailable,
+                fromPty: fromPty,
+                active: active,
+                hasTerminal: hasTerminal,
+              ),
             ),
           ),
         ),
       ],
     );
+  }
+
+  /// What to say when there is nothing to render.
+  ///
+  /// Each branch is about what this session actually has. The one that used to
+  /// be wrong: a session with no chat view *and* no pane was told "its terminal
+  /// is the session" while sitting on the surface the workbench falls back to
+  /// precisely because there is no terminal left.
+  String _emptyHint({
+    required bool chatAvailable,
+    required bool fromPty,
+    required bool active,
+    required bool hasTerminal,
+  }) {
+    if (!chatAvailable) {
+      return hasTerminal
+          ? 'This agent keeps no transcript we can read, so there is no chat '
+                'view for it. Its terminal is the session.'
+          : 'This agent keeps no transcript we can read, and this session has '
+                'no terminal open, so there is nothing to show. Type below to '
+                'run it again.';
+    }
+    if (fromPty) {
+      return hasTerminal
+          ? 'Nothing in this session\'s transcript yet — it appears once the '
+                'agent answers. The terminal shows it live.'
+          : 'Nothing in this session\'s transcript yet — it appears once the '
+                'agent answers.';
+    }
+    return active
+        ? 'Session is running — say something to the agent.'
+        : 'No messages yet.';
   }
 
   /// The agent's own transcript as chat messages. Tool lines are dropped: the
@@ -239,6 +273,23 @@ class _OpenInTerminalButton extends ConsumerWidget {
       orElse: () => const SizedBox.shrink(),
     );
   }
+}
+
+/// The pane [sessionId] can be *shown* in, or null when it has none.
+///
+/// A row keeps its `pane_id` after the pane behind it is gone, so the id alone
+/// is not the question: the terminal must still hold an instance for it, in a
+/// tab or detached. A pane restored from disk counts — its scrollback is the
+/// session's record even though nothing is running in it.
+///
+/// The single answer to "has this session got a terminal", so which surface the
+/// workbench opens and what the conversation says about the terminal cannot
+/// disagree.
+String? sessionTerminalPane(WidgetRef ref, String sessionId) {
+  final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+  if (paneId == null) return null;
+  final terminals = ref.read(terminalSessionsControllerProvider.notifier);
+  return terminals.instanceFor(paneId) == null ? null : paneId;
 }
 
 /// Whether a chat view can be built for the agent behind [sessionId].
