@@ -6,10 +6,13 @@ import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:chitragupta/src/features/git/application/changes_providers.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
+import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
@@ -38,6 +41,12 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
 
+  /// A checkout nested inside the project's first repository.
+  const nestedPath = EnvironmentPath(
+    environmentId: 'windows',
+    path: r'C:\src\demo\app\nested',
+  );
+
   /// What the status pipeline says about every session, and what git says about
   /// the one on screen. Mutable so a test can set them *before* the first pump,
   /// which is when the overridden providers are first read.
@@ -61,7 +70,11 @@ void main() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(repository());
+    RepositoryDao(db)
+      ..insert(repository())
+      // A clone nested inside the first checkout: the shape behind "the sidebar
+      // shows the hub, not the repository I am actually working in".
+      ..insert(repository(id: 'r2', name: 'nested', path: nestedPath.path));
     AgentInstallationDao(db).insert(agentInstallation());
     agentStatus = AgentActivityStatus.idle;
     agentEvidence = const [];
@@ -123,7 +136,11 @@ void main() {
   }
 
   /// A session running in a pane of ours — the only kind that has two views.
-  String seedSessionInAPane({String id = 's1', String title = 'Session'}) {
+  String seedSessionInAPane({
+    String id = 's1',
+    String title = 'Session',
+    EnvironmentPath? worktree,
+  }) {
     final terminals = container.read(
       terminalSessionsControllerProvider.notifier,
     );
@@ -135,7 +152,14 @@ void main() {
         .panes
         .single;
     final dao = SessionDao(db);
-    dao.insert(session(id: id, title: title));
+    dao.insert(
+      session(
+        id: id,
+        title: title,
+        useWorktree: worktree != null,
+        worktree: worktree,
+      ),
+    );
     dao.updatePaneId(id, paneId);
     return paneId;
   }
@@ -467,6 +491,92 @@ void main() {
     expect(
       tester.widget<DeliveryStrip>(find.byType(DeliveryStrip)).sessionId,
       's2',
+    );
+  });
+
+  testWidgets('the side panel follows the session in the terminal tab', (
+    tester,
+  ) async {
+    // The reported bug: the panel described whatever row was last clicked in
+    // the Explorer — for a hub project, the hub — while the user was typing
+    // into an agent working in a clone underneath it. Note `s2`'s row still
+    // says `r1`; what decides is where its agent works.
+    seedSessionInAPane(id: 's1', title: 'Hub');
+    final nested = seedSessionInAPane(
+      id: 's2',
+      title: 'Nested',
+      worktree: nestedPath,
+    );
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+
+    expect(container.read(selectedRepositoryIdProvider), 'r1');
+
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .focusPane(nested);
+    await tester.pumpAndSettle();
+
+    expect(container.read(selectedRepositoryIdProvider), 'r2');
+  });
+
+  testWidgets('an Explorer choice holds until the active session changes', (
+    tester,
+  ) async {
+    // Switching must stay possible: a deliberate click is not overruled by the
+    // session already on screen, only by moving to a different one.
+    seedSessionInAPane(id: 's1', title: 'Hub');
+    final nested = seedSessionInAPane(
+      id: 's2',
+      title: 'Nested',
+      worktree: nestedPath,
+    );
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+
+    container.read(selectedRepositoryIdProvider.notifier).select('r2');
+    await tester.pumpAndSettle();
+    expect(
+      container.read(selectedRepositoryIdProvider),
+      'r2',
+      reason: 'the session on screen did not change, so nothing overrode it',
+    );
+
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .focusPane(nested);
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'r2');
+
+    // ...and back: moving to a session in the other checkout does move it.
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .focusPane(container.read(sessionDaoProvider).getById('s1')!.paneId!);
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'r1');
+  });
+
+  testWidgets('a tab with no session leaves the Explorer in charge', (
+    tester,
+  ) async {
+    seedSessionInAPane(id: 's1', title: 'Hub');
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+    expect(container.read(selectedRepositoryIdProvider), 'r1');
+
+    container.read(selectedRepositoryIdProvider.notifier).select('r2');
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(selectedRepositoryIdProvider),
+      'r2',
+      reason: 'a shell tab is not a session and must not steer the panel',
     );
   });
 }

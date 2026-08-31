@@ -6,6 +6,7 @@ import '../theme/design_tokens.dart';
 
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/detail/presentation/workbench_session_view.dart';
+import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
@@ -54,9 +55,15 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // The listener in `build` only fires on a *change*, so without this the
     // one case the whole loop is about would be the case that lands on chat.
     final selected = ref.read(selectedSessionIdProvider);
-    if (selected == null) return;
+    final active = ref.read(activePaneSessionIdProvider);
+    if (selected == null && active == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _openSession(selected);
+      if (!mounted) return;
+      // A restored workspace can put an agent pane on screen before anything is
+      // selected; the side panel should describe that session, not the row the
+      // Explorer happens to highlight first.
+      if (active != null) ref.read(sessionContextProvider).follow(active);
+      if (selected != null) _openSession(selected);
     });
   }
 
@@ -106,6 +113,13 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // An imported CLI session has no pane of ours; the transcript we read out
       // of the CLI's own store is the only surface it has.
       if (next != null) _showChat();
+    });
+    // The side panel describes the session you are in. Driven by the pane on
+    // screen rather than by the selection, so activating another terminal tab
+    // moves the changes, worktree and GitHub surfaces with it; a tab with no
+    // session writes nothing and leaves the Explorer's choice alone.
+    ref.listen(activePaneSessionIdProvider, (_, next) {
+      if (next != null) ref.read(sessionContextProvider).follow(next);
     });
 
     final scheme = Theme.of(context).colorScheme;
@@ -231,8 +245,7 @@ class _PaneSessionDock extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final terminals = ref.watch(terminalSessionsControllerProvider);
-    final sessionId = _focusedPaneSessionId(ref, terminals);
+    final sessionId = ref.watch(activePaneSessionIdProvider);
     if (sessionId == null) return const SizedBox.shrink();
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -246,23 +259,6 @@ class _PaneSessionDock extends ConsumerWidget {
       ],
     );
   }
-}
-
-/// The session running in the pane the terminal view is showing, if any.
-///
-/// Keyed off the *pane on screen*, not off the Explorer's selection: switching
-/// terminal tabs changes which agent you are looking at, and controls that
-/// followed the tree selection would act on a different session than the one
-/// under them. A shell tab has no session row pointing at it and answers null.
-String? _focusedPaneSessionId(WidgetRef ref, TerminalSessionsState terminals) {
-  final paneId = terminals.activeTab?.focusedPaneId;
-  if (paneId == null) return null;
-  // Adopting a pane, or launching into one, rewrites `paneId` on the row.
-  ref.watch(sessionsRevisionProvider);
-  for (final record in ref.read(sessionDaoProvider).getAll()) {
-    if (record.paneId == paneId) return record.id;
-  }
-  return null;
 }
 
 class _TabStrip extends ConsumerWidget {
@@ -350,7 +346,7 @@ class _TabStrip extends ConsumerWidget {
           // was readable on one view and invisible on the other; this is the
           // same widget reading the same `effectivePermissionFor`, so the two
           // views cannot disagree.
-          if (onTerminal) _PanePermissionChip(terminals: terminals),
+          if (onTerminal) const _PanePermissionChip(),
           if (session?.paneId != null)
             _ViewToggle(
               onTerminal: onTerminal,
@@ -369,15 +365,13 @@ class _TabStrip extends ConsumerWidget {
 /// The permission chip for the agent pane the terminal view is showing.
 ///
 /// Follows the focused pane rather than the tree, for the reason given on
-/// [_focusedPaneSessionId]. A shell tab draws nothing.
+/// [activePaneSessionIdProvider]. A shell tab draws nothing.
 class _PanePermissionChip extends ConsumerWidget {
-  const _PanePermissionChip({required this.terminals});
-
-  final TerminalSessionsState terminals;
+  const _PanePermissionChip();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = _focusedPaneSessionId(ref, terminals);
+    final sessionId = ref.watch(activePaneSessionIdProvider);
     if (sessionId == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(right: Insets.sm),
