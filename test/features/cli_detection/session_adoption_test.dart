@@ -653,6 +653,49 @@ void main() {
       expect(after.externalSessionId, 'cli-abc');
     });
 
+    test('an empty prompt line does not resurrect the command before it', () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude');
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      // The user presses Enter on an empty line. `CommandBlockTracker` opens a
+      // block for the prompt and then drops it, because nothing ran — so
+      // `latest` falls back to the *previous, completed* block, and the pane
+      // reports `claude` all over again.
+      h.panes
+        ..clear()
+        ..add(pane('pane-1', commandId: 'cmd-1'));
+      h.service.observePanes();
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      // Nothing is running there, so nothing is armed and no second row is
+      // minted for an agent that exited a moment ago.
+      expect(h.service.armedPaneIds, isEmpty);
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-def');
+      expect(h.sessions.getAll(), hasLength(1));
+    });
+
     test('a row a resume has since moved is left where it is', () {
       final h = harness();
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');
