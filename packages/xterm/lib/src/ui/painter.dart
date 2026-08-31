@@ -144,14 +144,37 @@ class TerminalPainter {
     }
   }
 
+  /// FORKED: [underline] draws a rule along the bottom of the cells instead of
+  /// filling them, so a hovered link is marked the way a browser marks one and
+  /// the text under it stays exactly as legible. Everything else, including the
+  /// filled path, is upstream's. See VENDORED.md.
   @pragma('vm:prefer-inline')
-  void paintHighlight(Canvas canvas, Offset offset, int length, Color color) {
-    final endOffset =
-        offset.translate(length * _cellSize.width, _cellSize.height);
-
+  void paintHighlight(
+    Canvas canvas,
+    Offset offset,
+    int length,
+    Color color, {
+    bool underline = false,
+  }) {
     final paint = Paint()
       ..color = color
       ..strokeWidth = 1;
+
+    if (underline) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          offset.dx,
+          offset.dy + _cellSize.height - 2,
+          length * _cellSize.width,
+          1,
+        ),
+        paint,
+      );
+      return;
+    }
+
+    final endOffset =
+        offset.translate(length * _cellSize.width, _cellSize.height);
 
     canvas.drawRect(
       Rect.fromPoints(offset, endOffset),

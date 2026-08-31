@@ -123,16 +123,21 @@ class TerminalController with ChangeNotifier {
   /// Creates a new highlight on the terminal from [p1] to [p2] with the given
   /// [color]. The highlight will be removed when the returned object is
   /// disposed.
+  ///
+  /// FORKED: [underline] draws a rule along the bottom of the cells instead of
+  /// filling them, which is how a hovered link is marked. See VENDORED.md.
   TerminalHighlight highlight({
     required CellAnchor p1,
     required CellAnchor p2,
     required Color color,
+    bool underline = false,
   }) {
     final highlight = TerminalHighlight(
       this,
       p1: p1,
       p2: p2,
       color: color,
+      underline: underline,
     );
 
     _highlights.add(highlight);
@@ -156,11 +161,16 @@ class TerminalHighlight with Disposable {
 
   final Color color;
 
+  /// FORKED: draw a rule along the bottom of the cells rather than filling
+  /// them. See VENDORED.md.
+  final bool underline;
+
   TerminalHighlight(
     this.owner, {
     required this.p1,
     required this.p2,
     required this.color,
+    this.underline = false,
   });
 
   /// Returns the range of the highlight. May be null if the anchors that

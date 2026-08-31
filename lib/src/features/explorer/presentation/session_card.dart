@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../sessions/domain/session_lineage.dart';
 import '../application/session_diff_stat.dart';
@@ -21,42 +22,6 @@ String compactAge(Duration age) {
   }
   final hours = age.inHours % 24;
   return hours == 0 ? '${age.inDays}d' : '${age.inDays}d ${hours}h';
-}
-
-/// Right-click support, shared by every row in the Explorer.
-class ContextMenuRegion extends StatelessWidget {
-  const ContextMenuRegion({
-    required this.menuItems,
-    required this.onSelected,
-    required this.child,
-    super.key,
-  });
-
-  final List<PopupMenuEntry<String>> menuItems;
-  final ValueChanged<String> onSelected;
-  final Widget child;
-
-  Future<void> _show(BuildContext context, Offset position) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(position.dx, position.dy, 1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: menuItems,
-    );
-    if (selected != null) onSelected(selected);
-  }
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.translucent,
-    onSecondaryTapDown: (details) => _show(context, details.globalPosition),
-    child: child,
-  );
 }
 
 /// A session, drawn as a three-line card.

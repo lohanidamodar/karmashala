@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/session_diff_stat.dart';
 import 'session_card.dart';

@@ -6,9 +6,10 @@ import 'package:xterm/xterm.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../application/terminal_link_actions.dart';
 import '../data/terminal_instance.dart';
+import '../domain/terminal_link_resolution.dart';
 import '../domain/terminal_links.dart';
-import '../domain/terminal_search.dart';
 
 /// One pane's terminal grid, and the link affordance over it.
 ///
@@ -20,27 +21,49 @@ import '../domain/terminal_search.dart';
 ///
 /// ## Links
 ///
-/// The owner's report was "links are not clickable in chitragupta's terminal".
-/// They are now, on **Ctrl+click** (Cmd on macOS) — VS Code's and Windows
-/// Terminal's gesture, and the only safe one: a plain click in a terminal
-/// places a selection and, when the program has asked for mouse reporting, is
-/// an event the program itself receives. Opening a browser on it would be a
-/// side effect of clicking anywhere.
+/// The owner's report was "links are not clickable in chitragupta's terminal",
+/// then "any link — file link, relative file link, http link". They are, on
+/// **Ctrl+click** (Cmd on macOS) — VS Code's and Windows Terminal's gesture,
+/// and the only safe one: a plain click in a terminal places a selection and,
+/// when the program has asked for mouse reporting, is an event the program
+/// itself receives. Opening something as a side effect of clicking anywhere
+/// would be wrong.
 ///
-/// Discoverability is the hover: the URL under the pointer is highlighted and
-/// the pane says `Ctrl+click to open …` along its bottom edge, so the gesture
-/// is visible before it is needed rather than being something you had to
-/// already know.
+/// **Ctrl is the switch, not just the click.** Nothing is detected until the
+/// modifier is held. Hold it and the link under the pointer underlines itself
+/// and the cursor turns into a hand — every terminal's affordance, and the
+/// thing that says "this is clickable" before you commit to it. Release it, or
+/// move off, and the underline goes. With Ctrl up the pane behaves exactly as
+/// it did before any of this existed, selection drag included.
+///
+/// Four kinds of target, one code path:
+///
+/// * an http(s) URL, opened in the browser;
+/// * a directory, revealed in the host's file manager;
+/// * a file, opened in the configured code editor;
+/// * `path:12` / `path:12:7`, which resolves as the file and carries the
+///   location for an opener that can use it (none can yet).
+///
+/// A path that does not exist underlines nothing and does nothing: the pane
+/// asks what is at the resolved path once, for the one candidate under the
+/// pointer, and stays silent when the answer is "nothing".
 ///
 /// ## What this costs at 100 panes
 ///
-/// Nothing, for 99 of them. Detection is driven by [MouseRegion.onHover], so a
-/// pane with no pointer over it never runs it — there is no per-write, per-line
-/// or per-frame scan, and the output path is untouched. The hovered pane pays
-/// one [lineTextOf] plus one regex over that single line, and only when the
-/// pointer crosses into a different cell.
+/// Nothing, in every pane, until Ctrl goes down. With the modifier up
+/// [_onHover] stores the pointer position and returns — no cell lookup, no line
+/// flattening, no regex, no `stat`. There is no per-write, per-line or
+/// per-frame work anywhere here and the output path is untouched; the keyboard
+/// handler that watches for Ctrl is registered only while the pointer is inside
+/// a pane, so at most one exists no matter how many panes are open.
 ///
-/// The highlight itself is xterm's own [TerminalController.highlight], the same
+/// With Ctrl held, the hovered pane pays — only when the pointer crosses into a
+/// different cell — one flatten of the hovered row (plus its wrapped
+/// continuation rows, at most [kMaxWrappedRows] either side), two regex passes
+/// over that text, and at most one `FileSystemEntity.type` per distinct
+/// candidate, memoised until the pointer leaves the pane.
+///
+/// The underline itself is xterm's own [TerminalController.highlight], the same
 /// mechanism find-in-scrollback uses: it is anchored to the buffer, so it stays
 /// on its text as output scrolls, and there is at most one of them.
 ///
@@ -62,7 +85,7 @@ class TerminalPaneView extends StatefulWidget {
     required this.chordOverrides,
     required this.onKeyEvent,
     required this.onSecondaryTapDown,
-    required this.openUrl,
+    required this.linkActions,
     super.key,
   });
 
@@ -74,9 +97,10 @@ class TerminalPaneView extends StatefulWidget {
   final FocusOnKeyEventCallback onKeyEvent;
   final void Function(Offset globalPosition) onSecondaryTapDown;
 
-  /// Opens a URL outside the app. Injected, so a test records what a click
-  /// would have opened instead of launching a browser at the machine.
-  final Future<bool> Function(String url) openUrl;
+  /// Reaches the browser, the file manager, the editor and the filesystem.
+  /// Injected, so a test records what a Ctrl+click would have done instead of
+  /// starting any of them on the machine running it.
+  final TerminalLinkActions linkActions;
 
   @override
   State<TerminalPaneView> createState() => _TerminalPaneViewState();
@@ -86,6 +110,18 @@ class TerminalPaneView extends StatefulWidget {
 /// rather than the start of a selection drag.
 const double _clickSlop = 4;
 
+/// A path candidate that turned out to be something.
+class _Resolved {
+  const _Resolved(this.hostPath, this.kind);
+
+  final String hostPath;
+  final TerminalPathKind kind;
+}
+
+/// How many probe answers a pane remembers while the pointer is inside it.
+/// Dropped on exit, so a file created after a miss is found on the next visit.
+const int _maxProbeCache = 64;
+
 class _TerminalPaneViewState extends State<TerminalPaneView> {
   /// Reaches `TerminalViewState.renderTerminal`, which is the only thing that
   /// can turn a pointer position into a buffer cell — it owns the cell metrics
@@ -93,14 +129,63 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
   final _viewKey = GlobalKey<TerminalViewState>();
 
   TerminalLink? _link;
-  int? _linkRow;
+  _Resolved? _resolved;
   CellOffset? _lastCell;
   TerminalHighlight? _highlight;
 
+  /// Whether the link modifier is down. Detection does nothing until it is.
+  bool _modifier = false;
+
+  /// Where the pointer last was, so pressing Ctrl without moving the mouse
+  /// still lights up what is under it.
+  Offset? _pointer;
+
+  /// Whether the keyboard handler is registered. It is added when the pointer
+  /// enters this pane and removed when it leaves, so exactly one pane is ever
+  /// listening — the cost does not grow with the number of open panes.
+  bool _listening = false;
+
+  /// Answers from [TerminalLinkActions.kindOf], so sliding along one path does
+  /// not `stat` it once per cell.
+  final Map<String, TerminalPathKind?> _probed = {};
+
+  /// Discards the answer to a probe that is no longer the one being asked for.
+  int _epoch = 0;
+
   @override
   void dispose() {
+    _stopListening();
     _highlight?.dispose();
     super.dispose();
+  }
+
+  void _startListening() {
+    if (_listening) return;
+    _listening = true;
+    HardwareKeyboard.instance.addHandler(_onKeyboardChanged);
+  }
+
+  void _stopListening() {
+    if (!_listening) return;
+    _listening = false;
+    HardwareKeyboard.instance.removeHandler(_onKeyboardChanged);
+  }
+
+  /// Watches the modifier so the underline appears the moment Ctrl goes down,
+  /// rather than on the next mouse movement. Never handles anything: it only
+  /// reads the keyboard's state, which is already updated by the time handlers
+  /// run.
+  bool _onKeyboardChanged(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    final down = keyboard.isControlPressed || keyboard.isMetaPressed;
+    if (down == _modifier) return false;
+    _modifier = down;
+    if (down) {
+      _resolveAt(_pointer);
+    } else {
+      _forget();
+    }
+    return false;
   }
 
   /// The buffer cell under a **screen** position.
@@ -125,41 +210,112 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     }
   }
 
-  void _onHover(PointerHoverEvent event) {
-    final cell = _cellAt(event.position);
-    if (cell == null || cell == _lastCell) return;
-    _lastCell = cell;
-
-    final lines = widget.instance.terminal.buffer.lines;
-    if (cell.y >= lines.length) return _setLink(null, null);
-    final link = linkAt(lineTextOf(lines[cell.y]), cell.x);
-    if (link == _link && cell.y == _linkRow) return;
-    _setLink(link, cell.y);
+  void _onEnter(PointerEnterEvent event) {
+    _pointer = event.position;
+    _startListening();
+    final keyboard = HardwareKeyboard.instance;
+    _modifier = keyboard.isControlPressed || keyboard.isMetaPressed;
+    if (_modifier) _resolveAt(event.position);
   }
 
-  void _setLink(TerminalLink? link, int? row) {
-    _highlight?.dispose();
-    _highlight = null;
-    if (link != null && row != null) {
-      final buffer = widget.instance.terminal.buffer;
-      _highlight = widget.instance.controller.highlight(
-        p1: buffer.createAnchor(link.startColumn, row),
-        p2: buffer.createAnchor(link.endColumn, row),
-        // Translucent, like a search hit: the URL has to stay readable under
-        // its own affordance.
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-      );
-    }
-    if (link == _link && row == _linkRow) return;
-    setState(() {
-      _link = link;
-      _linkRow = row;
-    });
+  /// The whole per-move cost with Ctrl up: one field write.
+  void _onHover(PointerHoverEvent event) {
+    _pointer = event.position;
+    if (!_modifier) return;
+    _resolveAt(event.position);
   }
 
   void _onExit(PointerExitEvent event) {
+    _stopListening();
+    _pointer = null;
+    _modifier = false;
+    _probed.clear();
+    _forget();
+  }
+
+  /// Works out what is under [position] and lights it up, or clears.
+  ///
+  /// Only ever reached with the modifier held. The `stat` at the end is the one
+  /// filesystem call on this path: detection above it is pure text, so a line
+  /// full of path-shaped words costs regex, not I/O.
+  Future<void> _resolveAt(Offset? position) async {
+    if (position == null) return;
+    final cell = _cellAt(position);
+    if (cell == null) return _forget();
+    // The same cell has the same answer, and we already gave it.
+    if (cell == _lastCell) return;
+    _lastCell = cell;
+
+    final buffer = widget.instance.terminal.buffer;
+    if (cell.y >= buffer.lines.length) return _clearLink();
+    final link = linkAt(linkLineAt(buffer, cell.y), cell.y, cell.x);
+    if (link == null) return _clearLink();
+    // Still the same link, one cell along: it is already underlined.
+    if (link == _link) return;
+
+    final target = link.target;
+    if (target is UrlTarget) return _show(link, null);
+
+    final hostPath = hostPathForTerminalTarget(
+      target as PathTarget,
+      workingDirectory: widget.instance.workingDirectory,
+      profileId: widget.instance.profileId,
+    );
+    if (hostPath == null) return _clearLink();
+
+    final epoch = ++_epoch;
+    final kind = await _kindOf(hostPath);
+    // The pointer moved, or Ctrl came up, while we were asking.
+    if (!mounted || epoch != _epoch) return;
+    // Nothing is there. Nothing visible happens — a wrong thing opened is far
+    // worse than a word that turns out not to be a link.
+    if (kind == null) return _clearLink();
+    _show(link, _Resolved(hostPath, kind));
+  }
+
+  Future<TerminalPathKind?> _kindOf(String hostPath) async {
+    if (_probed.containsKey(hostPath)) return _probed[hostPath];
+    final kind = await widget.linkActions.kindOf(hostPath);
+    if (_probed.length >= _maxProbeCache) _probed.clear();
+    _probed[hostPath] = kind;
+    return kind;
+  }
+
+  /// Underlines [link], across every row it covers.
+  void _show(TerminalLink link, _Resolved? resolved) {
+    _highlight?.dispose();
+    final buffer = widget.instance.terminal.buffer;
+    _highlight = widget.instance.controller.highlight(
+      p1: buffer.createAnchor(link.startColumn, link.startRow),
+      p2: buffer.createAnchor(link.endColumn, link.endRow),
+      // A rule under the text, not a wash over it: the link has to stay as
+      // readable as the output around it.
+      color: Theme.of(context).colorScheme.primary,
+      underline: true,
+    );
+    setState(() {
+      _link = link;
+      _resolved = resolved;
+    });
+  }
+
+  /// Drops the underline, keeping the "this cell has been answered" memory.
+  void _clearLink() {
+    _highlight?.dispose();
+    _highlight = null;
+    if (_link == null) return;
+    setState(() {
+      _link = null;
+      _resolved = null;
+    });
+  }
+
+  /// Drops the underline *and* the memory, so the same cell is asked about
+  /// again — what releasing and re-pressing Ctrl has to mean.
+  void _forget() {
+    _epoch++;
     _lastCell = null;
-    _setLink(null, null);
+    _clearLink();
   }
 
   /// `Ctrl+C` copies when there is a selection, and interrupts when there is
@@ -220,8 +376,44 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return;
     final cell = _cellAt(event.position);
-    if (cell == null || cell.y != _linkRow || !link.contains(cell.x)) return;
-    widget.openUrl(link.url);
+    if (cell == null || !link.contains(cell.y, cell.x)) return;
+    _open(link);
+  }
+
+  Future<void> _open(TerminalLink link) async {
+    final target = link.target;
+    if (target is UrlTarget) return widget.linkActions.openUrl(target.url);
+    final resolved = _resolved;
+    if (resolved == null) return;
+    final error = await widget.linkActions.open(
+      resolved.hostPath,
+      resolved.kind,
+      line: (target as PathTarget).line,
+      column: target.column,
+    );
+    if (error == null || !mounted) return;
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  /// What the hint says the click will do, and to what.
+  ///
+  /// The *resolved* path, not the printed one: `Ctrl+click to open
+  /// C:\src\app\lib\main.dart` is the useful sentence when the output said
+  /// `lib/main.dart`.
+  (String, String) _hintFor(TerminalLink link) {
+    final resolved = _resolved;
+    if (resolved == null) return ('open', link.target.label);
+    final location = link.target is PathTarget
+        ? (link.target as PathTarget).label.substring(
+            (link.target as PathTarget).path.length,
+          )
+        : '';
+    return (
+      resolved.kind == TerminalPathKind.directory ? 'reveal' : 'open',
+      '${resolved.hostPath}$location',
+    );
   }
 
   @override
@@ -264,6 +456,7 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     return MouseRegion(
       // No cursor of its own: `TerminalView`'s own `MouseRegion` is nearer the
       // pointer and wins, so the cursor is set through `mouseCursor` above.
+      onEnter: _onEnter,
       onHover: _onHover,
       onExit: _onExit,
       child: Listener(
@@ -278,7 +471,14 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
         onPointerUp: _onPointerUp,
         child: Stack(
           fit: StackFit.expand,
-          children: [view, if (_link != null) _LinkHint(url: _link!.url)],
+          children: [
+            view,
+            if (_link != null)
+              _LinkHint(
+                verb: _hintFor(_link!).$1,
+                target: _hintFor(_link!).$2,
+              ),
+          ],
         ),
       ),
     );
@@ -286,11 +486,15 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 }
 
 /// The browser-style hint along the bottom of a pane with a link under the
-/// pointer. Says the gesture, because Ctrl+click is not guessable.
+/// pointer. Names the gesture and the target — the *resolved* target, which for
+/// a relative path is the one useful thing the pane knows and the output does
+/// not say.
 class _LinkHint extends StatelessWidget {
-  const _LinkHint({required this.url});
+  const _LinkHint({required this.verb, required this.target});
 
-  final String url;
+  /// `open` or `reveal`, so a folder does not promise to open a file.
+  final String verb;
+  final String target;
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +521,7 @@ class _LinkHint extends StatelessWidget {
             child: Text(
               // Ctrl on Windows and Linux, Cmd on macOS — both are accepted,
               // and the one named is the one the platform's users expect.
-              '${_modifierLabel()}+click to open  $url',
+              '${_modifierLabel()}+click to $verb  $target',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(
