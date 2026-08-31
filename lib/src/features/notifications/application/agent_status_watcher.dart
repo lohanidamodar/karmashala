@@ -11,8 +11,16 @@ import '../domain/session_attention.dart';
 import '../domain/watched_session.dart';
 import 'session_status_registry.dart';
 
-/// Polls the agent status pipeline, turns what changed into decisions, and
-/// keeps the set of sessions that need the user up to date.
+/// Turns what changed about an agent's status into decisions, and keeps the set
+/// of sessions that need the user up to date.
+///
+/// **Two inputs, and hooks are the first of them.** A hook report arrives
+/// through [applyHookChange] as the callback lands — authoritative, already in
+/// memory, and applied to exactly the session it names. [poll] is the fallback:
+/// a full pass every [interval] over the registry's latest cycle, for the
+/// sessions no hook speaks for and for the membership questions a single hook
+/// cannot answer. Before this, a hook waited up to five seconds to be
+/// *discovered* by a poll that had to look at everything.
 ///
 /// Two outputs, deliberately different in kind:
 ///
@@ -36,7 +44,12 @@ class AgentStatusWatcher {
     this.onInbox,
     this.policy = const AgentNotificationPolicy(),
     this.interval = const Duration(seconds: 5),
-  });
+  }) {
+    // Subscribed from construction rather than from [start], because a hook is
+    // not something this class schedules — it is something that happens to it,
+    // and the subscription costs nothing until one does. [dispose] ends it.
+    _hookChanges = registry.hookChanges.listen(applyHookChange);
+  }
 
   /// Where every session's status already lives.
   ///
@@ -66,6 +79,16 @@ class AgentStatusWatcher {
   final Duration interval;
 
   final Map<AgentSessionKey, AgentActivityStatus> _lastStatus = {};
+
+  /// Everything currently holding the user up, in the order the last full pass
+  /// found it.
+  ///
+  /// Kept between passes rather than rebuilt from scratch each time, because a
+  /// hook pass knows about exactly one session and still has to publish the
+  /// whole ambient set — the tray lists all of it.
+  Map<AgentSessionKey, SessionAttention> _attention = {};
+
+  StreamSubscription<SessionStatusEntry>? _hookChanges;
   Timer? _timer;
   bool _polling = false;
   bool _disposed = false;
@@ -91,7 +114,10 @@ class AgentStatusWatcher {
   void dispose() {
     _disposed = true;
     stop();
+    unawaited(_hookChanges?.cancel());
+    _hookChanges = null;
     _lastStatus.clear();
+    _attention = {};
   }
 
   /// One pass: take the registry's current view of every watched session, diff
@@ -112,55 +138,20 @@ class AgentStatusWatcher {
       final cycle = await registry.cycle();
       if (_disposed) return;
 
-      final attention = <SessionAttention>[];
+      final attention = <AgentSessionKey, SessionAttention>{};
       final seen = <AgentSessionKey>{};
       final news = <({WatchedSession session, NotificationReason reason})>[];
 
       for (final entry in cycle.entries) {
-        final session = entry.session;
-        final report = entry.report;
-        seen.add(session.key);
-
-        final previous = _lastStatus[session.key];
-        _lastStatus[session.key] = report.status;
-
-        // What happened, before anything about whether to interrupt. The inbox
-        // takes this; the toast takes the gated form below.
-        final reason = policy
-            .newsIn(
-              AgentStatusTransition(
-                session: session.key,
-                from: previous,
-                to: report.status,
-                source: report.source,
-              ),
-            )
-            .reason;
-        if (reason != null) news.add((session: session, reason: reason));
-
-        final decision = policy.decide(
-          NotificationContext(
-            transition: AgentStatusTransition(
-              session: session.key,
-              from: previous,
-              to: report.status,
-              source: report.source,
-            ),
-            settings: settings,
-            windowFocused: focused,
-            visibleSessionIds: visible,
-          ),
+        seen.add(entry.key);
+        final waiting = _judge(
+          entry,
+          settings: settings,
+          focused: focused,
+          visible: visible,
+          news: news,
         );
-        if (decision.shouldNotify) {
-          onNotify(
-            PendingNotification(session: session, reason: decision.reason!),
-          );
-        }
-
-        final kind = AttentionKind.forStatus(report.status);
-        if (kind != null) {
-          attention.add(SessionAttention(session: session, kind: kind));
-        }
+        if (waiting != null) attention[entry.key] = waiting;
       }
 
       // Forget sessions that fell out of the watch set. If one comes back it is
@@ -172,10 +163,100 @@ class AgentStatusWatcher {
       // session could be dropped here purely for sorting late, and its next
       // real transition was then swallowed as a first observation.
       _lastStatus.removeWhere((key, _) => !seen.contains(key));
-      onAttention(attention);
-      onInbox?.call(InboxUpdate(waiting: attention, watched: seen, news: news));
+      _attention = attention;
+      onAttention(attention.values.toList(growable: false));
+      onInbox?.call(
+        InboxUpdate(
+          waiting: attention.values.toList(growable: false),
+          watched: seen,
+          news: news,
+        ),
+      );
     } finally {
       _polling = false;
     }
+  }
+
+  /// One session, whose status a hook just changed between passes.
+  ///
+  /// **The primary path.** A hook is authoritative and already in memory, so it
+  /// reaches the tray, the inbox and the toast pipeline as it lands rather than
+  /// up to [interval] later; [poll] is the fallback for the sessions no hook
+  /// speaks for.
+  ///
+  /// A *partial* pass, and the `watched` set it hands the inbox says so: this
+  /// looked at exactly one session, so the inbox retires that session's cleared
+  /// condition and nobody else's. `_lastStatus` is not pruned here for the same
+  /// reason — "not looked at this pass" is not "no longer watched", and only
+  /// [poll], which sees the whole watch set, is entitled to decide the second.
+  void applyHookChange(SessionStatusEntry entry) {
+    if (_disposed) return;
+    final news = <({WatchedSession session, NotificationReason reason})>[];
+    final waiting = _judge(
+      entry,
+      settings: readSettings(),
+      focused: isWindowFocused(),
+      visible: visibleSessionIds(),
+      news: news,
+    );
+    if (waiting == null) {
+      _attention.remove(entry.key);
+    } else {
+      _attention[entry.key] = waiting;
+    }
+    onAttention(_attention.values.toList(growable: false));
+    onInbox?.call(
+      InboxUpdate(
+        waiting: waiting == null ? const [] : [waiting],
+        watched: {entry.key},
+        news: news,
+      ),
+    );
+  }
+
+  /// The policy over one session: what happened, whether to interrupt for it,
+  /// and whether it is still holding the user up.
+  ///
+  /// Shared by the full pass and the hook pass so the two cannot come to
+  /// disagree about what a status means — appending to [news] and firing
+  /// [onNotify] as a side effect, and returning the attention it leaves behind.
+  SessionAttention? _judge(
+    SessionStatusEntry entry, {
+    required NotificationSettings settings,
+    required bool focused,
+    required Set<String> visible,
+    required List<({WatchedSession session, NotificationReason reason})> news,
+  }) {
+    final session = entry.session;
+    final report = entry.report;
+    final previous = _lastStatus[session.key];
+    _lastStatus[session.key] = report.status;
+
+    final transition = AgentStatusTransition(
+      session: session.key,
+      from: previous,
+      to: report.status,
+      source: report.source,
+    );
+
+    // What happened, before anything about whether to interrupt. The inbox
+    // takes this; the toast takes the gated form below.
+    final reason = policy.newsIn(transition).reason;
+    if (reason != null) news.add((session: session, reason: reason));
+
+    final decision = policy.decide(
+      NotificationContext(
+        transition: transition,
+        settings: settings,
+        windowFocused: focused,
+        visibleSessionIds: visible,
+      ),
+    );
+    if (decision.shouldNotify) {
+      onNotify(PendingNotification(session: session, reason: decision.reason!));
+    }
+
+    final kind = AttentionKind.forStatus(report.status);
+    return kind == null ? null : SessionAttention(session: session, kind: kind);
   }
 }

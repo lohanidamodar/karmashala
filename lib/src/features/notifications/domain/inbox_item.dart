@@ -69,12 +69,12 @@ enum InboxItemKind {
 
 /// One thing waiting for the user, and how to get to it.
 class InboxItem {
-  const InboxItem({
+  InboxItem({
     required this.session,
     required this.kind,
     required this.at,
     this.seen = false,
-  });
+  }) : id = idFor(kind, session.key);
 
   final WatchedSession session;
   final InboxItemKind kind;
@@ -90,7 +90,15 @@ class InboxItem {
 
   /// Stable across polls, so an item keeps its place and its [seen] flag while
   /// the condition behind it persists.
-  String get id => '${kind.name}:${session.key}';
+  ///
+  /// Stored rather than computed: it is the inbox's index key, so it is read
+  /// once per event per poll and a getter that interpolated a new string each
+  /// time was most of what made poll application expensive.
+  final String id;
+
+  /// The id an item for [kind] and [key] would have, without building one.
+  static String idFor(InboxItemKind kind, AgentSessionKey key) =>
+      '${kind.name}:$key';
 
   String get label => session.label;
 
@@ -136,6 +144,27 @@ class InboxUpdate {
   final List<({WatchedSession session, NotificationReason reason})> news;
 }
 
+/// How many **event** items the attention inbox keeps.
+///
+/// Events are the half that grew without limit: a finished turn stays until the
+/// user views, dismisses or reads it, so an eight-hour day across a hundred
+/// sessions accumulates thousands of records of things that already happened.
+/// Two hundred is one per session in the audit's *live/quiet* tier
+/// (`ARCHITECTURE.md` §"Scale target — 100 live terminals") — past that the
+/// list has stopped being a work queue and become a log.
+///
+/// **Conditions are exempt, deliberately.** An agent waiting on you is not a
+/// log entry: there is at most one per session and kind, it retires by itself
+/// the moment the agent stops waiting, and dropping one is precisely the Loop
+/// 42 bug this class exists to prevent — a user who walked away comes back to a
+/// clean tray and a stuck agent. So the inbox holds at most
+/// `kAttentionInboxCap` events plus one item per session actually blocked on
+/// the user, and that second number is bounded by the watch set rather than by
+/// time. Making conditions evictable would also make the list *unstable* at the
+/// cap: an evicted condition is re-filed by the very next poll with a fresh
+/// arrival time, so it would displace a survivor, forever.
+const int kAttentionInboxCap = 200;
+
 /// The attention inbox: everything pending, and what the user has looked at.
 ///
 /// **An event log, not a mirror.** The distinction decides the one case Loop 42
@@ -153,17 +182,70 @@ class InboxUpdate {
 /// * the user **dismissed** it.
 ///
 /// Losing track of a session is none of those, so the item stays.
+///
+/// **Bounded, and evicted from the bottom of a ranking rather than the end of
+/// a list.** See [kAttentionInboxCap] and [AttentionInbox._evict].
 class AttentionInbox {
-  const AttentionInbox({this.items = const []});
+  /// The inbox holding exactly [items], newest first, capped.
+  factory AttentionInbox({List<InboxItem> items = const []}) => _index(items);
+
+  AttentionInbox._(
+    this.items,
+    this._byId,
+    this._conditions,
+    this._openIds,
+    this.unseen,
+  );
+
+  /// Indexes one list of items — one pass, and the only place a new inbox is
+  /// built, so nothing can construct an inbox over the cap.
+  static AttentionInbox _index(List<InboxItem> items) {
+    final kept = items.length > kAttentionInboxCap ? _evict(items) : items;
+    // (Under the cap in total, nothing can be over it in events either.)
+    final byId = <String, InboxItem>{};
+    final conditions = <InboxItem>[];
+    final openIds = <String>{};
+    var unseen = 0;
+    for (final item in kept) {
+      byId[item.id] = item;
+      if (item.kind.isCondition) conditions.add(item);
+      openIds.add(item.session.openId);
+      if (!item.seen) unseen++;
+    }
+    return AttentionInbox._(
+      List.unmodifiable(kept),
+      byId,
+      conditions,
+      openIds,
+      unseen,
+    );
+  }
 
   /// Newest first.
   final List<InboxItem> items;
 
-  static const empty = AttentionInbox();
+  /// [InboxItem.id] → item. What makes applying a poll linear: an upsert is a
+  /// map lookup rather than a scan of every item, which at 500 sessions was
+  /// 500 scans of a 500-item list per poll.
+  final Map<String, InboxItem> _byId;
+
+  /// The condition items, in list order. Only these can be retired by a poll,
+  /// so only these are walked when one arrives.
+  final List<InboxItem> _conditions;
+
+  /// The workspace rows this inbox has items for, so looking at a session that
+  /// has none costs a set lookup rather than a walk.
+  final Set<String> _openIds;
 
   /// The number every surface agrees on: the status bar's count, the side
   /// panel's badge and the tray's badge are all this.
-  int get unseen => items.where((item) => !item.seen).length;
+  ///
+  /// Counted once when the inbox is built rather than by each consumer on each
+  /// read — three widgets and the tray asked for it, and each asked again on
+  /// every rebuild.
+  final int unseen;
+
+  static final empty = AttentionInbox();
 
   bool get isEmpty => items.isEmpty;
 
@@ -172,20 +254,21 @@ class AttentionInbox {
       items.where((item) => !item.seen).toList(growable: false);
 
   /// Folds one poll into the inbox.
+  ///
+  /// Linear in what the poll *says*, not in what the inbox holds: an upsert is
+  /// one map lookup, and only condition items can be retired, so a poll that
+  /// changes nothing allocates nothing and returns `this`.
   AttentionInbox apply(InboxUpdate update, DateTime now) {
-    final next = [...items];
-
-    int indexOf(String id) => next.indexWhere((item) => item.id == id);
+    final addedIds = <String>{};
+    final added = <InboxItem>[];
 
     void upsert(WatchedSession session, InboxItemKind kind) {
-      final item = InboxItem(session: session, kind: kind, at: now);
-      final existing = indexOf(item.id);
-      if (existing >= 0) {
-        // Already listed. Keep its arrival time and its seen flag: a condition
-        // that is still true is not a new thing to tell the user about.
-        return;
-      }
-      next.insert(0, item);
+      final id = InboxItem.idFor(kind, session.key);
+      // Already listed, or already added by the news half of this same update.
+      // Either way it keeps its arrival time and its seen flag: a condition
+      // that is still true is not a new thing to tell the user about.
+      if (_byId.containsKey(id) || !addedIds.add(id)) return;
+      added.add(InboxItem(session: session, kind: kind, at: now));
     }
 
     // News first, so an event and the state that confirms it are one item.
@@ -198,20 +281,33 @@ class AttentionInbox {
 
     // Retire conditions that have cleared — but only for sessions we could
     // actually see this poll.
-    final stillWaiting = {
-      for (final waiting in update.waiting)
-        '${InboxItemKind.ofAttention(waiting.kind).name}:${waiting.session.key}',
-    };
-    next.removeWhere(
-      (item) =>
-          item.kind.isCondition &&
-          update.watched.contains(item.key) &&
-          !stillWaiting.contains(item.id),
-    );
+    final retired = <String>{};
+    if (_conditions.isNotEmpty && update.watched.isNotEmpty) {
+      final stillWaiting = {
+        for (final waiting in update.waiting)
+          InboxItem.idFor(
+            InboxItemKind.ofAttention(waiting.kind),
+            waiting.session.key,
+          ),
+      };
+      for (final item in _conditions) {
+        if (!update.watched.contains(item.key)) continue;
+        if (stillWaiting.contains(item.id)) continue;
+        retired.add(item.id);
+      }
+    }
 
     // Identity when nothing moved: a poll every five seconds must not rebuild
-    // the status bar, the panel and the tray for saying the same thing again.
-    return _maybe(next);
+    // the status bar, the panel and the tray for saying the same thing again —
+    // and must not copy the list to discover that.
+    if (added.isEmpty && retired.isEmpty) return this;
+    return _index([
+      // Each addition used to be inserted at the front in turn, so the last one
+      // ended up first. Kept, because it is what orders the tray menu.
+      ...added.reversed,
+      for (final item in items)
+        if (!retired.contains(item.id)) item,
+    ]);
   }
 
   /// Records that the user is looking at [openIds] right now.
@@ -221,6 +317,7 @@ class AttentionInbox {
   /// but stays listed, because looking at a question does not answer it.
   AttentionInbox viewed(Set<String> openIds) {
     if (openIds.isEmpty) return this;
+    if (!openIds.any(_openIds.contains)) return this;
     final next = <InboxItem>[];
     for (final item in items) {
       if (!openIds.contains(item.session.openId)) {
@@ -239,8 +336,13 @@ class AttentionInbox {
       if (item.kind.isCondition) item.copyWith(seen: true),
   ]);
 
-  AttentionInbox dismiss(String id) =>
-      _maybe([...items]..removeWhere((item) => item.id == id));
+  AttentionInbox dismiss(String id) {
+    if (!_byId.containsKey(id)) return this;
+    return _index([
+      for (final item in items)
+        if (item.id != id) item,
+    ]);
+  }
 
   AttentionInbox _maybe(List<InboxItem> next) {
     if (next.length == items.length) {
@@ -253,6 +355,33 @@ class AttentionInbox {
       }
       if (same) return this;
     }
-    return AttentionInbox(items: List.unmodifiable(next));
+    return _index(next);
+  }
+
+  /// Drops the least useful events until at most [kAttentionInboxCap] remain.
+  ///
+  /// Conditions are never candidates — see [kAttentionInboxCap]. Among events,
+  /// an unread one outranks a read one, because an item you have already looked
+  /// at is one the inbox has finished doing its job for; then the newer
+  /// outranks the older. So the first thing evicted is the oldest finished turn
+  /// you have already read, and the last is the newest one you have not.
+  static List<InboxItem> _evict(List<InboxItem> items) {
+    final events = <int>[];
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i].kind.isCondition) events.add(i);
+    }
+    if (events.length <= kAttentionInboxCap) return items;
+    events.sort((a, b) {
+      final left = items[a];
+      final right = items[b];
+      if (left.seen != right.seen) return left.seen ? 1 : -1;
+      final byAge = right.at.compareTo(left.at);
+      return byAge != 0 ? byAge : a.compareTo(b);
+    });
+    final dropped = events.skip(kAttentionInboxCap).toSet();
+    return [
+      for (var i = 0; i < items.length; i++)
+        if (!dropped.contains(i)) items[i],
+    ];
   }
 }

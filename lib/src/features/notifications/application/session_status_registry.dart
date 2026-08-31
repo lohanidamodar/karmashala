@@ -48,6 +48,17 @@ const Duration kTranscriptSearchInterval = Duration(seconds: 10);
 /// "recently active" when the probe budget is being shared out.
 const Duration kStatusRecentlyActiveWindow = Duration(seconds: 60);
 
+/// The most often a hook naming a session we do not track may force a full
+/// cycle.
+///
+/// A hook for a session already tracked is answered in place, in O(1), with no
+/// rationing at all — that is the whole point of the event path. The one case
+/// that needs the loader is a session the workspace has not enumerated yet
+/// (adoption, or a CLI that has just announced its own id), and that is a
+/// once-per-session event. The floor is here so a hook naming a session that
+/// *never* becomes tracked cannot turn the cheap path into a polling loop.
+const Duration kHookCycleFloor = Duration(seconds: 1);
+
 /// One session's current status, as the registry holds it.
 class SessionStatusEntry {
   const SessionStatusEntry({
@@ -110,7 +121,10 @@ class SessionStatusCycle {
 ///
 /// * **hook reports** and **terminal grids** — already in memory, so they are
 ///   read for *every* session on *every* cycle. Nothing is capped by list
-///   position, because nothing about these costs anything to include.
+///   position, because nothing about these costs anything to include. A hook
+///   does not even wait for a cycle: [hookReported] folds it in as it lands and
+///   publishes it on [hookChanges], which is what makes hooks the primary path
+///   and the cycle below the fallback.
 /// * **transcript paths** — resolved once, centrally, by one store scan shared
 ///   by every session that still needs one.
 /// * **fallback probes** — the disk half, and the only rationed part: a fair
@@ -139,6 +153,7 @@ class SessionStatusRegistry {
     this.interval = kStatusCycleInterval,
     this.transcriptSearchInterval = kTranscriptSearchInterval,
     this.recentlyActiveWindow = kStatusRecentlyActiveWindow,
+    this.hookCycleFloor = kHookCycleFloor,
   });
 
   final AgentStatusService statusService;
@@ -182,12 +197,18 @@ class SessionStatusRegistry {
   final Duration transcriptSearchInterval;
   final Duration recentlyActiveWindow;
 
+  /// See [kHookCycleFloor].
+  final Duration hookCycleFloor;
+
   final Map<AgentSessionKey, _Tracked> _tracked = {};
   final Map<String, _Tracked> _byOpenId = {};
   final StreamController<void> _changes = StreamController<void>.broadcast();
+  final StreamController<SessionStatusEntry> _hookChanges =
+      StreamController<SessionStatusEntry>.broadcast();
 
   DateTime? _nextTranscriptSearch;
   DateTime? _nextStoreSlot;
+  DateTime? _nextHookCycle;
   Timer? _timer;
   bool _disposed = false;
   Future<SessionStatusCycle>? _inFlight;
@@ -213,7 +234,20 @@ class SessionStatusRegistry {
   /// the adoption cost claim is asserted against.
   int storeSlots = 0;
 
-  /// The most recent cycle's entries.
+  /// Hook callbacks handed to [hookReported].
+  int hookReports = 0;
+
+  /// Hook callbacks that changed a status without waiting for a cycle.
+  int hookFastUpdates = 0;
+
+  /// Cycles a hook for an untracked session forced, rationed by
+  /// [hookCycleFloor].
+  int hookCycles = 0;
+
+  /// The most recent *cycle's* entries.
+  ///
+  /// A snapshot of that pass, so a status a hook changed since is visible
+  /// through [reportForKey] and [hookChanges] rather than here.
   List<SessionStatusEntry> get entries => _last.entries;
 
   int get trackedCount => _tracked.length;
@@ -271,6 +305,76 @@ class SessionStatusRegistry {
       );
       controller.onCancel = subscription.cancel;
     });
+  }
+
+  /// Sessions a hook just changed the status of, as the callback lands.
+  ///
+  /// The event path. `AgentStatusWatcher` listens here so an approval request
+  /// reaches the tray, the inbox and the toast pipeline immediately instead of
+  /// at its next pass, which demotes polling to what it should always have
+  /// been: the fallback for agents whose hooks are not installed.
+  Stream<SessionStatusEntry> get hookChanges => _hookChanges.stream;
+
+  /// A hook callback just landed for [key]. Fold it in now.
+  ///
+  /// This is the cheap half of a cycle, for one session, run out of turn. A
+  /// hook outranks every other source (`AgentStatusService`'s precedence), so
+  /// answering it needs no disk, no store scan and not even the session's
+  /// terminal — a map lookup and the precedence, and nothing else.
+  ///
+  /// Publishes only when the evidence actually moved, so a chatty agent's
+  /// stream of tool-use callbacks costs a lookup each and wakes nobody.
+  ///
+  /// A [key] the registry does not track yet is the one case that needs the
+  /// loader: it asks for a cycle instead, rationed by [hookCycleFloor]. The
+  /// latency that costs is only ever a session's *first* hook, which the
+  /// notification policy suppresses as a first observation anyway.
+  void hookReported(AgentSessionKey key) {
+    if (_disposed) return;
+    hookReports++;
+    final tracked = _tracked[key];
+    if (tracked == null || agents.byId(key.agentId) == null) {
+      _requestEarlyCycle();
+      return;
+    }
+    final now = clock.nowUtc();
+    final query =
+        tracked.query ??
+        AgentStatusQuery(
+          agentId: key.agentId,
+          sessionId: key.sessionId,
+          stateFilePath: tracked.statePath,
+        );
+    final hook = statusService.hookReport(query, now);
+    // Recorded but already stale, or an event that means nothing to us. The
+    // next cycle re-ranks it against the sources that are still worth reading.
+    if (hook == null) return;
+    final before = tracked.report;
+    tracked.query = query;
+    tracked.hook = hook;
+    tracked.grid = null;
+    tracked.wantsProbe = false;
+    tracked.publish(
+      statusService.compose(query: query, now: now, hook: hook),
+      now,
+    );
+    if (_sameEvidence(before, tracked.report)) return;
+    hookFastUpdates++;
+    if (!_changes.isClosed) _changes.add(null);
+    if (!_hookChanges.isClosed) _hookChanges.add(tracked.entry());
+  }
+
+  void _requestEarlyCycle() {
+    final now = clock.nowUtc();
+    final next = _nextHookCycle;
+    if (next != null && now.isBefore(next)) return;
+    _nextHookCycle = now.add(hookCycleFloor);
+    hookCycles++;
+    // Fire and forget, and quietly: this runs inside an agent's hook callback,
+    // and a cycle that cannot enumerate sessions must not come back as an
+    // unhandled error in the HTTP handler that fired it. The periodic cycle
+    // meets the same failure with somewhere to report it.
+    unawaited(cycle().catchError((Object _) => _last));
   }
 
   /// Recomputes every watched session's status, spends this cycle's probe
@@ -384,6 +488,7 @@ class SessionStatusRegistry {
     _tracked.clear();
     _byOpenId.clear();
     unawaited(_changes.close());
+    unawaited(_hookChanges.close());
   }
 
   /// Forgets resolved transcript paths, so the next cycle looks again.
