@@ -1,3 +1,4 @@
+import 'verdict_attribution.dart';
 import 'verification_artifact.dart';
 import 'verification_step.dart';
 import 'verification_target.dart';
@@ -38,6 +39,7 @@ class VerificationRun {
     required this.startedAt,
     required this.artifactDirectory,
     this.sessionId,
+    this.producedBySessionId,
     this.finishedAt,
     this.verdict,
     this.reason,
@@ -56,6 +58,14 @@ class VerificationRun {
   /// table. Reading the session's title is a lookup, not a join.
   final String? sessionId;
 
+  /// The session that recorded this run and signed off on its verdict, or
+  /// null for a row written before attribution existed.
+  ///
+  /// Distinct from [sessionId], which says whose *work* is under test. When
+  /// the two are equal the verdict is self-reported; that is the common case
+  /// today, and saying so is the point.
+  final String? producedBySessionId;
+
   final DateTime startedAt;
   final DateTime? finishedAt;
   final VerificationVerdict? verdict;
@@ -69,6 +79,12 @@ class VerificationRun {
   final List<VerificationStep> steps;
   final List<VerificationArtifact> artifacts;
 
+  /// Whether the verifier was the author, someone else, or unrecorded.
+  VerdictAttribution get attribution => VerdictAttribution.of(
+    producerSessionId: producedBySessionId,
+    subjectSessionId: sessionId,
+  );
+
   /// Still recording (or abandoned): nothing has finished it.
   bool get isOpen => finishedAt == null;
 
@@ -77,6 +93,7 @@ class VerificationRun {
   VerificationRun copyWith({
     String? title,
     String? sessionId,
+    String? producedBySessionId,
     DateTime? finishedAt,
     VerificationVerdict? verdict,
     String? reason,
@@ -89,6 +106,7 @@ class VerificationRun {
     startedAt: startedAt,
     artifactDirectory: artifactDirectory,
     sessionId: sessionId ?? this.sessionId,
+    producedBySessionId: producedBySessionId ?? this.producedBySessionId,
     finishedAt: finishedAt ?? this.finishedAt,
     verdict: verdict ?? this.verdict,
     reason: reason ?? this.reason,

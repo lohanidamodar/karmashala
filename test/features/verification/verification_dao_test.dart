@@ -1,5 +1,6 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/verification/data/verification_dao.dart';
+import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_artifact.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_run.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_step.dart';
@@ -12,12 +13,14 @@ VerificationRun _run(
   String id, {
   VerificationTarget? target,
   String? sessionId,
+  String? producedBySessionId,
   DateTime? startedAt,
 }) => VerificationRun(
   id: id,
   title: 'Verify $id',
   target: target ?? const VerificationTarget.browser('https://example.com'),
   sessionId: sessionId,
+  producedBySessionId: producedBySessionId,
   startedAt: startedAt ?? _t0,
   artifactDirectory: r'C:\support\verification\' + id,
 );
@@ -252,5 +255,75 @@ void main() {
       _run('run-open', startedAt: _t0.add(const Duration(days: 1))),
     );
     expect(dao.openRun()!.id, 'run-open');
+  });
+
+  group('the producer of the verdict', () {
+    test('round-trips, and the run says the author graded itself', () {
+      dao.insertRun(
+        _run('run-a', sessionId: 's-1', producedBySessionId: 's-1'),
+      );
+
+      final read = dao.getRun('run-a')!;
+      expect(read.producedBySessionId, 's-1');
+      expect(read.attribution, VerdictAttribution.author);
+    });
+
+    test('a different producer reads as independent', () {
+      dao.insertRun(
+        _run('run-a', sessionId: 's-1', producedBySessionId: 's-2'),
+      );
+      expect(dao.getRun('run-a')!.attribution, VerdictAttribution.independent);
+    });
+
+    test('a row written before attribution reads as not recorded', () {
+      // Exactly what a pre-v20 row is once the column exists: null, because
+      // nothing recorded a producer. It must not read as the author, and it
+      // must not read as independent.
+      db.execute(
+        'INSERT INTO verification_runs '
+        '(id, title, target_kind, target_url, session_id, started_at, '
+        'verdict, artifact_directory) '
+        "VALUES ('legacy', 'Old run', 'browser', 'https://example.com', "
+        "'s-1', '2026-08-01T00:00:00.000Z', 'pass', 'C:/old');",
+      );
+
+      final read = dao.getRun('legacy')!;
+      expect(read.verdict, VerificationVerdict.pass);
+      expect(read.producedBySessionId, isNull);
+      expect(read.attribution, VerdictAttribution.notRecorded);
+    });
+
+    test('listing carries it too, not just the single read', () {
+      dao.insertRun(
+        _run('run-a', sessionId: 's-1', producedBySessionId: 's-2'),
+      );
+      expect(dao.listRuns().single.producedBySessionId, 's-2');
+    });
+
+    test('finishing records the session that signed off', () {
+      dao.insertRun(_run('run-a', sessionId: 's-1'));
+      dao.finishRun(
+        'run-a',
+        finishedAt: _t0,
+        verdict: VerificationVerdict.pass,
+        producedBySessionId: 's-2',
+      );
+      expect(dao.getRun('run-a')!.attribution, VerdictAttribution.independent);
+    });
+
+    test('finishing without a caller keeps the producer the start recorded',
+        () {
+      // COALESCE, not assignment: a caller that cannot name itself must not
+      // erase an attribution that was already true.
+      dao.insertRun(
+        _run('run-a', sessionId: 's-1', producedBySessionId: 's-2'),
+      );
+      dao.finishRun(
+        'run-a',
+        finishedAt: _t0,
+        verdict: VerificationVerdict.pass,
+      );
+      expect(dao.getRun('run-a')!.producedBySessionId, 's-2');
+    });
   });
 }

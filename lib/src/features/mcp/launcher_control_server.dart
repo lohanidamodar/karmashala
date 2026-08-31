@@ -711,8 +711,11 @@ class LauncherControlServer {
       // that needs it and the app may not have asked for it yet.
       case final String name when VerificationTools.handles(name):
         await resolveVerificationRoot();
+        // The caller is the producer of every verdict recorded here (G3): the
+        // one thing a self-graded run could never say about itself.
         return VerificationTools(
           _container.read(verificationServiceProvider),
+          callerSessionId: callerSessionId,
         ).call(name, args);
       default:
         throw ArgumentError('Unknown tool: $tool');

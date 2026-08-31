@@ -88,6 +88,7 @@ class VerificationService {
     required VerificationTarget target,
     String? title,
     String? sessionId,
+    String? producedBySessionId,
     bool launch = true,
   }) async {
     final open = _recorder;
@@ -107,6 +108,7 @@ class VerificationService {
           : title.trim(),
       target: target,
       sessionId: sessionId,
+      producedBySessionId: producedBySessionId,
       startedAt: _now(),
       artifactDirectory: directory.path,
     );
@@ -216,6 +218,7 @@ class VerificationService {
   Future<VerificationRun> finish({
     required VerificationVerdict verdict,
     String? reason,
+    String? producedBySessionId,
   }) async {
     final recorder = _require();
     final run = recorder.run;
@@ -240,6 +243,7 @@ class VerificationService {
       finishedAt: _now(),
       verdict: verdict,
       reason: reason?.trim(),
+      producedBySessionId: producedBySessionId,
     );
     _recorder = null;
     final finished = _dao.getRun(run.id)!;

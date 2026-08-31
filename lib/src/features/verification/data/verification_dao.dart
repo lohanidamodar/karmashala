@@ -18,9 +18,9 @@ class VerificationDao {
     _db.execute(
       'INSERT INTO verification_runs '
       '(id, title, target_kind, target_url, target_serial, target_package, '
-      'session_id, started_at, finished_at, verdict, reason, '
-      'artifact_directory) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'session_id, produced_by_session_id, started_at, finished_at, verdict, '
+      'reason, artifact_directory) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         run.id,
         run.title,
@@ -29,6 +29,7 @@ class VerificationDao {
         run.target.serial,
         run.target.packageName,
         run.sessionId,
+        run.producedBySessionId,
         isoFromDate(run.startedAt),
         run.finishedAt == null ? null : isoFromDate(run.finishedAt!),
         run.verdict?.name,
@@ -41,16 +42,27 @@ class VerificationDao {
   /// Closes a run with its verdict. The only update a finished run ever gets —
   /// steps and artifacts are append-only, so evidence cannot be edited after
   /// the fact.
+  /// [producedBySessionId] names the session signing off. `COALESCE` rather
+  /// than a plain assignment: a caller that cannot name itself must not erase
+  /// the producer recorded when the run was started.
   void finishRun(
     String id, {
     required DateTime finishedAt,
     required VerificationVerdict verdict,
     String? reason,
+    String? producedBySessionId,
   }) {
     _db.execute(
-      'UPDATE verification_runs SET finished_at = ?, verdict = ?, reason = ? '
+      'UPDATE verification_runs SET finished_at = ?, verdict = ?, reason = ?, '
+      'produced_by_session_id = COALESCE(?, produced_by_session_id) '
       'WHERE id = ?;',
-      [isoFromDate(finishedAt), verdict.name, reason, id],
+      [
+        isoFromDate(finishedAt),
+        verdict.name,
+        reason,
+        producedBySessionId,
+        id,
+      ],
     );
   }
 
@@ -216,6 +228,7 @@ class VerificationDao {
             )
           : VerificationTarget.browser((row['target_url'] as String?) ?? ''),
       sessionId: row['session_id'] as String?,
+      producedBySessionId: row['produced_by_session_id'] as String?,
       startedAt: dateFromIso(row['started_at']),
       finishedAt: row['finished_at'] == null
           ? null

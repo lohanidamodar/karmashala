@@ -18,9 +18,17 @@ import 'verification_service.dart';
 ///   file contents and screenshots are opt-in. A run with twelve screenshots is
 ///   a very expensive default.
 class VerificationTools {
-  const VerificationTools(this._service);
+  const VerificationTools(this._service, {this.callerSessionId});
 
   final VerificationService _service;
+
+  /// The session whose agent is making the call, from the bridge's
+  /// `callerSessionId` (itself `kSessionIdEnvironmentVariable`).
+  ///
+  /// The producer of everything recorded here. Null only when the caller runs
+  /// outside a Chitragupta session, and then the run stays honestly
+  /// unattributed rather than borrowing an id from somewhere else.
+  final String? callerSessionId;
 
   /// Whether [tool] belongs to this set.
   static bool handles(String tool) => tool.startsWith('verification_');
@@ -63,16 +71,24 @@ class VerificationTools {
         ? VerificationTarget.browser(url)
         : VerificationTarget.device(serial: serial!, packageName: package);
 
+    // `sessionId` is whose work is being verified; the caller is who is doing
+    // the verifying. They default to the same session — the self-graded case
+    // this attribution exists to make visible — and diverge the moment an
+    // agent verifies someone else's work by naming it.
+    final subjectSessionId = _string(args['sessionId']) ?? callerSessionId;
     final run = await _service.start(
       target: target,
       title: _string(args['title']),
-      sessionId: _string(args['sessionId']),
+      sessionId: subjectSessionId,
+      producedBySessionId: callerSessionId,
       launch: args['launch'] != false,
     );
     return _text([
       'Recording ${run.id} — ${run.title}',
       'Target: ${run.target.kind.label} · ${run.target.label}',
       if (run.sessionId != null) 'Attached to session ${run.sessionId}',
+      'Verifier: ${run.producedBySessionId ?? 'not recorded'} '
+          '(${run.attribution.shortLabel})',
       '',
       target.isBrowser
           ? 'Every browser_* call is now a step, with its screenshots. Console '
@@ -104,10 +120,11 @@ class VerificationTools {
     final run = await _service.finish(
       verdict: verdict,
       reason: _string(args['reason']),
+      producedBySessionId: callerSessionId,
     );
     final report = p.join(run.artifactDirectory, 'report.md');
     return _text([
-      '${_verdictWord(run)} — ${run.title}',
+      '${_verdictWord(run)} — ${run.title}, ${run.attribution.phrase}',
       if (run.reason != null) run.reason!,
       '',
       _summaryLines(run).join('\n'),
@@ -135,7 +152,7 @@ class VerificationTools {
     }
     return _text([
       '${runs.length} run${runs.length == 1 ? '' : 's'}, newest first:',
-      'verdict  id  title  [target]  steps',
+      'verdict  id  title  [target]  verifier  steps',
       '',
       for (final run in runs) _runLine(run),
       '',
@@ -175,6 +192,8 @@ class VerificationTools {
       if (run.reason != null) run.reason!,
       'Target: ${run.target.kind.label} · ${run.target.label}',
       if (run.sessionId != null) 'Session: ${run.sessionId}',
+      'Verdict ${run.attribution.phrase}'
+          '${run.producedBySessionId == null ? '' : ' (${run.producedBySessionId})'}',
       'Started ${run.startedAt.toIso8601String()}'
           '${run.duration == null ? ' (still recording)' : ', took ${_seconds(run.duration!)}'}',
       '',
@@ -246,7 +265,7 @@ class VerificationTools {
 
   static String _runLine(VerificationRun run) =>
       '${_verdictMark(run).padRight(7)}  ${run.id}  ${run.title}  '
-      '[${run.target.label}]  '
+      '[${run.target.label}]  ${run.attribution.shortLabel}  '
       '${run.steps.length} step${run.steps.length == 1 ? '' : 's'}';
 
   String _stepLine(
