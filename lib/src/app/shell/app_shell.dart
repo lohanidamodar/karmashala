@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +23,7 @@ import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/system/system_integration_service.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
@@ -502,6 +505,17 @@ class _DesktopMenuBar extends ConsumerWidget {
               leadingIcon: const Icon(AppIcons.arrowsClockwise),
               onPressed: () => _clearAndReimport(context, ref),
               child: const Text('Clear projects and re-import'),
+            ),
+            const Divider(height: 1),
+            MenuItemButton(
+              leadingIcon: const Icon(AppIcons.power),
+              // The real exit, whatever close-to-tray does to the window: the
+              // tray's own Quit, so shutdown runs in order either way.
+              onPressed: () {
+                final system = ref.read(systemIntegrationProvider);
+                if (system != null) unawaited(system.quit());
+              },
+              child: const Text('Quit'),
             ),
           ],
           child: const Text('Workspace'),

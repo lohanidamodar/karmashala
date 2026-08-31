@@ -151,6 +151,7 @@ class AppLifecycle {
     // read and starts nothing.
     _container.read(remoteAccessControllerProvider);
     _systemIntegration = service;
+    _container.read(systemIntegrationProvider.notifier).adopt(service);
     await service.init();
     return service;
   }

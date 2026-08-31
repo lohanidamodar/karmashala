@@ -68,6 +68,21 @@ Future<void> _noShutdown() async {}
 /// focus, up to [_kMaxNativeAttempts]. The bug this replaces set the applied
 /// marker *before* registering, so one failure disabled the launcher hotkey for
 /// the lifetime of the process.
+/// Holds the running integration so the menu bar's Quit can take the same
+/// graceful path the tray's does. Null until the desktop integration starts,
+/// and for the whole life of companion mode.
+class SystemIntegrationHolder extends Notifier<SystemIntegrationService?> {
+  @override
+  SystemIntegrationService? build() => null;
+
+  void adopt(SystemIntegrationService service) => state = service;
+}
+
+final systemIntegrationProvider =
+    NotifierProvider<SystemIntegrationHolder, SystemIntegrationService?>(
+      SystemIntegrationHolder.new,
+    );
+
 class SystemIntegrationService with TrayListener, WindowListener {
   SystemIntegrationService(
     this._container, {
@@ -539,7 +554,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// The workspace snapshot goes first and synchronously, then the lifecycle
   /// owner gets its ordered shutdown, and only then is the window destroyed —
   /// `destroy()` ends the process, so anything after it does not happen.
-  @visibleForTesting
+  /// The one graceful exit, shared by the tray's Quit and the menu bar's.
   Future<void> quit() => _quit();
 
   Future<void> _quit() async {
