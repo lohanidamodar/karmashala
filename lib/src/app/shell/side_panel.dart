@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
+import 'logs_panel.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_state.dart';
@@ -50,26 +51,36 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.verification => AppIcons.checkCircle,
     SidePanelSurface.browser => AppIcons.globe,
     SidePanelSurface.repository => AppIcons.bookBookmark,
+    SidePanelSurface.logs => AppIcons.article,
   };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final open = ref.watch(sidePanelProvider);
+    final debugMode = ref.watch(
+      settingsControllerProvider.select((s) => s.debugMode),
+    );
+    final selected = ref.watch(sidePanelProvider);
+    // Turning debug mode off while the Logs surface is open must close it, not
+    // leave a body behind a glyph that is no longer on the rail.
+    final open = selected != null && selected.requiresDebugMode && !debugMode
+        ? null
+        : selected;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Collapsed costs nothing but the rail: no divider, no reserved body.
         if (open != null) _SidePanelBody(surface: open),
-        _SidePanelRail(open: open),
+        _SidePanelRail(open: open, debugMode: debugMode),
       ],
     );
   }
 }
 
 class _SidePanelRail extends ConsumerWidget {
-  const _SidePanelRail({required this.open});
+  const _SidePanelRail({required this.open, required this.debugMode});
 
   final SidePanelSurface? open;
+  final bool debugMode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -83,7 +94,7 @@ class _SidePanelRail extends ConsumerWidget {
       child: Column(
         children: [
           const SizedBox(height: Insets.xs),
-          for (final surface in SidePanelSurface.values)
+          for (final surface in SidePanelSurface.offered(debugMode: debugMode))
             _RailButton(
               surface: surface,
               selected: surface == open,
@@ -270,6 +281,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.browser => const BrowserPane(),
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
+    SidePanelSurface.logs => const LogsPanel(),
   };
 }
 
