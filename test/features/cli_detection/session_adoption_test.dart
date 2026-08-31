@@ -62,6 +62,7 @@ AdoptablePane pane(
   bool launched = false,
   String? commandId,
   String? commandLine,
+  bool running = true,
 }) => AdoptablePane(
   paneId: id,
   workingDirectory: directory,
@@ -69,6 +70,7 @@ AdoptablePane pane(
   hostsLaunchedSession: launched,
   lastCommandId: commandId,
   lastCommandLine: commandLine,
+  lastCommandRunning: running,
 );
 
 DetectedSession detected(
@@ -371,6 +373,55 @@ void main() {
       expect(h.sessions.getAll(), isEmpty);
     });
 
+    test('a command that has finished disarms its pane before the next prompt',
+        () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude --help');
+      expect(h.service.armedPaneIds, ['pane-1']);
+
+      // `claude --help` printed its usage and exited. The shell reports that on
+      // the block it has already shown us, which keeps its id and its text — so
+      // this flag is the only thing separating a CLI that has exited from an
+      // agent sitting at its prompt.
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude --help',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      expect(h.service.armedPaneIds, isEmpty);
+      // A hook from a Claude Code running in somebody else's terminal must not
+      // find a home in a pane that is back at a shell prompt.
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+      expect(h.sessions.getAll(), isEmpty);
+    });
+
+    test('a command that has finished buys no store scan', () async {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude --help');
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude --help',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      expect(h.service.wantsStoreSweep, isFalse);
+      expect(await h.service.sweep(), 0);
+      expect(h.counters.scans, 0);
+    });
+
     test('a pane that has gone away', () {
       final h = harness();
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');
@@ -552,6 +603,121 @@ void main() {
 
       expect(h.counters.scans, kAdoptionSweepAttempts);
       expect(h.service.wantsStoreSweep, isFalse);
+    });
+  });
+
+  group('a pane that moves on to something else', () {
+    test('the row it adopted stops naming the pane', () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude');
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+      final adopted = h.sessions.getAllByExternalSessionId('cli-abc').single;
+      expect(adopted.paneId, 'pane-1');
+
+      // The user quits Claude. The pane survives, because it is a shell — so
+      // without this the row goes on claiming a pane that is showing a prompt,
+      // and the status badge reads that prompt as the agent's screen.
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      expect(h.sessions.getById(adopted.id)!.paneId, isNull);
+    });
+
+    test('a second agent in one pane is a second row, not a changed one', () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude');
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+      final first = h.sessions.getAllByExternalSessionId('cli-abc').single;
+
+      typeCommand(h, 'pane-1', 'cmd-1', 'claude');
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-def');
+      final second = h.sessions.getAllByExternalSessionId('cli-def').single;
+
+      expect(second.id, isNot(first.id));
+      expect(second.paneId, 'pane-1');
+      // The first conversation keeps everything that made it itself, and loses
+      // only the pane the second one now owns.
+      final after = h.sessions.getById(first.id)!;
+      expect(after.paneId, isNull);
+      expect(after.title, first.title);
+      expect(after.createdAt, first.createdAt);
+      expect(after.externalSessionId, 'cli-abc');
+    });
+
+    test('an empty prompt line does not resurrect the command before it', () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude');
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      // The user presses Enter on an empty line. `CommandBlockTracker` opens a
+      // block for the prompt and then drops it, because nothing ran — so
+      // `latest` falls back to the *previous, completed* block, and the pane
+      // reports `claude` all over again.
+      h.panes
+        ..clear()
+        ..add(pane('pane-1', commandId: 'cmd-1'));
+      h.service.observePanes();
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      // Nothing is running there, so nothing is armed and no second row is
+      // minted for an agent that exited a moment ago.
+      expect(h.service.armedPaneIds, isEmpty);
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-def');
+      expect(h.sessions.getAll(), hasLength(1));
+    });
+
+    test('a row a resume has since moved is left where it is', () {
+      final h = harness();
+      typeCommand(h, 'pane-1', 'cmd-0', 'claude');
+      h.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
+      final adopted = h.sessions.getAllByExternalSessionId('cli-abc').single;
+      // A resume re-launched the conversation into a pane of its own. That
+      // placement is newer than ours, so leaving this pane must not undo it.
+      h.sessions.updatePaneId(adopted.id, 'pane-9');
+
+      h.panes
+        ..clear()
+        ..add(
+          pane(
+            'pane-1',
+            commandId: 'cmd-0',
+            commandLine: 'claude',
+            running: false,
+          ),
+        );
+      h.service.observePanes();
+
+      expect(h.sessions.getById(adopted.id)!.paneId, 'pane-9');
     });
   });
 }

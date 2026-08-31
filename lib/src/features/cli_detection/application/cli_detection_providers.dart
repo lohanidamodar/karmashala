@@ -110,6 +110,11 @@ List<AdoptablePane> adoptablePanes(Ref ref) {
           hostsLaunchedSession: instance.agentLaunch != null,
           lastCommandId: instance.commandBlocks?.tracker.latest?.id,
           lastCommandLine: instance.commandBlocks?.tracker.latest?.command,
+          // `latest` keeps reporting a finished block until the next prompt is
+          // drawn, so without this a CLI that has already exited still looks
+          // like one sitting at its prompt.
+          lastCommandRunning:
+              instance.commandBlocks?.tracker.latest?.isRunning ?? true,
         ),
   ];
 }
