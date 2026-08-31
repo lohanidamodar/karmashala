@@ -22,7 +22,7 @@ void main() {
   final t0 = DateTime.utc(2026, 8, 31, 12);
 
   WatchedSession session(int i) => WatchedSession(
-    key: AgentSessionKey('claudeCode', 'cli-$i'),
+    key: _CountingKey('claudeCode', 'cli-$i'),
     label: 'Session $i',
     openId: 'row-$i',
     imported: false,
@@ -57,6 +57,10 @@ void main() {
   }
 
   group('applying a poll', () {
+    // Filled by the two cases below, so the *shape* can be asserted across
+    // them rather than inside either one.
+    final builds = <int, int>{};
+
     for (final count in [100, 500]) {
       test('at $count sessions it is linear, not quadratic', () {
         final poll = waitingPoll(count);
@@ -74,41 +78,55 @@ void main() {
           reason: 'the two algorithms must be applying the same rules',
         );
 
+        // **Counted, not timed.** This assertion used to compare two
+        // stopwatches over a few microseconds of work, and it failed whenever
+        // the machine was busy — three separate agents hit it on a loaded
+        // run and each one re-ran rather than read it, which is what a flaky
+        // perf test costs. The audit's own unit is countable directly: the old
+        // algorithm's expense *was* building N² id strings, and an id is built
+        // by interpolating the key.
         const reps = 5;
-        final legacy = Stopwatch()..start();
+        _CountingKey.builds = 0;
         for (var i = 0; i < reps; i++) {
           _legacyApply(legacySeeded, poll, t0);
         }
-        legacy.stop();
+        final legacyBuilds = _CountingKey.builds;
 
-        final fast = Stopwatch()..start();
+        _CountingKey.builds = 0;
         for (var i = 0; i < reps; i++) {
           seeded.apply(poll, t0);
         }
-        fast.stop();
+        final fastBuilds = _CountingKey.builds;
 
-        final legacyPer = legacy.elapsedMicroseconds / reps;
-        final fastPer = fast.elapsedMicroseconds / reps;
         // ignore: avoid_print
         print(
-          'inbox apply · $count sessions · before ${legacyPer.round()} us/poll'
-          ' · after ${fastPer.round()} us/poll',
+          'inbox apply · $count sessions · before $legacyBuilds id-builds'
+          ' · after $fastBuilds',
         );
+        builds[count] = fastBuilds;
 
         // A steady-state poll now allocates nothing at all: no list copy, no id
         // strings, and the same object back, so no surface rebuilds.
         expect(identical(seeded.apply(poll, t0), seeded), isTrue);
 
-        // The margin is deliberately loose — this runs on a shared test runner
-        // — but the shape is not: quadratic against linear at 500 sessions is
-        // not a factor a noisy machine produces by accident.
+        // Linear in the session count, with a constant nobody has to trust: a
+        // handful of ids per session per rep, however loaded the runner is.
+        expect(fastBuilds, lessThanOrEqualTo(4 * count * reps));
         expect(
-          fastPer * (count == 500 ? 20 : 4),
-          lessThan(legacyPer),
-          reason: 'before ${legacyPer}us, after ${fastPer}us at $count',
+          legacyBuilds,
+          greaterThan(fastBuilds * 4),
+          reason: 'the algorithm this replaced built one id per comparison',
         );
       });
     }
+
+    test('and the curve is linear across the two sizes', () {
+      // Five times the sessions, five times the work — the claim the timing
+      // version was reaching for, now stated in a unit a busy machine cannot
+      // move.
+      expect(builds[100], isNotNull, reason: 'the two cases ran first');
+      expect(builds[500]! / builds[100]!, closeTo(5, 0.5));
+    });
 
     test('a poll of pure news agrees with the old algorithm', () {
       // The insert-only case is where the old algorithm was least bad, so it is
@@ -263,3 +281,20 @@ List<InboxItem> _legacyApply(
 /// read, per consumer.
 List<InboxItem> _legacyPending(List<InboxItem> items) =>
     items.where((item) => !item.seen).toList(growable: false);
+
+/// Counts the thing the old algorithm spent its time on.
+///
+/// `InboxItem.idFor` interpolates the key, so every id the poll builds passes
+/// through here — which makes the audit's "N² strings" finding directly
+/// countable, and deterministic on any machine.
+class _CountingKey extends AgentSessionKey {
+  const _CountingKey(super.agentId, super.sessionId);
+
+  static int builds = 0;
+
+  @override
+  String toString() {
+    builds++;
+    return super.toString();
+  }
+}
