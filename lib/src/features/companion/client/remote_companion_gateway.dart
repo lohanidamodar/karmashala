@@ -242,6 +242,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     await _dropLink();
     final pairingClient = CompanionPairingClient(
       store: store,
+      deviceId: await stableDeviceId(),
       deviceName: deviceName,
     );
     final record = await _runPairing(
@@ -277,6 +278,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     );
     final pairingClient = CompanionPairingClient(
       store: store,
+      deviceId: await stableDeviceId(),
       deviceName: deviceName,
     );
     final record = await _runPairing(
@@ -298,6 +300,46 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   /// Where the typed code's relay setting lives in the phone's store.
   static const String kPairingRelayStoreKey = 'chitragupta.companion.relay';
+
+  /// Where this phone's own identity lives — beside the pairing records
+  /// rather than inside one, because it must outlive unpairing every host.
+  static const String kDeviceIdStoreKey = 'chitragupta.remote.device_id';
+
+  /// This phone's device id: minted once, then used by every pairing it ever
+  /// makes.
+  ///
+  /// A fresh id per pairing is what made the desktop list the same phone
+  /// again and again, each new row holding a key that would never be used
+  /// again. The id is not a secret and proves nothing — the sealed handshake
+  /// does that — it is only the name the desktop files this phone under, so
+  /// re-pairing lands on the row that is already there.
+  ///
+  /// Read at most once per gateway: two pairings racing must not mint two.
+  Future<DeviceId> stableDeviceId() => _deviceIdOnce ??= _readOrMintDeviceId();
+  Future<DeviceId>? _deviceIdOnce;
+
+  Future<DeviceId> _readOrMintDeviceId() async {
+    try {
+      final raw = await store.read(kDeviceIdStoreKey);
+      if (raw != null) return DeviceId.parse(raw);
+    } on Object catch (error) {
+      onLog?.call('stored device id unreadable: $error');
+    }
+    // A phone that paired before this key existed already has an identity in
+    // its active record — adopting it means the desktop sees the SAME phone
+    // and refreshes its row, instead of one last duplicate.
+    await _ready;
+    final inherited = _all.active?.deviceId ?? _record?.deviceId;
+    final id = inherited ?? DeviceId.generate();
+    try {
+      await store.write(kDeviceIdStoreKey, id.value);
+    } on Object catch (error) {
+      // Pairing still works; it is only the stability that is at risk, and
+      // saying so beats a silent duplicate on the desktop next time.
+      onLog?.call('could not persist this phone\'s device id: $error');
+    }
+    return id;
+  }
 
   @override
   Future<Uri> pairingRelay() async {
