@@ -297,6 +297,42 @@ void main() {
     });
   });
 
+  group('the shape of the cost at a hundred sessions', () {
+    test('ten seconds of cycles is bounded by the budget, not the count', () async {
+      // The measurement Loop 87 reports. Ten seconds at the default 1.2 s
+      // cycle is eight passes.
+      //
+      // Before: one poller *per rendered badge* at 1.2 s, each calling the
+      // status service, each reading its transcript from disk with no mtime
+      // cache — 100 rows x 8 ticks = 800 tail reads in ten seconds (~83/s),
+      // plus a full CLI-store scan per unresolved badge every 10 s (up to 100
+      // scans, ~10/s), plus the 5-second watcher reading up to 60 more.
+      addTranscriptSessions(100);
+      final registry = build();
+
+      for (var i = 0; i < 8; i++) {
+        clock.now = clock.now.add(kStatusCycleInterval);
+        await registry.cycle();
+      }
+
+      expect(registry.cycles, 8, reason: 'one pass for all 100, eight times');
+      expect(
+        registry.probes,
+        8 * kStatusProbeBudget,
+        reason: 'the budget is the ceiling: 24 a cycle, ~20 a second',
+      );
+      expect(
+        registry.tailReads,
+        100,
+        reason: 'each transcript read once; unchanged files cost a stat',
+      );
+      expect(registry.transcriptScans, 0, reason: 'every path was known');
+      // ...and every one of the hundred is covered, which is the half the old
+      // 60-session watcher could not do at any price.
+      expect(registry.entries.where((e) => e.lastProbedAt == null), isEmpty);
+    });
+  });
+
   group('state survives a cycle that did not sample it', () {
     test('a session the rotation skipped keeps its last status', () async {
       addTranscriptSessions(3);
