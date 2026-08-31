@@ -1,10 +1,23 @@
+import 'dart:convert';
+
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:chitragupta/src/features/terminal/domain/launch_context.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Decodes what `powershell.exe -EncodedCommand` expects: base64 of UTF-16LE.
+String decodePowerShellCommand(String encoded) {
+  final bytes = base64Decode(encoded);
+  final units = <int>[
+    for (var i = 0; i + 1 < bytes.length; i += 2)
+      bytes[i] | (bytes[i + 1] << 8),
+  ];
+  return String.fromCharCodes(units);
+}
 
 void main() {
   group('the PTY launch', () {
@@ -126,9 +139,156 @@ void main() {
         workingDirectory: '/home/u/repo',
         wslDistribution: 'Ubuntu',
       );
-      final pty = agentPtyLaunchFor(launch, onWindowsHost: false);
+      final pty = agentPtyLaunchFor(
+        launch,
+        context: LaunchContext.forAgent(launch, hostIsWindows: false),
+      );
       expect(pty.executable, 'claude');
       expect(pty.workingDirectory, '/home/u/repo');
+    });
+  });
+
+  group('the command is built for the context it runs in', () {
+    const wslLaunch = AgentPaneLaunch(
+      agentId: 'claudeCode',
+      executable: '/home/u/.local/bin/claude',
+      arguments: ['--resume', 'sid'],
+      workingDirectory: '/home/u/repo',
+      wslDistribution: 'Ubuntu',
+      sessionId: 'sess-1',
+    );
+
+    test('Windows host, WSL destination: wrapped in wsl.exe exactly once', () {
+      final pty = agentPtyLaunchFor(
+        wslLaunch,
+        context: LaunchContext.forAgent(wslLaunch, hostIsWindows: true),
+      );
+      expect(pty.executable, 'wsl.exe');
+      expect(pty.arguments, [
+        '-d',
+        'Ubuntu',
+        '--cd',
+        '/home/u/repo',
+        '--',
+        '/home/u/.local/bin/claude',
+        '--resume',
+        'sid',
+      ]);
+      expect(pty.arguments.where((a) => a.contains('wsl.exe')), isEmpty);
+    });
+
+    test('Windows host, native destination: cmd.exe /c', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: r'C:\bin\claude.exe',
+        arguments: ['--resume', 'sid'],
+        workingDirectory: r'C:\repo',
+      );
+      final pty = agentPtyLaunchFor(
+        launch,
+        context: LaunchContext.forAgent(launch, hostIsWindows: true),
+      );
+      expect(pty.executable, 'cmd.exe');
+      expect(pty.arguments, ['/c', r'C:\bin\claude.exe --resume sid']);
+      expect(pty.workingDirectory, r'C:\repo');
+    });
+
+    test('already inside WSL: no wsl.exe anywhere in the launch', () {
+      // The owner's rule: if the session is being restored from a terminal that
+      // is already in the distro, running `wsl.exe` again would nest a second
+      // distro session inside the first.
+      final context = LaunchContext.forAgent(wslLaunch, hostIsWindows: false);
+      expect(context.kind, ShellContextKind.posix);
+      expect(context.wslDistribution, 'Ubuntu');
+
+      final pty = agentPtyLaunchFor(wslLaunch, context: context);
+      expect(pty.executable, '/home/u/.local/bin/claude');
+      expect(pty.arguments, ['--resume', 'sid']);
+      expect(pty.workingDirectory, '/home/u/repo');
+      expect(
+        [pty.executable, ...pty.arguments].where((a) => a.contains('wsl.exe')),
+        isEmpty,
+      );
+      // No WSLENV either: nothing is crossing a boundary, so the variable is
+      // simply inherited.
+      expect(pty.environment, {kSessionIdEnvironmentVariable: 'sess-1'});
+    });
+
+    test('a PowerShell destination uses the PowerShell form, not cmd.exe', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: r'C:\bin\claude.exe',
+        arguments: ['say hello'],
+        workingDirectory: r'C:\repo',
+      );
+      final pty = agentPtyLaunchFor(
+        launch,
+        context: const LaunchContext.powerShell(),
+      );
+      expect(pty.executable, 'powershell.exe');
+      expect(pty.arguments.sublist(0, 3), [
+        '-NoLogo',
+        '-NoProfile',
+        '-EncodedCommand',
+      ]);
+      expect(
+        decodePowerShellCommand(pty.arguments.last),
+        r"& 'C:\bin\claude.exe' 'say hello'",
+      );
+      expect(pty.workingDirectory, r'C:\repo');
+    });
+
+    test('a POSIX host with no distro runs the command as written', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: '/usr/bin/claude',
+        arguments: ['--resume', 'sid'],
+        workingDirectory: '/home/u/repo',
+      );
+      final context = LaunchContext.forAgent(launch, hostIsWindows: false);
+      expect(context.kind, ShellContextKind.posix);
+      final pty = agentPtyLaunchFor(launch, context: context);
+      expect(pty.executable, '/usr/bin/claude');
+      expect(pty.arguments, ['--resume', 'sid']);
+      expect(pty.workingDirectory, '/home/u/repo');
+    });
+
+    test('wrapping is structurally single', () {
+      // `wrapForPty` takes a ShellCommand and returns a PtyLaunch. The two are
+      // unrelated types and nothing converts a PtyLaunch back into a
+      // ShellCommand, so `wrapForPty(wrapForPty(...), ...)` does not compile —
+      // a second wrapper is not a mistake this code can make.
+      const command = ShellCommand(
+        executable: 'claude',
+        arguments: ['--resume', 'sid'],
+        workingDirectory: '/home/u/repo',
+      );
+      final wrapped = wrapForPty(command, const LaunchContext.wsl('Ubuntu'));
+      expect(wrapped, isA<PtyLaunch>());
+      expect(wrapped, isNot(isA<ShellCommand>()));
+
+      // And the external-terminal wrapper is single by the same construction.
+      expect(
+        wrapForExternalTerminal(command, const LaunchContext.wsl('Ubuntu')),
+        [
+          'wsl.exe',
+          '-d',
+          'Ubuntu',
+          '--cd',
+          '/home/u/repo',
+          '--',
+          'claude',
+          '--resume',
+          'sid',
+        ],
+      );
+      expect(
+        wrapForExternalTerminal(
+          command,
+          const LaunchContext.insideWsl('Ubuntu'),
+        ),
+        ['claude', '--resume', 'sid'],
+      );
     });
   });
 

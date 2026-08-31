@@ -1,4 +1,5 @@
 import '../domain/agent_pane_launch.dart';
+import '../domain/launch_context.dart';
 import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
 
@@ -7,6 +8,10 @@ import '../domain/terminal_profile.dart';
 ///
 /// Pure and testable — separated from the actual [Pty] spawn so the
 /// shell-selection logic can be unit-tested without a process.
+///
+/// A [PtyLaunch] is **already wrapped for its context**. It is deliberately not
+/// a [ShellCommand] and cannot be turned back into one, which is what makes
+/// double-wrapping impossible rather than merely discouraged.
 class PtyLaunch {
   const PtyLaunch({
     required this.executable,
@@ -59,12 +64,17 @@ class PtyLaunch {
   }
 }
 
-/// Builds the ConPTY launch for [profile].
+/// Builds the ConPTY launch for [profile], in the shell context it will open
+/// into.
 ///
 /// Windows-host shells receive [workingDirectory] directly. A WSL profile is
 /// launched via `wsl.exe -d <distro>`; the working directory is handed to WSL
 /// with `--cd` (it accepts a Windows path and translates it) rather than set on
-/// the host process.
+/// the host process. A POSIX [context] — the app itself running on Linux/macOS,
+/// where none of those executables exist — opens the login shell instead.
+///
+/// [context] defaults to the Windows-host reading of [profile], which is what
+/// every caller meant before the context was explicit.
 ///
 /// [shellIntegration] adds OSC 133 command markers for the shells that support
 /// it. It defaults to `false` and, when false, every launch is byte-identical to
@@ -72,12 +82,22 @@ class PtyLaunch {
 /// integrated must behave exactly as it always did.
 PtyLaunch ptyLaunchFor(
   TerminalProfile profile, {
+  LaunchContext? context,
   String? workingDirectory,
   bool shellIntegration = false,
 }) {
+  final target =
+      context ?? LaunchContext.forProfile(profile, hostIsWindows: true);
   final integrate = shellIntegration && shellSupportsIntegration(profile.shell);
-  switch (profile.shell) {
-    case TerminalShell.powerShell:
+  switch (target.kind) {
+    case ShellContextKind.posix:
+      // Already in the target shell — `wsl.exe`/`powershell.exe` don't exist —
+      // so just open the login shell in the working directory.
+      return PtyLaunch(
+        executable: target.posixShell ?? '/bin/bash',
+        workingDirectory: workingDirectory,
+      );
+    case ShellContextKind.powerShell:
       return PtyLaunch(
         executable: 'powershell.exe',
         arguments: [
@@ -92,13 +112,16 @@ PtyLaunch ptyLaunchFor(
         ],
         workingDirectory: workingDirectory,
       );
-    case TerminalShell.commandPrompt:
+    // A shell profile never names a bare executable; the Windows-native shell
+    // is `cmd.exe`, so both spellings land here.
+    case ShellContextKind.windowsNative:
+    case ShellContextKind.commandPrompt:
       return PtyLaunch(
         executable: 'cmd.exe',
         workingDirectory: workingDirectory,
       );
-    case TerminalShell.wsl:
-      final distro = profile.wslDistribution ?? '';
+    case ShellContextKind.wsl:
+      final distro = target.wslDistribution ?? '';
       return PtyLaunch(
         executable: 'wsl.exe',
         // Quoted for the same reason: a repository under a path containing a
@@ -113,96 +136,167 @@ PtyLaunch ptyLaunchFor(
   }
 }
 
-/// Builds the ConPTY launch that runs an agent CLI in a pane.
+/// Builds the ConPTY launch that runs an agent CLI in a pane, for the context
+/// the command is actually going into.
 ///
-/// A WSL launch is wrapped exactly the way the external-terminal path wraps it
-/// (`wsl.exe -d <distro> --cd <cwd> -- <exe> <args…>`), so an agent started in a
-/// pane and the same agent started in Windows Terminal are the same command
-/// line. On a non-Windows host ([onWindowsHost] false — the app running under
-/// Linux/macOS) there is nothing to wrap: we are already in the target shell.
+/// [context] defaults to the Windows-host reading of [launch] — a WSL launch
+/// crosses into its distribution, anything else is Windows-native — which is
+/// what every caller meant before the context was explicit. Pass
+/// `LaunchContext.forAgent(launch, hostIsWindows: Platform.isWindows)` to get
+/// the real one.
 ///
 /// The session id is stamped into the child's environment rather than passed as
 /// an argument, because it has to reach a *grandchild* — the MCP bridge the
 /// agent spawns — and an argument would not. For WSL that also means naming the
 /// variable in `WSLENV`, which is the only way a Win32 variable crosses into the
-/// distro.
-PtyLaunch agentPtyLaunchFor(
-  AgentPaneLaunch launch, {
-  bool onWindowsHost = true,
-}) {
-  final environment = <String, String>{
-    if (launch.sessionId != null)
-      kSessionIdEnvironmentVariable: launch.sessionId!,
-  };
-  final distro = launch.wslDistribution;
-  if (!onWindowsHost) {
-    return PtyLaunch(
-      executable: launch.executable,
-      arguments: launch.arguments,
-      workingDirectory: launch.workingDirectory,
-      environment: environment,
+/// distro; [wrapForPty] does that.
+PtyLaunch agentPtyLaunchFor(AgentPaneLaunch launch, {LaunchContext? context}) =>
+    wrapForPty(
+      ShellCommand(
+        executable: launch.executable,
+        arguments: launch.arguments,
+        workingDirectory: launch.workingDirectory,
+        environment: {
+          if (launch.sessionId != null)
+            kSessionIdEnvironmentVariable: launch.sessionId!,
+        },
+      ),
+      context ?? LaunchContext.forAgent(launch, hostIsWindows: true),
     );
+
+/// The **one** place a command gets a wrapper put in front of it for a ConPTY.
+///
+/// It consumes a [ShellCommand] — a command in the words of its own
+/// environment — and returns a [PtyLaunch], which is not a [ShellCommand] and
+/// has no route back to being one. So "wrap the wrapped launch again" is not a
+/// mistake that compiles, and every caller below can be read as asking one
+/// question: which context is this going into?
+PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
+  switch (context.kind) {
+    case ShellContextKind.posix:
+      // Already inside the target shell (the app on Linux/macOS, or running in
+      // the very distribution the command names). There is nothing to cross, so
+      // the command is spawned exactly as written — in particular a launch for
+      // a WSL environment must NOT pick up `wsl.exe` here.
+      return PtyLaunch(
+        executable: command.executable,
+        arguments: command.arguments,
+        workingDirectory: command.workingDirectory,
+        environment: command.environment,
+      );
+    case ShellContextKind.powerShell:
+      // A PowerShell destination gets the PowerShell form, not `cmd.exe`. The
+      // script is base64'd rather than quoted, which removes Windows
+      // command-line quoting from the problem entirely (the same reason the
+      // shell-integration bootstrap uses it) and survives flutter_pty's
+      // unquoted concatenation.
+      final script =
+          '& ${command.parts.map(quotePowerShellArgument).join(' ')}';
+      return PtyLaunch(
+        executable: 'powershell.exe',
+        arguments: [
+          '-NoLogo',
+          '-NoProfile',
+          '-EncodedCommand',
+          encodePowerShellCommand(script),
+        ],
+        workingDirectory: command.workingDirectory,
+        environment: command.environment,
+      );
+    case ShellContextKind.windowsNative:
+    case ShellContextKind.commandPrompt:
+      // A Windows-native agent is launched **through `cmd.exe /c`**, not directly.
+      //
+      // `flutter_pty` 0.4.2 builds its Windows command line as
+      // `<exe> <argv…>` while the Dart side has already put the executable at
+      // `argv[0]`, so the child is always handed **its own executable name as its
+      // first argument**. Loop 38 found this as `powershell.exe powershell.exe`
+      // spawning a nested shell; for an agent CLI it is worse, because the first
+      // positional argument is the *prompt*: `codex.exe` starts a turn asking
+      // about "codex.exe". The same function also concatenates arguments with
+      // single spaces and no quoting, so any argument containing a space is split
+      // — verified by a real `codex.exe` launch rejecting `say` as an unexpected
+      // argument.
+      //
+      // `cmd.exe` ignores the duplicated leading token and re-parses the rest, so
+      // one `/c` argument carrying a correctly quoted command line fixes both.
+      // PowerShell cannot be used for this: its first positional parameter is
+      // `-Command`, which the duplicate would bind to — which is why the
+      // PowerShell branch above goes through `-EncodedCommand` instead.
+      return PtyLaunch(
+        executable: 'cmd.exe',
+        arguments: [
+          '/c',
+          command.parts.map(quoteWindowsCommandArgument).join(' '),
+        ],
+        workingDirectory: command.workingDirectory,
+        environment: command.environment,
+      );
+    case ShellContextKind.wsl:
+      return PtyLaunch(
+        executable: 'wsl.exe',
+        arguments: [
+          '-d',
+          context.wslDistribution ?? '',
+          if (command.workingDirectory != null) ...[
+            '--cd',
+            command.workingDirectory!,
+          ],
+          '--',
+          ...command.parts,
+          // Quoted for the same reason the native branch goes through `cmd.exe`:
+          // `flutter_pty` concatenates arguments with single spaces and no quoting,
+          // so an unquoted multi-word prompt reaches the agent as several
+          // arguments and is silently ignored. There is no wrapper on this path to
+          // re-parse the line — `wsl.exe`'s argv comes straight from
+          // `CommandLineToArgvW` — so the quoting has to be in the strings. An
+          // argument with no whitespace passes through unchanged.
+        ].map(quoteWindowsCommandArgument).toList(),
+        // wsl.exe sets the child's directory itself, so the host process must not
+        // also be pointed at a Linux path it cannot resolve.
+        environment: {
+          ...command.environment,
+          // A Win32 variable only crosses into the distro if `WSLENV` names it.
+          if (command.environment.isNotEmpty)
+            'WSLENV': command.environment.keys.map((k) => '$k/u').join(':'),
+        },
+      );
   }
-  if (distro == null || distro.isEmpty) {
-    // A Windows-native agent is launched **through `cmd.exe /c`**, not directly.
-    //
-    // `flutter_pty` 0.4.2 builds its Windows command line as
-    // `<exe> <argv…>` while the Dart side has already put the executable at
-    // `argv[0]`, so the child is always handed **its own executable name as its
-    // first argument**. Loop 38 found this as `powershell.exe powershell.exe`
-    // spawning a nested shell; for an agent CLI it is worse, because the first
-    // positional argument is the *prompt*: `codex.exe` starts a turn asking
-    // about "codex.exe". The same function also concatenates arguments with
-    // single spaces and no quoting, so any argument containing a space is split
-    // — verified by a real `codex.exe` launch rejecting `say` as an unexpected
-    // argument.
-    //
-    // `cmd.exe` ignores the duplicated leading token and re-parses the rest, so
-    // one `/c` argument carrying a correctly quoted command line fixes both.
-    // PowerShell cannot be used for this: its first positional parameter is
-    // `-Command`, which the duplicate would bind to.
-    return PtyLaunch(
-      executable: 'cmd.exe',
-      arguments: [
-        '/c',
-        [
-          launch.executable,
-          ...launch.arguments,
-        ].map(quoteWindowsCommandArgument).join(' '),
-      ],
-      workingDirectory: launch.workingDirectory,
-      environment: environment,
-    );
-  }
-  return PtyLaunch(
-    executable: 'wsl.exe',
-    arguments: [
-      '-d',
-      distro,
-      if (launch.workingDirectory != null) ...[
-        '--cd',
-        launch.workingDirectory!,
-      ],
-      '--',
-      launch.executable,
-      ...launch.arguments,
-      // Quoted for the same reason the native branch goes through `cmd.exe`:
-      // `flutter_pty` concatenates arguments with single spaces and no quoting,
-      // so an unquoted multi-word prompt reaches the agent as several
-      // arguments and is silently ignored. There is no wrapper on this path to
-      // re-parse the line — `wsl.exe`'s argv comes straight from
-      // `CommandLineToArgvW` — so the quoting has to be in the strings. An
-      // argument with no whitespace passes through unchanged.
-    ].map(quoteWindowsCommandArgument).toList(),
-    // wsl.exe sets the child's directory itself, so the host process must not
-    // also be pointed at a Linux path it cannot resolve.
-    environment: {
-      ...environment,
-      if (launch.sessionId != null)
-        'WSLENV': '$kSessionIdEnvironmentVariable/u',
-    },
-  );
 }
+
+/// The same context decision, for a command handed to an **external** terminal
+/// (Windows Terminal, WezTerm, a pasted `wsl.exe …` line) rather than a ConPTY.
+///
+/// Only the environment crossing belongs here: which shell the external
+/// terminal itself is (PowerShell, cmd, …) is that terminal's own argument
+/// convention, applied by `SystemTerminalService`. Nothing is quoted, because
+/// unlike `flutter_pty` those paths deliver argv properly and quoting twice
+/// would corrupt it.
+///
+/// Takes a [ShellCommand] and returns a plain argv, so — as with [wrapForPty] —
+/// its own output cannot be fed back in.
+List<String> wrapForExternalTerminal(
+  ShellCommand command,
+  LaunchContext context,
+) {
+  if (context.kind != ShellContextKind.wsl) return command.parts;
+  return [
+    'wsl.exe',
+    '-d',
+    context.wslDistribution ?? '',
+    if (command.workingDirectory != null) ...[
+      '--cd',
+      command.workingDirectory!,
+    ],
+    '--',
+    ...command.parts,
+  ];
+}
+
+/// Quotes one argument for a PowerShell command line: single quotes, with an
+/// embedded single quote doubled.
+String quotePowerShellArgument(String value) =>
+    "'${value.replaceAll("'", "''")}'";
 
 /// Quotes one argument for a command line `cmd.exe` will re-parse.
 ///

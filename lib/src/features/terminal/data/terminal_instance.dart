@@ -10,6 +10,7 @@ import 'package:xterm/xterm.dart';
 import '../domain/agent_pane_launch.dart';
 import '../domain/enter_key_encoding.dart';
 import '../domain/ingest_tier.dart';
+import '../domain/launch_context.dart';
 import '../domain/mouse_wheel_reporter.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
@@ -586,24 +587,29 @@ TerminalInstance createPtyTerminalInstance({
     agentLaunch: agentLaunch,
   );
   if (agentLaunch != null) {
-    launch = agentPtyLaunchFor(agentLaunch, onWindowsHost: Platform.isWindows);
+    // The one place `Platform.isWindows` is turned into a launch context: from
+    // here down the command is built for where it is going, not for where we
+    // are — so a WSL launch made from inside that distro is not re-wrapped.
+    launch = agentPtyLaunchFor(
+      agentLaunch,
+      context: LaunchContext.forAgent(
+        agentLaunch,
+        hostIsWindows: Platform.isWindows,
+      ),
+    );
     title = agentLaunch.title ?? agentLaunch.agentId;
     profileId = agentLaunch.profileId;
-  } else if (Platform.isWindows) {
-    // The terminal profiles (PowerShell/cmd/WSL) assume a Windows host.
+  } else {
     launch = ptyLaunchFor(
       profile,
+      context: LaunchContext.forProfile(
+        profile,
+        hostIsWindows: Platform.isWindows,
+        posixShell: Platform.environment['SHELL'],
+      ),
       workingDirectory: workingDirectory,
       shellIntegration: integrate,
     );
-    title = profile.label;
-    profileId = profile.id;
-  } else {
-    // When the app itself runs on Linux/macOS (e.g. inside WSL),
-    // `wsl.exe`/`powershell.exe` don't exist — we're already in the target
-    // shell — so just open the login shell in the working directory.
-    final shell = Platform.environment['SHELL'] ?? '/bin/bash';
-    launch = PtyLaunch(executable: shell, workingDirectory: workingDirectory);
     title = profile.label;
     profileId = profile.id;
   }
