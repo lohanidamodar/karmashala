@@ -1,8 +1,11 @@
 import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/mounted_tabs.dart';
+import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:chitragupta/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -190,5 +193,67 @@ void main() {
       reason: 'the text field the user is typing in keeps the keyboard',
     );
     expect(paneHasFocus(container, soleePaneOf(container, opened)), isFalse);
+  });
+
+  testWidgets('an evicted tab is typable the moment it comes back', (
+    tester,
+  ) async {
+    // The mounted set is bounded, so most tabs in a hundred-tab workspace have
+    // no widgets at all. Focus lives on the pane's own `FocusNode`, which the
+    // controller owns and the view only borrows — so coming back must land the
+    // keyboard in the pane without a click, exactly as a mounted tab does.
+    final container = panelContainer();
+    final controller = controllerOf(container);
+    final first = controller.openTab(TerminalProfile.powerShell);
+    final firstPane = soleePaneOf(container, first);
+    for (var i = 0; i < kMountedTabBudget + 4; i++) {
+      controller.openTab(TerminalProfile.powerShell);
+    }
+    await pumpPanel(tester, container);
+
+    // `skipOffstage: false`, because `IndexedStack` hides its unselected
+    // children from the default finder.
+    int mountedViews() => tester
+        .widgetList(find.byType(TerminalPaneView, skipOffstage: false))
+        .length;
+    expect(mountedViews(), kMountedTabBudget);
+    expect(paneHasFocus(container, firstPane), isFalse);
+
+    controller.activateTab(first);
+    await tester.pump();
+
+    expect(paneHasFocus(container, firstPane), isTrue);
+    expect(mountedViews(), kMountedTabBudget, reason: 'and still bounded');
+  });
+
+  testWidgets('an unmounted tab is a warm pane, not a detached one', (
+    tester,
+  ) async {
+    // Bounding the *views* must not change what the pane is. A tab with no
+    // widgets is still open, so its process runs, its output is parsed, and it
+    // holds its buffer — cold is for a session with no tab at all, and nothing
+    // about it may be decided by whether a widget happens to exist.
+    final container = panelContainer();
+    final controller = controllerOf(container);
+    final first = controller.openTab(TerminalProfile.powerShell);
+    final firstPane = soleePaneOf(container, first);
+    for (var i = 0; i < kMountedTabBudget + 4; i++) {
+      controller.openTab(TerminalProfile.powerShell);
+    }
+    await pumpPanel(tester, container);
+
+    final instance = controller.instanceFor(firstPane)! as FakeTerminalInstance;
+    expect(instance.ingestTier, IngestTier.warm);
+
+    instance.receive('while-unmounted\r\n');
+    controller.activateTab(first);
+    await tester.pump();
+
+    expect(instance.ingestTier, IngestTier.hot);
+    expect(
+      instance.terminal.buffer.getText(),
+      contains('while-unmounted'),
+      reason: 'output that arrived with no view on screen is not output lost',
+    );
   });
 }

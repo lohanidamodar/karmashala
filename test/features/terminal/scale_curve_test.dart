@@ -1,11 +1,17 @@
 import 'dart:typed_data';
 
 import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/features/explorer/application/session_context.dart';
+import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
+import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/session.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_ingest_budget.dart';
 import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
 import 'package:chitragupta/src/features/terminal/domain/mounted_tabs.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/terminal_pane_view.dart';
 import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
@@ -416,4 +422,164 @@ void main() {
       }
     });
   });
+
+  group('publication: what one pane exiting costs everything else', () {
+    // T8's remainder, **measured rather than changed**. Three consumers still
+    // watch the whole `TerminalSessionsState`, and all three are outside this
+    // branch's territory:
+    //
+    // * `app/shell/status_bar.dart` — to read `detached.length`;
+    // * `app/shell/workbench.dart` — to notice whether the selected session
+    //   still has a pane;
+    // * `explorer/application/session_context.dart` —
+    //   `activePaneSessionIdProvider`, which additionally answers by walking
+    //   **every session row**, so a process exiting anywhere is a full scan.
+    //
+    // What is pinned here is only what must stay true however they are
+    // narrowed; the rest is printed, so whoever narrows them has a before.
+
+    Session sessionRow(int i) => Session(
+      id: 's$i',
+      repositoryId: 'r',
+      agentInstallationId: 'a',
+      title: 'session $i',
+      useWorktree: false,
+      status: SessionStatus.running,
+      createdAt: DateTime.utc(2026),
+      paneId: 'pane-$i',
+    );
+
+    test('a full session scan per exit is what a wide watch costs', () async {
+      final scans = <int, int>{};
+      final walked = <int, int>{};
+      final wideNotifications = <int, int>{};
+      final exitCount = <int, int>{};
+
+      for (final n in scale) {
+        final database = AppDatabase.memory();
+        final dao = _ProbeSessionDao(database, [
+          for (var i = 0; i < n; i++) sessionRow(i),
+        ]);
+        // Built with the override in it rather than layered on a child
+        // container: this codebase declares no provider `dependencies`, so a
+        // child's override never reaches a provider the parent already
+        // initialised, and the counter would read zero however wrong the code.
+        final container = ProviderContainer(
+          overrides: [
+            ...fakeTerminalOverrides(database: database),
+            sessionDaoProvider.overrideWithValue(dao),
+          ],
+        );
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        for (var i = 0; i < n; i++) {
+          controller.openTab(TerminalProfile.powerShell);
+        }
+        final panes = [
+          for (final tab
+              in container.read(terminalSessionsControllerProvider).tabs)
+            tab.layout.panes.single,
+        ];
+
+        var wide = 0;
+        var topology = 0;
+        final onWide = container.listen(
+          terminalSessionsControllerProvider,
+          (_, _) => wide++,
+        );
+        final onTopology = container.listen(
+          terminalSessionsControllerProvider.select((s) => s.tabs),
+          (_, _) => topology++,
+        );
+        // Kept alive so it really recomputes; an unlistened provider is
+        // disposed and would scan nothing however wide its watch.
+        final onActive = container.listen(
+          activePaneSessionIdProvider,
+          (_, _) {},
+        );
+        await container.pump();
+        dao.scans = 0;
+        dao.rowsWalked = 0;
+        wide = 0;
+        topology = 0;
+
+        // Ten unrelated background panes lose their process — a build
+        // finishing, an ssh session dropping, an agent ending its turn.
+        final dying = panes.length < 10 ? panes.length : 10;
+        for (var i = 0; i < dying; i++) {
+          (controller.instanceFor(panes[i])! as FakeTerminalInstance)
+                  .livenessNotifier
+                  .value =
+              PaneLiveness.exited;
+          await container.pump();
+        }
+
+        scans[n] = dao.scans;
+        walked[n] = dao.rowsWalked;
+        wideNotifications[n] = wide;
+        exitCount[n] = dying;
+
+        expect(
+          topology,
+          0,
+          reason:
+              'a pane dying changes no topology, and the narrow providers '
+              'already know it — this is the control',
+        );
+        expect(
+          dao.scans,
+          lessThanOrEqualTo(dying),
+          reason:
+              'at most one scan per exit today, and fewer once the watch is '
+              'narrowed — this bound survives the fix',
+        );
+
+        onWide.close();
+        onTopology.close();
+        onActive.close();
+        container.dispose();
+        database.close();
+      }
+
+      // ignore: avoid_print
+      print(
+        'N panes | exits | wide-watch notifications | session scans | rows walked',
+      );
+      for (final n in scale) {
+        // ignore: avoid_print
+        print(
+          '${n.toString().padLeft(7)} | ${exitCount[n]!.toString().padLeft(5)} | '
+          '${wideNotifications[n]!.toString().padLeft(24)} | '
+          '${scans[n]!.toString().padLeft(13)} | ${walked[n]}',
+        );
+      }
+
+      // The shape, and the only claim that needs to hold: the *work* one
+      // background pane's death causes grows with the number of sessions, not
+      // with what changed. Three widgets watch the same wide state, so the
+      // notification column is paid three times over in the shell.
+      expect(walked[100]!, greaterThan(walked[10]!));
+    });
+  });
+}
+
+/// A [SessionDao] that counts what `activePaneSessionIdProvider` asks of it.
+///
+/// Subclassed rather than faked so the rest of the dao behaves exactly as the
+/// app's does; only the one method the wide watch drives is instrumented.
+class _ProbeSessionDao extends SessionDao {
+  _ProbeSessionDao(super.database, this._rows);
+
+  final List<Session> _rows;
+
+  int scans = 0;
+  int rowsWalked = 0;
+
+  @override
+  List<Session> getAll() {
+    scans++;
+    rowsWalked += _rows.length;
+    return _rows;
+  }
 }
