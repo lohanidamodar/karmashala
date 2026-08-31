@@ -70,7 +70,16 @@ final importedTranscriptProvider = StreamProvider.autoDispose
       while (true) {
         DateTime? modified;
         try {
-          modified = file.existsSync() ? file.lastModifiedSync() : null;
+          // `stat()` rather than `existsSync()` + `lastModifiedSync()`: this
+          // runs on the UI isolate, and the transcripts it polls can live on a
+          // `\\wsl.localhost\...` share where the synchronous pair measures
+          // 1.19 ms against 0.07 ms locally. One file every two seconds is not
+          // the hitch Loop 90 was chasing, but there is no reason to block for
+          // it — the asynchronous form runs on `dart:io`'s thread pool.
+          final stat = await file.stat();
+          modified = stat.type == FileSystemEntityType.notFound
+              ? null
+              : stat.modified;
         } catch (_) {
           modified = null;
         }

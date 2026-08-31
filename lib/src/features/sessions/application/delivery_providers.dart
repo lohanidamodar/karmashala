@@ -8,6 +8,7 @@ import '../../git/application/changes_providers.dart';
 import '../../git/domain/remote_repo.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/domain/pull_request_snapshot.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -32,6 +33,17 @@ final deliveryPollIntervalProvider = Provider<Duration>(
   (ref) => const Duration(minutes: 2),
 );
 
+/// The shortest gap between two **focus-driven** re-reads.
+///
+/// Focus is not a rare event. A tiling window manager crosses it dozens of
+/// times a minute, and the owner reported the app flickering as they moved
+/// between GlazeWM workspaces; measured, ten alt-tabs inside one second cost
+/// ten `gh` processes and ten git passes, because every regain bumped the
+/// revision. Thirty seconds keeps the behaviour that matters — come back to
+/// the app and it shows current state rather than what it knew before lunch —
+/// while an alt-tab storm costs one refresh instead of one per tab.
+const Duration kDeliveryFocusRefreshInterval = Duration(seconds: 30);
+
 /// Ticks when the remote half of delivery state should be re-read.
 ///
 /// **One timer for the whole app**, not one per session: twenty rows watching
@@ -39,25 +51,45 @@ final deliveryPollIntervalProvider = Provider<Duration>(
 /// [checkoutPullRequestProvider]'s checkout key.
 ///
 /// It does not tick while the window is unfocused — nobody is reading — and
-/// bumps once when focus comes back, so returning to the app shows current
-/// state without having polled through lunch.
+/// bumps when focus comes back, so returning to the app shows current state
+/// without having polled through lunch. That regain is rate-limited to
+/// [kDeliveryFocusRefreshInterval]: a read that just happened is not worth
+/// repeating because the window blinked.
 class DeliveryPollController extends Notifier<int> {
   Timer? _timer;
+
+  /// When the last re-read was asked for, from whichever source. Mounting
+  /// counts: the providers below read as soon as they are first watched.
+  DateTime? _lastAsked;
 
   @override
   int build() {
     final interval = ref.watch(deliveryPollIntervalProvider);
+    final clock = ref.watch(clockProvider);
     _timer?.cancel();
     _timer = interval <= Duration.zero
         ? null
         : Timer.periodic(interval, (_) {
-            if (ref.read(windowFocusedProvider)) state++;
+            if (ref.read(windowFocusedProvider)) _ask(clock.nowUtc());
           });
     ref.onDispose(() => _timer?.cancel());
     ref.listen(windowFocusedProvider, (previous, next) {
-      if (next && previous == false) state++;
+      if (!next || previous != false) return;
+      final now = clock.nowUtc();
+      final last = _lastAsked;
+      if (last != null &&
+          now.difference(last) < kDeliveryFocusRefreshInterval) {
+        return;
+      }
+      _ask(now);
     });
+    _lastAsked = clock.nowUtc();
     return 0;
+  }
+
+  void _ask(DateTime now) {
+    _lastAsked = now;
+    state++;
   }
 }
 
@@ -285,23 +317,28 @@ final repositoryRemoteProvider = Provider.autoDispose
     .family<RemoteRepo?, String>((ref, repositoryId) {
       final repository = ref.read(repositoryDaoProvider).getById(repositoryId);
       if (repository == null) return null;
+      // `.value` rather than `.asData?.value`, for the same reason as
+      // [sessionDeliveryActionsProvider]: a link should not disappear because
+      // the delivery state behind it is being refreshed.
       return ref
           .watch(checkoutDeliveryProvider(Checkout(repository.path)))
-          .asData
-          ?.value
-          .remote;
+          .value
+          ?.remote;
     });
 
 /// The actions the strip should draw for a session, primary first.
 ///
-/// `asData?.value` folds "still loading" and "the probe threw" into the same
+/// `AsyncValue.value` folds "still loading" and "the probe threw" into the same
 /// null the domain reads as "could not tell" — deliberately, so a slow git or a
-/// missing `gh` never withholds an action.
+/// missing `gh` never withholds an action — but keeps the **previous** answer
+/// through a refresh. `asData?.value` did not, and that is what made the strip
+/// blink on every window focus: a refresh is an `AsyncLoading` carrying the
+/// value it already had, and reading it as null redrew the row as though the
+/// app had never known anything.
 final sessionDeliveryActionsProvider = Provider.autoDispose
     .family<List<OfferedAction>, String>(
-      (ref, sessionId) => deliveryActionsFor(
-        ref.watch(sessionDeliveryProvider(sessionId)).asData?.value,
-      ),
+      (ref, sessionId) =>
+          deliveryActionsFor(ref.watch(sessionDeliveryProvider(sessionId)).value),
     );
 
 /// `origin/main` → `main`. What `gh repo view` would call the default branch,
