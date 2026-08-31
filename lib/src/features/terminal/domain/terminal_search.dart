@@ -37,7 +37,12 @@ class TerminalLineText {
 }
 
 /// Flattens [line] into searchable text plus its cell mapping.
-TerminalLineText lineTextOf(BufferLine line) {
+///
+/// [trimTrailing] cuts the empty tail so a query cannot match into it. Link
+/// scanning turns it off for every row but the last of a wrapped run: joining
+/// two rows across a trimmed gap would splice the end of one word onto the
+/// start of the next and invent a token that is not on screen.
+TerminalLineText lineTextOf(BufferLine line, {bool trimTrailing = true}) {
   final buffer = StringBuffer();
   final cells = <int>[];
   final widths = <int>[];
@@ -53,10 +58,9 @@ TerminalLineText lineTextOf(BufferLine line) {
     cell += advance;
   }
 
-  // Trim trailing blanks so a query cannot match into the empty tail.
   var end = cells.length;
   final text = buffer.toString();
-  while (end > 0 && text.codeUnitAt(end - 1) == 0x20) {
+  while (trimTrailing && end > 0 && text.codeUnitAt(end - 1) == 0x20) {
     end--;
   }
   if (end == 0) return TerminalLineText.empty;

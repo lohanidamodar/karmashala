@@ -584,13 +584,23 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
           break;
         }
 
-        _paintSegment(canvas, segment, highlight.color);
+        _paintSegment(
+          canvas,
+          segment,
+          highlight.color,
+          underline: highlight.underline,
+        );
       }
     }
   }
 
   @pragma('vm:prefer-inline')
-  void _paintSegment(Canvas canvas, BufferSegment segment, Color color) {
+  void _paintSegment(
+    Canvas canvas,
+    BufferSegment segment,
+    Color color, {
+    bool underline = false,
+  }) {
     final start = segment.start ?? 0;
     final end = segment.end ?? _terminal.viewWidth;
 
@@ -599,6 +609,12 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
       segment.line * _painter.cellSize.height + _lineOffset,
     );
 
-    _painter.paintHighlight(canvas, startOffset, end - start, color);
+    _painter.paintHighlight(
+      canvas,
+      startOffset,
+      end - start,
+      color,
+      underline: underline,
+    );
   }
 }

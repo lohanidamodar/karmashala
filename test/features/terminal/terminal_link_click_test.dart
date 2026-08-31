@@ -1,8 +1,10 @@
 import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/git/application/remote_links.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_link_actions.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,26 +14,50 @@ import 'package:xterm/xterm.dart';
 
 import 'fake_instance.dart';
 
-/// Clicking a link in the terminal.
+/// What a Ctrl+click in a terminal pane actually does.
 ///
-/// "links are not clickable in chitragupta's terminal" — they are now, on
-/// Ctrl+click, with the hover saying so. The browser is never reached: the
-/// opener is the injected `openExternalUrlProvider` seam.
+/// "any link — file link, relative file link, http link — clickable with proper
+/// opening on the terminal", and "detection only should run on ctrl click or
+/// ctrl and hover should underline like other terminals does".
+///
+/// So the two properties this file is really about: **nothing is detected until
+/// Ctrl is held**, and what a click reaches is the injected
+/// [TerminalLinkActions] seam — never a real browser, editor, Explorer or
+/// filesystem.
 void main() {
+  const cwd = r'C:\src\app';
+  const resolvedMain = r'C:\src\app\lib\main.dart';
+
   late AppDatabase db;
-  late List<String> opened;
+  late _RecordingLinkActions actions;
   late ProviderContainer container;
 
   setUp(() {
     db = AppDatabase.memory();
-    opened = [];
+    actions = _RecordingLinkActions();
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
-        openExternalUrlProvider.overrideWithValue((url) async {
-          opened.add(url);
-          return true;
-        }),
+        ...fakeTerminalOverrides(
+          database: db,
+          // A pane that opened somewhere, so a relative path has something to
+          // be relative to.
+          instanceFactory:
+              ({
+                required String id,
+                required TerminalProfile profile,
+                String? workingDirectory,
+                String? restoredScrollback,
+                bool shellIntegration = false,
+                AgentPaneLaunch? agentLaunch,
+              }) => FakeTerminalInstance(
+                id: id,
+                title: profile.label,
+                profileId: profile.id,
+                workingDirectory: workingDirectory ?? cwd,
+                restored: restoredScrollback,
+              ),
+        ),
+        terminalLinkActionsProvider.overrideWithValue(actions),
       ],
     );
   });
@@ -94,107 +120,308 @@ void main() {
     return mouse;
   }
 
-  testWidgets('hovering a URL highlights it and says how to open it', (
+  Future<void> pressCtrl(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> releaseCtrl(WidgetTester tester) async {
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+  }
+
+  /// A Ctrl+click at [target], with the double-tap timer xterm arms let expire.
+  Future<void> ctrlClick(
+    WidgetTester tester,
+    TestGesture mouse,
+    Offset target,
+  ) async {
+    await mouse.down(target);
+    await tester.pump();
+    await mouse.up();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+  }
+
+  MouseCursor cursor(WidgetTester tester) =>
+      tester.widget<TerminalView>(find.byType(TerminalView)).mouseCursor;
+
+  group('Ctrl is the switch', () {
+    testWidgets('with Ctrl up, hovering resolves nothing at all', (
+      tester,
+    ) async {
+      final instance = await pumpWithOutput(
+        tester,
+        'edit lib/main.dart and see https://example.com/a',
+      );
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+
+      // Sweep across the path, the URL and the prose between them.
+      final mouse = await hover(tester, centreOfCell(tester, 5, 0));
+      for (final column in [7, 12, 20, 30, 35]) {
+        await mouse.moveTo(centreOfCell(tester, column, 0));
+        await tester.pumpAndSettle();
+      }
+
+      expect(
+        actions.probed,
+        isEmpty,
+        reason: 'the seam is never reached with the modifier up',
+      );
+      expect(instance.controller.highlights, isEmpty);
+      expect(find.textContaining('click to'), findsNothing);
+      expect(cursor(tester), SystemMouseCursors.text);
+    });
+
+    testWidgets('holding Ctrl underlines the path under the pointer', (
+      tester,
+    ) async {
+      final instance = await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      await hover(tester, centreOfCell(tester, 8, 0));
+
+      await pressCtrl(tester);
+
+      final highlight = instance.controller.highlights.single;
+      expect(highlight.underline, isTrue, reason: 'a rule, not a wash');
+      // Exactly `lib/main.dart`, which starts at column 5 and is 13 long.
+      expect(highlight.range!.begin, const CellOffset(5, 0));
+      expect(highlight.range!.end, const CellOffset(18, 0));
+      expect(cursor(tester), SystemMouseCursors.click);
+      expect(find.textContaining(resolvedMain), findsOneWidget);
+    });
+
+    testWidgets('releasing Ctrl clears it', (tester) async {
+      final instance = await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      await hover(tester, centreOfCell(tester, 8, 0));
+      await pressCtrl(tester);
+      expect(instance.controller.highlights, hasLength(1));
+
+      await releaseCtrl(tester);
+
+      expect(instance.controller.highlights, isEmpty);
+      expect(find.textContaining('click to'), findsNothing);
+      expect(cursor(tester), SystemMouseCursors.text);
+    });
+
+    testWidgets('pressing Ctrl again lights it up again', (tester) async {
+      // The "this cell has been answered" memory has to be dropped with the
+      // underline, or the second press would find nothing to do.
+      final instance = await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      await hover(tester, centreOfCell(tester, 8, 0));
+      await pressCtrl(tester);
+      await releaseCtrl(tester);
+
+      await pressCtrl(tester);
+
+      expect(instance.controller.highlights, hasLength(1));
+    });
+
+    testWidgets('a word that is not a path underlines nothing', (tester) async {
+      final instance = await pumpWithOutput(tester, 'git status --porcelain');
+      await hover(tester, centreOfCell(tester, 1, 0));
+
+      await pressCtrl(tester);
+
+      expect(instance.controller.highlights, isEmpty);
+      expect(actions.probed, isEmpty, reason: 'no separator, so no candidate');
+      expect(cursor(tester), SystemMouseCursors.text);
+    });
+
+    testWidgets('moving off the link clears it', (tester) async {
+      final instance = await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      final mouse = await hover(tester, centreOfCell(tester, 8, 0));
+      await pressCtrl(tester);
+      expect(instance.controller.highlights, hasLength(1));
+
+      await mouse.moveTo(centreOfCell(tester, 1, 0));
+      await tester.pumpAndSettle();
+
+      expect(instance.controller.highlights, isEmpty);
+    });
+  });
+
+  group('what a click opens', () {
+    testWidgets('a file goes to the editor seam', (tester) async {
+      await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      final target = centreOfCell(tester, 8, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.opened, [
+        (resolvedMain, TerminalPathKind.file, null, null),
+      ]);
+      expect(actions.openedUrls, isEmpty);
+    });
+
+    testWidgets('path:line:col carries the location through', (tester) async {
+      // Nothing honours it yet; it must still arrive at the opener, or
+      // honouring it later means re-parsing the text.
+      await pumpWithOutput(tester, 'at lib/main.dart:42:7 failed');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      final target = centreOfCell(tester, 6, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.opened, [(resolvedMain, TerminalPathKind.file, 42, 7)]);
+    });
+
+    testWidgets('a directory goes to the file manager, not the editor', (
+      tester,
+    ) async {
+      await pumpWithOutput(tester, r'cd C:\src\app\lib');
+      actions.exists[r'C:\src\app\lib'] = TerminalPathKind.directory;
+      final target = centreOfCell(tester, 8, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+      expect(find.textContaining('click to reveal'), findsOneWidget);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.opened, [
+        (r'C:\src\app\lib', TerminalPathKind.directory, null, null),
+      ]);
+    });
+
+    testWidgets('a URL keeps going to the browser', (tester) async {
+      await pumpWithOutput(tester, 'see https://example.com/a');
+      final target = centreOfCell(tester, 6, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+      // A URL is decided from the text alone; nothing is stat'd for it.
+      expect(actions.probed, isEmpty);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.openedUrls, ['https://example.com/a']);
+      expect(actions.opened, isEmpty);
+    });
+
+    testWidgets('a path that is not there does nothing, visibly or otherwise', (
+      tester,
+    ) async {
+      // `exists` is empty, so the probe says "nothing there". A wrong thing
+      // opened is far worse than a word that turns out not to be a link.
+      final instance = await pumpWithOutput(tester, 'edit lib/gone.dart now');
+      final target = centreOfCell(tester, 8, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      expect(actions.probed, [r'C:\src\app\lib\gone.dart']);
+      expect(instance.controller.highlights, isEmpty);
+      expect(cursor(tester), SystemMouseCursors.text);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(actions.opened, isEmpty);
+      expect(actions.openedUrls, isEmpty);
+    });
+
+    testWidgets('a plain click opens nothing', (tester) async {
+      // A click in a terminal places a selection, and when the program has
+      // asked for mouse reporting it is an event the program receives.
+      await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      final target = centreOfCell(tester, 8, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+      await releaseCtrl(tester);
+
+      await ctrlClick(tester, mouse, target);
+
+      expect(actions.opened, isEmpty);
+    });
+
+    testWidgets('Ctrl+click away from the link opens nothing', (tester) async {
+      await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      final mouse = await hover(tester, centreOfCell(tester, 8, 0));
+      await pressCtrl(tester);
+      final elsewhere = centreOfCell(tester, 1, 0);
+      await mouse.moveTo(elsewhere);
+      await tester.pumpAndSettle();
+
+      await ctrlClick(tester, mouse, elsewhere);
+      await releaseCtrl(tester);
+
+      expect(actions.opened, isEmpty);
+    });
+
+    testWidgets('an opener that fails says so', (tester) async {
+      await pumpWithOutput(tester, 'edit lib/main.dart now');
+      actions.exists[resolvedMain] = TerminalPathKind.file;
+      actions.error = 'No code editor set. Pick one in Settings.';
+      final target = centreOfCell(tester, 8, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(find.textContaining('No code editor set'), findsOneWidget);
+    });
+  });
+
+  testWidgets('one candidate is probed once, however far you slide along it', (
     tester,
   ) async {
-    final instance = await pumpWithOutput(tester, 'see https://example.com/a');
+    await pumpWithOutput(tester, 'edit lib/main.dart now');
+    actions.exists[resolvedMain] = TerminalPathKind.file;
+    final mouse = await hover(tester, centreOfCell(tester, 5, 0));
+    await pressCtrl(tester);
 
-    await hover(tester, centreOfCell(tester, 6, 0));
+    for (final column in [6, 7, 8, 9, 10, 11]) {
+      await mouse.moveTo(centreOfCell(tester, column, 0));
+      await tester.pumpAndSettle();
+    }
+    await releaseCtrl(tester);
 
-    expect(
-      instance.controller.highlights,
-      hasLength(1),
-      reason: 'the URL under the pointer is highlighted, buffer-anchored',
-    );
-    expect(find.textContaining('click to open'), findsOneWidget);
-    expect(find.textContaining('https://example.com/a'), findsOneWidget);
-    // And the pointer says it is over something clickable.
-    expect(
-      tester.widget<TerminalView>(find.byType(TerminalView)).mouseCursor,
-      SystemMouseCursors.click,
-    );
+    expect(actions.probed, [resolvedMain]);
   });
+}
 
-  testWidgets('ordinary output is inert', (tester) async {
-    final instance = await pumpWithOutput(tester, r'PS C:\Users\me> git status');
+/// A [TerminalLinkActions] that records instead of doing.
+class _RecordingLinkActions implements TerminalLinkActions {
+  /// What the host is pretending to have. Anything else is "not there".
+  final Map<String, TerminalPathKind> exists = {};
 
-    await hover(tester, centreOfCell(tester, 4, 0));
+  final List<String> openedUrls = [];
+  final List<String> probed = [];
+  final List<(String, TerminalPathKind, int?, int?)> opened = [];
 
-    expect(instance.controller.highlights, isEmpty);
-    expect(find.textContaining('click to open'), findsNothing);
-    expect(
-      tester.widget<TerminalView>(find.byType(TerminalView)).mouseCursor,
-      SystemMouseCursors.text,
-    );
-  });
+  /// What [open] reports back, or null when it worked.
+  String? error;
 
-  testWidgets('leaving the pane drops the highlight', (tester) async {
-    final instance = await pumpWithOutput(tester, 'see https://example.com/a');
-    final mouse = await hover(tester, centreOfCell(tester, 6, 0));
-    expect(instance.controller.highlights, hasLength(1));
+  @override
+  Future<void> openUrl(String url) async => openedUrls.add(url);
 
-    await mouse.moveTo(const Offset(5000, 5000));
-    await tester.pumpAndSettle();
+  @override
+  Future<TerminalPathKind?> kindOf(String hostPath) async {
+    probed.add(hostPath);
+    return exists[hostPath];
+  }
 
-    expect(instance.controller.highlights, isEmpty);
-    expect(find.textContaining('click to open'), findsNothing);
-  });
-
-  testWidgets('Ctrl+click opens the URL', (tester) async {
-    await pumpWithOutput(tester, 'see https://example.com/a');
-    final target = centreOfCell(tester, 6, 0);
-    final mouse = await hover(tester, target);
-
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await mouse.down(target);
-    await tester.pump();
-    await mouse.up();
-    // xterm's gesture detector arms a 300 ms double-tap timer on every tap;
-    // let it expire, or the test ends with it pending.
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pumpAndSettle();
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-
-    expect(opened, ['https://example.com/a']);
-  });
-
-  testWidgets('a plain click does not open anything', (tester) async {
-    // A click in a terminal places a selection, and when the program has asked
-    // for mouse reporting it is an event the program receives. Opening a
-    // browser as a side effect of clicking anywhere would be wrong.
-    await pumpWithOutput(tester, 'see https://example.com/a');
-    final target = centreOfCell(tester, 6, 0);
-    final mouse = await hover(tester, target);
-
-    await mouse.down(target);
-    await tester.pump();
-    await mouse.up();
-    // xterm's gesture detector arms a 300 ms double-tap timer on every tap;
-    // let it expire, or the test ends with it pending.
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pumpAndSettle();
-
-    expect(opened, isEmpty);
-  });
-
-  testWidgets('Ctrl+click away from the link opens nothing', (tester) async {
-    await pumpWithOutput(tester, 'see https://example.com/a');
-    // Hover the URL first, so a stale hover cannot be what answers the click.
-    final mouse = await hover(tester, centreOfCell(tester, 6, 0));
-    final elsewhere = centreOfCell(tester, 1, 0);
-    await mouse.moveTo(elsewhere);
-    await tester.pumpAndSettle();
-
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await mouse.down(elsewhere);
-    await tester.pump();
-    await mouse.up();
-    // xterm's gesture detector arms a 300 ms double-tap timer on every tap;
-    // let it expire, or the test ends with it pending.
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pumpAndSettle();
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-
-    expect(opened, isEmpty);
-  });
+  @override
+  Future<String?> open(
+    String hostPath,
+    TerminalPathKind kind, {
+    int? line,
+    int? column,
+  }) async {
+    opened.add((hostPath, kind, line, column));
+    return error;
+  }
 }

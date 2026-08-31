@@ -9,9 +9,9 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../git/application/changes_providers.dart';
-import '../../git/application/remote_links.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../application/terminal_link_actions.dart';
 import '../application/terminal_scroll.dart';
 import '../application/terminal_theme_controller.dart';
 import '../application/terminal_search_controller.dart';
@@ -458,7 +458,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 // Right-click → copy selection / paste / end the session.
                 onSecondaryTapDown: (position) =>
                     _terminalMenu(context, position, paneId, instance),
-                openUrl: ref.read(openExternalUrlProvider),
+                linkActions: ref.read(terminalLinkActionsProvider),
               ),
             ),
           ],
