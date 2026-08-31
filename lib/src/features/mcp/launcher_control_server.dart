@@ -59,10 +59,11 @@ import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
 import 'mcp_tool_catalogue.dart';
+import 'session_mcp.dart';
 import 'session_tools.dart';
 import 'terminal_tools.dart';
-import 'workspace_tools.dart';
 import 'tmux_orchestration.dart';
+import 'workspace_tools.dart';
 import 'wsl_host_address.dart';
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
@@ -145,7 +146,7 @@ import 'wsl_host_address.dart';
 /// low-privilege (status reports only), and is already public to anything that
 /// can list process command lines; that is the threat model above, and moving
 /// the route would not improve it.
-class LauncherControlServer {
+class LauncherControlServer implements SessionMcp {
   LauncherControlServer(
     this._container, {
     AppLogger? logger,
@@ -176,6 +177,10 @@ class LauncherControlServer {
   String? _publishedBridgePath;
   ControlServerStatus _status = ControlServerStatus.notStarted;
   McpHttpEndpoint? _mcpEndpoint;
+
+  /// Where per-session MCP configs are written, or null when that directory
+  /// could not be locked to this user and so nothing is written at all.
+  SessionMcpConfigs? _sessionConfigs;
 
   /// Which session each per-session MCP credential names. Survives the endpoint
   /// so a config written before a restart keeps meaning what it meant.
@@ -221,6 +226,27 @@ class LauncherControlServer {
     if (host == null) return null;
     final token = _callers.tokenFor(sessionId);
     return 'http://$host${McpHttpEndpoint.path}/$token';
+  }
+
+  @override
+  SessionMcpAccess? accessFor({
+    required String sessionId,
+    required ExecutionEnvironment environment,
+    required bool withConfigFile,
+  }) {
+    final url = mcpUrlFor(sessionId, environment: environment.kind);
+    if (url == null) return null;
+    if (!withConfigFile) return SessionMcpAccess(url: url);
+    final windowsPath = _sessionConfigs?.write(
+      sessionId: sessionId,
+      url: url,
+    );
+    if (windowsPath == null) return null;
+    final agentPath = agentConfigPathFor(windowsPath, environment.kind);
+    // A file the agent cannot name is a flag pointing at nothing, which is a
+    // worse launch than the one that passes no flag at all.
+    if (agentPath == null) return null;
+    return SessionMcpAccess(url: url, configPath: agentPath);
   }
 
   /// `host:port` for an agent in [environment], or null when there is none.
@@ -276,6 +302,11 @@ class LauncherControlServer {
   /// the real machine's WSL switch; tests inject a stand-in so two-interface
   /// behaviour is provable on a host that has no WSL at all.
   ///
+  /// [sessionConfigDirectory] is where per-session MCP configs are written; by
+  /// default `mcp` beside the handshake file, which puts it in the
+  /// application-support directory in the app and in the test's temp directory
+  /// in a test.
+  ///
   /// ## Fail closed
   ///
   /// Every privileged step is a **prerequisite**, not a best effort. Applying
@@ -291,6 +322,7 @@ class LauncherControlServer {
     String? bridgeFilePath,
     bool useLocalSocket = true,
     String? socketDirectory,
+    String? sessionConfigDirectory,
     Future<InternetAddress?> Function() wslHostAddress =
         resolveWslHostAddress,
   }) async {
@@ -390,6 +422,14 @@ class LauncherControlServer {
     server.listen(_handle, onError: (Object e) => _logger.warning('$e'));
     _logger.info('Launcher control server on 127.0.0.1:${server.port}.');
     await _bindWslInterface(server.port, wslHostAddress);
+    // Beside the handshake file rather than resolved separately: they belong in
+    // the same application-support directory, and a second
+    // `getApplicationSupportDirectory()` would be a platform-channel call on a
+    // path every caller has already told us about.
+    await _prepareSessionConfigs(
+      sessionConfigDirectory ?? p.join(p.dirname(file.path), 'mcp'),
+    );
+    _publishSessionMcp(this);
     _startCheckpointRecorder();
   }
 
@@ -437,6 +477,38 @@ class LauncherControlServer {
         error,
         stack,
       );
+    }
+  }
+
+  /// Creates the owner-only directory per-session MCP configs go in, empty.
+  ///
+  /// Gated on a credential existing for the same reason [_bindWslInterface] is:
+  /// a config naming an endpoint that answers `401` is a file with a secret in
+  /// it and no use for it.
+  Future<void> _prepareSessionConfigs(String dirPath) async {
+    if (_mcpEndpoint?.token == null) return;
+    _sessionConfigs = await SessionMcpConfigs.prepare(
+      Directory(dirPath),
+      (dir) => _permissions.restrictDirectory(dir, logger: _logger),
+    );
+    if (_sessionConfigs == null) {
+      // Not fatal, and deliberately not: an agent that takes the URL on its
+      // command line is unaffected, and one that needs a file launches without
+      // it rather than with a credential nothing is guarding.
+      _logger.warning(
+        'MCP session configs are off: $dirPath could not be locked to this '
+        'user. Agents that need a config file will launch without one.',
+      );
+    }
+  }
+
+  /// Publishes (or withdraws) the wiring a launch reads.
+  void _publishSessionMcp(SessionMcp? value) {
+    try {
+      _container.read(sessionMcpProvider.notifier).adopt(value);
+    } on Object catch (error) {
+      // A disposed container on the way out, exactly as in _publishStatus.
+      _logger.warning('Could not publish the session MCP wiring: $error');
     }
   }
 
@@ -524,6 +596,9 @@ class LauncherControlServer {
         _logger.warning('Could not remove stale bridge handshake: $error');
       }
     }
+    _publishSessionMcp(null);
+    _sessionConfigs?.dispose();
+    _sessionConfigs = null;
     _server = null;
     _wslServer = null;
     _wslHost = null;
