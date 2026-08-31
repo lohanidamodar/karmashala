@@ -100,6 +100,7 @@ class SessionCard extends StatelessWidget {
     this.link,
     this.parentTitle,
     this.lineageBroken = false,
+    this.showMenu = true,
     super.key,
   });
 
@@ -172,6 +173,13 @@ class SessionCard extends StatelessWidget {
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
 
+  /// Whether to draw the row's overflow menu.
+  ///
+  /// The Explorer always does. The companion has no verbs to put in one — a
+  /// phone can open a session and nothing else — and an empty menu button is a
+  /// target that does nothing.
+  final bool showMenu;
+
   /// The glyph for a link kind. Three shapes for three genuinely different
   /// facts: an agent delegated this, the user moved it to another provider, the
   /// user branched it.
@@ -185,10 +193,10 @@ class SessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-      letterSpacing: 0,
-    );
+    // One decision — a mouse or a thumb — and every measurement below follows
+    // from it. `pointer` is the Explorer's own density, unchanged.
+    final density = UiDensity.of(context);
+    final muted = density.muted(theme);
 
     return ContextMenuRegion(
       menuItems: menuItems,
@@ -213,14 +221,24 @@ class SessionCard extends StatelessWidget {
               ),
             ),
           ),
-          padding: EdgeInsets.fromLTRB(6.0 + depth * 14, 6, 4, 6),
+          padding: EdgeInsets.fromLTRB(
+            density.padX + depth * 14,
+            density.padY,
+            density.isTouch ? density.padX : 4,
+            density.padY,
+          ),
+          // A floor, never a fixed height: the card still grows with its text
+          // at 200% scale instead of clipping it.
+          constraints: density.isTouch
+              ? const BoxConstraints(minHeight: Touch.target)
+              : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _line1(context, muted),
-              const SizedBox(height: 2),
-              _line2(theme),
+              _line1(context, muted, density),
+              SizedBox(height: density.lineGap),
+              _line2(theme, density),
               // A worktree session draws its third line even before git has
               // answered: the glyph that says "this has its own checkout" is a
               // persisted fact, and it must not blink into existence.
@@ -230,8 +248,8 @@ class SessionCard extends StatelessWidget {
                   lineageBroken ||
                   whereabouts != null ||
                   !(stat?.isEmpty ?? true)) ...[
-                const SizedBox(height: 3),
-                _line3(context, muted),
+                SizedBox(height: density.isTouch ? Insets.xs : 3),
+                _line3(context, muted, density),
               ],
             ],
           ),
@@ -240,7 +258,7 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  Widget _line1(BuildContext context, TextStyle? muted) {
+  Widget _line1(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
     // The left group is one Expanded child rather than a Flexible label beside
     // a Spacer: two flex children split the free space evenly, which truncated
@@ -254,10 +272,10 @@ class SessionCard extends StatelessWidget {
             children: [
               Icon(
                 agentIcon,
-                size: Chrome.iconSmall,
+                size: density.icon,
                 color: agentColor ?? scheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 5),
+              SizedBox(width: density.isTouch ? Insets.sm : 5),
               Flexible(
                 child: Text(
                   agentLabel,
@@ -284,7 +302,7 @@ class SessionCard extends StatelessWidget {
     );
   }
 
-  Widget _line2(ThemeData theme) => Row(
+  Widget _line2(ThemeData theme, UiDensity density) => Row(
     children: [
       if (lineageBroken) ...[
         Tooltip(
@@ -294,7 +312,7 @@ class SessionCard extends StatelessWidget {
               'rather than under a tree we cannot vouch for.',
           child: Icon(
             AppIcons.question,
-            size: 11,
+            size: density.iconSmall,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
@@ -306,42 +324,48 @@ class SessionCard extends StatelessWidget {
               : '${link!.phrase} "$parentTitle"',
           child: Icon(
             linkIcon(link!),
-            size: 11,
+            size: density.iconSmall,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(width: 4),
       ],
       if (pinned) ...[
-        Icon(AppIcons.pushPinFill, size: 11, color: theme.colorScheme.primary),
+        Icon(
+          AppIcons.pushPinFill,
+          size: density.iconSmall,
+          color: theme.colorScheme.primary,
+        ),
         const SizedBox(width: 4),
       ],
       Expanded(
         child: Text(
           title,
-          maxLines: 1,
+          // A phone gives a long title a second line rather than ellipsising
+          // the only thing that identifies the session; a dense pane cannot
+          // afford one.
+          maxLines: density.isTouch ? 2 : 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
+          style: density.title(theme),
+        ),
+      ),
+      if (showMenu)
+        SizedBox(
+          width: density.isTouch ? Touch.target : 22,
+          height: density.isTouch ? Touch.target : 18,
+          child: PopupMenuButton<String>(
+            tooltip: 'Session actions',
+            padding: EdgeInsets.zero,
+            iconSize: density.isTouch ? Touch.icon : 15,
+            icon: const Icon(AppIcons.dotsThreeVertical),
+            onSelected: onMenu,
+            itemBuilder: (context) => menuItems,
           ),
         ),
-      ),
-      SizedBox(
-        width: 22,
-        height: 18,
-        child: PopupMenuButton<String>(
-          tooltip: 'Session actions',
-          padding: EdgeInsets.zero,
-          iconSize: 15,
-          icon: const Icon(AppIcons.dotsThreeVertical),
-          onSelected: onMenu,
-          itemBuilder: (context) => menuItems,
-        ),
-      ),
     ],
   );
 
-  Widget _line3(BuildContext context, TextStyle? muted) {
+  Widget _line3(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
     final where = [
       ?subPath,
@@ -357,7 +381,7 @@ class SessionCard extends StatelessWidget {
     return Row(
       children: [
         if (leading != null) ...[
-          Icon(leading, size: 11, color: scheme.onSurfaceVariant),
+          Icon(leading, size: density.iconSmall, color: scheme.onSurfaceVariant),
           const SizedBox(width: 4),
         ],
         // The left half is the only thing on the card allowed to be long, so it
@@ -382,7 +406,7 @@ class SessionCard extends StatelessWidget {
             message: 'Runs in its own worktree',
             child: Icon(
               AppIcons.treeStructure,
-              size: 11,
+              size: density.iconSmall,
               color: scheme.onSurfaceVariant,
             ),
           ),

@@ -9,10 +9,16 @@ import '../../features/companion/presentation/link_banner.dart';
 import '../../features/companion/presentation/pairing/pairing_screen.dart';
 import '../../features/companion/presentation/session_list_screen.dart';
 import '../theme/app_icons.dart';
+import '../theme/design_tokens.dart';
 
-/// The phone shell: pairing until a host exists, then three tabs — Sessions,
+/// The phone shell: pairing until a host exists, then three tabs — Projects,
 /// Inbox, Settings — under a persistent connection banner. Compact-breakpoint
 /// layout (CLAUDE.md §6): bottom navigation, no rail, no panes.
+///
+/// The first tab is named for what it lists. It was "Sessions" and showed
+/// projects *and* sessions in one flat list, which is exactly the confusion
+/// Loop 82 was asked to fix: the tab is the top of the hierarchy, and the
+/// hierarchy's top is projects.
 class CompanionShell extends ConsumerStatefulWidget {
   const CompanionShell({super.key});
 
@@ -23,7 +29,7 @@ class CompanionShell extends ConsumerStatefulWidget {
 class _CompanionShellState extends ConsumerState<CompanionShell> {
   int _tab = 0;
 
-  static const _titles = ['Sessions', 'Inbox', 'Settings'];
+  static const _titles = ['Projects', 'Inbox', 'Settings'];
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +45,12 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
 
     const inboxIcon = Icon(AppIcons.tray);
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_tab])),
+      appBar: AppBar(
+        // Grown with the text scale rather than fixed: a 200% title does not
+        // fit a 56px bar, and the screen's own name is the worst thing to clip.
+        toolbarHeight: Touch.appBarOf(context),
+        title: Text(_titles[_tab]),
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -67,8 +78,9 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
         onDestinationSelected: (index) => setState(() => _tab = index),
         destinations: [
           const NavigationDestination(
-            icon: Icon(AppIcons.chatCircle),
-            label: 'Sessions',
+            icon: Icon(AppIcons.folder),
+            selectedIcon: Icon(AppIcons.folderOpen),
+            label: 'Projects',
           ),
           NavigationDestination(
             icon: inboxCount == 0

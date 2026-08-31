@@ -16,6 +16,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     final pairing = ref.watch(companionPairingProvider).asData?.value;
     final link =
         ref.watch(companionLinkProvider).asData?.value ??
@@ -27,14 +28,9 @@ class CompanionSettingsScreen extends ConsumerWidget {
       // only reachable in the moment after an unpair — exactly when a relay
       // may need changing before typing the next code.
       return ListView(
-        padding: const EdgeInsets.all(Insets.md),
+        padding: EdgeInsets.all(density.padX),
         children: [
-          Text(
-            'Not paired.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
+          Text('Not paired.', style: density.muted(theme)),
           const SizedBox(height: Insets.lg),
           const ConnectionsSection(),
           const SizedBox(height: Insets.lg),
@@ -64,24 +60,21 @@ class CompanionSettingsScreen extends ConsumerWidget {
     };
 
     return ListView(
-      padding: const EdgeInsets.all(Insets.md),
+      padding: EdgeInsets.all(density.padX),
       children: [
         // The saved desktops first: which one this phone is on is the fact
         // every other row here is about.
         const ConnectionsSection(),
         const SizedBox(height: Insets.lg),
-        Text(
-          'THIS CONNECTION',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: Insets.xs),
+        Text('THIS CONNECTION', style: theme.textTheme.labelSmall),
+        const SizedBox(height: Insets.sm),
         Container(
-          padding: const EdgeInsets.all(Insets.md),
+          padding: EdgeInsets.all(density.padX),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(Radii.sm),
+            borderRadius: BorderRadius.circular(
+              density.isTouch ? Radii.lg : Radii.sm,
+            ),
             border: Border.all(color: scheme.outlineVariant),
           ),
           child: Column(
@@ -91,24 +84,39 @@ class CompanionSettingsScreen extends ConsumerWidget {
                 children: [
                   Icon(
                     AppIcons.deviceMobile,
-                    size: Chrome.icon,
+                    size: density.icon,
                     color: scheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: Insets.sm),
+                  SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
                   Expanded(
                     child: Text(
                       pairing.hostName ?? 'Desktop',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: density.title(theme),
                     ),
                   ),
-                  Icon(linkIcon, size: Chrome.iconSmall, color: linkColour),
-                  const SizedBox(width: 4),
-                  Text(
-                    linkLabel,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: linkColour,
+                ],
+              ),
+              const SizedBox(height: Insets.xs),
+              // Its own line: "Connected · Direct (LAN)" is a sentence, and
+              // squeezing it beside the machine's name is what overflowed the
+              // card at phone width.
+              Row(
+                children: [
+                  Icon(linkIcon, size: density.iconSmall, color: linkColour),
+                  const SizedBox(width: Insets.xs),
+                  Flexible(
+                    child: Text(
+                      linkLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: density
+                          .muted(theme)
+                          ?.copyWith(
+                            color: linkColour,
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ),
                 ],
@@ -117,19 +125,16 @@ class CompanionSettingsScreen extends ConsumerWidget {
                 const SizedBox(height: Insets.xs),
                 Text(
                   'Host id: ${pairing.hostId!.value}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontFamily: kMonoFamily,
-                  ),
+                  style: density
+                      .muted(theme)
+                      ?.copyWith(fontFamily: kMonoFamily),
                 ),
               ],
               const SizedBox(height: Insets.sm),
               Text(
                 'This phone may: '
                 '${pairing.capabilities.granted.map((c) => c.wire.replaceAll('_', ' ')).join(', ')}.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: density.muted(theme),
               ),
               if (link == CompanionLinkState.disconnected) ...[
                 const SizedBox(height: Insets.sm),
@@ -138,7 +143,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
                   child: OutlinedButton.icon(
                     onPressed: () =>
                         ref.read(companionGatewayProvider).reconnect(),
-                    icon: const Icon(AppIcons.arrowsClockwise, size: 14),
+                    icon: const Icon(AppIcons.arrowsClockwise),
                     label: const Text('Try to reconnect'),
                   ),
                 ),
@@ -153,9 +158,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
           'Chitragupta companion — a remote view of the sessions your '
           'desktop holds. The desktop is the source of truth; revoking this '
           'phone there cuts it off immediately.',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
+          style: density.muted(theme),
         ),
       ],
     );
@@ -223,17 +226,11 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'PAIRING RELAY',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: Insets.xs),
+        Text('PAIRING RELAY', style: theme.textTheme.labelSmall),
+        const SizedBox(height: Insets.sm),
         TextField(
           controller: _relay,
           enabled: _loaded,
@@ -241,7 +238,9 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
           textInputAction: TextInputAction.done,
           onSubmitted: _apply,
           onEditingComplete: () => _apply(_relay.text),
-          style: theme.textTheme.bodySmall?.copyWith(fontFamily: kMonoFamily),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontFamily: kMonoFamily,
+          ),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
             hintText: kDefaultCompanionRelayUrl,

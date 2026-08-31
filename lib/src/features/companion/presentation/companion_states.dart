@@ -1,0 +1,225 @@
+/// Loading, empty and error — the three states a screen is unfinished without.
+///
+/// Companion scaffolding rather than a second widget vocabulary: the shapes
+/// here frame the shared Explorer cards, and every colour, radius and spacing
+/// comes from the app's own tokens.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
+import '../client/companion_gateway.dart';
+
+/// Draws [value] through its four states.
+///
+/// **Not `AsyncValue.when`**, and that is the point. Riverpod 3 retries a
+/// provider that failed, and while it retries the state is `AsyncLoading`
+/// *carrying* the error — so `when` takes its loading branch and the screen
+/// sits on a skeleton for ever instead of ever saying what went wrong. This
+/// asks the three questions in the order a user cares about: is there
+/// anything to show, did the first attempt fail, or has it simply not
+/// answered yet. A retry that fails while data is already on screen leaves the
+/// data up, which is also the right answer.
+Widget companionAsync<T>(
+  AsyncValue<T> value, {
+  required Widget Function(T data) data,
+  required Widget Function(Object error) error,
+  required Widget Function() loading,
+}) {
+  if (value.hasValue) return data(value.requireValue);
+  final failure = value.error;
+  if (failure != null) return error(failure);
+  return loading();
+}
+
+/// The sentence to show for a thrown [error].
+///
+/// A [GatewayException] already carries a user-fit sentence written by the
+/// layer that knew what went wrong. Anything else is a bug, and printing a
+/// Dart type at someone holding a phone tells them nothing they can act on.
+String companionErrorText(Object error) => error is GatewayException
+    ? error.message
+    : 'Something went wrong talking to your desktop.';
+
+/// A block the size and shape of text that has not arrived yet.
+class _Bone extends StatelessWidget {
+  const _Bone({required this.width, this.height = 12});
+
+  /// A fraction of the available width, 0–1.
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) => FractionallySizedBox(
+    alignment: Alignment.centerLeft,
+    widthFactor: width,
+    child: Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(Insets.xs),
+      ),
+    ),
+  );
+}
+
+/// Rows the shape of the list that is loading.
+///
+/// Deliberately still. A repeating shimmer never settles, which hangs every
+/// `pumpAndSettle` in the suite, and the silhouette alone already says "cards
+/// are coming" — which a spinner never does.
+class CompanionSkeletonList extends StatelessWidget {
+  const CompanionSkeletonList({this.rows = 4, this.lines = 3, super.key});
+
+  final int rows;
+
+  /// How many lines a row of the real list has — three for a session card,
+  /// two for a project row — so the two lists do not load into one silhouette.
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Loading',
+    child: ExcludeSemantics(
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+        itemCount: rows,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.fromLTRB(
+            Insets.lg,
+            Insets.md,
+            Insets.lg,
+            Insets.md,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _Bone(width: 0.34),
+              const SizedBox(height: Insets.sm),
+              const _Bone(width: 0.72, height: 14),
+              if (lines > 2) ...[
+                const SizedBox(height: Insets.sm),
+                const _Bone(width: 0.5),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// A screen with nothing on it yet, or one that failed — the same shape for
+/// both, so the app never has two ways of saying "not right now".
+///
+/// [title] names the situation, [body] explains it in a sentence or two, and
+/// the buttons are what to do about it. Never a raw exception, never a blank
+/// page, and never a state with no way forward.
+class CompanionNotice extends StatelessWidget {
+  const CompanionNotice({
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.tone,
+    this.actionLabel,
+    this.onAction,
+    this.secondaryLabel,
+    this.onSecondary,
+    super.key,
+  });
+
+  /// The error flavour: plain words and a retry.
+  factory CompanionNotice.failure({
+    required Object error,
+    required VoidCallback onRetry,
+    Key? key,
+  }) => CompanionNotice(
+    key: key,
+    icon: AppIcons.warningCircle,
+    title: 'That did not work',
+    body: companionErrorText(error),
+    tone: NoticeTone.failure,
+    actionLabel: 'Try again',
+    onAction: onRetry,
+  );
+
+  final IconData icon;
+  final String title;
+  final String body;
+
+  /// Picks the icon's colour out of [SemanticColors]. Null is the muted
+  /// default — most empty states are not a problem.
+  final NoticeTone? tone;
+
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final semantic = SemanticColors.of(context);
+    final colour = switch (tone) {
+      null => scheme.onSurfaceVariant,
+      NoticeTone.attention => semantic.attention,
+      NoticeTone.failure => semantic.failure,
+      NoticeTone.idle => semantic.idle,
+    };
+    return Center(
+      // Scrollable so the state survives a small screen at 200% text.
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.xxl),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(Insets.lg),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colour.withValues(alpha: 0.12),
+                ),
+                child: Icon(icon, size: Insets.xl, color: colour),
+              ),
+              const SizedBox(height: Insets.xl),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: Insets.sm),
+              Text(
+                body,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+              if (actionLabel != null) ...[
+                const SizedBox(height: Insets.xl),
+                FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+              ],
+              if (secondaryLabel != null) ...[
+                const SizedBox(height: Insets.sm),
+                TextButton(
+                  onPressed: onSecondary,
+                  child: Text(secondaryLabel!),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Which semantic colour a notice's glyph borrows. Null — the common case —
+/// is the muted default: most empty states are not a problem.
+enum NoticeTone { attention, failure, idle }

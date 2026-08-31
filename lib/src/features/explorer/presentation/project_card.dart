@@ -33,12 +33,13 @@ class ProjectCard extends StatelessWidget {
     required this.selected,
     required this.summary,
     required this.onTap,
-    required this.onNewSession,
     required this.menuItems,
     required this.onMenu,
+    this.onNewSession,
     this.missing = false,
     this.pinned = false,
     this.onTogglePin,
+    this.showMenu = true,
     super.key,
   });
 
@@ -49,11 +50,23 @@ class ProjectCard extends StatelessWidget {
   final bool missing;
   final bool pinned;
   final ProjectSummary summary;
-  final VoidCallback onTap;
-  final VoidCallback onNewSession;
+
+  /// Opens the project. Null draws the same card as a plain header — the
+  /// companion uses it that way above a single project's sessions, where
+  /// there is nothing to navigate to.
+  final VoidCallback? onTap;
+
+  /// Starts a session in this project. Null where the surface has no such verb
+  /// — the companion can read a desktop's projects, not start work in them —
+  /// and the button is then not drawn rather than drawn dead.
+  final VoidCallback? onNewSession;
+
   final VoidCallback? onTogglePin;
   final List<PopupMenuEntry<String>> menuItems;
   final ValueChanged<String> onMenu;
+
+  /// Whether to draw the row's overflow menu. See [SessionCard.showMenu].
+  final bool showMenu;
 
   /// The narrowest pane that still has room for the aggregate beside the row's
   /// buttons. The Explorer clamps to 200px, so this is a real case, and half a
@@ -75,10 +88,8 @@ class ProjectCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-      letterSpacing: 0,
-    );
+    final density = UiDensity.of(context);
+    final muted = density.muted(theme);
 
     return ContextMenuRegion(
       menuItems: menuItems,
@@ -98,36 +109,163 @@ class ProjectCard extends StatelessWidget {
               ),
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(4, 5, 4, 5),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final width = constraints.maxWidth;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _line1(
-                    context,
-                    muted,
-                    semantic,
-                    wide: width >= aggregateWidth,
-                    roomy: width >= badgeWidth,
-                  ),
-                  const SizedBox(height: 1),
-                  _line2(context, muted),
-                ],
-              );
-            },
-          ),
+          padding: density.isTouch
+              ? EdgeInsets.fromLTRB(
+                  density.padX,
+                  density.padY,
+                  density.padX,
+                  density.padY,
+                )
+              : const EdgeInsets.fromLTRB(4, 5, 4, 5),
+          constraints: density.isTouch
+              ? const BoxConstraints(minHeight: Touch.target)
+              : null,
+          child: density.isTouch
+              ? _touchBody(context, muted, semantic, density)
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _line1(
+                          context,
+                          muted,
+                          semantic,
+                          density,
+                          wide: width >= aggregateWidth,
+                          roomy: width >= badgeWidth,
+                        ),
+                        const SizedBox(height: 1),
+                        _line2(context, muted, density),
+                      ],
+                    );
+                  },
+                ),
         ),
       ),
     );
   }
 
+  /// The same facts, stacked.
+  ///
+  /// A 390px phone cannot fit a name, an aggregate, a badge and a chevron on
+  /// one row without ellipsising the name to nothing — the row's whole reason
+  /// for existing. So the name keeps line one with the drill-in chevron, the
+  /// counts take line two, and the path takes line three. Nothing is dropped
+  /// and nothing new is invented: it is the desktop's own content, unstacked.
+  Widget _touchBody(
+    BuildContext context,
+    TextStyle? muted,
+    SemanticColors semantic,
+    UiDensity density,
+  ) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final aggregate = summary.label;
+    // Line two and three hang under the name, not under the folder glyph.
+    final indent = EdgeInsets.only(left: density.icon + Insets.sm);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(
+              expanded ? AppIcons.folderOpen : AppIcons.folder,
+              size: density.icon,
+              color: missing ? scheme.error : scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: Insets.sm),
+            Expanded(
+              child: Text(
+                name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: density.title(theme),
+              ),
+            ),
+            if (summary.running > 0) ...[
+              const SizedBox(width: Insets.sm),
+              _runningBadge(muted, semantic, density),
+            ],
+            if (onNewSession != null)
+              IconButton(
+                tooltip: 'New session in this project',
+                icon: const Icon(AppIcons.plus),
+                onPressed: onNewSession,
+              ),
+            if (showMenu)
+              SizedBox(
+                width: Touch.target,
+                height: Touch.target,
+                child: PopupMenuButton<String>(
+                  tooltip: 'Project actions',
+                  padding: EdgeInsets.zero,
+                  iconSize: Touch.icon,
+                  icon: const Icon(AppIcons.dotsThreeVertical),
+                  onSelected: onMenu,
+                  itemBuilder: (context) => menuItems,
+                ),
+              ),
+            const SizedBox(width: Insets.xs),
+            // The affordance a phone reads as "this opens": the same caret the
+            // desktop uses for a collapsed project, on the edge a thumb
+            // travels towards.
+            Icon(
+              AppIcons.caretRight,
+              size: density.icon,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+        if (aggregate != null) ...[
+          SizedBox(height: density.lineGap),
+          Padding(
+            padding: indent,
+            child: _aggregate(
+              aggregate,
+              muted,
+              semantic,
+              align: TextAlign.left,
+            ),
+          ),
+        ],
+        if (path.isNotEmpty || missing) ...[
+          SizedBox(height: density.lineGap),
+          Padding(
+            padding: indent,
+            child: _pathLine(context, muted, density),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _runningBadge(
+    TextStyle? muted,
+    SemanticColors semantic,
+    UiDensity density,
+  ) => Tooltip(
+    message: summary.running == 1
+        ? '1 session is running'
+        : '${summary.running} sessions are running',
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(AppIcons.circle, size: 8, color: semantic.working),
+        const SizedBox(width: 3),
+        Text('${summary.running}', style: muted?.copyWith(color: semantic.working)),
+      ],
+    ),
+  );
+
   Widget _line1(
     BuildContext context,
     TextStyle? muted,
-    SemanticColors semantic, {
+    SemanticColors semantic,
+    UiDensity density, {
     required bool wide,
     required bool roomy,
   }) {
@@ -158,29 +296,12 @@ class ProjectCard extends StatelessWidget {
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: density.title(theme),
           ),
         ),
         if (roomy && summary.running > 0) ...[
           const SizedBox(width: 6),
-          Tooltip(
-            message: summary.running == 1
-                ? '1 session is running'
-                : '${summary.running} sessions are running',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(AppIcons.circle, size: 8, color: semantic.working),
-                const SizedBox(width: 3),
-                Text(
-                  '${summary.running}',
-                  style: muted?.copyWith(color: semantic.working),
-                ),
-              ],
-            ),
-          ),
+          _runningBadge(muted, semantic, density),
         ],
         if (aggregate != null) ...[
           const SizedBox(width: 6),
@@ -205,27 +326,29 @@ class ProjectCard extends StatelessWidget {
             icon: const Icon(AppIcons.pushPinFill),
             onPressed: onTogglePin,
           ),
-        IconButton(
-          tooltip: 'New session in this project',
-          visualDensity: VisualDensity.compact,
-          iconSize: 15,
-          constraints: const BoxConstraints.tightFor(width: 24, height: 22),
-          padding: EdgeInsets.zero,
-          icon: const Icon(AppIcons.plus),
-          onPressed: onNewSession,
-        ),
-        SizedBox(
-          width: 22,
-          height: 22,
-          child: PopupMenuButton<String>(
-            tooltip: 'Project actions',
-            padding: EdgeInsets.zero,
+        if (onNewSession != null)
+          IconButton(
+            tooltip: 'New session in this project',
+            visualDensity: VisualDensity.compact,
             iconSize: 15,
-            icon: const Icon(AppIcons.dotsThreeVertical),
-            onSelected: onMenu,
-            itemBuilder: (context) => menuItems,
+            constraints: const BoxConstraints.tightFor(width: 24, height: 22),
+            padding: EdgeInsets.zero,
+            icon: const Icon(AppIcons.plus),
+            onPressed: onNewSession,
           ),
-        ),
+        if (showMenu)
+          SizedBox(
+            width: 22,
+            height: 22,
+            child: PopupMenuButton<String>(
+              tooltip: 'Project actions',
+              padding: EdgeInsets.zero,
+              iconSize: 15,
+              icon: const Icon(AppIcons.dotsThreeVertical),
+              onSelected: onMenu,
+              itemBuilder: (context) => menuItems,
+            ),
+          ),
       ],
     );
   }
@@ -239,7 +362,12 @@ class ProjectCard extends StatelessWidget {
   /// and that the app's one attention phrase appears here as part of a longer
   /// sentence rather than as a second widget saying exactly what the status bar
   /// says.
-  Widget _aggregate(String label, TextStyle? muted, SemanticColors semantic) {
+  Widget _aggregate(
+    String label,
+    TextStyle? muted,
+    SemanticColors semantic, {
+    TextAlign align = TextAlign.right,
+  }) {
     final attention = summary.attentionLabel;
     return Text.rich(
       TextSpan(
@@ -257,38 +385,47 @@ class ProjectCard extends StatelessWidget {
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      textAlign: TextAlign.right,
+      textAlign: align,
       style: muted,
     );
   }
 
-  Widget _line2(BuildContext context, TextStyle? muted) {
+  Widget _line2(BuildContext context, TextStyle? muted, UiDensity density) =>
+      Padding(
+        padding: const EdgeInsets.only(left: 22),
+        child: _pathLine(context, muted, density),
+      );
+
+  Widget _pathLine(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
     // A missing folder is said once, in the place the path would have been —
     // not as a second warning icon competing with the name.
-    final text = missing ? 'Folder not found — $path' : path;
-    return Padding(
-      padding: const EdgeInsets.only(left: 22),
-      child: Row(
-        children: [
-          if (missing) ...[
-            Icon(AppIcons.warningCircle, size: 11, color: scheme.error),
-            const SizedBox(width: 4),
-          ],
-          Expanded(
-            child: Tooltip(
-              message: text,
-              child: Text(
-                text,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                style: missing ? muted?.copyWith(color: scheme.error) : muted,
-              ),
+    final text = missing
+        ? (path.isEmpty ? 'Folder not found' : 'Folder not found — $path')
+        : path;
+    return Row(
+      children: [
+        if (missing) ...[
+          Icon(
+            AppIcons.warningCircle,
+            size: density.iconSmall,
+            color: scheme.error,
+          ),
+          const SizedBox(width: 4),
+        ],
+        Expanded(
+          child: Tooltip(
+            message: text,
+            child: Text(
+              text,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: missing ? muted?.copyWith(color: scheme.error) : muted,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

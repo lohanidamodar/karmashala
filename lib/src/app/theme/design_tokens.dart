@@ -163,7 +163,232 @@ class Radii {
   static const sm = 6.0;
   static const md = 10.0;
   static const lg = 14.0;
+
+  /// A bottom sheet's top corners — the one radius a pointer surface never
+  /// draws, because it has no bottom sheets.
+  static const sheet = 22.0;
+
   static const Radius card = Radius.circular(md);
+}
+
+/// What a finger needs, where [Chrome] says what a pointer needs.
+class Touch {
+  const Touch._();
+
+  /// The floor for anything tappable, in logical pixels. Material and the
+  /// accessibility guidelines agree on 48; a 26px [Chrome.row] is a miss.
+  static const target = 48.0;
+
+  /// The least space between two targets, so a thumb cannot hit both.
+  static const gap = Insets.sm;
+
+  /// A leading glyph on a touch row, and the same glyph inside a dense clause.
+  static const icon = 18.0;
+  static const iconSmall = 14.0;
+
+  /// A touch surface's app bar, at the default text scale.
+  static const appBar = 56.0;
+
+  /// [appBar] grown with the ambient text scale and never shrunk below the
+  /// design height — a 200% title does not fit 56px, and the screen's own name
+  /// is the worst thing to clip.
+  static double appBarOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(appBar).clamp(appBar, 96.0);
+}
+
+/// How dense the *shared* cards and rows draw themselves.
+///
+/// The Explorer's `SessionCard` and `ProjectCard` are the same widgets on the
+/// desktop and on the phone — one design language, adapted rather than forked.
+/// What differs between a mouse and a thumb is spacing, hit area and one step
+/// of the type ramp, and that is one decision, taken once, here.
+///
+/// **Read from a [UiDensityScope], not from the ambient width.** The Explorer
+/// pane is routinely narrower than the compact breakpoint on a 1440px desktop,
+/// and a widget test hosts a card in a 300px box; inferring density from
+/// whatever `MediaQuery` reports would make both of those touch surfaces. The
+/// root that *knows* what it is — the companion app — installs the scope,
+/// computing it from its own width via [UiDensity.forWidth]. Anything with no
+/// scope above it is [UiDensity.pointer], which is exactly what the desktop
+/// has always drawn.
+enum UiDensity {
+  /// A mouse aims: dense rows, 11–13px glyphs, no target floor.
+  pointer,
+
+  /// A thumb does not: 48dp targets, roomier padding, one step up the ramp.
+  touch;
+
+  /// The Material compact breakpoint (CLAUDE.md §6).
+  static const compactWidth = 600.0;
+
+  /// The density a surface [width] logical pixels wide calls for.
+  static UiDensity forWidth(double width) =>
+      width < compactWidth ? UiDensity.touch : UiDensity.pointer;
+
+  /// The density in effect for [context]; [UiDensity.pointer] with no scope.
+  static UiDensity of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<UiDensityScope>()
+          ?.density ??
+      UiDensity.pointer;
+
+  bool get isTouch => this == UiDensity.touch;
+
+  /// Horizontal and vertical padding inside a card or row.
+  double get padX => isTouch ? Insets.lg : 6;
+  double get padY => isTouch ? Insets.md : 6;
+
+  /// Between two lines of the same card.
+  double get lineGap => isTouch ? Insets.xs : 2;
+
+  /// Between a glyph and the word it labels.
+  double get glyphGap => isTouch ? 6 : 4;
+
+  /// A leading glyph beside a card's own text.
+  double get icon => isTouch ? Touch.icon : Chrome.iconSmall;
+
+  /// A glyph inside a dense clause — a worktree mark, a lineage warning.
+  double get iconSmall => isTouch ? Touch.iconSmall : 11;
+
+  /// The floor for a tappable row. Zero on a pointer surface, where the
+  /// Explorer's density is the point.
+  double get minRow => isTouch ? Touch.target : 0;
+
+  /// The strongest line on a card — a session's title, a project's name.
+  TextStyle? title(ThemeData theme) =>
+      (isTouch ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
+          ?.copyWith(fontWeight: FontWeight.w600);
+
+  /// The muted supporting lines. A phone steps up to `bodySmall` because 11px
+  /// is under the floor for text a thumb's owner reads at arm's length.
+  TextStyle? muted(ThemeData theme) =>
+      (isTouch ? theme.textTheme.bodySmall : theme.textTheme.labelSmall)
+          ?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            letterSpacing: 0,
+          );
+
+  /// [base] re-tuned for this density: **identity** for [UiDensity.pointer],
+  /// so the desktop keeps the theme it has always had.
+  ///
+  /// Everything here is a size, not a colour or a font — the two platforms
+  /// share one palette and one type ramp, and differ only in how much room a
+  /// finger needs. Material's own `visualDensity: compact` and `shrinkWrap`
+  /// tap targets are the first things undone: they shrink every button in the
+  /// app below the 48dp floor.
+  ThemeData themeFor(ThemeData base) {
+    if (!isTouch) return base;
+    final scheme = base.colorScheme;
+    final text = base.textTheme;
+    ButtonStyle grow(ButtonStyle? style) =>
+        (style ?? const ButtonStyle()).copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, Touch.target)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: Insets.xl),
+          ),
+          textStyle: WidgetStatePropertyAll(text.bodyMedium),
+        );
+
+    return base.copyWith(
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      appBarTheme: base.appBarTheme.copyWith(
+        toolbarHeight: Touch.appBar,
+        backgroundColor: scheme.surface,
+        titleTextStyle: text.titleLarge,
+        iconTheme: IconThemeData(
+          size: Touch.icon + 2,
+          color: scheme.onSurfaceVariant,
+        ),
+        actionsIconTheme: IconThemeData(
+          size: Touch.icon + 2,
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      iconTheme: base.iconTheme.copyWith(size: Touch.icon),
+      filledButtonTheme: FilledButtonThemeData(
+        style: grow(base.filledButtonTheme.style),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: grow(base.outlinedButtonTheme.style),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: grow(base.textButtonTheme.style),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(Touch.target),
+          iconSize: Touch.icon + 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Radii.sm),
+          ),
+        ),
+      ),
+      listTileTheme: base.listTileTheme.copyWith(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: Insets.lg,
+          vertical: Insets.xs,
+        ),
+        minVerticalPadding: Insets.md,
+        horizontalTitleGap: Insets.md,
+        titleTextStyle: text.titleMedium,
+        subtitleTextStyle: text.bodySmall,
+      ),
+      inputDecorationTheme: base.inputDecorationTheme.copyWith(
+        isDense: false,
+        contentPadding: const EdgeInsets.all(Insets.md),
+        helperMaxLines: 3,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(Radii.sheet),
+          ),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        indicatorColor: scheme.primary.withValues(alpha: 0.14),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      ),
+      dialogTheme: base.dialogTheme.copyWith(
+        insetPadding: const EdgeInsets.all(Insets.xl),
+      ),
+    );
+  }
+
+  /// Installs the density for [child] — computed from the ambient width, so a
+  /// phone in a fold-out or a tablet in landscape gets the right one — and
+  /// re-tunes the inherited theme to match.
+  ///
+  /// The one call a root makes; nothing below it decides for itself.
+  static Widget wrap(BuildContext context, Widget child) {
+    final density = UiDensity.forWidth(MediaQuery.sizeOf(context).width);
+    return UiDensityScope(
+      density: density,
+      child: Theme(data: density.themeFor(Theme.of(context)), child: child),
+    );
+  }
+}
+
+/// Declares the [UiDensity] for everything below it.
+class UiDensityScope extends InheritedWidget {
+  const UiDensityScope({
+    required this.density,
+    required super.child,
+    super.key,
+  });
+
+  final UiDensity density;
+
+  @override
+  bool updateShouldNotify(UiDensityScope oldWidget) =>
+      oldWidget.density != density;
 }
 
 /// Motion durations.
