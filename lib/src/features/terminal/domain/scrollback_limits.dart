@@ -37,6 +37,33 @@ const int kDurableScrollbackMaxLines = 2000;
 /// pathological pane write megabytes into SQLite.
 const int kDurableScrollbackMaxBytes = 256 * 1024;
 
+/// Lines a **cold** pane keeps parsed: the screen, and nothing above it.
+///
+/// The third budget, and the one the scale target actually asks about. A
+/// detached pane used to keep the same [kLiveScrollbackMaxLines] window as a
+/// visible one — `BufferLine`s of four 32-bit words per cell — for a pane with
+/// no view and, since visibility-aware ingestion landed, nothing writing into
+/// it either. Measured with `tool/benchmark/terminal_scale_bench.dart`: 117 MB
+/// of parsed cells across 100 panes holding only 600 lines each; at the live
+/// cap the same hundred panes would be roughly 2 GB.
+///
+/// So a cold pane keeps its *screen* and drops its scrollback, holding the
+/// history as encoded text instead — [kColdScrollbackMaxLines] of it, replayed
+/// when the session comes back. The screen is kept rather than cleared because
+/// it costs the same (a buffer can never hold fewer lines than its viewport)
+/// and it is what the status sources read: `terminalTailLines` infers "waiting
+/// for approval" from the bottom of the grid, and a detached session must not
+/// go dark just because nobody is looking at it.
+///
+/// The window is the durable one deliberately: what a cold pane holds is
+/// exactly what would be written to SQLite if the app quit now, so the pane
+/// pays one encode it already owed rather than keeping a second, differently
+/// sized copy.
+const int kColdScrollbackMaxLines = kDurableScrollbackMaxLines;
+
+/// Bytes a cold pane's parked window may occupy. See [kColdScrollbackMaxLines].
+const int kColdScrollbackMaxBytes = kDurableScrollbackMaxBytes;
+
 /// Lines kept by a pane that failed to spawn. It holds one error message and
 /// never grows, so it needs no real scrollback.
 const int kErrorPaneScrollbackMaxLines = 1000;

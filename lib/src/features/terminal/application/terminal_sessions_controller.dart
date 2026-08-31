@@ -638,11 +638,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         : terminalProfileFromId(existing.profileId);
     if (profile == null) return;
 
-    // A dormant pane hands back exactly what was restored; a pane whose process
-    // exited has to be re-encoded, because its buffer has moved on since.
-    final scrollback = existing is DormantTerminalInstance
-        ? existing.restoredScrollback
-        : encodeScrollback(existing.terminal);
+    // A dormant pane hands back exactly what was restored and a parked one the
+    // window it kept; a pane whose process exited with a live buffer has to be
+    // re-encoded, because that buffer has moved on since.
+    final scrollback =
+        _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
     final workingDirectory = existing.workingDirectory;
 
     _releasePane(paneId);
@@ -766,6 +766,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// emits an SGR run per style change), so the cache is what keeps a save
   /// proportional to what changed rather than to how much is open.
   String _scrollbackOf(String paneId, TerminalInstance instance) {
+    // Two panes already hold their scrollback as text, and re-encoding a buffer
+    // to get it back would be both slower and wrong. A **parked** pane gave its
+    // buffer up when it went cold, so the window it kept is its scrollback and
+    // nothing has been parsed into it since. A **dormant** pane is replayed
+    // history with no process: what was restored is what should be stored, with
+    // no second round-trip through the codec — and asking for it never builds
+    // the buffer the restore did not build.
+    final held = _heldScrollbackOf(instance);
+    if (held != null) {
+      _encoded[paneId] = held;
+      _dirty.remove(paneId);
+      return held;
+    }
     if (!_dirty.contains(paneId)) {
       final cached = _encoded[paneId];
       if (cached != null) return cached;
@@ -778,6 +791,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _dirty.remove(paneId);
     return encoded;
   }
+
+  /// The scrollback [instance] is already holding as text, if it is.
+  static String? _heldScrollbackOf(TerminalInstance instance) =>
+      switch (instance) {
+        DormantTerminalInstance(:final restoredScrollback) =>
+          restoredScrollback,
+        ParkableTerminalInstance(parkedScrollback: final parked?) => parked,
+        _ => null,
+      };
 
   StoredTerminalTab _storedTab(TerminalTab tab) {
     return StoredTerminalTab(
@@ -967,9 +989,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _adopt(String paneId, TerminalInstance instance) {
     _instances[paneId] = instance;
     _livenessMutated();
-    void markDirty() => _dirty.add(paneId);
-    _dirtyListeners[paneId] = markDirty;
-    instance.terminal.addListener(markDirty);
+    // A dormant pane is replayed history with nothing running behind it, so its
+    // buffer cannot change and there is nothing to track — and reaching for
+    // `terminal` here would build the very buffer the restore is avoiding.
+    if (instance is! DormantTerminalInstance) {
+      void markDirty() => _dirty.add(paneId);
+      _dirtyListeners[paneId] = markDirty;
+      instance.terminal.addListener(markDirty);
+    }
     // Republish when the process exits so the pane (and its tab, and the
     // background-session list) stops presenting itself as live. One rebuild per
     // process death — not per frame — so this costs nothing.

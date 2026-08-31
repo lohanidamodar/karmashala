@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
+import 'package:chitragupta/src/features/terminal/data/scrollback_park.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
@@ -11,6 +12,7 @@ import 'package:chitragupta/src/features/terminal/presentation/terminal_pane_vie
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 
 import '../../test/features/terminal/fake_instance.dart';
 import '../../test/terminal/perf/corpora.dart';
@@ -155,31 +157,135 @@ void main() {
     }
   }, timeout: const Timeout(Duration(minutes: 20)));
 
+  test('detached memory curve at N = 1, 10, 100 panes', () {
+    // T7: what a workspace holds in *parsed* form once its background sessions
+    // have no tab. A detached pane kept the same `Terminal` — up to
+    // kLiveScrollbackMaxLines of `BufferLine`s, each one a `Uint32List` of four
+    // words per cell — for a pane with no view and nothing reading it.
+    //
+    // Counted rather than sampled: `ProcessInfo.currentRss` cannot say what was
+    // released without a GC we cannot ask for, but every resident line and the
+    // exact bytes behind it can be walked. RSS is printed beside it as a second
+    // opinion, not as the claim.
+    int parsedLines(TerminalSessionsController controller, List<String> panes) {
+      var lines = 0;
+      for (final paneId in panes) {
+        final instance = controller.instanceFor(paneId);
+        if (instance == null) continue;
+        lines += instance.terminal.mainBuffer.lines.length;
+      }
+      return lines;
+    }
+
+    int parsedCellBytes(
+      TerminalSessionsController controller,
+      List<String> panes,
+    ) {
+      var bytes = 0;
+      for (final paneId in panes) {
+        final instance = controller.instanceFor(paneId);
+        if (instance == null) continue;
+        final lines = instance.terminal.mainBuffer.lines;
+        for (var i = 0; i < lines.length; i++) {
+          bytes += lines[i].data.lengthInBytes;
+        }
+      }
+      return bytes;
+    }
+
+    // ignore: avoid_print
+    print(
+      'N panes | live lines | live cells | detached lines | detached cells | RSS',
+    );
+    for (final n in [1, 10, 100]) {
+      final baselineRss = rssMegabytes();
+      final opened = openPanes(n);
+      final controller = opened.controller;
+      final container = opened.container;
+      final tabs = container.read(terminalSessionsControllerProvider).tabs;
+      final panes = [for (final tab in tabs) tab.layout.panes.single];
+
+      final liveLines = parsedLines(controller, panes);
+      final liveCells = parsedCellBytes(controller, panes);
+
+      // Every tab but the active one closed: their processes carry on with no
+      // view, which is what "detached" means and what the cold tier is for.
+      final activeTabId = container
+          .read(terminalSessionsControllerProvider)
+          .activeTabId;
+      for (final tab in tabs) {
+        if (tab.id != activeTabId) controller.closeTab(tab.id);
+      }
+
+      final detachedLines = parsedLines(controller, panes);
+      final detachedCells = parsedCellBytes(controller, panes);
+      final rss = rssMegabytes();
+
+      // ignore: avoid_print
+      print(
+        '${n.toString().padLeft(7)} | '
+        '${liveLines.toString().padLeft(10)} | '
+        '${'${liveCells ~/ (1024 * 1024)}MB'.padLeft(10)} | '
+        '${detachedLines.toString().padLeft(14)} | '
+        '${'${detachedCells ~/ (1024 * 1024)}MB'.padLeft(14)} | '
+        '${rss}MB (+${rss - baselineRss})',
+      );
+
+      container.dispose();
+      opened.database.close();
+    }
+  }, timeout: const Timeout(Duration(minutes: 20)));
+
   test('memory budget at the live scrollback cap', () {
     // What the scale target actually asks to be reasoned about: 100 panes at
     // kLiveScrollbackMaxLines, not one. Measured on a single pane and
     // multiplied, because filling a hundred to the cap is the thing being
     // costed, not something to do casually inside a benchmark.
+    //
+    // A raw `Terminal` rather than a `FakeTerminalInstance`: the fake caps
+    // itself at 1 000 lines, so this used to report a tenth of the cap it
+    // named.
     final before = rssMegabytes();
-    final probe = FakeTerminalInstance(
-      id: 'probe',
-      title: 'probe',
-      profileId: 'p',
-    );
-    probe.terminal.resize(paneColumns, paneRows);
+    final probe = Terminal(maxLines: kLiveScrollbackMaxLines)
+      ..resize(paneColumns, paneRows);
     final chunk =
         '${corpusText(PerfCorpus.colorizedLs, columns: paneColumns, rows: paneRows)}\r\n';
     for (var i = 0; i < kLiveScrollbackMaxLines; i += paneRows) {
-      probe.terminal.write(chunk);
+      probe.write(chunk);
     }
     final after = rssMegabytes();
+
+    // The exact parsed-cell cost of that pane, and what parking gives back.
+    // Counted rather than sampled, for the same reason as the detached curve:
+    // RSS cannot report a release we cannot force a GC for.
+    int cells() {
+      final lines = probe.mainBuffer.lines;
+      var bytes = 0;
+      for (var i = 0; i < lines.length; i++) {
+        bytes += lines[i].data.lengthInBytes;
+      }
+      return bytes;
+    }
+
+    final live = cells();
+    final liveLines = probe.mainBuffer.lines.length;
+    ScrollbackPark(probe).park();
+    final parked = cells();
+
     // ignore: avoid_print
     print(
-      'one pane at $kLiveScrollbackMaxLines lines x $paneColumns cols: '
+      'one pane at $liveLines lines x $paneColumns cols: '
       '~${after - before}MB resident; '
       '100 panes would be ~${(after - before) * 100}MB',
     );
-    probe.dispose();
+    // ignore: avoid_print
+    print(
+      'parsed cells: ${(live / (1024 * 1024)).toStringAsFixed(1)}MB live -> '
+      '${(parked / (1024 * 1024)).toStringAsFixed(1)}MB parked; '
+      '100 detached panes: '
+      '${(live * 100 / (1024 * 1024 * 1024)).toStringAsFixed(2)}GB -> '
+      '${(parked * 100 / (1024 * 1024)).toStringAsFixed(0)}MB',
+    );
     expect(after, greaterThan(0));
   }, timeout: const Timeout(Duration(minutes: 20)));
 
