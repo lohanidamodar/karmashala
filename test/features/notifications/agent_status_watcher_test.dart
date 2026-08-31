@@ -6,6 +6,7 @@ import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:chitragupta/src/features/notifications/application/agent_status_watcher.dart';
 import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
 import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
+import 'package:chitragupta/src/features/notifications/domain/inbox_item.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_request.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_settings.dart';
@@ -30,6 +31,8 @@ void main() {
   late Set<String> visible;
   late List<PendingNotification> notified;
   late List<SessionAttention> attention;
+  late List<InboxUpdate> inboxUpdates;
+  late SessionStatusRegistry registry;
 
   const key = AgentSessionKey(AgentIds.claudeCode, 'cli-1');
   const session = WatchedSession(
@@ -58,24 +61,29 @@ void main() {
     visible = const {};
     notified = [];
     attention = [];
+    inboxUpdates = [];
   });
 
   /// The watcher over a real registry. It used to gather statuses itself, one
   /// awaited transcript at a time; the assertions below are unchanged, because
   /// what it decides from a status did not.
-  AgentStatusWatcher build() => AgentStatusWatcher(
-    registry: SessionStatusRegistry(
+  AgentStatusWatcher build() {
+    registry = SessionStatusRegistry(
       statusService: service,
       agents: AgentRegistry.builtIn,
       loadSessions: () => watched,
       clock: clock,
-    ),
-    readSettings: () => settings,
-    isWindowFocused: () => focused,
-    visibleSessionIds: () => visible,
-    onAttention: (next) => attention = next,
-    onNotify: notified.add,
-  );
+    );
+    return AgentStatusWatcher(
+      registry: registry,
+      readSettings: () => settings,
+      isWindowFocused: () => focused,
+      visibleSessionIds: () => visible,
+      onAttention: (next) => attention = next,
+      onNotify: notified.add,
+      onInbox: inboxUpdates.add,
+    );
+  }
 
   /// Fires one Claude hook callback for [key].
   void hook(String event) => receiver.handle(
@@ -279,4 +287,144 @@ void main() {
     expect(notified, isEmpty);
     expect(attention, hasLength(1));
   });
+
+  group('hooks are the primary path', () {
+    /// One hook callback, delivered the way `/agent-hook` delivers it: recorded
+    /// by the receiver, then handed straight to the registry.
+    Future<void> hookArrives(String event, {AgentSessionKey? forKey}) async {
+      final target = forKey ?? key;
+      receiver.handle(
+        agentId: target.agentId,
+        event: event,
+        body: '{"session_id":"${target.sessionId}"}',
+      );
+      registry.hookReported(target);
+      await pumpMicrotasks();
+    }
+
+    test('an approval request is delivered without waiting for a poll', () async {
+      final watcher = build();
+      await hookArrives('PreToolUse');
+      await watcher.poll();
+      expect(notified, isEmpty, reason: 'starting work is not news');
+
+      final polls = inboxUpdates.length;
+      await hookArrives('Notification');
+
+      expect(
+        notified.single.reason,
+        NotificationReason.needsInput,
+        reason: 'the toast pipeline heard it as the callback landed',
+      );
+      expect(attention.single.kind, AttentionKind.needsInput);
+      expect(inboxUpdates.length, polls + 1);
+      expect(inboxUpdates.last.waiting.single.kind, AttentionKind.needsInput);
+      expect(
+        inboxUpdates.last.watched,
+        {key},
+        reason: 'a hook pass looked at one session and says so',
+      );
+      expect(watcher.lastStatusOf(key), AgentActivityStatus.awaitingApproval);
+    });
+
+    test('the poll that follows does not report it a second time', () async {
+      final watcher = build();
+      await hookArrives('PreToolUse');
+      await watcher.poll();
+      await hookArrives('Notification');
+      expect(notified, hasLength(1));
+
+      await watcher.poll();
+      await watcher.poll();
+
+      expect(notified, hasLength(1), reason: 'exactly once, either way round');
+      expect(attention, hasLength(1), reason: 'and it is still waiting');
+    });
+
+    test('a hook pass forgets nothing it did not look at', () async {
+      // "Not sampled this pass" must stay different from "no longer watched":
+      // only a full poll, which sees the whole watch set, may forget a session.
+      const other = AgentSessionKey(AgentIds.claudeCode, 'cli-2');
+      watched = [
+        session,
+        const WatchedSession(
+          key: other,
+          label: 'Write docs',
+          openId: 'row-2',
+          imported: true,
+        ),
+      ];
+      final watcher = build();
+      await hookArrives('PreToolUse');
+      await hookArrives('PreToolUse', forKey: other);
+      await watcher.poll();
+      expect(watcher.lastStatusOf(other), AgentActivityStatus.working);
+
+      await hookArrives('Stop');
+
+      expect(notified.single.session.label, 'Fix login');
+      expect(
+        watcher.lastStatusOf(other),
+        AgentActivityStatus.working,
+        reason: 'the session this pass ignored keeps its status',
+      );
+      // And it is still there to transition later.
+      await hookArrives('Stop', forKey: other);
+      expect(notified, hasLength(2));
+    });
+
+    test('a hook clearing an approval retires only its own session', () async {
+      const other = AgentSessionKey(AgentIds.claudeCode, 'cli-2');
+      watched = [
+        session,
+        const WatchedSession(
+          key: other,
+          label: 'Write docs',
+          openId: 'row-2',
+          imported: true,
+        ),
+      ];
+      final watcher = build();
+      await hookArrives('Notification');
+      await hookArrives('Notification', forKey: other);
+      await watcher.poll();
+      expect(attention, hasLength(2));
+
+      await hookArrives('PreToolUse');
+
+      expect(attention.map((a) => a.session.key), [other]);
+      expect(inboxUpdates.last.waiting, isEmpty);
+      expect(inboxUpdates.last.watched, {key});
+    });
+
+    test('a hook for a session nobody watches raises nothing', () async {
+      final watcher = build();
+      await watcher.poll();
+
+      await hookArrives(
+        'Notification',
+        forKey: const AgentSessionKey(AgentIds.claudeCode, 'stranger'),
+      );
+
+      expect(notified, isEmpty);
+      expect(attention, isEmpty);
+      expect(
+        registry.hookCycles,
+        1,
+        reason: 'it asked the loader once, in case adoption knows it',
+      );
+    });
+  });
+}
+
+/// Lets already-queued microtasks run, so a broadcast subscriber has been
+/// delivered everything published so far.
+Future<void> pumpMicrotasks() async {
+  for (var i = 0; i < 8; i++) {
+    await Future<void>.value();
+  }
+  // A broadcast controller delivers each event in its own microtask, so a burst
+  // of a hundred needs the whole queue drained, not eight turns of it. A
+  // zero-duration timer fires only once nothing is left in it.
+  await Future<void>.delayed(Duration.zero);
 }

@@ -31,6 +31,7 @@ import '../fanout/application/comparison_providers.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/environment_path.dart';
 import '../environments/domain/execution_environment.dart';
+import '../notifications/application/notification_providers.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
@@ -543,6 +544,19 @@ class LauncherControlServer {
             );
       } on Object catch (error) {
         _logger.warning('Session adoption from a hook failed: $error');
+      }
+      // The status pipeline's *primary* input. A hook is authoritative and
+      // already in memory, so the registry folds it in here — one map lookup
+      // and a precedence — rather than a poll discovering it up to five seconds
+      // later. Wrapped for the same reason as adoption above.
+      try {
+        reportAgentHook(
+          _container,
+          agentId: report.agentId,
+          sessionId: report.sessionId,
+        );
+      } on Object catch (error) {
+        _logger.warning('Applying a hook report to the registry failed: $error');
       }
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never block the agent that fired it.

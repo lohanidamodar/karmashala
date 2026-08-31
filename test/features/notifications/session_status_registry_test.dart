@@ -663,6 +663,131 @@ void main() {
       );
     });
   });
+
+  group('a hook does not wait for a cycle', () {
+    late SessionStatusRegistry registry;
+
+    /// One callback for `hook-$i`, exactly as `/agent-hook` delivers it.
+    void hookArrives(int i, String event) {
+      receiver.handle(
+        agentId: AgentIds.claudeCode,
+        event: event,
+        body: '{"session_id":"hook-$i"}',
+      );
+      registry.hookReported(AgentSessionKey(AgentIds.claudeCode, 'hook-$i'));
+    }
+
+    test('it is applied in place, with no cycle and no disk', () async {
+      addHookedSessions(1);
+      registry = build();
+      await registry.cycle();
+      final cycles = registry.cycles;
+      source.calls = 0;
+
+      hookArrives(0, 'Notification');
+
+      expect(
+        registry.reportForKey(
+          const AgentSessionKey(AgentIds.claudeCode, 'hook-0'),
+        )?.status,
+        AgentActivityStatus.awaitingApproval,
+      );
+      expect(registry.cycles, cycles, reason: 'no cycle was needed');
+      expect(registry.hookFastUpdates, 1);
+      expect(source.calls, 0, reason: 'and no probe');
+    });
+
+    test('saying the same thing again publishes nothing', () async {
+      addHookedSessions(1);
+      registry = build();
+      await registry.cycle();
+
+      final changes = <SessionStatusEntry>[];
+      final subscription = registry.hookChanges.listen(changes.add);
+      addTearDown(subscription.cancel);
+
+      hookArrives(0, 'Notification');
+      hookArrives(0, 'Notification');
+      hookArrives(0, 'Notification');
+      await pumpMicrotasks();
+
+      expect(registry.hookReports, 3);
+      expect(
+        changes,
+        hasLength(1),
+        reason: 'a chatty agent costs a lookup each and wakes nobody',
+      );
+      expect(registry.hookFastUpdates, 1);
+    });
+
+    test('a badge hears it without a cycle', () async {
+      addHookedSessions(1);
+      registry = build();
+      await registry.cycle();
+
+      final seen = <AgentActivityStatus>[];
+      final subscription = registry
+          .reportsFor('row-hook-0')
+          .listen((report) => seen.add(report.status));
+      addTearDown(subscription.cancel);
+      await pumpMicrotasks();
+      expect(seen, [AgentActivityStatus.working]);
+
+      hookArrives(0, 'Notification');
+      await pumpMicrotasks();
+
+      expect(seen, [
+        AgentActivityStatus.working,
+        AgentActivityStatus.awaitingApproval,
+      ]);
+    });
+
+    test('a stranger forces one cycle per floor, not one per callback', () async {
+      registry = build();
+      const stranger = AgentSessionKey(AgentIds.claudeCode, 'stranger');
+
+      for (var i = 0; i < 20; i++) {
+        registry.hookReported(stranger);
+      }
+      await registry.cycle();
+      expect(registry.hookReports, 20);
+      expect(registry.hookCycles, 1);
+
+      clock.now = clock.now.add(kHookCycleFloor);
+      registry.hookReported(stranger);
+      await registry.cycle();
+      expect(registry.hookCycles, 2);
+    });
+
+    for (final count in [100, 500]) {
+      test('$count sessions, one hook each, cost no cycle at all', () async {
+        addHookedSessions(count);
+        registry = build(
+          resolveTranscripts: () async {
+            fail('a hook must not be able to start a store scan');
+          },
+        );
+        await registry.cycle();
+        final cycles = registry.cycles;
+        source.calls = 0;
+
+        final changes = <SessionStatusEntry>[];
+        final subscription = registry.hookChanges.listen(changes.add);
+        addTearDown(subscription.cancel);
+
+        for (var i = 0; i < count; i++) {
+          hookArrives(i, 'Notification');
+        }
+        await pumpMicrotasks();
+
+        expect(changes, hasLength(count), reason: 'every one of them landed');
+        expect(registry.cycles, cycles);
+        expect(registry.probes, 0);
+        expect(registry.transcriptScans, 0);
+        expect(source.calls, 0);
+      });
+    }
+  });
 }
 
 /// Lets already-queued microtasks run, so a broadcast subscriber has been
@@ -671,4 +796,8 @@ Future<void> pumpMicrotasks() async {
   for (var i = 0; i < 8; i++) {
     await Future<void>.value();
   }
+  // A broadcast controller delivers each event in its own microtask, so a burst
+  // of a hundred needs the whole queue drained, not eight turns of it. A
+  // zero-duration timer fires only once nothing is left in it.
+  await Future<void>.delayed(Duration.zero);
 }
