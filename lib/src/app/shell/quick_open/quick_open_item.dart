@@ -11,6 +11,7 @@ import 'fuzzy_match.dart';
 /// session is a piece of work, a file is a place inside one.
 enum QuickOpenGroup {
   attention('Needs you'),
+  tabs('Open tabs'),
   sessions('Sessions'),
   workspace('Projects & repositories'),
   files('Files'),

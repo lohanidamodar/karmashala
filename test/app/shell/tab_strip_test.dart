@@ -1,0 +1,387 @@
+import 'package:chitragupta/src/app/shell/tab_picker.dart';
+import 'package:chitragupta/src/app/shell/workbench.dart';
+import 'package:chitragupta/src/app/theme/app_theme.dart';
+import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
+import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/projects/data/project_dao.dart';
+import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
+import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
+import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
+import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
+import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
+import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../features/terminal/fake_instance.dart';
+import '../../support/fake_command_runner.dart';
+import '../../support/fakes.dart';
+import '../../support/window_matrix.dart';
+import '../../support/fixtures.dart';
+
+void main() {
+  group('tabStripMetrics', () {
+    test('one tab draws at its natural width, not the whole strip', () {
+      final metrics = tabStripMetrics(1200, 1);
+
+      expect(metrics.extent, kMaxTabWidth);
+      expect(metrics.overflowing, isFalse);
+    });
+
+    test('tabs share the room evenly once there is not enough for the cap', () {
+      // Six into 900 is 150: under the cap, over the floor, so nothing is
+      // clipped and nothing scrolls.
+      final metrics = tabStripMetrics(900, 6);
+
+      expect(metrics.extent, 150);
+      expect(metrics.overflowing, isFalse);
+    });
+
+    test('they stop shrinking at the floor, and that is where overflow starts', () {
+      // 900 / 10 is 90, under the floor: the tenth tab is the one that does
+      // not fit.
+      expect(tabStripMetrics(900, 8).overflowing, isFalse);
+      final metrics = tabStripMetrics(900, 10);
+
+      expect(metrics.extent, kMinTabWidth);
+      expect(metrics.overflowing, isTrue);
+    });
+
+    test('a hundred tabs overflow every window the app supports', () {
+      // The 720px minimum window and a 4K one alike: this is why the picker
+      // exists and better scrolling does not answer it.
+      expect(tabStripMetrics(720, 100).overflowing, isTrue);
+      expect(tabStripMetrics(3840, 100).overflowing, isTrue);
+    });
+
+    test('an empty strip asks for nothing', () {
+      expect(tabStripMetrics(900, 0).overflowing, isFalse);
+    });
+  });
+
+  group('the strip', () {
+    late AppDatabase db;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = AppDatabase.memory();
+      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+      ProjectDao(db).insert(project());
+      RepositoryDao(db).insert(repository());
+      AgentInstallationDao(db).insert(agentInstallation());
+      container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          // A selected session brings the chat surface with it, and every one
+          // of these otherwise polls on a real timer or reaches the host. The
+          // strip does not care what they say — only that a session has two
+          // renderings and therefore a tab of its own.
+          sessionTranscriptProvider.overrideWith(
+            (ref) => Stream.value(const []),
+          ),
+          availableSystemTerminalsProvider.overrideWith(
+            (ref) async => const <SystemTerminal>[],
+          ),
+          hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+          sessionDeliveryProvider.overrideWith(
+            (ref, _) async => SessionDelivery.unknown,
+          ),
+          sessionContinuationProvider.overrideWith(
+            (ref, _) => SessionContinuation(
+              targets: const [],
+              plan: SessionForkPlan.decide(
+                descriptor: null,
+                agentName: 'Test CLI',
+              ),
+            ),
+          ),
+          agentSessionStatusProvider.overrideWith(
+            (ref, id) => Stream.value(
+              AgentStatusReport(
+                agentId: AgentIds.claudeCode,
+                sessionId: id,
+                status: AgentActivityStatus.idle,
+                observedAt: testTime,
+                source: AgentStatusSource.terminalGrid,
+                evidence: const [],
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+    });
+    tearDown(() => db.close());
+
+    TerminalSessionsController terminals() =>
+        container.read(terminalSessionsControllerProvider.notifier);
+
+    /// Opens [count] tabs, each in a directory of its own — which is what a
+    /// window of identically-titled `PowerShell` tabs has to be told apart by.
+    ///
+    /// Leaves the *first* tab active. Opening a tab activates it, so without
+    /// this every test would start with the strip already scrolled to the far
+    /// end and the two chevrons the other way round.
+    List<String> openTabs(int count) {
+      final ids = [
+        for (var i = 0; i < count; i++)
+          terminals().openTab(
+            TerminalProfile.powerShell,
+            workingDirectory: r'C:\src\p' '$i',
+          ),
+      ];
+      terminals().activateTab(ids.first);
+      return ids;
+    }
+
+    Future<void> pump(
+      WidgetTester tester, {
+      Size size = const Size(1200, 800),
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: const Scaffold(body: WorkbenchView()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    /// The strip's own scroll view — the only horizontal one in the workbench.
+    ListView strip(WidgetTester tester) => tester.widget<ListView>(
+      find.byWidgetPredicate(
+        (widget) => widget is ListView && widget.scrollDirection == Axis.horizontal,
+      ),
+    );
+
+    Finder overflowButton(int count) =>
+        find.byTooltip('All $count tabs — filter and switch');
+
+    /// The chevron itself: `byTooltip` lands on the tooltip the button builds
+    /// around itself, not on the button.
+    IconButton chevron(WidgetTester tester, String tip) => tester.widget(
+      find.ancestor(of: find.byTooltip(tip), matching: find.byType(IconButton)),
+    );
+
+    testWidgets('a strip that fits offers nothing to fix it', (tester) async {
+      openTabs(4);
+      await pump(tester);
+
+      expect(find.byTooltip('Earlier tabs'), findsNothing);
+      expect(find.byTooltip('Later tabs'), findsNothing);
+      expect(overflowButton(4), findsNothing);
+      // And it does not scroll, because there is nothing off the end.
+      expect(strip(tester).controller!.position.maxScrollExtent, 0);
+    });
+
+    testWidgets('overflow brings out the chevrons and the picker button', (
+      tester,
+    ) async {
+      openTabs(30);
+      await pump(tester);
+
+      expect(overflowButton(30), findsOneWidget);
+      expect(find.byTooltip('Later tabs'), findsOneWidget);
+      // At the left end there is nothing earlier to reach, so that chevron is
+      // there but does nothing — a live button that scrolls nowhere is worse.
+      expect(find.byTooltip('Earlier tabs'), findsOneWidget);
+      expect(chevron(tester, 'Earlier tabs').onPressed, isNull);
+      expect(chevron(tester, 'Later tabs').onPressed, isNotNull);
+    });
+
+    testWidgets('a chevron scrolls, and turns the other one on', (
+      tester,
+    ) async {
+      openTabs(30);
+      await pump(tester);
+      expect(strip(tester).controller!.offset, 0);
+
+      await tester.tap(find.byTooltip('Later tabs'));
+      await tester.pumpAndSettle();
+
+      expect(strip(tester).controller!.offset, greaterThan(0));
+      expect(chevron(tester, 'Earlier tabs').onPressed, isNotNull);
+    });
+
+    testWidgets('the picker lists every tab and switches to the one picked', (
+      tester,
+    ) async {
+      final ids = openTabs(30);
+      await pump(tester);
+
+      await tester.tap(overflowButton(30));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TabPicker), findsOneWidget);
+      expect(find.text('30 tabs'), findsOneWidget);
+      // Thirty tabs called PowerShell, told apart by where they are.
+      await tester.enterText(find.byType(TextField), 'p27');
+      await tester.pumpAndSettle();
+      expect(find.text('1 tab'), findsOneWidget);
+      await tester.tap(find.text(r'C:\src\p27'));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(terminalSessionsControllerProvider).activeTabId,
+        ids[27],
+      );
+      expect(find.byType(TabPicker), findsNothing);
+    });
+
+    testWidgets('closing from the picker closes that tab and no other', (
+      tester,
+    ) async {
+      final ids = openTabs(30);
+      await pump(tester);
+
+      await tester.tap(overflowButton(30));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'p27');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close PowerShell'));
+      await tester.pumpAndSettle();
+
+      final open = container
+          .read(terminalSessionsControllerProvider)
+          .tabs
+          .map((tab) => tab.id);
+      expect(open, isNot(contains(ids[27])));
+      expect(open.length, 29);
+      // The list is still up, one row shorter, and nothing was switched to.
+      expect(find.byType(TabPicker), findsOneWidget);
+      expect(find.text('No tab matches.'), findsOneWidget);
+    });
+
+    testWidgets('the session in a tab is what the filter finds it by', (
+      tester,
+    ) async {
+      final ids = openTabs(30);
+      final paneId = container
+          .read(terminalSessionsControllerProvider)
+          .tabs[12]
+          .focusedPaneId;
+      SessionDao(db)
+        ..insert(session(id: 's1', title: 'Fix login redirect'))
+        ..updatePaneId('s1', paneId);
+      await pump(tester);
+
+      await tester.tap(overflowButton(30));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'login');
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 tab'), findsOneWidget);
+      await tester.tap(find.textContaining('Fix login redirect'));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(terminalSessionsControllerProvider).activeTabId,
+        ids[12],
+      );
+    });
+
+    testWidgets('stepping tabs scrolls the one you land on into view', (
+      tester,
+    ) async {
+      // What `Ctrl+PageUp`/`Ctrl+PageDown` invoke. Stepping back from the first
+      // tab wraps to the last, which is the furthest a step can ever land from
+      // where the strip is scrolled to.
+      openTabs(30);
+      await pump(tester);
+      expect(strip(tester).controller!.offset, 0);
+
+      terminals().previousTab();
+      await tester.pumpAndSettle();
+
+      final scroll = strip(tester).controller!.position;
+      final band = 29 * kMinTabWidth;
+      expect(scroll.pixels, lessThanOrEqualTo(band));
+      expect(
+        scroll.pixels + scroll.viewportDimension,
+        greaterThanOrEqualTo(band + kMinTabWidth),
+      );
+
+      // And forward again, back to the first tab at the other end.
+      terminals().nextTab();
+      await tester.pumpAndSettle();
+      expect(strip(tester).controller!.offset, 0);
+    });
+
+    testWidgets('a hundred tabs in the minimum window still work', (
+      tester,
+    ) async {
+      // 720x560 is the smallest window the app supports. Nothing may overflow
+      // (the test fails on a render overflow of its own accord), the way to
+      // open another tab may not be pushed off the end, and the picker has to
+      // be there — a hundred tabs is the case it exists for.
+      openTabs(100);
+      await pump(tester, size: const Size(720, 560));
+
+      expect(overflowButton(100), findsOneWidget);
+      expect(find.byTooltip('New terminal tab'), findsOneWidget);
+      // Virtualised: a hundred tabs are not a hundred built chips.
+      expect(find.text('PowerShell').evaluate().length, lessThan(100));
+
+      await tester.tap(overflowButton(100));
+      await tester.pumpAndSettle();
+      expect(find.text('100 tabs'), findsOneWidget);
+    });
+
+    testWidgets('a hundred tabs clip nothing and name every control', (
+      tester,
+    ) async {
+      openTabs(100);
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: const Scaffold(body: WorkbenchView()),
+          ),
+        ),
+        because: 'a hundred sessions is the size the strip is designed for',
+      );
+    });
+
+    testWidgets('the conversation is a tab in the list like any other', (
+      tester,
+    ) async {
+      openTabs(30);
+      final paneId = container
+          .read(terminalSessionsControllerProvider)
+          .tabs
+          .first
+          .focusedPaneId;
+      SessionDao(db)
+        ..insert(session(id: 's1', title: 'Read the report'))
+        ..updatePaneId('s1', paneId);
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+
+      // The conversation chip is one more tab, so the count is 31.
+      await tester.tap(overflowButton(31));
+      await tester.pumpAndSettle();
+      expect(find.text('Conversation'), findsOneWidget);
+    });
+  });
+}

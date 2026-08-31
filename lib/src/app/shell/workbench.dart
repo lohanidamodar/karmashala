@@ -17,6 +17,9 @@ import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
+import 'quick_open/quick_open_item.dart';
+import 'quick_open/quick_open_list.dart';
+import 'tab_picker.dart';
 
 /// The primary content area: one tab strip across the top, the work underneath.
 ///
@@ -124,7 +127,6 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 
     final scheme = Theme.of(context).colorScheme;
     final session = _selectedSession();
-    final terminals = ref.watch(terminalSessionsControllerProvider);
     // With nothing to read, the workbench is the terminal — an empty middle
     // would be worse than the surface the app is primarily about.
     final onTerminal = ref.watch(terminalVisibleProvider) || session == null;
@@ -135,7 +137,6 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         _TabStrip(
           session: session,
           onTerminal: onTerminal,
-          terminals: terminals,
           onShowSession: _showChat,
           onShowTerminal: _showTerminalFor,
         ),
@@ -261,26 +262,78 @@ class _PaneSessionDock extends ConsumerWidget {
   }
 }
 
+/// The widest a tab draws, matching [WorkbenchTabChip]'s own cap, and the
+/// narrowest it shrinks to before the strip gives up and scrolls.
+///
+/// The floor is what makes overflow *rare*: a tab has to keep its liveness
+/// mark, its close button and enough of its title to be told from the tab
+/// beside it, and 112px is where that stops being true.
+const double kMaxTabWidth = 220.0;
+const double kMinTabWidth = 112.0;
+
+/// How wide each tab draws in a strip [width] logical pixels wide holding
+/// [count] of them, and whether even at their narrowest they do not fit.
+///
+/// **Tabs are uniform**, the way a browser's and a terminal's are: they share
+/// the room evenly and shrink as more open, rather than each taking whatever
+/// its title happens to need. Two properties follow, and both are the reason
+/// for it. Overflow becomes a *predicate* — `count * kMinTabWidth > width` —
+/// instead of something only a laid-out row can answer; and the offset of tab
+/// *i* is `i * extent`, which is what lets the strip scroll a tab into view
+/// without having built the chip first. A hundred tabs are virtualised, so the
+/// tab a chord just moved to is usually one that does not exist yet.
+({double extent, bool overflowing}) tabStripMetrics(double width, int count) {
+  if (count <= 0) return (extent: kMaxTabWidth, overflowing: false);
+  return (
+    extent: (width / count).clamp(kMinTabWidth, kMaxTabWidth),
+    overflowing: count * kMinTabWidth > width,
+  );
+}
+
+/// One tab in the strip.
+///
+/// The chip is a closure, not a widget: at a hundred tabs the strip must build
+/// only the five or six on screen, and a list of built chips would be exactly
+/// the eager `ListView(children: [...])` the performance audit named.
+class _StripTab {
+  const _StripTab({required this.active, required this.chip});
+
+  final bool active;
+  final Widget Function() chip;
+}
+
+/// The workbench tab strip.
+///
+/// **What overflow is for.** The app is built for a hundred live terminals
+/// (`docs/ARCHITECTURE.md`), and a horizontal strip is hopeless at a hundred
+/// tabs however well it scrolls — so the answer to "I cannot reach my tabs"
+/// cannot be better scrolling. It is [TabPicker]: a filterable list of every
+/// tab, reached from a button that appears exactly when the strip stops being
+/// enough. The chevrons either side are the answer to the *other* half of the
+/// complaint — that reaching a tab two along needed a horizontal mouse wheel —
+/// and they only earn their place while the overflow is mild.
+///
+/// Everything to the right of the tabs — the permission chip, the view toggle,
+/// the terminal's own toolbar with **new tab** in it, focus mode — sits outside
+/// the scrolling region, so no number of tabs can push the way to make another
+/// one off the end of the strip.
 class _TabStrip extends ConsumerWidget {
   const _TabStrip({
     required this.session,
     required this.onTerminal,
-    required this.terminals,
     required this.onShowSession,
     required this.onShowTerminal,
   });
 
   final _WorkbenchSession? session;
   final bool onTerminal;
-  final TerminalSessionsState terminals;
   final VoidCallback onShowSession;
   final ValueChanged<String?> onShowTerminal;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-    final active = terminals.activeTabId;
+    final tabs = _tabs(ref);
 
     return Container(
       height: Chrome.tabStrip,
@@ -288,57 +341,13 @@ class _TabStrip extends ConsumerWidget {
       child: Row(
         children: [
           Expanded(
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                if (session != null)
-                  WorkbenchTabChip(
-                    selected: !onTerminal,
-                    onTap: onShowSession,
-                    label: session!.title,
-                    tooltip: 'Conversation · ${session!.title}',
-                    leading: Padding(
-                      padding: const EdgeInsets.only(right: Insets.sm),
-                      child: session!.native
-                          ? AgentStatusBadge(sessionId: session!.id)
-                          : const Icon(
-                              AppIcons.clockCounterClockwise,
-                              size: Chrome.iconSmall,
-                            ),
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Close conversation',
-                      iconSize: 13,
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(
-                        minWidth: 20,
-                        minHeight: 20,
-                      ),
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(AppIcons.x),
-                      onPressed: () {
-                        ref
-                            .read(selectedSessionIdProvider.notifier)
-                            .select(null);
-                        ref
-                            .read(selectedImportedSessionIdProvider.notifier)
-                            .select(null);
-                      },
-                    ),
-                  ),
-                for (final tab in terminals.tabs)
-                  TerminalTabChip(
-                    title: sessions.titleForTab(tab.id),
-                    liveness: sessions.livenessForTab(tab.id),
-                    selected: onTerminal && tab.id == active,
-                    onTap: () {
-                      sessions.activateTab(tab.id);
-                      onShowTerminal(null);
-                    },
-                    onClose: () => sessions.closeTab(tab.id),
-                    onEnd: () => sessions.closeTab(tab.id, detach: false),
-                  ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) => _TabRail(
+                tabs: tabs,
+                width: constraints.maxWidth,
+                activeIndex: tabs.indexWhere((tab) => tab.active),
+                entries: _entries,
+              ),
             ),
           ),
           // The permission mode belongs to the session, not to one of its two
@@ -357,6 +366,334 @@ class _TabStrip extends ConsumerWidget {
           const _ZenButton(),
           const SizedBox(width: Insets.xs),
         ],
+      ),
+    );
+  }
+
+  /// Every tab in the strip, left to right: the selected session's conversation
+  /// when there is one, then the terminal tabs.
+  ///
+  /// Deliberately cheap — a title and a liveness per tab, no database. It runs
+  /// on every terminal state publish, which at a hundred panes is often.
+  List<_StripTab> _tabs(WidgetRef ref) {
+    final terminals = ref.watch(terminalSessionsControllerProvider);
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final active = terminals.activeTabId;
+    return [
+      if (session != null)
+        _StripTab(
+          active: !onTerminal,
+          chip: () => WorkbenchTabChip(
+            selected: !onTerminal,
+            onTap: onShowSession,
+            label: session!.title,
+            tooltip: 'Conversation · ${session!.title}',
+            leading: Padding(
+              padding: const EdgeInsets.only(right: Insets.sm),
+              child: session!.native
+                  ? AgentStatusBadge(sessionId: session!.id)
+                  : const Icon(
+                      AppIcons.clockCounterClockwise,
+                      size: Chrome.iconSmall,
+                    ),
+            ),
+            trailing: IconButton(
+              tooltip: 'Close conversation',
+              iconSize: Chrome.iconSmall,
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+              padding: EdgeInsets.zero,
+              icon: const Icon(AppIcons.x),
+              onPressed: () => _closeConversation(ref),
+            ),
+          ),
+        ),
+      for (final tab in terminals.tabs)
+        _StripTab(
+          active: onTerminal && tab.id == active,
+          chip: () => TerminalTabChip(
+            title: sessions.titleForTab(tab.id),
+            liveness: sessions.livenessForTab(tab.id),
+            selected: onTerminal && tab.id == active,
+            onTap: () => _activate(sessions, tab.id),
+            onClose: () => sessions.closeTab(tab.id),
+            onEnd: () => sessions.closeTab(tab.id, detach: false),
+          ),
+        ),
+    ];
+  }
+
+  /// The same tabs as [_tabs], as [TabPicker] lists them.
+  ///
+  /// Built only while the picker is open, because this is the expensive half:
+  /// telling two `zsh` tabs apart means knowing which session runs in which
+  /// pane, and that is a query the strip itself never needs.
+  List<TabEntry> _entries(WidgetRef ref) {
+    final terminals = ref.watch(terminalSessionsControllerProvider);
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
+    ref.watch(sessionsRevisionProvider);
+    final titles = <String, String>{
+      for (final record in ref.read(sessionDaoProvider).getAll())
+        if (record.paneId != null) record.paneId!: record.title,
+    };
+    final active = terminals.activeTabId;
+    return [
+      if (session != null)
+        TabEntry(
+          item: QuickOpenItem(
+            id: 'conversation/${session!.id}',
+            group: QuickOpenGroup.tabs,
+            title: session!.title,
+            subtitle: 'Conversation',
+            icon: AppIcons.chatCircle,
+            onSelect: onShowSession,
+          ),
+          active: !onTerminal,
+        ),
+      for (final tab in terminals.tabs)
+        TabEntry(
+          item: QuickOpenItem(
+            id: 'tab/${tab.id}',
+            group: QuickOpenGroup.tabs,
+            title: sessions.titleForTab(tab.id),
+            subtitle: _whereabouts(tab, titles, sessions),
+            detail: sessions.livenessForTab(tab.id).isLive
+                ? null
+                : 'not running',
+            icon: AppIcons.terminal,
+            onSelect: () => _activate(sessions, tab.id),
+          ),
+          active: onTerminal && tab.id == active,
+          onClose: () => sessions.closeTab(tab.id),
+        ),
+    ];
+  }
+
+  /// Where a tab is: the session running in its focused pane, the directory
+  /// that pane is in, or both.
+  ///
+  /// Without it a window full of `zsh` tabs is a list of identical rows, and a
+  /// picker you cannot pick from is not an answer to anything.
+  static String? _whereabouts(
+    TerminalTab tab,
+    Map<String, String> sessionTitles,
+    TerminalSessionsController sessions,
+  ) {
+    final paneId = tab.focusedPaneId;
+    final parts = [
+      ?sessionTitles[paneId],
+      ?sessions.instanceFor(paneId)?.workingDirectory,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  void _activate(TerminalSessionsController sessions, String tabId) {
+    sessions.activateTab(tabId);
+    onShowTerminal(null);
+  }
+
+  void _closeConversation(WidgetRef ref) {
+    ref.read(selectedSessionIdProvider.notifier).select(null);
+    ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+  }
+}
+
+/// The scrolling part of the strip, and the affordances for what will not fit.
+class _TabRail extends StatefulWidget {
+  const _TabRail({
+    required this.tabs,
+    required this.width,
+    required this.activeIndex,
+    required this.entries,
+  });
+
+  final List<_StripTab> tabs;
+
+  /// The room the tabs have, which decides how wide each draws and whether
+  /// there is overflow at all. A field rather than something read from the
+  /// context so a resize is a *prop change* the state can react to.
+  final double width;
+
+  final int activeIndex;
+  final List<TabEntry> Function(WidgetRef ref) entries;
+
+  @override
+  State<_TabRail> createState() => _TabRailState();
+}
+
+class _TabRailState extends State<_TabRail> {
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    // The controller has no position until the first layout, so neither the
+    // reveal nor the chevrons can know anything until a frame has been drawn.
+    _afterLayout();
+  }
+
+  @override
+  void didUpdateWidget(_TabRail old) {
+    super.didUpdateWidget(old);
+    if (widget.activeIndex == old.activeIndex &&
+        widget.width == old.width &&
+        widget.tabs.length == old.tabs.length) {
+      return;
+    }
+    _afterLayout();
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Reveals the active tab and refreshes the chevrons once the frame this
+  /// change belongs to has been laid out.
+  ///
+  /// Deferred for the reason quick open defers its own reveal: until the list
+  /// has been laid out the scroll extents still describe the *previous* one,
+  /// and clamping a target against those is how a strip ends up scrolled
+  /// somewhere nobody asked for.
+  void _afterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(_revealActive);
+    });
+  }
+
+  /// Scrolls the active tab into view.
+  ///
+  /// The one thing a plain scrolling row does not do for itself, and the reason
+  /// `Ctrl+PageUp`/`Ctrl+PageDown` were half-useless: stepping to a tab you
+  /// cannot see is stepping to nowhere.
+  void _revealActive() {
+    final index = widget.activeIndex;
+    if (index < 0 || !_scroll.hasClients) return;
+    final extent = tabStripMetrics(widget.width, widget.tabs.length).extent;
+    final target = revealOffset(
+      position: _scroll.position,
+      leading: index * extent,
+      extent: extent,
+    );
+    if (target != null) _scroll.jumpTo(target);
+  }
+
+  /// Scrolls most of a screenful, so a click lands somewhere recognisable
+  /// rather than one tab along.
+  void _page(bool forward) {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    final step = position.viewportDimension * 0.8;
+    _scroll.animateTo(
+      (position.pixels + (forward ? step : -step)).clamp(
+        0.0,
+        position.maxScrollExtent,
+      ),
+      duration: Motion.base,
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = tabStripMetrics(widget.width, widget.tabs.length);
+    final list = ListView.builder(
+      controller: _scroll,
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.zero,
+      itemExtent: metrics.extent,
+      itemCount: widget.tabs.length,
+      itemBuilder: (context, index) => widget.tabs[index].chip(),
+    );
+    if (!metrics.overflowing) return list;
+    return Row(
+      children: [
+        _chevron(forward: false),
+        Expanded(child: list),
+        _chevron(forward: true),
+        _OverflowButton(count: widget.tabs.length, entries: widget.entries),
+      ],
+    );
+  }
+
+  Widget _chevron({required bool forward}) => ListenableBuilder(
+    listenable: _scroll,
+    builder: (context, _) {
+      final position = _scroll.hasClients ? _scroll.position : null;
+      // A position exists from the moment the controller is attached, but its
+      // pixels and extents do not exist until the viewport has been laid out —
+      // and reading `maxScrollExtent` before then throws. Both chevrons are
+      // simply off for that one frame.
+      //
+      // Half a pixel of slack at the ends: a scroll that has arrived can sit a
+      // rounding error short, and a chevron that stays enabled at the end is a
+      // button that does nothing.
+      final can =
+          position != null &&
+          position.hasPixels &&
+          position.hasContentDimensions &&
+          (forward
+              ? position.pixels < position.maxScrollExtent - 0.5
+              : position.pixels > 0.5);
+      // Shaped like the terminal toolbar's buttons at the other end of the
+      // strip rather than like a tab's own close button: these are chrome that
+      // acts on the strip, and they are the two the mouse aims at most.
+      return IconButton(
+        tooltip: forward ? 'Later tabs' : 'Earlier tabs',
+        icon: Icon(
+          forward ? AppIcons.caretRight : AppIcons.caretLeft,
+          size: Chrome.icon,
+        ),
+        onPressed: can ? () => _page(forward) : null,
+      );
+    },
+  );
+}
+
+/// The way to every tab the strip cannot show, and the only affordance here
+/// that still works at a hundred.
+class _OverflowButton extends ConsumerWidget {
+  const _OverflowButton({required this.count, required this.entries});
+
+  final int count;
+  final List<TabEntry> Function(WidgetRef ref) entries;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Tooltip(
+      // The name Narrator reads, so it has to say what the control *does*, not
+      // only how many there are.
+      message: 'All $count tabs — filter and switch',
+      child: InkWell(
+        onTap: () => TabPicker.show(context, entries),
+        child: Container(
+          height: Chrome.tabStrip,
+          padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: scheme.outlineVariant)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                AppIcons.listMagnifyingGlass,
+                size: Chrome.icon,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: Insets.xs),
+              Text(
+                '$count',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

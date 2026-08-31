@@ -9,6 +9,7 @@ import '../../theme/app_icons.dart';
 import '../../theme/design_tokens.dart';
 import 'quick_open_cache.dart';
 import 'quick_open_item.dart';
+import 'quick_open_list.dart';
 import 'quick_open_sources.dart';
 import 'repo_file_index.dart';
 
@@ -30,10 +31,8 @@ final quickOpenRequestProvider = NotifierProvider<QuickOpenRequest, int>(
   QuickOpenRequest.new,
 );
 
-/// Row geometry. Fixed so the list can be scrolled to an arbitrary selection
-/// without waiting for it to be laid out — a keyboard-driven list that can only
-/// reveal rows it has already built is a list that jumps.
-const _rowHeight = 42.0;
+/// A section header's height. The rows themselves are [quickOpenRowHeight],
+/// shared with every other filtered list in the shell.
 const _headerHeight = 24.0;
 
 /// One search box over the whole workspace: projects, repositories, sessions,
@@ -217,7 +216,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       offset += _headerHeight;
       for (var i = 0; i < section.results.length; i++) {
         if (seen == index) return offset;
-        offset += _rowHeight;
+        offset += quickOpenRowHeight;
         seen++;
       }
     }
@@ -238,15 +237,12 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
 
   void _revealSelected() {
     if (!_scroll.hasClients || _flat.isEmpty) return;
-    final top = _offsetOf(_selected);
-    final bottom = top + _rowHeight;
-    final view = _scroll.position.viewportDimension;
-    final current = _scroll.offset;
-    final target = bottom > current + view
-        ? bottom - view
-        : (top < current ? top : null);
-    if (target == null) return;
-    _scroll.jumpTo(target.clamp(0.0, _scroll.position.maxScrollExtent));
+    final target = revealOffset(
+      position: _scroll.position,
+      leading: _offsetOf(_selected),
+      extent: quickOpenRowHeight,
+    );
+    if (target != null) _scroll.jumpTo(target);
   }
 
   void _activate() {
@@ -314,7 +310,12 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _SearchField(controller: _controller, onChanged: _onQueryChanged),
+              QuickOpenSearchField(
+                controller: _controller,
+                onChanged: _onQueryChanged,
+                hintText:
+                    'Go to a session, file, branch, PR — or run a command',
+              ),
               const Divider(height: 1),
               Flexible(
                 child: _flat.isEmpty
@@ -354,8 +355,12 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       for (final result in section.results) {
         final index = seen++;
         widgets.add(
-          _ResultRow(
-            result: result,
+          QuickOpenRow(
+            icon: result.item.icon,
+            title: result.item.title,
+            titlePositions: result.titlePositions,
+            subtitle: result.item.subtitle,
+            detail: result.item.detail,
             selected: index == _selected,
             onTap: () {
               setState(() => _selected = index);
@@ -432,29 +437,6 @@ class QuickOpenButton extends StatelessWidget {
   }
 }
 
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.controller, required this.onChanged});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(Insets.sm),
-    child: TextField(
-      controller: controller,
-      autofocus: true,
-      decoration: const InputDecoration(
-        prefixIcon: Icon(AppIcons.magnifyingGlass, size: 18),
-        hintText: 'Go to a session, file, branch, PR — or run a command',
-        border: OutlineInputBorder(),
-        isDense: true,
-      ),
-      onChanged: onChanged,
-    ),
-  );
-}
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label});
 
@@ -474,147 +456,6 @@ class _SectionHeader extends StatelessWidget {
           letterSpacing: 0.6,
         ),
       ),
-    );
-  }
-}
-
-class _ResultRow extends StatelessWidget {
-  const _ResultRow({
-    required this.result,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final QuickOpenResult result;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final item = result.item;
-    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          height: _rowHeight,
-          // Selection is a wash plus a rule, not a filled bar: the row has to
-          // stay readable and the accent is the only colour in the palette.
-          decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withValues(alpha: 0.10)
-                : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: selected ? scheme.primary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-          child: Row(
-            children: [
-              Icon(item.icon, size: Chrome.icon, color: foreground),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _Highlighted(
-                      text: item.title,
-                      positions: result.titlePositions,
-                      style: theme.textTheme.bodyMedium!,
-                      accent: scheme.primary,
-                    ),
-                    if (item.subtitle != null)
-                      Text(
-                        item.subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (item.detail != null) ...[
-                const SizedBox(width: Insets.sm),
-                Text(
-                  item.detail!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The title with the matched characters emphasised, so a fuzzy hit explains
-/// itself instead of looking like a mistake.
-class _Highlighted extends StatelessWidget {
-  const _Highlighted({
-    required this.text,
-    required this.positions,
-    required this.style,
-    required this.accent,
-  });
-
-  final String text;
-  final List<int> positions;
-  final TextStyle style;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    if (positions.isEmpty) {
-      return Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: style,
-      );
-    }
-    final marked = positions.toSet();
-    final spans = <TextSpan>[];
-    final buffer = StringBuffer();
-    bool? runIsMatch;
-    void flush() {
-      if (buffer.isEmpty) return;
-      spans.add(
-        TextSpan(
-          text: buffer.toString(),
-          style: runIsMatch == true
-              ? style.copyWith(color: accent, fontWeight: FontWeight.w700)
-              : style,
-        ),
-      );
-      buffer.clear();
-    }
-
-    for (var i = 0; i < text.length; i++) {
-      final isMatch = marked.contains(i);
-      if (runIsMatch != isMatch) {
-        flush();
-        runIsMatch = isMatch;
-      }
-      buffer.write(text[i]);
-    }
-    flush();
-    return Text.rich(
-      TextSpan(children: spans),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
     );
   }
 }

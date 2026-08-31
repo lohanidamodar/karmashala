@@ -8,6 +8,8 @@ import 'package:chitragupta/src/features/github/application/github_providers.dar
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
 import 'package:flutter/material.dart';
@@ -34,7 +36,13 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<ProviderContainer> open(WidgetTester tester) async {
+  /// Opens the palette. [before] runs once the workspace is selected and
+  /// before the palette builds its items — which is when anything it has to
+  /// find already has to exist.
+  Future<ProviderContainer> open(
+    WidgetTester tester, {
+    void Function(ProviderContainer container)? before,
+  }) async {
     final container = ProviderContainer(
       overrides: fakeTerminalOverrides(database: db),
     );
@@ -58,6 +66,7 @@ void main() {
     // subject; the shell selects one as soon as a project is picked.
     container.read(selectedProjectIdProvider.notifier).select('p1');
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
+    before?.call(container);
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     return container;
@@ -247,6 +256,64 @@ void main() {
     await type(tester, 'zzzzqqqq');
 
     expect(find.text('Nothing matches.'), findsOneWidget);
+  });
+
+  testWidgets('a terminal tab of its own is findable by its directory', (
+    tester,
+  ) async {
+    // A shell, a build or a dev server has no session row pointing at it, so
+    // before this it had no entry in quick open at all — and at a hundred open
+    // tabs the strip is not a way to reach one by name.
+    late String wanted;
+    final container = await open(tester, before: (container) {
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      wanted = terminals.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\dev-server',
+      );
+      terminals.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\something-else',
+      );
+    });
+
+    // Both tabs are called PowerShell; the directory is the only thing that
+    // tells them apart, so it is what the query has to be able to reach.
+    await type(tester, 'dev-server');
+    expect(find.text('OPEN TABS'), findsOneWidget);
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(
+      container.read(terminalSessionsControllerProvider).activeTabId,
+      wanted,
+    );
+    expect(container.read(terminalVisibleProvider), isTrue);
+  });
+
+  testWidgets('a tab running one of our sessions is not listed twice', (
+    tester,
+  ) async {
+    // Picking the session already reattaches and focuses its pane, so a tab
+    // entry beside it would be the same destination in the list twice.
+    await open(tester, before: (container) {
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      SessionDao(db).updatePaneId(
+        's1',
+        container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .single
+            .focusedPaneId,
+      );
+    });
+
+    expect(find.text('SESSIONS'), findsOneWidget);
+    expect(find.text('OPEN TABS'), findsNothing);
   });
 
   testWidgets('opening it never starts a network or git call', (tester) async {
