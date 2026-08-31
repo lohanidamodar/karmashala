@@ -537,14 +537,10 @@ class SessionAdoptionService {
       role: SessionRepositoryRole.primary,
     );
     // The same conversation may already be in the workspace as read-only
-    // history. It is one session, so the live row replaces the imported record
-    // — our row only; the CLI's own file is untouched.
-    final imported = importedSessionDao.getByExternal(
-      candidate.agentId,
-      externalSessionId,
-    );
-    if (imported != null) importedSessionDao.delete(imported.id);
-
+    // history. Nothing is deleted for that: the row above now *supersedes* it,
+    // which `ImportedSessionDao` resolves for every reader — so the Explorer
+    // shows one card, and the history is still there if this row is ever
+    // removed. See that class's doc for why the tie is broken there.
     _bound.add(candidate.paneId);
     _settled.add(key);
     adoptions++;
