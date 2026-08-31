@@ -7,6 +7,7 @@ import 'package:xterm/xterm.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_link_actions.dart';
+import '../application/terminal_paste.dart';
 import '../data/terminal_instance.dart';
 import '../domain/terminal_link_resolution.dart';
 import '../domain/terminal_links.dart';
@@ -418,7 +419,21 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 
   @override
   Widget build(BuildContext context) {
-    final view = TerminalView(
+    final view = Actions(
+      // The app's own paste, above `TerminalView` and so above xterm's
+      // text-only one. `TerminalPasteIntent` is a type xterm has no entry for,
+      // which is what lets an ancestor handle a chord dispatched from inside
+      // the view — see the intent's own doc, and `pasteIntoTerminal` for what
+      // the handler does that xterm's could not.
+      actions: {
+        TerminalPasteIntent: CallbackAction<TerminalPasteIntent>(
+          onInvoke: (_) => pasteIntoTerminal(
+            widget.instance.terminal,
+            controller: widget.instance.controller,
+          ),
+        ),
+      },
+      child: TerminalView(
       widget.instance.terminal,
       key: _viewKey,
       controller: widget.instance.controller,
@@ -449,8 +464,9 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
           ? SystemMouseCursors.text
           : SystemMouseCursors.click,
       // Right-click → copy selection / paste / end the session.
-      onSecondaryTapDown: (details, _) =>
-          widget.onSecondaryTapDown(details.globalPosition),
+        onSecondaryTapDown: (details, _) =>
+            widget.onSecondaryTapDown(details.globalPosition),
+      ),
     );
 
     return MouseRegion(

@@ -12,6 +12,7 @@ import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/terminal_link_actions.dart';
+import '../application/terminal_paste.dart';
 import '../application/terminal_scroll.dart';
 import '../application/terminal_theme_controller.dart';
 import '../application/terminal_search_controller.dart';
@@ -504,9 +505,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           await Clipboard.setData(ClipboardData(text: text));
         }
       case 'paste':
-        final data = await Clipboard.getData(Clipboard.kTextPlain);
-        final text = data?.text;
-        if (text != null && text.isNotEmpty) session.terminal.paste(text);
+        // The same rule as the chord, from the same place: a menu item called
+        // Paste that silently does nothing with a screenshot on the clipboard
+        // is the bug being fixed, not a lesser version of it.
+        await pasteIntoTerminal(session.terminal, controller: session.controller);
       case 'find':
         _actions.openSearch();
       case 'end':

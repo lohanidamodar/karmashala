@@ -63,6 +63,20 @@ class TerminalFontSizeIntent extends Intent {
   final double delta;
 }
 
+/// Intent: paste into the focused terminal pane — the app's paste, not xterm's.
+///
+/// **A type of our own is what makes overriding possible at all.** xterm's
+/// `TerminalActions` sits *inside* `TerminalView`, so it is always nearer the
+/// dispatching context than anything the app can wrap around the pane, and it
+/// binds `PasteTextIntent` to a paste that can only read `text/plain`. An
+/// `Actions` lookup walks up past every map with no entry for the intent's
+/// type — so an intent xterm has never heard of reaches the pane's own handler,
+/// which knows what to do when the clipboard holds no text at all. See
+/// `pasteIntoTerminal`.
+class TerminalPasteIntent extends Intent {
+  const TerminalPasteIntent();
+}
+
 /// Terminal tabs, from anywhere in the app — not only a focused pane.
 class NewTerminalTabIntent extends Intent {
   const NewTerminalTabIntent();
@@ -407,7 +421,7 @@ const List<ShellChord> shellChords = [
       control: true,
       shift: true,
     ),
-    intent: PasteTextIntent(SelectionChangedCause.keyboard),
+    intent: TerminalPasteIntent(),
     label: 'Ctrl+Shift+V',
     does: 'Paste into the terminal',
     skipsShell: true,
@@ -418,7 +432,7 @@ const List<ShellChord> shellChords = [
   // it stays contested.
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.keyV, control: true),
-    intent: PasteTextIntent(SelectionChangedCause.keyboard),
+    intent: TerminalPasteIntent(),
     label: 'Ctrl+V',
     does: 'Paste into the terminal',
     skipsShell: true,
