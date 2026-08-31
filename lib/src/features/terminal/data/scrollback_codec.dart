@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:xterm/xterm.dart';
 
 import '../domain/scrollback_limits.dart';
@@ -15,7 +16,36 @@ import '../domain/scrollback_limits.dart';
 /// Every line is **self-contained** (it opens with `ESC[0m` and names every style
 /// it uses), so [maxBytes] can drop leading lines without a later line losing the
 /// colour an earlier one set.
+///
+/// Lines are encoded **newest first**, and encoding stops the moment one more
+/// line would breach [maxBytes]. That is what keeps the 20 s autosave off the
+/// critical path: the cost is proportional to what is *stored* rather than to
+/// what was considered. The obvious shape — encode all [maxLines], join, then
+/// drop one leading line and re-join until it fits — is quadratic in the
+/// overshoot, and every pane overshoots: 2 000 lines at 200 columns is ~400 KB
+/// of plain text against a 256 KB cap. Measured on the Loop 26 corpora at a full
+/// 10 000-line buffer, enforcing the cap that way cost **121 ms** (plain log),
+/// **281 ms** (colourised `ls`), **242 ms** (TUI frame) and **2 588 ms**
+/// (per-cell 24-bit colour) on top of a 3-197 ms encode — every 20 seconds, on
+/// the UI isolate, while the user types. See `tool/benchmark/scrollback_save_bench.dart`.
 String encodeScrollback(
+  Terminal terminal, {
+  int maxLines = kDurableScrollbackMaxLines,
+  int maxBytes = kDurableScrollbackMaxBytes,
+}) => encodeScrollbackWithStats(
+  terminal,
+  maxLines: maxLines,
+  maxBytes: maxBytes,
+).encoded;
+
+/// [encodeScrollback], plus how many buffer lines it had to encode to get
+/// there.
+///
+/// The line count is the whole performance contract — a save must cost what it
+/// stores, not what it considered — so it is exposed rather than left to a wall
+/// clock, which cannot be asserted on honestly.
+@visibleForTesting
+({String encoded, int linesEncoded}) encodeScrollbackWithStats(
   Terminal terminal, {
   int maxLines = kDurableScrollbackMaxLines,
   int maxBytes = kDurableScrollbackMaxBytes,
@@ -28,22 +58,29 @@ String encodeScrollback(
   while (end > 0 && _isBlank(lines[end - 1])) {
     end--;
   }
-  if (end == 0) return '';
+  if (end == 0) return (encoded: '', linesEncoded: 0);
 
   final start = end - maxLines < 0 ? 0 : end - maxLines;
-  final encoded = <String>[
-    for (var i = start; i < end; i++) _encodeLine(lines[i]),
-  ];
 
-  var result = encoded.join('\r\n');
-  // Trim whole leading lines until the cap is met; never a partial sequence.
-  var first = 0;
-  while (result.length > maxBytes && first < encoded.length - 1) {
-    first++;
-    result = encoded.sublist(first).join('\r\n');
+  // Newest first, so the budget can stop the walk. `newestFirst` is reversed
+  // before joining, so the stored order is unchanged.
+  final newestFirst = <String>[];
+  var total = 0;
+  for (var i = end - 1; i >= start; i--) {
+    final line = _encodeLine(lines[i]);
+    // Every line but the first also carries the `\r\n` that joins it on.
+    final cost = newestFirst.isEmpty ? line.length : line.length + 2;
+    if (newestFirst.isNotEmpty && total + cost > maxBytes) break;
+    newestFirst.add(line);
+    total += cost;
   }
+
   // Only reachable if a single line exceeds the cap, which 200 columns cannot.
-  return result.length > maxBytes ? '' : result;
+  if (total > maxBytes) return (encoded: '', linesEncoded: newestFirst.length);
+  return (
+    encoded: newestFirst.reversed.join('\r\n'),
+    linesEncoded: newestFirst.length,
+  );
 }
 
 bool _isBlank(BufferLine line) {
