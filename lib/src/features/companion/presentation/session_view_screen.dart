@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../remote/protocol.dart';
 import '../../sessions/domain/delivery_stage.dart';
@@ -38,6 +39,7 @@ class SessionViewScreen extends ConsumerWidget {
         .watch(companionApprovalProvider(sessionId))
         .asData
         ?.value;
+    final link = ref.watch(companionLinkProvider).asData?.value;
     final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
     final canApprove = gateway.capabilities.has(Capability.approve);
 
@@ -86,9 +88,31 @@ class SessionViewScreen extends ConsumerWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: transcript.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => CompanionNotice.failure(
+            // NOT `AsyncValue.when`: Riverpod 3 retries a provider that
+            // failed and reports `AsyncLoading` *carrying* the error, so
+            // `when` takes its loading branch and this screen sat on a
+            // spinner for ever — the "I opened a session and it keeps
+            // loading" report. `companionAsync` asks the questions in the
+            // order a user cares about.
+            child: companionAsync(
+              transcript,
+              loading: () => link == CompanionLinkState.connected
+                  ? const Center(child: CircularProgressIndicator())
+                  // Nothing is on its way, because there is no link to carry
+                  // it. A skeleton here is a promise the phone cannot keep.
+                  : CompanionNotice(
+                      icon: AppIcons.linkBreak,
+                      title: 'Waiting for your desktop',
+                      body: "This session's messages arrive as soon as the "
+                          'link is back.',
+                      tone: NoticeTone.attention,
+                      actionLabel: 'Try again',
+                      onAction: () {
+                        gateway.reconnect();
+                        ref.invalidate(companionTranscriptProvider(sessionId));
+                      },
+                    ),
+              error: (e) => CompanionNotice.failure(
                 error: e,
                 onRetry: () {
                   gateway.reconnect();
@@ -100,9 +124,14 @@ class SessionViewScreen extends ConsumerWidget {
                   for (final message in messages)
                     ChatMessage(role: message.role, text: message.text),
                 ],
+                // Two different nothings the phone cannot tell apart: an
+                // agent that keeps no readable transcript (its terminal IS
+                // the session, as the desktop says) and a session that has
+                // not spoken yet. Claiming either one would be a guess.
                 emptyHint:
-                    'Nothing in this session\'s transcript yet — it appears '
-                    'once the agent answers.',
+                    'No transcript to show. Some agents keep none we can '
+                    'read — their terminal is the session — and a session '
+                    'that has just started has nothing in it yet.',
                 footer: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
