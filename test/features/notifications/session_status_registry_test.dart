@@ -101,6 +101,7 @@ void main() {
     int probeConcurrency = kStatusProbeConcurrency,
     Future<Map<String, String>> Function()? resolveTranscripts,
     List<String> Function(WatchedSession)? readTail,
+    Future<void> Function(bool mayScanStores)? onCycle,
   }) => SessionStatusRegistry(
     statusService: service,
     agents: AgentRegistry.builtIn,
@@ -112,6 +113,7 @@ void main() {
     resolveTranscripts: resolveTranscripts,
     readTail: readTail,
     visibleSessionIds: () => visible,
+    onCycle: onCycle,
   );
 
   /// [count] imported sessions, each with its own transcript saying `idle`.
@@ -610,6 +612,55 @@ void main() {
       await pumpMicrotasks();
 
       expect(seen.last, AgentActivityStatus.working);
+    });
+  });
+
+  group('the cycle carries its passengers', () {
+    test('a passenger runs every cycle but may scan the stores rarely', () async {
+      final scanOffers = <bool>[];
+      final registry = build(
+        onCycle: (mayScanStores) async => scanOffers.add(mayScanStores),
+      );
+
+      for (var i = 0; i < 5; i++) {
+        await registry.cycle();
+        clock.now = clock.now.add(kStatusCycleInterval);
+      }
+
+      // Every cycle, so a free in-memory observation is never skipped …
+      expect(scanOffers, hasLength(5));
+      // … and one store slot, because five cycles is six seconds and the slot
+      // is offered once every ten.
+      expect(scanOffers.where((offered) => offered), hasLength(1));
+      expect(registry.storeSlots, 1);
+    });
+
+    test('the store slot reopens once its interval has passed', () async {
+      final scanOffers = <bool>[];
+      final registry = build(
+        onCycle: (mayScanStores) async => scanOffers.add(mayScanStores),
+      );
+
+      await registry.cycle();
+      clock.now = clock.now.add(kTranscriptSearchInterval);
+      await registry.cycle();
+
+      expect(scanOffers, [true, true]);
+    });
+
+    test('a passenger that throws does not take the cycle down', () async {
+      addTranscriptSessions(1);
+      final registry = build(
+        onCycle: (_) async => throw StateError('adoption exploded'),
+      );
+
+      final cycle = await registry.cycle();
+
+      expect(cycle.entries, hasLength(1));
+      expect(
+        registry.reportForOpenId('row-cli-0')?.status,
+        AgentActivityStatus.idle,
+      );
     });
   });
 }
