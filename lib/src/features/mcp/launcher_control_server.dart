@@ -175,9 +175,32 @@ class LauncherControlServer {
   final McpCallerRegistry _callers = McpCallerRegistry();
 
   /// Where a session's own MCP URL is built from, and what mints the token in
-  /// it. Null until [start] has bound the port and the owner-only channel has
-  /// been established.
+  /// it.
   McpCallerRegistry get callers => _callers;
+
+  /// The MCP endpoint URL for an unattributed caller, or null when nothing is
+  /// served — the hardening failed, or the server is not started.
+  String? get mcpUrl {
+    final server = _server;
+    final token = _mcpEndpoint?.token;
+    if (server == null || token == null) return null;
+    return 'http://127.0.0.1:${server.port}${McpHttpEndpoint.path}/$token';
+  }
+
+  /// The MCP endpoint URL that says the caller **is** [sessionId].
+  ///
+  /// This is the whole identity mechanism on the HTTP side: the app mints an
+  /// opaque token for one session, writes this URL into that session's MCP
+  /// config, and the endpoint maps the token back. The agent never has to be
+  /// told its own id and cannot claim a different one, which is the same
+  /// property `CHITRAGUPTA_SESSION_ID` gives the stdio bridge — the app stamps
+  /// identity on the process, the model does not declare it.
+  String? mcpUrlFor(String sessionId) {
+    final server = _server;
+    if (server == null || _mcpEndpoint?.token == null) return null;
+    final token = _callers.tokenFor(sessionId);
+    return 'http://127.0.0.1:${server.port}${McpHttpEndpoint.path}/$token';
+  }
 
   /// What came up, and what did not. Mirrored into
   /// [controlServerStatusProvider] so the settings screen can say so.
