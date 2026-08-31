@@ -8,7 +8,10 @@ void main() {
     Object? cancelled;
 
     final autosave = ScrollbackAutosave(
-      onTick: () => ticks++,
+      onTick: () {
+        ticks++;
+        return false;
+      },
       schedule: (duration, callback) {
         pending = callback;
         return 'handle';
@@ -25,10 +28,96 @@ void main() {
     expect(cancelled, 'handle');
   });
 
+  test('a tick that leaves a backlog comes back on the catch-up cadence', () {
+    // The scale-target behaviour: with a hundred busy panes one capped batch
+    // cannot save them all, so the autosave must drain rather than wait out a
+    // full idle interval with the work still owed.
+    final delays = <Duration>[];
+    void Function()? pending;
+    var backlog = true;
+
+    final autosave = ScrollbackAutosave(
+      onTick: () => backlog,
+      schedule: (delay, callback) {
+        delays.add(delay);
+        pending = callback;
+        return Object();
+      },
+      cancel: (_) {},
+    )..start();
+
+    expect(delays, [kScrollbackAutosaveInterval], reason: 'first tick is idle');
+
+    pending!();
+    pending!();
+    expect(
+      delays.sublist(1),
+      [kScrollbackAutosaveCatchUp, kScrollbackAutosaveCatchUp],
+      reason: 'while work remains',
+    );
+
+    backlog = false;
+    pending!();
+    expect(
+      delays.last,
+      kScrollbackAutosaveInterval,
+      reason: 'back to idle once everything is saved',
+    );
+    autosave.stop();
+  });
+
+  test('a tick never overlaps itself', () {
+    // Re-arming happens after onTick returns, so a batch that runs long cannot
+    // have a second one scheduled on top of it.
+    var scheduledDuringTick = 0;
+    var scheduled = 0;
+    void Function()? pending;
+    late ScrollbackAutosave autosave;
+    autosave = ScrollbackAutosave(
+      onTick: () {
+        scheduledDuringTick = scheduled;
+        return false;
+      },
+      schedule: (delay, callback) {
+        scheduled++;
+        pending = callback;
+        return Object();
+      },
+      cancel: (_) {},
+    )..start();
+
+    pending!();
+    expect(scheduledDuringTick, 1, reason: 'nothing armed while ticking');
+    expect(scheduled, 2, reason: 're-armed after');
+    autosave.stop();
+  });
+
+  test('a stopped autosave does not re-arm from a tick already in flight', () {
+    var scheduled = 0;
+    void Function()? pending;
+    late ScrollbackAutosave autosave;
+    autosave = ScrollbackAutosave(
+      onTick: () {
+        autosave.stop();
+        return true;
+      },
+      schedule: (delay, callback) {
+        scheduled++;
+        pending = callback;
+        return Object();
+      },
+      cancel: (_) {},
+    )..start();
+
+    pending!();
+    expect(scheduled, 1);
+    expect(autosave.isRunning, isFalse);
+  });
+
   test('start is idempotent, so it never leaks a second timer', () {
     var scheduled = 0;
     final autosave = ScrollbackAutosave(
-      onTick: () {},
+      onTick: () => false,
       schedule: (duration, callback) => ++scheduled,
       cancel: (_) {},
     );
@@ -42,7 +131,7 @@ void main() {
   test('stopping before starting is harmless', () {
     var cancelled = 0;
     final autosave = ScrollbackAutosave(
-      onTick: () {},
+      onTick: () => false,
       schedule: (duration, callback) => 1,
       cancel: (_) => cancelled++,
     );
@@ -53,7 +142,7 @@ void main() {
   test('it can be restarted after being stopped', () {
     var scheduled = 0;
     final autosave = ScrollbackAutosave(
-      onTick: () {},
+      onTick: () => false,
       schedule: (duration, callback) => ++scheduled,
       cancel: (_) {},
     );
@@ -64,7 +153,10 @@ void main() {
     expect(scheduled, 2);
   });
 
-  test('the default interval is the documented 20 seconds', () {
+  test('the documented cadences and budget', () {
     expect(kScrollbackAutosaveInterval, const Duration(seconds: 20));
+    expect(kScrollbackAutosaveCatchUp, const Duration(seconds: 1));
+    // Half a 60 Hz frame: a tick may drop one, never freeze the app.
+    expect(kScrollbackAutosaveBudget, const Duration(milliseconds: 8));
   });
 }

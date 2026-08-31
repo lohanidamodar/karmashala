@@ -408,6 +408,15 @@ class EscapeParser {
   ///
   /// https://terminalguide.namepad.de/seq/csi_sm/
   void _csiHandleSgr() {
+    // DIVERGENCE (Chitragupta, Loop 84): a *prefixed* `m` is not SGR.
+    // `CSI > 4 ; 2 m` is xterm's modifyOtherKeys and `CSI > 1 m` is
+    // modifyKeyboard; upstream dispatches every `m` here regardless of prefix,
+    // so a program merely asking whether modifier reporting is available had
+    // its request read as SGR 4 and SGR 2 and painted the rest of the pane
+    // underlined and faint. We do not implement those modes — we just must not
+    // mistake them for a colour change. See packages/xterm/VENDORED.md.
+    if (_csi.prefix != null) return;
+
     final params = _csi.params;
 
     if (params.isEmpty) {

@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
@@ -8,6 +9,8 @@ import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
 import '../domain/agent_pane_launch.dart';
+import '../domain/detach_policy.dart';
+import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
@@ -157,7 +160,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   late final ScrollbackAutosave _autosave = ref.read(
     scrollbackAutosaveFactoryProvider,
-  )(onTick: saveDirtyScrollback);
+  )(
+    onTick: () {
+      saveDirtyScrollback();
+      return hasDirtyScrollback;
+    },
+  );
 
   final _log = AppLogger.named('terminal');
 
@@ -168,9 +176,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// expects back.
   bool _processesShutDown = false;
 
+  /// Set on teardown, so a post-frame callback that outlives the container
+  /// cannot touch a disposed pane. See [_afterFrame].
+  bool _disposed = false;
+
   @override
   TerminalSessionsState build() {
     ref.onDispose(() {
+      _disposed = true;
       _autosave.stop();
       if (_processesShutDown) return;
       persistWorkspace();
@@ -210,7 +223,42 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     },
   );
 
-  void _publish() => state = _snapshot();
+  void _publish() {
+    _applyIngestTiers();
+    state = _snapshot();
+  }
+
+  /// Tells every pane how visible it is, so ingestion can cost what the pane is
+  /// worth rather than the same for all of them.
+  ///
+  /// The workspace is the only thing that knows this, which is why it lives
+  /// here and not in the pane: a pane cannot see which tab is in front. Called
+  /// from [_publish], so every open, close, split, activate, detach and
+  /// reattach re-derives it from one place — there is no second path that could
+  /// leave a pane at the wrong tier.
+  ///
+  /// * **hot** — every pane of the active tab, focused or not: they are all on
+  ///   screen.
+  /// * **warm** — panes of every other open tab. Correct, but not watched.
+  /// * **cold** — anything still tracked with no tab at all, which is a
+  ///   detached session. Not parsed; its output spools.
+  ///
+  /// Cost is O(panes) per publish and every pane whose tier did not change
+  /// returns immediately, which is nearly all of them nearly always.
+  void _applyIngestTiers() {
+    final tiers = <String, IngestTier>{};
+    for (final tab in _tabs) {
+      final tier = tab.id == _activeTabId ? IngestTier.hot : IngestTier.warm;
+      for (final paneId in tab.layout.panes) {
+        tiers[paneId] = tier;
+      }
+    }
+    for (final entry in _instances.entries) {
+      if (entry.value case final TieredTerminalInstance tiered) {
+        tiered.setIngestTier(tiers[entry.key] ?? IngestTier.cold);
+      }
+    }
+  }
 
   /// Disposes every pane, returning the reaps still in flight — one per pane
   /// that owns a process. Callers that can wait should; `ref.onDispose` cannot.
@@ -251,6 +299,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _activeTabId = tabId;
     _publish();
     persistWorkspace();
+    _focusActivePane();
     return tabId;
   }
 
@@ -319,6 +368,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
     _publish();
     persistWorkspace();
+    // Closing the active tab hands the keyboard to whichever tab took its
+    // place, rather than leaving it nowhere.
+    _focusActivePane();
   }
 
   /// Splits the active tab's focused pane along [axis], running [profile] in the
@@ -391,7 +443,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (tab == null) return;
     _activeTabId = tab.id;
     _replaceTab(tab.copyWith(focusedPaneId: paneId));
-    _instances[paneId]?.focusNode.requestFocus();
+    _focusActivePane();
   }
 
   /// Moves focus to the pane adjacent to the focused one in [direction].
@@ -532,7 +584,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     );
     _publish();
     persistWorkspace();
-    _instances[paneId]?.focusNode.requestFocus();
+    _focusActivePane();
   }
 
   // --- persistence -----------------------------------------------------------
@@ -585,19 +637,47 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Re-encodes only the panes whose buffers changed, returning the pane ids
-  /// written. This is the autosave tick.
-  List<String> saveDirtyScrollback() {
+  /// Whether any pane still owes a scrollback write.
+  ///
+  /// What tells [ScrollbackAutosave] to come back on its catch-up cadence
+  /// rather than its idle one.
+  bool get hasDirtyScrollback => _dirty.isNotEmpty;
+
+  /// Re-encodes the panes whose buffers changed, **for at most [budget] of
+  /// main-isolate time**, returning the pane ids written.
+  ///
+  /// This is the autosave tick, and the budget is the whole point of it. The
+  /// app's scale target is 100 live terminals (`docs/ARCHITECTURE.md`), and
+  /// saving every dirty pane on one tick is work proportional to *all* panes on
+  /// a timer — measured at 9 ms for one pane, 57 ms for ten and **645 ms for a
+  /// hundred** (`tool/benchmark/terminal_scale_bench.dart`), landing in a single
+  /// freeze on the UI isolate. Capping the batch makes a tick cost the same
+  /// whatever N is; whatever is left stays dirty and the autosave comes back in
+  /// a second for it, so the isolate gives up a bounded slice per second instead
+  /// of stalling every twenty.
+  ///
+  /// At least one pane is always written, so a pane that alone costs more than
+  /// the budget still makes progress rather than starving.
+  List<String> saveDirtyScrollback({
+    Duration budget = kScrollbackAutosaveBudget,
+  }) {
     final dao = _dao();
     if (dao == null || _dirty.isEmpty) return const [];
 
     final written = <String>[];
+    final spent = Stopwatch()..start();
     try {
       for (final paneId in _dirty.toList()) {
         final instance = _instances[paneId];
-        if (instance == null) continue;
+        if (instance == null) {
+          // A pane that has gone owes nothing; drop it rather than retrying it
+          // on every tick from here to shutdown.
+          _dirty.remove(paneId);
+          continue;
+        }
         dao.saveScrollback(paneId, _scrollbackOf(paneId, instance));
         written.add(paneId);
+        if (spent.elapsed >= budget) break;
       }
     } catch (error, stack) {
       _log.warning('Could not autosave terminal scrollback.', error, stack);
@@ -829,7 +909,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _detachOrRelease(String paneId) {
     final instance = _instances[paneId];
     if (instance == null) return;
-    if (!instance.liveness.value.isLive) {
+    if (!_shouldDetach(instance)) {
       _releasePane(paneId);
       return;
     }
@@ -841,6 +921,46 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         detachedAt: ref.read(clockProvider).nowUtc(),
       ),
     );
+  }
+
+  /// Whether closing this pane keeps its process alive — [shouldDetachOnClose]
+  /// with the pane's own answers to its four questions.
+  bool _shouldDetach(TerminalInstance instance) {
+    final recorder = instance.commandBlocks;
+    return shouldDetachOnClose(
+      isLive: instance.liveness.value.isLive,
+      isAgentSession: instance.agentLaunch != null,
+      // Null means the shell is not instrumented and has told us nothing.
+      // `pending` is the block being typed *or* run; only one that has started
+      // is a command actually executing.
+      commandRunning: recorder == null
+          ? null
+          : recorder.tracker.pending?.hasStarted ?? false,
+      nonBlankLines: _nonBlankLines(
+        instance,
+        stopAt: kIdleShellHistoryLines + 1,
+      ),
+    );
+  }
+
+  /// Non-blank lines in [instance]'s buffer, giving up at [stopAt].
+  ///
+  /// Bounded because the answer is only ever compared against a threshold, and
+  /// a pane at the 10 000-line scrollback cap must not cost a full walk to
+  /// close.
+  int _nonBlankLines(TerminalInstance instance, {required int stopAt}) {
+    final lines = instance.terminal.buffer.lines;
+    var count = 0;
+    for (var i = 0; i < lines.length && count < stopAt; i++) {
+      final line = lines[i];
+      for (var cell = 0; cell < line.length; cell++) {
+        if (line.getCodePoint(cell) > 32) {
+          count++;
+          break;
+        }
+      }
+    }
+    return count;
   }
 
   /// Disposes the pane [paneId] owns and stops tracking it.
@@ -891,10 +1011,66 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     activateTab(_tabs[(index + by + _tabs.length) % _tabs.length].id);
   }
 
+  /// Gives the active tab's focused pane the keyboard, so a pane that has just
+  /// become the active one is typable without a click.
+  ///
+  /// **Deferred to after the frame, and that is the whole point.** The panes
+  /// live in an [IndexedStack], which wraps every child but the selected one in
+  /// an `ExcludeFocus` (`packages/flutter/lib/src/widgets/indexed_stack.dart:108`).
+  /// Publishing a new active tab only marks the widget tree dirty, so at the
+  /// moment these callers run, the pane being switched *to* is still inside
+  /// that `ExcludeFocus` and `requestFocus()` is silently dropped. Waiting for
+  /// the rebuild that selects it is what makes the request stick.
+  ///
+  /// The pane is re-resolved inside the callback, so a burst of tab switches
+  /// leaves the keyboard on the tab the user actually landed on.
   void _focusActivePane() {
-    final tab = _activeTab;
-    if (tab == null) return;
-    _instances[tab.focusedPaneId]?.focusNode.requestFocus();
+    _afterFrame(() {
+      final tab = _activeTab;
+      if (tab == null) return;
+      final node = _instances[tab.focusedPaneId]?.focusNode;
+      if (node == null || node.hasFocus) return;
+      // Never out of a text field the user is typing in — quick open, the
+      // search bar, a composer, a dialog. Opening or closing a terminal tab is
+      // not worth taking the keyboard away from what someone is writing.
+      if (_keyboardIsInATextField()) return;
+      node.requestFocus();
+    });
+  }
+
+  /// Runs [action] once the pending rebuild has been laid out.
+  ///
+  /// A no-op with no binding at all, which is what a controller-only test is:
+  /// there is no widget tree, so there is no focus to move. A post-frame
+  /// callback, unlike a timer, does not trip `flutter_test`'s pending-work
+  /// checks when no frame ever comes.
+  void _afterFrame(void Function() action) {
+    final binding = _bindingOrNull();
+    if (binding == null) return;
+    binding.addPostFrameCallback((_) {
+      if (_disposed) return;
+      action();
+    });
+  }
+
+  /// The widget binding, or null when there is none.
+  ///
+  /// `WidgetsBinding.instance` throws rather than returning null, and the
+  /// controller is deliberately usable without a widget tree — most of its own
+  /// tests drive it that way — so the throw is the check.
+  static WidgetsBinding? _bindingOrNull() {
+    try {
+      return WidgetsBinding.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Whether the keyboard currently belongs to a text field.
+  static bool _keyboardIsInATextField() {
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (context == null) return false;
+    return context.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 }
 

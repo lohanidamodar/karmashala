@@ -35,10 +35,35 @@ void main() {
 
   /// Boots the whole shell, focuses the terminal pane the workbench opens, and
   /// hands back the container plus everything the pane's process was sent.
+  /// What the fake clipboard holds. Written by `Clipboard.setData`, read by
+  /// `Clipboard.getData` — the real platform channel is never reached.
+  String? clipboard;
+
   Future<(ProviderContainer, List<String>)> pumpFocusedTerminal(
     WidgetTester tester, {
     Map<String, bool> chordOverrides = const {},
   }) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        switch (call.method) {
+          case 'Clipboard.getData':
+            return clipboard == null ? null : <String, Object?>{
+              'text': clipboard,
+            };
+          case 'Clipboard.setData':
+            clipboard = (call.arguments as Map)['text'] as String?;
+            return null;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     final container = fakeTerminalContainer(database: db);
     addTearDown(container.dispose);
     // Applied before the first frame, the way a saved setting arrives.
@@ -209,41 +234,120 @@ void main() {
     expect(toShell, ['\x01']);
   });
 
-  testWidgets('Ctrl+V reaches the shell — readline quoted-insert', (
+  testWidgets('Ctrl+V pastes the clipboard into the pane', (tester) async {
+    // The owner could not paste an auth code into a login prompt: Loop 68 had
+    // routed Ctrl+V to the shell as readline's quoted-insert, which shows
+    // nothing, so the key looked broken. Windows Terminal, VS Code and every
+    // browser paste on Ctrl+V; so does this now.
+    clipboard = 'sk-auth-code-42';
+    final (_, toShell) = await pumpFocusedTerminal(tester);
+
+    await chord(tester, LogicalKeyboardKey.keyV);
+
+    expect(toShell, ['sk-auth-code-42']);
+    expect(
+      toShell,
+      isNot(contains('\x16')),
+      reason: 'quoted-insert must not also be typed',
+    );
+  });
+
+  testWidgets('Ctrl+V handed back to the shell types quoted-insert again', (
     tester,
   ) async {
-    final (_, toShell) = await pumpFocusedTerminal(tester);
+    // Contested, and listed in Settings beside Ctrl+B and Ctrl+K: ^V is a real
+    // readline verb and someone who uses it can have it back.
+    clipboard = 'not pasted';
+    final (_, toShell) = await pumpFocusedTerminal(
+      tester,
+      chordOverrides: const {'Ctrl+V': false},
+    );
 
     await chord(tester, LogicalKeyboardKey.keyV);
 
     expect(toShell, ['\x16']);
   });
 
-  testWidgets('Ctrl+Shift+V is paste, and types nothing at the prompt', (
+  testWidgets('a paste is bracketed when the program asked for it', (
     tester,
   ) async {
-    final (_, toShell) = await pumpFocusedTerminal(tester);
+    clipboard = 'two\nlines';
+    final (container, toShell) = await pumpFocusedTerminal(tester);
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final tab = container.read(terminalSessionsControllerProvider).activeTab!;
+    // DECSET 2004 — what a shell with bracketed paste turns on.
+    controller.instanceFor(tab.focusedPaneId)!.terminal.write('\x1b[?2004h');
+
+    await chord(tester, LogicalKeyboardKey.keyV);
+
+    expect(toShell, ['\x1b[200~two\nlines\x1b[201~']);
+  });
+
+  testWidgets('Ctrl+Shift+V still pastes, whatever Ctrl+V is set to', (
+    tester,
+  ) async {
+    clipboard = 'pasted';
+    final (_, toShell) = await pumpFocusedTerminal(
+      tester,
+      // Even with quoted-insert handed back, the Linux-terminal chord works.
+      chordOverrides: const {'Ctrl+V': false},
+    );
 
     await chord(tester, LogicalKeyboardKey.keyV, shift: true);
 
-    expect(
-      toShell,
-      isEmpty,
-      reason: 'the pane claimed it for paste, so no control byte was sent',
-    );
+    expect(toShell, ['pasted']);
   });
 
-  test('the pane keeps only chords a terminal cannot encode', () {
-    // Everything the pane holds back from the shell has to be a
+  test('the pane takes one real control character, and names it', () {
+    // Everything the pane holds back from the shell is either a
     // Ctrl+Shift+<letter>, which has no control character and therefore costs
-    // the shell nothing.
-    for (final activator in terminalPaneShortcuts.keys) {
+    // the shell nothing, or a chord that declares its `shellCost` and is
+    // contested so Settings can hand it back. Ctrl+V is the only one.
+    final paneOnly = [for (final c in shellChords) if (c.paneOnly) c];
+    expect(
+      [for (final c in paneOnly) c.label],
+      ['Ctrl+Shift+C', 'Ctrl+Shift+V', 'Ctrl+V'],
+    );
+    for (final chord in paneOnly) {
+      if (chord.activator.shift) continue;
       expect(
-        (activator as SingleActivator).shift,
+        chord.shellCost,
+        isNotNull,
+        reason: '${chord.label} takes a control character without saying so',
+      );
+      expect(
+        chord.contested,
         isTrue,
-        reason: '$activator takes a real control character from the shell',
+        reason: '${chord.label} must be switchable in Settings',
       );
     }
+    // And the map the pane installs is that list, filtered by the user's answer.
+    expect(terminalPaneShortcutsFor().length, 3);
+    expect(terminalPaneShortcutsFor(const {'Ctrl+V': false}).length, 2);
+  });
+
+  test('pane-only chords are absent from the app-wide map', () {
+    // Ctrl+V outside a terminal is the platform's own paste, in every text
+    // field in the app; binding it here would break all of them.
+    expect(
+      shellShortcutMap.keys,
+      isNot(
+        contains(const SingleActivator(LogicalKeyboardKey.keyV, control: true)),
+      ),
+    );
+    expect(
+      appChordForTerminal(
+        const KeyDownEvent(
+          physicalKey: PhysicalKeyboardKey.keyV,
+          logicalKey: LogicalKeyboardKey.keyV,
+          timeStamp: Duration.zero,
+        ),
+      ),
+      isNull,
+      reason: 'xterm dispatches it, not the app Actions',
+    );
   });
 
   test('the chords left to the shell are named, and no others', () {
@@ -260,8 +364,10 @@ void main() {
     // shell keeps them until Settings says otherwise, so upgrading takes no
     // key away from anyone. Ctrl+Shift+T and Ctrl+Shift+W always reach the app.
     expect(kept, ['Ctrl+B', 'Ctrl+T', 'Ctrl+W']);
-    // And the map the Shortcuts widget installs is the same list.
-    expect(shellShortcutMap.length, shellChords.length);
+    // And the map the Shortcuts widget installs is the same list, less the
+    // pane-only copy/paste chords the rest of the app must not re-bind.
+    final paneOnly = shellChords.where((c) => c.paneOnly).length;
+    expect(shellShortcutMap.length, shellChords.length - paneOnly);
   });
 
   test('every claimed chord names what the shell loses, or loses nothing', () {
@@ -284,6 +390,9 @@ void main() {
       'Ctrl+W',
       'Ctrl+PageUp',
       'Ctrl+PageDown',
+      // Paste. ^V is readline's quoted-insert, and this is the one pane-only
+      // chord that costs the shell anything.
+      'Ctrl+V',
     });
   });
 
@@ -355,6 +464,10 @@ void main() {
     expect(contested, isNot(contains('Ctrl+Shift+A')));
     expect(contested, contains('Ctrl+B'));
     expect(contested, contains('Ctrl+K'));
+    // Paste is claimed by default but still a real question, so Settings lists
+    // it: someone who uses readline's quoted-insert can have ^V back.
+    expect(contested, contains('Ctrl+V'));
+    expect(contested, isNot(contains('Ctrl+Shift+V')));
   });
 
   test('an override decides, and only for the chord it names', () {

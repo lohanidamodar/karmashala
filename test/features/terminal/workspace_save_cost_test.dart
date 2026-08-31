@@ -175,6 +175,50 @@ void main() {
     // The surviving pane is still saved correctly; the closed one is gone.
     expect(dao.loadWorkspace().tabs.single.panes.map((p) => p.id), [first]);
   });
+
+  test('a tick is capped, so its cost does not grow with the number of panes', () {
+    // The scale target forbids work proportional to all panes on a timer
+    // (docs/ARCHITECTURE.md). A zero budget is the extreme of the same rule:
+    // one pane always gets written — progress is guaranteed — and no more.
+    controller.openTab(TerminalProfile.powerShell);
+    for (var i = 0; i < 5; i++) {
+      controller.splitPane(SplitAxis.horizontal, TerminalProfile.powerShell);
+    }
+    final panes = container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .single
+        .layout
+        .panes;
+    expect(panes.length, 6);
+    for (final paneId in panes) {
+      instance(paneId).terminal.write('output\r\n');
+    }
+
+    expect(controller.saveDirtyScrollback(budget: Duration.zero).length, 1);
+    expect(controller.hasDirtyScrollback, isTrue);
+
+    // The backlog drains over following ticks rather than being dropped.
+    var ticks = 1;
+    while (controller.hasDirtyScrollback && ticks < 50) {
+      controller.saveDirtyScrollback(budget: Duration.zero);
+      ticks++;
+    }
+    expect(controller.hasDirtyScrollback, isFalse);
+    expect(ticks, panes.length);
+  });
+
+  test('a generous budget still saves everything in one tick', () {
+    final (first, second) = twoPanes();
+    instance(first).terminal.write('one\r\n');
+    instance(second).terminal.write('two\r\n');
+
+    expect(
+      controller.saveDirtyScrollback(budget: const Duration(minutes: 1)),
+      unorderedEquals([first, second]),
+    );
+    expect(controller.hasDirtyScrollback, isFalse);
+  });
 }
 
 /// A process-free instance whose terminal counts how many times the scrollback
@@ -246,5 +290,4 @@ class _CountingTerminal extends Terminal {
   Buffer get mainBuffer {
     mainBufferReads++;
     return super.mainBuffer;
-  }
-}
+  }}

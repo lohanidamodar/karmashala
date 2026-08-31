@@ -160,4 +160,85 @@ void main() {
       );
     }
   });
+
+  // --- what a save costs ------------------------------------------------------
+
+  /// The byte cap as it was originally written: encode every candidate line,
+  /// then drop one leading line and re-join until the result fits.
+  ///
+  /// Kept here as the reference the fast path must agree with, byte for byte.
+  /// It is also why the fast path exists — it is quadratic in the overshoot,
+  /// and it cost 121 ms to 2 588 ms per pane per autosave tick (Loop 84,
+  /// `tool/benchmark/scrollback_save_bench.dart`).
+  String referenceEncode(Terminal terminal, {required int maxBytes}) {
+    final all = encodeScrollback(terminal, maxBytes: 1 << 30);
+    if (all.isEmpty) return '';
+    final encoded = all.split('\r\n');
+    var result = encoded.join('\r\n');
+    var first = 0;
+    while (result.length > maxBytes && first < encoded.length - 1) {
+      first++;
+      result = encoded.sublist(first).join('\r\n');
+    }
+    return result.length > maxBytes ? '' : result;
+  }
+
+  test('the byte cap keeps exactly the lines the original loop kept', () {
+    final source = terminalWith(
+      [
+        for (var i = 0; i < 400; i++)
+          '\x1b[38;5;${i % 256}mline $i with some content\x1b[0m\r\n',
+      ].join(),
+    );
+    // Sweep the cap across the whole range, including both ends: an exact-fit
+    // boundary is where an off-by-one in the running total would show.
+    final full = encodeScrollback(source, maxBytes: 1 << 30).length;
+    for (final maxBytes in [
+      0,
+      1,
+      40,
+      41,
+      42,
+      500,
+      full ~/ 3,
+      full ~/ 2,
+      full - 1,
+      full,
+      full + 1,
+    ]) {
+      expect(
+        encodeScrollback(source, maxBytes: maxBytes),
+        referenceEncode(source, maxBytes: maxBytes),
+        reason: 'maxBytes=$maxBytes',
+      );
+    }
+  });
+
+  test('a save encodes what it stores, not what it considered', () {
+    // A pane full of per-cell 24-bit colour: ~4 KB of SGR per line, so the
+    // 256 KB cap is met long before the 2 000-line window is.
+    final source = Terminal(maxLines: kLiveScrollbackMaxLines)
+      ..resize(200, 50);
+    for (var row = 0; row < 400; row++) {
+      final cells = StringBuffer();
+      for (var x = 0; x < 200; x++) {
+        cells.write('\x1b[38;2;${x % 256};${(x * 7) % 256};${row % 256}m#');
+      }
+      source.write('$cells\r\n');
+    }
+
+    final stats = encodeScrollbackWithStats(source);
+    expect(
+      stats.encoded.length,
+      lessThanOrEqualTo(kDurableScrollbackMaxBytes),
+    );
+    // The window offers 2 000 lines; the budget is spent after a few dozen.
+    // Encoding all 2 000 and throwing 97% away is the bug this pins.
+    expect(stats.linesEncoded, lessThan(200));
+    expect(
+      stats.linesEncoded,
+      '\r\n'.allMatches(stats.encoded).length + 1,
+      reason: 'every line encoded is a line stored',
+    );
+  });
 }

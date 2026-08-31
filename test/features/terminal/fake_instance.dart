@@ -6,6 +6,8 @@ import 'package:chitragupta/src/features/terminal/application/terminal_sessions_
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:chitragupta/src/features/terminal/domain/detach_policy.dart';
+import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/foundation.dart';
@@ -15,7 +17,8 @@ import 'package:xterm/xterm.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
 /// spawning a real PTY.
-class FakeTerminalInstance implements TerminalInstance {
+class FakeTerminalInstance
+    implements TerminalInstance, TieredTerminalInstance {
   FakeTerminalInstance({
     required this.id,
     required this.title,
@@ -63,6 +66,20 @@ class FakeTerminalInstance implements TerminalInstance {
 
   bool disposed = false;
 
+  /// What the controller last told this pane about how visible it is, and every
+  /// value it has been told — a fake pane parses nothing, so the tier is the
+  /// only observable part of tiered ingestion at this level.
+  @override
+  IngestTier ingestTier = IngestTier.hot;
+  final tierHistory = <IngestTier>[];
+
+  @override
+  void setIngestTier(IngestTier tier) {
+    if (ingestTier == tier) return;
+    ingestTier = tier;
+    tierHistory.add(tier);
+  }
+
   @override
   void dispose() {
     if (disposed) return;
@@ -71,6 +88,20 @@ class FakeTerminalInstance implements TerminalInstance {
     livenessNotifier.dispose();
     focusNode.dispose();
     scrollController.dispose();
+  }
+}
+
+/// Makes a fake pane look like a shell somebody has actually used.
+///
+/// Closing a pane no longer always detaches it: `shouldDetachOnClose` releases
+/// an *idle* plain shell rather than leaving a PowerShell running with no tab.
+/// A fake pane's buffer starts empty, which is exactly the "opened it, typed
+/// nothing" case that policy releases — so a test about detaching, reattaching
+/// or background sessions has to be about a pane worth detaching, and says so
+/// by calling this.
+void giveShellHistory(TerminalInstance instance) {
+  for (var i = 0; i <= kIdleShellHistoryLines; i++) {
+    instance.terminal.write('history line $i\r\n');
   }
 }
 
@@ -96,7 +127,7 @@ fakeTerminalOverrides({
     scrollbackAutosaveFactoryProvider.overrideWithValue(
       ({required onTick}) => ScrollbackAutosave(
         onTick: onTick,
-        schedule: (interval, callback) => Object(),
+        schedule: (delay, callback) => Object(),
         cancel: (_) {},
       ),
     ),
