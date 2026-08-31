@@ -195,7 +195,11 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // moves the changes, worktree and GitHub surfaces with it; a tab with no
     // session writes nothing and leaves the Explorer's choice alone.
     ref.listen(activePaneSessionIdProvider, (_, next) {
-      if (next != null) ref.read(sessionContextProvider).follow(next);
+      final context = ref.read(sessionContextProvider);
+      // A shell tab follows nothing, and saying so matters: a checkout picked
+      // while one is up would otherwise be filed against whichever session was
+      // followed last, and stick to it for the rest of the run.
+      next == null ? context.stopFollowing() : context.follow(next);
     });
 
     final scheme = Theme.of(context).colorScheme;

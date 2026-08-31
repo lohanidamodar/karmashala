@@ -23,8 +23,18 @@ Future<void> pasteIntoTerminal(
   Terminal terminal, {
   TerminalController? controller,
 }) async {
-  final data = await Clipboard.getData(Clipboard.kTextPlain);
-  final text = data?.text;
+  // A clipboard read is not reliable on Windows: `OpenClipboard` fails while
+  // another app holds it — a clipboard manager, a browser mid-copy, an RDP
+  // session — and Flutter turns that into a `PlatformException`. Unhandled, it
+  // left the chord doing *nothing at all*: no paste, and not even the `^V` the
+  // fallback exists to send. A clipboard we cannot read is a clipboard with no
+  // text on it, which is a case this function already answers.
+  String? text;
+  try {
+    text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+  } on PlatformException {
+    text = null;
+  }
   if (text == null || text.isEmpty) {
     terminal.textInput(kPasteKeyToProgram);
     return;

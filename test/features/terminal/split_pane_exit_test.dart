@@ -123,6 +123,38 @@ void main() {
       );
     });
 
+    test('two exiting together leave the tab standing, not empty', () async {
+      // The decision to collapse is taken in the liveness callback and applied
+      // a microtask later. Both panes of a split dying in the same task queued
+      // two collapses while the tab still had two panes, and the second found
+      // itself alone and took the whole tab with it — breaking the one rule
+      // the feature is built on.
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final first = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      final second = controller.splitPane(
+        SplitAxis.vertical,
+        TerminalProfile.commandPrompt,
+      )!;
+
+      (controller.instanceFor(first)! as FakeTerminalInstance).exitCleanly();
+      (controller.instanceFor(second)! as FakeTerminalInstance).exitCleanly();
+      await Future<void>.delayed(Duration.zero);
+
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(state.tabs, hasLength(1), reason: 'the tab is not a casualty');
+      expect(state.activeTab!.layout.panes, hasLength(1));
+    });
+
     test('stays when it is the only pane in its tab', () async {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);

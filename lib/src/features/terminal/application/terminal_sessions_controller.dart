@@ -1097,8 +1097,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           _shouldCollapse(paneId, instance)) {
         // Not inline: this runs from inside the notifier's own callback, and
         // closing the pane disposes that notifier. One turn later it is a
-        // plain call, and `closePane` is a no-op if the pane has gone anyway.
-        Future.microtask(() => closePane(paneId, detach: false));
+        // plain call — and the decision is taken **again** there, because two
+        // panes exiting in the same task would queue two collapses while the
+        // tab still had both, and the second would find itself alone and take
+        // the whole tab with it. Re-asking also covers the pane simply having
+        // gone, in which case the liveness change still has to be published or
+        // nothing repaints.
+        Future.microtask(() {
+          if (!_shouldCollapse(paneId, instance)) {
+            _publish();
+            return;
+          }
+          closePane(paneId, detach: false);
+        });
         return;
       }
       _publish();

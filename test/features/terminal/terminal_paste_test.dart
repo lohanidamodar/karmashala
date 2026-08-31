@@ -30,9 +30,13 @@ void main() {
   /// the clipboard is not `text/plain`, and Flutter's clipboard cannot see it.
   String? clipboardText;
 
+  /// Windows fails a clipboard read whenever another app holds the clipboard.
+  bool clipboardThrows = false;
+
   setUp(() {
     db = AppDatabase.memory();
     clipboardText = null;
+    clipboardThrows = false;
     container = fakeTerminalContainer(database: db);
   });
 
@@ -47,7 +51,9 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => switch (call.method) {
-        'Clipboard.getData' => clipboardText == null
+        'Clipboard.getData' => clipboardThrows
+            ? throw PlatformException(code: 'Clipboard error')
+            : clipboardText == null
             ? null
             : <String, Object?>{'text': clipboardText},
         _ => null,
@@ -125,6 +131,22 @@ void main() {
     toShell.clear();
     await press(tester, shift: true);
     expect(toShell, ['hello']);
+  });
+
+  testWidgets('a clipboard that cannot be read is handed on too', (
+    tester,
+  ) async {
+    // `OpenClipboard` fails while another app holds it — a clipboard manager,
+    // a browser mid-copy, RDP — and Flutter raises a `PlatformException`.
+    // Swallowed, it left Ctrl+V doing nothing whatsoever: no paste, and not
+    // even the `^V` that is the whole point of the fallback.
+    clipboardThrows = true;
+    final (_, toShell) = await pumpPane(tester);
+
+    await press(tester);
+
+    expect(toShell, ['\x16']);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('an empty clipboard is handed on rather than pasted', (

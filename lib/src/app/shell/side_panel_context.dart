@@ -89,6 +89,12 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
           'Switch to another checkout in this project, or rescan for new ones',
       position: PopupMenuPosition.under,
       padding: EdgeInsets.zero,
+      // The last result belongs to the last rescan. Kept until the menu is
+      // opened again — without this the item is permanently labelled "No new
+      // checkouts found" and the word Rescan is never seen twice.
+      onOpened: () {
+        if (_rescanResult != null) setState(() => _rescanResult = null);
+      },
       onSelected: (picked) => switch (picked) {
         final Repository checkout => ref
             .read(checkoutPickerProvider)

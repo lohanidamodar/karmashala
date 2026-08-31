@@ -286,7 +286,15 @@ class _ExplorerRowState extends State<ExplorerRow> {
 /// twice over: the row's text must not reflow when a pointer arrives, and an
 /// absent button is absent from the focus ring too, so a hundred sessions cost
 /// a hundred tab stops instead of two hundred.
-class ExplorerRowMenuButton extends StatelessWidget {
+///
+/// **It stays while its own menu is open, and that is not a nicety.** Opening
+/// the menu pushes a route whose modal barrier takes both the hover and the
+/// focus off the row in the same frame, so a button drawn only for a hovering
+/// pointer unmounted itself underneath its own menu — and `showMenu` drops the
+/// result when the button that opened it is gone. Every choice on every row was
+/// silently discarded for a mouse user; right-click and Shift+F10 worked, which
+/// is exactly why the tests did not see it.
+class ExplorerRowMenuButton extends StatefulWidget {
   const ExplorerRowMenuButton({
     required this.visible,
     required this.tooltip,
@@ -301,20 +309,34 @@ class ExplorerRowMenuButton extends StatelessWidget {
   final ValueChanged<String> onSelected;
 
   @override
+  State<ExplorerRowMenuButton> createState() => _ExplorerRowMenuButtonState();
+}
+
+class _ExplorerRowMenuButtonState extends State<ExplorerRowMenuButton> {
+  bool _open = false;
+
+  @override
   Widget build(BuildContext context) {
     final density = UiDensity.of(context);
     final slot = ExplorerRow.slotOf(density);
     return SizedBox(
       width: slot,
       height: slot,
-      child: visible
+      child: widget.visible || _open
           ? PopupMenuButton<String>(
-              tooltip: tooltip,
+              tooltip: widget.tooltip,
               padding: EdgeInsets.zero,
               iconSize: ExplorerRow.glyphOf(density),
               icon: const Icon(AppIcons.dotsThreeVertical),
-              onSelected: onSelected,
-              itemBuilder: (context) => items,
+              onOpened: () => setState(() => _open = true),
+              onCanceled: () {
+                if (mounted) setState(() => _open = false);
+              },
+              onSelected: (value) {
+                if (mounted) setState(() => _open = false);
+                widget.onSelected(value);
+              },
+              itemBuilder: (context) => widget.items,
             )
           : null,
     );

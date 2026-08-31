@@ -37,6 +37,9 @@ void main() {
     ),
   ];
 
+  /// What the rows reported through `onMenu`.
+  final picked = <String>[];
+
   /// One of each row kind, at the depth the Explorer draws it.
   Widget rows({bool selected = false}) => Column(
     children: [
@@ -49,7 +52,7 @@ void main() {
         onTap: () {},
         onNewSession: () {},
         menuItems: menu(),
-        onMenu: (_) {},
+        onMenu: picked.add,
       ),
       CheckoutRow(
         depth: 1,
@@ -58,7 +61,7 @@ void main() {
         expanded: true,
         onTap: () {},
         menuItems: menu(),
-        onMenu: (_) {},
+        onMenu: picked.add,
       ),
       SessionCard(
         depth: 2,
@@ -68,7 +71,7 @@ void main() {
         title: 'Benchmark arcade games',
         onTap: () {},
         menuItems: menu(),
-        onMenu: (_) {},
+        onMenu: picked.add,
       ),
       SessionCard(
         depth: 3,
@@ -78,7 +81,7 @@ void main() {
         title: 'A subagent of it',
         onTap: () {},
         menuItems: menu(),
-        onMenu: (_) {},
+        onMenu: picked.add,
       ),
     ],
   );
@@ -99,6 +102,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    picked.clear();
     await tester.pumpWidget(host(rows(selected: selected)));
     await tester.pumpAndSettle();
   }
@@ -289,6 +293,45 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Rename'), findsOneWidget);
+    });
+
+    testWidgets('a choice made with the mouse actually reaches the row', (
+      tester,
+    ) async {
+      // The bug this exists for: the button was drawn only while the row was
+      // hovered, and opening the menu puts a modal barrier over the row — so
+      // the button unmounted underneath its own menu and `showMenu` dropped
+      // the result. Every menu choice was silently discarded for a mouse user,
+      // while right-click and Shift+F10 kept working, which is why nothing
+      // here caught it. Assert the *effect*, not that a menu appeared.
+      await pump(tester);
+      await hover(tester, find.byType(SessionCard).first);
+      await tester.tap(find.byTooltip('Session actions'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+
+      expect(picked, ['rename']);
+    });
+
+    testWidgets('and the button goes again once the menu is gone', (
+      tester,
+    ) async {
+      await pump(tester);
+      final gesture = await hover(tester, find.byType(SessionCard).first);
+      await tester.tap(find.byTooltip('Session actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+
+      await gesture.moveTo(Offset.zero);
+      await tester.pumpAndSettle();
+      expect(
+        find.byTooltip('Session actions'),
+        findsNothing,
+        reason: 'latching it open must not leave it latched',
+      );
     });
 
     testWidgets('a touch-width surface draws it at rest', (tester) async {

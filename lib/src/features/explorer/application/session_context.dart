@@ -125,6 +125,16 @@ class SessionContext {
     _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
     return repository;
   }
+
+  /// Nothing is being followed — the pane on screen runs no session of ours.
+  ///
+  /// Without this a pick made while a plain shell tab is up was filed against
+  /// whichever session was followed *last*, and stuck there: the Changes and
+  /// GitHub panels then described an unrelated checkout every time that session
+  /// came back on screen, for the rest of the run. A pick made with nothing
+  /// followed belongs to nothing.
+  void stopFollowing() =>
+      _ref.read(followedSessionProvider.notifier).set(null);
 }
 
 final sessionContextProvider = Provider(SessionContext.new);
