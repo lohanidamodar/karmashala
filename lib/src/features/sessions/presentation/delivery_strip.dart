@@ -165,13 +165,12 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
 
   @override
   Widget build(BuildContext context) {
-    // `asData?.value` folds "still loading" and "the probe threw" into the same
-    // null the domain reads as "could not tell" — deliberately, so slow git or
-    // a missing `gh` never withholds an action.
-    final delivery = ref
-        .watch(sessionDeliveryProvider(widget.sessionId))
-        .asData
-        ?.value;
+    // `.value` keeps the previous answer through a refresh, which is what
+    // stops the strip blinking every time the window regains focus: the state
+    // line below is drawn only when `delivery != null`, so reading a refresh's
+    // `AsyncLoading` as null made the strip lose a row — measured at 131px
+    // collapsing to 57px — and everything laid out around it moved.
+    final delivery = ref.watch(sessionDeliveryProvider(widget.sessionId)).value;
     final actions = ref.watch(sessionDeliveryActionsProvider(widget.sessionId));
     final canContinue = ref
         .watch(sessionContinuationProvider(widget.sessionId))
