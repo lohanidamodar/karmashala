@@ -37,6 +37,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v20** — G3 step 1: who produced a verdict — the session behind a
 ///   `verification_runs` row and behind a `fanout_candidates` verdict — so a
 ///   self-graded pass can be told from an independently checked one.
+/// * **v21** — Notes: an idea the user chose to keep out of a conversation
+///   instead of acting on it, with the session and message it was taken from.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -58,7 +60,53 @@ final Map<int, MigrationStep> schemaMigrations = {
   18: _migrateToV18,
   19: _migrateToV19,
   20: _migrateToV20,
+  21: _migrateToV21,
 };
+
+void _migrateToV21(Database db) {
+  // Notes: a thought the user chose to keep instead of acting on it.
+  //
+  // `body` is **quoted text, never a summary**. A note is made by tapping the
+  // affordance under a message, and what it stores is that message's own words;
+  // the same argument `HandoffPacket` makes at length applies here for the same
+  // reason — a paraphrase's errors are invisible to the reader who most needs
+  // them, and the reader here is the agent the note is later sent back to.
+  // Editing is the user's, deliberately, and `updated_at` says when they did.
+  //
+  // `source_session_id` is **not** a foreign key, like
+  // `verification_runs.session_id` and for the same reason: a note is a
+  // deferred instruction that has to outlive the conversation it came from.
+  // Deleting a finished session must not delete the idea it produced, and a
+  // note whose session is gone still says everything it said before — its own
+  // text — with an origin that no longer resolves.
+  //
+  // `source_message_ordinal` is the message's index in the transcript that was
+  // on screen, which is stable because transcripts are append-only. It is a
+  // pointer back to the moment, not an identity: the id it would want does not
+  // exist for a PTY-hosted session, whose transcript is the agent's own file
+  // and has no row of ours to name.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS notes (
+      id                     TEXT PRIMARY KEY,
+      title                  TEXT,
+      body                   TEXT NOT NULL,
+      source_session_id      TEXT,
+      source_repository_id   TEXT,
+      source_message_ordinal INTEGER,
+      source_message_role    TEXT,
+      created_at             TEXT NOT NULL,
+      updated_at             TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_notes_session '
+    'ON notes (source_session_id);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_notes_repository '
+    'ON notes (source_repository_id);',
+  );
+}
 
 void _migrateToV20(Database db) {
   // Who produced the verdict (G3 step 1).

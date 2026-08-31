@@ -55,6 +55,13 @@ class SettingsController extends Notifier<Settings> {
     bufferSize: state.logBufferSize,
   );
 
+  /// Turns the Notes feature on or off. Off hides the affordance and the
+  /// panel surface; the notes themselves stay in the database.
+  void setNotesEnabled(bool value) {
+    state = state.copyWith(notesEnabled: value);
+    _save();
+  }
+
   void setThemeMode(AppThemeMode mode) {
     state = state.copyWith(themeMode: mode);
     _save();

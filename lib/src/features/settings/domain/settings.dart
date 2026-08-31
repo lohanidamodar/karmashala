@@ -83,6 +83,7 @@ class Settings {
     this.localRelayPort = 8787,
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
+    this.notesEnabled = true,
     this.debugMode = kDefaultDebugMode,
     this.logVerbosity = LogVerbosity.normal,
     this.logToFile = true,
@@ -225,6 +226,15 @@ class Settings {
   /// terminal density and UI legibility are different preferences.
   final double terminalFontSize;
 
+  /// Whether the Notes feature is offered at all: the note affordance under
+  /// each message, and the Notes surface on the side-panel rail.
+  ///
+  /// On by default, and turning it off **hides the feature, it does not empty
+  /// it** — no note is deleted, and turning it back on brings the same list
+  /// back. A setting that destroyed data would make "I don't need this right
+  /// now" an irreversible decision.
+  final bool notesEnabled;
+
   /// Whether debug mode is on: the root logger drops to `ALL` and the Logs
   /// panel appears on the side-panel rail.
   ///
@@ -284,6 +294,7 @@ class Settings {
     int? localRelayPort,
     double? uiTextScale,
     double? terminalFontSize,
+    bool? notesEnabled,
     bool? debugMode,
     LogVerbosity? logVerbosity,
     bool? logToFile,
@@ -331,6 +342,7 @@ class Settings {
     localRelayPort: localRelayPort ?? this.localRelayPort,
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
+    notesEnabled: notesEnabled ?? this.notesEnabled,
     debugMode: debugMode ?? this.debugMode,
     logVerbosity: logVerbosity ?? this.logVerbosity,
     logToFile: logToFile ?? this.logToFile,
@@ -374,6 +386,7 @@ class Settings {
     'localRelayPort': localRelayPort,
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
+    'notesEnabled': notesEnabled,
     'debugMode': debugMode,
     'logVerbosity': logVerbosity.name,
     'logToFile': logToFile,
@@ -481,6 +494,9 @@ class Settings {
             minTerminalFontSize,
             maxTerminalFontSize,
           ),
+      notesEnabled: json['notesEnabled'] is bool
+          ? json['notesEnabled'] as bool
+          : true,
       debugMode: json['debugMode'] is bool
           ? json['debugMode'] as bool
           : kDefaultDebugMode,
@@ -526,6 +542,7 @@ class Settings {
       other.localRelayPort == localRelayPort &&
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
+      other.notesEnabled == notesEnabled &&
       other.debugMode == debugMode &&
       other.logVerbosity == logVerbosity &&
       other.logToFile == logToFile &&
@@ -565,6 +582,7 @@ class Settings {
       localRelayPort,
       uiTextScale,
       terminalFontSize,
+      notesEnabled,
       debugMode,
       logVerbosity,
       logToFile,
