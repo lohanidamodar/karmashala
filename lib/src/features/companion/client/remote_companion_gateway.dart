@@ -1365,6 +1365,11 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (client == null ||
         !client.isConnected ||
         _link.value != CompanionLinkState.connected) {
+      // Same reading as _mapRefusals: the link is not what it claims, so the
+      // loop must re-dial. Without this the phone parks on a relay socket the
+      // host has left — alone at the rendezvous, still reported "connected" —
+      // and never dials again.
+      _declareDead();
       throw const GatewayException(_kUnreachable);
     }
     return client;

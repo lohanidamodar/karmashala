@@ -263,6 +263,43 @@ void main() {
     await awaitLink(gateway, CompanionLinkState.disconnected);
   });
 
+  test('a refusal while the link is down re-dials instead of parking on '
+      'it', () async {
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+    // Let the post-connect refresh finish: a request already in flight when
+    // the host goes away wakes the loop by itself and would hide the gap
+    // this test is about.
+    expect((await gateway.listSessions()).single.id, 's1');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    // The desktop and its relay both go away, so the phone's transport keeps
+    // re-dialling and the link reads "connecting" from here on.
+    final blip = gateway.linkStates
+        .firstWhere((state) => state == CompanionLinkState.connecting)
+        .timeout(const Duration(seconds: 10));
+    await service!.stop();
+    await relay.close();
+    await blip;
+
+    // The refusal has to tell the connect loop the link is not what it
+    // claims. Without that the gateway parks on the dead link for good — and
+    // once the relay is back it reports "connected" on a rendezvous nobody
+    // is listening on, so the phone never reconnects.
+    await expectLater(
+      gateway.sendPrompt('s1', 'anyone there?'),
+      throwsA(
+        isA<GatewayException>().having(
+          (e) => e.message,
+          'message',
+          contains('unreachable'),
+        ),
+      ),
+    );
+    await awaitLink(gateway, CompanionLinkState.disconnected);
+  });
+
   test(
     'unpair forgets the stored pairing and refuses further actions',
     () async {
