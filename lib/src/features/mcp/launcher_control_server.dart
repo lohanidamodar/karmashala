@@ -58,6 +58,7 @@ import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
 import 'mcp_tool_catalogue.dart';
+import 'session_tools.dart';
 import 'tmux_orchestration.dart';
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
@@ -702,6 +703,7 @@ class LauncherControlServer {
           title: args['title'] as String?,
           prompt: args['prompt'] as String?,
           useWorktree: args['useWorktree'] == true,
+          permissionMode: args['permissionMode'] as String?,
           callerSessionId: callerSessionId,
         );
       case 'open_session':
@@ -781,6 +783,14 @@ class LauncherControlServer {
               const <String>[],
           name: args['name'] as String?,
         );
+      // Operating a session that already exists. Split out because these are
+      // the half that needs the caller's own identity: every one of them
+      // defaults to the session that called it.
+      case final String name when SessionControlTools.handles(name):
+        return SessionControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // The browser tools live in features/browser and share the app's single
       // BrowserService with the browser pane, so an agent and the developer
       // drive the same page.
@@ -965,6 +975,15 @@ class LauncherControlServer {
                 'Run in a dedicated Git worktree instead of the repository '
                 'itself. Use this when the new session will edit files and you '
                 'are still working in the same repository.',
+          },
+          'permissionMode': {
+            'type': 'string',
+            'enum': ['ask', 'acceptEdits', 'bypass'],
+            'description':
+                'How much the new agent may do without asking. Omit to use '
+                'the mode configured in Settings, which is what the '
+                'New-session dialog does. "bypass" skips every prompt and is '
+                'never a default; ask the user before choosing it for them.',
           },
         },
         'required': ['projectId'],
@@ -1401,6 +1420,7 @@ class LauncherControlServer {
         'required': ['ids'],
       },
     },
+    ...sessionControlToolSchemas,
     ...browserToolSchemas,
     ...verificationToolSchemas,
   ];
@@ -1619,6 +1639,24 @@ class LauncherControlServer {
     ];
   }
 
+  /// The permission mode named by a caller, or null to let the setting decide.
+  ///
+  /// Refuses an unknown name rather than falling back to the default. The
+  /// modes are already decided in `permission_carry.dart`, and a typo silently
+  /// becoming "ask" would look like the tool worked; a typo silently becoming
+  /// anything else would be worse.
+  PermissionMode? _parsePermissionMode(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    final wanted = raw.trim();
+    for (final mode in PermissionMode.values) {
+      if (mode.name == wanted) return mode;
+    }
+    throw ArgumentError(
+      'Unknown permissionMode "$raw". One of: '
+      '${PermissionMode.values.map((m) => m.name).join(', ')}.',
+    );
+  }
+
   Future<Object?> _openNewSession({
     String? projectId,
     String? cli,
@@ -1627,6 +1665,7 @@ class LauncherControlServer {
     String? title,
     String? prompt,
     bool useWorktree = false,
+    String? permissionMode,
     String? callerSessionId,
   }) async {
     if (projectId == null) throw ArgumentError('Missing projectId.');
@@ -1709,6 +1748,7 @@ class LauncherControlServer {
           useWorktree: useWorktree,
           firstMessage: prompt,
           parentSessionId: callerSessionId,
+          permissionOverride: _parsePermissionMode(permissionMode),
         ),
       );
       return {
@@ -1718,6 +1758,7 @@ class LauncherControlServer {
         'repository': repo.name,
         'environmentId': repo.path.environmentId,
         'depth': launcher.depthForChildOf(callerSessionId).depth,
+        'permissionMode': launched.session.permissionMode?.name ?? 'not recorded',
         if (launched.session.worktree != null)
           'worktree': launched.session.worktree!.path,
       };

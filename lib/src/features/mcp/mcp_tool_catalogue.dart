@@ -93,6 +93,15 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // Reveals a session that is already running, or resumes one that is not.
       // Twice is once, either way.
       'open_session': McpToolAnnotations(idempotent: true),
+      'session_transcript': McpToolAnnotations.read,
+      'session_send': McpToolAnnotations(),
+      // Presses the agent's own approve/deny key. Approving is granting
+      // permission for something that then happens, and nothing un-happens it.
+      'session_answer': McpToolAnnotations(destructive: true),
+      'session_rename': McpToolAnnotations(idempotent: true),
+      // Ends the agent process. The transcript survives; the turn in flight
+      // does not, and nothing brings it back.
+      'session_end': McpToolAnnotations(destructive: true),
       'session_handoff': McpToolAnnotations(),
       'session_fork': McpToolAnnotations(),
       'open_sessions_in_tmux': McpToolAnnotations(),

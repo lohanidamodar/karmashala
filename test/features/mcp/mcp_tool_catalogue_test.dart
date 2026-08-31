@@ -47,6 +47,8 @@ void main() {
     // marked, and a rename of one must fail here rather than pass on a total.
     for (final name in const [
       'checkpoint_restore',
+      'session_end',
+      'session_answer',
       'device_stop_emulator',
       'device_tap',
       'browser_evaluate',
