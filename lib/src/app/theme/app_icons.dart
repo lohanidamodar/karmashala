@@ -91,6 +91,12 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData caretLeft = IconData(
+    0xe138,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData caretRight = IconData(
     0xe13a,
     fontFamily: 'PhosphorRegular',
