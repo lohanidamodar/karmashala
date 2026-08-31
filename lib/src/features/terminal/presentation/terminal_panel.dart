@@ -378,6 +378,9 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     final fontSize = ref.watch(
       settingsControllerProvider.select((s) => s.terminalFontSize),
     );
+    final chordOverrides = ref.watch(
+      settingsControllerProvider.select((s) => s.terminalChordOverrides),
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -429,8 +432,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 onKeyEvent: _actions.onPaneKey,
                 // xterm's own shortcut manager runs after `onKeyEvent` and
                 // before `Terminal.keyInput`; its Windows defaults quietly took
-                // Ctrl+A and Ctrl+V from the shell. See `terminalPaneShortcuts`.
-                shortcuts: terminalPaneShortcuts,
+                // Ctrl+A and Ctrl+V from the shell. Ctrl+V is paste again, but
+                // declared — and so switchable in Settings, which is what the
+                // overrides are doing here.
+                shortcuts: terminalPaneShortcutsFor(chordOverrides),
                 // Right-click → copy selection / paste / end the session.
                 onSecondaryTapDown: (details, _) => _terminalMenu(
                   context,
