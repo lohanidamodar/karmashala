@@ -6,3 +6,9 @@ tags:
   # CHITRAGUPTA_SSH_* environment variables are unset, so a normal run is
   # unaffected; `--exclude-tags live-ssh` drops them outright.
   live-ssh:
+
+  # Opt-in end-to-end test of the WSL hook path (see
+  # test/features/agents/live_wsl_hook_test.dart). It needs a real WSL
+  # distribution with curl and a WSL virtual switch, and skips itself when it
+  # finds none — so a normal run on a machine without WSL is unaffected.
+  live-wsl:

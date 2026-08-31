@@ -140,9 +140,32 @@ void main() {
       });
 
       expect(closed.mcpUrlFor('s1', environment: EnvironmentKind.wsl), isNull);
-      // And the widened address is never even bound: an endpoint that serves
-      // nothing must not grow a second door for nothing to be served through.
-      expect(closed.wslHost, isNull);
+      // The door is still bound, because `/agent-hook` is still served — the
+      // same fail-*open* rule that keeps the hook route up on loopback when
+      // hardening fails, since an agent that cannot report status is a worse
+      // outcome than one that cannot drive a device. What it must not do is
+      // serve `/mcp` there: a withheld credential is withheld on every door.
+      expect(closed.wslHost, isNotNull);
+      final port = closed.hookEndpoint!.port;
+      expect(
+        (await post(
+          Uri.parse('http://127.0.0.2:$port/mcp'),
+          const <String, Object?>{},
+        )).status,
+        401,
+      );
+      expect(
+        (await post(
+          closed.hookEndpoint!.uriFor(
+            agentId: 'claudeCode',
+            event: 'Stop',
+            environment: EnvironmentKind.wsl,
+          )!,
+          const {'session_id': 's1'},
+          token: closed.hookEndpoint!.token,
+        )).status,
+        200,
+      );
     });
   });
 
@@ -168,15 +191,15 @@ void main() {
     });
 
     test('answers 404 to everything else', () async {
-      // The privileged `/rpc` envelope and the agent-hook route stay on
-      // loopback. Widening the address is a decision about one endpoint, and
-      // this is where that stays true.
+      // The privileged `/rpc` envelope stays on loopback. Widening the address
+      // is a decision about the two endpoints agents in a distribution need,
+      // and this is where that stays true.
       server = await startServer(wslHostAddress: () async => wslStandIn);
       final port = Uri.parse(
         server.mcpUrlFor('s1', environment: EnvironmentKind.wsl)!,
       ).port;
 
-      for (final path in ['/rpc', '/agent-hook', '/']) {
+      for (final path in ['/rpc', '/']) {
         final response = await post(
           Uri.parse('http://127.0.0.2:$port$path'),
           const <String, Object?>{},
@@ -184,11 +207,85 @@ void main() {
         expect(response.status, 404, reason: path);
       }
     });
+
+    test('answers /agent-hook, which is the point of installing one', () async {
+      // Without this the second door 404s the callback and a WSL hook is
+      // installed, fires on every tool call, and reports nothing — the one
+      // outcome worse than skipping the store.
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+      final endpoint = server.hookEndpoint!;
+
+      final response = await post(
+        endpoint.uriFor(
+          agentId: 'claudeCode',
+          event: 'Stop',
+          environment: EnvironmentKind.wsl,
+        )!,
+        const {'session_id': 's1'},
+        token: endpoint.token,
+      );
+
+      expect(response.status, 200);
+    });
+
+    test('still demands the hook token on that door', () async {
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+      final endpoint = server.hookEndpoint!;
+
+      final response = await post(
+        endpoint.uriFor(
+          agentId: 'claudeCode',
+          event: 'Stop',
+          environment: EnvironmentKind.wsl,
+        )!,
+        const {'session_id': 's1'},
+        token: 'not-the-token',
+      );
+
+      expect(response.status, 401);
+    });
+  });
+
+  group('the address the hook endpoint hands to the installer', () {
+    test('is the switch address once that interface is bound', () async {
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+
+      expect(server.hookEndpoint!.wslHost, '127.0.0.2');
+      expect(
+        server.hookEndpoint!.reaches(EnvironmentKind.wsl),
+        isTrue,
+        reason: 'this is what stops the installer skipping a WSL store',
+      );
+    });
+
+    test('is absent on a host with no switch, so WSL stays skipped', () async {
+      server = await startServer(wslHostAddress: () async => null);
+
+      expect(server.hookEndpoint!.wslHost, isNull);
+      expect(server.hookEndpoint!.reaches(EnvironmentKind.wsl), isFalse);
+      expect(
+        server.hookEndpoint!.reaches(EnvironmentKind.windowsNative),
+        isTrue,
+      );
+    });
+
+    test('the token is spelled in a shell command, so it stays shell-safe', () async {
+      server = await startServer(wslHostAddress: () async => wslStandIn);
+      // It is pasted verbatim into a `curl` line in the agent's own config and
+      // run by whatever shell that agent has. A quote, a `$` or a backtick in
+      // it would be a malformed hook in somebody's settings.json — installed,
+      // silent, and reported by nothing.
+      expect(server.hookEndpoint!.token, matches(RegExp(r'^[A-Za-z0-9_=-]+$')));
+    });
   });
 }
 
 /// One JSON POST, returning the status and the body.
-Future<({int status, String body})> post(Uri uri, Object? body) async {
+Future<({int status, String body})> post(
+  Uri uri,
+  Object? body, {
+  String? token,
+}) async {
   final client = HttpClient();
   try {
     final request = await client.postUrl(uri);
@@ -197,6 +294,9 @@ Future<({int status, String body})> post(Uri uri, Object? body) async {
       HttpHeaders.acceptHeader,
       'application/json, text/event-stream',
     );
+    if (token != null) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    }
     request.write(jsonEncode(body));
     final response = await request.close();
     return (
