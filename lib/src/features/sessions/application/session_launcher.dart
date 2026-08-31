@@ -30,14 +30,29 @@ import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
+import 'session_working_directory.dart';
 
 /// What a launch produced.
 class SessionLaunchResult {
-  const SessionLaunchResult({required this.session, this.paneId, this.tabId});
+  const SessionLaunchResult({
+    required this.session,
+    this.paneId,
+    this.tabId,
+    this.workingDirectoryNotice,
+  });
 
   final Session session;
   final String? paneId;
   final String? tabId;
+
+  /// Plain words for the user when the session could not start where it was
+  /// recorded as running, and started somewhere else instead.
+  ///
+  /// Null in the ordinary case. Non-null is not a failure — the session is up —
+  /// but it is the one thing the user must be told, because a resume in the
+  /// wrong directory is how an agent CLI quietly opens a new conversation
+  /// rather than the one that was asked for.
+  final String? workingDirectoryNotice;
 }
 
 /// Raised when the recursion cap or the cycle guard refuses a launch.
@@ -466,6 +481,10 @@ class SessionLauncher {
     }
 
     var workingDirectory = request.repository.path;
+    // What to write on the row, which is the launch directory except when we
+    // fell back off a directory that has gone away — see below.
+    var recordDirectory = true;
+    String? workingDirectoryNotice;
     EnvironmentPath? worktree;
     if (request.existingWorktree != null) {
       // Joining, not creating. A handoff and a same-worktree fork continue the
@@ -484,6 +503,26 @@ class SessionLauncher {
           );
       workingDirectory = created.path;
       worktree = created.path;
+    } else {
+      // Where this conversation was actually running, from the caller when it
+      // knows (a handoff, a fork) and otherwise from the row being resumed —
+      // which is what makes a resume from the Explorer land in an adopted
+      // session's own subdirectory without the Explorer having to say so.
+      final stated = request.workingDirectory ?? reused?.workingDirectory;
+      if (stated != null) {
+        if (_ref.read(sessionDirectoryPresentProvider)(stated)) {
+          workingDirectory = stated;
+        } else {
+          // Falling back rather than failing: a resume must still happen. The
+          // record is kept, because a missing folder is often temporary — an
+          // unmounted drive, a WSL distro that is not running — and forgetting
+          // it would turn that into permanent data loss.
+          recordDirectory = false;
+          workingDirectoryNotice =
+              '${stated.path} no longer exists, so this session starts in '
+              '${request.repository.path.path} instead.';
+        }
+      }
     }
 
     // A resumed session already has a CLI id. A new one gets *ours* when the
@@ -523,6 +562,7 @@ class SessionLauncher {
         reused?.copyWith(
           status: SessionStatus.running,
           permissionMode: permissionMode,
+          workingDirectory: recordDirectory ? workingDirectory : null,
         ) ??
         Session(
           id: id,
@@ -535,6 +575,10 @@ class SessionLauncher {
           // where this session runs, and it does run in a worktree.
           useWorktree: request.useWorktree || worktree != null,
           worktree: worktree,
+          // The directory the process is about to be started in — a fact, and
+          // the same one an adopted session records. Two sources for it would
+          // drift.
+          workingDirectory: recordDirectory ? workingDirectory : null,
           status: SessionStatus.running,
           createdAt: _ref.read(clockProvider).nowUtc(),
           externalSessionId: externalSessionId,
@@ -562,6 +606,7 @@ class SessionLauncher {
       dao
         ..updateStatus(id, SessionStatus.running)
         ..updatePermissionMode(id, permissionMode);
+      if (recordDirectory) dao.updateWorkingDirectory(id, workingDirectory);
     }
     final repositoryDao = _ref.read(sessionRepositoryDaoProvider)
       ..link(id, request.repository.id, role: SessionRepositoryRole.primary);
@@ -579,6 +624,7 @@ class SessionLauncher {
           workingDirectory,
           assignsOwnId,
           firstMessage,
+          workingDirectoryNotice,
         ),
         SessionSurface.external => await _startInExternalTerminal(
           session,
@@ -588,6 +634,7 @@ class SessionLauncher {
           workingDirectory,
           assignsOwnId,
           firstMessage,
+          workingDirectoryNotice,
         ),
       };
       _bump();
@@ -649,6 +696,7 @@ class SessionLauncher {
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
     String? firstMessage,
+    String? workingDirectoryNotice,
   ) {
     final environment = _ref
         .read(executionEnvironmentDaoProvider)
@@ -684,6 +732,7 @@ class SessionLauncher {
       session: session.copyWith(paneId: opened.paneId),
       paneId: opened.paneId,
       tabId: opened.tabId,
+      workingDirectoryNotice: workingDirectoryNotice,
     );
   }
 
@@ -695,6 +744,7 @@ class SessionLauncher {
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
     String? firstMessage,
+    String? workingDirectoryNotice,
   ) async {
     final environment = _ref
         .read(executionEnvironmentDaoProvider)
@@ -740,7 +790,10 @@ class SessionLauncher {
           command: command,
           workingDirectory: distro == null ? workingDirectory.path : null,
         );
-    return SessionLaunchResult(session: session);
+    return SessionLaunchResult(
+      session: session,
+      workingDirectoryNotice: workingDirectoryNotice,
+    );
   }
 
   /// How this session will reach Chitragupta's own tools, or `null` when it

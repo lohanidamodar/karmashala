@@ -17,11 +17,11 @@ import '../domain/session_fork.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_lineage.dart';
 import 'delivery_providers.dart';
-import 'handoff_providers.dart';
 import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
+import 'session_working_directory.dart';
 
 /// One agent this session could be continued in.
 ///

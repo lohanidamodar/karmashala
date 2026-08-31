@@ -549,6 +549,13 @@ class SessionAdoptionService {
       agentInstallationId: installation.id,
       title: _titleFor(title, candidate.agentId),
       useWorktree: false,
+      // Where the user actually started the agent, which until now was known
+      // here and thrown away. Bound to the repository's environment because
+      // that is the environment `_repositoryFor` made the match under, so the
+      // path means the same folder it meant when it was compared. Never
+      // `worktree`: that field would make this session claim a git worktree
+      // and put the user's own checkout in reach of `WorktreeService.remove`.
+      workingDirectory: _directoryOf(candidate, repository),
       status: SessionStatus.running,
       createdAt: clock.nowUtc(),
       externalSessionId: externalSessionId,
@@ -597,11 +604,36 @@ class SessionAdoptionService {
     if (session.status != SessionStatus.running) {
       sessionDao.updateStatus(session.id, SessionStatus.running);
     }
-    onAdopted?.call(
-      session.copyWith(
-        paneId: candidate.paneId,
-        status: SessionStatus.running,
-      ),
+    // Only a row that recorded nothing. A row written before schema v22 has an
+    // unknown directory and this pane is a real answer for it; a row that
+    // already names one was told by whoever launched it, and this evidence —
+    // a pane running an agent with the same conversation id — is not stronger
+    // than that.
+    var updated = session.copyWith(
+      paneId: candidate.paneId,
+      status: SessionStatus.running,
+    );
+    if (session.workingDirectory == null) {
+      final repository = repositoryDao.getById(session.repositoryId);
+      final directory = repository == null
+          ? null
+          : _directoryOf(candidate, repository);
+      if (directory != null) {
+        sessionDao.updateWorkingDirectory(session.id, directory);
+        updated = updated.copyWith(workingDirectory: directory);
+      }
+    }
+    onAdopted?.call(updated);
+  }
+
+  /// The pane's directory, bound to [repository]'s environment, or `null` when
+  /// the pane never recorded one.
+  EnvironmentPath? _directoryOf(_Candidate candidate, Repository repository) {
+    final directory = candidate.workingDirectory;
+    if (directory == null || directory.isEmpty) return null;
+    return EnvironmentPath(
+      environmentId: repository.path.environmentId,
+      path: directory,
     );
   }
 
