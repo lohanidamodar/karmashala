@@ -4,6 +4,7 @@ import '../../../app/shell/app_shell.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../environments/presentation/environments_section.dart';
+import '../../notes/presentation/notes_settings_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
 import '../../ssh/presentation/known_hosts_section.dart';
 import '../../ssh/presentation/ssh_hosts_section.dart';
@@ -169,6 +170,7 @@ class _SectionContent extends StatelessWidget {
       children: [SshHostsSection(), KnownHostsSection()],
     ),
     SettingsSectionId.remote => const RemoteAccessSection(),
+    SettingsSectionId.notes => const NotesSettingsSection(),
     SettingsSectionId.diagnostics => const DiagnosticsPage(),
   };
 }

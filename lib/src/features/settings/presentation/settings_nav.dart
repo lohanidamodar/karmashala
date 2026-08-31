@@ -76,6 +76,14 @@ enum SettingsSectionId {
     'relay',
     'devices',
   ]),
+  notes('Notes', AppIcons.note, [
+    'note',
+    'notes',
+    'idea',
+    'ideas',
+    'save for later',
+    'later',
+  ]),
   diagnostics('Diagnostics', AppIcons.listMagnifyingGlass, [
     'logs',
     'log file',

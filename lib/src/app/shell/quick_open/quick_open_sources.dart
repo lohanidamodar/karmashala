@@ -8,6 +8,7 @@ import '../../../features/editor/application/code_editor_providers.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/git/application/changes_providers.dart';
+import '../../../features/notes/application/notes_providers.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
@@ -150,6 +151,7 @@ class QuickOpenSources {
       ),
       for (final surface in SidePanelSurface.offered(
         debugMode: ref.read(settingsControllerProvider).debugMode,
+        notesEnabled: ref.read(notesEnabledProvider),
       ))
         _command(
           surface.label,

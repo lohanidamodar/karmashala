@@ -19,6 +19,7 @@ import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/git/application/changes_providers.dart';
+import '../../features/notes/application/notes_providers.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
@@ -553,6 +554,7 @@ class _DesktopMenuBar extends ConsumerWidget {
               debugMode: ref.watch(
                 settingsControllerProvider.select((s) => s.debugMode),
               ),
+              notesEnabled: ref.watch(notesEnabledProvider),
             ))
               MenuItemButton(
                 leadingIcon: Icon(SidePanel.iconFor(surface)),

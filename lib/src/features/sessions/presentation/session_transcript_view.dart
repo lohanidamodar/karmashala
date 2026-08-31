@@ -7,6 +7,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
+import '../../notes/application/composer_draft.dart';
+import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
@@ -39,6 +41,52 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
 }
 
 class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
+  /// Owned here rather than inside the composer, because something outside the
+  /// composer writes to it: a note sent back lands in this box.
+  final _composer = TextEditingController();
+
+  @override
+  void dispose() {
+    _composer.dispose();
+    super.dispose();
+  }
+
+  /// Moves whatever the Notes panel queued for this session into the box.
+  ///
+  /// Appended, not assigned: half-typed text in the composer is the user's, and
+  /// a note arriving must not overwrite it. Nothing is sent — the whole point
+  /// of routing a note through here is that the user reads it first, and then
+  /// presses Enter on the ordinary `continueSession` path.
+  void _takeQueuedNote() {
+    final queued = ref
+        .read(composerDraftProvider.notifier)
+        .take(widget.sessionId);
+    if (queued == null || queued.isEmpty) return;
+    final existing = _composer.text.trimRight();
+    _composer.text = existing.isEmpty ? queued : '$existing\n\n$queued';
+    _composer.selection = TextSelection.collapsed(
+      offset: _composer.text.length,
+    );
+  }
+
+  /// Keeps [message] as a note, word for word, remembering where it was taken
+  /// from. One tap: no dialog, no title, nothing rewritten.
+  void _saveNote(ChatMessage message, int ordinal) {
+    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    ref
+        .read(notesProvider.notifier)
+        .capture(
+          body: message.text,
+          sourceSessionId: widget.sessionId,
+          sourceRepositoryId: session?.repositoryId,
+          sourceMessageOrdinal: ordinal,
+          sourceMessageRole: message.role,
+        );
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(content: Text('Saved to Notes.')),
+    );
+  }
+
   Future<void> _stop() async {
     await ref.read(sessionEngineProvider).stop(widget.sessionId);
     ref.read(sessionsRevisionProvider.notifier).bump();
@@ -47,6 +95,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   @override
   Widget build(BuildContext context) {
     ref.watch(sessionsRevisionProvider);
+    final notesEnabled = ref.watch(notesEnabledProvider);
+    // A note sent back while this session was not on screen is waiting rather
+    // than lost; pick it up as soon as the box exists to hold it.
+    ref.listen(composerDraftProvider, (_, next) {
+      if (next.containsKey(widget.sessionId)) _takeQueuedNote();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _takeQueuedNote();
+    });
     final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
     // A PTY-hosted session's conversation lives in the agent's own transcript,
     // because an interactive agent has no structured stream on stdout to read
@@ -104,6 +161,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (messages) => ChatTranscriptView(
               messages: messages,
+              // Null when Notes is off: the transcript never learns the
+              // feature exists, so there is nothing left behind to hide.
+              onSaveNote: notesEnabled ? _saveNote : null,
               // The delivery strip sits on the composer's channel: its prompt
               // actions send through `continueSession`, so they are available
               // in exactly the same circumstances.
@@ -117,6 +177,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   ApprovalRequestCard(sessionId: widget.sessionId),
                   DeliveryStrip(sessionId: widget.sessionId),
                   MessageComposer(
+                    controller: _composer,
                     // MonoCode's chip row: the session's own safety policy,
                     // where the message is written rather than buried in
                     // Settings under the agent's name.

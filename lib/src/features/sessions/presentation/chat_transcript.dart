@@ -17,6 +17,11 @@ class ChatMessage {
   final String text;
 }
 
+/// Called when the user keeps a message as a note: the message itself, and its
+/// index in the whole transcript (not in the visible window), which is what the
+/// note records as where it came from.
+typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
+
 /// A CLI-style conversation list: user turns, agent replies and tool lines,
 /// rendered close to how Claude Code / Codex print them. Long transcripts start
 /// anchored at the newest message and load earlier turns on demand (a header
@@ -26,12 +31,18 @@ class ChatTranscriptView extends StatefulWidget {
     required this.messages,
     this.footer,
     this.emptyHint = 'No messages yet.',
+    this.onSaveNote,
     super.key,
   });
 
   final List<ChatMessage> messages;
   final Widget? footer;
   final String emptyHint;
+
+  /// Keeps a message as a note. Null hides the affordance entirely — the view
+  /// knows nothing about the Notes feature or the setting behind it, only
+  /// whether it was given somewhere to send one.
+  final SaveNoteCallback? onSaveNote;
 
   @override
   State<ChatTranscriptView> createState() => _ChatTranscriptViewState();
@@ -125,8 +136,14 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                         ),
                       );
                     }
-                    final message = visible[index - (start > 0 ? 1 : 0)];
-                    return _ChatMessageTile(message: message);
+                    final offset = index - (start > 0 ? 1 : 0);
+                    final message = visible[offset];
+                    return _ChatMessageTile(
+                      message: message,
+                      onSaveNote: widget.onSaveNote == null
+                          ? null
+                          : () => widget.onSaveNote!(message, start + offset),
+                    );
                   },
                 ),
         ),
@@ -137,8 +154,9 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 }
 
 class _ChatMessageTile extends StatelessWidget {
-  const _ChatMessageTile({required this.message});
+  const _ChatMessageTile({required this.message, this.onSaveNote});
   final ChatMessage message;
+  final VoidCallback? onSaveNote;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +198,7 @@ class _ChatMessageTile extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
+                    if (onSaveNote != null) _SaveNoteButton(onSave: onSaveNote!),
                     _CopyButton(text: message.text),
                   ],
                 ),
@@ -200,6 +219,49 @@ class _ChatMessageTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Keeps this message as a note, in one tap.
+///
+/// It sits beside Copy because it is the same gesture with a different
+/// destination, and it does the whole job on the first click: **the message's
+/// own words become the note**. Nothing is summarised on the way — the point of
+/// the feature is that you were mid-thought and did not want to stop, and a
+/// dialog asking you to title it would be the interruption you were avoiding.
+/// Titling and editing live in the Notes panel, afterwards.
+class _SaveNoteButton extends StatefulWidget {
+  const _SaveNoteButton({required this.onSave});
+  final VoidCallback onSave;
+
+  @override
+  State<_SaveNoteButton> createState() => _SaveNoteButtonState();
+}
+
+class _SaveNoteButtonState extends State<_SaveNoteButton> {
+  bool _saved = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: _saved ? 'Saved to Notes' : 'Save as note',
+      visualDensity: VisualDensity.compact,
+      iconSize: 13,
+      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      padding: EdgeInsets.zero,
+      color: _saved
+          ? SemanticColors.of(context).idle
+          : scheme.onSurfaceVariant,
+      icon: Icon(_saved ? AppIcons.check : AppIcons.notePencil),
+      onPressed: () async {
+        widget.onSave();
+        if (!mounted) return;
+        setState(() => _saved = true);
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (mounted) setState(() => _saved = false);
+      },
     );
   }
 }
