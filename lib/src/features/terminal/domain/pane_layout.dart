@@ -73,7 +73,7 @@ class PaneRect {
 /// closing and focus traversal are unit-testable without a widget tree. Every
 /// operation returns a new layout; nothing here mutates.
 class PaneLayout {
-  const PaneLayout(this.root);
+  PaneLayout(this.root);
 
   /// A layout holding a single pane.
   factory PaneLayout.single(String paneId) => PaneLayout(PaneLeaf(paneId));
@@ -81,13 +81,19 @@ class PaneLayout {
   final PaneNode root;
 
   /// Pane ids in depth-first, left-to-right order.
-  List<String> get panes {
-    final result = <String>[];
-    _collect(root, result);
-    return result;
-  }
+  ///
+  /// Walked once and kept. A layout is immutable — every operation returns a
+  /// new one — so the answer cannot go stale, and it is asked for constantly:
+  /// once per tab on every publish to set ingest tiers, and again inside every
+  /// [contains]. Rebuilding the list each time made "which tab holds this
+  /// pane?" allocate a list per tab per lookup.
+  ///
+  /// Treat as read-only.
+  late final List<String> panes = _collect(root, <String>[]);
 
-  bool contains(String paneId) => panes.contains(paneId);
+  late final Set<String> _paneIds = panes.toSet();
+
+  bool contains(String paneId) => _paneIds.contains(paneId);
 
   /// Divides [paneId] along [axis], putting [newPaneId] after it.
   ///
@@ -200,7 +206,7 @@ class PaneLayout {
 
 // --- Tree operations ---------------------------------------------------------
 
-void _collect(PaneNode node, List<String> out) {
+List<String> _collect(PaneNode node, List<String> out) {
   switch (node) {
     case PaneLeaf():
       out.add(node.id);
@@ -209,6 +215,7 @@ void _collect(PaneNode node, List<String> out) {
         _collect(child, out);
       }
   }
+  return out;
 }
 
 PaneNode _splitIn(
