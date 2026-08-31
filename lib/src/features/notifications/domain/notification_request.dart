@@ -90,9 +90,7 @@ class NotificationCoalescer {
       );
     }
 
-    final needsUser = unique
-        .where((e) => e.reason != NotificationReason.finished)
-        .length;
+    final needsUser = unique.where((e) => e.reason.needsUser).length;
     final title = switch (needsUser) {
       0 => '${unique.length} agents finished',
       final int n when n == unique.length => '$n sessions need you',
