@@ -1449,12 +1449,13 @@ class RemoteCompanionGateway implements CompanionGateway {
       // sent no label leaves only its own status word — the phone never
       // invents a claim about a process it cannot see.
       agentLabel: snapshot.agentLabel ?? snapshot.status.replaceAll('_', ' '),
-      projectName: snapshot.repositoryName ?? 'No project',
-      // The repository's real identity, so two checkouts sharing a folder
-      // name stay two projects. Null from an older host — the list then
-      // falls back to the name, which is what it always grouped by.
-      projectId: snapshot.repositoryId,
-      projectPath: text('repositoryPath'),
+      // The project the desktop's Explorer groups under, not the repository
+      // inside it — one project holding several repos is one header here too.
+      // Older hosts send no project, so the repository still answers.
+      projectName:
+          snapshot.projectName ?? snapshot.repositoryName ?? 'No project',
+      projectId: snapshot.projectId ?? snapshot.repositoryId,
+      projectPath: snapshot.projectPath,
       status: _statusOf(snapshot),
       whereabouts: snapshot.whereabouts,
       branch: text('branch'),
@@ -1465,7 +1466,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       deliveryStage: snapshot.stage,
       imported: snapshot.imported,
       archived: snapshot.archived,
-      folderMissing: raw?['folderMissing'] == true,
+      folderMissing: snapshot.folderMissing || raw?['folderMissing'] == true,
     );
   }
 

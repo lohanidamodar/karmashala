@@ -107,6 +107,10 @@ void main() {
       required String title,
       String? repositoryId,
       String? repositoryName,
+      String? projectId,
+      String? projectName,
+      String? projectPath,
+      bool folderMissing = false,
       bool archived = false,
     }) {
       fake.sessions[id] = RemoteSessionSnapshot(
@@ -116,6 +120,10 @@ void main() {
         archived: archived,
         repositoryId: repositoryId,
         repositoryName: repositoryName,
+        projectId: projectId,
+        projectName: projectName,
+        projectPath: projectPath,
+        folderMissing: folderMissing,
       );
     }
 
@@ -130,6 +138,41 @@ void main() {
       final list = await gateway.listSessions();
 
       expect([for (final s in list) s.id], ['z', 'a', 'm']);
+    });
+
+    test('two repositories in one project make one header, not two', () async {
+      // The Explorer groups by project; the phone must agree, or a project
+      // holding several checkouts splits into a header per checkout.
+      addRow('a', title: 'A', repositoryId: 'r1', repositoryName: 'api',
+          projectId: 'p1', projectName: 'Shop', projectPath: '/w/shop');
+      addRow('b', title: 'B', repositoryId: 'r2', repositoryName: 'web',
+          projectId: 'p1', projectName: 'Shop', projectPath: '/w/shop');
+      final gateway = await pairedGateway();
+
+      final list = await gateway.listSessions();
+
+      expect({for (final s in list) s.projectKey}, hasLength(1));
+      expect(list.first.projectName, 'Shop');
+      expect(list.first.projectPath, '/w/shop');
+    });
+
+    test('an older host without projects still groups by repository', () async {
+      addRow('a', title: 'A', repositoryId: 'r1', repositoryName: 'api');
+      addRow('b', title: 'B', repositoryId: 'r2', repositoryName: 'web');
+      final gateway = await pairedGateway();
+
+      final list = await gateway.listSessions();
+
+      expect({for (final s in list) s.projectKey}, hasLength(2));
+      expect(list.first.projectName, 'api');
+    });
+
+    test('a missing folder is marked, not silently normal', () async {
+      addRow('a', title: 'A', projectId: 'p1', projectName: 'Gone',
+          folderMissing: true);
+      final gateway = await pairedGateway();
+
+      expect((await gateway.listSessions()).single.folderMissing, isTrue);
     });
 
     test('archived sessions are listed and flagged, not dropped', () async {
