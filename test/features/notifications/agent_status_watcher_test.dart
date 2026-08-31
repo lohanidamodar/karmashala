@@ -33,6 +33,7 @@ void main() {
   late List<SessionAttention> attention;
   late List<InboxUpdate> inboxUpdates;
   late SessionStatusRegistry registry;
+  late List<String> Function(WatchedSession)? readTail;
 
   const key = AgentSessionKey(AgentIds.claudeCode, 'cli-1');
   const session = WatchedSession(
@@ -62,6 +63,7 @@ void main() {
     notified = [];
     attention = [];
     inboxUpdates = [];
+    readTail = null;
   });
 
   /// The watcher over a real registry. It used to gather statuses itself, one
@@ -73,6 +75,9 @@ void main() {
       agents: AgentRegistry.builtIn,
       loadSessions: () => watched,
       clock: clock,
+      // Read through the variable, not captured at build time: these tests
+      // change what the screen says between polls.
+      readTail: (session) => readTail?.call(session) ?? const [],
     );
     return AgentStatusWatcher(
       registry: registry,
@@ -286,6 +291,33 @@ void main() {
 
     expect(notified, isEmpty);
     expect(attention, hasLength(1));
+  });
+
+  test('a native session with nothing but a screen still reaches the tray', () async {
+    // The audit's P2: the ambient watcher built its queries from agent id,
+    // session id and an optional state path, so a native session — which has no
+    // state path — could only ever be answered by a hook, and read `unknown`
+    // once one went stale. Consolidating on the registry gave the watcher the
+    // same terminal grid the per-card badge had been reading all along, one row
+    // away. This is that, at the pipeline's own level.
+    const native = WatchedSession(
+      key: AgentSessionKey(AgentIds.claudeCode, 'row-native'),
+      label: 'Rename the button',
+      openId: 'row-native',
+      imported: false,
+    );
+    watched = [native];
+    readTail = (_) => const ['  esc to interrupt  '];
+    final watcher = build();
+
+    await watcher.poll();
+    expect(watcher.lastStatusOf(native.key), AgentActivityStatus.working);
+
+    readTail = (_) => const ['  Enter to confirm  '];
+    await watcher.poll();
+
+    expect(attention.single.menuLabel, 'Rename the button — needs approval');
+    expect(notified.single.reason, NotificationReason.needsInput);
   });
 
   group('hooks are the primary path', () {
