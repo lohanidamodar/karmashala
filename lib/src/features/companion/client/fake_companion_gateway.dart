@@ -29,6 +29,24 @@ class _Watched<T> {
   }
 }
 
+/// The id a scripted pairing that named no host gets, so a fake phone still
+/// has one addressable connection. Host ids are 16 bytes of hex on the wire,
+/// so the scripted ones are too — [DeviceId.parse] accepts nothing else.
+String fakeHostId(int index) =>
+    'fa4e${index.toRadixString(16).padLeft(4, '0')}'.padRight(32, '0');
+
+final String _kFakeHostId = fakeHostId(0);
+
+/// A scripted host id as a [DeviceId], or null for one a test invented that
+/// is not 16 bytes of hex — the fake must not throw over a label.
+DeviceId? _deviceId(String hostId) {
+  try {
+    return DeviceId.parse(hostId);
+  } on Object {
+    return null;
+  }
+}
+
 /// The scripted gateway.
 ///
 /// Constructed unpaired by default — the first-run experience. Use
@@ -36,6 +54,10 @@ class _Watched<T> {
 /// the mutators ([setSessions], [setLink], [appendMessage], [raiseApproval],
 /// [emitAttention]) to drive the UI from a test. Actions are recorded in
 /// [sentPrompts] and [answeredApprovals].
+///
+/// Multi-host: pass [connections] for a phone with several saved desktops and
+/// [sessionsByHost] for what each one holds, so a test can watch [switchTo]
+/// swap the whole session list.
 class FakeCompanionGateway implements CompanionGateway {
   FakeCompanionGateway({
     CompanionPairing? pairing,
@@ -47,6 +69,10 @@ class FakeCompanionGateway implements CompanionGateway {
     this.validShortCode = 'ABCD1234',
     this.pairDelay = Duration.zero,
     CapabilitySet? grantOnPair,
+    List<CompanionConnection> connections = const [],
+    Map<String, List<CompanionSessionSummary>> sessionsByHost = const {},
+    this.switchDelay = Duration.zero,
+    this.failSwitchTo,
   }) : _pairing = _Watched(pairing),
        _link = _Watched(link),
        _linkPath = _Watched(
@@ -55,7 +81,24 @@ class FakeCompanionGateway implements CompanionGateway {
              : null,
        ),
        _sessions = _Watched(List.unmodifiable(sessions)),
-       _grantOnPair = grantOnPair ?? CapabilitySet.all {
+       _grantOnPair = grantOnPair ?? CapabilitySet.all,
+       _sessionsByHost = {
+         for (final entry in sessionsByHost.entries)
+           entry.key: List.unmodifiable(entry.value),
+       },
+       _connections = _Watched(
+         List.unmodifiable(
+           connections.isNotEmpty || pairing == null
+               ? connections
+               : [
+                   CompanionConnection(
+                     hostId: pairing.hostId?.value ?? _kFakeHostId,
+                     name: pairing.hostName ?? 'Desktop',
+                     active: true,
+                   ),
+                 ],
+         ),
+       ) {
     transcripts.forEach(
       (id, messages) =>
           _transcripts[id] = _Watched(List.unmodifiable(messages)),
@@ -72,6 +115,10 @@ class FakeCompanionGateway implements CompanionGateway {
     CompanionLinkPath? linkPath,
     CapabilitySet? capabilities,
     String hostName = 'Desktop',
+    List<CompanionConnection> connections = const [],
+    Map<String, List<CompanionSessionSummary>> sessionsByHost = const {},
+    Duration switchDelay = Duration.zero,
+    String? failSwitchTo,
   }) => FakeCompanionGateway(
     pairing: CompanionPairing(
       capabilities: capabilities ?? CapabilitySet.all,
@@ -82,6 +129,10 @@ class FakeCompanionGateway implements CompanionGateway {
     sessions: sessions,
     transcripts: transcripts,
     approvals: approvals,
+    connections: connections,
+    sessionsByHost: sessionsByHost,
+    switchDelay: switchDelay,
+    failSwitchTo: failSwitchTo,
   );
 
   /// The one short code [pairWithCode] accepts.
@@ -90,6 +141,14 @@ class FakeCompanionGateway implements CompanionGateway {
   /// A pause between pairing-progress stages, so a widget test can watch each
   /// one render. Zero (the default) keeps pairing effectively synchronous.
   final Duration pairDelay;
+
+  /// A pause inside [switchTo] so a widget test can watch the connecting
+  /// state render before the new host lands.
+  final Duration switchDelay;
+
+  /// A host id whose [switchTo] leaves the phone on it but disconnected —
+  /// the scripted version of "the desktop you chose is not answering".
+  final String? failSwitchTo;
 
   final CapabilitySet _grantOnPair;
   final _progress = StreamController<CompanionPairingProgress>.broadcast(
@@ -100,6 +159,8 @@ class FakeCompanionGateway implements CompanionGateway {
   final _Watched<CompanionLinkState> _link;
   final _Watched<CompanionLinkPath?> _linkPath;
   final _Watched<List<CompanionSessionSummary>> _sessions;
+  final _Watched<List<CompanionConnection>> _connections;
+  final Map<String, List<CompanionSessionSummary>> _sessionsByHost;
   final _transcripts = <String, _Watched<List<CompanionChatMessage>>>{};
   final _approvals = <String, _Watched<CompanionApproval?>>{};
   final _attention = StreamController<CompanionAttentionEvent>.broadcast(
@@ -121,6 +182,9 @@ class FakeCompanionGateway implements CompanionGateway {
 
   /// How many times the UI asked for a reconnect.
   int reconnectRequests = 0;
+
+  /// Every host id the UI asked to switch to, in order.
+  final switchRequests = <String>[];
 
   // ---------------------------------------------------------------- pairing
 
@@ -244,21 +308,125 @@ class FakeCompanionGateway implements CompanionGateway {
   }
 
   CompanionPairing _pair() {
+    // Pairing ADDS a desktop and switches to it; only re-pairing the same
+    // host replaces its record.
+    final hostId = fakeHostId(_connections.value.length);
     final paired = CompanionPairing(
       capabilities: _grantOnPair,
       hostName: 'Desktop',
+      hostId: DeviceId.parse(hostId),
     );
     _pairing.value = paired;
+    _connections.value = List.unmodifiable([
+      for (final c in _connections.value)
+        CompanionConnection(
+          hostId: c.hostId,
+          name: c.name,
+          active: false,
+          lastConnectedAt: c.lastConnectedAt,
+        ),
+      CompanionConnection(hostId: hostId, name: 'Desktop', active: true),
+    ]);
     _link.value = CompanionLinkState.connected;
     _linkPath.value ??= CompanionLinkPath.relay;
     return paired;
   }
 
+  // ------------------------------------------------------------ connections
+
+  @override
+  List<CompanionConnection> get connections => _connections.value;
+
+  @override
+  Stream<List<CompanionConnection>> get connectionsStates =>
+      _connections.stream;
+
+  @override
+  Future<void> switchTo(String hostId) async {
+    final target = _connections.value
+        .where((c) => c.hostId == hostId)
+        .firstOrNull;
+    if (target == null) {
+      throw const GatewayException(
+        'That desktop is no longer saved on this phone.',
+      );
+    }
+    if (target.active) return;
+    switchRequests.add(hostId);
+    // The old host's link and every derived state go first: nothing from it
+    // may bleed into the new one.
+    _link.value = CompanionLinkState.connecting;
+    _sessions.value = const [];
+    _transcripts.clear();
+    for (final approval in _approvals.values) {
+      approval.value = null;
+    }
+    _approvals.clear();
+    _setActive(hostId);
+    if (switchDelay != Duration.zero) await Future<void>.delayed(switchDelay);
+    _pairing.value = CompanionPairing(
+      capabilities: _grantOnPair,
+      hostName: target.name,
+      hostId: _deviceId(hostId),
+    );
+    if (failSwitchTo == hostId) {
+      // Landed on the chosen desktop, but it is not answering — the banner
+      // says so, exactly as it would after a relaunch.
+      _link.value = CompanionLinkState.disconnected;
+      _linkPath.value = null;
+      return;
+    }
+    _sessions.value = List.unmodifiable(_sessionsByHost[hostId] ?? const []);
+    _link.value = CompanionLinkState.connected;
+    _linkPath.value = CompanionLinkPath.relay;
+  }
+
+  @override
+  Future<void> removeConnection(String hostId) async {
+    final wasActive = _connections.value
+        .any((c) => c.hostId == hostId && c.active);
+    final rest = [
+      for (final c in _connections.value)
+        if (c.hostId != hostId) c,
+    ];
+    if (!wasActive) {
+      _connections.value = List.unmodifiable(rest);
+      return;
+    }
+    if (rest.isEmpty) {
+      _connections.value = const [];
+      await unpair();
+      return;
+    }
+    _connections.value = List.unmodifiable(rest);
+    await switchTo(rest.first.hostId);
+  }
+
+  void _setActive(String hostId) => _connections.value = List.unmodifiable([
+    for (final c in _connections.value)
+      CompanionConnection(
+        hostId: c.hostId,
+        name: c.name,
+        active: c.hostId == hostId,
+        lastConnectedAt: c.lastConnectedAt,
+      ),
+  ]);
+
   @override
   Future<void> unpair() async {
+    final active = _connections.value
+        .where((c) => c.active)
+        .firstOrNull
+        ?.hostId;
+    if (active != null && _connections.value.length > 1) {
+      await removeConnection(active);
+      return;
+    }
+    _connections.value = const [];
     _pairing.value = null;
     _link.value = CompanionLinkState.disconnected;
     _linkPath.value = null;
+    _sessions.value = const [];
   }
 
   @override

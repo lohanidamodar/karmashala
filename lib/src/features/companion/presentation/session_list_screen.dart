@@ -41,14 +41,19 @@ class SessionListScreen extends ConsumerWidget {
                 'Start one there and it appears here.',
           );
         }
-        // Group by project, keeping the host's ordering within and across.
+        // Group by the repository's real identity — two checkouts that share
+        // a folder name are two projects — and keep the host's own ordering
+        // both inside a group and across groups. The host's list IS the
+        // order; re-sorting it here is what made the list jump.
         final byProject = <String, List<CompanionSessionSummary>>{};
         for (final session in list) {
-          (byProject[session.projectName] ??= []).add(session);
+          (byProject[session.projectKey] ??= []).add(session);
         }
         final children = <Widget>[];
-        byProject.forEach((project, sessions) {
-          children.add(_ProjectHeader(name: project, sessions: sessions));
+        byProject.forEach((_, sessions) {
+          children.add(
+            _ProjectHeader(name: sessions.first.projectName, sessions: sessions),
+          );
           for (final session in sessions) {
             children.add(_card(context, session, now));
           }
@@ -68,6 +73,13 @@ class SessionListScreen extends ConsumerWidget {
     DateTime now,
   ) {
     final at = session.lastActivityAt;
+    // The desktop's own clauses, appended to line three rather than replacing
+    // it: an archived or folder-less session is still listed, and says why.
+    final notes = [
+      if (session.folderMissing) 'folder missing',
+      if (session.archived) 'archived',
+      if (session.whereabouts != null) session.whereabouts!,
+    ];
     return SessionCard(
       depth: 0,
       selected: false,
@@ -78,7 +90,7 @@ class SessionListScreen extends ConsumerWidget {
       title: session.title,
       branch: session.branch,
       subPath: session.subPath,
-      whereabouts: session.whereabouts,
+      whereabouts: notes.isEmpty ? null : notes.join('  ·  '),
       worktree: session.worktree,
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(

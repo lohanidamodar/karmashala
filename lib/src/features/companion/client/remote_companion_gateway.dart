@@ -123,6 +123,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   late final Future<void> _ready;
 
+  /// Every saved desktop, and which is active. The active record is mirrored
+  /// in [_record] because everything below reads one host at a time.
+  stored.CompanionConnections _all = stored.CompanionConnections();
+
   stored.CompanionPairing? _record;
   CompanionClient? _client;
   StreamSubscription<CompanionEvent>? _clientEvents;
@@ -130,6 +134,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   StreamSubscription<TransportState>? _transportStates;
 
   final _pairing = _Watched<CompanionPairing?>(null);
+  final _connections = _Watched<List<CompanionConnection>>(const []);
   final _link = _Watched<CompanionLinkState>(CompanionLinkState.disconnected);
   final _linkPath = _Watched<CompanionLinkPath?>(null);
   final _progress = StreamController<CompanionPairingProgress>.broadcast(
@@ -142,6 +147,10 @@ class RemoteCompanionGateway implements CompanionGateway {
   );
 
   List<CompanionSessionSummary>? _sessions;
+
+  /// The session ids in the order the host last listed them.
+  final _hostOrder = <String>[];
+
   final _subscribed = <String>{};
   final _lastAttention = <String, String?>{};
   final _transcripts = <String, _TranscriptState>{};
@@ -150,6 +159,11 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   bool _loopRunning = false;
   bool _closed = false;
+
+  /// Set while a deliberate host switch is tearing the old link down, so the
+  /// loop dials the new desktop straight away instead of treating the drop as
+  /// an outage to back off from.
+  bool _switching = false;
   Completer<void>? _died;
   Completer<void>? _backoffWaiter;
   Future<void>? _refreshing;
@@ -196,8 +210,8 @@ class RemoteCompanionGateway implements CompanionGateway {
       throw _refusedPairingInput();
     }
     _emitPairing(CompanionPairingStage.codeAccepted);
-    // Re-pairing replaces the old host: drop the old link first so the new
-    // record is the only one anything reads.
+    // Pairing ADDS a desktop and switches to it, so the old host's link goes
+    // first — its sessions must not bleed into the new one.
     await _dropLink();
     final pairingClient = CompanionPairingClient(
       store: store,
@@ -317,18 +331,135 @@ class RemoteCompanionGateway implements CompanionGateway {
     );
   }
 
-  CompanionPairing _adoptPairing(stored.CompanionPairing record) {
-    _record = record;
-    final public = _publicPairing(record);
+  /// A freshly paired host becomes a saved connection AND the active one.
+  /// Pairing a host this phone already holds replaces that record alone; the
+  /// pairing client has already written it, so this re-reads the set.
+  Future<CompanionPairing> _adoptPairing(stored.CompanionPairing record) async {
+    _all = await stored.CompanionConnections.mutate(store, (all) {
+      all
+        ..upsert(record)
+        ..activeHostId = record.hostId;
+      return all;
+    });
+    _record = _all.active ?? record;
+    final public = _publicPairing(_record!);
     _pairing.value = public;
+    _publishConnections();
     _emitPairing(
       CompanionPairingStage.paired,
       hostName: public.hostName,
       capabilities: record.capabilities,
     );
+    // The old host's connect loop may have re-dialled it while the pairing
+    // race ran, so tear that link down again now that the new record is the
+    // active one — otherwise the phone would sit on the previous desktop
+    // while claiming to be on this one.
+    _switching = true;
+    await _dropLink(keepState: true);
+    _resetHostState();
+    _link.value = CompanionLinkState.connecting;
     _backoff.reset();
     _startLoop();
     return public;
+  }
+
+  // ------------------------------------------------------------ connections
+
+  @override
+  List<CompanionConnection> get connections => _connections.value;
+
+  @override
+  Stream<List<CompanionConnection>> get connectionsStates =>
+      _connections.stream;
+
+  @override
+  Future<void> switchTo(String hostId) async {
+    await _ready;
+    if (_closed) return;
+    if (_all.activeHostId?.value == hostId && _record != null) return;
+    final target = _all.byHost(hostId);
+    if (target == null) {
+      throw const GatewayException(
+        'That desktop is no longer saved on this phone.',
+      );
+    }
+    _all = await stored.CompanionConnections.mutate(store, (all) {
+      if (all.byHost(hostId) != null) all.activeHostId = all.byHost(hostId)!.hostId;
+      return all;
+    });
+    await _becomeActive(_all.active ?? target);
+  }
+
+  @override
+  Future<void> removeConnection(String hostId) async {
+    await _ready;
+    if (_all.byHost(hostId) == null) return;
+    final wasActive = _all.activeHostId?.value == hostId;
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        all.remove(hostId);
+        return all;
+      });
+    } on Object catch (error) {
+      onLog?.call('removeConnection failed: $error');
+      throw const GatewayException(
+        "That desktop could not be removed from this phone's secure storage. "
+        'Try again.',
+      );
+    }
+    if (!wasActive) {
+      // A background record went away; the live link is untouched.
+      _publishConnections();
+      return;
+    }
+    // The active one went: fall back to whatever the store chose, or unpaired.
+    await _becomeActive(_all.active);
+  }
+
+  /// Drops the current link and rebuilds every derived state for [record] —
+  /// or for no host at all when it is null. Nothing from the old desktop may
+  /// bleed into the new one, so the session list, subscriptions, transcripts,
+  /// approvals and attention baselines are all cleared before the dial.
+  Future<void> _becomeActive(stored.CompanionPairing? record) async {
+    _record = record;
+    _pairing.value = record == null ? null : _publicPairing(record);
+    _publishConnections();
+    // Connecting, not disconnected: the user asked for this desktop, and a
+    // "host unreachable" banner before anything was tried would be a lie.
+    _switching = record != null;
+    if (_switching) _link.value = CompanionLinkState.connecting;
+    await _dropLink(keepState: _switching);
+    _resetHostState();
+    if (record == null) {
+      _switching = false;
+      _link.value = CompanionLinkState.disconnected;
+      return;
+    }
+    _backoff.reset();
+    _startLoop();
+  }
+
+  /// Everything the gateway holds that belongs to ONE host.
+  void _resetHostState() {
+    _sessions = null;
+    _hostOrder.clear();
+    if (!_sessionChanges.isClosed) _sessionChanges.add(const []);
+    _subscribed.clear();
+    _lastAttention.clear();
+    for (final approval in _approvals.values) {
+      approval.value = null;
+    }
+    _approvals.clear();
+    for (final state in _transcripts.values) {
+      state.loaded = false;
+      state.stale = false;
+      state.cursor = 0;
+      state.messages = const [];
+      // A screen still watching an old host's transcript must not keep
+      // showing its rows against the new one.
+      _pushTranscript(state);
+    }
+    _transcripts.removeWhere((_, state) => state.listeners.isEmpty);
   }
 
   /// Runs the race and rewrites every failure as a sentence, mirroring the
@@ -512,31 +643,11 @@ class RemoteCompanionGateway implements CompanionGateway {
   @override
   Future<void> unpair() async {
     await _ready;
-    if (_record == null) return;
-    try {
-      await store.delete(stored.CompanionPairing.storeKey);
-    } on Object catch (error) {
-      onLog?.call('unpair delete failed: $error');
-      throw const GatewayException(
-        "The pairing could not be removed from this phone's secure storage. "
-        'Try again.',
-      );
-    }
-    _record = null;
-    await _dropLink();
-    _pairing.value = null;
-    _sessions = null;
-    if (!_sessionChanges.isClosed) _sessionChanges.add(const []);
-    _subscribed.clear();
-    _lastAttention.clear();
-    for (final approval in _approvals.values) {
-      approval.value = null;
-    }
-    for (final state in _transcripts.values) {
-      state.loaded = false;
-      state.cursor = 0;
-      state.messages = const [];
-    }
+    final active = _record;
+    if (active == null) return;
+    // Multi-host: unpairing forgets the ACTIVE desktop and falls back to
+    // another saved one, or to unpaired when it was the last.
+    await removeConnection(active.hostId.value);
   }
 
   @override
@@ -563,17 +674,24 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<List<CompanionSessionSummary>> listSessions() async {
     await _ready;
     final client = _requireClient();
-    final raw = await _mapRefusals(client.listSessions);
-    final live = [
-      for (final snapshot in raw)
-        if (!snapshot.archived) snapshot,
-    ];
-    for (final snapshot in live) {
+    final rows = await _mapRefusals(client.listSessionRows);
+    for (final row in rows) {
       // Seed the attention baseline silently: notifications are for news
       // that happens while we watch, not the state we walked in on.
-      _lastAttention.putIfAbsent(snapshot.sessionId, () => snapshot.attention);
+      _lastAttention.putIfAbsent(
+        row.snapshot.sessionId,
+        () => row.snapshot.attention,
+      );
     }
-    final list = [for (final snapshot in live) _summaryOf(snapshot)];
+    // The host's order IS the order — it is the desktop's own sort, and the
+    // phone re-sorting it is what made the list jump. Archived rows are kept
+    // and labelled rather than dropped, so the two lists agree.
+    final list = [
+      for (final row in rows) _summaryOf(row.snapshot, raw: row.json),
+    ];
+    _hostOrder
+      ..clear()
+      ..addAll([for (final row in rows) row.snapshot.sessionId]);
     _setSessions(list);
     return list;
   }
@@ -670,11 +788,45 @@ class RemoteCompanionGateway implements CompanionGateway {
   // ------------------------------------------------------- connection loop
 
   Future<void> _loadStoredPairing() async {
-    final record = await stored.CompanionPairing.load(store);
+    // Migrates a pre-multi-host store transparently: the single record it
+    // holds becomes the sole saved connection, active.
+    final all = await stored.CompanionConnections.load(store);
     if (_closed) return;
+    _all = all;
+    final record = all.active;
     _record = record;
     _pairing.value = record == null ? null : _publicPairing(record);
+    _publishConnections();
     if (record != null) _startLoop();
+  }
+
+  void _publishConnections() => _connections.value = List.unmodifiable([
+    for (final record in _all.records)
+      CompanionConnection(
+        hostId: record.hostId.value,
+        name: record.hostName.isEmpty ? 'Desktop' : record.hostName,
+        active: record.hostId.value == _all.activeHostId?.value,
+        lastConnectedAt: record.lastConnectedAt,
+      ),
+  ]);
+
+  /// Stamps "last connected" on the host that just came up, so the
+  /// Connections list can order and label it. Best-effort: a store that
+  /// refuses the write must never break a working link.
+  Future<void> _noteConnected(stored.CompanionPairing record) async {
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        final saved = all.byHost(record.hostId.value);
+        if (saved != null) all.upsert(saved.withLastConnected(_now()));
+        return all;
+      });
+      if (_all.activeHostId?.value == record.hostId.value) {
+        _record = _all.active ?? _record;
+      }
+      _publishConnections();
+    } on Object catch (error) {
+      onLog?.call('last-connected stamp failed: $error');
+    }
   }
 
   CompanionPairing _publicPairing(stored.CompanionPairing record) =>
@@ -720,6 +872,8 @@ class RemoteCompanionGateway implements CompanionGateway {
         if (client != null && !_closed && _record != null) {
           // The client bumped and persisted the generation counter.
           _record = client.pairing;
+          _switching = false;
+          unawaited(_noteConnected(client.pairing));
           _backoff.reset();
           _bindTransport(_dialled);
           _link.value = CompanionLinkState.connected;
@@ -739,6 +893,13 @@ class RemoteCompanionGateway implements CompanionGateway {
         }
         await _teardownClient();
         if (_closed || _record == null) break;
+        if (_switching) {
+          // A switch tore the old link down on purpose; the new desktop is
+          // dialled at once, with no outage banner and no backoff wait.
+          _switching = false;
+          _link.value = CompanionLinkState.connecting;
+          continue;
+        }
         _link.value = CompanionLinkState.disconnected;
         final wait = _backoff.next();
         final waiter = _backoffWaiter = Completer<void>();
@@ -953,12 +1114,15 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
   }
 
-  Future<void> _dropLink() async {
+  /// Tears the link down. [keepState] leaves the link state alone — a switch
+  /// owns it, and must not flash "host unreachable" on its way to the desktop
+  /// the user just chose.
+  Future<void> _dropLink({bool keepState = false}) async {
     _declareDead();
     final waiter = _backoffWaiter;
     if (waiter != null && !waiter.isCompleted) waiter.complete();
     await _teardownClient();
-    _link.value = CompanionLinkState.disconnected;
+    if (!keepState) _link.value = CompanionLinkState.disconnected;
   }
 
   void _declareDead() {
@@ -970,8 +1134,8 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   void _onEvent(CompanionEvent event) {
     switch (event) {
-      case SessionChangedEvent(:final snapshot):
-        _applySnapshot(snapshot);
+      case SessionChangedEvent(:final snapshot, :final raw):
+        _applySnapshot(snapshot, raw: raw);
       case TranscriptAppendedEvent(:final page):
         _applyAppended(page);
       case ApprovalRequestedEvent(:final request):
@@ -981,29 +1145,52 @@ class RemoteCompanionGateway implements CompanionGateway {
     }
   }
 
-  void _applySnapshot(RemoteSessionSnapshot snapshot) {
-    final summary = snapshot.archived ? null : _summaryOf(snapshot);
+  void _applySnapshot(
+    RemoteSessionSnapshot snapshot, {
+    Map<String, Object?>? raw,
+  }) {
+    // Archived rows stay listed and say so; the desktop still holds them.
+    final summary = _summaryOf(snapshot, raw: raw);
     final current = _sessions ?? const <CompanionSessionSummary>[];
     final next = <CompanionSessionSummary>[];
     var found = false;
     for (final session in current) {
       if (session.id == snapshot.sessionId) {
         found = true;
-        if (summary != null) next.add(summary);
+        next.add(summary);
       } else {
         next.add(session);
       }
     }
-    if (!found && summary != null) next.add(summary);
+    if (!found) {
+      // A late arrival goes where the host would have put it, not on the end:
+      // beside its own project's rows, so the list does not reshuffle under
+      // the user's thumb. A refresh then restores the host's exact order.
+      next.insert(_placeFor(next, summary), summary);
+    }
     _setSessions(next);
     _noteAttention(snapshot.sessionId, snapshot.attention, snapshot.title);
-    if (!found && summary != null) {
-      // News about a session the list never held: fold it in properly.
+    if (!found) {
       final client = _client;
       if (client != null) {
         unawaited(_ensureSubscribed(client, snapshot.sessionId));
+        // Re-read so the newcomer lands in the host's own ordering.
+        unawaited(_refreshSessions());
       }
     }
+  }
+
+  /// Where a session the list has never held belongs: after the last row of
+  /// its own project, or at the end when that project is new here too.
+  int _placeFor(
+    List<CompanionSessionSummary> list,
+    CompanionSessionSummary arrival,
+  ) {
+    var place = list.length;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].projectKey == arrival.projectKey) place = i + 1;
+    }
+    return place;
   }
 
   void _applyAppended(RemoteTranscriptPage page) {
@@ -1064,6 +1251,10 @@ class RemoteCompanionGateway implements CompanionGateway {
         sessionTitle: title,
         kind: kind,
         at: _now().toUtc(),
+        // Stamped from the host that is live right now. v1 keeps exactly one
+        // link, so news can only come from the active desktop — carrying the
+        // id is what lets a late event be checked against it after a switch.
+        hostId: _record?.hostId.value,
       ),
     );
   }
@@ -1230,7 +1421,10 @@ class RemoteCompanionGateway implements CompanionGateway {
     return null;
   }
 
-  CompanionSessionSummary _summaryOf(RemoteSessionSnapshot snapshot) {
+  CompanionSessionSummary _summaryOf(
+    RemoteSessionSnapshot snapshot, {
+    Map<String, Object?>? raw,
+  }) {
     final kind = _kindOf(snapshot.attention);
     CompanionAttention? attention;
     if (kind != null) {
@@ -1239,6 +1433,15 @@ class RemoteCompanionGateway implements CompanionGateway {
           ? previous
           : CompanionAttention(kind: kind, at: _now().toUtc());
     }
+    // The checkout facts the desktop card's third line is made of. They are
+    // read straight off the row rather than through the typed snapshot: the
+    // host that sends them is newer than this build's payload type, and a
+    // host that does not simply leaves the line as it is today.
+    String? text(String key) {
+      final value = raw?[key];
+      return value is String && value.isNotEmpty ? value : null;
+    }
+
     return CompanionSessionSummary(
       id: snapshot.sessionId,
       title: snapshot.title,
@@ -1247,12 +1450,22 @@ class RemoteCompanionGateway implements CompanionGateway {
       // invents a claim about a process it cannot see.
       agentLabel: snapshot.agentLabel ?? snapshot.status.replaceAll('_', ' '),
       projectName: snapshot.repositoryName ?? 'No project',
+      // The repository's real identity, so two checkouts sharing a folder
+      // name stay two projects. Null from an older host — the list then
+      // falls back to the name, which is what it always grouped by.
+      projectId: snapshot.repositoryId,
+      projectPath: text('repositoryPath'),
       status: _statusOf(snapshot),
       whereabouts: snapshot.whereabouts,
+      branch: text('branch'),
+      subPath: text('subPath'),
+      worktree: raw?['worktree'] == true,
       lastActivityAt: _parseInstant(snapshot.lastActivityAt),
       attention: attention,
       deliveryStage: snapshot.stage,
       imported: snapshot.imported,
+      archived: snapshot.archived,
+      folderMissing: raw?['folderMissing'] == true,
     );
   }
 

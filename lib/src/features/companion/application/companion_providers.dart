@@ -15,6 +15,51 @@ final companionLinkProvider = StreamProvider<CompanionLinkState>(
   (ref) => ref.watch(companionGatewayProvider).linkStates,
 );
 
+/// Every desktop this phone has paired with, one of them active.
+final companionConnectionsProvider =
+    StreamProvider<List<CompanionConnection>>(
+      (ref) => ref.watch(companionGatewayProvider).connectionsStates,
+    );
+
+/// Drives [CompanionGateway.switchTo] / [CompanionGateway.removeConnection],
+/// holding the host id whose switch is in flight so every surface that offers
+/// the verb shows the same progress and the same refusal.
+class CompanionSwitcher extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  /// The last refusal, for a surface that wants to show it. Cleared when the
+  /// next attempt starts.
+  String? lastError;
+
+  Future<void> switchTo(String hostId) =>
+      _run(hostId, () => ref.read(companionGatewayProvider).switchTo(hostId));
+
+  Future<void> remove(String hostId) => _run(
+    hostId,
+    () => ref.read(companionGatewayProvider).removeConnection(hostId),
+  );
+
+  Future<void> _run(String hostId, Future<void> Function() action) async {
+    // One switch at a time: a second tap mid-flight would tear down a link
+    // that is still coming up.
+    if (state != null) return;
+    lastError = null;
+    state = hostId;
+    try {
+      await action();
+    } on GatewayException catch (error) {
+      lastError = error.message;
+    } finally {
+      state = null;
+    }
+  }
+}
+
+/// The host id a switch is currently in flight for, or null.
+final companionSwitchingProvider =
+    NotifierProvider<CompanionSwitcher, String?>(CompanionSwitcher.new);
+
 /// Which path carries the link — Direct (LAN) or Relay — or null while down.
 final companionLinkPathProvider = StreamProvider<CompanionLinkPath?>(
   (ref) => ref.watch(companionGatewayProvider).linkPathStates,

@@ -40,8 +40,12 @@ sealed class CompanionEvent {
 }
 
 class SessionChangedEvent extends CompanionEvent {
-  const SessionChangedEvent(this.snapshot);
+  const SessionChangedEvent(this.snapshot, {this.raw});
   final RemoteSessionSnapshot snapshot;
+
+  /// The event's payload as it arrived, so a caller can read row fields a
+  /// newer host sends that this build's snapshot type has no name for yet.
+  final Map<String, Object?>? raw;
 }
 
 class TranscriptAppendedEvent extends CompanionEvent {
@@ -231,6 +235,7 @@ class CompanionClient {
           () => _emit(
             SessionChangedEvent(
               RemoteSessionSnapshot.fromJson(envelope.payload),
+              raw: envelope.payload,
             ),
           ),
         );
@@ -270,14 +275,20 @@ class CompanionClient {
 
   // --- Typed requests --------------------------------------------------------
 
-  Future<List<RemoteSessionSnapshot>> listSessions() async {
+  Future<List<RemoteSessionSnapshot>> listSessions() async =>
+      [for (final row in await listSessionRows()) row.snapshot];
+
+  /// [listSessions], keeping each row's raw JSON beside the parsed snapshot —
+  /// for row fields a newer host sends that this build has no name for yet.
+  Future<List<({RemoteSessionSnapshot snapshot, Map<String, Object?> json})>>
+  listSessionRows() async {
     final payload = await _request(FrameType.sessionsList, const {});
     final sessions = payload['sessions'];
     return [
       if (sessions is List)
         for (final entry in sessions)
           if (entry is Map<String, Object?>)
-            RemoteSessionSnapshot.fromJson(entry),
+            (snapshot: RemoteSessionSnapshot.fromJson(entry), json: entry),
     ];
   }
 
