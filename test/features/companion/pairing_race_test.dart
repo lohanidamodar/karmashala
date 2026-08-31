@@ -31,6 +31,10 @@ import '../remote/transport_harness.dart';
 final _lanGroup = InternetAddress('239.255.42.203');
 const _lanPort = 47699;
 
+/// A port nothing in this file ever advertises on, for the test whose whole
+/// point is that the LAN leg finds nobody.
+const _silentLanPort = 47700;
+
 void main() {
   late AppDatabase db;
   late PairedDeviceDao dao;
@@ -113,9 +117,15 @@ void main() {
     return gateway;
   }
 
-  LanPathScout makeScout() => LanPathScout(
+  /// [beaconPort] exists for the one test that must hear *nothing*: beacons
+  /// from earlier tests in this file are stopped at teardown, but a multicast
+  /// packet already in flight does not know that, and under a loaded machine
+  /// one arrives late enough to be heard by the next test's scout. A port of
+  /// its own makes "no desktop was found" true by construction rather than by
+  /// timing.
+  LanPathScout makeScout({int beaconPort = _lanPort}) => LanPathScout(
     group: _lanGroup,
-    beaconPort: _lanPort,
+    beaconPort: beaconPort,
     attemptTimeout: const Duration(milliseconds: 800),
     retryCooldown: const Duration(seconds: 30),
     // The suite's listeners sit on loopback; dial there (the harness rule).
@@ -218,7 +228,7 @@ void main() {
   });
 
   test('when both legs fail, one sentence says which failed how', () async {
-    final gateway = makeGateway(lan: makeScout());
+    final gateway = makeGateway(lan: makeScout(beaconPort: _silentLanPort));
     await gateway.setPairingRelay(await deadRelay());
     final code = PairingCode.encode(List<int>.generate(20, (i) => i + 40));
 
