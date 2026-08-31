@@ -429,6 +429,95 @@ void main() {
       expect(inboxUpdates.last.watched, {key});
     });
 
+    test('what the cap evicted is not re-filed by the next pass', () async {
+      // The robustness bar for the cap: eviction has to be a decision the inbox
+      // can stand by. An entry that reappears next poll is worse than one that
+      // never left — the list churns, the badge counts it again, and the user
+      // cannot clear it. Nothing prevents that inside the inbox, which is
+      // passive; it holds because news is a *transition* and the watcher
+      // remembers the status it already reported.
+      final watcher = build();
+      var inbox = AttentionInbox.empty;
+      var at = testTime;
+      void fold() {
+        for (final update in inboxUpdates) {
+          inbox = inbox.apply(update, at);
+        }
+        inboxUpdates.clear();
+      }
+
+      await hookArrives('PreToolUse');
+      await watcher.poll();
+      await hookArrives('Stop');
+      await watcher.poll();
+      fold();
+
+      final id = InboxItem.idFor(InboxItemKind.finished, key);
+      expect(inbox.items.map((item) => item.id), contains(id));
+
+      // A cap's worth of newer finished turns from elsewhere pushes it out.
+      at = testTime.add(const Duration(minutes: 1));
+      inbox = inbox.apply(
+        InboxUpdate(
+          news: [
+            for (var i = 0; i < kAttentionInboxCap; i++)
+              (
+                session: WatchedSession(
+                  key: AgentSessionKey(AgentIds.claudeCode, 'flood-$i'),
+                  label: 'Flood $i',
+                  openId: 'row-flood-$i',
+                  imported: true,
+                ),
+                reason: NotificationReason.finished,
+              ),
+          ],
+        ),
+        at,
+      );
+      expect(inbox.items.map((item) => item.id), isNot(contains(id)));
+
+      // Everything that could bring it back: more polls, and the agent
+      // repeating the hook it already sent.
+      at = testTime.add(const Duration(minutes: 2));
+      await watcher.poll();
+      await hookArrives('Stop');
+      await watcher.poll();
+      for (final update in inboxUpdates) {
+        expect(
+          update.news,
+          isEmpty,
+          reason: 'the turn ended once; ending is not news twice',
+        );
+      }
+      fold();
+      expect(inbox.items.map((item) => item.id), isNot(contains(id)));
+    });
+
+    test('a request the user dismissed comes back while it is still true', () {
+      // The other side of the same rule, and deliberate. A condition is not an
+      // event: dismissing "needs approval" does not answer the question, so the
+      // next pass re-files it. The tray showing a clean list over a blocked
+      // agent is the Loop 42 bug, and it must not be reintroduced as a fix for
+      // the churn above.
+      final blocked = InboxUpdate(
+        watched: {key},
+        waiting: const [
+          SessionAttention(session: session, kind: AttentionKind.needsInput),
+        ],
+      );
+      final inbox = AttentionInbox.empty.apply(blocked, testTime);
+      final id = InboxItem.idFor(InboxItemKind.needsApproval, key);
+
+      final dismissed = inbox.dismiss(id);
+      expect(dismissed.items, isEmpty);
+
+      final next = dismissed.apply(
+        blocked,
+        testTime.add(const Duration(seconds: 5)),
+      );
+      expect(next.items.single.id, id);
+    });
+
     test('a hook for a session nobody watches raises nothing', () async {
       final watcher = build();
       await watcher.poll();

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:math' as math;
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock.dart';
 import '../../agents/data/agent_state_file_status_source.dart';
 import '../../agents/data/agent_status_service.dart';
@@ -59,6 +60,22 @@ const Duration kStatusRecentlyActiveWindow = Duration(seconds: 60);
 /// *never* becomes tracked cannot turn the cheap path into a polling loop.
 const Duration kHookCycleFloor = Duration(seconds: 1);
 
+/// How long the fallback rotation may take to come back round to a session
+/// before the registry says so in the log.
+///
+/// It limits nothing — crossing it drops no session and changes no behaviour.
+/// It is the point at which the *fallback* has stopped being a fallback: a
+/// transcript reading two minutes old is not something anyone should be reading
+/// a badge from, and a workspace large enough to cause that should be visible
+/// as a line in the log rather than felt as badges that are quietly wrong.
+///
+/// Hook-backed sessions never wait for the rotation, so crossing this says
+/// precisely "the unhooked half of this workspace has outgrown the budget" —
+/// which is the thing the 60-session cap did, and did in silence. At the
+/// default budget it stays quiet through the audit's whole 500-session tier and
+/// speaks up somewhere past eight hundred sessions with no hooks installed.
+const Duration kProbeRotationCeiling = Duration(minutes: 2);
+
 /// One session's current status, as the registry holds it.
 class SessionStatusEntry {
   const SessionStatusEntry({
@@ -89,13 +106,116 @@ class SessionStatusEntry {
   AgentSessionKey get key => session.key;
 }
 
+/// How much of the watch set one cycle actually reached.
+///
+/// The registry guarantees coverage by construction — membership is uncapped,
+/// and the probe rotation reserves a share that priority traffic cannot take.
+/// But the 60-session cap reached production and survived there because
+/// **nobody could tell**, and a guarantee no one can observe fails the same way
+/// the next time somebody adds a limit for a good reason. This is the
+/// observation: what is watched, what the primary path answered for free, and
+/// how far behind the rationed half is.
+class SessionStatusCoverage {
+  const SessionStatusCoverage({
+    required this.tracked,
+    required this.hookAnswered,
+    required this.probeCandidates,
+    required this.probed,
+    required this.neverProbed,
+    required this.probeFailures,
+    required this.rotationPeriod,
+  });
+
+  /// Every session the registry holds a status for — the number that used to be
+  /// silently sixty.
+  final int tracked;
+
+  /// How many a hook answered, which is the primary path's real share of this
+  /// workspace and the part that owes the rotation nothing.
+  final int hookAnswered;
+
+  /// How many still need the disk before they can say anything.
+  final int probeCandidates;
+
+  /// How many candidates this cycle read.
+  final int probed;
+
+  /// Candidates whose transcript has never been read. Queued, not lost: they
+  /// have an entry, a status and a place in the rotation. Still above zero
+  /// after a full [rotationPeriod] means something is stuck rather than merely
+  /// waiting its turn.
+  final int neverProbed;
+
+  /// Candidates whose last read failed. These buy priority next cycle, so a
+  /// number that stays high is a permission or a path problem, not a queue.
+  final int probeFailures;
+
+  /// The guaranteed worst case for coming back round to any one candidate, or
+  /// `null` when the budget is too small to rotate at all.
+  ///
+  /// Computed from the *reserved* share rather than the whole budget, because
+  /// that is the part no amount of priority traffic can take — so it is a
+  /// promise that holds however busy the workspace is, not a best case.
+  final Duration? rotationPeriod;
+
+  /// Whether the fallback has stopped being one. See [kProbeRotationCeiling].
+  bool get isBehind {
+    final period = rotationPeriod;
+    return period == null || period > kProbeRotationCeiling;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionStatusCoverage &&
+      other.tracked == tracked &&
+      other.hookAnswered == hookAnswered &&
+      other.probeCandidates == probeCandidates &&
+      other.probed == probed &&
+      other.neverProbed == neverProbed &&
+      other.probeFailures == probeFailures &&
+      other.rotationPeriod == rotationPeriod;
+
+  @override
+  int get hashCode => Object.hash(
+    tracked,
+    hookAnswered,
+    probeCandidates,
+    probed,
+    neverProbed,
+    probeFailures,
+    rotationPeriod,
+  );
+
+  /// The one-line form the log uses, so a bug report carries the same words a
+  /// test asserts.
+  @override
+  String toString() {
+    final period = rotationPeriod;
+    return '$tracked watched · $hookAnswered by hook · $probed of '
+        '$probeCandidates probed · $neverProbed never · $probeFailures failed '
+        '· rotation ${period == null ? 'never' : '${period.inSeconds}s'}';
+  }
+}
+
 /// What one cycle did, for the watcher that consumes it and for diagnostics.
 class SessionStatusCycle {
   const SessionStatusCycle({
     required this.entries,
     required this.probed,
     required this.scans,
+    this.coverage = const SessionStatusCoverage(
+      tracked: 0,
+      hookAnswered: 0,
+      probeCandidates: 0,
+      probed: 0,
+      neverProbed: 0,
+      probeFailures: 0,
+      rotationPeriod: null,
+    ),
   });
+
+  /// How much of the watch set this cycle reached.
+  final SessionStatusCoverage coverage;
 
   /// Every watched session, in the order the loader offered them.
   final List<SessionStatusEntry> entries;
@@ -233,6 +353,12 @@ class SessionStatusRegistry {
   /// Cycles on which [onCycle] was allowed to touch the CLI stores. The number
   /// the adoption cost claim is asserted against.
   int storeSlots = 0;
+
+  /// How much of the watch set the last cycle reached, or `null` before the
+  /// first one. See [SessionStatusCoverage].
+  SessionStatusCoverage? coverage;
+
+  final AppLogger _log = AppLogger.named('notifications.status');
 
   /// Hook callbacks handed to [hookReported].
   int hookReports = 0;
@@ -439,10 +565,74 @@ class SessionStatusRegistry {
       ],
       probed: picks.length,
       scans: scans,
+      coverage: _measure(picks.length),
     );
     if (!_changes.isClosed) _changes.add(null);
     await _runCycleWork(now);
     return _last;
+  }
+
+  /// Counts what this cycle reached and says so when the answer changed shape.
+  ///
+  /// Everything here is edge-triggered. This runs every 1.2 seconds, so a line
+  /// per cycle would bury the log it exists to make readable; what is worth a
+  /// line is the watch set changing size and the rotation crossing
+  /// [kProbeRotationCeiling] in either direction — a log that once warned must
+  /// not read as though it still is.
+  SessionStatusCoverage _measure(int probed) {
+    var hookAnswered = 0;
+    var candidates = 0;
+    var neverProbed = 0;
+    var failures = 0;
+    for (final tracked in _tracked.values) {
+      if (tracked.report.source == AgentStatusSource.hook) hookAnswered++;
+      if (!tracked.wantsProbe || tracked.statePath == null) continue;
+      candidates++;
+      if (tracked.lastProbedAt == null) neverProbed++;
+      if (tracked.probeFailed) failures++;
+    }
+    final next = SessionStatusCoverage(
+      tracked: _tracked.length,
+      hookAnswered: hookAnswered,
+      probeCandidates: candidates,
+      probed: probed,
+      neverProbed: neverProbed,
+      probeFailures: failures,
+      rotationPeriod: _rotationPeriod(candidates),
+    );
+
+    final previous = coverage;
+    coverage = next;
+    if (previous == null || previous.tracked != next.tracked) {
+      _log.info('watching ${next.tracked} sessions — $next');
+    }
+    if (next.isBehind != (previous?.isBehind ?? false)) {
+      if (next.isBehind) {
+        _log.warning(
+          'the status fallback is behind: ${next.probeCandidates} sessions '
+          'need a transcript read and the rotation takes '
+          '${next.rotationPeriod?.inSeconds ?? -1}s to come back round. '
+          'Statuses for unhooked sessions will be stale. — $next',
+        );
+      } else {
+        _log.info('the status fallback is keeping up again — $next');
+      }
+    }
+    return next;
+  }
+
+  /// The guaranteed worst case for coming back round to one of [candidates].
+  ///
+  /// Measured against the reserved share, not the whole budget: the reserve is
+  /// the part priority traffic can never take, so this is a bound that holds
+  /// however busy the workspace is. `null` when the budget is too small to
+  /// reserve anything, which is a registry that cannot promise to rotate at
+  /// all.
+  Duration? _rotationPeriod(int candidates) {
+    if (candidates <= probeBudget) return interval;
+    final reserve = probeBudget >= 2 ? math.max(1, probeBudget ~/ 3) : 0;
+    if (reserve <= 0) return null;
+    return interval * ((candidates + reserve - 1) ~/ reserve);
   }
 
   /// Runs [onCycle], deciding whether this is the cycle that may pay for a
