@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/local_environment.dart';
 import '../application/file_explorer_providers.dart';
 import '../data/file_listing_service.dart';
 
 /// A lazy file/folder tree for the selected repository. Folders expand in place;
 /// tapping a file opens it in the configured code editor. Listing runs on the
 /// Windows host (WSL folders via their `\\wsl.localhost\…` form).
+///
+/// Every row — file and folder alike — right-clicks to a menu that reveals it in
+/// the system file manager or copies its path. The reveal is
+/// [RevealInFileManager]'s, the same one the Explorer, the repository info view
+/// and the comparison view use; nothing here starts a process of its own.
 class FileExplorerView extends ConsumerWidget {
   const FileExplorerView({super.key});
 
@@ -110,6 +120,22 @@ class _EntryRow extends ConsumerStatefulWidget {
 class _EntryRowState extends ConsumerState<_EntryRow> {
   bool _expanded = false;
 
+  /// The row's path as the rest of the app spells one.
+  ///
+  /// `DirEntry.windowsPath` is already a host path — the listing runs on the
+  /// Windows host through `dart:io` — so this only puts the owning environment
+  /// back on it, which is what [RevealInFileManager] needs to answer
+  /// "can this be shown?" without guessing.
+  EnvironmentPath get _path => EnvironmentPath(
+    environmentId: localWindowsEnvironmentId,
+    path: widget.entry.windowsPath,
+  );
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _openInEditor() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -123,6 +149,55 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
       messenger.showSnackBar(
         SnackBar(content: Text(e is StateError ? e.message : '$e')),
       );
+    }
+  }
+
+  /// Shows the row in the host's file manager, and says why when it cannot.
+  ///
+  /// A file is *selected* inside its folder and a folder is *opened* — the same
+  /// distinction [RevealInFileManager.reveal] draws. Failure comes back as a
+  /// [RevealOutcome] rather than a throw, so a `catch` here would never fire and
+  /// the click would be silent; the menu entry is already withheld where the
+  /// path has no host spelling, and this covers what fails anyway, such as a
+  /// file manager that will not start.
+  Future<void> _reveal() async {
+    final outcome = await ref
+        .read(revealInFileManagerProvider)
+        .reveal(_path, select: !widget.entry.isDirectory);
+    if (!outcome.ok) _say(outcome.error!);
+  }
+
+  Future<void> _copyPath() async {
+    await Clipboard.setData(ClipboardData(text: widget.entry.windowsPath));
+    _say('Path copied to clipboard');
+  }
+
+  /// Right-click items. Reveal is offered only where the host can actually
+  /// reach the row — an entry that always fails is worse than no entry, and
+  /// [RevealInFileManager.canReveal] starts no process, so asking while
+  /// building the menu is free. "Copy path" always works: it is text.
+  List<PopupMenuEntry<String>> _menuItems() => [
+    if (ref.read(revealInFileManagerProvider).canReveal(_path))
+      DesktopMenuItem(
+        value: 'reveal',
+        label: widget.entry.isDirectory
+            ? 'Open in File Explorer'
+            : 'Reveal in File Explorer',
+        icon: AppIcons.folderOpen,
+      ),
+    DesktopMenuItem(
+      value: 'copy-path',
+      label: 'Copy path',
+      icon: AppIcons.copySimple,
+    ),
+  ];
+
+  void _onMenu(String action) {
+    switch (action) {
+      case 'reveal':
+        _reveal();
+      case 'copy-path':
+        _copyPath();
     }
   }
 
@@ -175,11 +250,16 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
         ),
       ),
     );
-    if (!isDir || !_expanded) return row;
+    final menu = ContextMenuRegion(
+      menuItems: _menuItems(),
+      onSelected: _onMenu,
+      child: row,
+    );
+    if (!isDir || !_expanded) return menu;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        row,
+        menu,
         _DirChildren(dir: entry.windowsPath, depth: widget.depth + 1),
       ],
     );

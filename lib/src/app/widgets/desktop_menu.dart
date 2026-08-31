@@ -49,3 +49,42 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
 class DesktopMenuDivider extends PopupMenuDivider {
   const DesktopMenuDivider({super.key}) : super(height: 7);
 }
+
+/// Right-click support, shared by every row that has a menu.
+///
+/// Lives beside [DesktopMenuItem] rather than in the Explorer because the Files
+/// side panel needs the same gesture and the same menu chrome.
+class ContextMenuRegion extends StatelessWidget {
+  const ContextMenuRegion({
+    required this.menuItems,
+    required this.onSelected,
+    required this.child,
+    super.key,
+  });
+
+  final List<PopupMenuEntry<String>> menuItems;
+  final ValueChanged<String> onSelected;
+  final Widget child;
+
+  Future<void> _show(BuildContext context, Offset position) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(position.dx, position.dy, 1, 1),
+        Offset.zero & overlay.size,
+      ),
+      items: menuItems,
+    );
+    if (selected != null) onSelected(selected);
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    onSecondaryTapDown: (details) => _show(context, details.globalPosition),
+    child: child,
+  );
+}
