@@ -37,11 +37,8 @@ import '../../support/fixtures.dart';
 
 /// Picking the checkout the repository-scoped surfaces describe.
 ///
-/// The shape under test is the owner's own workspace: a hub project whose real
-/// work happens in a clone three folders down and in the `wt-*` worktrees beside
-/// it. A session's working directory is fixed at launch and its **subagents** are
-/// the ones that move, so no amount of following one pane would put Changes and
-/// GitHub on the right checkout. Being able to choose is what fixes it.
+/// The shape under test is the owner's own workspace: a hub project whose work
+/// happens in a clone three folders down and in the `wt-*` worktrees beside it.
 void main() {
   const hubPath = r'C:\src\demo';
   const appPath = r'C:\src\demo\projects\app';
@@ -62,15 +59,13 @@ void main() {
   List<String> verbOf(CommandRequest request) =>
       request.arguments.skip(2).toList();
 
-  /// Git as this workspace really answers. Note the forward slashes: on Windows
-  /// `git worktree list` reports them, while the `repositories` table holds
-  /// backslashes — the picker has to see through that or every row is a stranger.
+  /// Git as this workspace answers. The forward slashes are deliberate: that is
+  /// what `git worktree list` reports on Windows, against a table of backslashes.
   CommandResult respond(CommandRequest request) {
     final verb = verbOf(request);
     final dir = dirOf(request);
     if (verb.take(2).join(' ') == 'worktree list') {
-      // The hub is its own one-worktree repository. The clone under it owns the
-      // two `wt-*` folders, and says so whichever of the three is asked.
+      // The clone owns both `wt-*` folders and says so whichever is asked.
       final porcelain = dir == hubPath
           ? 'worktree C:/src/demo\nHEAD aaa\nbranch refs/heads/main\n\n'
           : 'worktree C:/src/demo/projects/app\n'
@@ -87,8 +82,7 @@ void main() {
         inboxPath => 'inbox-bounds',
         _ => 'main',
       };
-      // The `##` header only when it was asked for: a plain `git status
-      // --porcelain` that emits one is a status with a phantom changed file.
+      // The `##` header only when asked for, or it reads as a changed file.
       final header = verb.contains('--branch')
           ? '## $branch...origin/$branch\n'
           : '';
@@ -184,15 +178,13 @@ void main() {
       await pump(tester, container);
       await openPicker(tester);
 
-      // A nested clone and two worktrees beside it — all four, not the one the
-      // session happened to launch in.
+      // All four, not the one the session happened to launch in.
       expect(find.text('demo'), findsWidgets);
       expect(find.text('app'), findsOneWidget);
       expect(find.text('wt-relay'), findsOneWidget);
       expect(find.text('wt-inbox'), findsOneWidget);
 
-      // A worktree says so, and says which branch — `wt-relay` and the clone it
-      // was cut from must not read as two identical rows.
+      // A worktree says so, and says which branch.
       expect(
         find.text('worktree  ·  dual-relay  ·  projects/wt-relay'),
         findsOneWidget,
@@ -219,8 +211,7 @@ void main() {
 
       await openPicker(tester);
 
-      // Two families — the hub, and the clone that owns both worktrees — so two
-      // processes for four rows.
+      // Two families, so two processes for four rows.
       final listings = git.requests
           .where((r) => verbOf(r).take(2).join(' ') == 'worktree list')
           .map(dirOf)
@@ -230,8 +221,7 @@ void main() {
     });
 
     testWidgets('fits the panel dragged to its narrowest', (tester) async {
-      // 240px is the side panel's minimum, and the line has to hold a name, a
-      // sub-path and a caret inside it without overflowing.
+      // 240px is the side panel's minimum: a name, a sub-path and a caret.
       insertAllCheckouts();
       final container = makeContainer();
       container.read(selectedRepositoryIdProvider.notifier).select('inbox');
@@ -254,8 +244,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      // The menu is an overlay, so it is free to be wider than the panel it
-      // hangs off — and it still has to fit on screen at the right edge.
+      // The menu is an overlay, but still has to fit at the right edge.
       await openPicker(tester);
       expect(tester.takeException(), isNull);
       expect(find.text('wt-relay'), findsOneWidget);
@@ -269,8 +258,7 @@ void main() {
       container.read(selectedRepositoryIdProvider.notifier).select('hub');
       await pump(tester, container);
 
-      // Exactly what it drew before there was a picker: a name, no caret, and
-      // nothing to press.
+      // Exactly what it drew before there was a picker.
       expect(find.text('demo'), findsOneWidget);
       expect(find.byType(PopupMenuButton<Repository>), findsNothing);
       expect(find.byIcon(AppIcons.caretDown), findsNothing);
@@ -291,8 +279,7 @@ void main() {
 
       expect(container.read(selectedRepositoryIdProvider), 'relay');
 
-      // The surfaces read that one selection, so both follow it: Changes asks
-      // git in the picked directory…
+      // Changes asks git in the picked directory…
       final changes = await container.read(repositoryChangesProvider.future);
       expect(changes, hasLength(1));
       expect(
@@ -300,7 +287,7 @@ void main() {
         contains(relayPath),
       );
 
-      // …and GitHub runs `gh` there, not in the hub the session launched in.
+      // …and GitHub runs `gh` there, not in the hub.
       await container.read(githubPullRequestsProvider.future);
       final gh = git.requests
           .where((r) => r.executable == 'gh')
@@ -318,9 +305,8 @@ void main() {
       await tester.tap(find.text('wt-relay'));
       await tester.pumpAndSettle();
 
-      // Commit and Push are prompts driven by the delivery state of the
-      // repository the panel is scoped to. After the pick that state is read
-      // from the worktree, so the branch they would act on is its branch.
+      // Commit and Push are prompts driven by the scoped repository's delivery
+      // state, which after the pick is read from the worktree.
       final id = container.read(selectedRepositoryIdProvider)!;
       final delivery = await container.read(
         repositoryDeliveryProvider(id).future,
@@ -356,16 +342,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(selectedRepositoryIdProvider), 'relay');
 
-      // The workspace changing under the panel does not write the selection —
-      // only an active-session *change* does. A rescan rebuilds every provider
-      // the line reads, and the pick is still the pick afterwards.
+      // A rescan rebuilds every provider the line reads; the pick survives it.
       discovery.result = const [];
       await container.read(projectsControllerProvider.notifier).rediscover('p1');
       await tester.pumpAndSettle();
       expect(container.read(selectedRepositoryIdProvider), 'relay');
 
-      // And the session change still wins, which is the rule that existed
-      // before the picker did.
+      // And a session change still wins — the rule that existed before.
       container.read(sessionContextProvider).follow('s-hub');
       expect(container.read(selectedRepositoryIdProvider), 'hub');
     });
@@ -374,8 +357,7 @@ void main() {
   testWidgets('a worktree created while the app runs appears after a rescan', (
     tester,
   ) async {
-    // The owner's agents cut worktrees while the app is open. Discovery already
-    // counts a `.git` **file** as a checkout, so the rescan is all it takes.
+    // Agents cut worktrees while the app is open; the rescan is all it takes.
     RepositoryDao(db)
       ..insert(repository(id: 'hub', name: 'demo', path: hubPath))
       ..insert(repository(id: 'app', name: 'app', path: appPath));
@@ -405,8 +387,7 @@ void main() {
   });
 
   test('the picker only ever offers checkouts of one project', () {
-    // Two projects, and the panel pointed at the second. Offering the first
-    // project's clones would move the Explorer out from under the user.
+    // Offering another project's clones would move the Explorer under the user.
     ProjectDao(db).insert(
       project(id: 'p2', name: 'Other', path: r'C:\src\other'),
     );

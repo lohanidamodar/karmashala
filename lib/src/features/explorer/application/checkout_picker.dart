@@ -17,20 +17,11 @@ final selectedCheckoutProvider = Provider<Repository?>((ref) {
   return ref.read(repositoryDaoProvider).getById(id);
 });
 
-/// Every checkout the picker can offer: the repositories discovered inside the
-/// project the panel is currently pointed at, ordered by path.
+/// Every checkout in the project the panel is pointed at, ordered by path.
 ///
-/// Discovery already finds all of them — it keeps descending past a repository
-/// it has found, and it counts a `.git` **file** as a checkout, so a nested
-/// clone and a `wt-*` worktree are both rows in `repositories`. Nothing here
-/// touches the filesystem: this is the table, read synchronously.
-///
-/// Watching the workspace revision is what makes a **rescan** show up, and it is
-/// the same signal the Explorer's own tree re-reads the table on. Hanging this
-/// off the project list instead would not work: a rediscovery that only *adds*
-/// repositories leaves the projects equal and the selected checkout equal with
-/// them, so the picker would keep listing yesterday's worktrees — which is
-/// exactly the case the owner's agents create while the app is running.
+/// Watches the workspace revision, not the project list: a rescan that only
+/// *adds* repositories leaves the projects and the selection equal, so the
+/// picker would keep listing yesterday's worktrees.
 final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
   ref.watch(sessionsRevisionProvider);
   final selected = ref.watch(selectedCheckoutProvider);
@@ -40,21 +31,13 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
   return all;
 });
 
-/// What a picker row says about a checkout beyond its folder name: whether it is
-/// a worktree of some other checkout, and the branch it has out.
-///
-/// Both matter for the same reason. A hub project lists `chitragupta-app` and
-/// `wt-relay` side by side, and without this they are two folder names that look
-/// like two clones — when one is a worktree of the other and the only thing that
-/// distinguishes them is the branch.
+/// Whether a checkout is a linked worktree, and the branch it has out.
 class CheckoutLabel {
   const CheckoutLabel({required this.isWorktree, this.branch});
 
-  /// True when git reports this directory as a linked worktree rather than the
-  /// main checkout of its repository.
   final bool isWorktree;
 
-  /// The checked-out branch, or null when detached or unreported.
+  /// Null when detached or unreported.
   final String? branch;
 
   @override
@@ -70,17 +53,12 @@ class CheckoutLabel {
   String toString() => 'CheckoutLabel(worktree: $isWorktree, branch: $branch)';
 }
 
-/// Worktree-or-not and branch for every checkout in [projectId], keyed by
-/// repository id.
+/// Worktree-or-not and branch for every checkout in [projectId], by repository
+/// id.
 ///
-/// **One `git worktree list` per repository *family*, not per row.** That
-/// command, run anywhere in a family, reports the whole family — main checkout
-/// first, then each linked worktree with its branch — so listing the nested
-/// clone covers all fifteen `wt-*` folders beside it in one process. Rows
-/// already covered by an earlier answer are skipped.
-///
-/// `autoDispose`, and read only from the open picker: nothing here runs while
-/// the panel is merely on screen, and there is no timer behind it.
+/// One `git worktree list` per repository *family*, not per row — the command
+/// reports the whole family wherever it is run. `autoDispose`, and read only
+/// from the open picker, so nothing runs while the panel merely sits there.
 final checkoutLabelsProvider = FutureProvider.autoDispose
     .family<Map<String, CheckoutLabel>, String>((ref, projectId) async {
       final repositories = ref
@@ -88,8 +66,8 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
           .getByProject(projectId);
       final worktrees = ref.read(worktreeServiceProvider);
 
-      // Keyed by [Checkout] so the three spellings of one directory — the table,
-      // `Session.worktree` and git's forward slashes — collapse to one entry.
+      // Keyed by [Checkout]: git reports forward slashes where the table holds
+      // backslashes, and both spell one directory.
       final family = <Checkout, ({String? branch, bool isMain})>{};
       for (final repository in repositories) {
         if (family.containsKey(Checkout(repository.path))) continue;
@@ -97,13 +75,11 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
         try {
           listed = await worktrees.list(repository.path);
         } catch (_) {
-          // Git could not answer for this one — the row keeps its plain name
-          // rather than the whole picker losing its labels.
+          // Git could not answer: this row keeps its plain name.
           continue;
         }
         for (var i = 0; i < listed.length; i++) {
-          // `git worktree list` always prints the main worktree first, wherever
-          // in the family it was run.
+          // `git worktree list` prints the main worktree first, always.
           family.putIfAbsent(
             Checkout(listed[i].path),
             () => (branch: listed[i].branch, isMain: i == 0),
@@ -121,23 +97,17 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
       };
     });
 
-/// Moves the repository-scoped surfaces — changes and diffs, commit and push,
-/// the branch and worktree list, GitHub — to a checkout the user picked.
+/// Points the repository-scoped surfaces at a checkout the user picked.
 ///
-/// **The precedence rule is the one that already existed**, and this is another
-/// explicit writer of it: the active session writes the selection whenever it
-/// *changes*, an explicit choice writes it and then holds, because nothing
-/// overwrites it until the active session changes again. A pick therefore
-/// survives switching panes within the same session, and yields the moment the
-/// user activates a tab belonging to a different one.
+/// Another *explicit* writer of the existing precedence rule: a pick holds
+/// until the active session changes, exactly as an Explorer click does.
 class CheckoutPicker {
   const CheckoutPicker(this._ref);
 
   final Ref _ref;
 
   void select(Repository repository) {
-    // Only when it differs: `SelectedProjectController.select` kicks off a CLI
-    // store scan, and picking a sibling checkout is not a project change.
+    // Only when it differs: selecting a project kicks off a CLI-store scan.
     if (_ref.read(selectedProjectIdProvider) != repository.projectId) {
       _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);
     }

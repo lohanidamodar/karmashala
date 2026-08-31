@@ -9,24 +9,11 @@ import '../../features/explorer/application/checkout_picker.dart';
 import '../../features/projects/application/project_providers.dart';
 import '../../features/repositories/domain/repository.dart';
 
-/// Which checkout the panel is describing — and, when the project holds more
-/// than one, the control that moves it to another.
+/// Which checkout the panel is describing, and the picker that moves it.
 ///
-/// The repository-scoped surfaces all read one selection, and since Loop 85 that
-/// selection follows the terminal tab you are in — so the panel can change under
-/// you without a click. A surface that moves silently is worse than one that
-/// never moved, so the checkout is named on it: the repository, and where it
-/// sits inside its project, which is the whole difference between a hub and the
-/// clone three folders down that the agent is actually working in.
-///
-/// **And the name is the picker.** A session's working directory is fixed at
-/// launch while its subagents work in a nested clone and in the `wt-*` worktrees
-/// beside it, so the panel answered correctly about the wrong checkout and there
-/// was no way to say otherwise. Rather than add a second row of chrome, the line
-/// that already names the checkout opens the list of them: everything discovery
-/// found in this project, the current one marked, and picking one moves changes,
-/// commit, push and GitHub with it. A project with one checkout has nothing to
-/// choose, so it draws exactly what it drew before — no caret, no tap target.
+/// The selection moves on its own — it follows the terminal tab — so the
+/// surfaces have to name it; making that same line open the list of checkouts
+/// costs no extra chrome. One checkout in the project means no picker at all.
 class SidePanelContextLine extends ConsumerWidget {
   const SidePanelContextLine({super.key});
 
@@ -75,8 +62,7 @@ class SidePanelContextLine extends ConsumerWidget {
   }
 }
 
-/// The 22px strip itself. Identical whether or not it is a button, so a project
-/// with one checkout is pixel-for-pixel what it was.
+/// The 22px strip. Identical whether or not it is a button.
 class _ContextLineBody extends StatelessWidget {
   const _ContextLineBody({
     required this.repository,
@@ -113,9 +99,7 @@ class _ContextLineBody extends StatelessWidget {
           ),
           if (within != null) ...[
             const SizedBox(width: Insets.sm),
-            // The sub-path, not just the name: two clones can share a name,
-            // and "which one of these is it" is exactly the question a hub
-            // project makes hard to answer.
+            // The sub-path, not just the name: two clones can share a name.
             Flexible(
               flex: 2,
               child: Text(
@@ -142,14 +126,9 @@ class _ContextLineBody extends StatelessWidget {
   }
 }
 
-/// One checkout in the open picker.
-///
-/// The second line is what stops `wt-relay` and the clone it was cut from
-/// reading as two folder names: it says **worktree** where git says so, and the
-/// branch, which is the only thing that tells fifteen sibling worktrees apart.
-/// Those two facts cost a `git worktree list` per repository family and so
-/// arrive after the menu is drawn; the sub-path is in the table already and is
-/// there from the first frame, which is why the row never changes height.
+/// One checkout in the open picker. The second line is what stops `wt-relay`
+/// and the clone it was cut from reading as two folder names; its worktree and
+/// branch halves arrive after the menu is drawn, so the row height is fixed.
 class _CheckoutMenuRow extends ConsumerWidget {
   const _CheckoutMenuRow({
     required this.repository,
