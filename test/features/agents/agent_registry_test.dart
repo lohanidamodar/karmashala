@@ -136,24 +136,32 @@ const List<_AgentGolden> _goldens = [
     id: 'antigravity',
     displayName: 'Antigravity',
     kind: AgentKind.antigravity,
-    executable: 'antigravity',
-    baseArguments: ['--stdio'],
+    // `agy`, not `antigravity` — the name the CLI installs itself under, and
+    // the reason discovery never found it before.
+    executable: 'agy',
+    // Nothing headless is claimed: the stream-json protocol `agy --help`
+    // documents has not been run, and the adapter parses plain text.
+    baseArguments: [],
     permissionArguments: {
+      // Prompting is the CLI's own unflagged behaviour, so `ask` is exact with
+      // no arguments — the case `PermissionModeMapping.exact`'s `note` exists
+      // for, and the opposite of the empty-because-unknown mappings this entry
+      // used to carry.
       PermissionMode.ask: [],
-      PermissionMode.acceptEdits: [],
-      PermissionMode.bypass: ['--yolo'],
+      PermissionMode.acceptEdits: ['--mode', 'accept-edits'],
+      PermissionMode.bypass: ['--dangerously-skip-permissions'],
     },
-    // We know of no Antigravity flag for either safe mode. Both are `none`, and
-    // the arguments above stay empty for exactly that reason — which is why the
-    // two maps are not redundant.
+    // All three now map exactly, read off `agy --help` (1.1.22). The previous
+    // `--yolo` was not a flag this CLI has.
     permissionFits: {
-      PermissionMode.ask: PermissionModeFit.none,
-      PermissionMode.acceptEdits: PermissionModeFit.none,
+      PermissionMode.ask: PermissionModeFit.exact,
+      PermissionMode.acceptEdits: PermissionModeFit.exact,
       PermissionMode.bypass: PermissionModeFit.exact,
     },
-    resumeArguments: ['--resume', 'sid'],
-    // No documented interactive resume convention.
-    interactiveResumeArguments: [],
+    // `--conversation  Resume a previous conversation by ID`. One convention
+    // for both launches — there is no subcommand form as there is for Codex.
+    resumeArguments: ['--conversation', 'sid'],
+    interactiveResumeArguments: ['--conversation', 'sid'],
   ),
 ];
 
@@ -340,7 +348,17 @@ void main() {
         registry.byId('codex')!.store!.format,
         AgentStoreFormat.codexRollout,
       );
-      expect(registry.byId('antigravity')!.store, isNull);
+      // Antigravity's store is located but deliberately not readable: the
+      // conversations are encrypted, so the descriptor records where they are
+      // *and* that nothing here can parse them.
+      expect(
+        registry.byId('antigravity')!.store!.homeDirectoryName,
+        '.gemini/antigravity-cli',
+      );
+      expect(
+        registry.byId('antigravity')!.store!.format,
+        AgentStoreFormat.none,
+      );
     },
   );
 

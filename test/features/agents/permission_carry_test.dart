@@ -8,6 +8,27 @@ import 'package:flutter_test/flutter_test.dart';
 CarriedPermission _carry(PermissionMode mode, String agentId) =>
     carryPermission(mode, AgentRegistry.builtIn.byId(agentId));
 
+/// An agent whose **only** expressible mode is the most dangerous one.
+///
+/// This shape is what `permission_carry.dart` was written against, and until
+/// the CLI was actually run it was Antigravity's — `bypass: ['--yolo']` and
+/// nothing else. Interrogating `agy` 1.1.22 showed all three modes map exactly,
+/// so no shipped agent has this shape any more.
+///
+/// The rule still has to hold for one that does, and pinning it to whichever
+/// agent happened to be least understood made the test a fact about our
+/// research rather than about the rule. Hence a descriptor written for it.
+const _bypassOnly = AgentDescriptor(
+  id: 'bypassOnly',
+  displayName: 'Bypass-only CLI',
+  binaries: AgentBinaries(windows: ['b'], posix: ['b']),
+  launch: AgentLaunchSpec(
+    permissionModes: {
+      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
+    },
+  ),
+);
+
 void main() {
   group('a mode the target understands travels unchanged', () {
     test('exact stays exact and says the agent was told', () {
@@ -30,13 +51,13 @@ void main() {
   });
 
   group('a mode the target cannot express falls downwards, never upwards', () {
-    test('a careful session handed to Antigravity does not become --yolo', () {
-      // The property this rule exists for. Antigravity's *only* expressible
-      // mode is bypass, so a "nearest available mode" rule would answer the
+    test('a careful session handed to a bypass-only agent stays careful', () {
+      // The property this rule exists for. When an agent's *only* expressible
+      // mode is bypass, a "nearest available mode" rule would answer the
       // handoff of an `ask` session by launching the next agent with --yolo —
       // turning the user's safest choice into the most dangerous one as a side
       // effect of changing provider.
-      final carried = _carry(PermissionMode.ask, AgentIds.antigravity);
+      final carried = carryPermission(PermissionMode.ask, _bypassOnly);
       expect(carried.mode, PermissionMode.ask);
       expect(carried.fit, PermissionModeFit.none);
       expect(carried.enforced, isFalse);
@@ -190,7 +211,7 @@ void main() {
     test('an agent that can be told nothing still names its own default', () {
       final resolved = resolveContinuationPermission(
         sessionMode: PermissionMode.ask,
-        target: AgentRegistry.builtIn.byId(AgentIds.antigravity),
+        target: _bypassOnly,
       );
       // Not escalated to bypass to have *something* selectable: the default
       // stays the session's mode, unenforced, and the sentence says so.

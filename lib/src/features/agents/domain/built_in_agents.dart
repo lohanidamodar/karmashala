@@ -302,34 +302,114 @@ const _antigravity = AgentDescriptor(
   id: 'antigravity',
   displayName: 'Antigravity',
   kind: AgentKind.antigravity,
-  binaries: AgentBinaries(windows: ['antigravity'], posix: ['antigravity']),
+  // **The executable is `agy`, not `antigravity`.** Everything in this entry
+  // used to be inherited from Loop 10, which built the adapter against a fake
+  // process and never ran the CLI; the binary name was the load-bearing part of
+  // that guess, because discovery probes by name and so never found a real
+  // installation. `agy --version` reports 1.1.22, and the CLI is a separately
+  // distributed self-updating Go binary that puts itself on PATH with
+  // `agy install` — the Antigravity IDE does not ship or launch it.
+  binaries: AgentBinaries(windows: ['agy'], posix: ['agy']),
   launch: AgentLaunchSpec(
-    baseArguments: ['--stdio'],
-    // `ask` and `acceptEdits` are **absent, not empty**. We know of no
-    // Antigravity flag for either, and the old `[]` meant the app passed
-    // nothing while the UI reported the user's choice as applied — Loop 31 §4's
-    // sharpest case, since the mode being silently dropped was the *safe* one.
-    // Omitted means not offered, and the control says why instead of implying a
-    // policy we cannot enforce.
+    // Deliberately empty. The previous `--stdio` does not exist in this CLI at
+    // all, and while `agy --print --input-format stream-json --output-format
+    // stream-json` is a documented headless protocol, nothing here has run it:
+    // the tolerant line parser in `data/antigravity_adapter.dart` reads plain
+    // text, so declaring stream-json would pair a JSON protocol with a parser
+    // that does not speak it. Launching bare is also how the CLI is actually
+    // invoked in practice. The adapter is an enhancement layer and never
+    // load-bearing — every in-app session runs in a PTY — so an unverified
+    // protocol is left unclaimed rather than half-wired.
+    baseArguments: [],
+    // All three modes now map, and all three are exact. Read off
+    // `agy --help` (1.1.22):
+    //
+    //   --dangerously-skip-permissions  Auto-approve all tool permission
+    //                                   requests without prompting
+    //   --mode                          Set the agent execution mode for this
+    //                                   session (accept-edits, plan)
+    //
+    // This replaces a single `bypass: ['--yolo']` mapping. `--yolo` is not a
+    // flag this CLI has, so the one mode Antigravity claimed to support was the
+    // one that would have failed — and it was the dangerous one.
     permissionModes: {
-      PermissionMode.bypass: PermissionModeMapping.exact(['--yolo']),
+      // No flag, and unlike the old empty mappings this one is *exact* rather
+      // than absent. `--dangerously-skip-permissions` is documented as the way
+      // to stop the CLI prompting, which makes prompting the unflagged
+      // behaviour in the CLI's own words.
+      //
+      // Claude Code's entry above warns that "passing nothing" can quietly mean
+      // something else per account, and that warning is why this note exists
+      // rather than a bare `exact([])`: what is verified is the help text, not
+      // an observed session.
+      PermissionMode.ask: PermissionModeMapping.exact(
+        [],
+        note:
+            'Antigravity prompts before tool use unless it is told not to, so '
+            '"Ask every time" is its own default and needs no flag.',
+      ),
+      PermissionMode.acceptEdits: PermissionModeMapping.exact([
+        '--mode',
+        'accept-edits',
+      ]),
+      PermissionMode.bypass: PermissionModeMapping.exact([
+        '--dangerously-skip-permissions',
+      ]),
     },
-    resume: AgentResume.flag('--resume'),
-    // `fork` is left at the default (unsupported), and for Antigravity that is
-    // not merely caution. A fork needs a conversation to fork *from*, and
-    // Antigravity has no readable store (`store` is null below), so there is
-    // neither a CLI mechanism to invoke nor a transcript to build a handoff
-    // packet out of. Both fork routes are genuinely closed, not untested.
+    // `--conversation  Resume a previous conversation by ID`. One convention
+    // for both launches: unlike Codex there is no separate subcommand form, so
+    // the headless and interactive resumes are the same flag.
+    //
+    // Interactive resume is the entry that was missing rather than wrong.
+    // `interactiveResume` drives `interactiveAgentArguments`, and left at the
+    // default it meant a pane could never continue an Antigravity conversation
+    // at all, whatever the rest of the registry said.
+    resume: AgentResume.flag('--conversation'),
+    interactiveResume: AgentResume.flag('--conversation'),
+    // Left false, and this one is a real distinction rather than caution. The
+    // CLI does take an opening prompt, but as `-i` / `--prompt-interactive
+    // <prompt>` — a flag with a value, not the trailing positional this field
+    // means. Declaring it true would append the message as a bare argument,
+    // which is not how this CLI reads it. Delivering a first message to an
+    // Antigravity pane needs the descriptor to be able to express a
+    // prompt-carrying *flag*; see the follow-up in
+    // `docs/ANTIGRAVITY_SUPPORT_2026-08-31.md`.
+    acceptsPromptArgument: false,
+    // `fork` stays unsupported, now on evidence rather than on the default:
+    // `agy --help` lists every subcommand it has (agent, changelog, help,
+    // install, mcp, mic-serve, models, plugin, update) and none of them forks.
+    // `--continue` and `--conversation` both continue a conversation in place.
+    // The handoff route is closed too, because a packet is quoted from a
+    // transcript and this agent's are unreadable — see `store` below.
   ),
-  // No documented session store and no hook config, so nothing here can
-  // observe what an Antigravity session is doing.
+  // Where the CLI keeps its data, confirmed against a live install on both
+  // sides of this machine. It is **not** `.antigravity`, which is the IDE's
+  // VS Code-style extensions directory; the CLI writes
+  // `~/.gemini/antigravity-cli`, beside the IDE's own `antigravity-ide` — the
+  // `app_data_dir` that tells them apart is visible in each one's own logs.
   //
-  // The `--resume` above is the one value in this file with **no provenance**:
-  // every other flag carries the `--help` output or transcript it was read
-  // from, and this one only mirrors `antigravityLaunchArgs`
-  // (`data/antigravity_adapter.dart`), which says of itself that it is a
-  // compatibility adapter and provisional. The two agree, so the registry and
-  // the adapter build the same command line — but they agree about a guess.
-  // Re-check it against a real CLI before anything relies on it.
+  // The format is `none`, and that pairing is the point: we know exactly where
+  // the conversations are and we know we cannot read them. `conversations/` on
+  // the older build is encrypted (a uniform byte histogram, and no printable
+  // run of ten characters in a 177 KB file); the current build stores each one
+  // as SQLite whose every payload column is an opaque protobuf blob in an
+  // unpublished schema. So this is a settled property of the product rather
+  // than a reader nobody has written yet, and `agentSupportsChatView`
+  // correctly still offers no chat view.
+  store: AgentStoreSpec(
+    homeDirectoryName: '.gemini/antigravity-cli',
+    format: AgentStoreFormat.none,
+  ),
+  // Nothing can observe what a session is doing: no hook config, no parseable
+  // state file, and the TUI was never watched, so there is no screen text to
+  // write `grid` matchers against. `unknown` is the honest answer, and the grid
+  // source returns null rather than guessing.
+  //
+  // `approval` is likewise left empty on purpose. The 1.0.13 build wrote a
+  // `keybindings.json` binding `confirm.yes` to `y` and `confirm.no` to `n`,
+  // which looked like the best-sourced approval keys in this file — but 1.1.22
+  // ships no such file, so those keys describe a version nobody is running.
+  // Pressing a guessed key into a TUI is the one failure worse than sending the
+  // user to the terminal, so nothing is declared.
   statusStrategy: AgentStatusStrategy.none,
 );

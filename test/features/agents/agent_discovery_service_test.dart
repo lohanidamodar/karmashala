@@ -49,7 +49,9 @@ void main() {
             if (req.executable == 'where') {
               return switch (req.arguments.first) {
                 'claude' => _ok('C:\\bin\\claude.exe\r\n'),
-                'antigravity' => _ok('C:\\bin\\antigravity.exe\r\n'),
+                // The CLI installs itself as `agy`; nothing is on PATH
+                // under the name the registry used to probe for.
+                'agy' => _ok('C:\\bin\\agy.exe\r\n'),
                 _ => _notFound, // codex not installed
               };
             }

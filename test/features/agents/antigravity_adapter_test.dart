@@ -63,7 +63,7 @@ void main() {
     expect(events.single.data['text'], 'plain reply');
   });
 
-  test('AntigravityAdapter starts the executable with --stdio', () async {
+  test('AntigravityAdapter starts the executable bare', () async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -86,6 +86,9 @@ void main() {
 
     final req = runner.startRequests.single;
     expect(req.executable, r'C:\bin\antigravity.exe');
-    expect(req.arguments, ['--stdio']);
+    // `--stdio` is not a flag this CLI has. A default launch passes
+    // nothing: `agy` already prompts before tool use, and the headless
+    // stream-json protocol it documents has not been run.
+    expect(req.arguments, isEmpty);
   });
 }

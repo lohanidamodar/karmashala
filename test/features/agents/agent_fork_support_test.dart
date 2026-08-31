@@ -72,8 +72,11 @@ void main() {
       final descriptor = _descriptor(AgentIds.antigravity);
       expect(descriptor.launch.fork.style, AgentForkStyle.unsupported);
       // Not merely untested: it has no readable store to build a packet from
-      // and does not take an opening prompt to deliver one with.
-      expect(descriptor.store, isNull);
+      // and does not take an opening prompt to deliver one with. The store is
+      // now *located* — we know where the conversations live — but its format
+      // says they cannot be read, and a handoff packet is quoted from a
+      // transcript, so locating them changes nothing about this.
+      expect(descriptor.store!.format, AgentStoreFormat.none);
       expect(descriptor.launch.acceptsPromptArgument, isFalse);
     });
 
