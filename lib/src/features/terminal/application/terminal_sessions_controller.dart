@@ -103,6 +103,31 @@ class TerminalSessionsState {
     }
     return null;
   }
+
+  /// Equal when every part is the **same object**.
+  ///
+  /// The controller rebuilds each collection only when that collection changed
+  /// (see `_tabsMutated` and friends), so identity here is the whole point:
+  /// a consumer selecting `state.tabs` is no longer told to rebuild because a
+  /// process exited somewhere, and a publish that changed nothing tells nobody
+  /// anything. A deep comparison would give the same answer at O(N) per
+  /// publish, which is the cost being removed.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TerminalSessionsState &&
+          identical(other.tabs, tabs) &&
+          other.activeTabId == activeTabId &&
+          identical(other.detached, detached) &&
+          identical(other.liveness, liveness);
+
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(tabs),
+    activeTabId,
+    identityHashCode(detached),
+    identityHashCode(liveness),
+  );
 }
 
 /// Manages open terminal tabs, the split tree inside each, which pane has focus,
@@ -120,6 +145,20 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// Sessions with a running process and no tab, oldest first.
   final List<DetachedSession> _detached = [];
+
+  /// The published projections of [_tabs], [_detached] and the instances'
+  /// liveness, plus the two id indexes derived from the tab list.
+  ///
+  /// All null until asked for, and nulled only by the thing they are derived
+  /// from changing — so a publish that moved one pane's liveness hands the
+  /// *same* tab list back to consumers, and "which tab holds this pane?" is a
+  /// map lookup rather than a scan over every tab that allocated a pane list
+  /// per tab as it went.
+  List<TerminalTab>? _tabsView;
+  List<DetachedSession>? _detachedView;
+  Map<String, PaneLiveness>? _livenessView;
+  Map<String, int>? _tabIndexById;
+  Map<String, String>? _tabIdByPane;
 
   /// Panes whose buffer changed since their last snapshot.
   final Set<String> _dirty = {};
@@ -158,14 +197,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// not, because a dead pane still has a row worth restoring.
   bool _userClosedSinceRestore = false;
 
-  late final ScrollbackAutosave _autosave = ref.read(
-    scrollbackAutosaveFactoryProvider,
-  )(
-    onTick: () {
-      saveDirtyScrollback();
-      return hasDirtyScrollback;
-    },
-  );
+  late final ScrollbackAutosave _autosave =
+      ref.read(scrollbackAutosaveFactoryProvider)(
+        onTick: () {
+          saveDirtyScrollback();
+          return hasDirtyScrollback;
+        },
+      );
 
   final _log = AppLogger.named('terminal');
 
@@ -214,19 +252,45 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   }
 
   TerminalSessionsState _snapshot() => TerminalSessionsState(
-    tabs: List.of(_tabs),
+    tabs: _tabsView ??= List.unmodifiable(_tabs),
     activeTabId: _activeTabId,
-    detached: List.of(_detached),
-    liveness: {
+    detached: _detachedView ??= List.unmodifiable(_detached),
+    liveness: _livenessView ??= Map.unmodifiable({
       for (final entry in _instances.entries)
         entry.key: entry.value.liveness.value,
-    },
+    }),
   );
 
   void _publish() {
     _applyIngestTiers();
     state = _snapshot();
   }
+
+  /// Drops the projections and indexes derived from [_tabs].
+  ///
+  /// Called at every one of the seven places the tab list changes shape. It is
+  /// deliberately one method rather than incremental maintenance: an index that
+  /// is rebuilt wholesale cannot drift, and the rebuild is O(tabs) on a
+  /// structural change rather than on every publish.
+  void _tabsMutated() {
+    _tabsView = null;
+    _tabIndexById = null;
+    _tabIdByPane = null;
+  }
+
+  void _detachedMutated() => _detachedView = null;
+
+  /// Drops the liveness projection — a pane was adopted, released, or its
+  /// process changed state.
+  void _livenessMutated() => _livenessView = null;
+
+  Map<String, int> get _tabIndex =>
+      _tabIndexById ??= {for (var i = 0; i < _tabs.length; i++) _tabs[i].id: i};
+
+  Map<String, String> get _paneOwner => _tabIdByPane ??= {
+    for (final tab in _tabs)
+      for (final paneId in tab.layout.panes) paneId: tab.id,
+  };
 
   /// Tells every pane how visible it is, so ingestion can cost what the pane is
   /// worth rather than the same for all of them.
@@ -246,16 +310,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Cost is O(panes) per publish and every pane whose tier did not change
   /// returns immediately, which is nearly all of them nearly always.
   void _applyIngestTiers() {
-    final tiers = <String, IngestTier>{};
-    for (final tab in _tabs) {
-      final tier = tab.id == _activeTabId ? IngestTier.hot : IngestTier.warm;
-      for (final paneId in tab.layout.panes) {
-        tiers[paneId] = tier;
-      }
-    }
+    final owner = _paneOwner;
     for (final entry in _instances.entries) {
       if (entry.value case final TieredTerminalInstance tiered) {
-        tiered.setIngestTier(tiers[entry.key] ?? IngestTier.cold);
+        final tabId = owner[entry.key];
+        tiered.setIngestTier(
+          tabId == null
+              ? IngestTier.cold
+              : tabId == _activeTabId
+              ? IngestTier.hot
+              : IngestTier.warm,
+        );
       }
     }
   }
@@ -279,6 +344,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabs.clear();
     _detached.clear();
     _activeTabId = null;
+    _tabsMutated();
+    _detachedMutated();
+    _livenessMutated();
     return reaping;
   }
 
@@ -296,6 +364,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         focusedPaneId: paneId,
       ),
     );
+    _tabsMutated();
     _activeTabId = tabId;
     _publish();
     persistWorkspace();
@@ -330,6 +399,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         focusedPaneId: paneId,
       ),
     );
+    _tabsMutated();
     _activeTabId = tabId;
     _publish();
     persistWorkspace();
@@ -363,6 +433,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       }
     }
     _tabs.removeWhere((t) => t.id == id);
+    _tabsMutated();
     if (_activeTabId == id) {
       _activeTabId = _tabs.isEmpty ? null : _tabs.last.id;
     }
@@ -496,6 +567,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final index = _detached.indexWhere((s) => s.paneId == paneId);
     if (index < 0) return null;
     _detached.removeAt(index);
+    _detachedMutated();
 
     final tabId = _newId();
     _tabs.add(
@@ -505,6 +577,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         focusedPaneId: paneId,
       ),
     );
+    _tabsMutated();
     _activeTabId = tabId;
     _publish();
     persistWorkspace();
@@ -525,6 +598,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       return;
     }
     _detached.removeWhere((s) => s.paneId == paneId);
+    _detachedMutated();
     _releasePane(paneId);
     _publish();
     persistWorkspace();
@@ -539,6 +613,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _releasePane(session.paneId);
     }
     _detached.clear();
+    _detachedMutated();
     _publish();
     persistWorkspace();
   }
@@ -793,6 +868,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
                 : layout.panes.first,
           ),
         );
+        _tabsMutated();
         if (storedTab.id == stored.activeTabId) _activeTabId = storedTab.id;
       }
 
@@ -809,6 +885,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               detachedAt: ref.read(clockProvider).nowUtc(),
             ),
           );
+          _detachedMutated();
         }
       }
 
@@ -889,13 +966,18 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// being re-encoded three times a minute for nothing.
   void _adopt(String paneId, TerminalInstance instance) {
     _instances[paneId] = instance;
+    _livenessMutated();
     void markDirty() => _dirty.add(paneId);
     _dirtyListeners[paneId] = markDirty;
     instance.terminal.addListener(markDirty);
     // Republish when the process exits so the pane (and its tab, and the
     // background-session list) stops presenting itself as live. One rebuild per
     // process death — not per frame — so this costs nothing.
-    void onLiveness() => _publish();
+    void onLiveness() {
+      _livenessMutated();
+      _publish();
+    }
+
     _livenessListeners[paneId] = onLiveness;
     instance.liveness.addListener(onLiveness);
   }
@@ -921,6 +1003,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         detachedAt: ref.read(clockProvider).nowUtc(),
       ),
     );
+    _detachedMutated();
   }
 
   /// Whether closing this pane keeps its process alive — [shouldDetachOnClose]
@@ -967,6 +1050,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _releasePane(String paneId) {
     final instance = _instances.remove(paneId);
     if (instance == null) return;
+    _livenessMutated();
     _unlisten(paneId, instance);
     _dirty.remove(paneId);
     _encoded.remove(paneId);
@@ -984,30 +1068,24 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   TerminalTab? _tabById(String? id) {
     if (id == null) return null;
-    for (final tab in _tabs) {
-      if (tab.id == id) return tab;
-    }
-    return null;
+    final index = _tabIndex[id];
+    return index == null ? null : _tabs[index];
   }
 
-  TerminalTab? _tabContaining(String paneId) {
-    for (final tab in _tabs) {
-      if (tab.layout.contains(paneId)) return tab;
-    }
-    return null;
-  }
+  TerminalTab? _tabContaining(String paneId) => _tabById(_paneOwner[paneId]);
 
   void _replaceTab(TerminalTab updated) {
-    final index = _tabs.indexWhere((tab) => tab.id == updated.id);
-    if (index < 0) return;
+    final index = _tabIndex[updated.id];
+    if (index == null) return;
     _tabs[index] = updated;
+    _tabsMutated();
     _publish();
   }
 
   void _stepTab(int by) {
     if (_tabs.length < 2) return;
-    final index = _tabs.indexWhere((tab) => tab.id == _activeTabId);
-    if (index < 0) return;
+    final index = _tabIndex[_activeTabId];
+    if (index == null) return;
     activateTab(_tabs[(index + by + _tabs.length) % _tabs.length].id);
   }
 
@@ -1078,6 +1156,40 @@ final terminalSessionsControllerProvider =
     NotifierProvider<TerminalSessionsController, TerminalSessionsState>(
       TerminalSessionsController.new,
     );
+
+/// The terminal's tab topology: which tabs exist, in what order, holding which
+/// panes.
+///
+/// The narrow half of the terminal state. Watching this instead of the whole
+/// [TerminalSessionsState] is what stops a process dying in one pane rebuilding
+/// every terminal child: the controller hands back the *same* tab list unless
+/// the tabs themselves changed, so `select` has something to compare.
+final terminalTabsProvider = Provider<List<TerminalTab>>(
+  (ref) => ref.watch(terminalSessionsControllerProvider.select((s) => s.tabs)),
+);
+
+/// Which tab is in front.
+final terminalActiveTabIdProvider = Provider<String?>(
+  (ref) => ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.activeTabId),
+  ),
+);
+
+/// Sessions running with no tab.
+final terminalDetachedProvider = Provider<List<DetachedSession>>(
+  (ref) =>
+      ref.watch(terminalSessionsControllerProvider.select((s) => s.detached)),
+);
+
+/// Whether one pane has a process behind it.
+///
+/// A family, so a process exiting repaints that pane's status bar and its tab's
+/// dot rather than every consumer of the workspace.
+final terminalPaneLivenessProvider = Provider.family<PaneLiveness, String>(
+  (ref, paneId) => ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.livenessOf(paneId)),
+  ),
+);
 
 /// Whether the terminal is the surface the workbench is showing.
 ///

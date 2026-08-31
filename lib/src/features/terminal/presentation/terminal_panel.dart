@@ -146,10 +146,11 @@ class TerminalActions {
       context: context,
       builder: (context) => Consumer(
         builder: (context, ref, _) {
-          final state = ref.watch(terminalSessionsControllerProvider);
+          final detached = ref.watch(terminalDetachedProvider);
           return BackgroundSessionsDialog(
-            sessions: state.detached,
-            livenessOf: state.livenessOf,
+            sessions: detached,
+            livenessOf: (paneId) =>
+                ref.read(terminalPaneLivenessProvider(paneId)),
             onAttach: (paneId) {
               _sessions.reattachSession(paneId);
               Navigator.of(context).pop();
@@ -333,17 +334,21 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final state = ref.watch(terminalSessionsControllerProvider);
+    // Deliberately narrow: the topology and which tab is in front, not the
+    // whole workspace. A process exiting changes neither, so it no longer
+    // rebuilds the stack — the pane's own status bar watches its liveness.
+    final openTabs = ref.watch(terminalTabsProvider);
+    final activeTabId = ref.watch(terminalActiveTabIdProvider);
     final search = ref.watch(terminalSearchControllerProvider);
     _mounted.sync(
-      openTabIds: [for (final tab in state.tabs) tab.id],
-      activeTabId: state.activeTabId,
+      openTabIds: [for (final tab in openTabs) tab.id],
+      activeTabId: activeTabId,
     );
     final tabs = [
-      for (final tab in state.tabs)
+      for (final tab in openTabs)
         if (_mounted.contains(tab.id)) tab,
     ];
-    final activeIndex = tabs.indexWhere((t) => t.id == state.activeTabId);
+    final activeIndex = tabs.indexWhere((t) => t.id == activeTabId);
 
     return Material(
       color: theme.colorScheme.surfaceContainerLowest,
@@ -351,7 +356,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         children: [
           if (search.visible) const TerminalSearchBar(),
           Expanded(
-            child: state.tabs.isEmpty
+            child: openTabs.isEmpty
                 ? Center(
                     child: Text(
                       'Opening terminal…',
@@ -373,9 +378,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                             paneId,
                             focused:
                                 paneId == tab.focusedPaneId &&
-                                tab.id == state.activeTabId,
+                                tab.id == activeTabId,
                             showFocusRing: tab.layout.panes.length > 1,
-                            liveness: state.livenessOf(paneId),
                           ),
                         ),
                     ],
@@ -398,7 +402,6 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     String paneId, {
     required bool focused,
     required bool showFocusRing,
-    required PaneLiveness liveness,
   }) {
     final theme = Theme.of(context);
     final instance = _sessions.instanceFor(paneId);
@@ -426,13 +429,21 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         child: Column(
           children: [
             // A pane with no process behind it says so, rather than presenting
-            // an old prompt as a live one.
-            if (!liveness.isLive)
-              PaneStatusBar(
-                liveness: liveness,
-                workingDirectory: instance.workingDirectory,
-                onStart: () => _sessions.startPane(paneId),
-              ),
+            // an old prompt as a live one. In its own `Consumer` so a process
+            // exiting rebuilds this bar and nothing else.
+            Consumer(
+              builder: (context, ref, _) {
+                final liveness = ref.watch(
+                  terminalPaneLivenessProvider(paneId),
+                );
+                if (liveness.isLive) return const SizedBox.shrink();
+                return PaneStatusBar(
+                  liveness: liveness,
+                  workingDirectory: instance.workingDirectory,
+                  onStart: () => _sessions.startPane(paneId),
+                );
+              },
+            ),
             Expanded(
               child: TerminalPaneView(
                 // Starting a pane swaps its instance in place; without a key
@@ -516,9 +527,12 @@ class TerminalToolbar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final actions = TerminalActions(ref);
-    final state = ref.watch(terminalSessionsControllerProvider);
-    final backgroundCount = state.detached.length;
-    final hasTabs = state.tabs.isNotEmpty;
+    final backgroundCount = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.detached.length),
+    );
+    final hasTabs = ref.watch(
+      terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
+    );
     final hasCommands = actions.focusedBlocks().isNotEmpty;
 
     return Row(
