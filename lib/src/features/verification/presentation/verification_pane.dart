@@ -13,6 +13,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../application/verification_providers.dart';
 import '../application/verification_service.dart';
 import '../domain/verification_artifact.dart';
+import '../domain/verdict_attribution.dart';
 import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
 
@@ -128,6 +129,8 @@ class _RunRow extends ConsumerWidget {
             Row(
               children: [
                 _VerdictChip(run: run),
+                const SizedBox(width: Insets.xs),
+                _AttributionChip(attribution: run.attribution),
                 const SizedBox(width: Insets.sm),
                 Expanded(
                   child: Text(
@@ -201,6 +204,8 @@ class _RunDetail extends ConsumerWidget {
               Row(
                 children: [
                   _VerdictChip(run: run),
+                  const SizedBox(width: Insets.xs),
+                  _AttributionChip(attribution: run.attribution),
                   const SizedBox(width: Insets.sm),
                   Expanded(
                     child: Text(
@@ -221,6 +226,7 @@ class _RunDetail extends ConsumerWidget {
                     '${run.duration == null ? ' (still recording)' : ' · ${formatRunDuration(run.duration!)}'}',
               ),
               _SessionRow(run: run),
+              _VerifierRow(run: run),
               const SizedBox(height: Insets.lg),
               _SectionTitle('Steps (${run.steps.length})'),
               if (run.steps.isEmpty)
@@ -386,6 +392,60 @@ class _SessionRow extends ConsumerWidget {
             child: const Text('Open'),
           ),
       ],
+    );
+  }
+}
+
+/// Who produced the verdict, and whether that was the session under test.
+///
+/// The row that makes a self-graded pass legible as one. Derived from the two
+/// ids every time it paints, so it cannot disagree with them.
+class _VerifierRow extends ConsumerWidget {
+  const _VerifierRow({required this.run});
+
+  final VerificationRun run;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = run.producedBySessionId;
+    if (id == null) {
+      return _MetaRow(
+        label: 'Verifier',
+        value: '${VerdictAttribution.notRecorded.label} — nobody said who '
+            'graded this run',
+      );
+    }
+    final session = ref.read(sessionDaoProvider).getById(id);
+    return _MetaRow(
+      label: 'Verifier',
+      value: '${session?.title ?? id} · ${run.attribution.label}',
+    );
+  }
+}
+
+/// One word beside a verdict: who graded it.
+class _AttributionChip extends StatelessWidget {
+  const _AttributionChip({required this.attribution});
+
+  final VerdictAttribution attribution;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
+    // Self-verified is the one worth a second look, so it takes the attention
+    // colour rather than reading like a clean bill of health.
+    final colour = switch (attribution) {
+      VerdictAttribution.author => semantic.attention,
+      VerdictAttribution.independent => semantic.idle,
+      VerdictAttribution.notRecorded => semantic.neutral,
+    };
+    return Tooltip(
+      message: attribution.label,
+      child: Text(
+        attribution.shortLabel,
+        style: theme.textTheme.labelSmall?.copyWith(color: colour),
+      ),
     );
   }
 }

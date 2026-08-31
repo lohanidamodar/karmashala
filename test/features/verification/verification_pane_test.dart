@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:chitragupta/src/app/theme/app_theme.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/verification/application/verification_providers.dart';
+import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_artifact.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_run.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_step.dart';
@@ -39,6 +40,7 @@ void main() {
     VerificationVerdict? verdict,
     String? reason,
     String? sessionId,
+    String? producedBySessionId,
     List<VerificationStep> steps = const [],
     Map<String, String> files = const {},
     List<String> missingImages = const [],
@@ -50,6 +52,7 @@ void main() {
       title: title,
       target: target ?? const VerificationTarget.browser('https://example.com'),
       sessionId: sessionId,
+      producedBySessionId: producedBySessionId,
       startedAt: _t0,
       finishedAt: verdict == null ? null : _t0.add(const Duration(seconds: 9)),
       verdict: verdict,
@@ -322,6 +325,62 @@ void main() {
         formatWhen(now.subtract(const Duration(days: 4)), now: now),
         '4d ago',
       );
+    });
+  });
+
+  group('the pane says who produced the verdict', () {
+    testWidgets('a self-graded run is labelled as one, not as a clean pass', (
+      tester,
+    ) async {
+      seed(
+        id: 'run-self',
+        title: 'The author checked itself',
+        verdict: VerificationVerdict.pass,
+        sessionId: 's-1',
+        producedBySessionId: 's-1',
+      );
+      await pump(tester);
+
+      // Visible on the row, before anything is opened.
+      expect(find.text('self'), findsOneWidget);
+      await tapAndSettle(tester, find.text('The author checked itself'));
+      expect(
+        find.textContaining(VerdictAttribution.author.label),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('a run graded by another session reads as independent', (
+      tester,
+    ) async {
+      seed(
+        id: 'run-indep',
+        title: 'Somebody else checked it',
+        verdict: VerificationVerdict.pass,
+        sessionId: 's-1',
+        producedBySessionId: 's-2',
+      );
+      await pump(tester);
+
+      expect(find.text('independent'), findsOneWidget);
+      expect(find.text('self'), findsNothing);
+    });
+
+    testWidgets('a run from before attribution says nobody recorded it', (
+      tester,
+    ) async {
+      seed(
+        id: 'run-legacy',
+        title: 'An old run',
+        verdict: VerificationVerdict.pass,
+        sessionId: 's-1',
+      );
+      await pump(tester);
+
+      expect(find.text('unattributed'), findsOneWidget);
+      await tapAndSettle(tester, find.text('An old run'));
+      // Not "the author", not "independent" — the gap itself.
+      expect(find.textContaining('nobody said who graded'), findsOneWidget);
     });
   });
 }

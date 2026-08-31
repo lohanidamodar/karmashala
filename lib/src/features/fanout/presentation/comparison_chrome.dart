@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../verification/domain/verdict_attribution.dart';
 import '../domain/comparison.dart';
 
 /// Small shared pieces of the comparison surface.
@@ -99,10 +100,19 @@ class DiffStatLine extends StatelessWidget {
 }
 
 /// A verification verdict beside the diff stat. Absent when nothing has one.
+///
+/// [attribution] is required rather than optional: a verdict rendered without
+/// saying who produced it is the self-graded exam G3 names, and an optional
+/// parameter is how a caller quietly stops saying.
 class VerdictChip extends StatelessWidget {
-  const VerdictChip({required this.evidence, super.key});
+  const VerdictChip({
+    required this.evidence,
+    required this.attribution,
+    super.key,
+  });
 
   final CandidateEvidence evidence;
+  final VerdictAttribution attribution;
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +122,7 @@ class VerdictChip extends StatelessWidget {
       EvidenceVerdict.failed => (semantic.failure, AppIcons.xCircle),
       EvidenceVerdict.inconclusive => (semantic.neutral, AppIcons.question),
     };
+    final labelStyle = Theme.of(context).textTheme.labelSmall;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -122,9 +133,24 @@ class VerdictChip extends StatelessWidget {
             evidence.label ?? evidence.verdict.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: color),
+            style: labelStyle?.copyWith(color: color),
+          ),
+        ),
+        const SizedBox(width: Insets.xs),
+        Tooltip(
+          message: attribution.label,
+          child: Text(
+            attribution.shortLabel,
+            maxLines: 1,
+            style: labelStyle?.copyWith(
+              // Self-verified reads as a caution, not as a pass: it is the
+              // candidate's own account of itself.
+              color: switch (attribution) {
+                VerdictAttribution.author => semantic.attention,
+                VerdictAttribution.independent => semantic.idle,
+                VerdictAttribution.notRecorded => semantic.neutral,
+              },
+            ),
           ),
         ),
       ],
