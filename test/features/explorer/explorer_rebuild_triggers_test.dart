@@ -31,6 +31,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chitragupta/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:chitragupta/src/features/cli_detection/domain/detected_project.dart';
+import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
+
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -51,6 +55,18 @@ import '../terminal/fake_instance.dart';
 class _StaticSettings extends SettingsController {
   @override
   Settings build() => const Settings();
+}
+
+/// A detection service with no stores behind it.
+class _NoStores implements CliDetectionService {
+  const _NoStores();
+  @override
+  Future<List<DetectedProject>> detect(
+    List<CliStore> stores,
+    Map<String, ExecutionEnvironment> environmentsById,
+  ) async => const [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _MovableClock implements Clock {
@@ -134,6 +150,11 @@ void main() {
           (_) async => const ImportSummary(),
         ),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
+        // The real registry and the real adoption service are wanted here; the
+        // real *stores* are not. Without this the status pipeline walks the
+        // machine's own ~/.claude on Windows, which is both slow and none of a
+        // test's business.
+        cliDetectionServiceProvider.overrideWithValue(const _NoStores()),
       ],
     );
     addTearDown(container.dispose);

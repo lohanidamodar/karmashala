@@ -22,6 +22,10 @@ import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chitragupta/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:chitragupta/src/features/cli_detection/domain/detected_project.dart';
+import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
+
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -38,6 +42,18 @@ const _repoPath = r'C:\src\demo\app';
 
 /// Claude Code v2.1.251's idle footer, the row `AgentGridRules.idle` matches.
 const _claudeFooter = '  ? for shortcuts · shift+tab to cycle';
+
+/// A detection service with no stores behind it.
+class _NoStores implements CliDetectionService {
+  const _NoStores();
+  @override
+  Future<List<DetectedProject>> detect(
+    List<CliStore> stores,
+    Map<String, ExecutionEnvironment> environmentsById,
+  ) async => const [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 class _StaticSettings extends SettingsController {
   @override
@@ -65,6 +81,9 @@ Harness harness() {
       agentSessionStatusProvider.overrideWith(
         (ref, id) => const Stream<AgentStatusReport>.empty(),
       ),
+      // The sweep is real; the stores it would walk are the machine's own, and
+      // a test has no business reading them.
+      cliDetectionServiceProvider.overrideWithValue(const _NoStores()),
     ],
   );
   return (container: container, db: db);
