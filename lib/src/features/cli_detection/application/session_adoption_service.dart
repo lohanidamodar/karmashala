@@ -52,6 +52,7 @@ class AdoptablePane {
     required this.hostsLaunchedSession,
     this.lastCommandId,
     this.lastCommandLine,
+    this.lastCommandRunning = true,
   });
 
   final String paneId;
@@ -74,6 +75,15 @@ class AdoptablePane {
   /// running. `null` while it is still being typed, and for a shell that emits
   /// no `B` marker and so cannot have its input read back.
   final String? lastCommandLine;
+
+  /// Whether that block is still running.
+  ///
+  /// `CommandBlockTracker.latest` goes on reporting a finished block — same id,
+  /// same text — until the shell draws its next prompt, so this flag is the
+  /// only thing separating `claude --help`, which has printed its usage and
+  /// exited, from a `claude` sitting at its prompt. Defaults to true because a
+  /// shell that never emits the end marker has told us nothing.
+  final bool lastCommandRunning;
 }
 
 /// Adopts an agent session the user started **by hand** in one of our own
@@ -155,7 +165,8 @@ class SessionAdoptionService {
   /// One pass over every CLI store. The fallback, and the only disk work here.
   final Future<List<DetectedSession>> Function()? scanStores;
 
-  /// Called with each session adopted, so the workspace can redraw.
+  /// Called with each row adoption touches — adopted, rejoined, or released
+  /// from the pane it was standing in — so the workspace can redraw.
   final void Function(Session session)? onAdopted;
 
   final PathTranslator translator;
@@ -168,11 +179,16 @@ class SessionAdoptionService {
 
   /// paneId → the last command block we have already read, so a pane costs one
   /// record comparison per cycle and nothing else.
-  final Map<String, (String, String?)> _seenCommand = {};
+  final Map<String, (String, String?, bool)> _seenCommand = {};
 
-  /// Panes now standing for a session row. Never candidates again until the
+  /// paneId → the session row standing in that pane, or `null` for a pane bound
+  /// to a row that names a *different* pane. Never candidates again until the
   /// shell returns to a prompt and runs something else.
-  final Set<String> _bound = {};
+  ///
+  /// The value is what lets a pane give the row back when its agent leaves: a
+  /// bare set could tell that the pane had moved on but not which row was still
+  /// claiming it.
+  final Map<String, String?> _bound = {};
 
   /// `<agentId>/<sessionId>` we have already decided about, so the flood of
   /// hook callbacks one session produces costs a set lookup after the first.
@@ -199,7 +215,7 @@ class SessionAdoptionService {
 
   List<_Candidate> get _sweepable => [
     for (final candidate in _armed.values)
-      if (!_bound.contains(candidate.paneId) &&
+      if (!_bound.containsKey(candidate.paneId) &&
           candidate.attempts < sweepAttempts)
         candidate,
   ];
@@ -222,19 +238,32 @@ class SessionAdoptionService {
       if (commandId == null) continue;
       // Keyed by the block *and* its text: the id appears at the prompt, and
       // the command line only arrives once the shell says it is running.
-      final seen = (commandId, pane.lastCommandLine);
+      // Keyed by the block, its text *and* whether it is still running: the id
+      // appears at the prompt, the command line only once the shell says it is
+      // running, and the end marker changes neither of the first two.
+      final seen = (commandId, pane.lastCommandLine, pane.lastCommandRunning);
       if (_seenCommand[pane.paneId] == seen) continue;
       _seenCommand[pane.paneId] = seen;
-      // The shell is back at a prompt running something else, so whatever was
-      // running before has exited. Its pane is free again.
+      // Whatever was running here before has either exited or been replaced, so
+      // the pane is free again — and any row standing in it has to be told,
+      // because the pane itself lives on as a shell.
+      _releasePane(pane.paneId);
       _forget(pane.paneId, keepSeen: true);
+      // A command the shell has reported finished starts no agent. Arming on
+      // one would let `claude --help` collect a passing hook meant for an agent
+      // running somewhere else entirely.
+      if (!pane.lastCommandRunning) continue;
       final agentId = agentIdForCommandLine(pane.lastCommandLine ?? '', agents);
       if (agentId == null) continue;
       _arm(pane, agentId);
     }
     _armed.removeWhere((paneId, _) => !present.contains(paneId));
     _seenCommand.removeWhere((paneId, _) => !present.contains(paneId));
-    _bound.removeWhere((paneId) => !present.contains(paneId));
+    // A pane that has gone away keeps its row's `paneId`, exactly as a launched
+    // session's does: the row records where the session ran, and the terminal
+    // controller answers with no instance for it. Only a pane that is still
+    // there running something else is a lie worth correcting.
+    _bound.removeWhere((paneId, _) => !present.contains(paneId));
   }
 
   /// One hook callback for a session we may not know about.
@@ -342,7 +371,7 @@ class SessionAdoptionService {
     if (read == null) return;
     for (final pane in readPanes()) {
       if (!pane.isLive || pane.hostsLaunchedSession) continue;
-      if (_armed.containsKey(pane.paneId) || _bound.contains(pane.paneId)) {
+      if (_armed.containsKey(pane.paneId) || _bound.containsKey(pane.paneId)) {
         continue;
       }
       final agentId = _agentOnScreen(pane);
@@ -418,7 +447,8 @@ class SessionAdoptionService {
   _Candidate? _claim(String agentId, String cwd) {
     final candidates = [
       for (final candidate in _armed.values)
-        if (candidate.agentId == agentId && !_bound.contains(candidate.paneId))
+        if (candidate.agentId == agentId &&
+            !_bound.containsKey(candidate.paneId))
           candidate,
     ];
     if (candidates.isEmpty) return null;
@@ -541,7 +571,7 @@ class SessionAdoptionService {
     // which `ImportedSessionDao` resolves for every reader — so the Explorer
     // shows one card, and the history is still there if this row is ever
     // removed. See that class's doc for why the tie is broken there.
-    _bound.add(candidate.paneId);
+    _bound[candidate.paneId] = session.id;
     _settled.add(key);
     adoptions++;
     onAdopted?.call(session);
@@ -556,8 +586,13 @@ class SessionAdoptionService {
   /// on evidence this weak. A joined row goes back to running, because a
   /// resumed conversation is running whatever its last recorded state was.
   void _rejoin(Session session, _Candidate candidate) {
-    _bound.add(candidate.paneId);
-    if (session.paneId != null) return;
+    // Bound either way, so the pane is not offered again — but only the row we
+    // actually place here is ours to take back.
+    if (session.paneId != null) {
+      _bound[candidate.paneId] = null;
+      return;
+    }
+    _bound[candidate.paneId] = session.id;
     sessionDao.updatePaneId(session.id, candidate.paneId);
     if (session.status != SessionStatus.running) {
       sessionDao.updateStatus(session.id, SessionStatus.running);
@@ -568,6 +603,27 @@ class SessionAdoptionService {
         status: SessionStatus.running,
       ),
     );
+  }
+
+  /// Hands the pane back from the row adoption placed in it.
+  ///
+  /// Called when a bound pane's shell moves on to something else. The pane
+  /// outlives the agent — it is a shell, not the agent's own process — so
+  /// without this the row goes on reporting itself as hosted live in a pane
+  /// showing a prompt, and its status badge is read off whatever runs there
+  /// next. The status is deliberately left alone: the conversation still
+  /// exists and can be resumed, and only its whereabouts have changed.
+  void _releasePane(String paneId) {
+    final sessionId = _bound[paneId];
+    if (sessionId == null) return;
+    final session = sessionDao.getById(sessionId);
+    // Only a row still naming this pane is released. A resume may have moved
+    // the conversation into a pane of its own since, and that placement is
+    // newer than ours.
+    if (session == null || session.paneId != paneId) return;
+    sessionDao.updatePaneId(sessionId, null);
+    final updated = sessionDao.getById(sessionId);
+    if (updated != null) onAdopted?.call(updated);
   }
 
   String _titleFor(String? title, String agentId) {
