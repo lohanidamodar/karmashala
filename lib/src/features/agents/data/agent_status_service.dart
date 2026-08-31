@@ -47,44 +47,80 @@ class AgentStatusService {
   Future<AgentStatusReport> statusFor(AgentStatusQuery query) async {
     final now = clock.nowUtc();
     final descriptor = registry.byId(query.agentId);
-    if (descriptor == null) return _unknown(query, now);
+    if (descriptor == null) return unknownFor(query, now);
 
-    final hook = hookReports.latest(query.agentId, query.sessionId);
-    if (hook != null && now.difference(hook.observedAt) <= hookFreshness) {
-      return hook;
-    }
+    final hook = hookReport(query, now);
+    if (hook != null) return hook;
 
-    final grid = query.terminalTailLines.isEmpty
+    final grid = gridReport(query, now);
+    if (grid != null && escalates(grid)) return grid;
+
+    final path = query.stateFilePath;
+    final state = path == null
         ? null
-        : gridSource.read(
+        : await stateFileSource.read(
             descriptor,
-            query.terminalTailLines,
+            path,
             now,
             sessionId: query.sessionId,
           );
-    if (grid != null &&
-        (grid.status == AgentActivityStatus.awaitingApproval ||
-            grid.status == AgentActivityStatus.failed)) {
-      return grid;
-    }
 
-    final path = query.stateFilePath;
-    if (path != null) {
-      final report = await stateFileSource.read(
-        descriptor,
-        path,
-        now,
-        sessionId: query.sessionId,
-      );
-      if (report != null) return report;
-    }
-
-    if (grid != null) return grid;
-
-    return _unknown(query, now);
+    return compose(query: query, now: now, grid: grid, state: state);
   }
 
-  AgentStatusReport _unknown(AgentStatusQuery query, DateTime now) =>
+  /// The hook's answer for [query], when one exists and is fresh enough to
+  /// believe. An in-memory map lookup, and therefore free to ask about every
+  /// known session on every cycle.
+  AgentStatusReport? hookReport(AgentStatusQuery query, DateTime now) {
+    final hook = hookReports.latest(query.agentId, query.sessionId);
+    if (hook == null) return null;
+    return now.difference(hook.observedAt) <= hookFreshness ? hook : null;
+  }
+
+  /// What [query]'s already-captured screen says, or `null`. In memory: the
+  /// rows were read off a live terminal by the caller.
+  AgentStatusReport? gridReport(AgentStatusQuery query, DateTime now) {
+    if (query.terminalTailLines.isEmpty) return null;
+    final descriptor = registry.byId(query.agentId);
+    if (descriptor == null) return null;
+    return gridSource.read(
+      descriptor,
+      query.terminalTailLines,
+      now,
+      sessionId: query.sessionId,
+    );
+  }
+
+  /// Whether a grid reading is allowed to outrank the transcript — step 2 of
+  /// the precedence above.
+  static bool escalates(AgentStatusReport grid) =>
+      grid.status == AgentActivityStatus.awaitingApproval ||
+      grid.status == AgentActivityStatus.failed;
+
+  /// Whether the transcript still has to be consulted once [hook] and [grid]
+  /// are known. The one expensive question in the precedence, asked separately
+  /// so a scheduler can decide whether this session is worth a disk read at all.
+  bool needsStateFile(AgentStatusReport? hook, AgentStatusReport? grid) =>
+      hook == null && !(grid != null && escalates(grid));
+
+  /// The precedence itself, with every source already gathered. Does no I/O, so
+  /// a registry holding a cached [state] report can recompute a session's status
+  /// as often as it likes.
+  AgentStatusReport compose({
+    required AgentStatusQuery query,
+    required DateTime now,
+    AgentStatusReport? hook,
+    AgentStatusReport? grid,
+    AgentStatusReport? state,
+  }) {
+    if (hook != null) return hook;
+    if (grid != null && escalates(grid)) return grid;
+    if (state != null) return state;
+    if (grid != null) return grid;
+    return unknownFor(query, now);
+  }
+
+  AgentStatusReport unknownFor(AgentStatusQuery query, DateTime now) =>
       AgentStatusReport(
         agentId: query.agentId,
         sessionId: query.sessionId,

@@ -28,25 +28,65 @@ class AgentStateFileStatusSource {
     DateTime now, {
     String sessionId = '',
   }) async {
-    final rules = descriptor.stateFile;
-    if (rules == null) return null;
+    if (descriptor.stateFile == null) return null;
+    final snapshot = await probe(filePath);
+    if (snapshot == null) return null;
+    return classify(descriptor, snapshot, now, sessionId: sessionId);
+  }
 
+  /// Stats [filePath] and, when it has changed since [known], re-reads its tail.
+  ///
+  /// Split out of [read] so a scheduler can keep the expensive half — the tail
+  /// read and its JSON decode — and pay only a `stat` for a transcript nothing
+  /// has written to since it last looked. A quiet session then costs the same
+  /// whether it is sampled once a minute or once a second, which is what makes
+  /// a fair rotation over hundreds of sessions affordable.
+  ///
+  /// Returns `known` itself when the file is unchanged, and `null` when the file
+  /// is missing or unreadable — the same answer as "nothing to say".
+  Future<StateFileSnapshot?> probe(
+    String filePath, {
+    StateFileSnapshot? known,
+  }) async {
     final file = File(filePath);
-    final DateTime modified;
-    final String tail;
     try {
       final stat = await file.stat();
       if (stat.type == FileSystemEntityType.notFound) return null;
-      modified = stat.modified;
-      tail = await _readTail(file, stat.size);
+      final modified = stat.modified;
+      if (known != null &&
+          known.modified == modified &&
+          known.size == stat.size) {
+        return known;
+      }
+      final tail = await _readTail(file, stat.size);
+      return StateFileSnapshot(
+        modified: modified,
+        size: stat.size,
+        record: lastJsonRecord(tail),
+      );
     } on FileSystemException {
       return null;
     }
+  }
 
-    final record = lastJsonRecord(tail);
+  /// Classifies an already-read [snapshot] against [descriptor]'s rules.
+  ///
+  /// Pure, and re-runnable against a cached snapshot: the one time-dependent
+  /// rule — a `working` record only means working while the file is still being
+  /// written — is evaluated against [now] here rather than baked into the read,
+  /// so a stale cached snapshot still ages into `unknown` on its own.
+  AgentStatusReport? classify(
+    AgentDescriptor descriptor,
+    StateFileSnapshot snapshot,
+    DateTime now, {
+    String sessionId = '',
+  }) {
+    final rules = descriptor.stateFile;
+    if (rules == null) return null;
+    final record = snapshot.record;
     if (record == null) return null;
 
-    final (status, detail) = _classify(rules, record, modified, now);
+    final (status, detail) = _classify(rules, record, snapshot.modified, now);
     return AgentStatusReport(
       agentId: descriptor.id,
       sessionId: sessionId,
@@ -55,7 +95,7 @@ class AgentStateFileStatusSource {
       observedAt: now,
       // The file's own mtime, not the poll's: a transcript nothing has touched
       // for a day must not read as a fresh observation.
-      sourceModifiedAt: modified,
+      sourceModifiedAt: snapshot.modified,
       detail: detail,
     );
   }
@@ -112,6 +152,22 @@ class AgentStateFileStatusSource {
     }
     return null;
   }
+}
+
+/// One reading of a state file's end: what it said, and how to tell whether it
+/// has changed since.
+class StateFileSnapshot {
+  const StateFileSnapshot({
+    required this.modified,
+    required this.size,
+    required this.record,
+  });
+
+  final DateTime modified;
+  final int size;
+
+  /// The last decodable record, or `null` when the file held none.
+  final Map<String, Object?>? record;
 }
 
 /// The last line of [tail] that decodes to a JSON object, or `null`.
