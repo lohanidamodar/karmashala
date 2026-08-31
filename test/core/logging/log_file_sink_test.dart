@@ -29,12 +29,12 @@ void main() {
     previous = Diagnostics.instance;
   });
 
-  /// A directory that cannot exist, on every host: a child of a regular file.
-  /// A hardcoded `/proc/...` is writable on Windows, where it is just `C:\proc`.
-  Directory unwritable() {
-    File(p.join(dir.path, 'blocker')).writeAsStringSync('not a directory');
-    return Directory(p.join(dir.path, 'blocker', 'logs'));
-  }
+  /// Makes the write fail on every host: the log file's own path is taken by a
+  /// directory, and no platform will open a directory for writing. Blocking the
+  /// *parent* is not portable — a hardcoded `/proc/...` is a perfectly
+  /// creatable `C:\proc\...` on Windows.
+  void blockTheLogFile() =>
+      Directory(p.join(dir.path, 'chitragupta.log')).createSync();
 
   tearDown(() async {
     Diagnostics.instance = previous;
@@ -97,11 +97,10 @@ void main() {
     });
 
     test(
-      'a directory that cannot be written does not reach the caller',
+      'a write that cannot succeed does not reach the caller',
       () async {
-        final sink = LogFileSink(
-          directory: Directory('/proc/definitely-not-writable/logs'),
-        );
+        blockTheLogFile();
+        final sink = LogFileSink(directory: dir);
         expect(() => sink.add(entry('anything')), returnsNormally);
         await sink.flush();
         expect(sink.lastError, isNotNull);
@@ -111,9 +110,12 @@ void main() {
     );
 
     test('the queue is bounded when the disk stops answering', () {
+      blockTheLogFile();
       final sink = LogFileSink(
-        directory: unwritable(),
+        directory: dir,
         maxPending: 10,
+        // Long enough that nothing is flushed: this is about the queue's bound,
+        // not about the disk.
         flushInterval: const Duration(hours: 1),
       );
       for (var i = 0; i < 100; i++) {
