@@ -42,6 +42,15 @@ import 'tab_picker.dart';
 /// there. Now a selection opens the session's pane, and those controls are
 /// composed around it from the same widgets the conversation uses — see
 /// [_TerminalSurface]. Chat is one labelled tap, or `` Ctrl+` ``, away.
+///
+/// **The surface follows the session, not the tap.** Loop 85 decided it once,
+/// on the selection changing — but the Explorer selects a session *before* it
+/// reveals or resumes it, so that decision was made while the session still had
+/// no pane and the terminal arrived after the conversation had already been
+/// painted. One tap, two surfaces, which is what the user reported twice. The
+/// same question is now re-asked whenever its inputs move (see
+/// `_followSessionPane`), and the resting state is the terminal rather than
+/// something every path has to switch to.
 class WorkbenchView extends ConsumerStatefulWidget {
   const WorkbenchView({super.key});
 
@@ -50,6 +59,22 @@ class WorkbenchView extends ConsumerStatefulWidget {
 }
 
 class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
+  /// The pane the workbench last opened the selected session on, or null when
+  /// it had none. What [_followSessionPane] compares against, so a terminal
+  /// publish that changes nothing about *this* session costs one lookup.
+  String? _shownPane;
+
+  /// The surface the mount catch-up is *about* to select, until it has.
+  ///
+  /// Riverpod forbids writing a provider from `initState` — two widgets in one
+  /// frame would read different states — and reattaching a pane there would
+  /// republish the terminal while the tree around us is still building. So the
+  /// catch-up runs after the frame. Which leaves the frame itself: whatever the
+  /// provider happens to hold gets painted, and is then replaced. That is one
+  /// tap showing two surfaces, so the first build **reads** the answer the
+  /// catch-up will write instead of waiting for it.
+  bool? _surfaceOnMount;
+
   @override
   void initState() {
     super.initState();
@@ -60,13 +85,21 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     final selected = ref.read(selectedSessionIdProvider);
     final active = ref.read(activePaneSessionIdProvider);
     if (selected == null && active == null) return;
+    if (selected != null) {
+      _shownPane = sessionTerminalPane(ref, selected);
+      _surfaceOnMount = _shownPane != null;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // A restored workspace can put an agent pane on screen before anything is
       // selected; the side panel should describe that session, not the row the
       // Explorer happens to highlight first.
       if (active != null) ref.read(sessionContextProvider).follow(active);
-      if (selected != null) _openSession(selected);
+      if (selected != null) _showSurfaceFor(_shownPane);
+      // Cleared through `setState` rather than on the back of the write above:
+      // the write is a no-op whenever it agrees with what the provider already
+      // held, and this must stop standing in for it either way.
+      setState(() => _surfaceOnMount = null);
     });
   }
 
@@ -96,7 +129,34 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // `sessionTerminalPane` is the one answer to "has it got a terminal", and
     // the conversation's empty state reads it too, so the fallback and what the
     // fallback then says cannot contradict each other.
+    _showSurfaceFor(sessionTerminalPane(ref, sessionId));
+  }
+
+  /// Keeps the surface on the selected session's *eventual* state.
+  ///
+  /// The fallback above is answered at the moment of the tap, and at that
+  /// moment the answer is often provisional: `ExplorerActions.openNative`
+  /// selects the row **before** it reveals or resumes it, so a session being
+  /// brought back has no pane yet when the surface is chosen. Deciding once and
+  /// leaving it there is what made one tap open the conversation and then the
+  /// terminal — from the user's seat, both.
+  ///
+  /// So the same question is asked again whenever its two inputs move: the
+  /// terminal's own state (a pane created, adopted, restored, detached or
+  /// ended) and `sessions.pane_id` (which a launch rewrites, then bumps the
+  /// revision). Memoised on [_shownPane], so a publish that changes nothing
+  /// about this session changes nothing here — in particular it never overrules
+  /// a user who has deliberately switched to the conversation.
+  void _followSessionPane() {
+    final sessionId = ref.read(selectedSessionIdProvider);
+    if (sessionId == null) return;
     final paneId = sessionTerminalPane(ref, sessionId);
+    if (paneId == _shownPane) return;
+    _showSurfaceFor(paneId);
+  }
+
+  void _showSurfaceFor(String? paneId) {
+    _shownPane = paneId;
     if (paneId == null) {
       _showChat();
     } else {
@@ -115,8 +175,16 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.listen(selectedImportedSessionIdProvider, (_, next) {
       // An imported CLI session has no pane of ours; the transcript we read out
       // of the CLI's own store is the only surface it has.
-      if (next != null) _showChat();
+      if (next != null) _showSurfaceFor(null);
     });
+    // ...and the pane the selected session has can arrive after the tap that
+    // selected it, or go away under it. Both of these move it: the terminal's
+    // state says whether an instance exists, the revision says which pane the
+    // row points at. See [_followSessionPane].
+    ref.listen(terminalSessionsControllerProvider, (_, _) {
+      _followSessionPane();
+    });
+    ref.listen(sessionsRevisionProvider, (_, _) => _followSessionPane());
     // The side panel describes the session you are in. Driven by the pane on
     // screen rather than by the selection, so activating another terminal tab
     // moves the changes, worktree and GitHub surfaces with it; a tab with no
@@ -127,9 +195,10 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
 
     final scheme = Theme.of(context).colorScheme;
     final session = _selectedSession();
+    final wantsTerminal = ref.watch(terminalVisibleProvider);
     // With nothing to read, the workbench is the terminal — an empty middle
     // would be worse than the surface the app is primarily about.
-    final onTerminal = ref.watch(terminalVisibleProvider) || session == null;
+    final onTerminal = (_surfaceOnMount ?? wantsTerminal) || session == null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,6 +237,10 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// all (imported CLI sessions have no pane and no live status).
   _WorkbenchSession? _selectedSession() {
     ref.watch(sessionsRevisionProvider);
+    // A pane appearing or ending changes whether this session has a terminal at
+    // all, which is what decides whether the strip offers the toggle. Watched
+    // rather than read so the strip cannot keep offering a surface that is gone.
+    ref.watch(terminalSessionsControllerProvider);
     final importedId = ref.watch(selectedImportedSessionIdProvider);
     if (importedId != null) {
       final imported = ref.read(importedSessionDaoProvider).getById(importedId);

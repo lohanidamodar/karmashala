@@ -1079,10 +1079,16 @@ final terminalSessionsControllerProvider =
       TerminalSessionsController.new,
     );
 
-/// Whether the terminal panel is visible.
+/// Whether the terminal is the surface the workbench is showing.
+///
+/// Defaults to **true**: the app is terminal-primary, so the terminal is what
+/// it rests on and the conversation is what you switch to. It was `false`,
+/// which made chat the resting state and left every path that wanted the
+/// terminal — the workbench on mount, a launch, a reveal — writing `true` to
+/// correct it, each one a chance to correct it a frame too late.
 class TerminalVisibleController extends Notifier<bool> {
   @override
-  bool build() => false;
+  bool build() => true;
   void toggle() => state = !state;
   void set(bool value) => state = value;
 }

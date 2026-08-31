@@ -135,6 +135,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Builds the workbench and stops after **one** frame.
+  ///
+  /// The surface a session opens on is a question about the first frame, not
+  /// about where things settle: a workbench that paints the conversation and
+  /// then replaces it with the terminal has, from the user's seat, opened both.
+  Future<void> pumpOneFrame(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+      ),
+    );
+  }
+
+  /// The stack holding the two surfaces: index 0 is the terminal, 1 the chat.
+  IndexedStack surfaces(WidgetTester tester) => tester.widget<IndexedStack>(
+    find.ancestor(
+      of: find.byType(TerminalPaneStack, skipOffstage: false),
+      matching: find.byType(IndexedStack),
+    ),
+  );
+
   /// A session running in a pane of ours — the only kind that has two views.
   String seedSessionInAPane({
     String id = 's1',
@@ -578,5 +604,104 @@ void main() {
       'r2',
       reason: 'a shell tab is not a session and must not steer the panel',
     );
+  });
+
+  testWidgets('a pane arriving for the selected session takes the surface', (
+    tester,
+  ) async {
+    // The reported regression. `ExplorerActions.openNative` selects the row
+    // *first* and only then reveals or resumes it, so the workbench chose the
+    // surface while the session still had no pane — conversation — and the
+    // terminal that arrived a moment later read as a second thing opening.
+    //
+    // The pane is made to appear here the way the terminal makes one appear,
+    // deliberately without the launcher's own `terminalVisible = true`: the
+    // workbench must follow the session's state, not depend on another feature
+    // poking its surface at the right moment.
+    SessionDao(db).insert(session(title: 'Read the report'));
+    await pump(tester);
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(SessionTranscriptView),
+      findsOneWidget,
+      reason: 'nothing of ours is running it yet',
+    );
+
+    final terminals = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    terminals.openTab(TerminalProfile.powerShell);
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .layout
+        .panes
+        .single;
+    SessionDao(db).updatePaneId('s1', paneId);
+    container.read(sessionsRevisionProvider.notifier).bump();
+    // One frame, not a settle: the correction has to have happened before
+    // anything was painted, or the conversation is still a surface the user saw
+    // and then lost.
+    await tester.pump();
+
+    expect(container.read(terminalVisibleProvider), isTrue);
+    expect(surfaces(tester).index, 0, reason: 'the terminal is the session');
+    await tester.pumpAndSettle();
+    expect(surfaces(tester).index, 0);
+  });
+
+  testWidgets('the selected session losing its pane returns it to chat', (
+    tester,
+  ) async {
+    // The same rule read the other way: the surface follows the session, so a
+    // pane ended under it leaves the conversation as the only thing it has.
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+    expect(surfaces(tester).index, 0);
+
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .closeTab(
+          container.read(terminalSessionsControllerProvider).tabs.single.id,
+          detach: false,
+        );
+    await tester.pumpAndSettle();
+
+    expect(surfaces(tester).index, 1);
+    expect(find.byTooltip('Terminal view'), findsNothing);
+  });
+
+  testWidgets('a session selected at mount never paints its chat first', (
+    tester,
+  ) async {
+    // The flash the Loop 85 report predicted: the surface defaulted to the
+    // conversation and a post-frame callback corrected it, so the frame the
+    // user actually saw first was the wrong one.
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+
+    await pumpOneFrame(tester);
+
+    expect(surfaces(tester).index, 0, reason: 'the very first frame');
+    await tester.pumpAndSettle();
+    expect(surfaces(tester).index, 0);
+  });
+
+  testWidgets('a paneless session selected at mount paints chat first', (
+    tester,
+  ) async {
+    // The other half of the same guard, and what stops the fix being "always
+    // show the terminal": a session with nothing of ours running it must not
+    // flash a terminal it does not own on the way to its conversation.
+    SessionDao(db).insert(session(title: 'Read the report'));
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+
+    await pumpOneFrame(tester);
+
+    expect(surfaces(tester).index, 1, reason: 'the very first frame');
+    await tester.pumpAndSettle();
+    expect(surfaces(tester).index, 1);
   });
 }
