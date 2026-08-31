@@ -6,14 +6,11 @@ import '../theme/design_tokens.dart';
 import 'logs_panel.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
+import 'side_panel_context.dart';
 import 'side_panel_state.dart';
 
 import '../../features/browser/presentation/browser_pane.dart';
 import '../../features/detail/presentation/repository_info_view.dart';
-import '../../features/explorer/application/checkout.dart';
-import '../../features/git/application/changes_providers.dart';
-import '../../features/projects/application/project_providers.dart';
-import '../../features/repositories/application/repository_providers.dart';
 import '../../features/detail/presentation/verification_view.dart';
 import '../../features/devices/presentation/device_pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
@@ -290,75 +287,6 @@ class _ChangesSurface extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => ChangesView(
     repositoryName: selectedRepository(ref)?.name ?? 'repository',
   );
-}
-
-/// Which checkout the panel is describing.
-///
-/// The repository-scoped surfaces all read one selection, and since Loop 85
-/// that selection follows the terminal tab you are in — so the panel can change
-/// under you without a click. A surface that moves silently is worse than one
-/// that never moved, so the checkout is named on it: the repository, and where
-/// it sits inside its project, which is the whole difference between a hub and
-/// the clone three folders down that the agent is actually working in.
-class SidePanelContextLine extends ConsumerWidget {
-  const SidePanelContextLine({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final id = ref.watch(selectedRepositoryIdProvider);
-    if (id == null) return const SizedBox.shrink();
-    final repository = ref.read(repositoryDaoProvider).getById(id);
-    if (repository == null) return const SizedBox.shrink();
-    final project = ref.read(projectDaoProvider).getById(repository.projectId);
-    final within = project == null
-        ? null
-        : relativeSubPath(project.root, repository.path);
-
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Tooltip(
-      message: repository.path.path,
-      child: Container(
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-        color: scheme.surfaceContainerLowest,
-        child: Row(
-          children: [
-            Icon(
-              AppIcons.bookBookmark,
-              size: Chrome.iconSmall,
-              color: scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: Insets.sm),
-            Flexible(
-              child: Text(
-                repository.name,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall,
-              ),
-            ),
-            if (within != null) ...[
-              const SizedBox(width: Insets.sm),
-              // The sub-path, not just the name: two clones can share a name,
-              // and "which one of these is it" is exactly the question a hub
-              // project makes hard to answer.
-              Flexible(
-                flex: 2,
-                child: Text(
-                  within,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _SidePanelHeader extends ConsumerWidget {
