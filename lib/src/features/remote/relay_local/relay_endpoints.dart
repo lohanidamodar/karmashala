@@ -1,13 +1,16 @@
 /// The seam the pairing dialog's tabs read: which relay endpoints can carry a
-/// pairing RIGHT NOW. The host dials exactly one relay, so the list holds the
-/// active choice — the embedded local relay when "This computer" is selected
-/// and it is actually running with a LAN address, the hosted relay otherwise.
+/// pairing RIGHT NOW.
+///
+/// Since Loop 80 the host listens on both relays at once, so this offers
+/// **every active one**: the embedded local relay while it is running with a
+/// LAN address, the hosted relay while its switch is on. Both on means two
+/// tabs, each pairing a phone onto that relay for good.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/relay_mode.dart';
+import '../application/relay_prefs.dart';
 import '../application/remote_access_controller.dart';
 import 'local_relay_providers.dart';
 import 'local_relay_service.dart';
@@ -41,31 +44,36 @@ class RelayEndpointOption {
   String toString() => 'RelayEndpointOption($label, $url, ${kind.name})';
 }
 
-/// Empty while remote access is off, or while the local relay is chosen but
-/// not reachable (starting, bind failed, no LAN address) — a tab offering an
-/// endpoint no phone can dial would only pretend.
+/// Empty while remote access is off, or while neither relay is usable — a tab
+/// offering an endpoint no phone can dial would only pretend. Local first: on
+/// the network you share with the phone it is the one that always works.
 final relayEndpointsProvider = Provider<List<RelayEndpointOption>>((ref) {
   final settings = ref.watch(settingsControllerProvider);
   if (!settings.remoteAccessEnabled) return const [];
-  if (settings.remoteRelayMode == RelayMode.local) {
+  final prefs = ref.watch(relayPrefsProvider);
+  final options = <RelayEndpointOption>[];
+
+  if (prefs.localEnabled) {
     final status = ref.watch(localRelayStatusProvider);
     final primary = status.primaryUrl;
-    if (status.state != LocalRelayState.running || primary == null) {
-      return const [];
+    if (status.state == LocalRelayState.running && primary != null) {
+      options.add(
+        RelayEndpointOption(
+          label: 'Local network',
+          url: primary,
+          kind: RelayEndpointKind.local,
+        ),
+      );
     }
-    return [
-      RelayEndpointOption(
-        label: 'Local network',
-        url: primary,
-        kind: RelayEndpointKind.local,
-      ),
-    ];
   }
-  return [
-    RelayEndpointOption(
-      label: 'Internet',
-      url: resolveRelayUri(settings.remoteRelayUrl),
-      kind: RelayEndpointKind.internet,
-    ),
-  ];
+  if (prefs.hostedEnabled) {
+    options.add(
+      RelayEndpointOption(
+        label: 'Internet',
+        url: resolveRelayUri(settings.remoteRelayUrl),
+        kind: RelayEndpointKind.internet,
+      ),
+    );
+  }
+  return options;
 });

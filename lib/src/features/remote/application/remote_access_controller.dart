@@ -1,6 +1,11 @@
 /// Starts and stops [RemoteHostService] to match the settings, and owns the
 /// event wiring from the desktop's providers into the fan-out.
 ///
+/// The two relays are independent (Loop 80): the embedded local relay and the
+/// hosted one are separate switches, and the host serves the devices of both
+/// at once. Turning one off *parks* its devices rather than restarting
+/// anything — they come back when it does.
+///
 /// Remote access is OFF by default: nothing here runs until the settings
 /// toggle turns it on. `AppLifecycle` calls [shutdown] inside its budget
 /// slice, so quitting never waits on a socket.
@@ -16,12 +21,12 @@ import '../../notifications/domain/inbox_item.dart';
 import '../../notifications/domain/session_attention.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/relay_mode.dart';
 import '../../settings/domain/settings.dart';
 import '../domain/paired_device.dart';
 import '../pairing/host_pairing.dart';
 import '../protocol.dart';
 import '../relay_local/local_relay_providers.dart';
+import 'relay_prefs.dart';
 import 'remote_bindings.dart';
 import 'remote_host_service.dart';
 import 'remote_providers.dart';
@@ -75,21 +80,60 @@ class RemoteAccessController {
       await _stopLocalRelay();
       return;
     }
-    final relay = await _resolveRelay(settings);
-    if (_service != null && _service!.relay == relay) return;
+    final prefs = _ref.read(relayPrefsProvider);
+    // Both relays are brought to the state the prefs ask for, independently.
+    final localUrl = await _syncLocalRelay(settings, prefs);
+    final hosted = resolveRelayUri(settings.remoteRelayUrl);
+
+    final service = _service;
+    if (service != null && service.relay == hosted) {
+      // Same hosted relay: the running service just re-points at the relays
+      // that are up, parking and unparking devices — no restart, no dropped
+      // generation, no re-pairing.
+      await service.updateRelays(
+        localRelayUrl: localUrl,
+        hostedEnabled: prefs.hostedEnabled,
+      );
+      return;
+    }
     await _stopService();
-    final service =
-        _serviceFactory?.call(relay) ??
+    final started =
+        _serviceFactory?.call(hosted) ??
         RemoteHostService(
           devices: _ref.read(pairedDeviceDaoProvider),
           hostId: _ref.read(hostDeviceIdProvider),
           bindings: _ref.read(remoteHostBindingsProvider),
-          relay: relay,
+          relay: hosted,
           onDevicesChanged: () =>
               _ref.read(pairedDevicesRevisionProvider.notifier).bump(),
         );
-    _service = service;
-    await service.start();
+    _service = started;
+    await started.updateRelays(
+      localRelayUrl: localUrl,
+      hostedEnabled: prefs.hostedEnabled,
+    );
+    await started.start();
+  }
+
+  /// Starts or stops the embedded relay to match the prefs, and answers where
+  /// it can be dialled — its primary LAN URL, loopback when it is up with no
+  /// LAN address, null when it is off or failed to bind.
+  Future<Uri?> _syncLocalRelay(Settings settings, RelayPrefs prefs) async {
+    final localRelay = _ref.read(localRelayServiceProvider);
+    if (!prefs.localEnabled) {
+      await localRelay.stop();
+      return null;
+    }
+    await localRelay.ensureRunning(settings.localRelayPort);
+    if (!localRelay.isRunning) return null; // The bind failed; status says why.
+    // No LAN address (a machine with no network): loopback keeps the host
+    // consistent until the next sync finds one.
+    return localRelay.status.primaryUrl ??
+        Uri(
+          scheme: 'ws',
+          host: '127.0.0.1',
+          port: localRelay.status.boundPort ?? settings.localRelayPort,
+        );
   }
 
   Future<void> _stopService() async {
@@ -98,36 +142,27 @@ class RemoteAccessController {
     if (service != null) await service.stop();
   }
 
-  /// Local mode brings the embedded relay up first — its LAN URL is what the
-  /// QR and every phone must dial, so the host dials the same one. Hosted
-  /// mode stops it and uses the configured URL.
-  Future<Uri> _resolveRelay(Settings settings) async {
-    if (settings.remoteRelayMode != RelayMode.local) {
-      await _stopLocalRelay();
-      return resolveRelayUri(settings.remoteRelayUrl);
-    }
-    final localRelay = _ref.read(localRelayServiceProvider);
-    await localRelay.ensureRunning(settings.localRelayPort);
-    // No LAN address (or the bind failed, which the status row explains):
-    // loopback keeps the host consistent until the next sync retries.
-    return localRelay.status.primaryUrl ??
-        Uri(scheme: 'ws', host: '127.0.0.1', port: settings.localRelayPort);
-  }
-
   Future<void> _stopLocalRelay() => _ref.read(localRelayServiceProvider).stop();
 
   /// Shows a new pairing code. Throws [StateError] while remote access is
   /// off — the dialog says so instead of pretending. [relay] carries the
   /// dialog's endpoint choice; null keeps the service's configured relay.
+  /// [relayIsLocal] says that choice was the embedded relay, which is what
+  /// the device row remembers so the host keeps serving it there.
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
+    bool relayIsLocal = false,
   }) {
     final service = _service;
     if (service == null || !service.isRunning) {
       throw StateError('Turn on remote access first.');
     }
-    return service.beginPairing(capabilities: capabilities, relay: relay);
+    return service.beginPairing(
+      capabilities: capabilities,
+      relay: relay,
+      relayIsLocal: relayIsLocal,
+    );
   }
 
   Future<void> cancelPairing() async {

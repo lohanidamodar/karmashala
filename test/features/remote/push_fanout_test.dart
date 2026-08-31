@@ -73,7 +73,9 @@ void main() {
     fanout = PushFanout(
       devices: () => devices,
       hasLiveLink: live.contains,
-      client: RelayPushClient(
+      // Loop 80: one client per device's own relay. These devices all sit on
+      // the same one; `clientFor` answering null is the relay-off case.
+      clientFor: (device) => RelayPushClient(
         relay: Uri.parse('wss://relay.example.com'),
         post: post.call,
       ),
@@ -274,6 +276,53 @@ void main() {
         ),
         Uri.parse('http://127.0.0.1:8787/base/v1/push/register'),
       );
+    });
+  });
+
+  group('per-device relays (loop 80)', () {
+    test('each push goes to the device\'s OWN relay', () async {
+      final local = _device(id: _deviceId, token: 'token-local');
+      final hosted = _device(
+        id: 'b' * 32,
+        token: 'token-hosted',
+        key: Uint8List.fromList(List<int>.generate(32, (i) => 200 - i)),
+      );
+      devices = [local, hosted];
+      fanout = PushFanout(
+        devices: () => devices,
+        hasLiveLink: live.contains,
+        clientFor: (device) => RelayPushClient(
+          relay: device.id == local.id
+              ? Uri.parse('ws://192.168.1.7:8787')
+              : Uri.parse('wss://relay.example.com'),
+          post: post.call,
+        ),
+        now: () => DateTime.utc(2026, 8, 31, 12),
+        onLog: log.add,
+      );
+
+      await notify();
+
+      final hosts = {for (final p in post.posts) p.url.host};
+      expect(hosts, {'192.168.1.7', 'relay.example.com'});
+    });
+
+    test('a device whose relay is off gets nothing, and says why', () async {
+      fanout = PushFanout(
+        devices: () => devices,
+        hasLiveLink: live.contains,
+        // Null is the relay-switched-off answer: a push through it could not
+        // arrive, and posting to the other relay would leak the news to a
+        // server this phone never agreed to.
+        clientFor: (device) => null,
+        now: () => DateTime.utc(2026, 8, 31, 12),
+        onLog: log.add,
+      );
+
+      await notify();
+
+      expect(post.posts, isEmpty);
+      expect(log, contains('a push was not sent: that relay is off'));
     });
   });
 }

@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/relay_mode.dart';
 import '../../settings/presentation/settings_section.dart';
+import '../application/relay_prefs.dart';
 import '../application/remote_access_controller.dart';
 import '../application/remote_providers.dart';
 import '../domain/paired_device.dart';
@@ -13,9 +13,9 @@ import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
 
-/// Settings → Remote access: the enable switch, the one-click choice between
-/// the embedded local relay and a hosted one, the paired devices with
-/// last-seen and revoke, and the pairing button.
+/// Settings → Remote access: the enable switch, the two independent relays
+/// (the embedded local one with its start/stop, and a hosted one), the paired
+/// devices with last-seen, their relay and revoke, and the pairing button.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 
@@ -48,10 +48,16 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
     ref.read(remoteAccessControllerProvider).sync();
   }
 
-  /// The one-click switch: choosing "This computer" auto-starts the local
-  /// relay; the choice persists, so it auto-starts on later launches too.
-  void _setMode(RelayMode mode) {
-    ref.read(settingsControllerProvider.notifier).setRemoteRelayMode(mode);
+  /// Start/stop the embedded relay. Persisted, so it auto-starts with remote
+  /// access on later launches; the hosted relay is untouched by this.
+  void _setLocalEnabled(bool value) {
+    ref.read(relayPrefsProvider.notifier).setLocalEnabled(value);
+    ref.read(remoteAccessControllerProvider).sync();
+  }
+
+  /// Turn the hosted relay on or off. Its devices park while it is off.
+  void _setHostedEnabled(bool value) {
+    ref.read(relayPrefsProvider.notifier).setHostedEnabled(value);
     ref.read(remoteAccessControllerProvider).sync();
   }
 
@@ -85,7 +91,13 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settings = ref.watch(settingsControllerProvider);
+    final prefs = ref.watch(relayPrefsProvider);
     final devices = ref.watch(pairedDevicesProvider);
+    // A device is parked while the relay it was paired through is off: the
+    // row says so instead of leaving "last seen" to imply it is served.
+    final localLive =
+        prefs.localEnabled &&
+        ref.watch(localRelayStatusProvider).state == LocalRelayState.running;
 
     return SettingsSection(
       title: 'REMOTE ACCESS',
@@ -105,27 +117,20 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
           ),
           if (settings.remoteAccessEnabled) ...[
             const SizedBox(height: Insets.sm),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<RelayMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: RelayMode.local,
-                    icon: Icon(AppIcons.terminalWindow, size: 16),
-                    label: Text('This computer (local network)'),
-                  ),
-                  ButtonSegment(
-                    value: RelayMode.hosted,
-                    icon: Icon(AppIcons.globe, size: 16),
-                    label: Text('Hosted relay (internet)'),
-                  ),
-                ],
-                selected: {settings.remoteRelayMode},
-                onSelectionChanged: (selection) => _setMode(selection.first),
+            // Two independent relays: any combination is legal, and a phone
+            // is served on whichever one it was paired through.
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: prefs.localEnabled,
+              onChanged: _setLocalEnabled,
+              secondary: const Icon(AppIcons.terminalWindow, size: 16),
+              title: const Text('Local relay (this computer)'),
+              subtitle: const Text(
+                'Runs on this computer for phones on the same network. No '
+                'server of your own, nothing leaves the house.',
               ),
             ),
-            const SizedBox(height: Insets.sm),
-            if (settings.remoteRelayMode == RelayMode.local) ...[
+            if (prefs.localEnabled) ...[
               const _LocalRelayStatusRow(),
               const SizedBox(height: Insets.sm),
               Row(
@@ -144,7 +149,20 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
                   ),
                 ],
               ),
-            ] else
+            ],
+            const SizedBox(height: Insets.sm),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: prefs.hostedEnabled,
+              onChanged: _setHostedEnabled,
+              secondary: const Icon(AppIcons.globe, size: 16),
+              title: const Text('Hosted relay (internet)'),
+              subtitle: const Text(
+                'Reaches a phone anywhere. The relay only forwards sealed '
+                'frames — it can read nothing.',
+              ),
+            ),
+            if (prefs.hostedEnabled)
               TextField(
                 controller: _relay,
                 decoration: const InputDecoration(
@@ -158,6 +176,29 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
                 onChanged: _saveRelay,
                 onSubmitted: (_) => _applyRelay(),
                 onEditingComplete: _applyRelay,
+              ),
+            if (!prefs.anyEnabled)
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      AppIcons.warningCircle,
+                      size: 16,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Text(
+                        'No relay is switched on, so remote access is idle: '
+                        'paired phones can only reach this computer over the '
+                        'local network, and no new device can be paired.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             const SizedBox(height: Insets.md),
             Row(
@@ -183,7 +224,13 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
                 ),
               )
             else
-              for (final device in devices) _DeviceRow(device: device),
+              for (final device in devices)
+                _DeviceRow(
+                  device: device,
+                  parked: device.pairedViaLocalRelay
+                      ? !localLive
+                      : !prefs.hostedEnabled,
+                ),
           ],
         ],
       ),
@@ -276,9 +323,13 @@ class _LocalRelayStatusRow extends ConsumerWidget {
 }
 
 class _DeviceRow extends ConsumerWidget {
-  const _DeviceRow({required this.device});
+  const _DeviceRow({required this.device, this.parked = false});
 
   final PairedDevice device;
+
+  /// The relay this device was paired through is switched off, so only a
+  /// direct LAN link reaches it. It resumes when that relay returns.
+  final bool parked;
 
   static String _lastSeen(DateTime? at) {
     if (at == null) return 'Never connected';
@@ -314,9 +365,19 @@ class _DeviceRow extends ConsumerWidget {
                   ),
                 ),
                 Text(
-                  device.revoked ? 'Revoked' : _lastSeen(device.lastSeenAt),
+                  device.revoked
+                      ? 'Revoked'
+                      : [
+                          device.pairedViaLocalRelay
+                              ? 'Local relay'
+                              : 'Hosted relay',
+                          if (parked) 'paused — that relay is off',
+                          _lastSeen(device.lastSeenAt),
+                        ].join(' · '),
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                    color: parked && !device.revoked
+                        ? scheme.error
+                        : scheme.onSurfaceVariant,
                   ),
                 ),
               ],

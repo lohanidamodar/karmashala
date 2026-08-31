@@ -8,15 +8,28 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/process/command_runner_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/imported_session.dart';
+import '../../environments/application/environment_providers.dart';
+import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_path.dart';
+import '../../environments/domain/execution_environment.dart';
+import '../../explorer/application/checkout.dart';
+import '../../explorer/application/project_tree.dart';
+import '../../explorer/application/session_diff_stat.dart';
+import '../../explorer/application/session_forest.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/session_attention.dart';
+import '../../projects/application/project_providers.dart';
+import '../../projects/application/projects_controller.dart';
+import '../../projects/domain/project.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_chat_source.dart';
@@ -82,8 +95,76 @@ final remoteSessionPresenceProvider =
       };
     });
 
+/// Whether a session's working folder is gone from disk — the Explorer's own
+/// "missing" mark, answered synchronously here because `sessions.list` is.
+///
+/// A seam like the two probe-shaped lookups above: production touches the
+/// filesystem, tests stub it. **False also means "could not tell"** — a
+/// non-Windows path with no translation available is never flagged, which is
+/// the same fail-safe direction `projectPathMissingProvider` takes.
+final remoteFolderMissingProvider =
+    Provider<bool Function(EnvironmentPath path)>((ref) {
+      return (path) {
+        try {
+          final environments = ref.read(executionEnvironmentDaoProvider);
+          final env = environments.getById(path.environmentId);
+          if (env == null) return false;
+          var resolved = path.path;
+          if (env.kind != EnvironmentKind.windowsNative) {
+            ExecutionEnvironment? windows;
+            for (final candidate in environments.getAll()) {
+              if (candidate.kind == EnvironmentKind.windowsNative) {
+                windows = candidate;
+                break;
+              }
+            }
+            if (windows == null) return false;
+            resolved = ref
+                .read(pathTranslatorProvider)
+                .translate(path, from: env, to: windows)
+                .path;
+          }
+          return !Directory(resolved).existsSync();
+        } on Object {
+          return false;
+        }
+      };
+    });
+
+/// The branch checked out at a directory, **only if the desktop has already
+/// measured it**. Reads the cached `checkoutStatProvider` answer and starts
+/// no git of its own — the same rule the Explorer's project headers follow, so
+/// listing sessions on a phone never sets off a wave of processes. Null means
+/// "not measured yet", never "no branch".
+final remoteCheckoutBranchProvider =
+    Provider<String? Function(EnvironmentPath path)>((ref) {
+      return (path) {
+        try {
+          return ref
+              .read(checkoutStatProvider(Checkout(path)))
+              .asData
+              ?.value
+              .branch;
+        } on Object {
+          return null;
+        }
+      };
+    });
+
 final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
-  RemoteSessionSnapshot snapshotOf(Session session) {
+  /// The project a repository belongs to, for the rows the ordered walk did
+  /// not already know it for (`sessionById`, orphan fallbacks).
+  Project? projectOfRepository(String? repositoryId) {
+    if (repositoryId == null) return null;
+    final repository = ref.read(repositoryDaoProvider).getById(repositoryId);
+    if (repository == null) return null;
+    return ref.read(projectDaoProvider).getById(repository.projectId);
+  }
+
+  bool isPinned(String sessionId) =>
+      ref.read(settingsControllerProvider).pinnedSessionIds.contains(sessionId);
+
+  RemoteSessionSnapshot snapshotOf(Session session, {Project? project}) {
     final repository = ref
         .read(repositoryDaoProvider)
         .getById(session.repositoryId);
@@ -92,6 +173,10 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         .getById(session.agentInstallationId)
         ?.agentId;
     final presence = ref.read(remoteSessionPresenceProvider)(session.id);
+    final owner = project ?? projectOfRepository(session.repositoryId);
+    // The directory the agent actually works in — its worktree, else the
+    // repository's own path. The same value the Explorer places rows by.
+    final directory = session.worktree ?? repository?.path;
     return RemoteSessionSnapshot(
       sessionId: session.id,
       title: session.title,
@@ -114,13 +199,31 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       lastActivityAt: (presence.lastSeen ?? session.createdAt)
           .toUtc()
           .toIso8601String(),
+      projectId: owner?.id,
+      projectName: owner?.name,
+      projectPath: owner?.root.path,
+      pinned: isPinned(session.id),
+      folderMissing:
+          directory != null && ref.read(remoteFolderMissingProvider)(directory),
+      // The Explorer row's own subtitle, and the worktree it names.
+      subPath: owner == null || directory == null
+          ? null
+          : relativeSubPath(owner.root, directory),
+      worktree: session.worktree?.path,
+      branch: directory == null
+          ? null
+          : ref.read(remoteCheckoutBranchProvider)(directory),
     );
   }
 
-  RemoteSessionSnapshot importedSnapshotOf(ImportedSession session) {
+  RemoteSessionSnapshot importedSnapshotOf(
+    ImportedSession session, {
+    Project? project,
+  }) {
     final repository = ref
         .read(repositoryDaoProvider)
         .getById(session.repositoryId);
+    final owner = project ?? projectOfRepository(session.repositoryId);
     return RemoteSessionSnapshot(
       sessionId: session.id,
       title: session.displayTitle,
@@ -138,20 +241,123 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       // The store file's own mtime — the agent's writing, nothing inferred.
       lastActivityAt: session.updatedAt?.toUtc().toIso8601String(),
       imported: true,
+      projectId: owner?.id,
+      projectName: owner?.name,
+      projectPath: owner?.root.path,
+      pinned: isPinned(session.id),
+      folderMissing:
+          repository != null &&
+          ref.read(remoteFolderMissingProvider)(repository.path),
+      subPath: owner == null || repository == null
+          ? null
+          : relativeSubPath(owner.root, repository.path),
+      branch: repository == null
+          ? null
+          : ref.read(remoteCheckoutBranchProvider)(repository.path),
     );
   }
 
   ImportedSession? importedById(String sessionId) =>
       ref.read(importedSessionDaoProvider).getById(sessionId);
 
+  /// The sessions of one Explorer row, in the order the Explorer draws them:
+  /// pinned first, then most recently active, with a lineage's children
+  /// following the session they came from.
+  List<RemoteSessionSnapshot> rowSnapshots(
+    CheckoutSessions sessions,
+    Project project,
+  ) {
+    if (sessions.isEmpty) return const [];
+    final forest = buildSessionForest(sessions.native, isPinned: isPinned);
+    List<RemoteSessionSnapshot> lineage(SessionNode node) => [
+      snapshotOf(node.session, project: project),
+      for (final child in node.children) ...lineage(child),
+    ];
+    final entries =
+        <({DateTime ts, bool pinned, List<RemoteSessionSnapshot> rows})>[
+          for (final node in forest)
+            (
+              ts: node.session.createdAt,
+              pinned: isPinned(node.session.id),
+              rows: lineage(node),
+            ),
+          for (final imported in sessions.imported)
+            (
+              ts: imported.updatedAt ?? imported.createdAt,
+              pinned: isPinned(imported.id),
+              rows: [importedSnapshotOf(imported, project: project)],
+            ),
+        ]..sort((a, b) {
+          if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+          return b.ts.compareTo(a.ts);
+        });
+    return [for (final entry in entries) ...entry.rows];
+  }
+
+  /// Every session, in the **Explorer's own order** — the desktop tree read
+  /// top to bottom: pinned projects first, repositories in path order, the
+  /// unscanned folders beneath a repository before the repository's own
+  /// sessions, and each row's sessions ordered as the cards are.
+  ///
+  /// Deliberately built WITHOUT asking git for worktrees: that is the same
+  /// tree the Explorer itself draws while git is still answering (repositories
+  /// as peers), and `sessions.list` must not spawn a process per repository.
+  /// Placement by deepest containing path is unaffected — it is what puts a
+  /// worktree's sessions in the right place — so only the worktree *headings*
+  /// are missing, which the phone does not draw anyway.
+  List<RemoteSessionSnapshot> listSessionsInExplorerOrder() {
+    final out = <RemoteSessionSnapshot>[];
+    final placed = <String>{};
+    for (final project in ref.read(sortedProjectsProvider)) {
+      final repositories = ref
+          .read(repositoryDaoProvider)
+          .getByProject(project.id);
+      if (repositories.isEmpty) continue;
+      final tree = ProjectTree(
+        repositories: [
+          for (final repository in repositories)
+            RepoNode(repository: repository, worktreesKnown: false),
+        ],
+      );
+      final placement = placeSessions(
+        tree,
+        ref.read(projectSessionLocationsProvider(project.id)),
+      );
+      final ordered = [...tree.repositories]
+        ..sort(
+          (a, b) => canonicalPathKey(
+            a.repository.path.path,
+          ).compareTo(canonicalPathKey(b.repository.path.path)),
+        );
+      for (final node in ordered) {
+        final key = repoRowKey(node.repository);
+        for (final folder in placement.under(key)) {
+          for (final row in rowSnapshots(
+            placement.at(folderRowKey(folder.path)),
+            project,
+          )) {
+            if (placed.add(row.sessionId)) out.add(row);
+          }
+        }
+        for (final row in rowSnapshots(placement.at(key), project)) {
+          if (placed.add(row.sessionId)) out.add(row);
+        }
+      }
+    }
+    // Nothing is ever dropped: a session whose repository or project row is
+    // gone is appended rather than vanishing from the phone's list.
+    for (final session in ref.read(sessionDaoProvider).getAll()) {
+      if (placed.add(session.id)) out.add(snapshotOf(session));
+    }
+    for (final session in ref.read(importedSessionDaoProvider).getAll()) {
+      if (placed.add(session.id)) out.add(importedSnapshotOf(session));
+    }
+    return out;
+  }
+
   return RemoteHostBindings(
     hostName: Platform.localHostname,
-    listSessions: () => [
-      for (final session in ref.read(sessionDaoProvider).getAll())
-        snapshotOf(session),
-      for (final session in ref.read(importedSessionDaoProvider).getAll())
-        importedSnapshotOf(session),
-    ],
+    listSessions: listSessionsInExplorerOrder,
     sessionById: (sessionId) {
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session != null) return snapshotOf(session);

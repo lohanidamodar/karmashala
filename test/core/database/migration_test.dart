@@ -1,4 +1,5 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/core/database/migrations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -13,9 +14,35 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 18);
+    expect(db.schemaVersion, 19);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 18);
+    expect(version, 19);
+  });
+
+  test('the migration keys stay contiguous, and the version is their '
+      'count', () {
+    // The invariant two parallel loops share: a gap means somebody renumbered
+    // around a merge and never closed it.
+    expect(schemaMigrations.keys.toList()..sort(), [
+      for (var v = 1; v <= schemaMigrations.length; v++) v,
+    ]);
+    expect(db.schemaVersion, schemaMigrations.length);
+  });
+
+  test('v19 gives paired_devices the relay it was paired through', () {
+    final columns = db
+        .query('PRAGMA table_info(paired_devices);')
+        .map((r) => r['name']! as String)
+        .toList();
+    expect(columns, contains('relay_url'));
+
+    // Nullable and undefaulted: a fresh install has no relay to name until a
+    // pairing names one, and the writer always does.
+    final column = db
+        .query('PRAGMA table_info(paired_devices);')
+        .firstWhere((r) => r['name'] == 'relay_url');
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
   });
 
   test('creates all domain tables plus app_metadata', () {
@@ -94,7 +121,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 18);
+    expect(db.schemaVersion, 19);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });

@@ -137,4 +137,74 @@ void main() {
       expect(RemoteSessionSnapshot.fromJson(decoded.payload), rich);
     });
   });
+
+  group("loop 80's fields are additive the same way", () {
+    final placed = RemoteSessionSnapshot(
+      sessionId: 's1',
+      title: 'Fix the tests',
+      status: 'running',
+      projectId: 'p1',
+      projectName: 'popupbits',
+      projectPath: r'C:\work\popupbits',
+      pinned: true,
+      folderMissing: true,
+      subPath: 'projects/app',
+      worktree: r'C:\work\popupbits\wt-app',
+      branch: 'feature/x',
+    );
+
+    test('an old host says none of them, and nothing is invented', () {
+      final snapshot = RemoteSessionSnapshot.fromJson(const {
+        'sessionId': 's1',
+        'title': 'Fix the tests',
+        'status': 'running',
+      });
+
+      expect(snapshot.projectId, isNull);
+      expect(snapshot.projectName, isNull);
+      expect(snapshot.projectPath, isNull);
+      expect(snapshot.subPath, isNull);
+      expect(snapshot.worktree, isNull);
+      expect(snapshot.branch, isNull);
+      // Both booleans read false, which is "no claim", not "we checked".
+      expect(snapshot.pinned, isFalse);
+      expect(snapshot.folderMissing, isFalse);
+    });
+
+    test('they round-trip, and the false booleans stay off the wire', () {
+      expect(RemoteSessionSnapshot.fromJson(placed.toJson()), placed);
+      expect(rich.toJson().containsKey('pinned'), isFalse);
+      expect(rich.toJson().containsKey('folderMissing'), isFalse);
+      expect(rich.toJson().containsKey('projectId'), isFalse);
+    });
+
+    test('wrongly typed values degrade rather than throw', () {
+      final json = placed.toJson()
+        ..['projectName'] = 7
+        ..['subPath'] = ['not', 'a', 'string']
+        ..['branch'] = false
+        ..['pinned'] = 'yes'
+        ..['folderMissing'] = 1;
+
+      final snapshot = RemoteSessionSnapshot.fromJson(json);
+
+      expect(snapshot.projectName, isNull);
+      expect(snapshot.subPath, isNull);
+      expect(snapshot.branch, isNull);
+      expect(snapshot.pinned, isFalse);
+      expect(snapshot.folderMissing, isFalse);
+    });
+
+    test("copyWith(stage:) — the api's enrichment — keeps them", () {
+      final staged = placed.copyWith(stage: 'merged');
+
+      expect(staged.projectId, 'p1');
+      expect(staged.projectPath, placed.projectPath);
+      expect(staged.pinned, isTrue);
+      expect(staged.folderMissing, isTrue);
+      expect(staged.subPath, 'projects/app');
+      expect(staged.worktree, placed.worktree);
+      expect(staged.branch, 'feature/x');
+    });
+  });
 }

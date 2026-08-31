@@ -1,12 +1,14 @@
-/// The one-click switch, end to end below the UI: choosing "This computer"
-/// brings the embedded relay up and points the host at its LAN URL, choosing
-/// hosted (or disabling) tears it down. Loopback only — nothing binds 0.0.0.0.
+/// The two relay switches, end to end below the UI: turning the local relay
+/// on brings the embedded server up and points the host at its LAN URL,
+/// turning it off tears it down — and the hosted relay is a separate switch
+/// that neither move touches. Loopback only — nothing binds 0.0.0.0.
 library;
 
 import 'dart:io';
 
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/features/remote/application/relay_prefs.dart';
 import 'package:chitragupta/src/features/remote/application/remote_access_controller.dart';
 import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
 import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
@@ -14,7 +16,6 @@ import 'package:chitragupta/src/features/remote/protocol.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
-import 'package:chitragupta/src/features/settings/domain/relay_mode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,6 +27,7 @@ void main() {
   late ProviderContainer container;
   late RemoteAccessController controller;
   late SettingsController settings;
+  late RelayPrefsController prefs;
 
   setUp(() {
     db = AppDatabase.memory();
@@ -56,6 +58,7 @@ void main() {
     );
     controller = container.read(remoteAccessControllerProvider);
     settings = container.read(settingsControllerProvider.notifier);
+    prefs = container.read(relayPrefsProvider.notifier);
   });
 
   tearDown(() async {
@@ -65,48 +68,106 @@ void main() {
     db.close();
   });
 
+  test('turning the local relay on starts it and the host serves it', () async {
+    settings.setRemoteAccessEnabled(true);
+    settings.setLocalRelayPort(0);
+    prefs.setLocalEnabled(true);
+
+    await controller.sync();
+
+    expect(localRelay.isRunning, isTrue);
+    final port = localRelay.status.boundPort!;
+    expect(controller.isRunning, isTrue);
+    expect(
+      controller.service!.localRelayUrl,
+      Uri.parse('ws://127.0.0.1:$port'),
+    );
+    // The relay the QR will name is genuinely serving.
+    final client = HttpClient();
+    final response = await (await client.getUrl(
+      Uri.parse('http://127.0.0.1:$port/healthz'),
+    )).close();
+    expect(response.statusCode, 200);
+    client.close(force: true);
+  });
+
+  test('both switches on: both relays are served at once', () async {
+    settings.setRemoteAccessEnabled(true);
+    settings.setRemoteRelayUrl('wss://relay.example.com');
+    settings.setLocalRelayPort(0);
+    prefs
+      ..setLocalEnabled(true)
+      ..setHostedEnabled(true);
+
+    await controller.sync();
+
+    expect(localRelay.isRunning, isTrue);
+    expect(controller.service!.hostedEnabled, isTrue);
+    expect(controller.service!.localRelayUrl, isNotNull);
+    expect(controller.service!.relay, Uri.parse('wss://relay.example.com'));
+  });
+
   test(
-    'choosing "This computer" starts the relay and the host dials it',
+    'turning the local relay off stops it and leaves hosted alone',
     () async {
       settings.setRemoteAccessEnabled(true);
-      settings.setRemoteRelayMode(RelayMode.local);
       settings.setLocalRelayPort(0);
+      prefs
+        ..setLocalEnabled(true)
+        ..setHostedEnabled(true);
+      await controller.sync();
+      final service = controller.service;
+      expect(localRelay.isRunning, isTrue);
 
+      prefs.setLocalEnabled(false);
       await controller.sync();
 
-      expect(localRelay.isRunning, isTrue);
-      final port = localRelay.status.boundPort!;
-      expect(controller.isRunning, isTrue);
-      expect(controller.service!.relay, Uri.parse('ws://127.0.0.1:$port'));
-      // The relay the host will hand to the QR is genuinely serving.
-      final client = HttpClient();
-      final response = await (await client.getUrl(
-        Uri.parse('http://127.0.0.1:$port/healthz'),
-      )).close();
-      expect(response.statusCode, 200);
-      client.close(force: true);
+      expect(localRelay.status.state, LocalRelayState.stopped);
+      expect(controller.service!.localRelayUrl, isNull);
+      expect(controller.service!.hostedEnabled, isTrue);
+      expect(
+        controller.service,
+        same(service),
+        reason: 'a relay switch parks devices; it never restarts the host',
+      );
     },
   );
 
-  test('switching to hosted stops the local relay', () async {
+  test('turning the hosted relay off leaves the local one serving', () async {
     settings.setRemoteAccessEnabled(true);
-    settings.setRemoteRelayMode(RelayMode.local);
     settings.setLocalRelayPort(0);
+    prefs
+      ..setLocalEnabled(true)
+      ..setHostedEnabled(true);
     await controller.sync();
-    expect(localRelay.isRunning, isTrue);
 
-    settings.setRemoteRelayMode(RelayMode.hosted);
-    settings.setRemoteRelayUrl('wss://relay.example.com');
+    prefs.setHostedEnabled(false);
+    await controller.sync();
+
+    expect(controller.service!.hostedEnabled, isFalse);
+    expect(localRelay.isRunning, isTrue);
+    expect(controller.service!.localRelayUrl, isNotNull);
+  });
+
+  test('neither relay: the host still runs for direct LAN links', () async {
+    settings.setRemoteAccessEnabled(true);
+    prefs
+      ..setLocalEnabled(false)
+      ..setHostedEnabled(false);
+
     await controller.sync();
 
     expect(localRelay.status.state, LocalRelayState.stopped);
-    expect(controller.service!.relay, Uri.parse('wss://relay.example.com'));
+    expect(controller.isRunning, isTrue);
+    expect(controller.service!.localRelayUrl, isNull);
+    expect(controller.service!.hostedEnabled, isFalse);
+    expect(controller.service!.lanPortBound, isNotNull);
   });
 
   test('disabling remote access stops relay and host together', () async {
     settings.setRemoteAccessEnabled(true);
-    settings.setRemoteRelayMode(RelayMode.local);
     settings.setLocalRelayPort(0);
+    prefs.setLocalEnabled(true);
     await controller.sync();
     final port = localRelay.status.boundPort!;
 
@@ -120,7 +181,7 @@ void main() {
     await rebound.close();
   });
 
-  test('a moved port restarts both onto the new one', () async {
+  test('a moved port restarts the relay onto the new one', () async {
     final firstSocket = await ServerSocket.bind('127.0.0.1', 0);
     final first = firstSocket.port;
     await firstSocket.close();
@@ -129,39 +190,37 @@ void main() {
     await secondSocket.close();
 
     settings.setRemoteAccessEnabled(true);
-    settings.setRemoteRelayMode(RelayMode.local);
     settings.setLocalRelayPort(first);
+    prefs.setLocalEnabled(true);
     await controller.sync();
-    expect(controller.service!.relay.port, first);
+    expect(controller.service!.localRelayUrl!.port, first);
 
     settings.setLocalRelayPort(second);
     await controller.sync();
 
     expect(localRelay.status.boundPort, second);
-    expect(controller.service!.relay.port, second);
+    expect(controller.service!.localRelayUrl!.port, second);
   });
 
-  test('a taken port surfaces as status; the host stays consistent', () async {
+  test('a taken port surfaces as status, and heals on the next sync', () async {
     final taken = await ServerSocket.bind('127.0.0.1', 0);
     addTearDown(taken.close);
     settings.setRemoteAccessEnabled(true);
-    settings.setRemoteRelayMode(RelayMode.local);
     settings.setLocalRelayPort(taken.port);
+    prefs.setLocalEnabled(true);
 
     await controller.sync();
 
     expect(localRelay.status.state, LocalRelayState.error);
     expect(localRelay.status.error, contains('in use'));
-    // The host still runs, pointed at the port the user asked for, so the
-    // next sync after freeing the port needs no restart.
-    expect(
-      controller.service!.relay,
-      Uri.parse('ws://127.0.0.1:${taken.port}'),
-    );
+    // A relay that did not bind is not offered: local devices park rather
+    // than dialling an address nothing answers on.
+    expect(controller.service!.localRelayUrl, isNull);
 
     await taken.close();
     await controller.sync();
 
     expect(localRelay.status.state, LocalRelayState.running);
+    expect(controller.service!.localRelayUrl, isNotNull);
   });
 }

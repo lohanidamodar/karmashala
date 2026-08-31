@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqlite3/sqlite3.dart';
 
 /// A single schema migration step: SQL applied to move the database **to** the
@@ -29,6 +31,9 @@ typedef MigrationStep = void Function(Database db);
 ///   else about the session is removed with it.
 /// * **v18** — Loop 70: companion devices paired with this host
 ///   (`paired_devices`), for the mobile-companion remote access feature.
+/// * **v19** — Loop 80: which relay each paired device was paired through
+///   (`paired_devices.relay_url`), so the host can serve local-relay and
+///   hosted-relay devices side by side.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -48,7 +53,49 @@ final Map<int, MigrationStep> schemaMigrations = {
   16: _migrateToV16,
   17: _migrateToV17,
   18: _migrateToV18,
+  19: _migrateToV19,
 };
+
+void _migrateToV19(Database db) {
+  // Which relay this device's frames travel through (Loop 80): the literal
+  // hosted relay URL, or the sentinel `'local'` for the relay embedded in this
+  // app. The sentinel, not the LAN URL of the moment: the machine's IP and the
+  // relay's port both move, while "my own relay" stays the same fact — the
+  // host resolves it to the live embedded relay at serve time.
+  db.execute('ALTER TABLE paired_devices ADD COLUMN relay_url TEXT;');
+
+  // Backfill from the relay the app was configured to use when the column
+  // arrived: every pre-v19 pairing went through that one relay, because
+  // serving two at once is what this migration exists to enable. Absent or
+  // unreadable settings mean the defaults: hosted mode, PopupBits relay
+  // (the literal below is `kDefaultRelayUrl`, unimportable from core).
+  var relayUrl = 'wss://relay.popupbits.com';
+  final settingsRows = db.select(
+    "SELECT value FROM app_metadata WHERE key = 'settings.v1';",
+  );
+  if (settingsRows.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(settingsRows.first['value'] as String);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['remoteRelayMode'] == 'local') {
+          relayUrl = 'local';
+        } else if (decoded['remoteRelayUrl'] is String) {
+          final configured = (decoded['remoteRelayUrl'] as String).trim();
+          final parsed = Uri.tryParse(configured);
+          if (configured.isNotEmpty && parsed != null && parsed.hasScheme) {
+            relayUrl = configured;
+          }
+        }
+      }
+    } on FormatException {
+      // Unreadable settings: the default above stands.
+    }
+  }
+  db.execute(
+    'UPDATE paired_devices SET relay_url = ? WHERE relay_url IS NULL;',
+    [relayUrl],
+  );
+}
 
 void _migrateToV18(Database db) {
   // Phones paired with this desktop host (Loop 70, mobile companion).
