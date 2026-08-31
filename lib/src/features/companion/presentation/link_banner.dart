@@ -25,6 +25,7 @@ class LinkBanner extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    final trouble = ref.read(companionGatewayProvider).linkTrouble;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
@@ -55,8 +56,12 @@ class LinkBanner extends ConsumerWidget {
               child: Text(
                 connecting
                     ? 'Connecting to your desktop…'
-                    : 'Host unreachable — check that Chitragupta is running '
-                          'on your desktop.',
+                    // The gateway's own sentence when it knows something more
+                    // exact than "unreachable" — a relay that hung up saying
+                    // nobody was there is not a broken network.
+                    : trouble ??
+                          'Host unreachable — check that Chitragupta is '
+                              'running on your desktop.',
                 style: (density.isTouch
                     ? theme.textTheme.bodyMedium
                     : theme.textTheme.bodySmall)?.copyWith(

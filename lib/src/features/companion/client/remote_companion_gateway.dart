@@ -182,6 +182,14 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// The newest `host.status` this link carried, applied to the saved
   /// candidates once the connection has settled.
   RemoteHostStatus? _lastHostStatus;
+
+  /// Serialises overlapping re-proofs: a socket that flaps twice must not
+  /// leave an older, slower handshake deciding the link's fate.
+  int _reproveAttempt = 0;
+
+  /// The plainest true sentence about why the link is down, when there is one
+  /// worth adding to the banner's own words.
+  String? _trouble;
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
   Timer? _lanHealTimer;
@@ -196,6 +204,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   @override
   CompanionLinkState get link => _link.value;
+
+  @override
+  String? get linkTrouble =>
+      _link.value == CompanionLinkState.connected ? null : _trouble;
 
   @override
   Stream<CompanionLinkState> get linkStates => _link.stream;
@@ -1053,11 +1065,18 @@ class RemoteCompanionGateway implements CompanionGateway {
       await client.connect(helloTimeout: helloTimeout);
       _linkPath.value = CompanionLinkPath.relay;
       _activeRelay = url;
+      _noteTrouble(null);
       return client;
     } on Object catch (error) {
       onLog?.call('connect over $url failed: $error');
+      // Why it failed, while the transport that failed is still around to
+      // say so — a relay hanging up with "no peer" is not a network fault.
+      final trouble = _troubleFor(error);
       await _teardownClient();
       await _noteRelayOutcome(url, ok: false);
+      // Keep the last thing actually learned rather than replacing a real
+      // reason with silence: the next candidate's transport has no story yet.
+      _noteTrouble(trouble ?? _trouble);
       return null;
     }
   }
@@ -1149,14 +1168,27 @@ class RemoteCompanionGateway implements CompanionGateway {
     _transportStates = null;
     if (previous != null) unawaited(previous.cancel());
     if (transport == null) return;
+    // The dial that got us here already proved the host answers, so the
+    // FIRST connected state needs no proving. Every later one does.
+    var dropped = false;
     _transportStates = transport.states.listen((state) {
       if (_client == null) return;
       switch (state) {
         case TransportState.connected:
           _cancelLanHeal();
-          _link.value = CompanionLinkState.connected;
+          if (!dropped) {
+            _link.value = CompanionLinkState.connected;
+            return;
+          }
+          dropped = false;
+          // A socket at a rendezvous is NOT a link: the relay accepts one
+          // whether or not the host is still at the other end, and it will
+          // hold that lonely socket for two minutes before hanging up. So
+          // the far end has to say hello again before this claims connected.
+          unawaited(_reproveLink());
         case TransportState.connecting:
         case TransportState.disconnected:
+          dropped = true;
           // The transport re-dials the same rendezvous by itself; the
           // channel and its sequences survive the blip (loop 64's rule).
           if (_link.value == CompanionLinkState.connected) {
@@ -1169,6 +1201,69 @@ class RemoteCompanionGateway implements CompanionGateway {
           break;
       }
     });
+  }
+
+  /// Makes `connected` mean *the host answered*, after a socket came back.
+  ///
+  /// Re-sends the hello on the existing channel and waits for a fresh
+  /// `host.status`. The host reattaches the transport, keeps the channel and
+  /// its sequences and re-announces, so nothing about the key schedule moves.
+  /// Silence means the phone is alone at the rendezvous — which is a dead
+  /// link however healthy the socket looks — so the loop re-dials properly
+  /// instead of parking on a "connected" that answers nothing.
+  Future<void> _reproveLink() async {
+    final client = _client;
+    if (client == null || _closed) return;
+    final attempt = ++_reproveAttempt;
+    try {
+      await client.rehandshake(timeout: helloTimeout);
+    } on Object catch (error) {
+      if (_closed || _client != client || attempt != _reproveAttempt) return;
+      onLog?.call('the socket came back but the host did not: $error');
+      // The socket came back and the hello went unanswered: from this side
+      // that IS "the desktop is not on this relay", whatever the close code
+      // said, so it is stated rather than inferred.
+      _noteTrouble(_troubleFor(error) ?? _kHostAbsentTrouble);
+      _declareDead();
+      return;
+    }
+    if (_closed || _client != client || attempt != _reproveAttempt) return;
+    _noteTrouble(null);
+    _link.value = CompanionLinkState.connected;
+  }
+
+  /// The plainest true sentence about why the link is not up, or null when
+  /// there is nothing to add beyond the banner's own words.
+  ///
+  /// Two ways to learn the same thing: the relay hung up with "no peer" after
+  /// holding a lone socket for its timeout, or a dial found nobody at any
+  /// rendezvous. Neither is a network failure, and telling someone to check
+  /// their wifi when their desktop is simply closed wastes their afternoon.
+  String? _troubleFor([Object? error]) {
+    if (error is RemoteApiException && error.hostAbsent) {
+      return _kHostAbsentTrouble;
+    }
+    final transport = _dialled;
+    if (transport is RelayTransport &&
+        transport.lastCloseCode == kRelayCloseNoPeer) {
+      return _kHostAbsentTrouble;
+    }
+    return null;
+  }
+
+  /// What "nobody was at the rendezvous" reads like to someone holding a
+  /// phone. Never "check your connection": the network is demonstrably fine,
+  /// since the relay answered.
+  static const String _kHostAbsentTrouble =
+      'Your desktop is not answering on this relay — check that Chitragupta '
+      'is running, and that it is set to the same relay.';
+
+  void _noteTrouble(String? trouble) {
+    if (_trouble == trouble) return;
+    _trouble = trouble;
+    // The banner reads this when the link state changes, which it is about
+    // to; nudging the same value through keeps the two in step.
+    _link.value = _link.value;
   }
 
   /// A LAN link that dropped redials forever on its own — but the host may
