@@ -84,6 +84,12 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
 
       // Workspace.
       'list_projects': McpToolAnnotations.read,
+      'list_checkouts': McpToolAnnotations.read,
+      'delivery_status': McpToolAnnotations.read,
+      // Reads the directory and records what it finds. Running it twice over
+      // an unchanged directory changes nothing the first run did not.
+      'project_rescan': McpToolAnnotations(idempotent: true),
+      'select_checkout': McpToolAnnotations(idempotent: true),
 
       // Sessions.
       'list_sessions': McpToolAnnotations.read,
