@@ -8,7 +8,9 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/notification_presenter.dart';
 import '../data/notification_settings_repository.dart';
@@ -18,6 +20,7 @@ import '../domain/session_attention.dart';
 import 'agent_status_watcher.dart';
 import 'attention_inbox.dart';
 import 'notification_dispatcher.dart';
+import 'session_status_registry.dart';
 import 'watched_session_loader.dart';
 
 final notificationSettingsRepositoryProvider =
@@ -152,12 +155,42 @@ final watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
   ),
 );
 
+/// The one status registry. Everything that shows or reacts to an agent's
+/// status reads this: the badges, the whereabouts age, the approval card, the
+/// checkpoint recorder, the tray, the inbox and the toasts.
+///
+/// Created lazily and cycled only once `AgentStatusWatcher.start()` starts it,
+/// so reading a status never starts the app doing work.
+final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
+  final registry = SessionStatusRegistry(
+    statusService: ref.watch(agentStatusServiceProvider),
+    agents: ref.watch(agentRegistryProvider),
+    loadSessions: () => ref.read(watchedSessionLoaderProvider).load(),
+    clock: ref.watch(clockProvider),
+    // The pane's own screen, for the sessions that have one. The watcher used
+    // to have no access to this at all, which is why the ambient pipeline could
+    // report `unknown` for a session whose badge could read "needs you" off the
+    // terminal right beside it.
+    readTail: (session) {
+      if (session.imported) return const [];
+      final row = ref.read(sessionDaoProvider).getById(session.openId);
+      if (row == null) return const [];
+      return sessionTerminalTail(ref, row, agentId: session.key.agentId);
+    },
+    // One store scan for every session still missing a transcript path, on the
+    // registry's own slow interval — not one per badge per tick.
+    resolveTranscripts: () => ref.read(sessionTranscriptLocatorProvider).index(),
+    visibleSessionIds: () => visibleAgentSessionIds(ref.container),
+  );
+  ref.onDispose(registry.dispose);
+  return registry;
+});
+
 /// The always-on watcher. Started by `SystemIntegrationService`, which owns the
 /// rest of the desktop integration.
 final agentStatusWatcherProvider = Provider<AgentStatusWatcher>((ref) {
   final watcher = AgentStatusWatcher(
-    statusService: ref.watch(agentStatusServiceProvider),
-    loadSessions: () => ref.read(watchedSessionLoaderProvider).load(),
+    registry: ref.watch(sessionStatusRegistryProvider),
     readSettings: () => ref.read(notificationSettingsControllerProvider),
     isWindowFocused: () => ref.read(windowFocusedProvider),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
@@ -171,23 +204,26 @@ final agentStatusWatcherProvider = Provider<AgentStatusWatcher>((ref) {
   return watcher;
 });
 
-/// The CLI session ids currently rendered in the app.
+/// The session ids currently rendered in the app, in every key the status
+/// pipeline might hold them under.
 ///
 /// The selection providers hold workspace row ids; the status pipeline is keyed
-/// by the CLI's own session id, so each selection is resolved through its DAO.
-/// Takes a container rather than a `Ref` so `SystemIntegrationService`, which
-/// only holds one, can call it too.
+/// by the CLI's own session id when the agent has announced one and by the row
+/// id when it has not, so both are contributed. Takes a container rather than a
+/// `Ref` so `SystemIntegrationService`, which only holds one, can call it too.
 Set<String> visibleAgentSessionIds(ProviderContainer container) {
   final read = container.read;
   final ids = <String>{};
   final nativeId = read(selectedSessionIdProvider);
   if (nativeId != null) {
+    ids.add(nativeId);
     final native = read(sessionDaoProvider).getById(nativeId);
     final externalId = native?.externalSessionId;
     if (externalId != null) ids.add(externalId);
   }
   final importedId = read(selectedImportedSessionIdProvider);
   if (importedId != null) {
+    ids.add(importedId);
     final imported = read(importedSessionDaoProvider).getById(importedId);
     if (imported != null) ids.add(imported.externalId);
   }

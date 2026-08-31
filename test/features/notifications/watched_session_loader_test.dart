@@ -55,13 +55,12 @@ void main() {
     });
   });
 
-  WatchedSessionLoader loader({int limit = 60}) => WatchedSessionLoader(
+  WatchedSessionLoader loader() => WatchedSessionLoader(
     sessionDao: sessions,
     importedSessionDao: imported,
     installationDao: installations,
     hookReports: reports,
     clock: FixedClock(testTime),
-    limit: limit,
   );
 
   /// Writes a transcript file whose last-modified time is [age] before now.
@@ -161,10 +160,22 @@ void main() {
     expect(watched.single.stateFilePath, isNull);
   });
 
-  test('a native session the CLI has not named yet is skipped', () {
+  test('a native session the CLI has not named yet is watched anyway', () {
+    // Rewritten in Loop 87. It used to assert this session was skipped, on the
+    // reasoning that a status can only come from a hook and a hook is keyed by
+    // the CLI's own id. That stopped being true when the terminal grid became a
+    // source: the session has a screen, the screen says whether it is waiting on
+    // the user, and the visible badge has been reading it all along — keyed by
+    // the row id, exactly as here. Skipping it was how the ambient pipeline
+    // ended up reporting `unknown` for a session the badge beside it could read.
     sessions.insert(session(id: 's1'));
 
-    expect(loader().load(), isEmpty);
+    final watched = loader().load();
+
+    expect(watched, hasLength(1));
+    expect(watched.single.key.sessionId, 's1', reason: 'keyed by our own id');
+    expect(watched.single.openId, 's1');
+    expect(watched.single.stateFilePath, isNull);
   });
 
   test('a finished native session can no longer produce status', () {
@@ -210,7 +221,12 @@ void main() {
     expect(loader.load(), hasLength(1));
   });
 
-  test('the newest sessions win when the cap bites', () {
+  test('live sessions come back newest first', () {
+    // Rewritten in Loop 87. It used to pass `limit: 2` and assert that the two
+    // newest sessions were the only ones returned — the 60-session cap that
+    // made session 61 invisible to notifications forever. Recency is still the
+    // order, because it decides which waiting session the tray names first; it
+    // is no longer a selection.
     for (var i = 0; i < 5; i++) {
       addImported(
         'i$i',
@@ -220,8 +236,52 @@ void main() {
       );
     }
 
-    final watched = loader(limit: 2).load();
+    final watched = loader().load();
 
-    expect(watched.map((s) => s.key.sessionId), ['cli-0', 'cli-1']);
+    expect(watched.map((s) => s.key.sessionId), [
+      'cli-0',
+      'cli-1',
+      'cli-2',
+      'cli-3',
+      'cli-4',
+    ]);
+  });
+
+  for (final count in [100, 500]) {
+    test('all $count live sessions are watched, not the first 60', () {
+      for (var i = 0; i < count; i++) {
+        addImported(
+          'i$i',
+          externalId: 'cli-$i',
+          filePath: transcript('t$i', age: const Duration(minutes: 1)),
+          title: 'Session $i',
+        );
+      }
+
+      final watched = loader().load();
+
+      expect(watched, hasLength(count));
+      expect(
+        watched.map((s) => s.key.sessionId).toSet(),
+        {for (var i = 0; i < count; i++) 'cli-$i'},
+      );
+    });
+  }
+
+  test('every native session is watched however many there are', () {
+    for (var i = 0; i < 200; i++) {
+      sessions.insert(
+        session(id: 's$i').copyWith(externalSessionId: 'cli-$i'),
+      );
+    }
+
+    final watched = loader().load();
+
+    expect(watched, hasLength(200));
+    expect(
+      watched.any((s) => s.key.sessionId == 'cli-199'),
+      isTrue,
+      reason: 'the old cap kept the newest 60 and forgot the rest',
+    );
   });
 }

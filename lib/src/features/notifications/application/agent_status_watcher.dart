@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import '../../agents/data/agent_status_service.dart';
 import '../../agents/domain/agent_status.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/agent_status_transition.dart';
@@ -10,6 +9,7 @@ import '../domain/notification_request.dart';
 import '../domain/notification_settings.dart';
 import '../domain/session_attention.dart';
 import '../domain/watched_session.dart';
+import 'session_status_registry.dart';
 
 /// Polls the agent status pipeline, turns what changed into decisions, and
 /// keeps the set of sessions that need the user up to date.
@@ -27,8 +27,7 @@ import '../domain/watched_session.dart';
 /// and no window, database or agent.
 class AgentStatusWatcher {
   AgentStatusWatcher({
-    required this.statusService,
-    required this.loadSessions,
+    required this.registry,
     required this.readSettings,
     required this.isWindowFocused,
     required this.visibleSessionIds,
@@ -39,11 +38,13 @@ class AgentStatusWatcher {
     this.interval = const Duration(seconds: 5),
   });
 
-  final AgentStatusService statusService;
-
-  /// The sessions worth asking about this tick — bounded by the caller, since
-  /// every entry costs a status lookup.
-  final List<WatchedSession> Function() loadSessions;
+  /// Where every session's status already lives.
+  ///
+  /// This used to gather them itself — a `for` loop awaiting one transcript
+  /// after another over a list somebody else had truncated at 60. It now reads
+  /// a cycle the registry produced for the whole app, so the policy runs over
+  /// *every* watched session and costs no I/O of its own.
+  final SessionStatusRegistry registry;
 
   final NotificationSettings Function() readSettings;
   final bool Function() isWindowFocused;
@@ -67,12 +68,16 @@ class AgentStatusWatcher {
   final Map<AgentSessionKey, AgentActivityStatus> _lastStatus = {};
   Timer? _timer;
   bool _polling = false;
+  bool _disposed = false;
 
   /// The last status observed for [key], for tests and diagnostics.
   AgentActivityStatus? lastStatusOf(AgentSessionKey key) => _lastStatus[key];
 
   void start() {
     if (_timer != null) return;
+    // The registry cycles faster than this: a badge is being looked at, a toast
+    // is not. One timer each, for the whole app.
+    registry.start();
     unawaited(poll());
     _timer = Timer.periodic(interval, (_) => unawaited(poll()));
   }
@@ -80,39 +85,41 @@ class AgentStatusWatcher {
   void stop() {
     _timer?.cancel();
     _timer = null;
+    registry.stop();
   }
 
   void dispose() {
+    _disposed = true;
     stop();
     _lastStatus.clear();
   }
 
-  /// One pass: read every watched session's status, diff it against the last
-  /// pass, and publish the results.
+  /// One pass: take the registry's current view of every watched session, diff
+  /// it against the last pass, and publish the results.
   Future<void> poll() async {
     // A slow filesystem must not let two passes interleave and produce a
     // transition against a half-updated snapshot.
-    if (_polling) return;
+    if (_polling || _disposed) return;
     _polling = true;
     try {
-      final sessions = loadSessions();
+      // Read the app's state *before* the cycle is awaited. These are cheap
+      // synchronous reads of a provider container, and after an async gap the
+      // container may be gone — a shutdown that lands mid-poll must not throw
+      // out of a background timer.
       final settings = readSettings();
       final focused = isWindowFocused();
       final visible = visibleSessionIds();
+      final cycle = await registry.cycle();
+      if (_disposed) return;
 
       final attention = <SessionAttention>[];
       final seen = <AgentSessionKey>{};
       final news = <({WatchedSession session, NotificationReason reason})>[];
 
-      for (final session in sessions) {
+      for (final entry in cycle.entries) {
+        final session = entry.session;
+        final report = entry.report;
         seen.add(session.key);
-        final report = await statusService.statusFor(
-          AgentStatusQuery(
-            agentId: session.key.agentId,
-            sessionId: session.key.sessionId,
-            stateFilePath: session.stateFilePath,
-          ),
-        );
 
         final previous = _lastStatus[session.key];
         _lastStatus[session.key] = report.status;
@@ -159,6 +166,11 @@ class AgentStatusWatcher {
       // Forget sessions that fell out of the watch set. If one comes back it is
       // a first observation again, which the policy treats as "no evidence
       // anything just changed" — the conservative answer.
+      //
+      // `seen` is now every watched session rather than the first sixty of
+      // them, which is what makes that conservatism honest: before Loop 87 a
+      // session could be dropped here purely for sorting late, and its next
+      // real transition was then swallowed as a first observation.
       _lastStatus.removeWhere((key, _) => !seen.contains(key));
       onAttention(attention);
       onInbox?.call(InboxUpdate(waiting: attention, watched: seen, news: news));

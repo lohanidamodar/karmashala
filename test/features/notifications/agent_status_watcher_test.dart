@@ -4,6 +4,7 @@ import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
 import 'package:chitragupta/src/features/notifications/application/agent_status_watcher.dart';
+import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
 import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
 import 'package:chitragupta/src/features/notifications/domain/notification_request.dart';
@@ -18,6 +19,7 @@ import '../../support/fixtures.dart';
 /// Drives the watcher against the **real** status pipeline: hook callbacks go
 /// in through the real receiver, and the real [AgentStatusService] answers.
 void main() {
+  late FixedClock clock;
   late AgentHookReports reports;
   late AgentHookReceiver receiver;
   late AgentStatusService service;
@@ -38,7 +40,7 @@ void main() {
   );
 
   setUp(() {
-    final clock = FixedClock(testTime);
+    clock = FixedClock(testTime);
     reports = AgentHookReports();
     receiver = AgentHookReceiver(
       registry: AgentRegistry.builtIn,
@@ -58,9 +60,16 @@ void main() {
     attention = [];
   });
 
+  /// The watcher over a real registry. It used to gather statuses itself, one
+  /// awaited transcript at a time; the assertions below are unchanged, because
+  /// what it decides from a status did not.
   AgentStatusWatcher build() => AgentStatusWatcher(
-    statusService: service,
-    loadSessions: () => watched,
+    registry: SessionStatusRegistry(
+      statusService: service,
+      agents: AgentRegistry.builtIn,
+      loadSessions: () => watched,
+      clock: clock,
+    ),
     readSettings: () => settings,
     isWindowFocused: () => focused,
     visibleSessionIds: () => visible,
@@ -211,6 +220,54 @@ void main() {
       );
     },
   );
+
+  test('a hundred sessions finishing all reach the toast pipeline', () async {
+    // The 60-cap in one assertion. Before Loop 87 the loader handed the watcher
+    // the newest sixty of these, so forty transitions were silently unobserved
+    // — and the forty were chosen by nothing more meaningful than sort order.
+    watched = [
+      for (var i = 0; i < 100; i++)
+        WatchedSession(
+          key: AgentSessionKey(AgentIds.claudeCode, 'many-$i'),
+          label: 'Session $i',
+          openId: 'row-$i',
+          imported: true,
+        ),
+    ];
+    final watcher = build();
+
+    for (var i = 0; i < 100; i++) {
+      receiver.handle(
+        agentId: AgentIds.claudeCode,
+        event: 'PreToolUse',
+        body: '{"session_id":"many-$i"}',
+      );
+    }
+    await watcher.poll();
+    expect(notified, isEmpty, reason: 'starting work is not news');
+    for (var i = 0; i < 100; i++) {
+      expect(
+        watcher.lastStatusOf(AgentSessionKey(AgentIds.claudeCode, 'many-$i')),
+        AgentActivityStatus.working,
+        reason: 'session $i was never observed',
+      );
+    }
+
+    for (var i = 0; i < 100; i++) {
+      receiver.handle(
+        agentId: AgentIds.claudeCode,
+        event: 'Stop',
+        body: '{"session_id":"many-$i"}',
+      );
+    }
+    await watcher.poll();
+
+    expect(notified, hasLength(100));
+    expect(
+      notified.every((e) => e.reason == NotificationReason.finished),
+      isTrue,
+    );
+  });
 
   test('turning notifications off leaves the tray working', () async {
     settings = const NotificationSettings(enabled: false);

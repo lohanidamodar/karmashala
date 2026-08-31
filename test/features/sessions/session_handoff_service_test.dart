@@ -79,7 +79,14 @@ class _FakeLocator implements SessionTranscriptLocator {
     required String agentId,
     required String externalSessionId,
   }) async => path;
+
+  @override
+  Future<Map<String, String>> index() async =>
+      path == null ? const {} : {'$agentId/$externalId': path!};
 }
+
+const agentId = 'claudeCode';
+const externalId = 'cli-1';
 
 class _StaticSettings extends SettingsController {
   _StaticSettings(this._settings);
