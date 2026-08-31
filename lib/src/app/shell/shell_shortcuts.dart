@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_state.dart';
@@ -44,6 +45,21 @@ class OpenQuickOpenIntent extends Intent {
 /// Intent: show the attention inbox.
 class OpenAttentionInboxIntent extends Intent {
   const OpenAttentionInboxIntent();
+}
+
+/// Intent: change the terminal grid's font size.
+///
+/// Bound app-wide but about the terminal on purpose: like a browser's zoom
+/// chords, Ctrl+= / Ctrl+- / Ctrl+0 resize the surface the app is *for*. The
+/// overall UI scale is a considered setting, not something to lean on a key
+/// for, and lives in Settings → Appearance.
+class TerminalFontSizeIntent extends Intent {
+  const TerminalFontSizeIntent.increase() : delta = 1;
+  const TerminalFontSizeIntent.decrease() : delta = -1;
+  const TerminalFontSizeIntent.reset() : delta = 0;
+
+  /// Points to add, or 0 for "back to the default".
+  final double delta;
 }
 
 /// One entry in the application's keyboard map.
@@ -109,6 +125,7 @@ class ShellChord {
 /// | `Ctrl+K` / `Ctrl+P` | quick open | app |
 /// | `Ctrl+Shift+P` | quick open, already filtered to commands | app |
 /// | `Ctrl+Shift+A` | the attention inbox — open it, or close it again | app |
+/// | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | terminal font size up / down / reset | app |
 ///
 /// ## Why there is a skip-list at all
 ///
@@ -263,6 +280,30 @@ const List<ShellChord> shellChords = [
     intent: OpenAttentionInboxIntent(),
     label: 'Ctrl+Shift+A',
     does: 'Open or close the attention inbox',
+    skipsShell: true,
+  ),
+  // The zoom chords every browser and editor taught. Contested (no Shift), so
+  // Settings offers each one back to the shell like the rest.
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.equal, control: true),
+    intent: TerminalFontSizeIntent.increase(),
+    label: 'Ctrl+=',
+    does: 'Terminal font size up',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.minus, control: true),
+    intent: TerminalFontSizeIntent.decrease(),
+    label: 'Ctrl+-',
+    does: 'Terminal font size down',
+    skipsShell: true,
+    shellCost: 'readline undo (^_) — Ctrl+X Ctrl+U does the same thing',
+  ),
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.digit0, control: true),
+    intent: TerminalFontSizeIntent.reset(),
+    label: 'Ctrl+0',
+    does: 'Terminal font size back to the default',
     skipsShell: true,
   ),
 ];
@@ -427,6 +468,15 @@ class ShellShortcuts extends ConsumerWidget {
           ToggleFocusModeIntent: CallbackAction<ToggleFocusModeIntent>(
             onInvoke: (intent) {
               ref.read(terminalMaximizedProvider.notifier).toggle();
+              return null;
+            },
+          ),
+          TerminalFontSizeIntent: CallbackAction<TerminalFontSizeIntent>(
+            onInvoke: (intent) {
+              final settings = ref.read(settingsControllerProvider.notifier);
+              intent.delta == 0
+                  ? settings.resetTerminalFontSize()
+                  : settings.adjustTerminalFontSize(intent.delta);
               return null;
             },
           ),

@@ -92,6 +92,55 @@ void main() {
     expect(hits(RegExp(r'\.withOpacity\(')), isEmpty);
   });
 
+  test('no raw fontSize outside the theme layer', () {
+    // A hardcoded `fontSize:` is a widget deciding for itself how big text
+    // is — the sites that ignored the theme were exactly the ones the "menus
+    // don't follow text sizing" complaint was about. Sizes are named in the
+    // theme layer (`TextTheme`, `MonoStyles`); feature widgets borrow a style.
+    //
+    // The debt set is a ratchet, not an amnesty: the files named here carried
+    // a literal size before the rule existed, no new file may join, and one
+    // that gets cleaned up must be struck off (the loop below enforces it).
+    const debt = {
+      'lib/src/features/browser/presentation/browser_pane.dart',
+      'lib/src/features/detail/presentation/repository_info_view.dart',
+      'lib/src/features/environments/presentation/environments_section.dart',
+      'lib/src/features/fanout/presentation/comparison_view.dart',
+      'lib/src/features/git/presentation/changes_view.dart',
+      'lib/src/features/sessions/presentation/chat_transcript.dart',
+      'lib/src/features/sessions/presentation/markdown_message.dart',
+      'lib/src/features/sessions/presentation/message_composer.dart',
+      'lib/src/features/ssh/presentation/host_key_changed_alert.dart',
+      'lib/src/features/ssh/presentation/host_key_dialog.dart',
+      'lib/src/features/ssh/presentation/known_hosts_section.dart',
+      'lib/src/features/ssh/presentation/remote_file_browser_dialog.dart',
+      'lib/src/features/ssh/presentation/ssh_hosts_section.dart',
+      'lib/src/features/terminal/presentation/terminal_panel.dart',
+      'lib/src/features/terminal/presentation/terminal_search_bar.dart',
+    };
+    // A literal size only: `fontSize: someVariable` is a value that came from
+    // somewhere accountable (a setting, a theme style) and is allowed.
+    final pattern = RegExp(r'fontSize:\s*[0-9]');
+    expect(
+      hits(
+        pattern,
+        skip: (path) =>
+            path.startsWith('lib/src/app/theme/') || debt.contains(path),
+      ),
+      isEmpty,
+      reason: 'use a theme text style or MonoStyles instead of a literal size',
+    );
+    final remaining = hits(pattern).map((h) => h.split(':').first).toSet();
+    for (final path in debt) {
+      expect(
+        remaining.contains(path),
+        isTrue,
+        reason: '$path no longer has a raw fontSize — strike it off the '
+            'debt list so it cannot regress',
+      );
+    }
+  });
+
   test('the guard can actually fail', () {
     // The assertion framework arriving self-tested, per the review's (D)12.
     final source = 'Icon(Icons.refresh), Colors.teal, x.shade700';

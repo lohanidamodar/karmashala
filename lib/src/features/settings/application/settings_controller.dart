@@ -56,6 +56,33 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Sets the overall UI text scale, clamped to the supported 90%–150%.
+  void setUiTextScale(double scale) {
+    state = state.copyWith(
+      uiTextScale: scale.clamp(Settings.minUiTextScale, Settings.maxUiTextScale),
+    );
+    _save();
+  }
+
+  /// Sets the terminal grid's font size, clamped to a usable range.
+  void setTerminalFontSize(double size) {
+    state = state.copyWith(
+      terminalFontSize: size.clamp(
+        Settings.minTerminalFontSize,
+        Settings.maxTerminalFontSize,
+      ),
+    );
+    _save();
+  }
+
+  /// Nudges the terminal font size — what Ctrl+= / Ctrl+- are wired to.
+  void adjustTerminalFontSize(double delta) =>
+      setTerminalFontSize(state.terminalFontSize + delta);
+
+  /// Puts the terminal font size back to the shipped default (Ctrl+0).
+  void resetTerminalFontSize() =>
+      setTerminalFontSize(Settings.defaultTerminalFontSize);
+
   void setWindowSize(double width, double height) {
     state = state.copyWith(windowWidth: width, windowHeight: height);
     _save();

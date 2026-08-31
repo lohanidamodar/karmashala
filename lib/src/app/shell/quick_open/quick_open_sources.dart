@@ -16,6 +16,7 @@ import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/domain/session.dart';
 import '../../../features/sessions/domain/session_launch.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
+import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../theme/app_icons.dart';
@@ -437,7 +438,14 @@ class QuickOpenSources {
           icon: AppIcons.robot,
           keywords: [installation.agentId, installation.environmentId],
           weight: _agentWeight,
-          onSelect: () => dismiss(() => SettingsScreen.show(context)),
+          // Lands on the Agents section — the entry is an agent, and a jump
+          // to the top of Appearance would be a jump to nowhere.
+          onSelect: () => dismiss(
+            () => SettingsScreen.show(
+              context,
+              section: SettingsSectionId.agents,
+            ),
+          ),
         ),
     ];
   }

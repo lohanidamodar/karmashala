@@ -267,7 +267,10 @@ void main() {
       for (final chord in shellChords)
         if (chord.shellCost != null) chord.label,
     };
-    expect(costly, {'Ctrl+\\', 'Ctrl+K', 'Ctrl+P'});
+    // `Ctrl+-` joined them in Loop 79: a terminal encodes it as ^_, which is
+    // readline's undo. `Ctrl+=` and `Ctrl+0` have no control character at all,
+    // so the zoom chords are not uniformly free and must not claim to be.
+    expect(costly, {'Ctrl+\\', 'Ctrl+K', 'Ctrl+P', 'Ctrl+-'});
   });
 
   test('the Explorer advertises the chord that survives a terminal', () {

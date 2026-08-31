@@ -206,7 +206,46 @@ class Chrome {
   static const icon = 16.0;
   static const iconSmall = 13.0;
   static const iconTitle = 18.0;
+
+  /// [titleBar] grown with the ambient text scale, and never shrunk below the
+  /// design height: a 150% menu label does not fit a 30px row, and clipping
+  /// the menu bar was exactly the "menus ignore text sizing" bug.
+  static double titleBarOf(BuildContext context) => MediaQuery.textScalerOf(
+    context,
+  ).scale(titleBar).clamp(titleBar, 52.0);
+
+  /// [statusBar], same treatment.
+  static double statusBarOf(BuildContext context) => MediaQuery.textScalerOf(
+    context,
+  ).scale(statusBar).clamp(statusBar, 38.0);
 }
 
 /// A monospace stack for the "ledger hand" — paths, ids, event types, diffs.
 const String kMonoFamily = 'monospace';
+
+/// The ledger hand's text styles, in the theme layer where a size may be
+/// named. Feature widgets use these instead of declaring their own
+/// `fontSize:` (the token guard test enforces it), and because the size lives
+/// on an ordinary [TextStyle] they follow the app's text scaler like any
+/// other text.
+class MonoStyles {
+  const MonoStyles._();
+
+  /// Inline identifiers beside label-sized text (chips, badges).
+  static const TextStyle small = TextStyle(
+    fontFamily: kMonoFamily,
+    fontSize: 11,
+  );
+
+  /// The default ledger hand: paths, ids, environment names.
+  static const TextStyle body = TextStyle(
+    fontFamily: kMonoFamily,
+    fontSize: 12,
+  );
+
+  /// A ledger value promoted to sit beside body text (a hotkey combo).
+  static const TextStyle label = TextStyle(
+    fontFamily: kMonoFamily,
+    fontSize: 13,
+  );
+}
