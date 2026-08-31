@@ -229,6 +229,38 @@ void main() {
       expect(listings, containsAll([hubPath, appPath]));
     });
 
+    testWidgets('fits the panel dragged to its narrowest', (tester) async {
+      // 240px is the side panel's minimum, and the line has to hold a name, a
+      // sub-path and a caret inside it without overflowing.
+      insertAllCheckouts();
+      final container = makeContainer();
+      container.read(selectedRepositoryIdProvider.notifier).select('inbox');
+      tester.view.physicalSize = const Size(1400, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topRight,
+                child: SizedBox(width: 240, child: SidePanelContextLine()),
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+
+      // The menu is an overlay, so it is free to be wider than the panel it
+      // hangs off — and it still has to fit on screen at the right edge.
+      await openPicker(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text('wt-relay'), findsOneWidget);
+    });
+
     testWidgets('a project with one checkout shows no picker', (tester) async {
       RepositoryDao(db).insert(
         repository(id: 'hub', name: 'demo', path: hubPath),
