@@ -211,6 +211,49 @@ void main() {
     expect(ghCalls.where((a) => a.contains('view')).length, 1);
   });
 
+  test('the two-minute poll costs one gh per checkout being looked at', () async {
+    // Written while hunting a periodic hitch, where this poll was the leading
+    // suspect: a `gh` process per checkout every two minutes, on a machine with
+    // seventeen repositories, would be a plausible once-a-minute stall.
+    //
+    // It is not, and the reason is which provider the tree reads. Every row in
+    // the Explorer watches `sessionLocalDeliveryProvider`, which never touches
+    // `gh`; only `sessionDeliveryProvider` does, and that one exists for the
+    // session whose strip is on screen. So a tick costs one `gh` per *watched*
+    // checkout — one, in practice — not one per session and not one per
+    // repository.
+    for (var i = 0; i < 5; i++) {
+      addSession('s$i');
+    }
+    final container = harness();
+
+    // What the Explorer draws: every row, none of them asking `gh`.
+    for (var i = 0; i < 5; i++) {
+      await container.read(sessionLocalDeliveryProvider('s$i').future);
+    }
+    expect(ghCalls, isEmpty, reason: 'a tree row must never start a gh');
+
+    // What the strip draws: one session, kept alive across the tick the way a
+    // widget watching it would.
+    final subscription = container.listen(
+      sessionDeliveryProvider('s0'),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+    await container.read(sessionDeliveryProvider('s0').future);
+    final afterFirstRead = ghCalls.length;
+
+    container.read(deliveryPollProvider.notifier).state++;
+    await container.read(sessionDeliveryProvider('s0').future);
+
+    expect(afterFirstRead, 1);
+    expect(
+      ghCalls.length - afterFirstRead,
+      1,
+      reason: 'one tick, one gh — not one per session sharing the checkout',
+    );
+  });
+
   test('a repository with no remote asks gh nothing at all', () async {
     addSession('s1', at: null);
     remoteUrl = '';
