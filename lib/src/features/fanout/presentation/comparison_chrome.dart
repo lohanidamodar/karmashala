@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../verification/domain/verdict_attribution.dart';
+import '../../verification/presentation/attribution_mark.dart';
 import '../domain/comparison.dart';
 
 /// Small shared pieces of the comparison surface.
@@ -137,22 +138,7 @@ class VerdictChip extends StatelessWidget {
           ),
         ),
         const SizedBox(width: Insets.xs),
-        Tooltip(
-          message: attribution.label,
-          child: Text(
-            attribution.shortLabel,
-            maxLines: 1,
-            style: labelStyle?.copyWith(
-              // Self-verified reads as a caution, not as a pass: it is the
-              // candidate's own account of itself.
-              color: switch (attribution) {
-                VerdictAttribution.author => semantic.attention,
-                VerdictAttribution.independent => semantic.idle,
-                VerdictAttribution.notRecorded => semantic.neutral,
-              },
-            ),
-          ),
-        ),
+        AttributionMark(attribution: attribution),
       ],
     );
   }
