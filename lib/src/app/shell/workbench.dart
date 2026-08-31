@@ -637,16 +637,15 @@ class _TabRailState extends State<_TabRail> {
           (forward
               ? position.pixels < position.maxScrollExtent - 0.5
               : position.pixels > 0.5);
+      // Shaped like the terminal toolbar's buttons at the other end of the
+      // strip rather than like a tab's own close button: these are chrome that
+      // acts on the strip, and they are the two the mouse aims at most.
       return IconButton(
         tooltip: forward ? 'Later tabs' : 'Earlier tabs',
-        iconSize: Chrome.iconSmall,
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(
-          minWidth: Chrome.row,
-          minHeight: Chrome.row,
+        icon: Icon(
+          forward ? AppIcons.caretRight : AppIcons.caretLeft,
+          size: Chrome.icon,
         ),
-        padding: EdgeInsets.zero,
-        icon: Icon(forward ? AppIcons.caretRight : AppIcons.caretLeft),
         onPressed: can ? () => _page(forward) : null,
       );
     },
