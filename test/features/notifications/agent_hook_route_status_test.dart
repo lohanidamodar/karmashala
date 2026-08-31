@@ -14,6 +14,7 @@ import 'package:chitragupta/src/features/notifications/application/session_statu
 import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
 import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -88,7 +89,11 @@ void main() {
     try {
       final request = await client.openUrl(
         'POST',
-        endpoint.uriFor(agentId: AgentIds.claudeCode, event: event),
+        endpoint.uriFor(
+          agentId: AgentIds.claudeCode,
+          event: event,
+          environment: EnvironmentKind.windowsNative,
+        )!,
       );
       request.headers.set(
         HttpHeaders.authorizationHeader,

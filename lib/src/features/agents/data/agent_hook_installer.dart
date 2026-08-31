@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/util/json_object_splice.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
 
@@ -17,8 +18,21 @@ const String agentHookMarker = 'chitragupta-agent-hook';
 /// (`replaceTopLevelJsonValue`), so every other key keeps its original bytes —
 /// agent configs can contain keys that differ only by case, which a
 /// decode/encode round trip would silently collapse.
+///
+/// Every entry point takes the [EnvironmentKind] the config belongs to, because
+/// the callback address differs per environment and there is no safe default:
+/// writing a loopback URL into a WSL distribution's config installs a hook that
+/// fires on every tool call and never arrives. An environment
+/// [AgentHookEndpoint] cannot reach is **refused here as well as skipped by the
+/// caller**, so a mistake upstream cannot put a dead URL in somebody's file.
 class AgentHookInstaller {
-  const AgentHookInstaller();
+  const AgentHookInstaller({this.replace = _replaceFile});
+
+  /// How staged content is moved onto the real config. Injectable because the
+  /// failure path is the guarantee: a rename cannot be made to fail on demand,
+  /// and "an interrupted install leaves a config the agent can still parse" is
+  /// otherwise a claim with no test behind it.
+  final Future<void> Function(File staged, File destination) replace;
 
   /// Writes one hook entry per event the descriptor declares. Returns `false`
   /// when the agent has no hook configuration to write into. Throws
@@ -34,9 +48,11 @@ class AgentHookInstaller {
     required AgentDescriptor descriptor,
     required String storeHome,
     required AgentHookEndpoint endpoint,
+    required EnvironmentKind environment,
   }) async {
     final spec = descriptor.hooks;
     if (spec == null) return false;
+    if (!endpoint.reaches(environment)) return false;
 
     await _rewrite(descriptor, storeHome, (hooks) {
       var changed = false;
@@ -51,7 +67,8 @@ class AgentHookInstaller {
           descriptor: descriptor,
           event: event,
           endpoint: endpoint,
-        );
+          environment: environment,
+        )!;
         if (_alreadyCurrent(entries, command)) continue;
         hooks[event] = [
           ..._withoutOurs(entries),
@@ -99,14 +116,27 @@ class AgentHookInstaller {
   }
 
   /// The command line an agent runs for [event]: post the hook payload from
-  /// stdin to the loopback endpoint, bounded so a stopped app costs nothing.
-  String hookCommand({
+  /// stdin to the endpoint address for [environment], bounded so a stopped app
+  /// costs nothing. `null` when nothing this app binds is reachable from there.
+  ///
+  /// It names no path of its own — only `curl`, a URL and a header — so the one
+  /// string is equally valid in a Windows shell and in a distribution's `sh`.
+  /// The token is base64url (`A-Za-z0-9-_=`) and both the header and the URL
+  /// are double-quoted, so the `&` between query parameters cannot background
+  /// the command and nothing in it is expanded.
+  String? hookCommand({
     required AgentDescriptor descriptor,
     required String event,
     required AgentHookEndpoint endpoint,
+    required EnvironmentKind environment,
   }) {
-    final uri = endpoint
-        .uriFor(agentId: descriptor.id, event: event)
+    final base = endpoint.uriFor(
+      agentId: descriptor.id,
+      event: event,
+      environment: environment,
+    );
+    if (base == null) return null;
+    final uri = base
         .replace(
           queryParameters: {
             'agent': descriptor.id,
@@ -147,8 +177,34 @@ class AgentHookInstaller {
       spec.configKey,
       jsonEncode(hooks),
     );
-    await file.writeAsString(updated, flush: true);
+    await _writeAtomically(file, updated);
     return true;
+  }
+
+  /// Stages [contents] beside [file] and moves it into place.
+  ///
+  /// A plain `writeAsString` truncates the config first, so a process killed
+  /// mid-write leaves an agent that will not start — and this now writes across
+  /// a `\\wsl.localhost` share as well as to local disk, where a write is
+  /// slower and the window is wider. Staging inverts that: the only step that
+  /// touches the real file is a rename, and a failed rename leaves the config
+  /// exactly as the user's editor left it.
+  Future<void> _writeAtomically(File file, String contents) async {
+    final staged = File('${file.path}.chitragupta-tmp');
+    await staged.writeAsString(contents, flush: true);
+    try {
+      await replace(staged, file);
+    } finally {
+      // Never left behind, whichever way the move went: a stray file in
+      // somebody's `.claude` directory is litter we would have to explain.
+      if (staged.existsSync()) {
+        try {
+          staged.deleteSync();
+        } on FileSystemException {
+          // Nothing more to try, and it must not mask the real failure.
+        }
+      }
+    }
   }
 
   /// [entries] with our own entries removed. Everything else is carried over
@@ -183,3 +239,11 @@ class AgentHookInstaller {
     );
   }
 }
+
+/// Move [staged] onto [destination], replacing it.
+///
+/// Verified over `\\wsl.localhost\<distro>\home\<user>` as well as on local
+/// disk: the moved file lands owned by the distribution's user with mode 644,
+/// which is what an agent inside that distribution has to be able to read.
+Future<void> _replaceFile(File staged, File destination) =>
+    staged.rename(destination.path);
