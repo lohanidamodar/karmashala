@@ -9,6 +9,7 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
@@ -189,7 +190,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///
   /// A shell (or a TUI) naming its own window is the strongest signal there is
   /// about what a plain terminal is doing, which is why it outranks the
-  /// directory. Agent panes are the exception — see [_titleForPane].
+  /// directory. Agent panes are the exception — see [_titleForPane], and so is
+  /// a pane merely reciting the launcher we started it with — see
+  /// [_namesLauncher], which is why titles are filtered on the way *in* rather
+  /// than on the way out.
   final Map<String, String> _oscTitles = {};
 
   /// Resolved tab labels, cleared on every publish.
@@ -1101,15 +1105,38 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // own window — and `terminal` is the `late final` whose first read parses
     // the stored scrollback, which is the cost restore exists to avoid.
     if (instance is! DormantTerminalInstance) {
-      instance.terminal.onTitleChange = (title) => _onPaneTitle(paneId, title);
+      // Resolved once per pane and captured, not per title: a TUI that repaints
+      // its title every frame must not rebuild a launch every frame.
+      final launcher = _launcherExecutable(instance);
+      instance.terminal.onTitleChange = (title) =>
+          _onPaneTitle(paneId, title, launcher);
     }
   }
 
+  /// The executable this pane's process was started *through*, or `null` when
+  /// nothing was put in front of it.
+  ///
+  /// Asked of `ptyLaunchFor` — the same builder that produced the launch — so
+  /// the name refused as a title cannot drift from the name actually spawned.
+  /// Taken in the Windows reading of the profile on purpose: an image path
+  /// arriving as a window title is a ConPTY behaviour, and on a POSIX host
+  /// there is no wrapper for a pane to be named after.
+  String? _launcherExecutable(TerminalInstance instance) {
+    // An agent pane never consults OSC at all — see [_titleForPane].
+    if (instance.agentLaunch != null) return null;
+    final profile = terminalProfileFromId(instance.profileId);
+    return profile == null ? null : ptyLaunchFor(profile).executable;
+  }
+
   /// A pane named its own window (OSC 0 or 2).
-  void _onPaneTitle(String paneId, String title) {
+  void _onPaneTitle(String paneId, String title, String? launcher) {
     final trimmed = title.trim();
     final current = _oscTitles[paneId];
     if (trimmed.isEmpty ? current == null : current == trimmed) return;
+    // Dropped on the way in rather than filtered on the way out: a title that
+    // says nothing leaves the pane called whatever it was called before, and
+    // costs no publish at all.
+    if (_namesLauncher(trimmed, launcher)) return;
     if (trimmed.isEmpty) {
       _oscTitles.remove(paneId);
     } else {
@@ -1292,6 +1319,44 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (context == null) return false;
     return context.findAncestorWidgetOfExactType<EditableText>() != null;
   }
+}
+
+/// Whether [title] is a pane reciting the program we launched rather than
+/// saying anything about the work going on in it.
+///
+/// ConPTY hands the child's image path through as a pane's window title, so a
+/// WSL pane opens announcing itself as `C:\Windows\System32\wsl.exe` — the
+/// wrapper this app put in front of the shell, and the one thing about the pane
+/// the user already knows.
+///
+/// Two conditions, and it takes both to stay narrow. The title has to be an
+/// absolute path *and nothing else*, which leaves `user@host: /home/me/src` and
+/// a bare `wsl` alone — those are real titles a real shell sends. And the file
+/// it names has to be [launcher] itself, so a pane naming some other path is
+/// still believed. Compared case-insensitively, because the path comes from
+/// Windows and its casing is not ours to predict.
+bool _namesLauncher(String title, String? launcher) {
+  if (launcher == null || !_isAbsolutePath(title)) return false;
+  return _basename(title).toLowerCase() == _basename(launcher).toLowerCase();
+}
+
+/// Whether [path] is rooted — a drive (`C:\…`), a UNC share (`\\…`) or POSIX
+/// (`/…`).
+bool _isAbsolutePath(String path) {
+  if (path.startsWith('/') || path.startsWith('\\')) return true;
+  if (path.length < 3 || path[1] != ':') return false;
+  if (path[2] != '\\' && path[2] != '/') return false;
+  final drive = path.codeUnitAt(0) | 0x20;
+  return drive >= 0x61 && drive <= 0x7a;
+}
+
+/// The last segment of [path], for either separator — a Windows-first app has
+/// both, often in the same pane.
+String _basename(String path) {
+  final slash = path.lastIndexOf('/');
+  final backslash = path.lastIndexOf('\\');
+  final at = slash > backslash ? slash : backslash;
+  return at < 0 ? path : path.substring(at + 1);
 }
 
 final terminalSessionsControllerProvider =

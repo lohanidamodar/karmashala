@@ -188,6 +188,103 @@ void main() {
       expect(controller.titleForTab(tabId), 'vim README.md');
     });
 
+    test('a title naming the launcher we put in front of the shell is junk', () {
+      // ConPTY hands the child's image path through as the pane's first OSC
+      // window title, so a WSL pane opens calling itself
+      // `C:\Windows\System32\wsl.exe` — the wrapper this app added, never the
+      // work. The directory is what the user asked to see.
+      final tabId = controller.openTab(
+        archLinux,
+        workingDirectory: '/home/me/src/chitragupta',
+      );
+
+      writeTitle(controller, container, r'C:\Windows\System32\wsl.exe');
+
+      expect(controller.titleForTab(tabId), 'src/chitragupta');
+    });
+
+    test('the Windows shells are rejected by the same rule', () {
+      final powerShell = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\chitragupta',
+      );
+      writeTitle(
+        controller,
+        container,
+        r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
+      );
+      expect(controller.titleForTab(powerShell), 'src/chitragupta');
+
+      final cmd = controller.openTab(
+        TerminalProfile.commandPrompt,
+        workingDirectory: r'C:\src\chitragupta',
+      );
+      writeTitle(controller, container, r'C:\Windows\System32\cmd.exe');
+      expect(controller.titleForTab(cmd), 'src/chitragupta');
+    });
+
+    test('a title that merely contains a path is a real title', () {
+      final tabId = controller.openTab(
+        archLinux,
+        workingDirectory: '/home/me/src/chitragupta',
+      );
+
+      writeTitle(controller, container, 'me@host: ~/src/app');
+
+      expect(controller.titleForTab(tabId), 'me@host: ~/src/app');
+    });
+
+    test('a path that is not the executable we launched is a real title', () {
+      final tabId = controller.openTab(
+        archLinux,
+        workingDirectory: '/home/me/src/chitragupta',
+      );
+
+      // A shell reporting its directory, which is a path and nothing else. The
+      // rule is deliberately narrow enough to leave it alone.
+      writeTitle(controller, container, '/home/me/src/app');
+
+      expect(controller.titleForTab(tabId), '/home/me/src/app');
+    });
+
+    test('a bare program name is a real title', () {
+      final tabId = controller.openTab(
+        archLinux,
+        workingDirectory: '/home/me/src/chitragupta',
+      );
+
+      // Only an absolute path is the launcher naming itself; a TUI is free to
+      // call itself after a program.
+      writeTitle(controller, container, 'wsl');
+
+      expect(controller.titleForTab(tabId), 'wsl');
+    });
+
+    test('a launcher path arriving later does not clobber a real title', () {
+      final tabId = controller.openTab(
+        archLinux,
+        workingDirectory: '/home/me/src/chitragupta',
+      );
+
+      writeTitle(controller, container, 'vim README.md');
+      writeTitle(controller, container, r'C:\Windows\System32\wsl.exe');
+
+      expect(controller.titleForTab(tabId), 'vim README.md');
+    });
+
+    test('a rejected title does not republish', () {
+      controller.openTab(archLinux, workingDirectory: '/home/me/src');
+      final before = container.read(terminalSessionsControllerProvider);
+
+      writeTitle(controller, container, r'C:\Windows\System32\wsl.exe');
+
+      expect(
+        container.read(terminalSessionsControllerProvider),
+        same(before),
+        reason: 'a title nothing acts on must not rebuild the workspace',
+      );
+    });
+
     test('an agent session outranks the title the agent set for itself', () {
       // Claude Code and Codex both name their own window; letting that win
       // would put the rename back out of reach, which is the bug.
@@ -214,4 +311,28 @@ void main() {
       expect(controller.titleForTab(tabId), endsWith(' (2)'));
     });
   });
+}
+
+/// A WSL profile, the pane that reported the bug.
+const archLinux = TerminalProfile(
+  id: 'wsl:archlinux',
+  label: 'archlinux (WSL)',
+  shell: TerminalShell.wsl,
+  wslDistribution: 'archlinux',
+);
+
+/// Makes the active tab's only pane name its own window with OSC 2, the way a
+/// shell's prompt hook, a TUI or ConPTY itself does.
+void writeTitle(
+  TerminalSessionsController controller,
+  ProviderContainer container,
+  String title,
+) {
+  final pane = container
+      .read(terminalSessionsControllerProvider)
+      .activeTab!
+      .layout
+      .panes
+      .single;
+  controller.instanceFor(pane)!.terminal.write('\x1b]2;$title\x07');
 }
