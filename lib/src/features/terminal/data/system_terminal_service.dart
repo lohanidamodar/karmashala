@@ -4,6 +4,8 @@ import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../agents/domain/agent_registry.dart';
 import '../../settings/domain/permission_mode.dart';
+import '../domain/launch_context.dart';
+import 'pty_launch.dart';
 
 /// A standalone terminal emulator installed on the host that we can launch
 /// externally (as opposed to the in-app PTY tabs).
@@ -164,10 +166,11 @@ class SystemTerminalService {
           ...command,
         ];
       case SystemTerminalKind.powerShell:
-        final invocation = '& ${command.map(_quotePowerShell).join(' ')}';
+        final invocation =
+            '& ${command.map(quotePowerShellArgument).join(' ')}';
         final inner = cwd == null
             ? invocation
-            : 'Set-Location -LiteralPath ${_quotePowerShell(cwd)}; '
+            : 'Set-Location -LiteralPath ${quotePowerShellArgument(cwd)}; '
                   '$invocation';
         return ['-NoExit', '-Command', inner];
       case SystemTerminalKind.cmd:
@@ -181,8 +184,6 @@ class SystemTerminalService {
         return command;
     }
   }
-
-  String _quotePowerShell(String value) => "'${value.replaceAll("'", "''")}'";
 
   String _quoteCmd(String value) => '"${value.replaceAll('"', '""')}"';
 }
@@ -257,16 +258,15 @@ List<String> resumeCommandLine({
     ...permissionArgsFor(cli, permissionMode),
     ...resumeArgs,
   ];
-  if (environment.wslDistribution != null) {
-    return [
-      'wsl.exe',
-      '-d',
-      environment.wslDistribution!,
-      '--cd',
-      cwd.path,
-      '--',
-      ...base,
-    ];
-  }
-  return base;
+  // The environment decides the wrapper, in the one place that decides it for
+  // every surface. Which shell the external terminal itself is (PowerShell,
+  // cmd, ...) is that terminal's own convention and is applied by [_argsFor].
+  return wrapForExternalTerminal(
+    ShellCommand(
+      executable: base.first,
+      arguments: base.sublist(1),
+      workingDirectory: cwd.path,
+    ),
+    LaunchContext.forEnvironment(environment.wslDistribution),
+  );
 }

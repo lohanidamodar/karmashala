@@ -14,7 +14,9 @@ import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/data/pty_launch.dart';
 import '../../terminal/domain/agent_pane_launch.dart';
+import '../../terminal/domain/launch_context.dart';
 import '../data/session_repository_dao.dart';
 import '../domain/session.dart';
 import '../domain/session_attribution.dart';
@@ -679,17 +681,16 @@ class SessionLauncher {
       ),
     ];
     final distro = environment.wslDistribution;
-    final command = distro == null
-        ? agentCommand
-        : [
-            'wsl.exe',
-            '-d',
-            distro,
-            '--cd',
-            workingDirectory.path,
-            '--',
-            ...agentCommand,
-          ];
+    // Same wrapper decision as the pane and the resume paths, from the same
+    // function: the environment says whether the line has to cross into WSL.
+    final command = wrapForExternalTerminal(
+      ShellCommand(
+        executable: agentCommand.first,
+        arguments: agentCommand.sublist(1),
+        workingDirectory: workingDirectory.path,
+      ),
+      LaunchContext.forEnvironment(distro),
+    );
     await _ref
         .read(systemTerminalServiceProvider)
         .launch(
