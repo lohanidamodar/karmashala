@@ -49,14 +49,20 @@ class CompanionSettingsScreen extends ConsumerWidget {
 
     if (pairing == null) {
       // The shell shows the pairing flow before the tabs exist, so this is
-      // only reachable in the moment after an unpair.
-      return Center(
-        child: Text(
-          'Not paired.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
+      // only reachable in the moment after an unpair — exactly when a relay
+      // may need changing before typing the next code.
+      return ListView(
+        padding: const EdgeInsets.all(Insets.md),
+        children: [
+          Text(
+            'Not paired.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
-        ),
+          const SizedBox(height: Insets.lg),
+          const _PairingRelayField(),
+        ],
       );
     }
 
@@ -160,6 +166,8 @@ class CompanionSettingsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: Insets.lg),
+        const _PairingRelayField(),
+        const SizedBox(height: Insets.lg),
         OutlinedButton.icon(
           onPressed: () => _unpair(context, ref),
           icon: const Icon(AppIcons.linkBreak, size: 14),
@@ -172,6 +180,101 @@ class CompanionSettingsScreen extends ConsumerWidget {
           'phone there cuts it off immediately.',
           style: theme.textTheme.labelSmall?.copyWith(
             color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The relay a typed pairing code dials — the code itself carries only the
+/// secret, so the relay must be this phone's own setting (default: the same
+/// relay the desktop ships with). LAN pairing works even when it is wrong.
+class _PairingRelayField extends ConsumerStatefulWidget {
+  const _PairingRelayField();
+
+  @override
+  ConsumerState<_PairingRelayField> createState() => _PairingRelayFieldState();
+}
+
+class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
+  final _relay = TextEditingController();
+  String? _error;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final url = await ref.read(companionGatewayProvider).pairingRelay();
+    if (!mounted) return;
+    setState(() {
+      _relay.text = url.toString();
+      _loaded = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _relay.dispose();
+    super.dispose();
+  }
+
+  Future<void> _apply(String text) async {
+    final gateway = ref.read(companionGatewayProvider);
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      // Empty returns to the default, and the field shows what that is.
+      await gateway.setPairingRelay(null);
+      if (!mounted) return;
+      setState(() {
+        _relay.text = kDefaultCompanionRelayUrl;
+        _error = null;
+      });
+      return;
+    }
+    final parsed = Uri.tryParse(trimmed);
+    if (parsed == null || !parsed.hasScheme) {
+      setState(() => _error = 'Enter a full URL, like wss://relay.example.com');
+      return;
+    }
+    await gateway.setPairingRelay(parsed);
+    if (mounted) setState(() => _error = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PAIRING RELAY',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: Insets.xs),
+        TextField(
+          controller: _relay,
+          enabled: _loaded,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: _apply,
+          onEditingComplete: () => _apply(_relay.text),
+          style: theme.textTheme.bodySmall?.copyWith(fontFamily: kMonoFamily),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            hintText: kDefaultCompanionRelayUrl,
+            helperText:
+                'Used when pairing with a typed code (the QR names its own). '
+                'Leave empty for the default.',
+            helperMaxLines: 3,
+            errorText: _error,
           ),
         ),
       ],

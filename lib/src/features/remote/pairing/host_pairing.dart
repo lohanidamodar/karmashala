@@ -117,14 +117,23 @@ class HostPairingSession {
         deviceKey: key,
         role: ChannelRole.host,
       );
-      transport.send(
-        await _channel!.seal(
-          PairingMessage.encodeConfirm(
-            hostName: hostName,
-            capabilities: payload.capabilities,
-          ),
-        ),
+      final confirm = PairingMessage.encodeConfirm(
+        hostName: hostName,
+        capabilities: payload.capabilities,
+        hostId: hello.needsHostIdentity ? payload.hostId : null,
       );
+      if (hello.needsHostIdentity) {
+        // Typed-code phone: it cannot derive the id-bound device key yet, so
+        // the confirm rides a key derived from the secret alone and carries
+        // the host id, which the ack/done round-trip then proves.
+        final confirmChannel = await SealedChannel.forDevice(
+          deviceKey: await derivePairingConfirmKey(payload.secret),
+          role: ChannelRole.host,
+        );
+        transport.send(await confirmChannel.seal(confirm));
+      } else {
+        transport.send(await _channel!.seal(confirm));
+      }
       return;
     }
 

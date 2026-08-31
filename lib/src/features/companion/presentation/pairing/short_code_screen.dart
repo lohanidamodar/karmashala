@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/design_tokens.dart';
 import '../../client/companion_gateway.dart';
+import '../../client/pairing_input.dart';
+import 'pairing_progress_screen.dart';
 
-/// The QR fallback: paste the pairing code copied from the desktop.
+/// The QR fallback: type the code shown under the desktop's QR, or paste the
+/// full pairing payload — both are sniffed apart by the gateway.
 class ShortCodeScreen extends ConsumerStatefulWidget {
   const ShortCodeScreen({super.key});
 
@@ -26,6 +29,19 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
   Future<void> _pair() async {
     final code = _code.text.trim();
     if (_busy || code.isEmpty) return;
+    if (classifyPairingInput(code) != PairingInputKind.unrecognised) {
+      // A real code or payload: leave the input and narrate the attempt.
+      setState(() => _error = null);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PairingProgressScreen(
+            attempt: (gateway) => gateway.pairWithCode(code),
+          ),
+        ),
+      );
+      return;
+    }
+    // Not code-shaped: let the gateway refuse it in words, inline.
     setState(() {
       _busy = true;
       _error = null;
@@ -56,8 +72,9 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'On the desktop\'s pairing dialog, press "Copy pairing '
-                'code" and paste it here. Codes expire after five minutes.',
+                "Type the code shown under the desktop's QR "
+                '(like K7QM-3X2W-…), or paste its full pairing payload. '
+                'Codes expire after five minutes.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -74,7 +91,7 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),
-                  hintText: 'Paste the pairing code',
+                  hintText: 'Type or paste the pairing code',
                   counterText: '',
                   errorText: _error,
                   errorMaxLines: 4,

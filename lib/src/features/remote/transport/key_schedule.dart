@@ -128,6 +128,48 @@ Future<List<RendezvousId>> rendezvousWindow(
   ];
 }
 
+/// Bytes in a typed pairing code's secret: 160 bits — full entropy, so unlike
+/// a short PAKE code it cannot be brute-forced and needs no SPAKE2.
+const int kTypedCodeSecretBytes = 20;
+
+/// Expands a typed code's 20-byte secret into the 32-byte pairing secret the
+/// QR payload carries — one root secret, both redemption paths.
+Future<SecretKeyData> derivePairingSecret(List<int> codeSecret) {
+  if (codeSecret.length < kMinPairingSecretBytes) {
+    throw ArgumentError.value(
+      codeSecret.length,
+      'codeSecret',
+      'must be at least $kMinPairingSecretBytes bytes',
+    );
+  }
+  return _derive(
+    ikm: codeSecret,
+    info: 'pairing-secret'.codeUnits,
+    length: kDeviceKeyBytes,
+  );
+}
+
+/// The pairing rendezvous for one pairing secret. Carried in the QR payload;
+/// a typed-code phone, which has only the secret, derives it instead.
+Future<RendezvousId> derivePairingRendezvous(List<int> pairingSecret) async {
+  final key = await _derive(
+    ikm: pairingSecret,
+    info: 'pairing-rendezvous'.codeUnits,
+    length: RendezvousId.lengthInBytes,
+  );
+  return RendezvousId(Uint8List.fromList(key.bytes));
+}
+
+/// Seals the host's pairing confirm for a phone that does not yet know the
+/// host id (the typed-code path): derived from the secret alone, so opening
+/// it proves secret possession before the id-bound device key can exist.
+Future<SecretKeyData> derivePairingConfirmKey(List<int> pairingSecret) =>
+    _derive(
+      ikm: pairingSecret,
+      info: 'pairing-confirm'.codeUnits,
+      length: kDeviceKeyBytes,
+    );
+
 Future<SecretKeyData> _derive({
   required List<int> ikm,
   required Iterable<int> info,

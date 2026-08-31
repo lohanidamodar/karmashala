@@ -13,6 +13,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:chitragupta/src/features/remote/pairing/pairing_code.dart';
 import 'package:chitragupta/src/features/remote/protocol.dart';
 import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
 import 'package:chitragupta/src/features/remote/transport/sealed_channel.dart';
@@ -25,6 +26,7 @@ const _nonceHexes = [
   '303132333435363738393a3b3c3d3e3f4041424344454647',
   '505152535455565758595a5b5c5d5e5f6061626364656667',
 ];
+const _typedCodeSecretHex = '000102030405060708090a0b0c0d0e0f10111213';
 
 Future<void> main() async {
   final secret = _fromHex(_secretHex);
@@ -99,6 +101,9 @@ Future<void> main() async {
     'deviceKey': _hex(deviceKey.bytes),
     'generations': generations,
     'frames': frames,
+    // The typed-code chain: code secret → pairing secret → rendezvous and
+    // confirm key. Both ends must derive these identically.
+    'pairingCode': await _pairingCodeVectors(),
   };
 
   final file = File('test/features/remote/remote_test_vectors.json');
@@ -106,6 +111,22 @@ Future<void> main() async {
     '${const JsonEncoder.withIndent('  ').convert(vectors)}\n',
   );
   stdout.writeln('wrote ${file.path}');
+}
+
+Future<Map<String, Object?>> _pairingCodeVectors() async {
+  final codeSecret = _fromHex(_typedCodeSecretHex);
+  final pairingSecret = await derivePairingSecret(codeSecret);
+  return {
+    'codeSecret': _typedCodeSecretHex,
+    'code': PairingCode.encode(codeSecret),
+    'pairingSecret': _hex(pairingSecret.bytes),
+    'pairingRendezvous': (await derivePairingRendezvous(
+      pairingSecret.bytes,
+    )).value,
+    'confirmKey': _hex(
+      (await derivePairingConfirmKey(pairingSecret.bytes)).bytes,
+    ),
+  };
 }
 
 String _hex(List<int> bytes) =>

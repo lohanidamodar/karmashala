@@ -46,10 +46,13 @@ class CompanionPairingClient {
   /// Dials the payload's relay unless [transport] supplies a link — the LAN
   /// path when discovery found the host, or a loopback in tests. A transport
   /// this method dialled it also closes; a supplied one stays the caller's.
+  /// [onConfirm] fires when the host's sealed confirm opens — the moment the
+  /// desktop is provably found — before the ack/done round-trip finishes.
   Future<CompanionPairing> pair(
     PairingPayload payload, {
     RemoteTransport? transport,
     Duration timeout = const Duration(seconds: 30),
+    void Function(String hostName, CapabilitySet capabilities)? onConfirm,
   }) async {
     if (!kSupportedVersions.contains(payload.version)) {
       throw const CompanionPairingException(
@@ -90,6 +93,7 @@ class CompanionPairingClient {
       final hostName = confirm['host'] is String
           ? confirm['host']! as String
           : '';
+      onConfirm?.call(hostName, capabilities);
 
       link.send(await channel.seal(PairingMessage.encodeAck()));
       await _awaitSealed(frames, channel, PairingMessage.done, timeout);
@@ -108,6 +112,106 @@ class CompanionPairingClient {
     } on TimeoutException {
       throw const CompanionPairingException(
         'the desktop did not answer — is the QR code still on screen?',
+      );
+    } finally {
+      await frames.cancel();
+      if (ownsTransport) await link.close();
+    }
+  }
+
+  /// Pairs from a typed code's secret alone (no payload).
+  ///
+  /// The pairing secret and rendezvous are HKDF-derived from [codeSecret];
+  /// [relay] is this phone's own configured relay (the code carries none) and
+  /// is what the stored pairing dials afterwards. The host's confirm arrives
+  /// sealed under a key derived from the secret alone and carries the host id
+  /// and grant; the ack/done round-trip under the id-bound device key then
+  /// proves both ends derived the same key before anything is persisted.
+  Future<CompanionPairing> pairWithTypedCode({
+    required Uint8List codeSecret,
+    required Uri relay,
+    RemoteTransport? transport,
+    Duration timeout = const Duration(seconds: 30),
+    void Function(String hostName, CapabilitySet capabilities)? onConfirm,
+  }) async {
+    final secret = Uint8List.fromList(
+      (await derivePairingSecret(codeSecret)).bytes,
+    );
+    final rendezvous = await derivePairingRendezvous(secret);
+    final ownsTransport = transport == null;
+    final link =
+        transport ??
+        RelayTransport.connect(relay: relay, rendezvous: rendezvous);
+    final frames = StreamIterator<Uint8List>(link.frames);
+    try {
+      final confirmChannel = await SealedChannel.forDevice(
+        deviceKey: await derivePairingConfirmKey(secret),
+        role: ChannelRole.companion,
+      );
+
+      link.send(LinkHello(rendezvous).encode());
+      link.send(
+        PairHello(
+          deviceId: deviceId,
+          name: deviceName,
+          needsHostIdentity: true,
+        ).encode(),
+      );
+
+      final confirm = await _awaitSealed(
+        frames,
+        confirmChannel,
+        PairingMessage.confirm,
+        timeout,
+      );
+      final hostIdText = confirm['hostId'];
+      if (hostIdText is! String) {
+        throw const CompanionPairingException(
+          'this desktop is too old for typed pairing codes — scan its QR '
+          'code instead',
+        );
+      }
+      final DeviceId hostId;
+      try {
+        hostId = DeviceId.parse(hostIdText);
+      } on ProtocolException {
+        throw const CompanionPairingException(
+          'the desktop sent a malformed pairing confirmation',
+        );
+      }
+      final capabilities = CapabilitySet.fromJson(confirm['capabilities'] ?? 0);
+      final hostName = confirm['host'] is String
+          ? confirm['host']! as String
+          : '';
+      onConfirm?.call(hostName, capabilities);
+
+      final key = await deriveDeviceKey(
+        pairingSecret: secret,
+        hostId: hostId,
+        deviceId: deviceId,
+      );
+      final channel = await SealedChannel.forDevice(
+        deviceKey: key,
+        role: ChannelRole.companion,
+      );
+      link.send(await channel.seal(PairingMessage.encodeAck()));
+      await _awaitSealed(frames, channel, PairingMessage.done, timeout);
+
+      final pairing = CompanionPairing(
+        hostId: hostId,
+        deviceId: deviceId,
+        deviceKey: Uint8List.fromList(key.bytes),
+        capabilities: capabilities,
+        relay: relay,
+        generation: kFirstSessionGeneration,
+        hostName: hostName,
+      );
+      await pairing.save(store);
+      return pairing;
+    } on TimeoutException {
+      throw const CompanionPairingException(
+        'the desktop did not answer — is the pairing code still on screen, '
+        'and typed exactly?',
       );
     } finally {
       await frames.cancel();

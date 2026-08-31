@@ -184,16 +184,19 @@ class RemoteHostService {
   /// Shows a new QR: generates the payload, listens on its rendezvous over
   /// the relay (LAN links route by hello), and persists the device once the
   /// sealed round-trip proves the key. One pairing at a time; a new call
-  /// cancels the previous code.
+  /// cancels the previous code. [relay] overrides the service's own for this
+  /// one code — the pairing dialog's endpoint choice (local vs internet).
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
+    Uri? relay,
   }) async {
     if (!_started) {
       throw StateError('remote access is not running');
     }
     await cancelPairing();
-    final payload = PairingPayload.generate(
-      relay: relay,
+    final pairingRelay = relay ?? this.relay;
+    final payload = await PairingPayload.generateWithCode(
+      relay: pairingRelay,
       hostId: hostId,
       capabilities: capabilities,
     );
@@ -208,7 +211,7 @@ class RemoteHostService {
       },
     );
     _pairing = session;
-    final transport = _relayFactory(relay, payload.rendezvous);
+    final transport = _relayFactory(pairingRelay, payload.rendezvous);
     _pairingTransport = transport;
     session.attach(transport);
     unawaited(

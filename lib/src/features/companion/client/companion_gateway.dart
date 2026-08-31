@@ -32,8 +32,61 @@ class PairingException extends GatewayException {
   String toString() => 'PairingException: $message';
 }
 
+/// The relay a typed pairing code falls back to when the phone has not
+/// configured one. Mirrors the desktop's `kDefaultRelayUrl` (pinned equal by
+/// test) without dragging the desktop controller into the companion client.
+const String kDefaultCompanionRelayUrl = 'wss://relay.popupbits.com';
+
 /// Whether the phone can currently talk to the host it is paired with.
 enum CompanionLinkState { disconnected, connecting, connected }
+
+/// Where one pairing attempt currently stands — what the progress screen
+/// narrates. [failed] is terminal for the attempt; everything before walks
+/// forward in declaration order.
+enum CompanionPairingStage {
+  /// The scanned or typed input parsed as a Chitragupta code.
+  codeAccepted,
+
+  /// Dialling — the LAN and the relay race; first sealed answer wins.
+  searching,
+
+  /// The desktop was found and proved it holds the secret; keys are being
+  /// proven both ways before anything is persisted.
+  proving,
+
+  /// Done: the pairing is stored and the link is coming up.
+  paired,
+
+  /// The attempt is over and [CompanionPairingProgress.message] says why.
+  failed,
+}
+
+/// One step of one pairing attempt, as [CompanionGateway.pairingProgress]
+/// reports it. Events-only: subscribe before calling a pairing verb.
+class CompanionPairingProgress {
+  const CompanionPairingProgress({
+    required this.stage,
+    this.detail,
+    this.hostName,
+    this.capabilities,
+    this.message,
+  });
+
+  final CompanionPairingStage stage;
+
+  /// A short clause for the searching stage ("on this network and over the
+  /// relay"), when there is one.
+  final String? detail;
+
+  /// Known from the proving stage on — the host's self-reported name.
+  final String? hostName;
+
+  /// Known from the proving stage on — what the desktop granted.
+  final CapabilitySet? capabilities;
+
+  /// The user-fit failure sentence; only on [CompanionPairingStage.failed].
+  final String? message;
+}
 
 /// Which transport carries the link while it is connected: the direct LAN
 /// socket at home, or the relay from anywhere (design §3's priority order).
@@ -259,8 +312,20 @@ abstract interface class CompanionGateway {
   /// Pairs from a scanned QR payload (the JSON the desktop displays).
   Future<CompanionPairing> pairWithQr(String qrPayload);
 
-  /// Pairs from the 8-character short code shown on the desktop.
+  /// Pairs from what the user typed or pasted: the grouped base32 code shown
+  /// under the desktop's QR, or the full JSON payload — sniffed apart here.
   Future<CompanionPairing> pairWithCode(String shortCode);
+
+  /// Stage-by-stage news about the pairing attempt in flight. Events only —
+  /// no current value is replayed; listen before calling a pairing verb.
+  Stream<CompanionPairingProgress> get pairingProgress;
+
+  /// The relay a typed code will dial (the code itself carries none):
+  /// the configured one, or [kDefaultCompanionRelayUrl].
+  Future<Uri> pairingRelay();
+
+  /// Configures [pairingRelay]; null returns to the default.
+  Future<void> setPairingRelay(Uri? url);
 
   /// Forgets the pairing on this phone. (Revoking the phone's key on the host
   /// is the desktop's verb, not this one.)

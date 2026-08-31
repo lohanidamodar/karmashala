@@ -32,11 +32,13 @@ class _FakeAccess extends RemoteAccessController {
   @override
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
+    // Signature keeps up with the controller (loop 76's endpoint tabs).
+    Uri? relay,
   }) async {
     if (!pairingAllowed) throw StateError('Turn on remote access first.');
     final session = HostPairingSession(
       payload: PairingPayload.generate(
-        relay: Uri.parse('wss://relay.example.com'),
+        relay: relay ?? Uri.parse('wss://relay.example.com'),
         hostId: DeviceId.parse('11111111222222223333333344444444'),
         capabilities: capabilities,
       ),

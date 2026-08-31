@@ -66,5 +66,12 @@
       "plaintext": "",
       "frame": "505152535455565758595a5b5c5d5e5f60616263646566670eb86eb8de1955253c154fa62414722153301880dee3a35a"
     }
-  ]
+  ],
+  "pairingCode": {
+    "codeSecret": "000102030405060708090a0b0c0d0e0f10111213",
+    "code": "AAAQ-EAYE-AUDA-OCAJ-BIFQ-YDIO-B4IB-CEQT",
+    "pairingSecret": "689718aaed564b6f79443e2b3889058d4c37af8603ad3348c82b036090c680d1",
+    "pairingRendezvous": "29d2883584ce34bba9097f9e5d1505bb",
+    "confirmKey": "4f683cd8e249ff70edc09399134167538ff6e9d72a97639ca0da840eb33e57c8"
+  }
 }
