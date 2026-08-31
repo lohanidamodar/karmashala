@@ -74,11 +74,19 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
+  # tool/icon/write_ico.dart packs the tray .ico files.
+  image: ^4.8.0
 
-# App icon generation: `dart run flutter_launcher_icons` (regenerates the Windows
-# .ico and other platform icons from assets/icon/app_icon.png).
+# App icons: `flutter test tool/icon/render_icons.dart` draws the mark and its
+# Android layers, then `dart run flutter_launcher_icons` fans them out to every
+# platform.
 flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
+  android: "ic_launcher"
+  # Layers from tool/icon/render_icons.dart; regenerate them before this.
+  adaptive_icon_background: "assets/icon/app_icon_background.png"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  adaptive_icon_monochrome: "assets/icon/app_icon_monochrome.png"
   windows:
     generate: true
     image_path: "assets/icon/app_icon.png"
