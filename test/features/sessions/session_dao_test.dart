@@ -48,6 +48,44 @@ void main() {
     expect(loaded.worktree!.path, r'C:\src\demo\app-wt');
   });
 
+  test('a session with no recorded working directory reads back null', () {
+    // Null is "we never recorded it", not "the repository root". Every row
+    // written before schema v22 is this shape, and a reader that wants a
+    // directory falls back on its own rather than being handed a claim.
+    dao.insert(session());
+    expect(dao.getById('s1')!.workingDirectory, isNull);
+  });
+
+  test('round-trips the directory the agent runs in, with its environment', () {
+    const cwd = EnvironmentPath(
+      environmentId: 'wsl:Ubuntu',
+      path: '/home/me/src/demo/app/packages/ui',
+    );
+    dao.insert(session().copyWith(workingDirectory: cwd));
+    final loaded = dao.getById('s1')!;
+    expect(loaded.workingDirectory, cwd);
+    // And it is emphatically not the worktree: that field drives
+    // `use_worktree` and `WorktreeService.remove`, which deletes the directory.
+    expect(loaded.worktree, isNull);
+    expect(loaded.useWorktree, isFalse);
+  });
+
+  test('updateWorkingDirectory changes only the working directory', () {
+    dao.insert(session(title: 'Adopted'));
+    dao.updateWorkingDirectory(
+      's1',
+      const EnvironmentPath(
+        environmentId: 'windows',
+        path: r'C:\src\demo\app\tool',
+      ),
+    );
+    final loaded = dao.getById('s1')!;
+    expect(loaded.workingDirectory!.path, r'C:\src\demo\app\tool');
+    expect(loaded.title, 'Adopted');
+    expect(loaded.status, SessionStatus.created);
+    expect(loaded.worktree, isNull);
+  });
+
   test('updateStatus changes only the status', () {
     dao.insert(session());
     dao.updateStatus('s1', SessionStatus.running);

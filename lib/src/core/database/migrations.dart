@@ -39,6 +39,8 @@ typedef MigrationStep = void Function(Database db);
 ///   self-graded pass can be told from an independently checked one.
 /// * **v21** — Notes: an idea the user chose to keep out of a conversation
 ///   instead of acting on it, with the session and message it was taken from.
+/// * **v22** — T10 follow-up: the directory a session's agent actually runs
+///   in, which an adopted session knew and threw away.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -61,7 +63,37 @@ final Map<int, MigrationStep> schemaMigrations = {
   19: _migrateToV19,
   20: _migrateToV20,
   21: _migrateToV21,
+  22: _migrateToV22,
 };
+
+void _migrateToV22(Database db) {
+  // Where a session's agent is actually running (T10 follow-up).
+  //
+  // Two columns rather than one, matching `worktree_*`: a path divorced from
+  // the environment that owns it is not a location (constraints 7 & 8), so a
+  // WSL session records a WSL path against its WSL environment and nothing
+  // translates it implicitly on the way back out.
+  //
+  // Deliberately **not** `worktree`, which the schema already has and which
+  // means something narrower and more dangerous: `SessionLauncher` reads a
+  // non-null `worktree` as "this session runs in a git worktree" and sets
+  // `use_worktree` from it, and `SessionArchiveService` hands it to
+  // `WorktreeService.remove` — `git worktree remove`, which deletes the
+  // directory. An ordinary cwd stored there would eventually offer to delete
+  // the user's own checkout.
+  //
+  // Nullable and undefaulted, like `permission_mode` in v11 and for the same
+  // reason: a row written before this column existed has an **unknown**
+  // directory, not the repository root. Backfilling the root would assert that
+  // every one of those sessions started there, and the sessions this column
+  // exists for — the ones adopted out of a terminal pane — are exactly the ones
+  // most likely to have started somewhere else. Readers fall back to the
+  // repository root themselves, which is a fallback rather than a claim.
+  db.execute(
+    'ALTER TABLE sessions ADD COLUMN working_directory_environment_id TEXT;',
+  );
+  db.execute('ALTER TABLE sessions ADD COLUMN working_directory_path TEXT;');
+}
 
 void _migrateToV21(Database db) {
   // Notes: a thought the user chose to keep instead of acting on it.

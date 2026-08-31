@@ -21,6 +21,7 @@ class Session {
     required this.status,
     required this.createdAt,
     this.worktree,
+    this.workingDirectory,
     this.externalSessionId,
     this.parentSessionId,
     this.parentLink,
@@ -42,6 +43,25 @@ class Session {
   /// The worktree location when [useWorktree] is true and it has been created;
   /// otherwise `null`.
   final EnvironmentPath? worktree;
+
+  /// The directory this session's agent actually runs in.
+  ///
+  /// Deliberately **not** [worktree], which is a narrower and more dangerous
+  /// claim: a non-null [worktree] makes [useWorktree] true at launch and is
+  /// what `SessionArchiveService` hands to `WorktreeService.remove`, so an
+  /// ordinary cwd stored there would eventually offer to delete the user's own
+  /// checkout. A session may run in a plain subdirectory of its repository and
+  /// have no worktree at all — which is the ordinary case for a session adopted
+  /// out of a terminal pane.
+  ///
+  /// It matters because Claude Code and Codex key their conversation stores by
+  /// working directory: resuming in the wrong one may not find the
+  /// conversation, and starts a new one wearing this row's title.
+  ///
+  /// Null means **unknown**, never "the repository root": every row written
+  /// before schema v22 is null, and readers fall back to the root themselves
+  /// rather than being handed a claim about where the session started.
+  final EnvironmentPath? workingDirectory;
 
   final SessionStatus status;
   final DateTime createdAt;
@@ -110,6 +130,7 @@ class Session {
     String? title,
     bool? useWorktree,
     EnvironmentPath? worktree,
+    EnvironmentPath? workingDirectory,
     SessionStatus? status,
     DateTime? createdAt,
     String? externalSessionId,
@@ -127,6 +148,7 @@ class Session {
     title: title ?? this.title,
     useWorktree: useWorktree ?? this.useWorktree,
     worktree: worktree ?? this.worktree,
+    workingDirectory: workingDirectory ?? this.workingDirectory,
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
     externalSessionId: externalSessionId ?? this.externalSessionId,
@@ -148,6 +170,7 @@ class Session {
       other.title == title &&
       other.useWorktree == useWorktree &&
       other.worktree == worktree &&
+      other.workingDirectory == workingDirectory &&
       other.status == status &&
       other.createdAt == createdAt &&
       other.externalSessionId == externalSessionId &&
@@ -167,6 +190,7 @@ class Session {
     title,
     useWorktree,
     worktree,
+    workingDirectory,
     status,
     createdAt,
     externalSessionId,

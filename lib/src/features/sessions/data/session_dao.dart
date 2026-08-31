@@ -17,10 +17,12 @@ class SessionDao {
     _db.execute(
       'INSERT INTO sessions '
       '(id, repository_id, agent_installation_id, title, use_worktree, '
-      'worktree_environment_id, worktree_path, status, created_at, '
+      'worktree_environment_id, worktree_path, '
+      'working_directory_environment_id, working_directory_path, '
+      'status, created_at, '
       'external_session_id, parent_session_id, parent_link_kind, pane_id, '
       'surface, view, permission_mode, archived_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -29,6 +31,8 @@ class SessionDao {
         intFromBool(session.useWorktree),
         session.worktree?.environmentId,
         session.worktree?.path,
+        session.workingDirectory?.environmentId,
+        session.workingDirectory?.path,
         session.status.name,
         isoFromDate(session.createdAt),
         session.externalSessionId,
@@ -57,6 +61,21 @@ class SessionDao {
         session.status.name,
         session.id,
       ],
+    );
+  }
+
+  /// Records the directory this session's agent runs in.
+  ///
+  /// Its own statement, like [updatePaneId], and for the same reason: where a
+  /// session runs is learned once — at launch, or when a hand-started agent is
+  /// adopted out of a pane — and must never be able to carry another edit with
+  /// it. In particular it must never touch `worktree`, which drives
+  /// `use_worktree` and the archive service's `git worktree remove`.
+  void updateWorkingDirectory(String id, EnvironmentPath? directory) {
+    _db.execute(
+      'UPDATE sessions SET working_directory_environment_id = ?, '
+      'working_directory_path = ? WHERE id = ?;',
+      [directory?.environmentId, directory?.path, id],
     );
   }
 
@@ -226,6 +245,8 @@ class SessionDao {
   Session _fromRow(Map<String, Object?> row) {
     final worktreeEnv = row['worktree_environment_id'] as String?;
     final worktreePath = row['worktree_path'] as String?;
+    final cwdEnv = row['working_directory_environment_id'] as String?;
+    final cwdPath = row['working_directory_path'] as String?;
     return Session(
       id: row['id']! as String,
       repositoryId: row['repository_id']! as String,
@@ -234,6 +255,11 @@ class SessionDao {
       useWorktree: boolFromInt(row['use_worktree']),
       worktree: (worktreeEnv != null && worktreePath != null)
           ? EnvironmentPath(environmentId: worktreeEnv, path: worktreePath)
+          : null,
+      // Both halves or nothing: half a location is not one, and a path with no
+      // environment is the bare string this codebase refuses to store.
+      workingDirectory: (cwdEnv != null && cwdPath != null)
+          ? EnvironmentPath(environmentId: cwdEnv, path: cwdPath)
           : null,
       status: SessionStatus.values.byName(row['status']! as String),
       createdAt: dateFromIso(row['created_at']),
