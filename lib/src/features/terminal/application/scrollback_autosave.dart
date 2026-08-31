@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// How often live panes are re-snapshotted.
+/// How often live panes are re-snapshotted when everything is up to date.
 ///
 /// This is the trigger that actually matters: the app is a Windows desktop app
 /// with close-to-tray, so a window close terminates the process without the
@@ -10,14 +10,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// bounds the worst-case loss at 20 s of output.
 const Duration kScrollbackAutosaveInterval = Duration(seconds: 20);
 
-/// Schedules a repeating callback, returning a handle that [CancelSchedule] can
+/// How soon the next batch runs when the last tick left panes unsaved.
+///
+/// The app's scale target is 100 live terminals (`docs/ARCHITECTURE.md`), and a
+/// tick is deliberately capped at [kScrollbackAutosaveBudget] rather than
+/// allowed to walk every dirty pane — so with a hundred busy panes one tick
+/// cannot get through them all. Coming back in a second drains the backlog at a
+/// bounded rate instead of doing it all at once: the UI isolate gives up ~8 ms
+/// per second rather than freezing for 645 ms every 20.
+const Duration kScrollbackAutosaveCatchUp = Duration(seconds: 1);
+
+/// Most main-isolate time one autosave tick may spend.
+///
+/// Half a 60 Hz frame. The point is that the cost of a tick is **constant in
+/// the number of panes**: whatever is not saved this time stays dirty and is
+/// picked up by the catch-up tick.
+const Duration kScrollbackAutosaveBudget = Duration(milliseconds: 8);
+
+/// Schedules a one-shot callback, returning a handle that [CancelSchedule] can
 /// stop. Injected so tests drive the policy with no real clock.
-typedef RepeatingSchedule =
-    Object Function(Duration interval, void Function() callback);
+typedef DelayedSchedule =
+    Object Function(Duration delay, void Function() callback);
 
 typedef CancelSchedule = void Function(Object handle);
 
-/// Runs [onTick] on an interval while started.
+/// Runs [onTick] on an interval while started, coming back sooner when a tick
+/// reports it left work behind.
 ///
 /// Thin on purpose: the interesting logic (which panes are dirty, what gets
 /// written) belongs to the controller. This exists so that policy is testable
@@ -26,46 +44,69 @@ class ScrollbackAutosave {
   ScrollbackAutosave({
     required this.onTick,
     this.interval = kScrollbackAutosaveInterval,
-    RepeatingSchedule? schedule,
+    this.catchUpInterval = kScrollbackAutosaveCatchUp,
+    DelayedSchedule? schedule,
     CancelSchedule? cancel,
   }) : _schedule = schedule ?? _defaultSchedule,
        _cancel = cancel ?? _defaultCancel;
 
-  final void Function() onTick;
+  /// Runs one batch. Returns whether panes were left unsaved, which is what
+  /// decides how long until the next one.
+  final bool Function() onTick;
+
+  /// The idle cadence — used when a tick saved everything it found.
   final Duration interval;
-  final RepeatingSchedule _schedule;
+
+  /// The cadence used while a backlog remains.
+  final Duration catchUpInterval;
+
+  final DelayedSchedule _schedule;
   final CancelSchedule _cancel;
 
   Object? _handle;
+  bool _running = false;
 
-  bool get isRunning => _handle != null;
+  bool get isRunning => _running;
 
   void start() {
-    if (_handle != null) return;
-    _handle = _schedule(interval, onTick);
+    if (_running) return;
+    _running = true;
+    _arm(interval);
   }
 
   void stop() {
+    _running = false;
     final handle = _handle;
     if (handle == null) return;
     _handle = null;
     _cancel(handle);
   }
 
-  static Object _defaultSchedule(Duration interval, void Function() callback) =>
-      Timer.periodic(interval, (_) => callback());
+  void _arm(Duration delay) {
+    _handle = _schedule(delay, _fire);
+  }
+
+  void _fire() {
+    _handle = null;
+    if (!_running) return;
+    final more = onTick();
+    // Re-armed only after the tick, so a slow batch can never overlap itself.
+    if (_running) _arm(more ? catchUpInterval : interval);
+  }
+
+  static Object _defaultSchedule(Duration delay, void Function() callback) =>
+      Timer(delay, callback);
 
   static void _defaultCancel(Object handle) => (handle as Timer).cancel();
 }
 
 /// Builds the autosave for the sessions controller.
 ///
-/// Injected the same way the terminal instance factory is: a real
-/// `Timer.periodic` outlives the widget tree, which trips `flutter_test`'s
-/// "no pending timers" invariant, so widget tests override this with a
-/// scheduler that never fires.
+/// Injected the same way the terminal instance factory is: a real `Timer`
+/// outlives the widget tree, which trips `flutter_test`'s "no pending timers"
+/// invariant, so widget tests override this with a scheduler that never fires.
 typedef ScrollbackAutosaveFactory =
-    ScrollbackAutosave Function({required void Function() onTick});
+    ScrollbackAutosave Function({required bool Function() onTick});
 
 final scrollbackAutosaveFactoryProvider = Provider<ScrollbackAutosaveFactory>(
   (ref) =>

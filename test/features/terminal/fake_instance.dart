@@ -96,7 +96,7 @@ fakeTerminalOverrides({
     scrollbackAutosaveFactoryProvider.overrideWithValue(
       ({required onTick}) => ScrollbackAutosave(
         onTick: onTick,
-        schedule: (interval, callback) => Object(),
+        schedule: (delay, callback) => Object(),
         cancel: (_) {},
       ),
     ),

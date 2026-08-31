@@ -158,7 +158,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   late final ScrollbackAutosave _autosave = ref.read(
     scrollbackAutosaveFactoryProvider,
-  )(onTick: saveDirtyScrollback);
+  )(
+    onTick: () {
+      saveDirtyScrollback();
+      return hasDirtyScrollback;
+    },
+  );
 
   final _log = AppLogger.named('terminal');
 
@@ -595,19 +600,47 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Re-encodes only the panes whose buffers changed, returning the pane ids
-  /// written. This is the autosave tick.
-  List<String> saveDirtyScrollback() {
+  /// Whether any pane still owes a scrollback write.
+  ///
+  /// What tells [ScrollbackAutosave] to come back on its catch-up cadence
+  /// rather than its idle one.
+  bool get hasDirtyScrollback => _dirty.isNotEmpty;
+
+  /// Re-encodes the panes whose buffers changed, **for at most [budget] of
+  /// main-isolate time**, returning the pane ids written.
+  ///
+  /// This is the autosave tick, and the budget is the whole point of it. The
+  /// app's scale target is 100 live terminals (`docs/ARCHITECTURE.md`), and
+  /// saving every dirty pane on one tick is work proportional to *all* panes on
+  /// a timer — measured at 9 ms for one pane, 57 ms for ten and **645 ms for a
+  /// hundred** (`tool/benchmark/terminal_scale_bench.dart`), landing in a single
+  /// freeze on the UI isolate. Capping the batch makes a tick cost the same
+  /// whatever N is; whatever is left stays dirty and the autosave comes back in
+  /// a second for it, so the isolate gives up a bounded slice per second instead
+  /// of stalling every twenty.
+  ///
+  /// At least one pane is always written, so a pane that alone costs more than
+  /// the budget still makes progress rather than starving.
+  List<String> saveDirtyScrollback({
+    Duration budget = kScrollbackAutosaveBudget,
+  }) {
     final dao = _dao();
     if (dao == null || _dirty.isEmpty) return const [];
 
     final written = <String>[];
+    final spent = Stopwatch()..start();
     try {
       for (final paneId in _dirty.toList()) {
         final instance = _instances[paneId];
-        if (instance == null) continue;
+        if (instance == null) {
+          // A pane that has gone owes nothing; drop it rather than retrying it
+          // on every tick from here to shutdown.
+          _dirty.remove(paneId);
+          continue;
+        }
         dao.saveScrollback(paneId, _scrollbackOf(paneId, instance));
         written.add(paneId);
+        if (spent.elapsed >= budget) break;
       }
     } catch (error, stack) {
       _log.warning('Could not autosave terminal scrollback.', error, stack);
