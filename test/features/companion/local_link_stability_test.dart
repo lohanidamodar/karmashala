@@ -176,6 +176,7 @@ void main() {
       },
       requestTimeout: const Duration(seconds: 2),
       helloTimeout: const Duration(milliseconds: 400),
+      linkHealGrace: const Duration(milliseconds: 800),
       reconnectBackoff: backoff ?? fastBackoff(),
     );
     gateways.add(gateway);
@@ -352,5 +353,74 @@ void main() {
       lessThan(const Duration(seconds: 10)),
       reason: 'a relay on this machine is not an internet relay',
     );
+  });
+
+  test('a desktop too busy to answer one request keeps its link', timeout:
+      const Timeout(Duration(minutes: 3)), () async {
+    await startService();
+    final gateway = await pairedPhone();
+    final states = <CompanionLinkState>[];
+    final watch = gateway.linkStates.listen(states.add);
+    addTearDown(watch.cancel);
+
+    // The desktop is there and answering helloes; it is simply slow on this
+    // one call. Fifteen seconds of silence used to be read as a dead link.
+    final busy = Completer<void>();
+    fake.promptGate = busy;
+    await expectLater(
+      gateway.sendPrompt('s1', 'are you busy?'),
+      throwsA(isA<GatewayException>()),
+    );
+    // Long enough for the proof to run and for a teardown to have shown up.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    busy.complete();
+    fake.promptGate = null;
+    await watch.cancel();
+
+    expect(
+      states.where((s) => s != CompanionLinkState.connected),
+      isEmpty,
+      reason: 'one slow answer is not a broken link',
+    );
+    expect((await gateway.listSessions()).single.id, 's1');
+  });
+
+  test('a local relay that moves address takes its phone with it — no '
+      're-pairing, ever', timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+    await startService();
+    final gateway = await pairedPhone();
+    final pairedAt = DateTime.now();
+
+    // The desktop's LAN address moves under it: a DHCP renew, a Wi-Fi band
+    // switch, a VPN coming up. The relay is the same server on a new address.
+    final moved = await RelayServer.bind(
+      address: '127.0.0.1',
+      port: 0,
+      options: const RelayOptions(loneTimeout: loneTimeout),
+    );
+    addTearDown(moved.close);
+    final movedUri = Uri.parse('ws://127.0.0.1:${moved.port}');
+    await service!.updateRelays(localRelayUrl: movedUri, hostedEnabled: false);
+    await relay.close();
+
+    // Nothing is touched on the phone. It must find the desktop again on its
+    // own — the rendezvous comes from the device key, never from the URL, so
+    // an address is only ever a place to meet.
+    await awaitLink(
+      gateway,
+      CompanionLinkState.connected,
+      timeout: const Duration(seconds: 20),
+    );
+    expect(gateway.activeRelay, movedUri);
+    expect((await gateway.listSessions()).single.id, 's1');
+    expect(
+      gateway.pairing?.hostId?.value,
+      hostId.value,
+      reason: 'the same pairing throughout — an address move is not a re-pair',
+    );
+    expect(DateTime.now().difference(pairedAt), lessThan(
+      const Duration(seconds: 30),
+    ));
   });
 }

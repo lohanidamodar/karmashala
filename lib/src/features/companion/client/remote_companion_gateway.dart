@@ -73,6 +73,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     RelayTransportFactoryFn? relayFactory,
     this.requestTimeout = const Duration(seconds: 15),
     this.helloTimeout = const Duration(seconds: 8),
+    this.linkHealGrace = const Duration(seconds: 10),
     this.pairingTimeout = const Duration(seconds: 20),
     this.lan,
     this.pushTokenSource,
@@ -106,6 +107,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   final Duration requestTimeout;
   final Duration helloTimeout;
+
+  /// How long a transport that dropped is left to redial its own endpoint
+  /// before the gateway stops waiting and dials every saved path again.
+  final Duration linkHealGrace;
 
   /// The window one pairing attempt gets before both legs — LAN and relay —
   /// are declared failed together.
@@ -228,7 +233,8 @@ class RemoteCompanionGateway implements CompanionGateway {
   String? _trouble;
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
-  Timer? _lanHealTimer;
+  /// Runs while a dropped transport is being given its chance to come back.
+  Timer? _healTimer;
 
   /// Beacon hosts whose direct dial has failed since this phone last held a
   /// LAN link, by [LanPathScout.keyOf].
@@ -1304,7 +1310,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       if (_client == null) return;
       switch (state) {
         case TransportState.connected:
-          _cancelLanHeal();
+          _cancelHeal();
           if (!dropped) {
             _link.value = CompanionLinkState.connected;
             return;
@@ -1323,7 +1329,7 @@ class RemoteCompanionGateway implements CompanionGateway {
           if (_link.value == CompanionLinkState.connected) {
             _link.value = CompanionLinkState.connecting;
           }
-          _armLanHeal();
+          _armHeal();
         case TransportState.closed:
           _declareDead();
         case TransportState.idle:
@@ -1407,23 +1413,33 @@ class RemoteCompanionGateway implements CompanionGateway {
     _link.value = _link.value;
   }
 
-  /// A LAN link that dropped redials forever on its own — but the host may
-  /// simply be gone. Give it one attempt's grace, then declare the link dead
-  /// so the loop heals to the relay instead of showing "connecting" all day.
-  void _armLanHeal() {
+  /// A transport that dropped redials its OWN endpoint forever, and that
+  /// endpoint may be one nobody is at any more — the desktop's LAN address
+  /// moved under it, or the relay it was reached through went away. Nothing
+  /// else watches that: the re-proof only runs when a socket comes BACK, so a
+  /// transport stuck in `connecting` is a loop parked on a completer that
+  /// will never fire and a phone reading "Connecting…" for ever.
+  ///
+  /// So give the transport one grace period to heal itself, and then declare
+  /// the link dead. That costs nothing when it was a blip — the link is
+  /// already down when the timer fires — and it is what lets the loop re-read
+  /// the candidate set, which is where the desktop's NEW address is.
+  void _armHeal() {
     final scout = lan;
-    if (scout == null || _linkPath.value != CompanionLinkPath.lan) return;
-    _lanHealTimer ??= Timer(scout.attemptTimeout * 2, () {
-      _lanHealTimer = null;
+    final grace = _linkPath.value == CompanionLinkPath.lan && scout != null
+        ? scout.attemptTimeout * 2
+        : linkHealGrace;
+    _healTimer ??= Timer(grace, () {
+      _healTimer = null;
       if (_closed || _link.value == CompanionLinkState.connected) return;
-      onLog?.call('lan link did not heal; falling back to the relay');
+      onLog?.call('the link did not heal itself; dialling every path again');
       _declareDead();
     });
   }
 
-  void _cancelLanHeal() {
-    _lanHealTimer?.cancel();
-    _lanHealTimer = null;
+  void _cancelHeal() {
+    _healTimer?.cancel();
+    _healTimer = null;
   }
 
   Future<void> _recoverAfterConnect() async {
@@ -1448,7 +1464,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   Future<void> _teardownClient() async {
-    _cancelLanHeal();
+    _cancelHeal();
     final events = _clientEvents;
     _clientEvents = null;
     final states = _transportStates;
@@ -1813,8 +1829,22 @@ class RemoteCompanionGateway implements CompanionGateway {
       return await action();
     } on RemoteApiException catch (error) {
       if (error.code == null) {
-        // Nobody answered: the link is not what it claims to be. Re-dial.
-        _declareDead();
+        // Nobody answered inside the request timeout — and that is a fact
+        // about the REQUEST, not about the link.
+        //
+        // The relay disposes a rendezvous the moment either peer leaves, and
+        // closes both sockets doing it, so a transport that is still up means
+        // the desktop's socket is still at the other end. What a timeout
+        // means there is that the desktop is busy: the host serialises every
+        // frame for one device on a single chain (`_DeviceRuntime._chain`, so
+        // that `Envelope.seq` and the sealed sequence agree), so one slow
+        // binding call holds up everything behind it — including the hello a
+        // proof would send. Re-dialling cannot help that: the same runtime,
+        // with the same blocked chain, is still there afterwards. So the user
+        // gets the refusal and the link is left alone; a link that is really
+        // gone is found by the things that actually watch it — the heartbeat,
+        // the relay's own teardown, and the proof on resume.
+        onLog?.call('a request went unanswered; the link itself still holds');
         throw const GatewayException(_kUnreachable);
       }
       throw GatewayException(_sentenceFor(error));

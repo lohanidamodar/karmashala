@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:chitragupta/src/features/remote/application/host_bindings.dart';
@@ -21,6 +22,10 @@ class FakeRemoteBindings {
   /// When set, every prompt send throws it.
   Object? promptError;
 
+  /// When set, every prompt send waits on it — a desktop too busy to answer,
+  /// which is a different thing from a desktop that is gone.
+  Completer<void>? promptGate;
+
   late final RemoteHostBindings bindings = RemoteHostBindings(
     hostName: 'TestHost',
     listSessions: () => sessions.values.toList(),
@@ -35,6 +40,8 @@ class FakeRemoteBindings {
       );
     },
     sendPrompt: (sessionId, text) async {
+      final gate = promptGate;
+      if (gate != null) await gate.future;
       if (promptError != null) throw promptError!;
       prompts.add((sessionId: sessionId, text: text));
     },
