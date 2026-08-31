@@ -9,6 +9,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/application/remote_links.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/terminal_scroll.dart';
@@ -26,6 +27,7 @@ import '../../../app/shell/shell_shortcuts.dart';
 import 'command_history_sheet.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
+import 'terminal_pane_view.dart';
 import 'terminal_search_bar.dart';
 
 /// Everything the terminal surface can be asked to *do*, in one place.
@@ -406,43 +408,20 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 onStart: () => _sessions.startPane(paneId),
               ),
             Expanded(
-              child: TerminalView(
-                instance.terminal,
+              child: TerminalPaneView(
                 // Starting a pane swaps its instance in place; without a key
                 // the element would be reused and keep the disposed focus node.
                 key: ObjectKey(instance),
-                controller: instance.controller,
-                focusNode: instance.focusNode,
-                scrollController: instance.scrollController,
-                theme: terminalThemeFor(theme, _importedPalette()),
-                textStyle: TerminalStyle(
-                  fontSize: fontSize,
-                  fontFamily: kMonoFamily,
-                ),
-                // The grid's size is its own setting; the app-wide UI text
-                // scale must not compound onto it.
-                textScaler: TextScaler.noScaling,
-                padding: const EdgeInsets.all(Insets.sm),
-                autofocus: focused,
-                // Desktop uses the physical keyboard; this also avoids xterm
-                // opening a software text-input client, which on Windows fails
-                // with "Could not set client, view ID is null" and blanks the
-                // terminal.
-                hardwareKeyboardOnly: true,
+                instance: instance,
+                focused: focused,
+                fontSize: fontSize,
+                terminalTheme: terminalThemeFor(theme, _importedPalette()),
+                chordOverrides: chordOverrides,
                 onKeyEvent: _actions.onPaneKey,
-                // xterm's own shortcut manager runs after `onKeyEvent` and
-                // before `Terminal.keyInput`; its Windows defaults quietly took
-                // Ctrl+A and Ctrl+V from the shell. Ctrl+V is paste again, but
-                // declared — and so switchable in Settings, which is what the
-                // overrides are doing here.
-                shortcuts: terminalPaneShortcutsFor(chordOverrides),
                 // Right-click → copy selection / paste / end the session.
-                onSecondaryTapDown: (details, _) => _terminalMenu(
-                  context,
-                  details.globalPosition,
-                  paneId,
-                  instance,
-                ),
+                onSecondaryTapDown: (position) =>
+                    _terminalMenu(context, position, paneId, instance),
+                openUrl: ref.read(openExternalUrlProvider),
               ),
             ),
           ],
