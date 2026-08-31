@@ -8,6 +8,7 @@ import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
+import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -532,6 +533,44 @@ void main() {
       expect(stored.evidence!.verdict, EvidenceVerdict.passed);
       expect(stored.evidence!.label, '8 tests, 0 failed');
       expect(stored.evidence!.runId, 'run-1');
+      // Nobody named a producer, so the candidate says so rather than
+      // assuming the session that did the work also graded it.
+      expect(stored.evidence!.producerSessionId, isNull);
+      expect(stored.evidenceAttribution, VerdictAttribution.notRecorded);
+    });
+
+    test('who produced the verdict survives the round trip', () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final launched = await launchTwo(h);
+      final dao = ComparisonDao(h.db);
+      final candidate = launched.started.first.candidate!;
+
+      dao.updateEvidence(
+        candidate.id,
+        CandidateEvidence(
+          verdict: EvidenceVerdict.passed,
+          label: '8 tests, 0 failed',
+          runId: 'run-1',
+          producerSessionId: candidate.sessionId,
+        ),
+      );
+      final self = dao.getById(launched.comparison.id)!.candidates.first;
+      expect(self.evidence!.producerSessionId, candidate.sessionId);
+      expect(self.evidenceAttribution, VerdictAttribution.author);
+
+      dao.updateEvidence(
+        candidate.id,
+        const CandidateEvidence(
+          verdict: EvidenceVerdict.passed,
+          label: '8 tests, 0 failed',
+          runId: 'run-2',
+          producerSessionId: 'some-other-session',
+        ),
+      );
+      final checked = dao.getById(launched.comparison.id)!.candidates.first;
+      expect(checked.evidenceAttribution, VerdictAttribution.independent);
     });
 
     test('a note can be kept against a candidate', () async {

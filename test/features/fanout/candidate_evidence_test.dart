@@ -3,6 +3,7 @@ import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
 import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
 import 'package:chitragupta/src/features/verification/data/verification_dao.dart';
+import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_run.dart';
 import 'package:chitragupta/src/features/verification/domain/verification_target.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,11 +36,13 @@ void main() {
     String id, {
     required String? sessionId,
     required DateTime startedAt,
+    String? producedBySessionId,
   }) => VerificationRun(
     id: id,
     title: 'Run $id',
     target: const VerificationTarget.browser('http://localhost:3000'),
     sessionId: sessionId,
+    producedBySessionId: producedBySessionId,
     startedAt: startedAt,
     artifactDirectory: r'C:\runs\$id',
   );
@@ -114,5 +117,47 @@ void main() {
     );
 
     expect(lookup('s2'), isNull);
+  });
+
+  group('the verdict carries who produced it across the seam', () {
+    void finished(
+      String id, {
+      required String sessionId,
+      String? producedBySessionId,
+    }) {
+      dao.insertRun(
+        run(
+          id,
+          sessionId: sessionId,
+          producedBySessionId: producedBySessionId,
+          startedAt: DateTime.utc(2026, 1, 1),
+        ),
+      );
+      dao.finishRun(
+        id,
+        finishedAt: DateTime.utc(2026, 1, 1, 1),
+        verdict: VerificationVerdict.pass,
+        reason: 'it works',
+      );
+    }
+
+    test('a self-graded run arrives as a self-graded verdict', () {
+      finished('r1', sessionId: 's1', producedBySessionId: 's1');
+      final evidence = lookup('s1')!;
+      expect(evidence.producerSessionId, 's1');
+      expect(evidence.attributionFor('s1'), VerdictAttribution.author);
+    });
+
+    test('a run graded by another session arrives as independent', () {
+      finished('r1', sessionId: 's1', producedBySessionId: 's2');
+      expect(lookup('s1')!.attributionFor('s1'), VerdictAttribution.independent);
+    });
+
+    test('a run from before attribution arrives as not recorded', () {
+      finished('r1', sessionId: 's1');
+      final evidence = lookup('s1')!;
+      expect(evidence.producerSessionId, isNull);
+      expect(evidence.attributionFor('s1'), VerdictAttribution.notRecorded);
+    });
   });
 }
