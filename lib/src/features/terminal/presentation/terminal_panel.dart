@@ -375,6 +375,9 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     final theme = Theme.of(context);
     final instance = _sessions.instanceFor(paneId);
     if (instance == null) return const SizedBox.shrink();
+    final fontSize = ref.watch(
+      settingsControllerProvider.select((s) => s.terminalFontSize),
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -409,10 +412,13 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 focusNode: instance.focusNode,
                 scrollController: instance.scrollController,
                 theme: terminalThemeFor(theme, _importedPalette()),
-                textStyle: const TerminalStyle(
-                  fontSize: 13,
+                textStyle: TerminalStyle(
+                  fontSize: fontSize,
                   fontFamily: kMonoFamily,
                 ),
+                // The grid's size is its own setting; the app-wide UI text
+                // scale must not compound onto it.
+                textScaler: TextScaler.noScaling,
                 padding: const EdgeInsets.all(Insets.sm),
                 autofocus: focused,
                 // Desktop uses the physical keyboard; this also avoids xterm

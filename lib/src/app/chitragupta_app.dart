@@ -6,6 +6,7 @@ import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
 import 'shell/app_shell.dart';
 import 'theme/app_theme.dart';
+import 'theme/ui_text_scale.dart';
 
 /// Root application widget.
 ///
@@ -24,9 +25,16 @@ class ChitraguptaApp extends ConsumerWidget {
       settingsControllerProvider.select((s) => s.compactDensity),
     );
     final density = compact ? VisualDensity.compact : VisualDensity.standard;
+    final uiTextScale = ref.watch(
+      settingsControllerProvider.select((s) => s.uiTextScale),
+    );
     return MaterialApp(
       title: 'Chitragupta',
       debugShowCheckedModeBanner: false,
+      // Above the Navigator, so menus, dialogs and tooltips scale too — not
+      // just the routes.
+      builder: (context, child) =>
+          UiTextScale(scale: uiTextScale, child: child!),
       theme: AppTheme.light().copyWith(visualDensity: density),
       darkTheme: AppTheme.dark().copyWith(visualDensity: density),
       themeMode: switch (themeMode) {

@@ -154,6 +154,102 @@ void main() {
     });
   });
 
+  group('ui text scale', () {
+    test('defaults to 100%', () {
+      expect(const Settings().uiTextScale, 1.0);
+    });
+
+    test('survives a JSON round-trip', () {
+      const s = Settings(uiTextScale: 1.25);
+      expect(Settings.fromJson(s.toJson()).uiTextScale, 1.25);
+      expect(Settings.fromJson(s.toJson()), s);
+    });
+
+    test('an absurd stored value is clamped on read', () {
+      // A hand-edited 0.1 would make the whole UI unusable — including the
+      // settings screen it could be fixed from.
+      expect(
+        Settings.fromJson(const {'uiTextScale': 0.1}).uiTextScale,
+        Settings.minUiTextScale,
+      );
+      expect(
+        Settings.fromJson(const {'uiTextScale': 9.0}).uiTextScale,
+        Settings.maxUiTextScale,
+      );
+    });
+
+    test('the controller persists it, clamped to the supported range', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(settingsControllerProvider.notifier);
+
+      controller.setUiTextScale(1.25);
+      expect(SettingsRepository(db).load().uiTextScale, 1.25);
+
+      controller.setUiTextScale(5.0);
+      expect(
+        container.read(settingsControllerProvider).uiTextScale,
+        Settings.maxUiTextScale,
+      );
+    });
+  });
+
+  group('terminal font size', () {
+    test('the default is exactly the pre-setting hardcoded 13', () {
+      // The terminal perf/pixel goldens are painted at 13; a changed default
+      // would silently repaint every golden.
+      expect(Settings.defaultTerminalFontSize, 13.0);
+      expect(const Settings().terminalFontSize, 13.0);
+    });
+
+    test('an absent key reads back as the default', () {
+      expect(Settings.fromJson(const {}).terminalFontSize, 13.0);
+    });
+
+    test('survives a JSON round-trip', () {
+      const s = Settings(terminalFontSize: 16.0);
+      expect(Settings.fromJson(s.toJson()).terminalFontSize, 16.0);
+      expect(Settings.fromJson(s.toJson()), s);
+    });
+
+    test('adjust, reset and clamping all persist through the controller', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(settingsControllerProvider.notifier);
+
+      controller.adjustTerminalFontSize(1);
+      expect(SettingsRepository(db).load().terminalFontSize, 14.0);
+
+      controller.adjustTerminalFontSize(-2);
+      expect(SettingsRepository(db).load().terminalFontSize, 12.0);
+
+      controller.resetTerminalFontSize();
+      expect(
+        SettingsRepository(db).load().terminalFontSize,
+        Settings.defaultTerminalFontSize,
+      );
+
+      controller.setTerminalFontSize(100);
+      expect(
+        container.read(settingsControllerProvider).terminalFontSize,
+        Settings.maxTerminalFontSize,
+      );
+      controller.setTerminalFontSize(1);
+      expect(
+        container.read(settingsControllerProvider).terminalFontSize,
+        Settings.minTerminalFontSize,
+      );
+    });
+  });
+
   group('SettingsRepository', () {
     late AppDatabase db;
     setUp(() => db = AppDatabase.memory());

@@ -97,7 +97,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
     return ShellShortcuts(
       child: Scaffold(
-        appBar: const ShellTitleBar(),
+        // The bar's height follows the text scale (menus must not clip at
+        // 125%+), and `preferredSize` cannot read a context — so the shell
+        // measures and passes it down.
+        appBar: ShellTitleBar(height: Chrome.titleBarOf(context)),
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -235,10 +238,14 @@ class _ExplorerColumnState extends ConsumerState<_ExplorerColumn> {
 /// rail button, because that is the other place in the chrome where a glyph
 /// means "show me this".
 class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
-  const ShellTitleBar({super.key});
+  const ShellTitleBar({this.height = Chrome.titleBar, super.key});
+
+  /// The row's height — [Chrome.titleBar] scaled by the text size at the use
+  /// site (see [Chrome.titleBarOf]).
+  final double height;
 
   @override
-  Size get preferredSize => const Size.fromHeight(Chrome.titleBar);
+  Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -251,7 +258,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
     return Material(
       color: scheme.surfaceContainerLow,
       child: Container(
-        height: Chrome.titleBar,
+        height: height,
         padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: scheme.outlineVariant)),

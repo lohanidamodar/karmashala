@@ -41,7 +41,8 @@ class ShellStatusBar extends ConsumerWidget {
     );
 
     return Container(
-      height: Chrome.statusBar,
+      // Scaled with the text, or the labels would clip at 125%+.
+      height: Chrome.statusBarOf(context),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
         border: Border(top: BorderSide(color: scheme.outlineVariant)),

@@ -27,11 +27,14 @@ import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:chitragupta/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:chitragupta/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:chitragupta/src/features/settings/presentation/settings_nav.dart';
+import 'package:chitragupta/src/features/settings/presentation/settings_screen.dart';
 import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
 import 'package:chitragupta/src/features/ssh/presentation/remote_file_browser_dialog.dart';
 import 'package:chitragupta/src/features/ssh/presentation/ssh_host_dialog.dart';
 import 'package:chitragupta/src/features/detail/presentation/repository_info_view.dart';
 import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:chitragupta/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -454,6 +457,52 @@ void main() {
       build: () => app(container, const EnvironmentHealthDialog()),
       because: 'the content is a hard 620x420 inside a 720x560 window',
     );
+  });
+
+  group('SettingsScreen', () {
+    // The Loop 79 master-detail redesign, in every standard cell plus the
+    // desktop 125% cell — the scale the in-app text-size setting offers, at
+    // the size it will actually be used.
+    ProviderContainer prepared() {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          ...noProcessOverrides(),
+          // Theme discovery reads real Ghostty/Warp directories.
+          discoveredTerminalThemesProvider.overrideWithValue(const []),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    testWidgets('the default landing (nav plus Appearance)', (tester) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(prepared(), const SettingsScreen()),
+        matrix: const [...windowMatrix, desktopLargeText],
+        because:
+            'the nav rail, the filter and the appearance rows must hold at '
+            'the minimum window and at 125% text',
+      );
+    });
+
+    testWidgets('the terminal section', (tester) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          prepared(),
+          const SettingsScreen(initialSection: SettingsSectionId.terminal),
+        ),
+        matrix: const [...windowMatrix, desktopLargeText],
+        because:
+            'chord rows, dropdowns and the font stepper stack tightest of '
+            'all the sections',
+      );
+    });
   });
 
   testWidgets('NewProjectDialog', (tester) async {

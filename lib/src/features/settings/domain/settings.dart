@@ -79,7 +79,20 @@ class Settings {
     this.remoteRelayUrl,
     this.remoteRelayMode = RelayMode.hosted,
     this.localRelayPort = 8787,
+    this.uiTextScale = 1.0,
+    this.terminalFontSize = defaultTerminalFontSize,
   });
+
+  /// The terminal font size the app shipped with — the hardcoded 13 the pane
+  /// used before this was a setting. The default must stay exactly this value:
+  /// the terminal pixel goldens are painted at it.
+  static const double defaultTerminalFontSize = 13.0;
+  static const double minTerminalFontSize = 8.0;
+  static const double maxTerminalFontSize = 28.0;
+
+  /// Bounds for [uiTextScale] (90%–150%).
+  static const double minUiTextScale = 0.9;
+  static const double maxUiTextScale = 1.5;
 
   /// The `AgentDescriptor.id` of the agent pre-selected when starting a new
   /// session, or `null` for none. Kept in sync with
@@ -197,6 +210,15 @@ class Settings {
   /// package's own (pinned by a test there, so the two cannot drift).
   final int localRelayPort;
 
+  /// Overall UI text scale (1.0 = 100%), applied at the app root through
+  /// `MediaQuery`'s textScaler so menus, dialogs and tooltips follow too.
+  /// Multiplies the OS text scale rather than replacing it.
+  final double uiTextScale;
+
+  /// The terminal grid's font size, separate from [uiTextScale] on purpose:
+  /// terminal density and UI legibility are different preferences.
+  final double terminalFontSize;
+
   bool isPinned(String projectId) => pinnedProjectIds.contains(projectId);
 
   bool isSessionPinned(String sessionId) =>
@@ -237,6 +259,8 @@ class Settings {
     bool clearRemoteRelayUrl = false,
     RelayMode? remoteRelayMode,
     int? localRelayPort,
+    double? uiTextScale,
+    double? terminalFontSize,
   }) => Settings(
     defaultAgent: clearDefaultAgent
         ? null
@@ -278,6 +302,8 @@ class Settings {
         : (remoteRelayUrl ?? this.remoteRelayUrl),
     remoteRelayMode: remoteRelayMode ?? this.remoteRelayMode,
     localRelayPort: localRelayPort ?? this.localRelayPort,
+    uiTextScale: uiTextScale ?? this.uiTextScale,
+    terminalFontSize: terminalFontSize ?? this.terminalFontSize,
   );
 
   Settings withPermissions(String agentId, AgentPermissions value) =>
@@ -315,6 +341,8 @@ class Settings {
     if (remoteRelayUrl != null) 'remoteRelayUrl': remoteRelayUrl,
     'remoteRelayMode': remoteRelayMode.name,
     'localRelayPort': localRelayPort,
+    'uiTextScale': uiTextScale,
+    'terminalFontSize': terminalFontSize,
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
@@ -407,6 +435,17 @@ class Settings {
       localRelayPort: json['localRelayPort'] is int
           ? json['localRelayPort'] as int
           : 8787,
+      // Clamped on read: a hand-edited 0.1 would make the whole UI unusable,
+      // and Settings is the only screen it could be fixed from.
+      uiTextScale: (toDouble(json['uiTextScale']) ?? 1.0).clamp(
+        minUiTextScale,
+        maxUiTextScale,
+      ),
+      terminalFontSize:
+          (toDouble(json['terminalFontSize']) ?? defaultTerminalFontSize).clamp(
+            minTerminalFontSize,
+            maxTerminalFontSize,
+          ),
     );
   }
 
@@ -438,6 +477,8 @@ class Settings {
       other.remoteRelayUrl == remoteRelayUrl &&
       other.remoteRelayMode == remoteRelayMode &&
       other.localRelayPort == localRelayPort &&
+      other.uiTextScale == uiTextScale &&
+      other.terminalFontSize == terminalFontSize &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions);
@@ -471,6 +512,8 @@ class Settings {
       remoteRelayUrl,
       remoteRelayMode,
       localRelayPort,
+      uiTextScale,
+      terminalFontSize,
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),

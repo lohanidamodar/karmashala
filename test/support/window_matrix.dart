@@ -55,6 +55,16 @@ const minimumWindowLargeText = WindowCell(
   textScale: 1.3,
 );
 
+/// A desktop window at the settings screen's 125% UI text size — the scale
+/// the in-app setting actually offers, at the size it will actually be used.
+/// Not in the default matrix (opt in per surface) so adding it cannot silently
+/// change what every existing test asserts.
+const desktopLargeText = WindowCell(
+  '1440x900 @ 1.25x text',
+  Size(1440, 900),
+  textScale: 1.25,
+);
+
 const windowMatrix = [minimumWindow, desktopWindow, minimumWindowLargeText];
 
 /// A single thing wrong with one surface in one cell.
