@@ -2,6 +2,7 @@ import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:chitragupta/src/features/verification/application/verification_service.dart';
 import 'package:chitragupta/src/features/verification/application/verification_tool_schemas.dart';
 import 'package:chitragupta/src/features/verification/application/verification_tools.dart';
+import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'verification_harness.dart';
@@ -289,6 +290,69 @@ void main() {
       final text = textOf(await tools.call('verification_get', const {}));
       expect(text, contains('STILL RECORDING'));
       expect(text, contains('in progress'));
+    });
+  });
+
+  group('the caller is recorded as the producer of the verdict', () {
+    // The bridge sends `callerSessionId` from CHITRAGUPTA_SESSION_ID; the
+    // control server hands it to this tool set. Without it, every verdict is
+    // a self-graded exam that does not admit to being one.
+    late VerificationTools called;
+    setUp(() => called = VerificationTools(h.service, callerSessionId: 's-1'));
+
+    test('a run started over MCP knows who started it', () async {
+      await called.call('verification_start', {
+        'url': 'https://example.com',
+      });
+      final run = h.service.activeRun!;
+      expect(run.producedBySessionId, 's-1');
+      // With no explicit subject the caller is also the work under test, and
+      // the run says out loud that it graded itself.
+      expect(run.sessionId, 's-1');
+      expect(run.attribution, VerdictAttribution.author);
+    });
+
+    test('verifying another session names both sides', () async {
+      await called.call('verification_start', {
+        'url': 'https://example.com',
+        'sessionId': 's-2',
+      });
+      final run = h.service.activeRun!;
+      expect(run.sessionId, 's-2');
+      expect(run.producedBySessionId, 's-1');
+      expect(run.attribution, VerdictAttribution.independent);
+    });
+
+    test('finishing attributes the session that signed off', () async {
+      await called.call('verification_start', {
+        'url': 'https://example.com',
+        'sessionId': 's-2',
+      });
+      final result = await VerificationTools(
+        h.service,
+        callerSessionId: 's-3',
+      ).call('verification_finish', {'verdict': 'pass'});
+
+      expect(h.service.list().single.producedBySessionId, 's-3');
+      expect(textOf(result), contains('by another session'));
+    });
+
+    test('a caller outside a session leaves the run unattributed', () async {
+      await tools.call('verification_start', {'url': 'https://example.com'});
+      await tools.call('verification_finish', {'verdict': 'pass'});
+
+      final run = h.service.list().single;
+      expect(run.producedBySessionId, isNull);
+      expect(run.attribution, VerdictAttribution.notRecorded);
+    });
+
+    test('the list column says which runs graded themselves', () async {
+      await called.call('verification_start', {'url': 'https://example.com'});
+      await called.call('verification_finish', {'verdict': 'pass'});
+
+      final text = textOf(await called.call('verification_list', const {}));
+      expect(text, contains('verifier'));
+      expect(text, contains('self'));
     });
   });
 }
