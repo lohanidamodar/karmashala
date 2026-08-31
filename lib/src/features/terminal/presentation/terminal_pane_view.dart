@@ -162,6 +162,47 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     _setLink(null, null);
   }
 
+  /// `Ctrl+C` copies when there is a selection, and interrupts when there is
+  /// not — Windows Terminal's and VS Code's rule, and the one every user who
+  /// has ever pressed it in a terminal already has.
+  ///
+  /// This cannot live in the static chord map beside `Ctrl+V`, because the
+  /// answer is not a setting: it depends on whether a selection exists *right
+  /// now*, in *this* pane. So it is the pane's own key path, ahead of
+  /// `onPaneKey`.
+  ///
+  /// Copying clears the selection, which is what makes the pair usable: the
+  /// second `Ctrl+C` — the one you press because the first did not stop the
+  /// program — interrupts. With no selection nothing here runs at all, so the
+  /// bytes a pane sends are unchanged from before.
+  ///
+  /// Returns null when this is not that chord, meaning "not mine".
+  KeyEventResult? _handleCopyOrInterrupt(KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.keyC) return null;
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed ||
+        keyboard.isShiftPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isMetaPressed) {
+      return null;
+    }
+    final controller = widget.instance.controller;
+    final selection = controller.selection;
+    // No selection: ^C, byte for byte as before.
+    if (selection == null) return null;
+    if (event is KeyDownEvent) {
+      final text = widget.instance.terminal.buffer.getText(selection);
+      if (text.isNotEmpty) Clipboard.setData(ClipboardData(text: text));
+      controller.clearSelection();
+    }
+    // The key-up and any repeat are swallowed too, or xterm's fallback would
+    // type the control character for a chord already answered.
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) =>
+      _handleCopyOrInterrupt(event) ?? widget.onKeyEvent(node, event);
+
   /// Where the primary button went down, so a drag is not read as a click.
   Offset? _pressedAt;
 
@@ -205,7 +246,7 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
       // software text-input client, which on Windows fails with "Could not set
       // client, view ID is null" and blanks the terminal.
       hardwareKeyboardOnly: true,
-      onKeyEvent: widget.onKeyEvent,
+      onKeyEvent: _onKeyEvent,
       // xterm's own shortcut manager runs after `onKeyEvent` and before
       // `Terminal.keyInput`; its Windows defaults quietly took Ctrl+A and
       // Ctrl+V from the shell. Ctrl+V is paste again, but declared — and so
