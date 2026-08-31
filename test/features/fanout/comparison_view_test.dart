@@ -3,6 +3,7 @@ import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
 import 'package:chitragupta/src/features/fanout/data/comparison_dao.dart';
 import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
+import 'package:chitragupta/src/features/fanout/presentation/comparison_chrome.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_list.dart';
 import 'package:chitragupta/src/features/fanout/presentation/comparison_view.dart';
 import 'package:flutter/material.dart';
@@ -62,9 +63,23 @@ void main() {
     );
 
     // The verdict sits beside the diff stat, and says who produced it —
-    // here nobody did, which reads as its own answer.
+    // here nobody did, which reads as its own answer. The outcome says it too,
+    // because the merge is what was decided on the strength of that verdict.
     expect(find.text('12 tests, 0 failed'), findsOneWidget);
-    expect(find.text('unattributed'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(VerdictChip),
+        matching: find.text('unattributed'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(OutcomeLabel),
+        matching: find.text('unattributed'),
+      ),
+      findsOneWidget,
+    );
   });
 
   /// Rewrites `cand-win`'s verdict so only the producer differs, and renders.
@@ -96,7 +111,8 @@ void main() {
     // s-win is cand-win's own session.
     await pumpWithProducer(tester, db, 's-win');
 
-    expect(find.text('self'), findsOneWidget);
+    // Both the candidate's chip and the merged outcome above it.
+    expect(find.text('self'), findsNWidgets(2));
     expect(find.text('independent'), findsNothing);
   });
 
@@ -107,7 +123,7 @@ void main() {
     addTearDown(db.close);
     await pumpWithProducer(tester, db, 's-lost');
 
-    expect(find.text('independent'), findsOneWidget);
+    expect(find.text('independent'), findsNWidgets(2));
     expect(find.text('self'), findsNothing);
   });
 

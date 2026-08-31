@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../verification/application/verification_providers.dart';
+import '../../verification/domain/verdict_attribution.dart';
 import '../../verification/domain/verification_run.dart';
 import '../data/comparison_dao.dart';
 import '../domain/comparison.dart';
@@ -51,6 +52,38 @@ final candidateEvidenceProvider = Provider<CandidateEvidenceLookup>((ref) {
     return null;
   };
 });
+
+/// The evidence a surface should show for [candidate]: the live run when one
+/// offers a verdict, otherwise the copy frozen into the comparison — which is
+/// all that is left once the run is pruned.
+///
+/// One function, because the candidate's chip, the comparison's outcome and
+/// the merge confirmation all answer "who graded this" and must not answer it
+/// differently. Two of them resolving the evidence separately is how the list
+/// comes to say `self` while the dialog beside it says `independent`.
+CandidateEvidence? evidenceShownFor(
+  ComparisonCandidate candidate,
+  CandidateEvidenceLookup lookup,
+) {
+  final sessionId = candidate.sessionId;
+  return (sessionId == null ? null : lookup(sessionId)) ?? candidate.evidence;
+}
+
+/// [evidenceShownFor], reduced to the one fact every verdict surface states.
+///
+/// Falls back to [VerdictAttribution.notRecorded] rather than to null: a
+/// candidate nobody verified and a verdict nobody signed are the same answer
+/// to "was this checked by someone else", and a surface that renders nothing
+/// for either reads as "verified" to anyone scanning it.
+VerdictAttribution attributionShownFor(
+  ComparisonCandidate candidate,
+  CandidateEvidenceLookup lookup,
+) =>
+    evidenceShownFor(
+      candidate,
+      lookup,
+    )?.attributionFor(candidate.sessionId) ??
+    VerdictAttribution.notRecorded;
 
 /// The comparisons list, and the one operation the UI performs on it that is
 /// not a fan-out: reload after something changed underneath.
