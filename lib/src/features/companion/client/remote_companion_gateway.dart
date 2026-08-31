@@ -77,10 +77,17 @@ class RemoteCompanionGateway implements CompanionGateway {
     this.lan,
     this.pushTokenSource,
     Backoff? reconnectBackoff,
+    Backoff? localReconnectBackoff,
     DateTime Function()? now,
     this.onLog,
   }) : _relayFactory = relayFactory ?? _defaultRelayFactory,
        _backoff = reconnectBackoff ?? Backoff(),
+       _localBackoff =
+           localReconnectBackoff ??
+           Backoff(
+             initial: const Duration(milliseconds: 200),
+             maximum: const Duration(seconds: 2),
+           ),
        _now = now ?? DateTime.now {
     _ready = _loadStoredPairing();
   }
@@ -120,6 +127,17 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Waits between full re-dials. Blips inside a connection are the
   /// transport's own backoff, not this one.
   final Backoff _backoff;
+
+  /// The same, for a desktop on this network. A schedule that climbs to half a
+  /// minute is the right answer for an internet relay that may be down for
+  /// good reasons; it is the wrong answer for a machine on the same table,
+  /// where the honest expectation is that the link comes back in a moment.
+  final Backoff _localBackoff;
+
+  /// Whether the connection that just ended ran over something local — the
+  /// LAN, or a relay at a private address. Decides which schedule the next
+  /// wait comes from.
+  bool _lastPathWasLocal = false;
 
   final DateTime Function() _now;
 
@@ -456,7 +474,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     await _dropLink(keepState: true);
     _resetHostState();
     _link.value = CompanionLinkState.connecting;
-    _backoff.reset();
+    _resetBackoff();
     _startLoop();
     return public;
   }
@@ -533,7 +551,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       _link.value = CompanionLinkState.disconnected;
       return;
     }
-    _backoff.reset();
+    _resetBackoff();
     _startLoop();
   }
 
@@ -766,10 +784,16 @@ class RemoteCompanionGateway implements CompanionGateway {
     // re-dialled — including one still dialling, which abandons the
     // candidates it has left rather than making the user wait them out.
     if (_link.value != CompanionLinkState.connected) {
-      _backoff.reset();
+      _resetBackoff();
       _dialOvertaken = true;
       _declareDead();
+      return;
     }
+    // The link SAYS it is up. After a resume that is a claim about a socket
+    // nobody watched while the app was frozen, so it is proved rather than
+    // taken: one hello, one `host.status`, and silence declares it dead. The
+    // alternative is waiting out the heartbeat with a corpse on screen.
+    unawaited(_reproveLink());
   }
 
   // --------------------------------------------------------------- sessions
@@ -972,6 +996,14 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (scout == null || _closed || _record == null) return;
     if (_link.value != CompanionLinkState.connected) return;
     if (_linkPath.value != CompanionLinkPath.relay) return;
+    // The desktop IS the relay: the embedded local relay is served on the very
+    // address the beacon arrives from, so a "direct" socket would reach the
+    // same machine over the same network, one hop shorter. That is not worth
+    // a link — and paying for it every time the beacon repeats is what made
+    // the owner's local-relay link drop on a schedule.
+    if (host.address.address == _activeRelay?.host) {
+      return;
+    }
     if (scout.inCooldown(host)) return;
     if (_lanUpgradeRefused.contains(scout.keyOf(host))) return;
     onLog?.call('beacon sighted; switching the link to the LAN');
@@ -998,7 +1030,7 @@ class RemoteCompanionGateway implements CompanionGateway {
           if (won != null) await _noteRelayOutcome(won, ok: true);
           _switching = false;
           unawaited(_noteConnected(client.pairing));
-          _backoff.reset();
+          _resetBackoff();
           _bindTransport(_dialled);
           _link.value = CompanionLinkState.connected;
           // Now that the client has written its own record, the host's
@@ -1032,7 +1064,7 @@ class RemoteCompanionGateway implements CompanionGateway {
           continue;
         }
         _link.value = CompanionLinkState.disconnected;
-        final wait = _backoff.next();
+        final wait = (_lastPathWasLocal ? _localBackoff : _backoff).next();
         final waiter = _backoffWaiter = Completer<void>();
         unawaited(
           Future<void>.delayed(wait).then((_) {
@@ -1137,6 +1169,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // beacon's cleartext was never trusted beyond "try dialling here".
       scout.noteSuccess(host);
       _lanUpgradeRefused.clear();
+      _lastPathWasLocal = true;
       _linkPath.value = CompanionLinkPath.lan;
       onLog?.call('connected over the LAN');
       return client;
@@ -1160,6 +1193,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       await client.connect(helloTimeout: helloTimeout);
       _linkPath.value = CompanionLinkPath.relay;
       _activeRelay = url;
+      _lastPathWasLocal = isLocalRelay(url);
       _noteTrouble(null);
       return client;
     } on Object catch (error) {
@@ -1463,6 +1497,13 @@ class RemoteCompanionGateway implements CompanionGateway {
     if (waiter != null && !waiter.isCompleted) waiter.complete();
     await _teardownClient();
     if (!keepState) _link.value = CompanionLinkState.disconnected;
+  }
+
+  /// Both schedules, because which one the next wait comes from is decided
+  /// after the fact, by the path that was lost.
+  void _resetBackoff() {
+    _backoff.reset();
+    _localBackoff.reset();
   }
 
   void _declareDead() {

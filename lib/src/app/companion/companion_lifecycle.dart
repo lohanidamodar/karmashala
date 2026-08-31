@@ -1,8 +1,13 @@
 /// Lifecycle-aware reconnect for the companion.
 ///
-/// On resume with the link down, re-dial immediately instead of waiting out
-/// the backoff. While foregrounded the gateway's own backoff governs. On
-/// pause nothing is done at all: the link rests, with no wake-locks and no
+/// On resume the gateway is always asked to reconnect, whatever the link
+/// claims. A link that reads "connected" after the app was frozen is a claim
+/// about a socket nobody watched: Android may have torn it down, or the NAT
+/// binding behind it may be gone, and the transport will not find out until
+/// its next heartbeat — twenty-five seconds of a dead link that looks alive.
+/// `reconnect()` re-dials a link that is down and PROVES one that says it is
+/// up, so the answer is definite either way within one hello. On pause
+/// nothing is done at all: the link rests, with no wake-locks and no
 /// background service — an FCM wake is the design's background answer.
 library;
 
@@ -35,8 +40,11 @@ class CompanionLifecycleReconnector with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (_gateway.link == CompanionLinkState.connected) return;
-    onLog?.call('resumed with the link down; re-dialling now');
+    onLog?.call(
+      _gateway.link == CompanionLinkState.connected
+          ? 'resumed; proving the link rather than trusting it'
+          : 'resumed with the link down; re-dialling now',
+    );
     unawaited(() async {
       try {
         await _gateway.reconnect();

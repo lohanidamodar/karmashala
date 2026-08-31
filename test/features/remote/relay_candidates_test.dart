@@ -459,4 +459,36 @@ void main() {
       expect(first.value, isNot((await rendezvousFor(key, 2)).value));
     });
   });
+
+  group('isLocalRelay', () {
+    test('loopback, private and link-local addresses are on this network', () {
+      for (final url in [
+        'ws://127.0.0.1:8787',
+        'ws://localhost:8787',
+        'ws://10.0.0.4:8787',
+        'ws://172.16.3.9:8787',
+        'ws://172.31.255.1:8787',
+        'ws://192.168.1.5:8787',
+        'ws://169.254.10.2:8787',
+        'ws://[::1]:8787',
+        'ws://[fe80::1]:8787',
+        'ws://[fd00::1]:8787',
+      ]) {
+        expect(isLocalRelay(Uri.parse(url)), isTrue, reason: url);
+      }
+    });
+
+    test('a hosted relay, and the ranges that only look private, are not', () {
+      for (final url in [
+        'wss://relay.popupbits.com',
+        'ws://8.8.8.8:8787',
+        'ws://172.15.0.1:8787',
+        'ws://172.32.0.1:8787',
+        'ws://193.168.1.5:8787',
+        'ws://[2001:db8::1]:8787',
+      ]) {
+        expect(isLocalRelay(Uri.parse(url)), isFalse, reason: url);
+      }
+    });
+  });
 }
