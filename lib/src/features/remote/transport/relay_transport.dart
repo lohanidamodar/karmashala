@@ -5,10 +5,8 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
-
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../protocol.dart';
 import 'remote_transport.dart';
@@ -54,7 +52,11 @@ class RelayTransport extends ReconnectingTransport {
   final Duration heartbeat;
   final Duration connectTimeout;
 
-  WebSocketChannel? _channel;
+  /// The live socket. Deliberately `dart:io`'s own [WebSocket] rather than a
+  /// `WebSocketChannel` wrapper: closing the wrapper's sink does **not** close
+  /// the socket (proved against a real relay — the rendezvous stayed held),
+  /// and a listener the relay still counts is what wedges a re-registration.
+  WebSocket? _socket;
 
   /// Maps a relay base URL onto the rendezvous path, upgrading http(s) to ws(s).
   static Uri endpointFor(Uri relay, RendezvousId rendezvous) {
@@ -71,17 +73,24 @@ class RelayTransport extends ReconnectingTransport {
 
   @override
   Future<void> connectOnce() async {
-    final channel = IOWebSocketChannel.connect(
-      endpoint,
-      pingInterval: heartbeat,
-      connectTimeout: connectTimeout,
-    );
-    await channel.ready;
-    _channel = channel;
+    final socket = await WebSocket.connect(
+      endpoint.toString(),
+    ).timeout(connectTimeout);
+    socket.pingInterval = heartbeat;
+    // Closed while this dial was in flight: `abort()` had no socket to close,
+    // so without this the connection would come up **after** the transport was
+    // gone and hold the rendezvous open. The relay would then pair the host's
+    // next listener with that orphan — one peer talking to itself, with the
+    // phone refused as a third.
+    if (state == TransportState.closed) {
+      await socket.close(WebSocketStatus.goingAway, 'closing');
+      return;
+    }
+    _socket = socket;
     onConnected();
 
     final ended = Completer<void>();
-    final subscription = channel.stream.listen(
+    final subscription = socket.listen(
       (Object? message) {
         if (message is List<int>) {
           onFrame(Uint8List.fromList(message));
@@ -102,22 +111,24 @@ class RelayTransport extends ReconnectingTransport {
 
     await ended.future;
     await subscription.cancel();
-    _channel = null;
-    onLog?.call('relay closed the connection (${channel.closeCode})');
+    _socket = null;
+    onLog?.call('relay closed the connection (${socket.closeCode})');
   }
 
   @override
   bool writeFrame(Uint8List frame) {
-    final channel = _channel;
-    if (channel == null) return false;
-    channel.sink.add(frame);
+    final socket = _socket;
+    if (socket == null) return false;
+    socket.add(frame);
     return true;
   }
 
+  /// Closes the socket itself with an explicit code, so the relay frees the
+  /// rendezvous immediately and the next listener can take it.
   @override
   Future<void> abort() async {
-    final channel = _channel;
-    _channel = null;
-    await channel?.sink.close();
+    final socket = _socket;
+    _socket = null;
+    await socket?.close(WebSocketStatus.goingAway, 'closing');
   }
 }

@@ -21,14 +21,19 @@ class _FakeAccess extends RemoteAccessController {
   _FakeAccess(super.ref);
 
   final relaysAsked = <Uri?>[];
+
+  /// What the dialog said about each asked relay: local, or hosted.
+  final localFlagsAsked = <bool>[];
   HostPairingSession? lastPairing;
 
   @override
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
     Uri? relay,
+    bool relayIsLocal = false,
   }) async {
     relaysAsked.add(relay);
+    localFlagsAsked.add(relayIsLocal);
     final session = HostPairingSession(
       payload: await PairingPayload.generateWithCode(
         relay: relay ?? Uri.parse('wss://relay.example.com'),
@@ -144,5 +149,31 @@ void main() {
       isNot(before),
       reason: 'the old code named the old relay; a fresh one was rooted here',
     );
+  });
+
+  testWidgets('the dialog tells the host which tab is the local relay', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app(endpoints: [internet, local]));
+    await tester.pumpAndSettle();
+
+    expect(fake.localFlagsAsked, [false]);
+
+    await tester.tap(find.text('Local network'));
+    await tester.pumpAndSettle();
+
+    // That flag is what the device row remembers, so the host keeps serving
+    // this phone on the embedded relay rather than a URL that moves.
+    expect(fake.localFlagsAsked, [false, true]);
+  });
+
+  testWidgets('with no relay switched on it refuses instead of showing a '
+      'code nothing listens on', (tester) async {
+    await tester.pumpWidget(app(endpoints: const []));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('No relay is switched on'), findsOneWidget);
+    expect(find.byType(SegmentedButton<int>), findsNothing);
+    expect(fake.relaysAsked, isEmpty);
   });
 }

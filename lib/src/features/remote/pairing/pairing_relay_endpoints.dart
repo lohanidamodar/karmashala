@@ -47,10 +47,15 @@ class PairingRelayEndpoint {
   String toString() => 'PairingRelayEndpoint($label, $url, ${kind.name})';
 }
 
-/// The endpoints the dialog shows, in tab order. Never empty: what the
-/// embedded local relay currently offers ([relayEndpointsProvider]), or the
-/// configured internet relay when that list is empty (remote access off, or
-/// the local relay still coming up — a code must still be showable).
+/// The endpoints the dialog shows, in tab order: every relay the host is
+/// actually serving ([relayEndpointsProvider]) — one tab each, both when both
+/// are on.
+///
+/// **Empty is a real answer** since Loop 80: remote access on with every relay
+/// switched off means no code could be redeemed, and the dialog says that
+/// rather than showing a tab nothing listens on. With remote access *off* the
+/// configured internet relay stands in, keeping the shown shape stable for a
+/// dialog that refuses with "turn on remote access" anyway.
 final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
   ref,
 ) {
@@ -69,6 +74,7 @@ final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
     ];
   }
   final settings = ref.watch(settingsControllerProvider);
+  if (settings.remoteAccessEnabled) return const [];
   return [
     PairingRelayEndpoint(
       label: 'Internet',

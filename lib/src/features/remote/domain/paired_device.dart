@@ -2,6 +2,11 @@ import 'dart:typed_data';
 
 import '../protocol.dart';
 
+/// The [PairedDevice.relayUrl] sentinel meaning "the relay embedded in this
+/// app" — resolved to the live local relay at serve time, because the LAN IP
+/// and port move while the fact "my own relay" does not.
+const String kLocalRelayMarker = 'local';
+
 /// One phone paired with this desktop host.
 ///
 /// The row is the host's whole memory of the device: its identity, its
@@ -20,6 +25,7 @@ class PairedDevice {
     this.lastSeenAt,
     this.pushToken,
     this.pushPlatform,
+    this.relayUrl,
   }) : deviceKey = Uint8List.fromList(deviceKey);
 
   /// The companion's [DeviceId], lowercase hex.
@@ -51,6 +57,24 @@ class PairedDevice {
   final String? pushToken;
   final String? pushPlatform;
 
+  /// The relay this device was paired through: a hosted relay URL, or
+  /// [kLocalRelayMarker] for the embedded local relay. Null only for a row
+  /// somehow missed by the v19 backfill — treated as the configured hosted
+  /// relay, which is what every pre-v19 pairing used.
+  final String? relayUrl;
+
+  /// Whether this device's frames travel through the embedded local relay.
+  bool get pairedViaLocalRelay => relayUrl == kLocalRelayMarker;
+
+  /// The hosted relay URL stored at pairing, or null for a local-relay
+  /// device and for an unparsable/absent value.
+  Uri? get hostedRelayUri {
+    final url = relayUrl;
+    if (url == null || url == kLocalRelayMarker) return null;
+    final parsed = Uri.tryParse(url);
+    return parsed != null && parsed.hasScheme ? parsed : null;
+  }
+
   DeviceId get deviceId => DeviceId.parse(id);
 
   PairedDevice copyWith({
@@ -62,6 +86,7 @@ class PairedDevice {
     DateTime? lastSeenAt,
     String? pushToken,
     String? pushPlatform,
+    String? relayUrl,
   }) => PairedDevice(
     id: id,
     name: name ?? this.name,
@@ -73,6 +98,7 @@ class PairedDevice {
     lastSeenAt: lastSeenAt ?? this.lastSeenAt,
     pushToken: pushToken ?? this.pushToken,
     pushPlatform: pushPlatform ?? this.pushPlatform,
+    relayUrl: relayUrl ?? this.relayUrl,
   );
 
   @override

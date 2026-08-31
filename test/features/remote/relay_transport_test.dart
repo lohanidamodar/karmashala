@@ -207,4 +207,47 @@ void main() {
     expect(await toPhone.next, [5]);
     expect(states.seen, isNot(contains(TransportState.disconnected)));
   });
+
+  test(
+    'closing frees the rendezvous, so the same one can be taken again',
+    () async {
+      // The defect this pins (found by loop 80's park/return test): closing a
+      // `WebSocketChannel`'s sink did not close the socket, so the relay went on
+      // counting the departed listener. A host re-registering on the same
+      // rendezvous — parking a relay and switching it back on, or moving the
+      // relay URL — was then paired **with its own stale socket**, and the phone
+      // was refused as a third peer forever.
+      final host = connect(_rendezvous);
+      final states = StateLog(host);
+      await states.waitFor(TransportState.connected);
+      expect(relay.rendezvousCount, 1);
+
+      await host.close();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      expect(
+        relay.rendezvousCount,
+        0,
+        reason: 'the relay saw the socket leave',
+      );
+
+      // And the rendezvous really is takeable again, by two fresh peers.
+      final again = connect(_rendezvous);
+      final phone = connect(_rendezvous);
+      final toPhone = ItemQueue<Uint8List>(phone.frames);
+      again.send([7]);
+      expect(await toPhone.next, [7]);
+      await states.cancel();
+    },
+  );
+
+  test('a transport closed while its dial is in flight leaves no socket '
+      'behind', () async {
+    final host = connect(_rendezvous);
+    // No wait: close lands while the WebSocket handshake is still running.
+    await host.close();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    expect(relay.rendezvousCount, 0);
+  });
 }

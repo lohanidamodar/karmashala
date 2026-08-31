@@ -5,7 +5,7 @@ import '../../../core/database/row_mapping.dart';
 import '../domain/paired_device.dart';
 import '../protocol.dart';
 
-/// Data access for the `paired_devices` table (schema v18).
+/// Data access for the `paired_devices` table (schema v18, `relay_url` v19).
 class PairedDeviceDao {
   PairedDeviceDao(this._db);
 
@@ -15,8 +15,8 @@ class PairedDeviceDao {
     _db.execute(
       'INSERT INTO paired_devices '
       '(id, name, device_key, capabilities, generation, revoked, '
-      'push_token, push_platform, created_at, last_seen_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'push_token, push_platform, created_at, last_seen_at, relay_url) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         device.id,
         device.name,
@@ -28,6 +28,7 @@ class PairedDeviceDao {
         device.pushPlatform,
         isoFromDate(device.createdAt),
         device.lastSeenAt == null ? null : isoFromDate(device.lastSeenAt!),
+        device.relayUrl,
       ],
     );
   }
@@ -102,6 +103,7 @@ class PairedDeviceDao {
     revoked: boolFromInt(row['revoked']),
     pushToken: row['push_token'] as String?,
     pushPlatform: row['push_platform'] as String?,
+    relayUrl: row['relay_url'] as String?,
     createdAt: dateFromIso(row['created_at']),
     lastSeenAt: row['last_seen_at'] == null
         ? null

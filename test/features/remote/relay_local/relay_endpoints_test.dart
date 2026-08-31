@@ -5,6 +5,7 @@ library;
 
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/features/remote/application/relay_prefs.dart';
 import 'package:chitragupta/src/features/remote/application/remote_access_controller.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_service.dart';
@@ -121,5 +122,76 @@ void main() {
         reason: 'a tab offering an undialable endpoint would only pretend',
       );
     }
+  });
+
+  group('both relays at once (loop 80)', () {
+    test('both switched on offers two endpoints, local first', () {
+      final container = containerWith(_running);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRemoteAccessEnabled(true);
+      container.read(relayPrefsProvider.notifier)
+        ..setLocalEnabled(true)
+        ..setHostedEnabled(true);
+
+      final offered = container.read(relayEndpointsProvider);
+
+      expect(offered, hasLength(2));
+      // Local first: on the network the phone shares it always works.
+      expect(offered[0].label, 'Local network');
+      expect(offered[0].kind, RelayEndpointKind.local);
+      expect(offered[0].url, Uri.parse('ws://192.168.1.7:8787'));
+      expect(offered[1].kind, RelayEndpointKind.internet);
+      expect(offered[1].url, Uri.parse(kDefaultRelayUrl));
+    });
+
+    test('only the local switch offers one local endpoint', () {
+      final container = containerWith(_running);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRemoteAccessEnabled(true);
+      container.read(relayPrefsProvider.notifier)
+        ..setLocalEnabled(true)
+        ..setHostedEnabled(false);
+
+      expect(container.read(relayEndpointsProvider), [
+        RelayEndpointOption(
+          label: 'Local network',
+          url: Uri.parse('ws://192.168.1.7:8787'),
+          kind: RelayEndpointKind.local,
+        ),
+      ]);
+    });
+
+    test('both switched off offers nothing, however healthy the relay', () {
+      final container = containerWith(_running);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRemoteAccessEnabled(true);
+      container.read(relayPrefsProvider.notifier)
+        ..setLocalEnabled(false)
+        ..setHostedEnabled(false);
+
+      expect(
+        container.read(relayEndpointsProvider),
+        isEmpty,
+        reason: 'nothing is listening, so nothing may be offered',
+      );
+    });
+
+    test('local on but not yet running offers only the hosted endpoint', () {
+      final container = containerWith(const LocalRelayStatus.stopped());
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRemoteAccessEnabled(true);
+      container.read(relayPrefsProvider.notifier)
+        ..setLocalEnabled(true)
+        ..setHostedEnabled(true);
+
+      final offered = container.read(relayEndpointsProvider);
+
+      expect(offered, hasLength(1));
+      expect(offered.single.kind, RelayEndpointKind.internet);
+    });
   });
 }

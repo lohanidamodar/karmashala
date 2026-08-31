@@ -24,6 +24,14 @@ class RemoteSessionSnapshot {
     this.whereabouts,
     this.lastActivityAt,
     this.imported = false,
+    this.projectId,
+    this.projectName,
+    this.projectPath,
+    this.pinned = false,
+    this.folderMissing = false,
+    this.subPath,
+    this.worktree,
+    this.branch,
   });
 
   final String sessionId;
@@ -61,6 +69,39 @@ class RemoteSessionSnapshot {
   /// True for a CLI session imported as read-only history.
   final bool imported;
 
+  /// The project this session belongs to — the Explorer's top grouping, so
+  /// the phone can draw the same headings the desktop does. Null when the
+  /// repository is gone, or from an older host.
+  final String? projectId;
+  final String? projectName;
+
+  /// The project root as the desktop spells it — a subtitle, never a path to
+  /// act on: the phone cannot reach this filesystem.
+  final String? projectPath;
+
+  /// Whether the user pinned this session. Pinned sessions sort above the
+  /// rest within their row, which is the ordering the host already applies —
+  /// the flag exists so the phone can *show* the pin, not re-sort by it.
+  final bool pinned;
+
+  /// The session's working folder no longer exists on disk (the Explorer's
+  /// own "missing" mark). False also means "we could not tell": the desktop
+  /// never falsely flags a folder, and neither does this.
+  final bool folderMissing;
+
+  /// Where the agent works, written relative to the project root — the
+  /// Explorer row's own subtitle (`projects/app`). Null when it says nothing
+  /// the title does not.
+  final String? subPath;
+
+  /// The worktree directory when the session runs in one, else null.
+  final String? worktree;
+
+  /// The branch checked out where the session works, when the desktop has
+  /// **already** measured it. Null means "not measured", never "no branch":
+  /// this reads the cached checkout stat and deliberately starts no git.
+  final String? branch;
+
   RemoteSessionSnapshot copyWith({String? attention, String? stage}) =>
       RemoteSessionSnapshot(
         sessionId: sessionId,
@@ -76,6 +117,14 @@ class RemoteSessionSnapshot {
         whereabouts: whereabouts,
         lastActivityAt: lastActivityAt,
         imported: imported,
+        projectId: projectId,
+        projectName: projectName,
+        projectPath: projectPath,
+        pinned: pinned,
+        folderMissing: folderMissing,
+        subPath: subPath,
+        worktree: worktree,
+        branch: branch,
       );
 
   Map<String, Object?> toJson() => {
@@ -92,6 +141,15 @@ class RemoteSessionSnapshot {
     if (whereabouts != null) 'whereabouts': whereabouts,
     if (lastActivityAt != null) 'lastActivityAt': lastActivityAt,
     if (imported) 'imported': imported,
+    if (projectId != null) 'projectId': projectId,
+    if (projectName != null) 'projectName': projectName,
+    if (projectPath != null) 'projectPath': projectPath,
+    // Omitted when false, so an unpinned row's bytes stay the old shape.
+    if (pinned) 'pinned': pinned,
+    if (folderMissing) 'folderMissing': folderMissing,
+    if (subPath != null) 'subPath': subPath,
+    if (worktree != null) 'worktree': worktree,
+    if (branch != null) 'branch': branch,
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -116,6 +174,14 @@ class RemoteSessionSnapshot {
       whereabouts: str(json['whereabouts']),
       lastActivityAt: str(json['lastActivityAt']),
       imported: json['imported'] == true,
+      projectId: str(json['projectId']),
+      projectName: str(json['projectName']),
+      projectPath: str(json['projectPath']),
+      pinned: json['pinned'] == true,
+      folderMissing: json['folderMissing'] == true,
+      subPath: str(json['subPath']),
+      worktree: str(json['worktree']),
+      branch: str(json['branch']),
     );
   }
 
@@ -134,7 +200,15 @@ class RemoteSessionSnapshot {
       other.agentLabel == agentLabel &&
       other.whereabouts == whereabouts &&
       other.lastActivityAt == lastActivityAt &&
-      other.imported == imported;
+      other.imported == imported &&
+      other.projectId == projectId &&
+      other.projectName == projectName &&
+      other.projectPath == projectPath &&
+      other.pinned == pinned &&
+      other.folderMissing == folderMissing &&
+      other.subPath == subPath &&
+      other.worktree == worktree &&
+      other.branch == branch;
 
   @override
   int get hashCode => Object.hash(
@@ -151,6 +225,12 @@ class RemoteSessionSnapshot {
     whereabouts,
     lastActivityAt,
     imported,
+    projectId,
+    projectName,
+    projectPath,
+    pinned,
+    folderMissing,
+    Object.hash(subPath, worktree, branch),
   );
 }
 

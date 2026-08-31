@@ -77,10 +77,23 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
       _error = null;
       _copied = false;
     });
+    final endpoint = _selectedEndpoint();
+    if (endpoint == null && ref.read(pairingRelayEndpointsProvider).isEmpty) {
+      // Every relay is switched off: a code nothing listens on cannot pair.
+      if (mounted && serial == _beginSerial) {
+        setState(() {
+          _error =
+              'No relay is switched on. Turn on the local relay or the '
+              'hosted one in Remote access first.';
+        });
+      }
+      return;
+    }
     try {
       final session = await _access.beginPairing(
         capabilities: CapabilitySet.of(_granted),
-        relay: _selectedEndpoint()?.url,
+        relay: endpoint?.url,
+        relayIsLocal: endpoint?.kind == PairingRelayKind.local,
       );
       if (!mounted || serial != _beginSerial) return;
       setState(() => _session = session);

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:chitragupta/src/features/remote/application/relay_prefs.dart';
 import 'package:chitragupta/src/features/remote/application/remote_access_controller.dart';
 import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
 import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
@@ -14,7 +15,6 @@ import 'package:chitragupta/src/features/remote/protocol.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:chitragupta/src/features/settings/data/settings_repository.dart';
-import 'package:chitragupta/src/features/settings/domain/relay_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,8 +35,10 @@ class _FakeAccess extends RemoteAccessController {
   @override
   Future<HostPairingSession> beginPairing({
     required CapabilitySet capabilities,
-    // Signature keeps up with the controller (loop 76's endpoint tabs).
+    // Signature keeps up with the controller (loop 76's endpoint tabs,
+    // loop 80's per-device relay).
     Uri? relay,
+    bool relayIsLocal = false,
   }) async {
     if (!pairingAllowed) throw StateError('Turn on remote access first.');
     final session = HostPairingSession(
@@ -105,7 +107,11 @@ void main() {
     ],
   );
 
-  PairedDevice device({String id = 'a', bool revoked = false}) => PairedDevice(
+  PairedDevice device({
+    String id = 'a',
+    bool revoked = false,
+    String? relayUrl,
+  }) => PairedDevice(
     id: id * 32,
     name: 'OPPO',
     deviceKey: revoked ? Uint8List(0) : Uint8List(32),
@@ -114,7 +120,23 @@ void main() {
     createdAt: DateTime.utc(2026, 8, 31),
     revoked: revoked,
     lastSeenAt: revoked ? null : DateTime.now().toUtc(),
+    relayUrl: relayUrl,
   );
+
+  /// The master Remote access switch — the first one in the section.
+  Future<void> enableRemoteAccess(WidgetTester tester) async {
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+  }
+
+  /// Flips one of the two relay switches by its own title.
+  Future<void> toggleRelay(WidgetTester tester, String title) async {
+    await tester.tap(find.widgetWithText(SwitchListTile, title));
+    await tester.pumpAndSettle();
+  }
+
+  const localTitle = 'Local relay (this computer)';
+  const hostedTitle = 'Hosted relay (internet)';
 
   testWidgets('off by default: no relay field, no pairing button', (
     tester,
@@ -129,8 +151,7 @@ void main() {
   testWidgets('the toggle persists and wakes the controller', (tester) async {
     await tester.pumpWidget(app());
 
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
 
     expect(SettingsRepository(db).load().remoteAccessEnabled, isTrue);
     expect(fake.syncCalls, 1);
@@ -141,8 +162,7 @@ void main() {
   testWidgets('devices are listed with last-seen and revoke', (tester) async {
     PairedDeviceDao(db).insert(device());
     await tester.pumpWidget(app());
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
 
     expect(find.text('OPPO'), findsOneWidget);
     expect(find.textContaining('Last seen'), findsOneWidget);
@@ -163,8 +183,7 @@ void main() {
   ) async {
     PairedDeviceDao(db).insert(device(id: 'b', revoked: true));
     await tester.pumpWidget(app());
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
 
     expect(find.text('Revoked'), findsOneWidget);
     expect(find.text('Revoke'), findsNothing);
@@ -183,8 +202,7 @@ void main() {
     addTearDown(() => FlutterError.onError = onError);
 
     await tester.pumpWidget(app());
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
 
     await tester.tap(find.text('Pair a device'));
     await tester.pumpAndSettle();
@@ -208,33 +226,29 @@ void main() {
     expect(find.byType(PairingDialog), findsNothing);
   });
 
-  testWidgets('enabled: the relay choice shows, hosted by default', (
-    tester,
-  ) async {
+  testWidgets('enabled: two independent relay switches, hosted on by '
+      'default', (tester) async {
     await tester.pumpWidget(app());
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
 
-    expect(find.byType(SegmentedButton<RelayMode>), findsOneWidget);
-    expect(find.text('This computer (local network)'), findsOneWidget);
-    expect(find.text('Hosted relay (internet)'), findsOneWidget);
-    // Hosted keeps the advanced URL field; local's port field stays hidden.
+    expect(find.widgetWithText(SwitchListTile, localTitle), findsOneWidget);
+    expect(find.widgetWithText(SwitchListTile, hostedTitle), findsOneWidget);
+    // Hosted carries the advanced URL field; the local port field appears
+    // only with the local relay switched on.
     expect(find.text('Relay URL'), findsOneWidget);
     expect(find.text('Port'), findsNothing);
   });
 
-  testWidgets('one click to This computer persists and shows the relay URL', (
-    tester,
-  ) async {
+  testWidgets('turning the local relay on persists it and shows its URL — '
+      'the hosted one keeps running', (tester) async {
     await tester.pumpWidget(app(relayStatus: running()));
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
 
-    await tester.tap(find.text('This computer (local network)'));
-    await tester.pumpAndSettle();
+    await toggleRelay(tester, localTitle);
 
     // Persisted, so it auto-starts with remote access on later launches.
-    expect(SettingsRepository(db).load().remoteRelayMode, RelayMode.local);
+    expect(RelayPrefsController.readFrom(db)!.localEnabled, isTrue);
+    expect(RelayPrefsController.readFrom(db)!.hostedEnabled, isTrue);
     // The controller was woken — that is what auto-starts the local relay.
     expect(fake.syncCalls, 2);
     expect(find.text('Relay running at ws://192.168.1.7:8787'), findsOneWidget);
@@ -242,8 +256,42 @@ void main() {
       find.text('Also reachable at ws://172.22.32.1:8787'),
       findsOneWidget,
     );
-    expect(find.text('Relay URL'), findsNothing);
+    // Both relays are offered at once: the port field AND the hosted URL.
     expect(find.text('Port'), findsOneWidget);
+    expect(find.text('Relay URL'), findsOneWidget);
+  });
+
+  testWidgets('turning both relays off says remote access is idle', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    await enableRemoteAccess(tester);
+
+    await toggleRelay(tester, hostedTitle);
+
+    expect(RelayPrefsController.readFrom(db)!.hostedEnabled, isFalse);
+    expect(RelayPrefsController.readFrom(db)!.localEnabled, isFalse);
+    expect(find.textContaining('No relay is switched on'), findsOneWidget);
+    expect(find.text('Relay URL'), findsNothing);
+    expect(find.text('Port'), findsNothing);
+    // Pairing is still offered — it refuses with its own sentence, and the
+    // switches above say why.
+    expect(find.text('Pair a device'), findsOneWidget);
+  });
+
+  testWidgets('a device row names its relay, and says when it is parked', (
+    tester,
+  ) async {
+    PairedDeviceDao(db).insert(device(relayUrl: kLocalRelayMarker));
+    await tester.pumpWidget(app());
+    await enableRemoteAccess(tester);
+
+    // The local relay is off, so the phone paired through it is parked —
+    // the row says which relay and why it is quiet, not just "last seen".
+    expect(
+      find.textContaining('Local relay · paused — that relay is off'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a bind failure shows the reason and Retry resyncs', (
@@ -257,10 +305,8 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('This computer (local network)'));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
+    await toggleRelay(tester, localTitle);
 
     expect(
       find.text('Local relay: port 8787 is already in use by another program'),
@@ -277,10 +323,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(app(relayStatus: running(firewallHint: true)));
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('This computer (local network)'));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
+    await toggleRelay(tester, localTitle);
 
     expect(find.textContaining('Windows Defender Firewall'), findsOneWidget);
   });
@@ -289,10 +333,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(app(relayStatus: running()));
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('This computer (local network)'));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
+    await toggleRelay(tester, localTitle);
+    // Hosted off, so the port field is the only text field on screen.
+    await toggleRelay(tester, hostedTitle);
 
     await tester.enterText(find.byType(TextField), '9000');
     await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -314,8 +358,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(app());
-    await tester.tap(find.byType(Switch));
-    await tester.pumpAndSettle();
+    await enableRemoteAccess(tester);
     fake.pairingAllowed = false;
 
     await tester.tap(find.text('Pair a device'));

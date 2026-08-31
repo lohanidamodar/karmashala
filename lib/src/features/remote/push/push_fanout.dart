@@ -21,18 +21,23 @@ class PushFanout {
   PushFanout({
     required List<PairedDevice> Function() devices,
     required bool Function(String deviceId) hasLiveLink,
-    required this.client,
+    required RelayPushClient? Function(PairedDevice device) clientFor,
     DateTime Function()? now,
     this.onLog,
   }) : _now = now ?? DateTime.now,
        // ignore: prefer_initializing_formals — private field, named for callers.
        _devices = devices,
        // ignore: prefer_initializing_formals — private field, named for callers.
-       _hasLiveLink = hasLiveLink;
+       _hasLiveLink = hasLiveLink,
+       // ignore: prefer_initializing_formals — private field, named for callers.
+       _clientFor = clientFor;
 
   final List<PairedDevice> Function() _devices;
   final bool Function(String deviceId) _hasLiveLink;
-  final RelayPushClient client;
+
+  /// The push client for one device's OWN relay — null when that relay is off,
+  /// which is exactly when a push through it could not arrive.
+  final RelayPushClient? Function(PairedDevice device) _clientFor;
   final DateTime Function() _now;
 
   /// Lifecycle only — never called with a title, a token or a payload.
@@ -70,6 +75,12 @@ class PushFanout {
     final token = device.pushToken;
     if (token == null || token.isEmpty) return;
     if (_hasLiveLink(device.id)) return;
+    // A device whose relay is switched off has nowhere for a push to land.
+    final client = _clientFor(device);
+    if (client == null) {
+      onLog?.call('a push was not sent: that relay is off');
+      return;
+    }
 
     final key = SecretKeyData(device.deviceKey);
     final tag = await derivePushTag(key);
