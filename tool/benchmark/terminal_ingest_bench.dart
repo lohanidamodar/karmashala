@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
+import 'package:chitragupta/src/features/terminal/data/terminal_ingest_budget.dart';
+import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
 import 'package:chitragupta/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -57,7 +59,7 @@ const int _frames = 60;
 /// deterministically — a benchmark that waited on real frames would be
 /// measuring the test binding rather than the ingestion.
 class BenchPane {
-  BenchPane() {
+  BenchPane({required TerminalIngestBudget budget, required IngestTier tier}) {
     terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
       ..resize(_columns, _rows);
     coalescer = PtyOutputCoalescer(
@@ -65,9 +67,12 @@ class BenchPane {
         bytesParsed += data.length;
         terminal.write(data);
       },
+      budget: budget,
+      tier: tier,
       scheduleFrameCallback: (callback) => frameCallback = callback,
       scheduleWatchdog: (delay, callback) {
         watchdogsArmed++;
+        watchdogDelays += delay.inMilliseconds;
         return Object();
       },
       cancelWatchdog: (_) {},
@@ -83,6 +88,7 @@ class BenchPane {
 
   int bytesParsed = 0;
   int watchdogsArmed = 0;
+  int watchdogDelays = 0;
 
   /// Runs whatever this pane was waiting for a frame to do.
   void runFrame() {
@@ -113,15 +119,26 @@ void main() {
     // ignore: avoid_print
     print(
       'N panes | frame cost | per pane | bytes/frame | echo wait | '
-      'watchdogs | RSS',
+      'watchdogs | mean wd | dropped | RSS',
     );
     for (final n in [1, 10, 100]) {
       final baselineRss = rssMegabytes();
-      final panes = [for (var i = 0; i < n; i++) BenchPane()];
+      // The workspace this models: one visible tab, everything else open but
+      // hidden — which is what `TerminalSessionsController` sets.
+      var now = Duration.zero;
+      final budget = TerminalIngestBudget(clock: () => now);
+      final panes = [
+        for (var i = 0; i < n; i++)
+          BenchPane(
+            budget: budget,
+            tier: i == n - 1 ? IngestTier.hot : IngestTier.warm,
+          ),
+      ];
       final focused = panes.last;
 
       final frameCosts = <Duration>[];
       for (var frame = 0; frame < _frames; frame++) {
+        now += kIngestRefillInterval;
         for (final pane in panes) {
           pane.coalescer.add(chunk);
         }
@@ -136,11 +153,21 @@ void main() {
       final bytesPerFrame =
           panes.fold<int>(0, (sum, p) => sum + p.bytesParsed) ~/ _frames;
       final watchdogs = panes.fold<int>(0, (sum, p) => sum + p.watchdogsArmed);
+      final dropped = panes.fold<int>(
+        0,
+        (sum, p) => sum + p.coalescer.droppedBytes,
+      );
+      // The cadence hidden panes drain at. A pane nobody watches schedules no
+      // frames, so its watchdog *is* its clock; at 100 ms rather than 16 that
+      // is five sixths fewer timers per second in the real app.
+      final meanWatchdog =
+          panes.fold<int>(0, (sum, p) => sum + p.watchdogDelays) / watchdogs;
 
       // The echo: one keystroke's worth of output into the focused pane, while
       // every other pane is still producing. What it waits for is the frame.
       final echoWaits = <Duration>[];
       for (var i = 0; i < 20; i++) {
+        now += kIngestRefillInterval;
         for (final pane in panes) {
           pane.coalescer.add(chunk);
         }
@@ -163,6 +190,8 @@ void main() {
         '${bytesPerFrame.toString().padLeft(11)} | '
         '${'${(median(echoWaits).inMicroseconds / 1000).toStringAsFixed(2)}ms'.padLeft(9)} | '
         '${watchdogs.toString().padLeft(9)} | '
+        '${'${meanWatchdog.toStringAsFixed(0)}ms'.padLeft(7)} | '
+        '${'${dropped ~/ 1024}K'.padLeft(7)} | '
         '${rss}MB (+${rss - baselineRss})',
       );
 

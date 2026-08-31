@@ -6,6 +6,7 @@ import 'package:chitragupta/src/features/terminal/application/terminal_sessions_
 import 'package:chitragupta/src/features/terminal/data/command_block_recorder.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/foundation.dart';
@@ -15,7 +16,8 @@ import 'package:xterm/xterm.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
 /// spawning a real PTY.
-class FakeTerminalInstance implements TerminalInstance {
+class FakeTerminalInstance
+    implements TerminalInstance, TieredTerminalInstance {
   FakeTerminalInstance({
     required this.id,
     required this.title,
@@ -62,6 +64,20 @@ class FakeTerminalInstance implements TerminalInstance {
   final livenessNotifier = ValueNotifier(PaneLiveness.live);
 
   bool disposed = false;
+
+  /// What the controller last told this pane about how visible it is, and every
+  /// value it has been told — a fake pane parses nothing, so the tier is the
+  /// only observable part of tiered ingestion at this level.
+  @override
+  IngestTier ingestTier = IngestTier.hot;
+  final tierHistory = <IngestTier>[];
+
+  @override
+  void setIngestTier(IngestTier tier) {
+    if (ingestTier == tier) return;
+    ingestTier = tier;
+    tierHistory.add(tier);
+  }
 
   @override
   void dispose() {

@@ -9,6 +9,7 @@ import 'package:xterm/xterm.dart';
 
 import '../domain/agent_pane_launch.dart';
 import '../domain/enter_key_encoding.dart';
+import '../domain/ingest_tier.dart';
 import '../domain/mouse_wheel_reporter.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
@@ -18,6 +19,8 @@ import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
+import 'scrollback_spool.dart';
+import 'terminal_ingest_budget.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
 /// UI renders. Implementations own whatever backs the buffer (a real PTY in
@@ -83,6 +86,24 @@ abstract interface class ReapableTerminalInstance {
   Future<void> get reaped;
 }
 
+/// A [TerminalInstance] whose output ingestion answers to how visible it is.
+///
+/// Deliberately a second, narrower interface, for the same reason
+/// [ReapableTerminalInstance] is one: most panes have nothing to throttle. An
+/// error pane never spawned anything, a dormant pane is replayed history, and a
+/// test fake produces output only when a test says so. Only a pane with a live
+/// pipe behind it has a tier worth setting.
+///
+/// The controller sets this from the only thing that decides it — where the
+/// pane is in the workspace. A pane never chooses its own tier.
+abstract interface class TieredTerminalInstance {
+  /// How visible this pane is now.
+  void setIngestTier(IngestTier tier);
+
+  /// What it was last told.
+  IngestTier get ingestTier;
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -103,7 +124,10 @@ typedef TerminalInstanceFactory =
 /// (architecture constraint 6): an interactive terminal needs a pseudo-terminal,
 /// which the run-to-completion/stream abstraction does not model.
 class PtyTerminalInstance
-    implements TerminalInstance, ReapableTerminalInstance {
+    implements
+        TerminalInstance,
+        ReapableTerminalInstance,
+        TieredTerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
@@ -113,6 +137,7 @@ class PtyTerminalInstance
     this.agentLaunch,
     String? restoredScrollback,
     bool shellIntegration = false,
+    TerminalIngestBudget? ingestBudget,
   }) {
     terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
       // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
@@ -149,8 +174,11 @@ class PtyTerminalInstance
     // flutter_pty reads 1 KB at a time, so without this a busy shell costs
     // hundreds of decodes, parses and notifyListeners() a second on the UI
     // isolate — which is what the streaming stutter was.
-    _coalescer = PtyOutputCoalescer(onData: terminal.write);
-    _outputSubscription = _pty.output.listen(_coalescer.add);
+    _coalescer = PtyOutputCoalescer(
+      onData: terminal.write,
+      budget: ingestBudget,
+    );
+    _outputSubscription = _pty.output.listen(_onPtyBytes);
 
     // Captured while the process is certainly alive: `pid` is only safe to act
     // on before the OS can recycle the number.
@@ -213,6 +241,68 @@ class PtyTerminalInstance
   bool _disposed = false;
   bool _exited = false;
   Future<void>? _reap;
+
+  /// Where a cold pane's output goes instead of into the parser.
+  final ScrollbackSpool _spool = ScrollbackSpool();
+
+  IngestTier _tier = IngestTier.hot;
+
+  @override
+  IngestTier get ingestTier => _tier;
+
+  /// Bytes the spool discarded while this pane was cold. Diagnostics, and what
+  /// the replay reads to decide whether to admit to a gap.
+  @visibleForTesting
+  int get spooledBytes => _spool.length;
+
+  /// Reads the pipe. A pane nobody can see does not parse: its bytes go
+  /// straight into a bounded spool, undecoded, and are replayed only if the
+  /// session comes back. Something still has to *read* the pipe, or the child
+  /// blocks on a full OS buffer.
+  void _onPtyBytes(Uint8List bytes) {
+    if (_disposed) return;
+    if (_tier == IngestTier.cold) {
+      _spool.add(bytes);
+      return;
+    }
+    _coalescer.add(bytes);
+  }
+
+  @override
+  void setIngestTier(IngestTier tier) {
+    if (_disposed || _tier == tier) return;
+    final wasCold = _tier == IngestTier.cold;
+    _tier = tier;
+    _coalescer.tier = tier;
+    if (tier == IngestTier.cold) {
+      // Take what is already queued with us rather than parsing it on the way
+      // out: going cold must not cost a flush.
+      _spool.add(_coalescer.takePending());
+    } else if (wasCold) {
+      _replaySpool();
+    }
+  }
+
+  /// Writes what arrived while this pane was cold into its buffer.
+  ///
+  /// One write, bounded by the spool's own cap, so bringing a session back is
+  /// a single parse of at most a few hundred screens rather than however much
+  /// the process produced while it was away.
+  void _replaySpool() {
+    final dropped = _spool.droppedBytes;
+    final bytes = _spool.drain();
+    _spool.reset();
+    if (bytes.isEmpty && dropped == 0) return;
+    if (dropped > 0) {
+      terminal.write(
+        '\r\n\x1b[90m[\u2026 ${dropped ~/ 1024} KiB of output while '
+        'detached was dropped]\x1b[0m\r\n',
+      );
+    }
+    if (bytes.isNotEmpty) {
+      terminal.write(const Utf8Decoder(allowMalformed: true).convert(bytes));
+    }
+  }
 
   @override
   Future<void> get reaped => _reap ?? Future<void>.value();

@@ -9,6 +9,7 @@ import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
 import '../data/terminal_workspace_dao.dart';
 import '../domain/agent_pane_launch.dart';
+import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
@@ -221,7 +222,42 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     },
   );
 
-  void _publish() => state = _snapshot();
+  void _publish() {
+    _applyIngestTiers();
+    state = _snapshot();
+  }
+
+  /// Tells every pane how visible it is, so ingestion can cost what the pane is
+  /// worth rather than the same for all of them.
+  ///
+  /// The workspace is the only thing that knows this, which is why it lives
+  /// here and not in the pane: a pane cannot see which tab is in front. Called
+  /// from [_publish], so every open, close, split, activate, detach and
+  /// reattach re-derives it from one place — there is no second path that could
+  /// leave a pane at the wrong tier.
+  ///
+  /// * **hot** — every pane of the active tab, focused or not: they are all on
+  ///   screen.
+  /// * **warm** — panes of every other open tab. Correct, but not watched.
+  /// * **cold** — anything still tracked with no tab at all, which is a
+  ///   detached session. Not parsed; its output spools.
+  ///
+  /// Cost is O(panes) per publish and every pane whose tier did not change
+  /// returns immediately, which is nearly all of them nearly always.
+  void _applyIngestTiers() {
+    final tiers = <String, IngestTier>{};
+    for (final tab in _tabs) {
+      final tier = tab.id == _activeTabId ? IngestTier.hot : IngestTier.warm;
+      for (final paneId in tab.layout.panes) {
+        tiers[paneId] = tier;
+      }
+    }
+    for (final entry in _instances.entries) {
+      if (entry.value case final TieredTerminalInstance tiered) {
+        tiered.setIngestTier(tiers[entry.key] ?? IngestTier.cold);
+      }
+    }
+  }
 
   /// Disposes every pane, returning the reaps still in flight — one per pane
   /// that owns a process. Callers that can wait should; `ref.onDispose` cannot.
