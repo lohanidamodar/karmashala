@@ -770,7 +770,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// that cannot be reopened.
   @override
   void onWindowClose() {
-    if (_closeToTray && _trayIconApplied) {
+    final hide = _closeToTray && _trayIconApplied;
+    // Logged because the two ways this can go look identical from the outside
+    // until one of them is wrong: a close that quits when the user expected the
+    // tray is either the setting being off or the icon never having gone up,
+    // and nothing else in the log distinguishes them.
+    _logger.info(
+      'system: window close → ${hide ? 'hide to tray' : 'quit'} '
+      '(closeToTray=$_closeToTray trayIcon=$_trayIconApplied)',
+    );
+    if (hide) {
       unawaited(_native.window.hide());
     } else {
       unawaited(_quit());

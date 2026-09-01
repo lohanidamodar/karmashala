@@ -241,32 +241,7 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   }
 
   Future<void> _openUrl() async {
-    final controller = TextEditingController();
-    final url = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Open a URL'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'myapp://path, or https://example.com',
-          ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Open'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+    final url = await askForSimulatorUrl(context);
     if (url == null || url.trim().isEmpty) return;
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
@@ -363,3 +338,46 @@ Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
     );
   },
 );
+
+
+/// Asks for a URL to open on the simulator. Null if the dialog was dismissed.
+///
+/// Extracted so it can be tested on its own — it is the whole of a bug worth a
+/// regression test. It holds **no `TextEditingController`**: the first version
+/// created one and disposed it as soon as `showDialog` returned, which is after
+/// the route pops but *before* its exit animation has finished painting the
+/// field. Every frame of that animation then threw "A TextEditingController was
+/// used after being disposed", and because the error repeats per frame it took
+/// the whole app into an error state rather than failing once.
+///
+/// Reading the text from `onChanged` needs no controller and so cannot outlive
+/// one.
+Future<String?> askForSimulatorUrl(BuildContext context) {
+  var typed = '';
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Open a URL'),
+      content: TextField(
+        key: const Key('simulator-url-field'),
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: 'myapp://path, or https://example.com',
+        ),
+        onChanged: (value) => typed = value,
+        onSubmitted: Navigator.of(context).pop,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('simulator-url-open'),
+          onPressed: () => Navigator.of(context).pop(typed),
+          child: const Text('Open'),
+        ),
+      ],
+    ),
+  );
+}
