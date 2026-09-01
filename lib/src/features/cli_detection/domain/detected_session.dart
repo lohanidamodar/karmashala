@@ -11,6 +11,7 @@ class DetectedSession {
     required this.storeHome,
     this.title,
     this.preview = '',
+    this.startedAt,
     this.modifiedAt,
     this.entrypoint,
   });
@@ -38,6 +39,22 @@ class DetectedSession {
 
   /// First user message preview.
   final String preview;
+
+  /// When the CLI says this conversation **began**, or `null` for a store that
+  /// does not record it.
+  ///
+  /// Different from [modifiedAt] in the one way that matters to
+  /// `LaunchedSessionAttributionService`: a conversation's start is fixed, so it
+  /// can be compared against the moment a session row was written, while its
+  /// last-modified time is "a moment ago" for everything still being typed in.
+  /// Matching a launched Codex row on mtime would therefore accept any live
+  /// conversation in the directory, including one running in somebody else's
+  /// terminal window.
+  ///
+  /// Null for Claude Code (which is told our id at launch and needs no
+  /// inference) and for Antigravity (whose store yields identity without a
+  /// start, and whose rows `AntigravitySessionAttributionService` owns).
+  final DateTime? startedAt;
 
   final DateTime? modifiedAt;
 

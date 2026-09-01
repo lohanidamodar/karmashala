@@ -266,13 +266,28 @@ class AttentionInbox {
   AttentionInbox apply(InboxUpdate update, DateTime now) {
     final addedIds = <String>{};
     final added = <InboxItem>[];
+    final rebound = <String, WatchedSession>{};
 
     void upsert(WatchedSession session, InboxItemKind kind) {
       final id = InboxItem.idFor(kind, session.key);
-      // Already listed, or already added by the news half of this same update.
-      // Either way it keeps its arrival time and its seen flag: a condition
-      // that is still true is not a new thing to tell the user about.
-      if (_byId.containsKey(id) || !addedIds.add(id)) return;
+      final listed = _byId[id];
+      if (listed != null) {
+        // Already listed: it keeps its arrival time and its seen flag, because
+        // a condition that is still true is not a new thing to tell the user
+        // about. But **where to go for it is not identity.** A Codex session
+        // that has just learned its conversation id is watched from that poll
+        // on as the native row that is running it, where the only record with a
+        // transcript to read — and so the only one that could raise this item —
+        // was the imported history until now. Both are the same
+        // `AgentSessionKey`, so this is the same item; an item still holding the
+        // old answer opens a read-only transcript for a session whose pane is
+        // right there, which is the owner's "it show the session as not
+        // active". See `LaunchedSessionAttributionService`.
+        if (listed.session != session) rebound[id] = session;
+        return;
+      }
+      // Already added by the news half of this same update.
+      if (!addedIds.add(id)) return;
       added.add(InboxItem(session: session, kind: kind, at: now));
     }
 
@@ -305,13 +320,22 @@ class AttentionInbox {
     // Identity when nothing moved: a poll every five seconds must not rebuild
     // the status bar, the panel and the tray for saying the same thing again —
     // and must not copy the list to discover that.
-    if (added.isEmpty && retired.isEmpty) return this;
+    if (added.isEmpty && retired.isEmpty && rebound.isEmpty) return this;
     return _index([
       // Each addition used to be inserted at the front in turn, so the last one
       // ended up first. Kept, because it is what orders the tray menu.
       ...added.reversed,
       for (final item in items)
-        if (!retired.contains(item.id)) item,
+        if (!retired.contains(item.id))
+          if (rebound[item.id] case final session?)
+            InboxItem(
+              session: session,
+              kind: item.kind,
+              at: item.at,
+              seen: item.seen,
+            )
+          else
+            item,
     ]);
   }
 

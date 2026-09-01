@@ -24,6 +24,7 @@ import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'antigravity_attribution_service.dart';
 import 'cli_detection_service.dart';
+import 'launched_session_attribution_service.dart';
 import 'project_import_service.dart';
 import 'session_adoption_service.dart';
 import 'session_auto_import_service.dart';
@@ -139,11 +140,66 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
   return SessionTitleSyncService(
     sessionDao: ref.watch(sessionDaoProvider),
     agents: ref.watch(agentRegistryProvider),
-    scanStores: () => scanCliStores(ref),
+    scanStores: () => ref.read(cliStoreScanPassProvider).read(),
     // A row changing its name in the tree is what the revision counter is for.
     onRenamed: (_, _) => ref.read(sessionsRevisionProvider.notifier).bump(),
   );
 });
+
+/// Writes the CLI's conversation id onto a session we launched for an agent
+/// that would not accept one.
+///
+/// Codex is that agent today: `SessionLauncher` records a null id and, in its
+/// own words, the row "keep[s] a null id until something discovers it". Nothing
+/// did — the store scan that could belongs to `SessionAdoptionService`, which
+/// only ever looks at panes the app did *not* launch. See the service's own doc
+/// for the three symptoms one missing id produced.
+final launchedSessionAttributionServiceProvider =
+    Provider<LaunchedSessionAttributionService>((ref) {
+      return LaunchedSessionAttributionService(
+        sessionDao: ref.watch(sessionDaoProvider),
+        installationDao: ref.watch(agentInstallationDaoProvider),
+        repositoryDao: ref.watch(repositoryDaoProvider),
+        environmentDao: ref.watch(executionEnvironmentDaoProvider),
+        agents: ref.watch(agentRegistryProvider),
+        scanStores: () => ref.read(cliStoreScanPassProvider).read(),
+        // A row that has just learned which conversation it is on changes what
+        // the strip, the tree and the inbox each say about it.
+        onAttributed: (_, _) =>
+            ref.read(sessionsRevisionProvider.notifier).bump(),
+      );
+    });
+
+/// One store scan, shared by the passengers on a single store slot.
+///
+/// Attribution and the title sync ask the disk the same question —
+/// [scanCliStores] lists and parses every session file in every store, which on
+/// the owner's machine is a hundred-odd files over `\\wsl.localhost` — and on
+/// the slot where a session learns its conversation, *both* want the answer.
+/// Reading it twice for one slot would be pure waste, so the pass is opened and
+/// closed around them by [cliStoreSyncRunnerProvider] and nothing outside that
+/// holds it.
+final cliStoreScanPassProvider = Provider<CliStoreScanPass>(
+  (ref) => CliStoreScanPass(() => scanCliStores(ref)),
+);
+
+/// A store scan that is read once per pass. See [cliStoreScanPassProvider].
+class CliStoreScanPass {
+  CliStoreScanPass(this._scan);
+
+  final Future<List<DetectedSession>> Function() _scan;
+
+  /// The scan this pass has already started, if any. Held as the *future*, so
+  /// two readers in one pass share the work rather than the result of it — a
+  /// second caller that arrives before the first has finished still waits on
+  /// the one read.
+  Future<List<DetectedSession>>? _inFlight;
+
+  Future<List<DetectedSession>> read() => _inFlight ??= _scan();
+
+  /// Ends the pass, so the next slot reads the disk again.
+  void end() => _inFlight = null;
+}
 
 /// Reconciles session rows against what the CLI stores now say.
 ///
@@ -157,8 +213,18 @@ final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
     // Attribution first: it is what gives a row the CLI id the title sync has
     // to match on, so a session learning its conversation this slot is renamed
     // in the same one rather than the next.
+    //
+    // Antigravity's needs no store scan — it reads one JSON file per store and
+    // the pane's own screen — so it runs outside the pass.
     await ref.read(antigravityAttributionServiceProvider).attribute();
-    await ref.read(sessionTitleSyncServiceProvider).sync();
+    final pass = ref.read(cliStoreScanPassProvider);
+    try {
+      await ref.read(launchedSessionAttributionServiceProvider).attribute();
+      await ref.read(sessionTitleSyncServiceProvider).sync();
+    } finally {
+      // Whatever happened, the next slot must see the disk as it is then.
+      pass.end();
+    }
   };
 });
 
