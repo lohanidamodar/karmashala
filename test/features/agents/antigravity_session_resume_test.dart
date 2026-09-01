@@ -282,11 +282,10 @@ void main() {
       expect(plan.arguments, ['--conversation', conversation]);
     });
 
-    test('no id continues the directory\'s conversation, and says '
+    test('no id resumes the directory\'s conversation, and says '
         'which', () {
-      // The honest fallback. `--continue` resolves through the same
-      // `last_conversations.json` entry read here, so the app can name what it
-      // is about to reopen rather than offering a blind "continue last".
+      // The honest fallback, and the reason it is not a recency picker: the
+      // app reads which conversation `--continue` would reach and can name it.
       final plan = planAntigravityResume(
         descriptor: descriptor,
         workingDirectory: workdir,
@@ -294,8 +293,22 @@ void main() {
       );
 
       expect(plan, isA<AntigravityContinueLatest>());
-      expect(plan.arguments, ['--continue']);
       expect((plan as AntigravityContinueLatest).conversationId, conversation);
+    });
+
+    test('and names it rather than passing --continue', () {
+      // `--continue`'s directory scope is read off the binary's symbols, not an
+      // observed run. Naming the conversation reaches the same one with no
+      // scope assumption — and if the assumption were wrong, this still opens
+      // the conversation the app just said it would.
+      final plan = planAntigravityResume(
+        descriptor: descriptor,
+        workingDirectory: workdir,
+        lastConversationForDirectory: conversation,
+      );
+
+      expect(plan.arguments, ['--conversation', conversation]);
+      expect(plan.arguments, isNot(contains('--continue')));
     });
 
     test('an id beats a continuable directory', () {
