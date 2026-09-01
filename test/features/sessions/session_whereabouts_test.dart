@@ -39,6 +39,12 @@ const _refusal =
     'thread 01a051ab-eaeb-7a73-b8a4-a27d81e47984 already has an active writer '
     '(code -32600)';
 
+/// Captured from the owner's own pane on 2026-09-01, after the app resumed a
+/// session id it had assigned to a conversation Claude Code never wrote.
+const _noSuchConversation =
+    'No conversation found with session ID: '
+    '4b13c55e-ec74-4c0b-ac63-44747861aabd';
+
 const _exclusive = AgentDescriptor(
   id: 'exclusive',
   displayName: 'Exclusive Agent',
@@ -50,6 +56,9 @@ const _exclusive = AgentDescriptor(
     interactiveResume: AgentResume.subcommand('resume'),
     resumeConflict: AgentResumeConflictRules(
       markers: [GridMatcher('already has an active writer')],
+    ),
+    missingConversation: AgentMissingConversationRules(
+      markers: [GridMatcher('No conversation found with session ID')],
     ),
   ),
 );
@@ -258,6 +267,100 @@ void main() {
       container.read(sessionWhereaboutsProvider(id)).refusedResume,
       isFalse,
     );
+  });
+
+  test("a dead pane saying the agent has no record of the conversation says "
+      'so, and does not claim a holder', () async {
+    // The fallback for a resume the store probe could not predict. The user
+    // saw this exact pane and read it as lost work; the row now carries the
+    // agent's own answer instead of still saying "running here".
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+
+    final id = await launch(h.container);
+    final paneId = SessionDao(h.db).getById(id)!.paneId!;
+    writeToPane(
+      h.container,
+      paneId,
+      '${_wrapped(_noSuchConversation, 20)}[process exited with code 1]\r\n',
+    );
+    killProcess(h.container, paneId);
+    h.container.invalidate(sessionWhereaboutsProvider(id));
+
+    final where = h.container.read(sessionWhereaboutsProvider(id));
+    expect(where.conversationMissing, isTrue);
+    expect(where.note, 'no conversation to resume');
+    expect(where.explanation, contains('no record of it'));
+    // The opposite of a holder. Folding the two together would block a resume
+    // that should be explained instead.
+    expect(where.refusedResume, isFalse);
+    expect(where.knownHeldElsewhere, isFalse);
+  });
+
+  test('an agent that has never said it counts for nothing', () async {
+    const undeclared = AgentDescriptor(
+      id: 'exclusive',
+      displayName: 'Exclusive Agent',
+      binaries: AgentBinaries(windows: ['exclusive'], posix: ['exclusive']),
+      launch: AgentLaunchSpec(
+        interactiveResume: AgentResume.subcommand('resume'),
+      ),
+    );
+    final db = AppDatabase.memory();
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    ProjectDao(db).insert(project());
+    RepositoryDao(db).insert(repository());
+    AgentInstallationDao(db).insert(agentInstallation(agentId: 'exclusive'));
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+        idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
+        agentRegistryProvider.overrideWithValue(
+          const AgentRegistry([undeclared]),
+        ),
+        settingsControllerProvider.overrideWith(_StaticSettings.new),
+      ],
+    );
+    addTearDown(db.close);
+    addTearDown(container.dispose);
+
+    final id = await launch(container);
+    final paneId = SessionDao(db).getById(id)!.paneId!;
+    writeToPane(container, paneId, _noSuchConversation);
+    killProcess(container, paneId);
+    container.invalidate(sessionWhereaboutsProvider(id));
+
+    expect(
+      container.read(sessionWhereaboutsProvider(id)).conversationMissing,
+      isFalse,
+    );
+  });
+
+  test('a restored pane is never read for either answer', () async {
+    // A pane rebuilt from disk holds the *previous* run's output, so an answer
+    // in there is not evidence about this one — and reading it would build the
+    // buffer the restore deliberately kept unparsed.
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+
+    final id = await launch(h.container);
+    final paneId = SessionDao(h.db).getById(id)!.paneId!;
+    writeToPane(h.container, paneId, _noSuchConversation);
+    (h.container
+                .read(terminalSessionsControllerProvider.notifier)
+                .instanceFor(paneId)!
+            as FakeTerminalInstance)
+        .livenessNotifier
+        .value = PaneLiveness.restored;
+    h.container.invalidate(sessionWhereaboutsProvider(id));
+
+    final where = h.container.read(sessionWhereaboutsProvider(id));
+    expect(where.conversationMissing, isFalse);
+    expect(where.refusedResume, isFalse);
   });
 
   test('a status with no source contributes no age', () {

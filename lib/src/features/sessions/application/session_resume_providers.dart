@@ -78,18 +78,26 @@ final sessionWhereaboutsProvider = Provider.autoDispose
 
       // The pane is dead. Its last words are still in the buffer, and for a
       // launch that was a resume they may be the agent explaining that somebody
-      // else holds the conversation.
+      // else holds the conversation — or that there is no conversation. Both
+      // are read from one tail: the screen is scanned once, at whichever
+      // window is larger, so a second question costs no second read.
       final descriptor = sessionDescriptor(ref, session.agentInstallationId);
-      final refused = showsResumeConflict(
-        descriptor,
-        terminalTailLines(
-          instance.terminal,
-          lines: descriptor?.launch.resumeConflict.scanLines ?? 30,
-        ),
+      final conflict =
+          descriptor?.launch.resumeConflict ??
+          const AgentResumeConflictRules();
+      final missing =
+          descriptor?.launch.missingConversation ??
+          const AgentMissingConversationRules();
+      final tail = terminalTailLines(
+        instance.terminal,
+        lines: conflict.scanLines > missing.scanLines
+            ? conflict.scanLines
+            : missing.scanLines,
       );
       return SessionWhereabouts(
         external: external,
-        refusedResume: refused,
+        refusedResume: showsResumeConflict(descriptor, tail),
+        conversationMissing: missing.matchedBy(tail),
         lastSeen: lastSeen,
       );
     });

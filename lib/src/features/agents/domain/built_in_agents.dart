@@ -82,6 +82,16 @@ const _claudeCode = AgentDescriptor(
     // on this machine (started 4s ago) already has Remote Control for this
     // conversation". Nothing about the session itself was refused.
     allowsConcurrentResume: true,
+    // Captured from the owner's own pane, verbatim, after the app resumed a
+    // session id it had assigned to a conversation Claude never wrote:
+    //
+    //   No conversation found with session ID: 4b13c55e-ec74-4c0b-ac63-…
+    //   [process exited with code 1]
+    //
+    // The id is dropped from the marker because it is different every time.
+    missingConversation: AgentMissingConversationRules(
+      markers: [GridMatcher('No conversation found with session ID')],
+    ),
     // `--fork-session` is a *modifier on a resume*, not a mode of its own, so
     // the arguments are `--resume <id> --fork-session`. The forked process
     // loads the original's history and writes its own session id from the first
