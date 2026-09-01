@@ -115,7 +115,6 @@ void main() {
       'lib/src/features/ssh/presentation/known_hosts_section.dart',
       'lib/src/features/ssh/presentation/remote_file_browser_dialog.dart',
       'lib/src/features/ssh/presentation/ssh_hosts_section.dart',
-      'lib/src/features/terminal/presentation/terminal_panel.dart',
       'lib/src/features/terminal/presentation/terminal_search_bar.dart',
     };
     // A literal size only: `fontSize: someVariable` is a value that came from

@@ -60,7 +60,8 @@ void main() {
       MaterialApp(
         home: PaneLayoutView(
           layout: layout,
-          paneBuilder: (id) => PaintCounter(counts: counts, name: id),
+          regionBuilder: (group) =>
+              PaintCounter(counts: counts, name: group.activePaneId),
         ),
       ),
     );
@@ -82,13 +83,15 @@ void main() {
               layout: PaneLayout.single(
                 'visible',
               ).split('visible', SplitAxis.horizontal, 'visible2', 's1'),
-              paneBuilder: (id) => PaintCounter(counts: counts, name: id),
+              regionBuilder: (group) =>
+              PaintCounter(counts: counts, name: group.activePaneId),
             ),
             PaneLayoutView(
               layout: PaneLayout.single(
                 'hidden',
               ).split('hidden', SplitAxis.vertical, 'hidden2', 's2'),
-              paneBuilder: (id) => PaintCounter(counts: counts, name: id),
+              regionBuilder: (group) =>
+              PaintCounter(counts: counts, name: group.activePaneId),
             ),
           ],
         ),
@@ -115,7 +118,8 @@ void main() {
       sized(
         PaneLayoutView(
           layout: PaneLayout.single('a'),
-          paneBuilder: (id) => SizedBox.expand(key: ValueKey(id)),
+          regionBuilder: (group) =>
+              SizedBox.expand(key: ValueKey(group.activePaneId)),
         ),
       ),
     );
@@ -134,7 +138,8 @@ void main() {
       sized(
         PaneLayoutView(
           layout: layout,
-          paneBuilder: (id) => SizedBox.expand(key: ValueKey(id)),
+          regionBuilder: (group) =>
+              SizedBox.expand(key: ValueKey(group.activePaneId)),
         ),
       ),
     );
@@ -158,7 +163,8 @@ void main() {
           layout: PaneLayout.single(
             'a',
           ).split('a', SplitAxis.vertical, 'b', 's1'),
-          paneBuilder: (id) => SizedBox.expand(key: ValueKey(id)),
+          regionBuilder: (group) =>
+              SizedBox.expand(key: ValueKey(group.activePaneId)),
         ),
       ),
     );
@@ -180,7 +186,8 @@ void main() {
           layout: PaneLayout.single(
             'a',
           ).split('a', SplitAxis.horizontal, 'b', 's1'),
-          paneBuilder: (id) => SizedBox.expand(key: ValueKey(id)),
+          regionBuilder: (group) =>
+              SizedBox.expand(key: ValueKey(group.activePaneId)),
           onResize: (splitId, index, delta) => resizes.add((splitId, index)),
         ),
       ),
