@@ -367,6 +367,137 @@ void main() {
     );
   });
 
+  // --- A conversation the desktop has reconciled ----------------------------
+  //
+  // The owner opened a session on the phone and got "a session that's not
+  // running": read-only CLI history for a conversation that was live in a pane
+  // on the desktop. `sessions` and `imported_sessions` can each hold a record
+  // of one conversation and `ImportedSessionDao` resolves the tie — a
+  // conversation with a native row is *superseded*. The list already obeyed
+  // that (every list read there filters); resolving an id did not, so a phone
+  // holding the imported id — from a list fetched before attribution wrote the
+  // conversation id onto the native row — was answered with the history.
+
+  void seedImported(
+    String id, {
+    required String externalId,
+    String title = 'Old CLI chat',
+  }) {
+    ImportedSessionDao(db).insertIfAbsent(
+      ImportedSession(
+        id: id,
+        repositoryId: 'r1',
+        cli: 'mystery',
+        externalId: externalId,
+        environmentId: 'windows',
+        filePath: 'C:\\nowhere\\$id.jsonl',
+        storeHome: r'C:\nowhere',
+        isSubagent: false,
+        preview: 'an old conversation',
+        title: title,
+        createdAt: now,
+        updatedAt: DateTime.utc(2026, 8, 31, 8),
+      ),
+    );
+  }
+
+  /// Writes the conversation id onto a native row, which is what
+  /// `LaunchedSessionAttributionService` does on a store sweep — the moment
+  /// the imported record becomes superseded.
+  void attribute(String sessionId, String externalId) =>
+      SessionDao(db).updateExternalSessionId(sessionId, externalId);
+
+  group('a conversation the desktop has reconciled', () {
+    test('is listed once, as the live row', () {
+      seedWorkspace();
+      seedImported('imp1', externalId: 'x1');
+      seedSession('s1', title: 'Old CLI chat');
+      attribute('s1', 'x1');
+
+      final rows = container.read(remoteHostBindingsProvider).listSessions();
+
+      expect(rows, hasLength(1));
+      expect(rows.single.sessionId, 's1');
+      expect(rows.single.imported, isFalse);
+    });
+
+    test('opens on the live row when the phone holds the imported id', () async {
+      seedWorkspace();
+      seedImported('imp1', externalId: 'x1');
+      seedSession('s1', title: 'Old CLI chat');
+      attribute('s1', 'x1');
+      appendEvent('s1', SessionEventTypes.agentMessage, {'text': 'still here'});
+
+      final bindings = container.read(remoteHostBindingsProvider);
+
+      // The stale id the phone is holding resolves to the running session.
+      final snapshot = bindings.sessionById('imp1');
+      expect(snapshot, isNotNull);
+      expect(snapshot!.sessionId, 's1');
+      expect(snapshot.imported, isFalse);
+      expect(snapshot.status, 'running');
+
+      // And so does everything that takes a session id.
+      final page = await bindings.transcriptFor('imp1');
+      expect([for (final m in page.messages) m.text], ['still here']);
+
+      // Not "imported from the CLI — read-only here": this reaches the live
+      // row and stops on the agent's own approval rules, like `s1` does.
+      await expectLater(
+        bindings.answerApproval('imp1', 'approve'),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('names no way to approve'),
+          ),
+        ),
+      );
+    });
+
+    test('history with no native row is still listed and still read-only',
+        () async {
+      seedWorkspace();
+      seedImported('imp2', externalId: 'x2');
+
+      final bindings = container.read(remoteHostBindingsProvider);
+      final rows = bindings.listSessions();
+
+      expect(rows, hasLength(1));
+      expect(rows.single.sessionId, 'imp2');
+      expect(rows.single.imported, isTrue);
+      expect(bindings.sessionById('imp2')?.imported, isTrue);
+      await expectLater(
+        bindings.answerApproval('imp2', 'approve'),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('imported from the CLI'),
+          ),
+        ),
+      );
+    });
+
+    test('a native row with no conversation id yet hides nothing', () {
+      // The window `LaunchedSessionAttributionService` exists to close: a
+      // Codex row keeps a null id until a store sweep discovers it, and a null
+      // id must never be read as "this row represents that history".
+      seedWorkspace();
+      seedImported('imp3', externalId: 'x3');
+      seedSession('s1');
+
+      final bindings = container.read(remoteHostBindingsProvider);
+      final rows = bindings.listSessions();
+
+      expect(
+        [for (final row in rows) row.sessionId],
+        containsAll(<String>['s1', 'imp3']),
+      );
+      expect(bindings.sessionById('imp3')?.imported, isTrue);
+    });
+  });
+
   test('push registration lands on the paired-device row', () async {
     final dao = PairedDeviceDao(db);
     dao.insert(fakeDevice());
