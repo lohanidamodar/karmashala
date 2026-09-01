@@ -6,6 +6,8 @@ HandoffPacket _packet({
   int omittedTurns = 0,
   List<HandoffChange>? changes = const [],
   List<String> unresolvedTasks = const [],
+  List<HandoffDecision>? decisions = const [],
+  int omittedDecisions = 0,
   String? branch = 'feature/x',
   int? commitsAhead = 2,
   String? baseBranch = 'origin/main',
@@ -24,8 +26,28 @@ HandoffPacket _packet({
   changes: changes,
   recap: recap,
   omittedTurns: omittedTurns,
+  decisions: decisions,
+  omittedDecisions: omittedDecisions,
   unresolvedTasks: unresolvedTasks,
   isFork: isFork,
+);
+
+HandoffDecision _decision({
+  String kind = 'Approach rejected',
+  String summary = 'The isolate pool deadlocked on Windows.',
+  String? detail,
+  String? decidedBy = 'Claude Code',
+  String? origin = 'verification run',
+  String? originId = 'v-1',
+  DateTime? recordedAt,
+}) => HandoffDecision(
+  kind: kind,
+  summary: summary,
+  detail: detail,
+  decidedBy: decidedBy,
+  origin: origin,
+  originId: originId,
+  recordedAt: recordedAt ?? DateTime.utc(2026, 8, 31, 12, 5),
 );
 
 void main() {
@@ -141,6 +163,181 @@ void main() {
         );
       },
     );
+  });
+
+  group('the decision record', () {
+    test('is rendered ahead of the quoted recap, so it is never the part '
+        'that gets cut', () {
+      final text = _packet(
+        decisions: [_decision()],
+        recap: const [HandoffTurn(speaker: 'User', text: 'Parse the header.')],
+      ).render();
+      expect(
+        text.indexOf('## Decisions on record'),
+        lessThan(text.indexOf('## Conversation so far')),
+      );
+    });
+
+    test('quotes each decision under its kind, attributed and dated', () {
+      final text = _packet(decisions: [_decision()]).render();
+      expect(text, contains('**Approach rejected**'));
+      // Attributed, like every other line the packet prints: the reader has to
+      // be able to tell a rule the user imposed from one an agent chose.
+      expect(text, contains('decided by Claude Code'));
+      expect(text, contains('2026-08-31 12:05Z'));
+      // Quoted, never paraphrased.
+      expect(text, contains('> The isolate pool deadlocked on Windows.'));
+    });
+
+    test('names the act that produced it, and its record when there is one', () {
+      expect(
+        _packet(decisions: [_decision()]).render(),
+        contains('from verification run `v-1`'),
+      );
+      // An approval prompt is drawn by another program and gone once answered;
+      // naming a record to open would be inventing one.
+      expect(
+        _packet(
+          decisions: [
+            _decision(origin: "the agent's own approval prompt", originId: null),
+          ],
+        ).render(),
+        contains("from the agent's own approval prompt"),
+      );
+    });
+
+    test('a decision whose origin has been pruned still renders', () {
+      // Nothing dereferences an origin, so a run that has been cleaned up is
+      // indistinguishable from one that has not — by design.
+      final text = _packet(
+        decisions: [_decision(originId: 'v-long-gone')],
+      ).render();
+      expect(text, contains('from verification run `v-long-gone`'));
+      expect(text, contains('> The isolate pool deadlocked on Windows.'));
+    });
+
+    test('a multi-line detail is quoted line by line, like a turn', () {
+      final text = _packet(
+        decisions: [_decision(detail: 'one\ntwo')],
+      ).render();
+      expect(text, contains('> one'));
+      expect(text, contains('> two'));
+    });
+
+    test('an unknown decider says "not recorded" rather than nothing', () {
+      final text = _packet(
+        decisions: [_decision(decidedBy: null)],
+      ).render();
+      expect(text, contains('decided by not recorded'));
+    });
+
+    test('an empty record says "not recorded", never "none"', () {
+      final text = _packet(decisions: const []).render();
+      expect(text, contains('## Decisions on record'));
+      final section = text.substring(
+        text.indexOf('## Decisions on record'),
+        text.indexOf('## Conversation so far'),
+      );
+      expect(section, contains('Not recorded'));
+      // The distinction the whole feature turns on: nobody wrote anything
+      // down, which is not evidence that nothing was decided. An empty
+      // `changes` list is allowed to mean "the tree is clean"; an empty
+      // decision record is never allowed to mean "nothing was settled".
+      expect(section, contains('not the same as'));
+      expect(section, contains('only written by explicit acts'));
+      expect(section, isNot(contains('None')));
+      expect(section, isNot(contains('No decisions')));
+    });
+
+    test('a record that could not be read is a different admission', () {
+      final text = _packet(decisions: null).render();
+      expect(text, contains('Not recorded'));
+      expect(text, contains('could not be read'));
+    });
+
+    test('says how many decisions were left out, if any ever are', () {
+      final text = _packet(
+        decisions: [_decision()],
+        omittedDecisions: 6,
+      ).render();
+      expect(text, contains('The last 1 of 7 decisions'));
+    });
+  });
+
+  group('trimDecisions', () {
+    List<HandoffDecision> many(int count, {int size = 20}) => [
+      for (var i = 0; i < count; i++)
+        HandoffDecision(
+          kind: 'Constraint accepted',
+          summary: '$i'.padRight(size, '.'),
+          decidedBy: 'Claude Code',
+          origin: 'a `decision_record` call',
+        ),
+    ];
+
+    test('keeps the most recent, oldest first, and counts the rest', () {
+      final result = trimDecisions(
+        many(10),
+        const HandoffDecisionBudget(maxDecisions: 3),
+      );
+      expect(result.decisions, hasLength(3));
+      expect(result.omitted, 7);
+      expect(result.decisions.first.summary, startsWith('7'));
+      expect(result.decisions.last.summary, startsWith('9'));
+    });
+
+    test('reports what it cost, so the recap can be charged for it', () {
+      final result = trimDecisions(many(4, size: 100));
+      expect(result.decisions, hasLength(4));
+      expect(result.cost, greaterThan(400));
+    });
+
+    test('truncates an over-long decision in the middle', () {
+      final result = trimDecisions([
+        HandoffDecision(
+          kind: 'Approach rejected',
+          summary: 'HEAD${'.' * 900}TAIL',
+        ),
+      ], const HandoffDecisionBudget(maxCharactersPerDecision: 120));
+      final summary = result.decisions.single.summary;
+      expect(summary, startsWith('HEAD'));
+      expect(summary, endsWith('TAIL'));
+      expect(summary, contains('trimmed for the handoff'));
+    });
+
+    test('leaves a record that already fits completely alone', () {
+      final input = many(5);
+      final result = trimDecisions(input);
+      expect(result.decisions, input);
+      expect(result.omitted, 0);
+    });
+  });
+
+  group('the recap pays for the decisions, not the other way round', () {
+    List<HandoffTurn> turns(int count) => [
+      for (var i = 0; i < count; i++)
+        HandoffTurn(speaker: 'User', text: '$i'.padRight(200, '.')),
+    ];
+
+    test('spending on decisions leaves less for the recap', () {
+      const budget = HandoffRecapBudget(maxCharacters: 2000, maxTurns: 100);
+      final whole = trimRecap(turns(40), budget);
+      final squeezed = trimRecap(turns(40), budget.reducedBy(1500));
+
+      // The decisions go first and are charged first, so what gives is the
+      // quoted tail — which is the trade the whole feature is making.
+      expect(squeezed.turns.length, lessThan(whole.turns.length));
+      expect(squeezed.omitted, greaterThan(whole.omitted));
+    });
+
+    test('an over-spent budget still quotes the last turn', () {
+      final result = trimRecap(
+        turns(40),
+        const HandoffRecapBudget(maxCharacters: 2000).reducedBy(999999),
+      );
+      expect(result.turns, hasLength(1));
+      expect(result.turns.single.text, startsWith('39'));
+    });
   });
 
   group('the instruction and open work', () {
