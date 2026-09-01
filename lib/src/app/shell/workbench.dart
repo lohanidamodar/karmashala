@@ -72,6 +72,12 @@ const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 /// terminal surface draws [_NoPaneForSession] for it, which names the session,
 /// says nothing of ours is running it and offers the two honest ways on. That
 /// keeps "always the terminal" from meaning "somebody else's terminal tab".
+///
+/// **What the selection is for, though, is asking to see a session.** Ending
+/// one is the opposite, so the empty state is not the answer to it: the
+/// selection is released instead and the user lands on whatever the terminal
+/// still has. See [_releaseEndedPane], and [_releaseHijackedSelection] for the
+/// other gesture that means the same thing.
 class WorkbenchView extends ConsumerStatefulWidget {
   const WorkbenchView({super.key});
 
@@ -157,10 +163,47 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     if (sessionId == null) return;
     final paneId = sessionTerminalPane(ref, sessionId);
     if (paneId == _shownPane) return;
+    // A session that *had* a pane and no longer has one has been ended — which
+    // is a different act from selecting a session that never had one, and only
+    // the first is a reason to move the user off it. See [_releaseEndedPane].
+    final ended = _shownPane != null && paneId == null;
     _shownPane = paneId;
-    // Losing a pane is not a reason to move: the terminal surface says what
-    // happened. Gaining one is, or the session would be off screen.
-    if (paneId != null) _showTerminalFor(paneId);
+    // Gaining a pane moves the workbench onto it, or the session would be off
+    // screen.
+    if (paneId != null) {
+      _showTerminalFor(paneId);
+    } else if (ended) {
+      _releaseEndedPane();
+    }
+  }
+
+  /// Lets go of the selected session once the pane it was being shown in has
+  /// been taken away.
+  ///
+  /// Ending a session is an explicit "I am done with this", so the workbench
+  /// must not park the user on [_NoPaneForSession] — a tombstone for the thing
+  /// they just finished with — while live tabs sit behind it. That was the
+  /// report: *"when i end session why show this, why not switch to another
+  /// existing tab and show empty if no other tabs exist?"*.
+  ///
+  /// Releasing the selection is the whole move. [TerminalSessionsController]
+  /// already hands the active tab to the neighbour when the active one closes,
+  /// the way every tab strip does, and with nothing selected the workbench
+  /// draws whatever the terminal has — that neighbour, or the empty workbench
+  /// when the ended session was the last tab.
+  ///
+  /// **Cleared, not out-voted**, for the reason [_releaseHijackedSelection]
+  /// gives: `null` is the one value the selection listeners in [build] ignore,
+  /// so writing the neighbour's session id here would restart the fight where
+  /// a tap opens a session's terminal and something else undoes it.
+  ///
+  /// Only while the terminal is the surface up. On the conversation the empty
+  /// state is not in the way — and letting the selection go there would hand
+  /// the reader whichever session the neighbouring tab happens to run, which
+  /// is the wrong transcript rather than a tidier one.
+  void _releaseEndedPane() {
+    if (!ref.read(terminalVisibleProvider)) return;
+    ref.read(selectedSessionIdProvider.notifier).select(null);
   }
 
   void _showSurfaceFor(String? paneId) {
@@ -372,6 +415,11 @@ class _TerminalSurface extends StatelessWidget {
 /// `sessionTerminalPane` and the row itself, which is the same pair the
 /// conversation's empty hint reads, so the two surfaces cannot describe one
 /// session differently.
+///
+/// It answers a session the user has **asked to see**. It is deliberately not
+/// what ending a session leaves behind: that selection is released before this
+/// is ever reached ([_releaseEndedPane]), because explaining the corpse of the
+/// thing someone just finished with is not an answer to anything.
 class _NoPaneForSession extends ConsumerWidget {
   const _NoPaneForSession({required this.session});
 
