@@ -11,7 +11,7 @@ import 'notification_presenter.dart';
 /// Desktop OS notifications, via `local_notifier` — the same leanflutter family
 /// as the `tray_manager` and `window_manager` this app already builds on.
 ///
-/// Platform reality, which is not uniform (see `docs/loop-reports/loop-42.md`):
+/// Platform reality, which is not uniform:
 ///
 /// * **Windows** — real toasts through WinToast. An unpackaged app has to own a
 ///   Start Menu shortcut carrying its AUMID before Windows will accept a toast

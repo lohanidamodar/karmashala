@@ -76,7 +76,7 @@ import '../domain/terminal_links.dart';
 /// packed stride and everything that walks it (reflow, snapshot, the batched
 /// painter and its pixel goldens). Out of proportion to the gain here: an agent
 /// that emits `OSC 8` almost always uses the URL itself as the label, and that
-/// is detected by the text scan below. Recorded in `docs/loop-reports/loop-84.md`.
+/// is detected by the text scan below.
 class TerminalPaneView extends StatefulWidget {
   const TerminalPaneView({
     required this.instance,

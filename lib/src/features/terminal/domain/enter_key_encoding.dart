@@ -39,8 +39,7 @@
 /// when modifiers are reported. That needs the vendored parser to route prefixed
 /// CSI away from SGR, a new `EscapeHandler` method, and mode state on `Terminal`
 /// — three forked files — and it would not change the reported symptom, because
-/// `ESC CR` already works with Claude Code unconfigured. See
-/// `docs/loop-reports/loop-84.md`.
+/// `ESC CR` already works with Claude Code unconfigured.
 library;
 
 import 'package:xterm/core.dart';
