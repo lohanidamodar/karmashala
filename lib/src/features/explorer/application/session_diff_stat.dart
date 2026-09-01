@@ -228,6 +228,42 @@ class ProjectSummary {
       Object.hash(sessions, changedFiles, running, needsAttention);
 }
 
+/// The project containing each native or imported session row.
+///
+/// Kept apart from the inbox projection because session placement changes on a
+/// workspace mutation, while attention can change on every status cycle. The
+/// latter must not turn into a database sweep.
+final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
+  ref.watch(sessionsRevisionProvider);
+  final repositories = {
+    for (final repository in ref.read(repositoryDaoProvider).getAll())
+      repository.id: repository.projectId,
+  };
+  return Map.unmodifiable({
+    for (final session in ref.read(sessionDaoProvider).getAll())
+      session.id: ?repositories[session.repositoryId],
+    for (final session in ref.read(importedSessionDaoProvider).getAll())
+      session.id: ?repositories[session.repositoryId],
+  });
+});
+
+/// Unseen attention items grouped by project.
+///
+/// The inbox is capped, so projecting it is bounded. Project headers select
+/// their own integer from this map; a notification in one project therefore
+/// leaves every unrelated header asleep.
+final projectAttentionCountsProvider = Provider<Map<String, int>>((ref) {
+  final projectIds = ref.watch(sessionProjectIdsProvider);
+  final counts = <String, int>{};
+  final countedSessions = <String>{};
+  for (final item in ref.watch(attentionInboxProvider).pending) {
+    if (!countedSessions.add(item.session.openId)) continue;
+    final projectId = projectIds[item.session.openId];
+    if (projectId != null) counts[projectId] = (counts[projectId] ?? 0) + 1;
+  }
+  return Map.unmodifiable(counts);
+});
+
 /// Sessions, changed files, running sessions and waiting work under one project.
 ///
 /// The counts are synchronous (DAO reads and one already-computed inbox); the
@@ -258,26 +294,23 @@ final projectSummaryProvider = Provider.autoDispose
       final importedDao = ref.read(importedSessionDaoProvider);
       // The one attention count in the app, narrowed to this project rather
       // than recomputed: a second definition of "needs you" is a second number
-      // that can disagree with the tray.
-      final waiting = {
-        for (final item in ref.watch(attentionInboxProvider).pending)
-          item.session.openId,
-      };
+      // that can disagree with the tray. Selecting the integer is important:
+      // one waiting session must not wake every project header.
+      final needsAttention = ref.watch(
+        projectAttentionCountsProvider.select(
+          (counts) => counts[projectId] ?? 0,
+        ),
+      );
 
       var sessions = 0;
       var running = 0;
-      var needsAttention = 0;
       int? changed;
       for (final repository in repositories) {
         for (final session in sessionDao.getByRepository(repository.id)) {
           sessions++;
           if (session.status == SessionStatus.running) running++;
-          if (waiting.contains(session.id)) needsAttention++;
         }
-        for (final session in importedDao.getByRepository(repository.id)) {
-          sessions++;
-          if (waiting.contains(session.id)) needsAttention++;
-        }
+        sessions += importedDao.getByRepository(repository.id).length;
         // The shared producer rather than this file's projection of it: a
         // session card, the delivery strip and the Changes panel all funnel
         // into `checkoutDeliveryProvider`, so that is the one most likely to be
