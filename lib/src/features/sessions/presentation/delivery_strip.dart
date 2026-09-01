@@ -6,6 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../git/application/remote_links.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../github/domain/pull_request_snapshot.dart';
+import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/delivery_providers.dart';
 import '../application/session_actions.dart';
 import '../application/session_archive_service.dart';
@@ -259,7 +260,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Divider(height: 1),
-        if (delivery != null) _DeliveryState(delivery: delivery),
+        if (delivery != null)
+          _DeliveryState(delivery: delivery, sessionId: widget.sessionId),
         Padding(
           // Padded on all four sides since Loop 85: the strip is hosted under
           // the terminal as well as above the composer, and there it is the
@@ -278,9 +280,13 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
 
 /// The state line: how far the work has got, and the numbers behind that.
 class _DeliveryState extends StatelessWidget {
-  const _DeliveryState({required this.delivery});
+  const _DeliveryState({required this.delivery, required this.sessionId});
 
   final SessionDelivery delivery;
+
+  /// Carried through only for the verification verdict, which is the one fact
+  /// in the line that is not a property of [SessionDelivery].
+  final String sessionId;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -289,7 +295,7 @@ class _DeliveryState extends StatelessWidget {
       spacing: Insets.sm,
       runSpacing: Insets.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: _deliveryFacts(context, delivery),
+      children: _deliveryFacts(context, delivery, sessionId),
     ),
   );
 }
@@ -326,7 +332,7 @@ class DeliveryStateLine extends ConsumerWidget {
         spacing: Insets.sm,
         runSpacing: Insets.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
-        children: _deliveryFacts(context, delivery),
+        children: _deliveryFacts(context, delivery, sessionId),
       ),
     );
   }
@@ -337,7 +343,11 @@ class DeliveryStateLine extends ConsumerWidget {
 /// A list rather than a widget because both hosts wrap them in a [Wrap] of
 /// their own: nested, the whole state would break to a run of its own long
 /// before it had run out of room.
-List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
+List<Widget> _deliveryFacts(
+  BuildContext context,
+  SessionDelivery delivery,
+  String sessionId,
+) {
   final theme = Theme.of(context);
   final semantic = SemanticColors.of(context);
   final label = theme.textTheme.labelSmall;
@@ -363,6 +373,12 @@ List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
         Text(stage.label, style: label?.copyWith(color: colour)),
       ],
     ),
+    // Beside the stage, because the two answer the neighbouring halves of the
+    // same question: how far the work got, and whether anything checked it.
+    // It draws in every state — "no check recorded" included — since a fact
+    // that vanishes when the answer is "nothing" reads as a clean bill of
+    // health to anyone scanning the line.
+    SessionVerdictMark(sessionId: sessionId),
     if (delivery.branch case final branch?)
       Row(
         mainAxisSize: MainAxisSize.min,
