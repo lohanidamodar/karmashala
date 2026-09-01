@@ -65,3 +65,4 @@ ios/fastlane/README.md
 # Loop 27 device-pane decode spike (throwaway, never shipped)
 .spike/
 packages/local_ipc/pubspec.lock
+macos/Vendor/
