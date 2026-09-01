@@ -52,6 +52,10 @@ class McpCallerRegistry {
   /// The session [token] names, or null if it names none.
   String? sessionFor(String token) => _sessionByToken[token];
 
+  /// Every session a token has been minted for, as a snapshot — so a caller
+  /// deciding which of them to [forget] can iterate while forgetting.
+  List<String> get sessions => List<String>.of(_tokenBySession.keys);
+
   /// Retires a session's token. Called when the session is gone, so a config
   /// file left behind on disk cannot keep speaking for it.
   void forget(String sessionId) {
@@ -72,9 +76,7 @@ class McpCallerRegistry {
 /// reach, so a predictable one would be the whole boundary.
 String generateSecret([Random? random]) {
   final source = random ?? Random.secure();
-  return base64Url.encode(
-    List<int>.generate(24, (_) => source.nextInt(256)),
-  );
+  return base64Url.encode(List<int>.generate(24, (_) => source.nextInt(256)));
 }
 
 /// Compares two secrets without leaking where they first differ.

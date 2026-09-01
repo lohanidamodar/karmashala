@@ -58,6 +58,7 @@ import 'handshake_file_permissions.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
+import 'mcp_session_token_reaper.dart';
 import 'mcp_tool_catalogue.dart';
 import 'session_mcp.dart';
 import 'session_tools.dart';
@@ -194,6 +195,14 @@ class LauncherControlServer implements SessionMcp {
   /// it.
   McpCallerRegistry get callers => _callers;
 
+  /// Retires those tokens when their sessions end. Started with the server and
+  /// stopped with it, because a token only exists while the server does.
+  late final McpSessionTokenReaper _tokenReaper = McpSessionTokenReaper(
+    _container,
+    _callers,
+    logger: _logger,
+  );
+
   /// The MCP endpoint URL for an unattributed caller, or null when nothing is
   /// served — the hardening failed, or the server is not started.
   String? get mcpUrl {
@@ -241,10 +250,7 @@ class LauncherControlServer implements SessionMcp {
     final url = mcpUrlFor(sessionId, environment: environment.kind);
     if (url == null) return null;
     if (!withConfigFile) return SessionMcpAccess(url: url);
-    final windowsPath = _sessionConfigs?.write(
-      sessionId: sessionId,
-      url: url,
-    );
+    final windowsPath = _sessionConfigs?.write(sessionId: sessionId, url: url);
     if (windowsPath == null) return null;
     final agentPath = agentConfigPathFor(windowsPath, environment.kind);
     // A file the agent cannot name is a flag pointing at nothing, which is a
@@ -259,9 +265,8 @@ class LauncherControlServer implements SessionMcp {
     if (server == null || _mcpEndpoint?.token == null) return null;
     return switch (environment) {
       EnvironmentKind.windowsNative => '127.0.0.1:${server.port}',
-      EnvironmentKind.wsl => _wslHost == null
-          ? null
-          : '${_wslHost!.address}:${server.port}',
+      EnvironmentKind.wsl =>
+        _wslHost == null ? null : '${_wslHost!.address}:${server.port}',
       EnvironmentKind.ssh => null,
     };
   }
@@ -327,8 +332,7 @@ class LauncherControlServer implements SessionMcp {
     bool useLocalSocket = true,
     String? socketDirectory,
     String? sessionConfigDirectory,
-    Future<InternetAddress?> Function() wslHostAddress =
-        resolveWslHostAddress,
+    Future<InternetAddress?> Function() wslHostAddress = resolveWslHostAddress,
   }) async {
     if (_server != null) return;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -435,6 +439,7 @@ class LauncherControlServer implements SessionMcp {
     );
     _publishSessionMcp(this);
     _startCheckpointRecorder();
+    _tokenReaper.start();
   }
 
   /// Also listens on the WSL virtual switch's host address, so an agent inside
@@ -604,6 +609,7 @@ class LauncherControlServer implements SessionMcp {
   }
 
   Future<void> stop() async {
+    _tokenReaper.stop();
     await _server?.close(force: true);
     await _wslServer?.close(force: true);
     await _socketServer?.close();
@@ -848,7 +854,9 @@ class LauncherControlServer implements SessionMcp {
           sessionId: report.sessionId,
         );
       } on Object catch (error) {
-        _logger.warning('Applying a hook report to the registry failed: $error');
+        _logger.warning(
+          'Applying a hook report to the registry failed: $error',
+        );
       }
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never block the agent that fired it.
@@ -2017,7 +2025,8 @@ class LauncherControlServer implements SessionMcp {
         'repository': repo.name,
         'environmentId': repo.path.environmentId,
         'depth': launcher.depthForChildOf(callerSessionId).depth,
-        'permissionMode': launched.session.permissionMode?.name ?? 'not recorded',
+        'permissionMode':
+            launched.session.permissionMode?.name ?? 'not recorded',
         if (launched.session.worktree != null)
           'worktree': launched.session.worktree!.path,
       };
