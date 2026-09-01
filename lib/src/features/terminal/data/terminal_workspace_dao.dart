@@ -91,6 +91,22 @@ class TerminalWorkspaceDao {
 
   final AppDatabase _db;
 
+  /// The scrollback text this dao last saw in the store, by pane id.
+  ///
+  /// Everything else a save compares, it reads back from the store itself —
+  /// authoritative, and cheap because those columns are ids, ordinals and a
+  /// layout tree. Scrollback is the one exception: a pane holds up to a full
+  /// durable window of SGR-dense text and there are up to a hundred of them, so
+  /// reading it back to compare would cost about what rewriting it costs, which
+  /// defeats the point.
+  ///
+  /// So for that one column the dao keeps its own record, and the fallback
+  /// whenever it has none is to **write**. Nothing else writes the column:
+  /// [saveScrollback] is the only other writer and keeps this in step,
+  /// [loadWorkspace] primes it with what it has just read, and [clear] empties
+  /// it.
+  final Map<String, String> _writtenScrollback = {};
+
   /// How many tabs (including detached rows) the store currently holds.
   ///
   /// The controller's guard needs to know whether an empty save would *destroy*
@@ -102,7 +118,24 @@ class TerminalWorkspaceDao {
     return (rows.first['n'] as int?) ?? 0;
   }
 
-  /// Replaces the stored workspace with [tabs].
+  /// Makes the stored workspace be [tabs], by writing **only the rows that
+  /// differ from what is stored**.
+  ///
+  /// This used to be `DELETE FROM terminal_tabs;` followed by an INSERT per tab
+  /// and per pane, every pane carrying its whole scrollback. The bindings are
+  /// synchronous (`package:sqlite3`), the controller calls this on every
+  /// structural change, and `tool/benchmark/terminal_scale_bench.dart` measured
+  /// the result at **645 ms** at the hundred-pane scale target — a frame the
+  /// user watches go by every time they resume a session, which is the owner's
+  /// "resuming session still makes ui laggy" against 1.1.5.
+  ///
+  /// Resuming a session adds one pane to one tab. So the save now costs one
+  /// upsert per row that actually moved plus one delete per row that actually
+  /// vanished, and nothing per row that is already correct. Two small SELECTs
+  /// of the stored *structure* (never the scrollback) say which is which, so
+  /// ordinals and the delete-what-vanished semantics the full replace got for
+  /// free are still read from the store rather than assumed — see
+  /// [_writeChangedRows] and `workspace_write_cost_test.dart`.
   ///
   /// A copy of the outgoing workspace is taken first, inside the same
   /// transaction, when this save **loses** something:
@@ -128,31 +161,108 @@ class TerminalWorkspaceDao {
     _db.transaction(() {
       final stored = storedTabCount();
       if (tabs.isEmpty || (!userClosed && tabs.length < stored)) {
-        _backupWorkspace(now);
+        _backupWorkspace(now, stored);
       }
-      // Panes cascade with their tab.
-      _db.execute('DELETE FROM terminal_tabs;');
-      for (var i = 0; i < tabs.length; i++) {
-        final tab = tabs[i];
+      _writeChangedRows(tabs, activeTabId, now);
+    });
+  }
+
+  /// The body of [saveWorkspace]: upsert what moved, delete what vanished.
+  ///
+  /// The stored **structure** is read first — every tab and pane row minus the
+  /// scrollback column, which is the only expensive one. That read is what lets
+  /// this keep the two properties a full replace never had to think about:
+  ///
+  /// * **Ordinals.** Position is written from the incoming list's index every
+  ///   time it disagrees with the stored one, so reordering tabs or closing one
+  ///   out of the middle renumbers exactly the rows that moved and leaves no
+  ///   gap.
+  /// * **Delete what vanished.** An id in the store and not in [tabs] is
+  ///   deleted outright rather than being left behind by an upsert that never
+  ///   ran.
+  ///
+  /// Order matters, and it is: upserts first, deletes after. A pane that moved
+  /// out of a tab that is itself going has to be re-parented *before* that tab
+  /// goes, or the foreign key cascade takes it with the tab.
+  ///
+  /// `ON CONFLICT DO UPDATE` rather than `INSERT OR REPLACE`: REPLACE deletes
+  /// the conflicting row before reinserting it, and with `PRAGMA foreign_keys =
+  /// ON` that fires `terminal_panes`' `ON DELETE CASCADE` — updating a tab
+  /// would silently throw away its panes.
+  void _writeChangedRows(
+    List<StoredTerminalTab> tabs,
+    String? activeTabId,
+    String now,
+  ) {
+    final storedTabs = {
+      for (final row in _db.query(
+        'SELECT id, ordinal, layout, focused_pane_id, is_active, detached '
+        'FROM terminal_tabs;',
+      ))
+        row['id']! as String: row,
+    };
+    final storedPanes = {
+      for (final row in _db.query(
+        'SELECT id, tab_id, ordinal, profile_id, title, working_directory, '
+        'launch_command FROM terminal_panes;',
+      ))
+        row['id']! as String: row,
+    };
+
+    final liveTabs = <String>{};
+    final livePanes = <String>{};
+
+    for (var i = 0; i < tabs.length; i++) {
+      final tab = tabs[i];
+      liveTabs.add(tab.id);
+      final layout = jsonEncode(tab.layout.toJson());
+      final isActive = intFromBool(!tab.detached && tab.id == activeTabId);
+      final detached = intFromBool(tab.detached);
+      final storedTab = storedTabs[tab.id];
+      if (storedTab == null ||
+          storedTab['ordinal'] != i ||
+          storedTab['layout'] != layout ||
+          storedTab['focused_pane_id'] != tab.focusedPaneId ||
+          storedTab['is_active'] != isActive ||
+          storedTab['detached'] != detached) {
         _db.execute(
           'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
-          'is_active, detached, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);',
-          [
-            tab.id,
-            i,
-            jsonEncode(tab.layout.toJson()),
-            tab.focusedPaneId,
-            intFromBool(!tab.detached && tab.id == activeTabId),
-            intFromBool(tab.detached),
-            now,
-          ],
+          'is_active, detached, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) '
+          'ON CONFLICT (id) DO UPDATE SET ordinal = excluded.ordinal, '
+          'layout = excluded.layout, '
+          'focused_pane_id = excluded.focused_pane_id, '
+          'is_active = excluded.is_active, detached = excluded.detached, '
+          'updated_at = excluded.updated_at;',
+          [tab.id, i, layout, tab.focusedPaneId, isActive, detached, now],
         );
-        for (var j = 0; j < tab.panes.length; j++) {
-          final pane = tab.panes[j];
+      }
+
+      for (var j = 0; j < tab.panes.length; j++) {
+        final pane = tab.panes[j];
+        livePanes.add(pane.id);
+        final launch = pane.agentLaunch == null
+            ? null
+            : jsonEncode(pane.agentLaunch!.toJson());
+        final storedPane = storedPanes[pane.id];
+        if (storedPane == null ||
+            storedPane['tab_id'] != tab.id ||
+            storedPane['ordinal'] != j ||
+            storedPane['profile_id'] != pane.profileId ||
+            storedPane['title'] != pane.title ||
+            storedPane['working_directory'] != pane.workingDirectory ||
+            storedPane['launch_command'] != launch ||
+            _scrollbackChanged(pane)) {
           _db.execute(
             'INSERT INTO terminal_panes (id, tab_id, ordinal, profile_id, '
             'title, working_directory, scrollback, launch_command, updated_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
+            'ON CONFLICT (id) DO UPDATE SET tab_id = excluded.tab_id, '
+            'ordinal = excluded.ordinal, profile_id = excluded.profile_id, '
+            'title = excluded.title, '
+            'working_directory = excluded.working_directory, '
+            'scrollback = excluded.scrollback, '
+            'launch_command = excluded.launch_command, '
+            'updated_at = excluded.updated_at;',
             [
               pane.id,
               tab.id,
@@ -161,15 +271,46 @@ class TerminalWorkspaceDao {
               pane.title,
               pane.workingDirectory,
               pane.scrollback,
-              pane.agentLaunch == null
-                  ? null
-                  : jsonEncode(pane.agentLaunch!.toJson()),
+              launch,
               now,
             ],
           );
+          _writtenScrollback[pane.id] = pane.scrollback;
         }
       }
-    });
+    }
+
+    for (final entry in storedPanes.entries) {
+      if (livePanes.contains(entry.key)) continue;
+      _writtenScrollback.remove(entry.key);
+      final tabId = entry.value['tab_id'] as String?;
+      // A pane whose tab is going too needs no statement of its own — the
+      // foreign key cascades — which is what keeps closing a tab one write
+      // however many panes were in it.
+      final tabGoing =
+          tabId != null &&
+          storedTabs.containsKey(tabId) &&
+          !liveTabs.contains(tabId);
+      if (tabGoing) continue;
+      _db.execute('DELETE FROM terminal_panes WHERE id = ?;', [entry.key]);
+    }
+    for (final id in storedTabs.keys) {
+      if (liveTabs.contains(id)) continue;
+      _db.execute('DELETE FROM terminal_tabs WHERE id = ?;', [id]);
+    }
+  }
+
+  /// Whether [pane]'s scrollback differs from what this dao last wrote for it.
+  ///
+  /// "No record" counts as changed: the dao only ever skips a write it can
+  /// account for.
+  bool _scrollbackChanged(StoredTerminalPane pane) {
+    final written = _writtenScrollback[pane.id];
+    if (written == null) return true;
+    // The controller hands back the *same* string instance for a pane whose
+    // buffer has not moved (its encoding cache), so the common case settles on
+    // a pointer compare and never walks the text.
+    return !identical(written, pane.scrollback) && written != pane.scrollback;
   }
 
   /// Updates one pane's scrollback in place — the autosave path, which must not
@@ -179,6 +320,12 @@ class TerminalWorkspaceDao {
       'UPDATE terminal_panes SET scrollback = ?, updated_at = ? WHERE id = ?;',
       [scrollback, isoFromDate(DateTime.now()), paneId],
     );
+    // Only for a pane the dao already knows the store holds. An UPDATE that
+    // matched no row must not leave a record claiming it did — that record is
+    // the one thing a save trusts without re-reading.
+    if (_writtenScrollback.containsKey(paneId)) {
+      _writtenScrollback[paneId] = scrollback;
+    }
   }
 
   /// Copies the stored workspace into the backup tables, replacing whatever was
@@ -187,8 +334,11 @@ class TerminalWorkspaceDao {
   /// Called from inside [saveWorkspace]'s transaction, so a failure anywhere in
   /// the save rolls the copy back with it — the backup can never be a snapshot
   /// of a delete that did not happen.
-  void _backupWorkspace(String now) {
-    if (storedTabCount() == 0) return;
+  ///
+  /// [stored] is the tab count [saveWorkspace] has already taken, passed rather
+  /// than counted again.
+  void _backupWorkspace(String now, int stored) {
+    if (stored == 0) return;
     _db.execute('DELETE FROM terminal_panes_backup;');
     _db.execute('DELETE FROM terminal_tabs_backup;');
     _db.execute(
@@ -205,8 +355,20 @@ class TerminalWorkspaceDao {
     _db.writeMetadata(kTerminalWorkspaceBackupAtKey, now);
   }
 
-  StoredTerminalWorkspace loadWorkspace() =>
-      _load('terminal_tabs', 'terminal_panes');
+  StoredTerminalWorkspace loadWorkspace() {
+    final workspace = _load('terminal_tabs', 'terminal_panes');
+    // Reading the live tables *is* learning what the store holds, so the record
+    // a save compares scrollback against costs nothing to bring up to date
+    // here. It is also what makes the first save after a restore free rather
+    // than a full rewrite of every pane the restore has just read back.
+    _writtenScrollback
+      ..clear()
+      ..addEntries([
+        for (final tab in [...workspace.tabs, ...workspace.detached])
+          for (final pane in tab.panes) MapEntry(pane.id, pane.scrollback),
+      ]);
+    return workspace;
+  }
 
   /// The workspace as it stood immediately before the last save that emptied it.
   ///
@@ -267,7 +429,10 @@ class TerminalWorkspaceDao {
     );
   }
 
-  void clear() => _db.execute('DELETE FROM terminal_tabs;');
+  void clear() {
+    _db.execute('DELETE FROM terminal_tabs;');
+    _writtenScrollback.clear();
+  }
 
   /// Parses a stored agent launch, treating anything unreadable as "no agent"
   /// — the pane then comes back as a plain restored buffer rather than not at
