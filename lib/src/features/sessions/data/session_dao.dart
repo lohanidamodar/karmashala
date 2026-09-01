@@ -117,13 +117,19 @@ class SessionDao {
     ]);
   }
 
-  /// Records the permission mode this session runs under.
+  /// Records the permission mode chosen for this session, or with `null` that
+  /// no mode is chosen for it and it follows the global default.
   ///
   /// Its own statement, like [updateView], and for the same reason: changing a
   /// session's safety policy must not be able to carry any other edit with it.
-  void updatePermissionMode(String id, PermissionMode mode) {
+  ///
+  /// Nullable because null is a *value* here and not a missing argument: "I
+  /// never chose one for this session" is the state the owner's request turns
+  /// on ("it should be highest priority to sessions own permission"), and a
+  /// user who picks a mode must be able to go back to it.
+  void updatePermissionMode(String id, PermissionMode? mode) {
     _db.execute('UPDATE sessions SET permission_mode = ? WHERE id = ?;', [
-      mode.name,
+      mode?.name,
       id,
     ]);
   }

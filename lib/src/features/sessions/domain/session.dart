@@ -98,19 +98,29 @@ class Session {
   /// time; it starts and stops nothing.
   final SessionView view;
 
-  /// How much this session's agent may do without asking.
+  /// The mode **chosen for this session**, or null when nobody ever chose one.
   ///
-  /// Stamped at launch from the per-agent default for the session's
-  /// [SessionPurpose], and rewritten when the user overrides it on the composer
-  /// control. Once written it is **the** answer for this session: a later
-  /// resume runs under the mode the session carries, not under whatever the
-  /// global default has since become.
+  /// Not "the mode it runs under": that is [permissionMode] resolved against
+  /// the per-agent default, which is `resolveSessionPermission` and lives in
+  /// `session_permission.dart`. This field records only the decision, and its
+  /// nullability is load-bearing:
   ///
-  /// Null only for rows written before schema v11, which fall back to the
-  /// per-agent setting. That is a genuine "we never recorded it", not a
-  /// defaulted [PermissionMode.ask] — half those sessions were launched under
-  /// something else, and claiming otherwise would be the silent lie this field
-  /// exists to remove. See `SessionLauncher.permissionFor`.
+  /// * **Non-null** — someone picked this mode for this session (the composer
+  ///   chip, "Continue with…", a caller that resolved one). It outranks the
+  ///   global default at launch and at resume, after the default is changed,
+  ///   and across a restart.
+  /// * **Null** — no choice was made, so the session follows the per-agent
+  ///   default *live* and moves with it. Rows written before schema v11 are
+  ///   also null and get the same treatment, which is honest: half of them were
+  ///   launched under something other than [PermissionMode.ask], and a
+  ///   defaulted value here would be a claim about them we cannot make.
+  ///
+  /// A launch deliberately does **not** stamp the resolved default here. Doing
+  /// so made every session read as having chosen, froze it at whatever Settings
+  /// said the day it started, and — because the resume path rewrote this column
+  /// from the setting — quietly discarded the choices that had really been
+  /// made. Both halves of the owner's report: "existing session permission mode
+  /// should be overridable in each session. but settings is taking precedence."
   final PermissionMode? permissionMode;
 
   /// When this session's worktree was archived away, if it was.

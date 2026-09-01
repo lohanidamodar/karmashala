@@ -27,12 +27,18 @@ import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/shell/tab_picker.dart';
+import '../../../app/shell/workbench_tab_chip.dart';
 import 'command_history_sheet.dart';
 import 'empty_pane_region.dart';
+import 'pane_group_strip.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
 import 'terminal_pane_view.dart';
 import 'terminal_search_bar.dart';
+
+// The chip shape moved out so a region header could share it; re-exported so
+// this file is still the one import a tab chip needs.
+export '../../../app/shell/workbench_tab_chip.dart';
 
 /// Everything the terminal surface can be asked to *do*, in one place.
 ///
@@ -248,6 +254,14 @@ class TerminalActions {
         action = () => jumpCommand(forward: false);
       } else if (key == LogicalKeyboardKey.arrowDown) {
         action = () => jumpCommand(forward: true);
+      } else if (key == LogicalKeyboardKey.pageUp) {
+        // Ctrl+PageUp/Down steps *tabs*; with Shift it steps the tabs stacked
+        // in this region. Alt+Arrow walks between regions, but a pane behind
+        // another has no direction to be in — without this it would be
+        // reachable only by clicking its chip.
+        action = _sessions.previousPaneInRegion;
+      } else if (key == LogicalKeyboardKey.pageDown) {
+        action = _sessions.nextPaneInRegion;
       }
     } else if (alt && !shift) {
       if (key == LogicalKeyboardKey.arrowLeft) {
@@ -389,13 +403,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                           layout: tab.layout,
                           onResize: (splitId, index, delta) =>
                               _resize(tab, splitId, index, delta),
-                          paneBuilder: (paneId) => _buildPane(
-                            paneId,
-                            focused:
-                                paneId == tab.focusedPaneId &&
-                                tab.id == activeTabId,
-                            showFocusRing: tab.layout.panes.length > 1,
-                          ),
+                          regionBuilder: (group) =>
+                              _buildRegion(group, tab, tab.id == activeTabId),
                         ),
                     ],
                   ),
@@ -411,6 +420,41 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     final extent = box == null ? 0.0 : box.size.longestSide;
     if (extent <= 0) return;
     _sessions.resizePane(tab.id, splitId, index, delta / extent);
+  }
+
+  /// One region: its header, and the one pane it is showing.
+  ///
+  /// **Only the front pane is built.** A region is a stack, and building the
+  /// ones behind it would put their render objects, layouts and controllers on
+  /// screen's budget for something nobody can see — the same eager-`IndexedStack`
+  /// mistake [MountedTabs] exists to undo one level up. The instance behind a
+  /// hidden pane is untouched, so bringing it forward costs a build and nothing
+  /// else: its buffer, its scrollback and its process were never its widget's.
+  ///
+  /// **The header is skipped where it would say nothing.** One region holding
+  /// one pane is already named by the workbench strip, and an empty region
+  /// draws its own invitation with its own close button — 30px of chrome
+  /// repeating either would be 30px taken from the terminal for nothing.
+  Widget _buildRegion(PaneGroup group, TerminalTab tab, bool tabActive) {
+    final split = tab.layout.groups.length > 1;
+    final empty =
+        group.panes.length == 1 &&
+        _sessions.instanceFor(group.activePaneId) == null;
+    final pane = _buildPane(
+      group.activePaneId,
+      focused: tabActive && group.activePaneId == tab.focusedPaneId,
+      showFocusRing: split,
+    );
+    if (empty || (!split && group.panes.length < 2)) return pane;
+    return Column(
+      children: [
+        PaneGroupStrip(
+          group: group,
+          focused: tabActive && group.panes.contains(tab.focusedPaneId),
+        ),
+        Expanded(child: pane),
+      ],
+    );
   }
 
   Widget _buildPane(
@@ -743,86 +787,6 @@ class TerminalTabChip extends StatelessWidget {
       case 'end':
         onEnd();
     }
-  }
-}
-
-/// The shared chip shape for everything in the workbench tab strip, so a
-/// session tab and a terminal tab are visibly the same kind of thing.
-class WorkbenchTabChip extends StatelessWidget {
-  const WorkbenchTabChip({
-    required this.selected,
-    required this.onTap,
-    required this.label,
-    this.leading,
-    this.trailing,
-    this.onSecondaryTapDown,
-    this.tooltip,
-    super.key,
-  });
-
-  final bool selected;
-  final VoidCallback onTap;
-  final String label;
-  final Widget? leading;
-  final Widget? trailing;
-  final GestureTapDownCallback? onSecondaryTapDown;
-  final String? tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // The active chip takes the colour of the ground it sits over, so the tab
-    // and its content read as one surface; selection is then carried by a top
-    // rule in the accent, because an outline alone is invisible against a
-    // neutral ramp at this size.
-    final chip = Material(
-      color: selected ? scheme.surfaceContainerLowest : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        onSecondaryTapDown: onSecondaryTapDown,
-        child: Container(
-          height: Chrome.tabStrip,
-          constraints: const BoxConstraints(maxWidth: 220),
-          padding: EdgeInsets.only(
-            left: Insets.sm,
-            right: trailing == null ? Insets.sm : 2,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(
-                width: 2,
-                color: selected ? scheme.primary : Colors.transparent,
-              ),
-              right: BorderSide(color: scheme.outlineVariant),
-            ),
-          ),
-          // Fills the slot the strip gave it rather than hugging its title:
-          // tabs are laid out at a uniform extent, so a short name left the X
-          // floating in the middle of the tab with empty space after it — "the
-          // tabs close button is aligned to text not to the tab pad itself".
-          child: Row(
-            children: [
-              ?leading,
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: selected
-                        ? scheme.onSurface
-                        : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              if (trailing != null) ...[const SizedBox(width: 2), trailing!],
-            ],
-          ),
-        ),
-      ),
-    );
-    return tooltip == null ? chip : Tooltip(message: tooltip!, child: chip);
   }
 }
 

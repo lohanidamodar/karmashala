@@ -23,7 +23,16 @@ const _claudeCode = AgentDescriptor(
   id: 'claudeCode',
   displayName: 'Claude Code',
   kind: AgentKind.claudeCode,
-  binaries: AgentBinaries(windows: ['claude'], posix: ['claude']),
+  // `%USERPROFILE%\.local\bin\claude.exe` is where Claude Code's own native
+  // Windows installer puts the binary. It is listed because on the machine this
+  // was reported from that file exists and that directory is on neither the
+  // user nor the machine PATH, so `where claude` returns "Could not find files
+  // for the given pattern(s)" and the Windows installation is invisible.
+  binaries: AgentBinaries(
+    windows: ['claude'],
+    posix: ['claude'],
+    windowsInstallPaths: [r'%USERPROFILE%\.local\bin\claude.exe'],
+  ),
   launch: AgentLaunchSpec(
     baseArguments: [
       '--input-format',
@@ -214,7 +223,16 @@ const _codex = AgentDescriptor(
   id: 'codex',
   displayName: 'Codex CLI',
   kind: AgentKind.codex,
-  binaries: AgentBinaries(windows: ['codex'], posix: ['codex']),
+  // The OpenAI Codex Windows installer's own target directory, which it also
+  // adds to the user PATH. Listed anyway because PATH only helps a process
+  // started *after* the install: the app inherits its PATH once, at launch.
+  binaries: AgentBinaries(
+    windows: ['codex'],
+    posix: ['codex'],
+    windowsInstallPaths: [
+      r'%LOCALAPPDATA%\Programs\OpenAI\Codex\bin\codex.exe',
+    ],
+  ),
   launch: AgentLaunchSpec(
     baseArguments: ['app-server'],
     permissionModes: {
@@ -396,6 +414,10 @@ const _antigravity = AgentDescriptor(
   // installation. `agy --version` reports 1.1.22, and the CLI is a separately
   // distributed self-updating Go binary that puts itself on PATH with
   // `agy install` — the Antigravity IDE does not ship or launch it.
+  //
+  // No `windowsInstallPaths`: `agy install` is what puts the binary somewhere,
+  // and nobody here has watched it do that on Windows. A guessed path would be
+  // a probe that can only ever fail, so the honest entry is an empty one.
   binaries: AgentBinaries(windows: ['agy'], posix: ['agy']),
   launch: AgentLaunchSpec(
     // Deliberately empty. The previous `--stdio` does not exist in this CLI at

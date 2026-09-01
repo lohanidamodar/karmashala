@@ -23,6 +23,7 @@ import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
+import '../../../features/terminal/presentation/pane_group_strip.dart';
 import '../../theme/app_icons.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
@@ -203,23 +204,34 @@ class QuickOpenSources {
     ];
   }
 
-  /// The keyboard's way to do what dragging a tab into an empty split does,
-  /// and the way back out again.
+  /// The keyboard's way to do everything a region header can be dragged to do.
+  ///
+  /// Every drop target has an entry here, because a feature reachable only by
+  /// dragging is one some people cannot reach at all: a tab into a region
+  /// (empty or not), a pane into another region, and a pane back out to a tab
+  /// of its own.
   List<QuickOpenItem> _splitCommands() {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final slot = sessions.emptySlotInActiveTab();
+    // An empty region first: it is the one somebody has just cleared, and the
+    // one that looks wrong until something is in it.
+    final target = slot ?? sessions.regionForIncomingTab();
     final pane = sessions.paneMovableToNewTab();
     return [
-      if (slot != null)
+      if (target != null)
         _command(
-          'Move a tab into the empty split…',
-          subtitle: 'Fill the empty region of the split you are in',
+          slot != null
+              ? 'Move a tab into the empty split…'
+              : 'Move a tab into this split…',
+          subtitle: slot != null
+              ? 'Fill the empty region of the split you are in'
+              : 'Add a tab to the region you are in',
           icon: AppIcons.squareSplitHorizontal,
           keywords: const ['split', 'move', 'tab', 'pane', 'drag'],
           onSelect: () =>
-              TabPicker.show(context, (ref) => tabsMovableInto(ref, slot)),
+              TabPicker.show(context, (ref) => tabsMovableInto(ref, target)),
         ),
-      if (pane != null)
+      if (pane != null) ...[
         _command(
           'Move this pane to a new tab',
           subtitle: 'Take the focused pane out of its split',
@@ -227,6 +239,16 @@ class QuickOpenSources {
           keywords: const ['split', 'unsplit', 'pane', 'tab', 'move'],
           onSelect: () => sessions.movePaneToNewTab(pane),
         ),
+        if (sessions.regionAnchorsBesides(pane).isNotEmpty)
+          _command(
+            'Move this pane into another split…',
+            subtitle: 'Send the focused pane to another region',
+            icon: AppIcons.squareSplitVertical,
+            keywords: const ['split', 'region', 'pane', 'move', 'drag'],
+            onSelect: () =>
+                TabPicker.show(context, (ref) => regionsMovableTo(ref, pane)),
+          ),
+      ],
     ];
   }
 

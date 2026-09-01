@@ -350,7 +350,9 @@ void main() {
         expect(after.externalSessionId, 'ext-1');
         expect(after.status, SessionStatus.running);
         expect(after.paneId, isNot(before.paneId));
-        expect(after.permissionMode, PermissionMode.ask);
+        // Nobody chose a mode for this session, and a resume is not a choice:
+        // the column stays empty so the session goes on following the setting.
+        expect(after.permissionMode, isNull);
       },
     );
 

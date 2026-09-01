@@ -30,6 +30,7 @@ import '../domain/session_depth.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_lineage.dart';
 import '../domain/session_naming.dart';
+import '../domain/session_permission.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'decision_recorder.dart';
@@ -225,36 +226,31 @@ class SessionLauncher {
   /// overrode it — so the safe default was not a backstop. It is one here:
   /// nothing else reads `permissionsFor`.
   ///
-  /// **[sessionMode] wins when it is set.** That is `Session.permissionMode`,
-  /// stamped at launch and rewritten by the composer control, and it is why the
-  /// per-agent setting keeps its two values without either of them being able
-  /// to overwrite a session's own choice later. A caller holding a session row
-  /// passes it; one that has no session yet (a shell command for a project, a
-  /// brand-new launch) leaves it null and gets the default for [purpose].
-  ///
-  /// Null [sessionMode] on an *existing* row means the row predates schema v11,
-  /// so the setting is the only answer anyone ever had for it.
+  /// The rule itself lives in [resolveSessionPermission] rather than here, so
+  /// the composer chip, the launch path and the handoff read one statement of
+  /// it instead of three agreeing ones. A caller holding a session row passes
+  /// its [sessionMode]; one that has no session yet (a shell command for a
+  /// project, a brand-new launch) leaves it null and gets the default for
+  /// [purpose].
   PermissionMode permissionFor(
     String agentId,
     SessionPurpose purpose, {
     PermissionMode? sessionMode,
-  }) {
-    if (sessionMode != null) return sessionMode;
-    final permissions = _ref
-        .read(settingsControllerProvider)
-        .permissionsFor(agentId);
-    return switch (purpose) {
-      SessionPurpose.newSession => permissions.newSessions,
-      SessionPurpose.existingSession => permissions.existingSessions,
-    };
-  }
+  }) => resolveSessionPermission(
+    sessionMode: sessionMode,
+    defaults: _ref.read(settingsControllerProvider).permissionsFor(agentId),
+    purpose: purpose,
+  ).mode;
 
   /// The mode [sessionId] will run under on its next launch or resume, and the
   /// agent it will be handed to.
   ///
   /// The read behind the composer control, so what the chip shows and what the
   /// launcher passes come from one place by construction rather than by two
-  /// call sites agreeing.
+  /// call sites agreeing. `inherited` is [SessionPermission.followsDefault]:
+  /// the session made no choice and is tracking the setting live, which the
+  /// control has to be able to say out loud rather than showing the resolved
+  /// value as if this session had picked it.
   ({PermissionMode mode, AgentDescriptor? descriptor, bool inherited})?
   effectivePermissionFor(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
@@ -263,18 +259,22 @@ class SessionLauncher {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
+    final resolved = resolveSessionPermission(
+      sessionMode: session.permissionMode,
+      defaults: _ref
+          .read(settingsControllerProvider)
+          .permissionsFor(installation.agentId),
+      purpose: SessionPurpose.existingSession,
+    );
     return (
-      mode: permissionFor(
-        installation.agentId,
-        SessionPurpose.existingSession,
-        sessionMode: session.permissionMode,
-      ),
+      mode: resolved.mode,
       descriptor: _ref.read(agentRegistryProvider).byId(installation.agentId),
-      inherited: session.permissionMode == null,
+      inherited: resolved.followsDefault,
     );
   }
 
-  /// Records the mode [sessionId] should run under from its next launch on.
+  /// Records the mode [sessionId] should run under from its next launch on, or
+  /// with a null [mode] that it should follow the global default again.
   ///
   /// Deliberately **does not touch the running process**. Every agent here
   /// takes its permission policy from its command line at startup; none of them
@@ -282,7 +282,7 @@ class SessionLauncher {
   /// command at whatever has focus would be a guess about another program's
   /// UI. So this writes the row, and the control says the change applies on the
   /// next launch rather than implying the live agent has been re-governed.
-  void setPermissionMode(String sessionId, PermissionMode mode) {
+  void setPermissionMode(String sessionId, PermissionMode? mode) {
     _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
     _bump();
   }
@@ -619,10 +619,6 @@ class SessionLauncher {
       );
     }
 
-    final permissionMode =
-        request.permissionOverride ??
-        permissionFor(request.installation.agentId, request.purpose);
-
     // A resume continues a conversation we may already have a row for. Until
     // Loop 66 it minted a second one every time, so resuming a stopped session
     // left the dead row *and* a new one, both drawn in the tree and both
@@ -630,7 +626,27 @@ class SessionLauncher {
     // above have to choose between rows at all. Reusing is what the imported
     // path has always done by deleting its own record afterwards; the native
     // path had no equivalent.
+    //
+    // Resolved *before* the permission mode, and that order is the fix for the
+    // owner's report — "existing session permission mode should be overridable
+    // in each session. but settings is taking precedence". This method used to
+    // resolve the mode from the setting alone and then write it over the row it
+    // was about to reuse, so every resume silently discarded the mode chosen on
+    // the composer chip.
     final reused = _reusableRowForResume(request);
+
+    // What was **decided** for this session, in priority order: a caller that
+    // resolved one for this launch (a handoff's carry, a review's cap, an MCP
+    // request that named a mode), otherwise the row's own choice. Null means
+    // nobody ever chose, and the setting answers — live, so changing it moves
+    // this session and every other that never chose.
+    final chosenMode = request.permissionOverride ?? reused?.permissionMode;
+    final permissionMode = permissionFor(
+      request.installation.agentId,
+      request.purpose,
+      sessionMode: chosenMode,
+    );
+
     final id = reused?.id ?? _ref.read(idGeneratorProvider).newId();
 
     if (request.useWorktree && request.existingWorktree != null) {
@@ -724,7 +740,10 @@ class SessionLauncher {
     final session =
         reused?.copyWith(
           status: SessionStatus.running,
-          permissionMode: permissionMode,
+          // `copyWith` keeps the row's own mode when this is null, which is
+          // the point: a resume must not overwrite a choice, and must not
+          // freeze a session that never made one.
+          permissionMode: request.permissionOverride,
           workingDirectory: recordDirectory ? workingDirectory : null,
         ) ??
         Session(
@@ -754,21 +773,28 @@ class SessionLauncher {
               : (request.parentLink ?? SessionLink.spawn),
           surface: request.surface,
           view: request.view ?? defaultViewFor(descriptor),
-          // Stamped, not left null. The mode was already resolved above and then
-          // died with the local that held it, so nothing could say what a running
-          // session was running under — the exact question a control showing the
-          // *effective* mode has to answer. Recording it here also means a later
-          // resume runs under the session's own mode rather than re-reading a
-          // global default that may have changed since.
-          permissionMode: permissionMode,
+          // Only what was **chosen**, which for an ordinary launch is nothing.
+          // Stamping the resolved default here read as a per-session decision
+          // afterwards, so every session was frozen at whatever Settings
+          // happened to say on the day it started and changing the default
+          // moved nothing — the opposite half of the owner's report. The
+          // effective mode is not lost by leaving this null: it is
+          // [resolveSessionPermission] of this row and the live setting, which
+          // is the same answer the chip and the next launch compute.
+          permissionMode: request.permissionOverride,
         );
     final dao = _ref.read(sessionDaoProvider);
     if (reused == null) {
       dao.insert(session);
     } else {
-      dao
-        ..updateStatus(id, SessionStatus.running)
-        ..updatePermissionMode(id, permissionMode);
+      dao.updateStatus(id, SessionStatus.running);
+      // Written only when this launch carries a decision. Writing the resolved
+      // mode unconditionally is what destroyed the chip's choice on the next
+      // resume, and it would also stamp a default onto a session that is
+      // deliberately following one.
+      if (request.permissionOverride != null) {
+        dao.updatePermissionMode(id, request.permissionOverride);
+      }
       if (recordDirectory) dao.updateWorkingDirectory(id, workingDirectory);
     }
     final repositoryDao = _ref.read(sessionRepositoryDaoProvider)

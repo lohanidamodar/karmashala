@@ -11,23 +11,59 @@ enum PaneDirection { left, right, up, down }
 /// Smallest share of its split a pane may be resized down to.
 const double kMinPaneWeight = 0.05;
 
-/// A node in a tab's pane tree: either a terminal ([PaneLeaf]) or a division of
+/// A node in a tab's pane tree: either a region ([PaneGroup]) or a division of
 /// space between two or more nodes ([PaneSplit]).
 sealed class PaneNode {
   const PaneNode(this.id);
 
-  /// For a leaf this is the `TerminalInstance` id; for a split it is a generated
-  /// id used to address the split when resizing.
+  /// For a group this is a generated region id; for a split it is a generated
+  /// id used to address the split when resizing. Never a pane id.
   final String id;
 }
 
-/// One terminal.
-class PaneLeaf extends PaneNode {
-  const PaneLeaf(super.id);
+/// One **region**: the panes stacked in one part of a tab, and which of them is
+/// on top.
+///
+/// A leaf used to be a single terminal, and that is what left a pane dragged
+/// into a split with nowhere to be dragged back from: there was no header, so
+/// there was no handle. A region is VS Code's editor group — it holds one or
+/// more panes, shows a tab for each, and only [activePaneId] is on screen.
+///
+/// [panes] is never empty; a region that loses its last pane is removed by
+/// [PaneLayout.close] and the split it was in collapses. An **empty region** —
+/// the room a split clears before anything is put in it — is still a region
+/// holding exactly one pane id that has no terminal behind it, which is the
+/// invariant `TerminalSessionsController.isEmptySlot` states.
+class PaneGroup extends PaneNode {
+  PaneGroup(super.id, {required this.panes, String? activePaneId})
+    : assert(panes.isNotEmpty, 'a region with no panes is not a region'),
+      // Clamped here rather than at every call site: pruning, closing and
+      // restoring can all take the front pane away, and the answer is the same
+      // every time — whatever is left comes forward.
+      activePaneId = (activePaneId != null && panes.contains(activePaneId))
+          ? activePaneId
+          : panes.first;
+
+  /// A region holding [paneId] alone.
+  factory PaneGroup.of(String paneId, {String? id}) =>
+      PaneGroup(id ?? regionIdFor(paneId), panes: [paneId]);
+
+  /// The panes in this region, in the order their tabs are shown.
+  final List<String> panes;
+
+  /// The pane actually on screen. Always one of [panes].
+  final String activePaneId;
 
   @override
-  String toString() => 'PaneLeaf($id)';
+  String toString() => 'PaneGroup($id, $panes, active: $activePaneId)';
 }
+
+/// The region id a lone pane gets when nobody supplies one.
+///
+/// Derived rather than generated so [PaneLayout.single] keeps its one-argument
+/// shape, and prefixed so a region id can never be mistaken for the pane id it
+/// was derived from.
+String regionIdFor(String paneId) => 'r:$paneId';
 
 /// Space divided along [axis] between [children] in proportion to [weights].
 ///
@@ -50,7 +86,7 @@ class PaneSplit extends PaneNode {
       'PaneSplit($id, ${axis.name}, ${children.length} children)';
 }
 
-/// A pane's share of its tab, in normalized `0..1` coordinates.
+/// A region's share of its tab, in normalized `0..1` coordinates.
 class PaneRect {
   const PaneRect(this.left, this.top, this.right, this.bottom);
 
@@ -66,21 +102,31 @@ class PaneRect {
   String toString() => 'PaneRect($left, $top, $right, $bottom)';
 }
 
-/// The immutable tree of panes inside one terminal tab, plus the operations the
-/// UI drives it with.
+/// The immutable tree of regions inside one terminal tab, plus the operations
+/// the UI drives it with.
 ///
 /// Deliberately free of Flutter, Riverpod and the terminal itself, so splitting,
-/// closing and focus traversal are unit-testable without a widget tree. Every
-/// operation returns a new layout; nothing here mutates.
+/// closing, stacking and focus traversal are unit-testable without a widget
+/// tree. Every operation returns a new layout; nothing here mutates.
+///
+/// **Everything is addressed by pane id.** A region has an id of its own, but it
+/// is only ever an identity for the widget that draws it — callers say "the
+/// region this pane is in", which is what let regions arrive without rewriting
+/// every caller that used to name a leaf.
 class PaneLayout {
   PaneLayout(this.root);
 
-  /// A layout holding a single pane.
-  factory PaneLayout.single(String paneId) => PaneLayout(PaneLeaf(paneId));
+  /// A layout holding a single pane in a region of its own.
+  factory PaneLayout.single(String paneId, {String? groupId}) =>
+      PaneLayout(PaneGroup.of(paneId, id: groupId));
 
   final PaneNode root;
 
-  /// Pane ids in depth-first, left-to-right order.
+  /// Every region, depth-first, left to right.
+  late final List<PaneGroup> groups = _collectGroups(root, <PaneGroup>[]);
+
+  /// Pane ids in depth-first, left-to-right order — every pane, including the
+  /// ones stacked behind another in their region.
   ///
   /// Walked once and kept. A layout is immutable — every operation returns a
   /// new one — so the answer cannot go stale, and it is asked for constantly:
@@ -89,13 +135,28 @@ class PaneLayout {
   /// pane?" allocate a list per tab per lookup.
   ///
   /// Treat as read-only.
-  late final List<String> panes = _collect(root, <String>[]);
+  late final List<String> panes = [
+    for (final group in groups) ...group.panes,
+  ];
 
-  late final Set<String> _paneIds = panes.toSet();
+  /// The pane on screen in each region — what "on screen" means once a region
+  /// can hold more than one pane.
+  late final List<String> visiblePanes = [
+    for (final group in groups) group.activePaneId,
+  ];
 
-  bool contains(String paneId) => _paneIds.contains(paneId);
+  late final Map<String, PaneGroup> _groupByPane = {
+    for (final group in groups)
+      for (final paneId in group.panes) paneId: group,
+  };
 
-  /// Divides [paneId] along [axis], putting [newPaneId] after it.
+  bool contains(String paneId) => _groupByPane.containsKey(paneId);
+
+  /// The region [paneId] is in, or `null` when this layout does not hold it.
+  PaneGroup? groupOf(String paneId) => _groupByPane[paneId];
+
+  /// Divides the region holding [paneId] along [axis], putting a new region
+  /// holding [newPaneId] after it.
   ///
   /// The new split is always created nested; normalization then flattens it into
   /// the parent when the axes match, which is what turns a second "split right"
@@ -112,13 +173,55 @@ class PaneLayout {
     return normalized == null ? this : PaneLayout(normalized);
   }
 
-  /// Puts [node] where the leaf [leafId] is, keeping its position and its share
-  /// of the split.
+  /// Puts [paneIds] into the region holding [targetPaneId] and brings the last
+  /// of them to the front.
+  ///
+  /// What dropping a tab onto a region's header is made of. The caller owns
+  /// uniqueness: nothing in [paneIds] may already be in this layout, or the
+  /// same pane would appear twice.
+  PaneLayout addPanes(String targetPaneId, List<String> paneIds) {
+    if (paneIds.isEmpty || !contains(targetPaneId)) return this;
+    return PaneLayout(
+      _mapGroups(
+        root,
+        (group) => group.panes.contains(targetPaneId)
+            ? PaneGroup(
+                group.id,
+                panes: [...group.panes, ...paneIds],
+                activePaneId: paneIds.last,
+              )
+            : group,
+      ),
+    );
+  }
+
+  /// [addPanes] for one pane.
+  PaneLayout addPane(String targetPaneId, String paneId) =>
+      addPanes(targetPaneId, [paneId]);
+
+  /// Brings [paneId] to the front of its own region. The layout's shape does
+  /// not change, so nothing is normalized.
+  PaneLayout activate(String paneId) {
+    final group = groupOf(paneId);
+    if (group == null || group.activePaneId == paneId) return this;
+    return PaneLayout(
+      _mapGroups(
+        root,
+        (candidate) => identical(candidate, group)
+            ? PaneGroup(group.id, panes: group.panes, activePaneId: paneId)
+            : candidate,
+      ),
+    );
+  }
+
+  /// Puts [node] where the region holding [paneId] is, keeping its position and
+  /// its share of the split.
   ///
   /// What filling an *empty region* of a split is made of. Splitting no longer
   /// starts anything (see `TerminalSessionsController.splitPane`), so the new
-  /// region is a leaf with nothing behind it until something moves in — a new
-  /// terminal, one pane, or the whole pane tree of a tab being dragged in.
+  /// region is a region with nothing behind its one pane id until something
+  /// moves in — a new terminal, one pane, or the whole pane tree of a tab being
+  /// dragged in.
   ///
   /// Normalization then flattens a same-axis sub-tree into the parent, so
   /// moving a side-by-side tab into a column gives three rows rather than a row
@@ -126,16 +229,18 @@ class PaneLayout {
   /// into a third equal column.
   ///
   /// The caller owns uniqueness: [node] must not contain a pane this layout
-  /// already holds, or the same pane would appear twice.
-  PaneLayout replaceLeaf(String leafId, PaneNode node) {
-    if (!contains(leafId)) return this;
-    final normalized = _normalize(_replaceLeafIn(root, leafId, node));
+  /// already holds outside the region being replaced.
+  PaneLayout replaceRegion(String paneId, PaneNode node) {
+    final group = groupOf(paneId);
+    if (group == null) return this;
+    final normalized = _normalize(_replaceGroupIn(root, group, node));
     return normalized == null ? this : PaneLayout(normalized);
   }
 
-  /// Removes [paneId], collapsing every split it leaves pointless.
+  /// Removes [paneId], collapsing its region when it was the last pane in it
+  /// and every split that region leaves pointless.
   ///
-  /// Returns `null` when it was the last pane.
+  /// Returns `null` when it was the last pane in the tab.
   PaneLayout? close(String paneId) {
     if (!contains(paneId)) return this;
     final removed = _prune(root, (id) => id != paneId);
@@ -144,8 +249,9 @@ class PaneLayout {
     return normalized == null ? null : PaneLayout(normalized);
   }
 
-  /// Drops every leaf whose id is not in [keep] — used when restoring a stored
-  /// layout whose panes could not all be recreated.
+  /// Drops every pane whose id is not in [keep] — used when restoring a stored
+  /// layout whose panes could not all be recreated. A region left with nothing
+  /// goes with them.
   PaneLayout? withoutMissing(Set<String> keep) {
     final pruned = _prune(root, keep.contains);
     if (pruned == null) return null;
@@ -171,11 +277,13 @@ class PaneLayout {
     return all[(index + by + all.length) % all.length];
   }
 
-  /// The pane adjacent to [from] in [direction], or `null` at the layout's edge.
+  /// The pane on screen next to [from] in [direction], or `null` at the
+  /// layout's edge.
   ///
   /// Answered from geometry rather than tree structure: past two levels of
-  /// nesting the tree sibling is frequently not the pane the user sees next to
-  /// this one.
+  /// nesting the tree sibling is frequently not the region the user sees next to
+  /// this one. The answer is always a region's **front** pane, because a pane
+  /// stacked behind another is not somewhere focus can travel *to* sideways.
   String? paneInDirection(String from, PaneDirection direction) {
     final all = rects();
     final source = all[from];
@@ -192,20 +300,23 @@ class PaneLayout {
     };
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
 
+    final origin = groupOf(from);
     for (final entry in all.entries) {
-      if (entry.key == from) continue;
+      final group = _groupByPane[entry.key];
+      if (group == null || identical(group, origin)) continue;
       final rect = entry.value;
       if (x >= rect.left &&
           x < rect.right &&
           y >= rect.top &&
           y < rect.bottom) {
-        return entry.key;
+        return group.activePaneId;
       }
     }
     return null;
   }
 
-  /// Each pane's rectangle within the unit square.
+  /// Each pane's rectangle within the unit square. Everything stacked in one
+  /// region shares that region's rectangle.
   Map<String, PaneRect> rects() {
     final result = <String, PaneRect>{};
     _fillRects(root, const PaneRect(0, 0, 1, 1), result);
@@ -227,16 +338,33 @@ class PaneLayout {
 
 // --- Tree operations ---------------------------------------------------------
 
-List<String> _collect(PaneNode node, List<String> out) {
+List<PaneGroup> _collectGroups(PaneNode node, List<PaneGroup> out) {
   switch (node) {
-    case PaneLeaf():
-      out.add(node.id);
+    case PaneGroup():
+      out.add(node);
     case PaneSplit():
       for (final child in node.children) {
-        _collect(child, out);
+        _collectGroups(child, out);
       }
   }
   return out;
+}
+
+/// Rebuilds [node] with [map] applied to every region.
+PaneNode _mapGroups(PaneNode node, PaneGroup Function(PaneGroup) map) {
+  switch (node) {
+    case PaneGroup():
+      return map(node);
+    case PaneSplit():
+      return PaneSplit(
+        node.id,
+        axis: node.axis,
+        children: [
+          for (final child in node.children) _mapGroups(child, map),
+        ],
+        weights: List.of(node.weights),
+      );
+  }
 }
 
 PaneNode _splitIn(
@@ -247,12 +375,12 @@ PaneNode _splitIn(
   String splitId,
 ) {
   switch (node) {
-    case PaneLeaf():
-      if (node.id != paneId) return node;
+    case PaneGroup():
+      if (!node.panes.contains(paneId)) return node;
       return PaneSplit(
         splitId,
         axis: axis,
-        children: [node, PaneLeaf(newPaneId)],
+        children: [node, PaneGroup.of(newPaneId)],
         weights: const [0.5, 0.5],
       );
     case PaneSplit():
@@ -268,28 +396,40 @@ PaneNode _splitIn(
   }
 }
 
-PaneNode _replaceLeafIn(PaneNode node, String leafId, PaneNode replacement) {
+PaneNode _replaceGroupIn(PaneNode node, PaneGroup target, PaneNode replacement) {
   switch (node) {
-    case PaneLeaf():
-      return node.id == leafId ? replacement : node;
+    case PaneGroup():
+      return identical(node, target) ? replacement : node;
     case PaneSplit():
       return PaneSplit(
         node.id,
         axis: node.axis,
         children: [
           for (final child in node.children)
-            _replaceLeafIn(child, leafId, replacement),
+            _replaceGroupIn(child, target, replacement),
         ],
         weights: List.of(node.weights),
       );
   }
 }
 
-/// Rebuilds [node] keeping only leaves for which [keep] holds.
+/// Rebuilds [node] keeping only panes for which [keep] holds, and only the
+/// regions that still hold one.
 PaneNode? _prune(PaneNode node, bool Function(String paneId) keep) {
   switch (node) {
-    case PaneLeaf():
-      return keep(node.id) ? node : null;
+    case PaneGroup():
+      final panes = [
+        for (final paneId in node.panes)
+          if (keep(paneId)) paneId,
+      ];
+      if (panes.isEmpty) return null;
+      // The front pane may have been one of the dropped ones; the constructor
+      // brings whatever is left forward rather than leaving a dangling id.
+      return PaneGroup(
+        node.id,
+        panes: panes,
+        activePaneId: node.activePaneId,
+      );
     case PaneSplit():
       final children = <PaneNode>[];
       final weights = <double>[];
@@ -313,7 +453,7 @@ PaneNode? _prune(PaneNode node, bool Function(String paneId) keep) {
 /// weights, bottom-up. Idempotent.
 PaneNode? _normalize(PaneNode node) {
   switch (node) {
-    case PaneLeaf():
+    case PaneGroup():
       return node;
     case PaneSplit():
       final children = <PaneNode>[];
@@ -393,8 +533,12 @@ PaneNode? _resizeIn(PaneNode node, String splitId, int index, double delta) {
 
 void _fillRects(PaneNode node, PaneRect rect, Map<String, PaneRect> out) {
   switch (node) {
-    case PaneLeaf():
-      out[node.id] = rect;
+    case PaneGroup():
+      // Every pane stacked in a region occupies the region: only one of them
+      // is drawn, but "where is this pane" has the same answer for all of them.
+      for (final paneId in node.panes) {
+        out[paneId] = rect;
+      }
     case PaneSplit():
       var offset = 0.0;
       for (var i = 0; i < node.children.length; i++) {
@@ -422,7 +566,12 @@ void _fillRects(PaneNode node, PaneRect rect, Map<String, PaneRect> out) {
 // --- JSON --------------------------------------------------------------------
 
 Map<String, Object?> _toJson(PaneNode node) => switch (node) {
-  PaneLeaf() => {'t': 'leaf', 'id': node.id},
+  PaneGroup() => {
+    't': 'group',
+    'id': node.id,
+    'p': node.panes,
+    'a': node.activePaneId,
+  },
   PaneSplit() => {
     't': 'split',
     'id': node.id,
@@ -438,8 +587,25 @@ PaneNode? _fromJson(Object? json) {
   if (id is! String || id.isEmpty) return null;
 
   switch (json['t']) {
+    // Written before regions existed: one leaf was one pane, and its id was
+    // the pane's. Read as a region of one rather than dropped, so upgrading
+    // does not throw a workspace away.
     case 'leaf':
-      return PaneLeaf(id);
+      return PaneGroup.of(id);
+    case 'group':
+      final rawPanes = json['p'];
+      if (rawPanes is! List || rawPanes.isEmpty) return null;
+      final panes = <String>[];
+      for (final paneId in rawPanes) {
+        if (paneId is! String || paneId.isEmpty) return null;
+        panes.add(paneId);
+      }
+      final active = json['a'];
+      return PaneGroup(
+        id,
+        panes: panes,
+        activePaneId: active is String ? active : null,
+      );
     case 'split':
       final axis = switch (json['axis']) {
         'h' => SplitAxis.horizontal,

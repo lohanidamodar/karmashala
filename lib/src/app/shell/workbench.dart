@@ -17,10 +17,17 @@ import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_liveness.dart';
+import '../../features/terminal/domain/terminal_drag.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
 import 'tab_picker.dart';
+import 'tab_strip_metrics.dart';
+
+// The strip's uniform-extent rule lives beside the strip's other consumers —
+// a region header shares it. Re-exported so `workbench.dart` is still the one
+// import anything about the tab strip needs.
+export 'tab_strip_metrics.dart';
 
 /// The switcher between the two surfaces. Named so a test can read which one is
 /// painted on a given frame without going through whatever either one renders.
@@ -661,34 +668,6 @@ class _SessionBar extends ConsumerWidget {
   }
 }
 
-/// The widest a tab draws, matching [WorkbenchTabChip]'s own cap, and the
-/// narrowest it shrinks to before the strip gives up and scrolls.
-///
-/// The floor is what makes overflow *rare*: a tab has to keep its liveness
-/// mark, its close button and enough of its title to be told from the tab
-/// beside it, and 112px is where that stops being true.
-const double kMaxTabWidth = 220.0;
-const double kMinTabWidth = 112.0;
-
-/// How wide each tab draws in a strip [width] logical pixels wide holding
-/// [count] of them, and whether even at their narrowest they do not fit.
-///
-/// **Tabs are uniform**, the way a browser's and a terminal's are: they share
-/// the room evenly and shrink as more open, rather than each taking whatever
-/// its title happens to need. Two properties follow, and both are the reason
-/// for it. Overflow becomes a *predicate* — `count * kMinTabWidth > width` —
-/// instead of something only a laid-out row can answer; and the offset of tab
-/// *i* is `i * extent`, which is what lets the strip scroll a tab into view
-/// without having built the chip first. A hundred tabs are virtualised, so the
-/// tab a chord just moved to is usually one that does not exist yet.
-({double extent, bool overflowing}) tabStripMetrics(double width, int count) {
-  if (count <= 0) return (extent: kMaxTabWidth, overflowing: false);
-  return (
-    extent: (width / count).clamp(kMinTabWidth, kMaxTabWidth),
-    overflowing: count * kMinTabWidth > width,
-  );
-}
-
 /// One tab in the strip.
 ///
 /// The chip is a closure, not a widget: at a hundred tabs the strip must build
@@ -727,25 +706,45 @@ class _TabStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final tabs = _tabs(ref);
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
 
-    return Container(
-      height: Chrome.tabStrip,
-      color: scheme.surfaceContainerLow,
-      child: Row(
-        children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) => _TabRail(
-                tabs: tabs,
-                width: constraints.maxWidth,
-                activeIndex: tabs.indexWhere((tab) => tab.active),
+    // The strip is where a pane goes to stop being in a split. Dragging a chip
+    // out of a region's header and dropping it here is the same verb as the
+    // region menu's "Move to a new tab" and the palette's — the gesture the
+    // whole redesign turns on, because a drag that only goes one way leaves
+    // whatever it moved stranded.
+    return DragTarget<TerminalDrag>(
+      onWillAcceptWithDetails: (details) => switch (details.data) {
+        PaneDrag(:final paneId) => sessions.isPaneInSplit(paneId),
+        // A tab is already a tab; there is nothing here for it to become.
+        TabDrag() => false,
+      },
+      onAcceptWithDetails: (details) {
+        if (details.data case PaneDrag(:final paneId)) {
+          sessions.movePaneToNewTab(paneId);
+        }
+      },
+      builder: (context, candidate, _) => Container(
+        height: Chrome.tabStrip,
+        color: candidate.isEmpty
+            ? scheme.surfaceContainerLow
+            : scheme.primary.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => _TabRail(
+                  tabs: tabs,
+                  width: constraints.maxWidth,
+                  activeIndex: tabs.indexWhere((tab) => tab.active),
+                ),
               ),
             ),
-          ),
-          const TerminalToolbar(),
-          const _ZenButton(),
-          const SizedBox(width: Insets.xs),
-        ],
+            const TerminalToolbar(),
+            const _ZenButton(),
+            const SizedBox(width: Insets.xs),
+          ],
+        ),
       ),
     );
   }
@@ -799,14 +798,14 @@ class _TabChip extends ConsumerWidget {
       onEnd: () => sessions.closeTab(tab.id, detach: false),
     );
 
-    // Dropping a tab on an empty region of a split moves it there — VS Code's
-    // gesture, and half the reason a split can be made empty at all. The
-    // payload is the tab id and `EmptyPaneRegion` is the only thing that takes
-    // one; the keyboard reaches the same verb from the region's own "Move a tab
-    // here…" and from the command palette, because a drag alone is not an
-    // affordance everybody has.
-    return Draggable<String>(
-      data: tab.id,
+    // Dropping a tab on a region of a split moves it there — VS Code's gesture,
+    // and half the reason a split can be made empty at all. The payload says
+    // which of the two draggable things this is (see [TerminalDrag]), because a
+    // region header can send a *pane* the other way; the keyboard reaches the
+    // same verbs from the region's own "Move a tab here…" and from the command
+    // palette, because a drag alone is not an affordance everybody has.
+    return Draggable<TerminalDrag>(
+      data: TabDrag(tab.id),
       feedback: _TabDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
       child: chip,

@@ -17,6 +17,7 @@ import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
+import 'agent_detection_section.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 import 'settings_row.dart';
@@ -50,8 +51,8 @@ class AgentsPage extends ConsumerWidget {
           title: 'DEFAULT AGENT',
           child: installations.isEmpty
               ? Text(
-                  'No agents found. Press Discover under Environments to '
-                  'scan your environments.',
+                  'No agents found. Press "Detect agents" below to search '
+                  'your environments again.',
                   style: theme.textTheme.bodySmall,
                 )
               : SettingsRow(
@@ -83,6 +84,7 @@ class AgentsPage extends ConsumerWidget {
                   ),
                 ),
         ),
+        const AgentDetectionSection(),
         ClaudeAccountsSection(
           installations: installations
               .where((i) => i.agentId == AgentIds.claudeCode)
@@ -178,6 +180,19 @@ class _PermissionCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: Insets.xs),
+            // Says which way the precedence runs, because the natural reading
+            // of a settings screen is the opposite one: these are the modes a
+            // session starts under **until it chooses**, and a session that has
+            // chosen keeps its own when this changes.
+            Text(
+              'Defaults for sessions that have not chosen a mode of their own. '
+              'A mode picked on a session keeps that session, even after this '
+              'changes.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
             if (dangerous)
               Padding(

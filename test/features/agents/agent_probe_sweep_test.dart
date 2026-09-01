@@ -5,6 +5,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_installations_controller.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/data/agent_probe_log.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
@@ -24,6 +25,9 @@ FakeCommandRunner agyInWslRunner() => FakeCommandRunner(
     final isWindowsLocate = req.executable == 'where';
     final isPosixLocate =
         req.executable == 'bash' && req.arguments.first == '-lc';
+    if (isPosixLocate && req.arguments.last == 'exit 0') {
+      return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+    }
     if (isWindowsLocate || isPosixLocate) {
       final target = isPosixLocate
           ? req.arguments.last.split(' ').last
@@ -75,6 +79,9 @@ void main() {
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
+        // No host variables, so the descriptors' declared Windows install
+        // paths expand to nothing and these tests probe PATH only.
+        hostEnvironmentProvider.overrideWithValue(const {}),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
         ),
