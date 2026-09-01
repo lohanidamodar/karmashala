@@ -23,6 +23,7 @@ import '../domain/pane_liveness.dart';
 import '../domain/pane_restart.dart';
 import '../domain/pane_title.dart';
 import '../domain/terminal_profile.dart';
+import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
 
 /// Whether new panes get OSC 133 shell integration.
@@ -1714,6 +1715,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // process death — not per frame — so this costs nothing.
     void onLiveness() {
       _livenessMutated();
+      if (instance.liveness.value == PaneLiveness.exited) {
+        _announceExit(paneId, instance);
+      }
       if (instance.liveness.value == PaneLiveness.exited &&
           _shouldCollapse(paneId, instance)) {
         // Not inline: this runs from inside the notifier's own callback, and
@@ -1785,6 +1789,30 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // Only when it actually changed: a TUI that repaints its title every frame
     // must not republish the whole workspace every frame.
     _publish();
+  }
+
+  /// Says out loud that this pane's process stopped **by itself**.
+  ///
+  /// The one seam out of this feature, and it publishes a fact rather than a
+  /// conclusion: nothing here knows who reads [paneExitProvider] or what they
+  /// do with it. See [PaneExit].
+  ///
+  /// Reached only from a pane's own liveness change, which is what makes it the
+  /// narrow signal it is: closing a pane, ending a session and quitting the app
+  /// each dispose the instance, and [_unlisten] runs first in all three — so
+  /// the `exited` a disposal writes for anyone still attached is announced to
+  /// nobody. None of those three is an agent finishing its work, and a notice
+  /// for them would fire every time somebody closes a terminal.
+  void _announceExit(String paneId, TerminalInstance instance) {
+    ref
+        .read(paneExitProvider.notifier)
+        .record(
+          PaneExit(
+            paneId: paneId,
+            sessionId: instance.agentLaunch?.sessionId,
+            exitCode: instance.exitCode,
+          ),
+        );
   }
 
   /// Whether the pane that just exited should take itself off the screen.
