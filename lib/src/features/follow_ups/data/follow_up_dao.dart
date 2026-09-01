@@ -96,6 +96,23 @@ class FollowUpDao {
     );
   }
 
+  /// `'<sessionId>/<ending>'` for every ending that has ever produced a row,
+  /// **open or resolved**.
+  ///
+  /// One query for the whole table, read once per app run, so the sweep can
+  /// answer "have I already considered this?" without a query per ended
+  /// session. Resolved rows are included deliberately: the session row that
+  /// raised a notice goes on saying `failed` forever, so forgetting a dismissed
+  /// one would re-raise it on the next bump.
+  Set<String> raisedEndings() {
+    final rows = _db.query(
+      'SELECT DISTINCT session_id, ending FROM session_follow_ups;',
+    );
+    return {
+      for (final row in rows) '${row['session_id']}/${row['ending']}',
+    };
+  }
+
   FollowUp _fromRow(Map<String, Object?> row) => FollowUp(
     id: row['id']! as int,
     sessionId: row['session_id']! as String,
