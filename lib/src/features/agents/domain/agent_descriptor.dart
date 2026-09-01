@@ -334,6 +334,7 @@ class AgentLaunchSpec {
     this.acceptsPromptArgument = false,
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
+    this.missingConversation = const AgentMissingConversationRules(),
     this.fork = const AgentForkSupport.unsupported(),
     this.mcp = const AgentMcpSupport.unsupported(),
   });
@@ -376,6 +377,11 @@ class AgentLaunchSpec {
   /// whose refusal we have never seen — which resolves to "no explanation",
   /// never to a guessed one.
   final AgentResumeConflictRules resumeConflict;
+
+  /// What this agent prints when it is asked to resume a conversation it has no
+  /// record of. Empty for an agent whose answer we have never seen, which
+  /// resolves to "no explanation" rather than a guessed one.
+  final AgentMissingConversationRules missingConversation;
 
   /// Whether this agent can start a new conversation from an existing one's
   /// history, and how. Defaults to [AgentForkStyle.unsupported].

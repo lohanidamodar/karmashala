@@ -367,3 +367,62 @@ class AgentResumeConflictRules {
 
   bool get isEmpty => markers.isEmpty;
 }
+
+/// What an agent prints when it is asked to resume a conversation it has never
+/// heard of.
+///
+/// The other half of [AgentResumeConflictRules]. Both are post-mortems read off
+/// a pane that has just died, and they answer opposite questions about the same
+/// dead pane: *someone else has it* versus *nobody has it, because it was never
+/// written*. Claude Code's is
+///
+/// ```
+/// No conversation found with session ID: 4b13c55e-ec74-4c0b-ac63-44747861aabd
+/// ```
+///
+/// This is the fallback, not the fix. The store is asked before a resume is
+/// attempted (`conversationPresenceProvider`), and this is what remains for the
+/// case where the store could not be read — a stopped WSL distribution, an
+/// unusual `CLAUDE_CONFIG_DIR` — so the attempt still explains itself instead of
+/// leaving an error on a pane and a row that says "running".
+///
+/// Matching lives on the class rather than beside `showsResumeConflict` because
+/// the rules and the reading of them are the same fact, and a second free
+/// function would be a second place to forget the whitespace rule below.
+class AgentMissingConversationRules {
+  const AgentMissingConversationRules({
+    this.markers = const [],
+    this.scanLines = 30,
+  });
+
+  final List<GridMatcher> markers;
+
+  /// How many rows up from the bottom to read. Same window as
+  /// [AgentResumeConflictRules] and for the same reason: the agent has exited
+  /// and its last words may sit above whatever the shell printed afterwards.
+  final int scanLines;
+
+  bool get isEmpty => markers.isEmpty;
+
+  /// Whether [tailLines] show that answer.
+  ///
+  /// **Whitespace is removed from both sides before comparing**, exactly as
+  /// `showsResumeConflict` does it: the line hard-wraps at the pane width and
+  /// the wrap can fall inside a word, so a per-line substring match would work
+  /// at some terminal widths and silently stop at others.
+  ///
+  /// False for an agent that declares no marker. An undeclared message means
+  /// "we cannot explain this", never a guessed explanation.
+  bool matchedBy(List<String> tailLines) {
+    if (markers.isEmpty || tailLines.isEmpty) return false;
+    final screen = _squeezed(tailLines.join(' '));
+    for (final marker in markers) {
+      if (screen.contains(_squeezed(marker.contains))) return true;
+    }
+    return false;
+  }
+}
+
+/// Lower-cased with every whitespace character dropped.
+String _squeezed(String value) =>
+    value.toLowerCase().replaceAll(RegExp(r'\s+'), '');

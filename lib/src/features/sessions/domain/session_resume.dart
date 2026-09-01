@@ -57,13 +57,15 @@ ResumeAction resumeActionFor({
 
 /// What we can honestly say about where a session's process is.
 ///
-/// Three separate facts rather than one confident "active" flag, because they
+/// Separate facts rather than one confident "active" flag, because they
 /// are not equally strong and the UI must not present them as if they were:
 ///
 /// * [hostedLive] is **certain** — we own the process and can see it.
 /// * [refusedResume] is **certain** — the agent itself told us another process
 ///   holds the conversation. It is the only proof we ever get about a process
 ///   we do not own.
+/// * [conversationMissing] is **certain** — the agent itself told us it has no
+///   record of the conversation at all.
 /// * [external] is only a record of **where it was started**. A terminal window
 ///   we launched an hour ago may have been closed since, and we have no way to
 ///   know. It earns a note, never a claim.
@@ -77,6 +79,7 @@ class SessionWhereabouts {
     this.hostedLive = false,
     this.external = false,
     this.refusedResume = false,
+    this.conversationMissing = false,
     this.lastSeen,
   });
 
@@ -91,6 +94,14 @@ class SessionWhereabouts {
   /// conversation, and we saw the refusal on the pane's own screen.
   final bool refusedResume;
 
+  /// An agent was asked to resume it and answered that it has no record of the
+  /// conversation, and we saw *that* on the pane's own screen.
+  ///
+  /// **Certain**, like [refusedResume], and for the same reason: it is the
+  /// agent's own words about its own store. It is the honest end of a resume
+  /// the store probe could not predict — see `AgentMissingConversationRules`.
+  final bool conversationMissing;
+
   /// When the newest evidence about this session was **produced** — not when we
   /// last looked. Today that is the modification time of the agent's own
   /// transcript, which is the only timestamp that means anything once our pane
@@ -101,6 +112,11 @@ class SessionWhereabouts {
   final DateTime? lastSeen;
 
   /// Whether a second process is *known* to hold the conversation.
+  ///
+  /// [conversationMissing] deliberately does not count here: an agent that has
+  /// no record of a conversation is telling us the opposite of "somebody else
+  /// is writing to it", and folding the two together would block a resume that
+  /// should instead be explained.
   ///
   /// Only the agent's own refusal counts. [external] deliberately does not:
   /// treating "we launched a window once" as "it is running now" would put a
@@ -113,6 +129,7 @@ class SessionWhereabouts {
   String? get note {
     if (hostedLive) return 'running here';
     if (refusedResume) return 'open in another process';
+    if (conversationMissing) return 'no conversation to resume';
     if (external) return 'opened in an external terminal';
     return null;
   }
@@ -123,6 +140,11 @@ class SessionWhereabouts {
     if (refusedResume) {
       return 'The agent refused to resume this conversation because another '
           'process is already writing to it.';
+    }
+    if (conversationMissing) {
+      return 'The agent was asked to resume this conversation and answered '
+          'that it has no record of it, so the transcript was never written. '
+          'Nothing has been lost; start a new session instead.';
     }
     if (external) {
       return 'Started in a terminal window Chitragupta does not own, so we '
@@ -169,3 +191,23 @@ String resumeBlockedMessage(String agentName) =>
 /// The banner shown on a pane whose agent refused for this reason.
 String resumeConflictPaneMessage(String agentName) =>
     'Open somewhere else — $agentName allows one process per conversation';
+
+/// The plain words for a resume of a conversation that was never written.
+///
+/// A session whose agent takes a `--session-id` gets one of *our* ids at
+/// launch, and the row records it immediately. That id is a **promise**: it
+/// says what the conversation will be called once the CLI writes it. A launch
+/// that failed, or a session nothing was ever said in, leaves the promise
+/// unkept — the row names a conversation that does not exist, and the agent
+/// answers a later resume with its own version of "no conversation found",
+/// which reaches the user as a pane that flashes an error and exits.
+///
+/// Three things this has to say, in this order: that there is nothing to
+/// resume, *why* there is nothing (so it does not read as data loss), and what
+/// to do instead.
+String resumeMissingConversationMessage(String agentName) =>
+    '$agentName has no record of this conversation, so there is nothing to '
+    'resume. The session reserved its id when it started but the agent never '
+    'wrote a transcript for it — which is what a session nothing was ever said '
+    'in looks like, and what a launch that failed leaves behind. No work has '
+    'been lost. Start a new session in this repository.';

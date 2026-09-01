@@ -5,6 +5,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/domain/agent_descriptor.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
@@ -15,7 +16,9 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../data/cli_session_mutator.dart';
+import '../data/conversation_store_index.dart';
 import '../data/imported_session_dao.dart';
+import '../domain/conversation_presence.dart';
 import '../domain/detected_project.dart';
 import '../domain/detected_session.dart';
 import 'cli_detection_service.dart';
@@ -142,6 +145,67 @@ final cliStoreLocatorProvider = Provider<CliStoreLocator>(
     registry: ref.watch(agentRegistryProvider),
   ),
 );
+
+final conversationStoreIndexProvider = Provider<ConversationStoreIndex>(
+  (ref) => const ConversationStoreIndex(),
+);
+
+/// Asks an agent's own store whether it has ever held a conversation.
+typedef ConversationPresenceProbe =
+    Future<ConversationPresence> Function({
+      required AgentDescriptor descriptor,
+      required String environmentId,
+      required String conversationId,
+    });
+
+/// The one place "does this conversation exist" is answered.
+///
+/// A seam, like `sessionDirectoryPresentProvider`: production reads the store,
+/// tests substitute an answer. And like that one, **the safe answer is the
+/// permissive one** — every failure below resolves to
+/// [ConversationPresence.unknown], because a resume refused on a store we could
+/// not read is a worse bug than the one this exists to catch.
+///
+/// [environmentId] is where the session runs, and only *that* environment's
+/// store may say [ConversationPresence.absent]: it is the one the agent would
+/// have written to. The other located stores are still asked, because finding
+/// the conversation anywhere at all is proof it exists, and a user who moved a
+/// repository between WSL and Windows should not have their history called
+/// missing.
+final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
+  return ({
+    required AgentDescriptor descriptor,
+    required String environmentId,
+    required String conversationId,
+  }) async {
+    final spec = descriptor.store;
+    if (spec == null || spec.format == AgentStoreFormat.none) {
+      return ConversationPresence.unknown;
+    }
+    try {
+      final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+      final stores = await ref
+          .read(cliStoreLocatorProvider)
+          .locate(environments);
+      final index = ref.read(conversationStoreIndexProvider);
+      var here = ConversationPresence.unknown;
+      for (final store in stores) {
+        final home = store.homesByAgentId[descriptor.id];
+        if (home == null) continue;
+        final answer = await index.presenceOf(
+          storeHome: home,
+          format: spec.format,
+          conversationId: conversationId,
+        );
+        if (answer == ConversationPresence.present) return answer;
+        if (store.environmentId == environmentId) here = answer;
+      }
+      return here;
+    } on Object {
+      return ConversationPresence.unknown;
+    }
+  };
+});
 
 final cliSessionMutatorProvider = Provider<CliSessionMutator>(
   (ref) => const CliSessionMutator(),
