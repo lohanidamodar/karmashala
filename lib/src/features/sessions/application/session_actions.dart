@@ -353,6 +353,7 @@ class SessionActions {
     final exe = installs.isNotEmpty
         ? installs.first.executable.path
         : session.cli;
+    _refuseWhatCannotResume(session.cli, session.externalId);
     return shellCommandLine(
       agentExecutable: exe,
       cli: session.cli,
@@ -361,6 +362,7 @@ class SessionActions {
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
       cwd: repo.path.path,
+      registry: _ref.read(agentRegistryProvider),
     );
   }
 
@@ -378,6 +380,7 @@ class SessionActions {
     if (installation == null) {
       throw StateError('The agent for this session is not installed.');
     }
+    _refuseWhatCannotResume(installation.agentId, session.externalSessionId);
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
@@ -396,6 +399,7 @@ class SessionActions {
       // copies for later should name the directory the conversation belongs
       // to even if that folder is not mounted at this moment.
       cwd: (sessionWorkingDirectoryOf(_ref, session) ?? repo.path).path,
+      registry: _ref.read(agentRegistryProvider),
     );
   }
 
@@ -421,6 +425,10 @@ class SessionActions {
             .read(sessionLauncherProvider)
             .defaultInstallationIn(repo.path.environmentId) ??
         installs.first;
+    // Through the same decision as the two resume commands, where it always
+    // answers "nothing to refuse": this command names no conversation, so it
+    // cannot be mistaken for continuing one.
+    _refuseWhatCannotResume(installation.agentId, null);
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
@@ -428,6 +436,7 @@ class SessionActions {
           .read(sessionLauncherProvider)
           .permissionFor(installation.agentId, SessionPurpose.newSession),
       cwd: repo.path.path,
+      registry: _ref.read(agentRegistryProvider),
     );
   }
 
@@ -452,6 +461,7 @@ class SessionActions {
           agentId: session.cli,
           externalSessionId: session.externalId,
         );
+    _refuseWhatCannotResume(session.cli, session.externalId);
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
     if (repo == null) {
       throw StateError(
@@ -481,8 +491,8 @@ class SessionActions {
       permissionMode: _ref
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
+      registry: _ref.read(agentRegistryProvider),
     );
-    _refuseCommandThatCannotResume(command, session.externalId, session.cli);
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host shells
     // take a start directory.
     final cwd = env.wslDistribution == null ? repo.path.path : null;
@@ -542,6 +552,10 @@ class SessionActions {
         'their id automatically.',
       );
     }
+    // After the id is resolved, not before: `_recoverExternalSessionId` and
+    // `_continuableConversationFor` can both supply one the row did not carry,
+    // and it is the id we end up with that the command has to continue.
+    _refuseWhatCannotResume(installation.agentId, externalId);
     final env = _ref
         .read(executionEnvironmentDaoProvider)
         .getById(repo.path.environmentId);
@@ -571,8 +585,8 @@ class SessionActions {
             // become since it started.
             sessionMode: session.permissionMode,
           ),
+      registry: _ref.read(agentRegistryProvider),
     );
-    _refuseCommandThatCannotResume(command, externalId, installation.agentId);
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host
     // shells take a start directory.
     final cwd = env.wslDistribution == null ? directory.path : null;
@@ -581,42 +595,33 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
-  /// Refuses a command line that would start a *new* conversation while
-  /// claiming to continue [externalId].
+  /// Refuses to build anything that would claim to continue [externalId] for an
+  /// agent that cannot be told to continue anything.
   ///
-  /// `resumeCommandLine` builds its resume arguments from a hard-coded switch on
-  /// `claudeCode`/`codex` rather than from the descriptor's own
-  /// `interactiveResume`, so for anything else it produces the bare executable
-  /// — which, run in a terminal, opens a fresh conversation wearing an old
-  /// session's name. That is a wider gap than this guard, and it belongs to the
-  /// terminal feature that owns the builder; what is caught here is the part
-  /// this branch made reachable.
+  /// **This replaces a stopgap, and the replacement is narrower on purpose.**
+  /// The old guard fired on `store.format == antigravityStore` and tested the
+  /// *built command* for the id, because the builder chose its resume arguments
+  /// from a hard-coded `switch (cli)` and so produced a bare executable for
+  /// every agent outside it. It was written to stop refusing by itself once the
+  /// builder read the registry — which it now does, so testing the builder's
+  /// output against the same descriptor that produced it would prove nothing.
   ///
-  /// **Scoped to the agent whose store this branch learned an id from.** Before
-  /// attribution and `_continuableConversationFor`, an Antigravity session had
-  /// no CLI id at all, so this method threw the "no resumable id" error long
-  /// before building a command. Now it has one, and without this the user would
-  /// be handed a terminal quietly running a *different* conversation.
+  /// What is left is the case the registry itself calls hopeless: an agent
+  /// whose `interactiveResume` is [AgentResumeStyle.unsupported], or one this
+  /// registry has never heard of. Those still have to end in a sentence, not in
+  /// a command that quietly starts a fresh conversation under an old session's
+  /// name.
   ///
-  /// The test itself is against the **built command**, not against an agent
-  /// name, so the day `resumeCommandLine` reads the registry this stops
-  /// refusing by itself.
-  void _refuseCommandThatCannotResume(
-    List<String> command,
-    String externalId,
-    String agentId,
-  ) {
-    if (externalId.isEmpty) return;
-    final descriptor = _ref.read(agentRegistryProvider).byId(agentId);
-    if (descriptor?.store?.format != AgentStoreFormat.antigravityStore) return;
-    if (command.any((argument) => argument.contains(externalId))) return;
-    throw StateError(
-      'Opening this in an external terminal would start a new '
-      '${descriptor!.displayName} conversation instead of continuing '
-      '$externalId: Karmashala only builds external-terminal resume commands '
-      'for Claude Code and Codex. Open the session in Karmashala instead, '
-      'where the agent is launched from its own registry entry.',
+  /// Called with a null/empty [externalId] by the fresh-session command too,
+  /// where the answer is always "nothing to refuse" — one decision, every
+  /// surface, rather than three call sites deciding for themselves.
+  void _refuseWhatCannotResume(String agentId, String? externalId) {
+    final refusal = resumeRefusalFor(
+      _ref.read(agentRegistryProvider),
+      agentId,
+      externalId,
     );
+    if (refusal != null) throw StateError(refusal);
   }
 
   /// The conversation an agent's own store says this session's directory last

@@ -196,10 +196,68 @@ class SystemTerminalService {
 /// agent apply its own default. Guessing one would mean passing a flag invented
 /// for a different CLI to a binary we know nothing about — it may not exist
 /// there, or may mean something else — which is the wrong side of the design note/// principle 5, "dangerous permission-bypass options are never the default".
-List<String> permissionArgsFor(String cli, PermissionMode permissionMode) {
-  final descriptor = AgentRegistry.builtIn.byId(cli);
+List<String> permissionArgsFor(
+  String cli,
+  PermissionMode permissionMode, {
+  AgentRegistry registry = AgentRegistry.builtIn,
+}) {
+  final descriptor = registry.byId(cli);
   return descriptor?.launch.permissionArgumentsFor(permissionMode) ??
       const <String>[];
+}
+
+/// The arguments that continue [cli]'s conversation [externalId] **in a
+/// terminal**, read from the agent registry.
+///
+/// This used to be `switch (cli) { 'claudeCode' => ['--resume', id], 'codex' =>
+/// ['resume', id], _ => [] }`, sitting twenty lines below a [permissionArgsFor]
+/// that already read the descriptor. The `_ => []` arm is what made it a bug
+/// rather than a gap: an agent outside the switch got a command line with no
+/// resume arguments at all, which does not fail — it **starts a brand-new
+/// conversation wearing the old session's name**, silently, losing whatever the
+/// user was continuing. Antigravity, which resumes with `--conversation <id>`
+/// and has said so in its descriptor all along, was the agent that hit it.
+///
+/// [AgentLaunchSpec.interactiveResume] and not `resume`: this is the TTY
+/// convention, which differs for Codex (`codex resume <id>` in a terminal vs
+/// `codex --resume <id>` in app-server mode).
+///
+/// An agent the registry has never heard of, or one that declares no resume
+/// convention, gets **nothing** — never another agent's flag. Callers must ask
+/// [resumeRefusalFor] first, so the user is told in words instead of being
+/// handed a command that continues nothing.
+List<String> resumeArgsFor(
+  String cli,
+  String? externalId, {
+  AgentRegistry registry = AgentRegistry.builtIn,
+}) => externalId == null || externalId.isEmpty
+    ? const <String>[]
+    : registry.byId(cli)?.launch.interactiveResume.argumentsFor(externalId) ??
+          const <String>[];
+
+/// Why [cli] must not be handed a command line claiming to continue
+/// [externalId], or `null` when it can be.
+///
+/// The one place the refusal is worded, because four surfaces need it: the
+/// three "copy command" buttons, the two external-terminal opens, and the MCP
+/// `open_session` tool. Each of them used to build a command and hand it over
+/// regardless.
+///
+/// Returns `null` when no conversation is named at all: a fresh-session command
+/// claims nothing, so there is nothing to be wrong about.
+String? resumeRefusalFor(
+  AgentRegistry registry,
+  String cli,
+  String? externalId,
+) {
+  if (externalId == null || externalId.isEmpty) return null;
+  if (registry.byId(cli)?.launch.interactiveResume.isSupported ?? false) {
+    return null;
+  }
+  return '${registry.displayNameFor(cli)} declares no way to continue a '
+      'conversation from a command line, so this command would start a new '
+      'one rather than continue $externalId. Open the session in Karmashala '
+      'instead, where the agent is launched from its own registry entry.';
 }
 
 /// A single shell-pasteable command: `cd <cwd> && <agent> <flags> [resume]`.
@@ -213,18 +271,12 @@ String shellCommandLine({
   String? externalId,
   required PermissionMode permissionMode,
   required String cwd,
+  AgentRegistry registry = AgentRegistry.builtIn,
 }) {
-  final resumeArgs = externalId == null
-      ? const <String>[]
-      : switch (cli) {
-          'claudeCode' => ['--resume', externalId],
-          'codex' => ['resume', externalId],
-          _ => const <String>[],
-        };
   final parts = [
     agentExecutable,
-    ...permissionArgsFor(cli, permissionMode),
-    ...resumeArgs,
+    ...permissionArgsFor(cli, permissionMode, registry: registry),
+    ...resumeArgsFor(cli, externalId, registry: registry),
   ];
   return 'cd ${_shQuote(cwd)} && ${parts.map(_shQuote).join(' ')}';
 }
@@ -245,17 +297,13 @@ List<String> resumeCommandLine({
   required ExecutionEnvironment environment,
   required EnvironmentPath cwd,
   PermissionMode permissionMode = PermissionMode.ask,
+  AgentRegistry registry = AgentRegistry.builtIn,
 }) {
-  final resumeArgs = switch (cli) {
-    'claudeCode' => ['--resume', externalId],
-    'codex' => ['resume', externalId],
-    _ => <String>[],
-  };
   // Permission flags before the resume subcommand/args (global flags first).
   final base = [
     agentExecutable,
-    ...permissionArgsFor(cli, permissionMode),
-    ...resumeArgs,
+    ...permissionArgsFor(cli, permissionMode, registry: registry),
+    ...resumeArgsFor(cli, externalId, registry: registry),
   ];
   // The environment decides the wrapper, in the one place that decides it for
   // every surface. Which shell the external terminal itself is (PowerShell,
