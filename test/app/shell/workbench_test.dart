@@ -1222,6 +1222,9 @@ void main() {
         reason: 'with nothing selected the workbench is the terminal',
       );
       expect(container.read(selectedSessionIdProvider), isNull);
+      // The panes' own standing rule, not this one: there is always at least
+      // one terminal once they are what the workbench is showing.
+      expect(find.byType(TerminalTabChip), findsOneWidget);
     });
 
     testWidgets('ending a session in another tab moves nothing', (
