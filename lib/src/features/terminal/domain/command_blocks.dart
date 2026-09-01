@@ -136,6 +136,7 @@ class CommandBlockTracker {
   final int maxBlocks;
 
   final List<CommandBlock> _blocks = [];
+  final List<void Function(CommandBlock)> _completionListeners = [];
   CommandBlock? _pending;
   int _nextId = 0;
 
@@ -148,6 +149,18 @@ class CommandBlockTracker {
   /// The most recently completed or running block.
   CommandBlock? get latest =>
       _pending ?? (_blocks.isEmpty ? null : _blocks.last);
+
+  /// Called with each block the moment it completes, in completion order.
+  ///
+  /// This is what lets `terminal_run` wait for a command instead of polling the
+  /// screen and guessing when a new prompt means "done" — the guesswork that
+  /// made an in-app pane worse than an agent's own shell. Listeners **observe**:
+  /// a block is the tracker's, and nothing here may edit one.
+  void addCompletionListener(void Function(CommandBlock block) listener) =>
+      _completionListeners.add(listener);
+
+  void removeCompletionListener(void Function(CommandBlock block) listener) =>
+      _completionListeners.remove(listener);
 
   void onMarker(
     ShellMarker marker, {
@@ -200,6 +213,11 @@ class CommandBlockTracker {
     _pending = null;
     if (_blocks.length > maxBlocks) {
       _blocks.removeRange(0, _blocks.length - maxBlocks);
+    }
+    // Over a copy: a satisfied waiter removes itself from inside this call, and
+    // mutating the live list mid-iteration would skip the listener after it.
+    for (final listener in List.of(_completionListeners)) {
+      listener(block);
     }
   }
 

@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../environments/application/environments_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
+import '../terminal/data/command_run_watch.dart';
 import '../terminal/data/terminal_grid_text.dart';
+import '../terminal/data/terminal_instance.dart';
 import '../terminal/domain/terminal_profile.dart';
 
 /// The terminal workspace, as an agent can drive it.
@@ -38,6 +40,7 @@ class TerminalControlTools {
         'terminal_run' => _run(
           args['paneId'] as String?,
           (args['command'] as String?) ?? '',
+          timeoutSeconds: args['timeoutSeconds'] as num?,
         ),
         'terminal_output' => _output(
           args['paneId'] as String?,
@@ -141,12 +144,29 @@ class TerminalControlTools {
     };
   }
 
-  /// Types [command] into a pane and presses return.
+  /// How long a run waits for its command before answering "still running".
+  static const Duration _defaultRunTimeout = Duration(seconds: 60);
+  static const Duration _maxRunTimeout = Duration(minutes: 10);
+
+  /// Runs [command] in a pane and waits for **that** command to finish.
   ///
-  /// This is typing, not executing: there is no exit code to wait for and no
-  /// completion to report, because a terminal pane has no such notion. Read the
-  /// result with `terminal_output`.
-  Object? _run(String? paneId, String command) {
+  /// The problem this exists to close: an agent's own shell tool runs a
+  /// process, waits, and returns output and an exit code in one round trip,
+  /// while a PTY is a byte stream with no notion of a command ending. So an
+  /// agent using a pane had to type, poll `terminal_output`, and guess — and
+  /// guessing is worse than spawning its own console, which is what agents did
+  /// instead, and why the user saw work happening outside the app.
+  ///
+  /// OSC 133 is the missing notion, and [CommandRunWatch] is where it is
+  /// waited on. Three things this must never do, because each of them makes a
+  /// caller act on something untrue: satisfy a call with an *earlier* command's
+  /// end marker, hand back the whole screen as if it were this command's
+  /// output, or report an exit code it did not receive.
+  Future<Object?> _run(
+    String? paneId,
+    String command, {
+    num? timeoutSeconds,
+  }) async {
     if (paneId == null || paneId.isEmpty) {
       throw ArgumentError('paneId is required. terminal_list has the ids.');
     }
@@ -157,6 +177,19 @@ class TerminalControlTools {
     if (instance == null) {
       throw StateError('No terminal pane with id $paneId.');
     }
+    // An agent pane is not a shell: it is somebody's live Claude Code (or
+    // Codex, or…) session, and text typed into it is a *turn*, indistinguishable
+    // from one the user took. Refusing in words is the only honest answer —
+    // there is no shell there to run a command, and no exit code to report.
+    final agent = instance.agentLaunch;
+    if (agent != null) {
+      throw StateError(
+        'Pane $paneId is running the ${agent.agentId} CLI, not a shell. '
+        'Typing into it would land in that live agent session as if the user '
+        'had typed it, and there is no command boundary to wait for. Talk to a '
+        'session with session_send, or open a shell with terminal_open.',
+      );
+    }
     if (!_container
         .read(terminalSessionsControllerProvider)
         .livenessOf(paneId)
@@ -165,19 +198,129 @@ class TerminalControlTools {
         'That pane\'s process has exited; there is no shell to type into.',
       );
     }
-    // A carriage return, for the same reason `SessionLauncher.sendTo` uses one:
-    // a PTY line discipline reads CR as submit and leaves a bare LF sitting on
-    // the line.
-    instance.terminal
-      ..textInput(command)
-      ..textInput('\r');
+
+    // Begun *before* the keystroke: a fast command can finish inside the same
+    // turn the write happened in, and a watch started afterwards would have
+    // missed its own end marker.
+    final watch = CommandRunWatch.begin(instance);
+    _type(instance, command);
+    if (watch == null) return _unwatched(instance, command);
+
+    final timeout = _timeout(timeoutSeconds);
+    final outcome = await watch.awaitFinish(timeout);
     return <String, Object?>{
       'paneId': paneId,
-      'typed': command,
-      'note':
-          'The command was typed and submitted. Nothing here waits for it or '
-          'reads its exit code — call terminal_output to see what happened.',
+      'command': command,
+      'finished': outcome.finished,
+      // Never invented. `null` is "we were not told", which is not zero.
+      'exitCode': outcome.exitCode,
+      'exitCodeKnown': outcome.finished && outcome.exitCode != null,
+      'durationMs': outcome.duration?.inMilliseconds,
+      'output': outcome.output.lines,
+      'note': _noteFor(outcome, paneId: paneId, timeout: timeout),
     };
+  }
+
+  /// A carriage return, for the same reason `SessionLauncher.sendTo` uses one:
+  /// a PTY line discipline reads CR as submit and leaves a bare LF sitting on
+  /// the line.
+  void _type(TerminalInstance instance, String command) => instance.terminal
+    ..textInput(command)
+    ..textInput('\r');
+
+  Duration _timeout(num? seconds) {
+    if (seconds == null) return _defaultRunTimeout;
+    final ms = (seconds * 1000).round().clamp(0, _maxRunTimeout.inMilliseconds);
+    return Duration(milliseconds: ms);
+  }
+
+  /// The answer for a pane whose shell cannot say when a command ended.
+  ///
+  /// It behaves as the tool always did — type and return — but it says so.
+  /// A caller that cannot tell "finished, exit 0" from "we cannot tell" makes
+  /// wrong decisions, so the one thing not on offer here is a fabricated zero.
+  Map<String, Object?> _unwatched(TerminalInstance instance, String command) {
+    final shell = _profiles()
+        .where((profile) => profile.id == instance.profileId)
+        .firstOrNull
+        ?.label;
+    return <String, Object?>{
+      'paneId': instance.id,
+      'command': command,
+      'finished': false,
+      'exitCode': null,
+      'exitCodeKnown': false,
+      'durationMs': null,
+      'output': <String>[],
+      'note':
+          'Typed and submitted, but NOT waited for: this pane'
+          '${shell == null ? '' : ' ($shell)'} has no OSC 133 shell '
+          'integration, so it cannot report when a command ends or what it '
+          'exited with. Integration is PowerShell-only today, and off until '
+          'Settings > Terminal enables it; cmd.exe has no prompt hook that '
+          'could carry it at all. The exit code is UNKNOWN — not 0, and not '
+          '"probably fine". Read what happened with terminal_output '
+          'paneId=${instance.id}.',
+    };
+  }
+
+  /// `500ms`, `60s` — never `60.0s`.
+  String _humanDuration(Duration timeout) => timeout.inMilliseconds % 1000 == 0
+      ? '${timeout.inSeconds}s'
+      : '${timeout.inMilliseconds}ms';
+
+  String _noteFor(
+    CommandRunOutcome outcome, {
+    required String paneId,
+    required Duration timeout,
+  }) {
+    final note = StringBuffer();
+    switch (outcome.end) {
+      case CommandRunEnd.finished:
+        note.write(
+          outcome.exitCode == null
+              ? 'The command finished, but the shell reported no exit code — '
+                    'an interrupted command ends that way. Treat the exit '
+                    'status as UNKNOWN, not as success.'
+              : 'Finished with exit code ${outcome.exitCode}.',
+        );
+      case CommandRunEnd.timedOut:
+        note.write(
+          'The command is still running in pane $paneId after '
+          '${_humanDuration(timeout)}. What is here is what it has '
+          'printed so far — NOT its whole output, and there is no exit code '
+          'because it has not finished. Keep watching it with terminal_output '
+          'paneId=$paneId, or leave it running.',
+        );
+        if (!outcome.markersSeen) {
+          note.write(
+            ' No OSC 133 marker has ever arrived in this pane, so the shell '
+            'may not be running the integration at all rather than the command '
+            'being slow.',
+          );
+        }
+      case CommandRunEnd.paneExited:
+        note.write(
+          'The pane\'s process exited while the command was running, so no '
+          'exit code was ever reported. What is here is what it printed before '
+          'that.',
+        );
+    }
+    if (!outcome.output.scoped) {
+      note.write(
+        ' No output could be attributed to this command specifically — it '
+        'either printed before starting or has already scrolled out of the '
+        'pane\'s history — so none is returned rather than somebody else\'s. '
+        'terminal_output reads the pane as it stands.',
+      );
+    }
+    if (outcome.output.omitted > 0) {
+      note.write(
+        ' The first ${outcome.output.omitted} lines were dropped; this is the '
+        'tail.',
+      );
+    }
+    return note.toString();
   }
 
   Object? _output(String? paneId, int lines) {
@@ -264,7 +407,9 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
     'outputSchema': {
       'type': 'object',
       'properties': {
-        'activeTabId': {'type': ['string', 'null']},
+        'activeTabId': {
+          'type': ['string', 'null'],
+        },
         'tabs': {
           'type': 'array',
           'items': {
@@ -281,8 +426,12 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
                   'properties': {
                     'paneId': {'type': 'string'},
                     'title': {'type': 'string'},
-                    'profileId': {'type': ['string', 'null']},
-                    'workingDirectory': {'type': ['string', 'null']},
+                    'profileId': {
+                      'type': ['string', 'null'],
+                    },
+                    'workingDirectory': {
+                      'type': ['string', 'null'],
+                    },
                     'live': {'type': 'boolean'},
                   },
                   'required': ['paneId', 'live'],
@@ -292,8 +441,14 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
             'required': ['id', 'panes'],
           },
         },
-        'detached': {'type': 'array', 'items': {'type': 'object'}},
-        'profiles': {'type': 'array', 'items': {'type': 'object'}},
+        'detached': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
+        'profiles': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
       },
       'required': ['tabs', 'detached', 'profiles'],
     },
@@ -330,7 +485,9 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
         'tabId': {'type': 'string'},
         'paneId': {'type': 'string'},
         'profileId': {'type': 'string'},
-        'workingDirectory': {'type': ['string', 'null']},
+        'workingDirectory': {
+          'type': ['string', 'null'],
+        },
       },
       'required': ['tabId', 'paneId', 'profileId'],
     },
@@ -338,11 +495,21 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
   {
     'name': 'terminal_run',
     'description':
-        'Type a command into a terminal pane and press return. This TYPES; it '
-        'does not wait. There is no exit code and no completion — a pane is a '
-        'shell, not a job runner — so call terminal_output afterwards to read '
-        'what happened. Whatever the command does is the command\'s business: '
-        'this tool cannot tell a build from an rm -rf.',
+        'Run a command in a terminal pane and WAIT for it to finish, then '
+        'return that command\'s own output and its exit code — one round trip, '
+        'the way your own shell tool works. Prefer this over spawning a shell '
+        'of your own: the pane is Karmashala\'s, so the user can watch it, take '
+        'it over, and keep it after you are gone. Read `finished` and '
+        '`exitCodeKnown` before you believe anything: a command still running '
+        'at the timeout comes back finished=false with the partial output it '
+        'has printed so far (pass a small timeoutSeconds for a dev server you '
+        'mean to leave running), and a pane whose shell has no OSC 133 '
+        'integration — PowerShell is the only one that has it today — comes '
+        'back at once with exitCodeKnown=false, because it cannot know. No '
+        'exit code is ever invented. Refuses a pane that is running an agent '
+        'CLI: that is somebody\'s live session, not a shell. Whatever the '
+        'command does is the command\'s business — this tool cannot tell a '
+        'build from an rm -rf.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -350,7 +517,15 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
           'type': 'string',
           'description': 'Which pane, from terminal_list.',
         },
-        'command': {'type': 'string', 'description': 'The command to type.'},
+        'command': {'type': 'string', 'description': 'The command to run.'},
+        'timeoutSeconds': {
+          'type': 'number',
+          'description':
+              'How long to wait for the command before answering "still '
+              'running" with what it has printed (default 60, max 600). '
+              'Nothing is killed on timeout — the command keeps running in the '
+              'pane.',
+        },
       },
       'required': ['paneId', 'command'],
     },
@@ -358,10 +533,29 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
       'type': 'object',
       'properties': {
         'paneId': {'type': 'string'},
-        'typed': {'type': 'string'},
+        'command': {'type': 'string'},
+        'finished': {'type': 'boolean'},
+        'exitCode': {
+          'type': ['number', 'null'],
+        },
+        'exitCodeKnown': {'type': 'boolean'},
+        'durationMs': {
+          'type': ['number', 'null'],
+        },
+        'output': {
+          'type': 'array',
+          'items': {'type': 'string'},
+        },
         'note': {'type': 'string'},
       },
-      'required': ['paneId', 'typed'],
+      'required': [
+        'paneId',
+        'command',
+        'finished',
+        'exitCodeKnown',
+        'output',
+        'note',
+      ],
     },
   },
   {
@@ -390,7 +584,10 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
         'paneId': {'type': 'string'},
         'title': {'type': 'string'},
         'live': {'type': 'boolean'},
-        'lines': {'type': 'array', 'items': {'type': 'string'}},
+        'lines': {
+          'type': 'array',
+          'items': {'type': 'string'},
+        },
       },
       'required': ['paneId', 'lines'],
     },
