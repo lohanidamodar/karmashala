@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
@@ -168,6 +169,17 @@ class ProjectsController extends Notifier<List<Project>> {
           projectEnvironment: environment,
           windows: windows,
         );
+    // A rescan is also the moment to notice what has *gone*. It only ever
+    // added, so a worktree deleted from the command line stayed in the table
+    // for ever — offered in every picker, stat'd by every cost the tree pays.
+    //
+    // **Not awaited**, and that is the point: the caller asked what the scan
+    // *found*, and retirement answers a different question by probing the
+    // filesystem once per checkout — which over a stopped distribution's UNC
+    // blocks for seconds each. Making the rescan wait on it would stall the
+    // very screen the user is watching for a fact nobody asked for. It bumps
+    // the revision itself when it changes something.
+    unawaited(_retireMissingCheckouts(projectId, project, environment, windows));
     if (added.isNotEmpty) {
       // New repositories may already have CLI history behind them, and the
       // tree's providers all hang off the revision.
@@ -176,6 +188,37 @@ class ProjectsController extends Notifier<List<Project>> {
     }
     _refresh();
     return added;
+  }
+
+  /// Drops the rows whose directories are provably gone, and says nothing when
+  /// it cannot tell. The service refuses to retire anything unless the project
+  /// root itself answered present, so a stopped distro or an unmounted drive
+  /// cannot delete a workspace.
+  Future<void> _retireMissingCheckouts(
+    String projectId,
+    Project project,
+    ExecutionEnvironment environment,
+    ExecutionEnvironment windows,
+  ) async {
+    try {
+      final report = await ref
+          .read(checkoutRetirementServiceProvider)
+          .retireMissingCheckouts(
+            projectId: projectId,
+            root: project.root,
+            environment: environment,
+            windows: windows,
+          );
+      if (report.retired.isEmpty) return;
+      ref.read(sessionsRevisionProvider.notifier).bump();
+      _refresh();
+    } catch (error) {
+      // A tidy-up that fails is not a failed rescan. The rows it would have
+      // dropped are still there, which is the safe direction.
+      AppLogger.named('projects').warning(
+        'Retiring missing checkouts failed: $error',
+      );
+    }
   }
 
   /// Removes [projectId] from the workspace. The database cascades to its

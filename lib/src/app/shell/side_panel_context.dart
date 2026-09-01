@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
@@ -267,6 +268,119 @@ class _CheckoutMenuRow extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Level two of the picker: the worktrees of the checkout the panel is on.
+///
+/// The owner's shape, in their words — *"show the worktrees after selecting the
+/// parent repo in the details"*. The line above answers "which repository";
+/// this answers "and which of its worktrees", which is a different question and
+/// was drowning the first one when both were poured into one 69-entry menu.
+///
+/// A worktree the workspace has a row for is selectable, because pointing the
+/// scoped surfaces at it means naming a `repositories` row. One it has never
+/// recorded is still *listed* — it exists, and saying so is better than
+/// pretending the repository has no worktrees — but it is not offered as a
+/// destination, because there is nothing to point at. Rescan is what turns the
+/// second kind into the first.
+class SidePanelWorktrees extends ConsumerWidget {
+  const SidePanelWorktrees({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final worktrees =
+        ref.watch(selectedCheckoutWorktreesProvider).value ?? const [];
+    if (worktrees.isEmpty) return const SizedBox.shrink();
+
+    final selected = ref.watch(selectedCheckoutProvider);
+    final rows = {
+      for (final checkout in ref.watch(projectCheckoutsProvider))
+        Checkout(checkout.path): checkout,
+    };
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      color: scheme.surfaceContainerLowest,
+      padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.sm, Insets.xs),
+      child: Wrap(
+        spacing: Insets.xs,
+        runSpacing: Insets.xs,
+        children: [
+          for (final worktree in worktrees)
+            _WorktreeChip(
+              label: worktree.branch ?? p.basename(worktree.path.path),
+              path: worktree.path.path,
+              selected: rows[Checkout(worktree.path)]?.id == selected?.id,
+              onTap: switch (rows[Checkout(worktree.path)]) {
+                final Repository row => () =>
+                    ref.read(checkoutPickerProvider).select(row),
+                _ => null,
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One worktree. Unselectable when the workspace has no row for it, and it says
+/// so rather than looking broken.
+class _WorktreeChip extends StatelessWidget {
+  const _WorktreeChip({
+    required this.label,
+    required this.path,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String path;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colour = selected
+        ? scheme.primary
+        : onTap == null
+        ? scheme.onSurfaceVariant.withValues(alpha: 0.6)
+        : scheme.onSurfaceVariant;
+    return Tooltip(
+      message: onTap == null
+          ? '$path\nNot in this workspace yet — rescan to add it'
+          : path,
+      child: Material(
+        color: selected
+            ? scheme.primary.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Radii.sm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: 2,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(AppIcons.gitBranch, size: Chrome.iconSmall, color: colour),
+                const SizedBox(width: Insets.xs),
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(color: colour),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

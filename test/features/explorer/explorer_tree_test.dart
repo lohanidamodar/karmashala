@@ -29,6 +29,7 @@ import 'package:chitragupta/src/features/terminal/data/system_terminal_service.d
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:chitragupta/src/features/repositories/application/repository_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,6 +138,9 @@ void main() {
           ),
           autoImportRunnerProvider.overrideWithValue(
             (_) async => const ImportSummary(),
+          ),
+          checkoutPresenceProbeProvider.overrideWithValue(
+            FakeCheckoutPresenceProbe(),
           ),
           agentSessionStatusProvider.overrideWith(
             (ref, id) => const Stream<AgentStatusReport>.empty(),

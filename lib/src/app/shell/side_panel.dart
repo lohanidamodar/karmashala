@@ -277,8 +277,10 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
                       _SidePanelHeader(surface: widget.surface),
                       const Divider(height: 1),
                     ],
-                    if (widget.surface.scopedToRepository)
+                    if (widget.surface.scopedToRepository) ...[
                       const SidePanelContextLine(),
+                      const SidePanelWorktrees(),
+                    ],
                     Expanded(child: _surfaceBody(widget.surface)),
                   ],
                 ),

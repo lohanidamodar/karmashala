@@ -1,3 +1,5 @@
+import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
+import 'package:chitragupta/src/features/repositories/data/checkout_presence_probe.dart';
 import 'package:chitragupta/src/core/util/clock.dart';
 import 'package:chitragupta/src/core/util/id_generator.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
@@ -44,4 +46,25 @@ class FakeRepositoryDiscoveryService implements RepositoryDiscoveryService {
     if (error != null) throw error!;
     return result;
   }
+}
+
+/// A presence probe that answers from a table and never touches a filesystem.
+///
+/// Retirement asks whether a directory is still there, and in production that
+/// is a bounded `Directory.exists` — a real async call with a real timer
+/// behind its deadline. A widget test that drives a rescan would otherwise
+/// leave both outliving the tree it was pumped in. `unknown` is the default
+/// because it is the answer that never retires anything.
+class FakeCheckoutPresenceProbe implements CheckoutPresenceProbe {
+  FakeCheckoutPresenceProbe([this.answers = const {}]);
+
+  /// Keyed by path, as the caller spells it.
+  final Map<String, CheckoutPresence> answers;
+
+  @override
+  Future<CheckoutPresence> presenceOf(
+    EnvironmentPath directory, {
+    required ExecutionEnvironment environment,
+    required ExecutionEnvironment windows,
+  }) async => answers[directory.path] ?? CheckoutPresence.unknown;
 }

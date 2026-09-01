@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../../../core/process/path_translator.dart';
@@ -52,6 +53,12 @@ abstract interface class CheckoutPresenceProbe {
 /// so the guard lives one level up: `CheckoutRetirementService` refuses to
 /// retire anything unless the project root itself answered [present], which is
 /// the one path we know was there when the scan started.
+/// How long one presence question may take before it answers `unknown`.
+///
+/// Generous enough for a live 9p round trip, short enough that a project full
+/// of checkouts in a stopped distribution does not stall a rescan.
+const Duration presenceProbeDeadline = Duration(seconds: 2);
+
 class LocalCheckoutPresenceProbe implements CheckoutPresenceProbe {
   const LocalCheckoutPresenceProbe({this.translator = const PathTranslator()});
 
@@ -85,9 +92,16 @@ class LocalCheckoutPresenceProbe implements CheckoutPresenceProbe {
     }
 
     try {
-      return await Directory(hostPath).exists()
-          ? CheckoutPresence.present
-          : CheckoutPresence.absent;
+      // Bounded, because this question can hang. A WSL path becomes
+      // `\\wsl.localhost\<distro>\…`, and Windows blocks on that UNC for a
+      // long time when the distribution is not running — long enough to stall
+      // the rescan that called us, once per checkout. A question we could not
+      // answer in time is `unknown`, which never retires anything, so the
+      // slow case costs a delay and never a deletion.
+      final exists = await Directory(
+        hostPath,
+      ).exists().timeout(presenceProbeDeadline);
+      return exists ? CheckoutPresence.present : CheckoutPresence.absent;
     } on Object {
       return CheckoutPresence.unknown;
     }

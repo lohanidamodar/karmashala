@@ -28,6 +28,7 @@ import 'package:chitragupta/src/features/sessions/domain/delivery_action.dart';
 import 'package:chitragupta/src/features/repositories/domain/repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:chitragupta/src/features/repositories/application/repository_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -134,6 +135,9 @@ void main() {
           (repos) async => const ImportSummary(),
         ),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+        checkoutPresenceProbeProvider.overrideWithValue(
+          FakeCheckoutPresenceProbe(),
+        ),
         // A real poll timer outlives the widget tree and trips the pending-timer
         // check; nothing here is testing the poll.
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
@@ -394,6 +398,9 @@ void main() {
           (repos) async => const ImportSummary(),
         ),
         repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+        checkoutPresenceProbeProvider.overrideWithValue(
+          FakeCheckoutPresenceProbe(),
+        ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
       ],
     );
