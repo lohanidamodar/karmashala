@@ -461,5 +461,52 @@ void main() {
       expect(result.text, contains('ext-9'));
       expect(result.text, contains('start a new'));
     });
+
+    test('and open_sessions_in_tmux refuses it too, naming the session', () async {
+      // The tmux path built its own resume arguments, and its switch was the
+      // worst of the family: `_ => ['--resume', id]` handed Claude Code's flag
+      // to *every* other agent. A window that dies on an unknown option is the
+      // good outcome there; the bad one is a flag that means something else.
+      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      RepositoryDao(db).insert(
+        repository(
+          id: 'r-wsl',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/app',
+        ),
+      );
+      AgentInstallationDao(db).insert(
+        agentInstallation(
+          id: 'a-silent-wsl',
+          agentId: 'silent',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/.local/bin/silent',
+        ),
+      );
+      ImportedSessionDao(db).insertIfAbsent(
+        ImportedSession(
+          id: 'i-silent-wsl',
+          repositoryId: 'r-wsl',
+          cli: 'silent',
+          externalId: 'ext-10',
+          environmentId: 'wsl:Ubuntu',
+          filePath: '/store/ext-10.jsonl',
+          storeHome: '/store',
+          isSubagent: false,
+          title: 'Grouped work',
+          preview: 'earlier work',
+          createdAt: testTime,
+        ),
+      );
+
+      final result = await callTool('open_sessions_in_tmux', {
+        'ids': ['i-silent-wsl'],
+      });
+
+      expect(result.isError, isTrue);
+      expect(result.text, contains('Grouped work'));
+      expect(result.text, contains('Silent Agent'));
+      expect(result.text, contains('ext-10'));
+    });
   });
 }

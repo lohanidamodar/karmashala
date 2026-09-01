@@ -2477,13 +2477,28 @@ class LauncherControlServer implements SessionMcp {
       if (repo == null || install == null) {
         throw StateError('Repository or agent missing for "$id".');
       }
+      // The same registry read as every other resume surface. This switch was
+      // the worst of the family: its `_` arm handed `--resume <id>` to *any*
+      // agent, so an agent that spells it differently was given a flag it does
+      // not have and the tmux window died on an unknown option — or, worse,
+      // took `--resume` as something else entirely.
+      final registry = _container.read(agentRegistryProvider);
+      final refusal = resumeRefusalFor(
+        registry,
+        session.cli,
+        session.externalId,
+      );
+      if (refusal != null) {
+        throw StateError('Session "${session.displayTitle}": $refusal');
+      }
       final parts = [
         install.executable.path,
-        ...permissionArgsFor(session.cli, _permissionFor(session.cli)),
-        ...switch (session.cli) {
-          AgentIds.codex => ['resume', session.externalId],
-          _ => ['--resume', session.externalId],
-        },
+        ...permissionArgsFor(
+          session.cli,
+          _permissionFor(session.cli),
+          registry: registry,
+        ),
+        ...resumeArgsFor(session.cli, session.externalId, registry: registry),
       ];
       windows.add(
         TmuxWindow(
