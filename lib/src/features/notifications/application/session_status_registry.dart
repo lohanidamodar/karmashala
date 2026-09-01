@@ -417,21 +417,42 @@ class SessionStatusRegistry {
     return Stream<AgentStatusReport>.multi((controller) {
       var last = current();
       controller.add(last);
-      final subscription = _changes.stream.listen(
-        (_) {
-          final next = current();
-          // Only when the *evidence* moved. A cycle that reconfirms a status is
-          // not a rebuild: at a hundred rows that is the difference between a
-          // silent app and eighty widget rebuilds a second.
-          if (_sameEvidence(last, next)) return;
-          last = next;
-          controller.add(next);
-        },
-        onDone: controller.close,
-      );
+      final subscription = _changes.stream.listen((_) {
+        final next = current();
+        // Only when the *evidence* moved. A cycle that reconfirms a status is
+        // not a rebuild: at a hundred rows that is the difference between a
+        // silent app and eighty widget rebuilds a second.
+        if (_sameEvidence(last, next)) return;
+        last = next;
+        controller.add(next);
+      }, onDone: controller.close);
       controller.onCancel = subscription.cancel;
     });
   }
+
+  /// [coverage] now, and again whenever a cycle measures something different.
+  ///
+  /// The log line is edge-triggered for the reason [_measure] gives, and a UI
+  /// needs the same discipline for the same reason: this runs every 1.2
+  /// seconds, and a row that repainted on each of them would be a ticker rather
+  /// than a readout. Yields immediately — `null` before the first cycle — so
+  /// "nothing measured yet" is a state a reader can render rather than a wait.
+  ///
+  /// `Stream.multi` rather than a generator, exactly as in [reportsFor]: this
+  /// can sit silent for a long time, and a cancellation must not wait for the
+  /// next value.
+  Stream<SessionStatusCoverage?> get coverageReports =>
+      Stream<SessionStatusCoverage?>.multi((controller) {
+        var last = coverage;
+        controller.add(last);
+        final subscription = _changes.stream.listen((_) {
+          final next = coverage;
+          if (next == last) return;
+          last = next;
+          controller.add(next);
+        }, onDone: controller.close);
+        controller.onCancel = subscription.cancel;
+      });
 
   /// Sessions a hook just changed the status of, as the callback lands.
   ///
@@ -538,9 +559,7 @@ class SessionStatusRegistry {
     _tracked.removeWhere((key, _) => !seen.contains(key));
     _byOpenId
       ..clear()
-      ..addEntries(
-        _tracked.values.map((t) => MapEntry(t.session.openId, t)),
-      );
+      ..addEntries(_tracked.values.map((t) => MapEntry(t.session.openId, t)));
 
     // 2. One store scan for everyone still missing a transcript path.
     final scans = await _resolvePaths(now);
@@ -847,9 +866,7 @@ class SessionStatusRegistry {
     if (picks.isEmpty) return;
     final queue = Queue<_Tracked>.of(picks);
     final workers = math.min(math.max(probeConcurrency, 1), picks.length);
-    await Future.wait([
-      for (var i = 0; i < workers; i++) _drain(queue, now),
-    ]);
+    await Future.wait([for (var i = 0; i < workers; i++) _drain(queue, now)]);
   }
 
   Future<void> _drain(Queue<_Tracked> queue, DateTime now) async {
