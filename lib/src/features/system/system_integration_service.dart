@@ -116,6 +116,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Read by [onWindowClose] and nothing else. Prevent-close is deliberately
   /// *not* derived from it — see [apply].
   bool _closeToTray = false;
+
+  /// Whether the tray icon actually went up.
+  ///
+  /// Hiding to a tray that is not there is a window the user cannot get back:
+  /// on stock GNOME there is no StatusNotifier host unless an AppIndicator
+  /// extension is installed, so `setIcon` fails and nothing appears — and with
+  /// the global hotkey needing X11 (keybinder has no Wayland support), a
+  /// Wayland session has no second way in either. [onWindowClose] falls back to
+  /// an ordered quit when this is false.
+  bool _trayIconApplied = false;
   bool _disposed = false;
 
   /// What the user asked for, kept separately from what the OS confirmed.
@@ -192,7 +202,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
       );
     }
 
-    await _run(NativeSetting.trayIcon, () async {
+    _trayIconApplied = await _run(NativeSetting.trayIcon, () async {
       await _native.tray.setIcon(_kIdleTrayIcon);
       await _native.tray.setToolTip('Karmashala');
     });
@@ -694,9 +704,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Reached only because prevent-close is on (see [apply]); without it the
   /// window is already gone by the time this runs. The quit branch is the same
   /// ordered teardown the tray's Quit uses.
+  ///
+  /// Close-to-tray is honoured only when there **is** a tray. The setting says
+  /// where the user wants the window to go; [_trayIconApplied] says whether
+  /// that place exists. Hiding without it is not close-to-tray, it is a window
+  /// that cannot be reopened.
   @override
   void onWindowClose() {
-    if (_closeToTray) {
+    if (_closeToTray && _trayIconApplied) {
       unawaited(_native.window.hide());
     } else {
       unawaited(_quit());

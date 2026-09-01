@@ -51,7 +51,11 @@ class LauncherMcp {
   /// isn't present (e.g. a dev run without the compiled bridge).
   File? bridgeExecutable() {
     final dir = p.dirname(Platform.resolvedExecutable);
-    final exe = File(p.join(dir, 'karmashala_mcp.exe'));
+    // `.exe` only on Windows. Asking for one everywhere meant this returned
+    // null on macOS and Linux no matter what had been built beside the app, so
+    // the stdio bridge could never be offered there even when it was present.
+    final name = Platform.isWindows ? 'karmashala_mcp.exe' : 'karmashala_mcp';
+    final exe = File(p.join(dir, name));
     return exe.existsSync() ? exe : null;
   }
 

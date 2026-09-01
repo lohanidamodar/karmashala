@@ -260,4 +260,44 @@ void main() {
       expect(warpThemeDirectories(environment: const {}), isEmpty);
     });
   });
+
+  group('macOS and Linux theme locations', () {
+    // These read `APPDATA` only, so off Windows every directory came back empty
+    // and the picker said "none installed" on a machine that had them.
+
+    test('Ghostty follows XDG_CONFIG_HOME when it is set', () {
+      final dirs = ghosttyThemeDirectories(
+        environment: const {'XDG_CONFIG_HOME': '/Users/a/.config'},
+      );
+      expect(dirs.single.path, '/Users/a/.config/ghostty/themes');
+    });
+
+    test('Ghostty falls back to ~/.config', () {
+      final dirs = ghosttyThemeDirectories(
+        environment: const {'HOME': '/Users/a'},
+      );
+      expect(dirs.single.path, '/Users/a/.config/ghostty/themes');
+    });
+
+    test('Warp keeps one themes directory for every channel', () {
+      // Not per-channel like Windows: Warp documents a single `~/.warp/themes`
+      // on macOS and Linux.
+      final dirs = warpThemeDirectories(
+        environment: const {'HOME': '/Users/a'},
+      );
+      expect(dirs.single.path, '/Users/a/.warp/themes');
+    });
+
+    test('APPDATA still wins where it is set', () {
+      // A Windows session under Git Bash or MSYS sets HOME as well; the Windows
+      // convention is still the right answer there.
+      final dirs = ghosttyThemeDirectories(
+        environment: const {
+          'APPDATA': r'C:\Users\a\AppData\Roaming',
+          'HOME': '/c/Users/a',
+        },
+      );
+      expect(dirs.single.path, contains('AppData'));
+    });
+  });
 }

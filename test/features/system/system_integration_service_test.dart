@@ -311,6 +311,27 @@ void main() {
       expect(quitCalls, isEmpty);
     });
 
+    test('close to tray quits when there is no tray to close to', () async {
+      // Stock GNOME has no StatusNotifier host unless an AppIndicator extension
+      // is installed, so `setIcon` fails and nothing appears. Hiding there is
+      // not close-to-tray, it is a window with no way back — and on Wayland the
+      // global hotkey cannot rescue it either, because keybinder is X11-only.
+      natives.tray.setIconFailure = Failure(StateError('no tray'), times: 99);
+
+      await build();
+      settings().setCloseToTray(true);
+      await pumpEventQueue();
+
+      service.onWindowClose();
+      await pumpEventQueue();
+
+      expect(statusOf(NativeSetting.trayIcon)!.ok, isFalse);
+      expect(quitCalls, [
+        'shutdown',
+      ], reason: 'the X still runs the ordered teardown rather than hiding');
+      expect(natives.window.destroyed, isTrue);
+    });
+
     test('without close to tray it shuts down, then destroys', () async {
       await build();
 

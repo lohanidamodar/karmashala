@@ -54,28 +54,57 @@ class DiscoveredTheme {
   int get hashCode => id.hashCode;
 }
 
-/// Where Ghostty keeps user themes on Windows.
+/// The per-user configuration root, taken from whichever variable the host
+/// actually sets.
 ///
-/// The reference implementation returns nothing on Windows, which makes a named
-/// theme unresolvable there. This app is Windows-first, so it looks beside the
-/// config instead.
-List<Directory> ghosttyThemeDirectories({Map<String, String>? environment}) {
-  final appData = (environment ?? Platform.environment)['APPDATA'];
-  if (appData == null || appData.isEmpty) return const [];
-  return [Directory(p.join(appData, 'ghostty', 'themes'))];
+/// `%APPDATA%` is Windows'; `$XDG_CONFIG_HOME` (or `~/.config`) is the POSIX
+/// convention Ghostty follows on macOS and Linux. Read off the environment
+/// rather than off `Platform` so both conventions stay reachable from a test on
+/// either host — and because a Windows session that also sets `HOME` (Git Bash,
+/// MSYS) should still be answered with `APPDATA`.
+///
+/// Reading only `APPDATA` meant every theme directory came back empty off
+/// Windows, and the picker reported "none installed" on a machine that had
+/// them.
+String? _configHome(Map<String, String> environment) {
+  final appData = environment['APPDATA'];
+  if (appData != null && appData.isNotEmpty) return appData;
+  final xdg = environment['XDG_CONFIG_HOME'];
+  if (xdg != null && xdg.isNotEmpty) return xdg;
+  final home = environment['HOME'];
+  if (home == null || home.isEmpty) return null;
+  return p.join(home, '.config');
 }
 
-/// Where Warp keeps user themes on Windows, one directory per install channel.
+/// Where Ghostty keeps user themes.
 ///
-/// Warp's own bundled themes live inside its binary, not on disk, so an empty
-/// result genuinely means "none installed" rather than "look harder".
+/// The reference implementation returns nothing on Windows, which makes a named
+/// theme unresolvable there, so this looks beside the config on every host.
+List<Directory> ghosttyThemeDirectories({Map<String, String>? environment}) {
+  final config = _configHome(environment ?? Platform.environment);
+  if (config == null) return const [];
+  return [Directory(p.join(config, 'ghostty', 'themes'))];
+}
+
+/// Where Warp keeps user themes.
+///
+/// Windows splits them per install channel under `%APPDATA%`; macOS and Linux
+/// use one `~/.warp/themes` for every channel, which is what Warp's own
+/// documentation names. Warp's bundled themes live inside its binary rather
+/// than on disk, so an empty result genuinely means "none installed" rather
+/// than "look harder".
 List<Directory> warpThemeDirectories({Map<String, String>? environment}) {
-  final appData = (environment ?? Platform.environment)['APPDATA'];
-  if (appData == null || appData.isEmpty) return const [];
-  return [
-    for (final channel in _warpChannels)
-      Directory(p.join(appData, 'warp', channel, 'data', 'themes')),
-  ];
+  final env = environment ?? Platform.environment;
+  final appData = env['APPDATA'];
+  if (appData != null && appData.isNotEmpty) {
+    return [
+      for (final channel in _warpChannels)
+        Directory(p.join(appData, 'warp', channel, 'data', 'themes')),
+    ];
+  }
+  final home = env['HOME'];
+  if (home == null || home.isEmpty) return const [];
+  return [Directory(p.join(home, '.warp', 'themes'))];
 }
 
 /// Scans [directories] for theme files of [format].
