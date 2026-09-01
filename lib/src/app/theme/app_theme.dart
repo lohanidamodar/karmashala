@@ -134,6 +134,13 @@ class AppTheme {
           minimumSize: const Size.square(26),
           maximumSize: const Size.square(30),
           padding: const EdgeInsets.all(Insets.xs),
+          // An `IconButton` sizes its glyph from its own button style, not
+          // from the ambient `iconTheme` above — so with this unset every
+          // one of them fell back to Material's 24, inside a 30px box with
+          // 4px of padding, i.e. a glyph larger than the room it was given.
+          // Call sites had been papering over it one `size:` literal at a
+          // time; roughly half never did and drew the oversized default.
+          iconSize: Chrome.icon,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm),
           ),
@@ -179,10 +186,15 @@ class AppTheme {
         labelStyle: text.labelMedium,
         padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       ),
+      // `*.icon` constructors size their leading glyph from the button style
+      // too — Material's default is 18, against a chrome whose every other
+      // glyph is `Chrome.icon`. Same fix, same reason, as `menuButtonTheme`
+      // below.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 30),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          iconSize: Chrome.icon,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -193,6 +205,7 @@ class AppTheme {
           minimumSize: const Size(0, 30),
           side: BorderSide(color: scheme.outlineVariant),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          iconSize: Chrome.icon,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -202,6 +215,7 @@ class AppTheme {
         style: TextButton.styleFrom(
           minimumSize: const Size(0, 30),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          iconSize: Chrome.icon,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),

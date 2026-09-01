@@ -287,6 +287,9 @@ enum UiDensity {
             EdgeInsets.symmetric(horizontal: Insets.xl),
           ),
           textStyle: WidgetStatePropertyAll(text.bodyMedium),
+          // The desktop theme pins button glyphs to `Chrome.icon`; a thumb
+          // gets `Touch.icon`, the same step every other glyph takes here.
+          iconSize: const WidgetStatePropertyAll(Touch.icon),
         );
 
     return base.copyWith(
