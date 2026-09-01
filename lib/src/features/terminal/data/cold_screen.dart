@@ -285,10 +285,27 @@ class ColdIngest {
       screen.flush();
       return;
     }
+    // A program may have taken the screen while this pane was cold — the
+    // refresh parses `?1049h` like anything else — and `unpark` writes with
+    // `terminal.write`, which goes to whichever buffer is *in front*. Left
+    // alone the parked snapshot lands on the program's screen while the main
+    // buffer stays empty, so the pane's history is silently gone: the one
+    // outcome parking exists to avoid.
+    //
+    // `?47` rather than `?1049` for the round trip, because it switches buffers
+    // and clears neither (parser.dart:985) — the program's frame survives
+    // untouched. `?1048` saves and restores the cursor across it, so the
+    // program's next write lands where it left off rather than wherever the
+    // snapshot finished. The spool then replays on top of the state the process
+    // actually believes it is in, which is what keeps anything it goes on to
+    // say about buffers — including leaving the alternate one — correct.
+    final onAltScreen = terminal.isUsingAltBuffer;
+    if (onAltScreen) terminal.write('\x1b[?1048h\x1b[?47l');
     // Before the replay, not after: what the screen refresh drew is about to be
     // written again, in order, from the spool.
     screen.reset();
     park.unpark();
+    if (onAltScreen) terminal.write('\x1b[?47h\x1b[?1048l');
     _replay();
   }
 

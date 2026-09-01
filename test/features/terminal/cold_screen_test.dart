@@ -25,6 +25,15 @@ import 'package:xterm/xterm.dart';
 void main() {
   Uint8List utf8Bytes(String text) => const Utf8Encoder().convert(text);
 
+  /// The main buffer's text, whichever buffer is currently in front — which is
+  /// the distinction these tests are about.
+  String mainBufferText(Terminal terminal) {
+    final lines = terminal.mainBuffer.lines;
+    return [
+      for (var y = 0; y < lines.length; y++) lines[y].getText(),
+    ].join('\n');
+  }
+
   ({Terminal terminal, ScrollbackPark park, ColdScreen screen, void Function(Duration) advance})
   coldPane({
     TerminalIngestBudget? budget,
@@ -384,6 +393,70 @@ void main() {
         reason: 'the unpark clears the buffer, so only the replay survives',
       );
       expect(text, contains('history line 199'), reason: 'history came back');
+    });
+  });
+
+  group('a pane that starts a full-screen program after it was detached', () {
+    /// A pane parked **on the main buffer** — so it really did give its
+    /// scrollback up — whose process then takes the screen while nobody is
+    /// looking. The order is the whole bug: park first, alt buffer second.
+    ColdIngest detachedAtAShell() {
+      final terminal = Terminal(maxLines: 1000)..resize(40, 10);
+      for (var i = 0; i < 200; i++) {
+        terminal.write('history line $i\r\n');
+      }
+      final cold = ColdIngest(terminal: terminal);
+      // The real entry into cold, so the park happens exactly as it does in a
+      // pane rather than being simulated.
+      cold.detach(Uint8List(0));
+      return cold;
+    }
+
+    test('keeps the scrollback it parked', () {
+      final cold = detachedAtAShell();
+      expect(cold.park.isParked, isTrue, reason: 'it was on the main buffer');
+
+      // The program takes the screen while the pane is cold. `ColdScreen`
+      // parses this to keep the grid current, so by the time anyone reattaches
+      // the terminal is on the alternate buffer — and `unpark` writes with
+      // `terminal.write`, which goes to whichever buffer is in front.
+      cold.add(const Utf8Encoder().convert('\x1b[?1049hTUI FRAME\r\n'));
+      cold.screen.flush();
+      expect(cold.terminal.isUsingAltBuffer, isTrue);
+
+      cold.reattach();
+
+      expect(
+        mainBufferText(cold.terminal),
+        contains('history line 199'),
+        reason: 'the parked snapshot must land in the buffer it came from',
+      );
+    });
+
+    test('and leaves the program on the screen it took', () {
+      final cold = detachedAtAShell();
+      cold.add(const Utf8Encoder().convert('\x1b[?1049hTUI FRAME\r\n'));
+      cold.screen.flush();
+
+      cold.reattach();
+
+      // The process believes it owns the display. Coming back must not hand it
+      // a screen switch it never asked for — its next write would land in the
+      // scrollback rather than on its own screen.
+      expect(cold.terminal.isUsingAltBuffer, isTrue);
+    });
+
+    test('and does not disturb a pane that never left the main buffer', () {
+      final cold = detachedAtAShell();
+      cold.add(const Utf8Encoder().convert('ordinary output\r\n'));
+      cold.screen.flush();
+
+      cold.reattach();
+
+      expect(cold.terminal.isUsingAltBuffer, isFalse);
+      final text = mainBufferText(cold.terminal);
+      expect(text, contains('history line 199'));
+      expect(text, contains('ordinary output'));
     });
   });
 }
