@@ -824,7 +824,7 @@ TerminalInstance createPtyTerminalInstance({
       adoptTerminal: adoptTerminal,
     );
   } catch (e) {
-    final args = launch.arguments.join(' ');
+    final args = describeLaunchArguments(launch.arguments);
     return ErrorTerminalInstance(
       id: id,
       title: title,
@@ -839,3 +839,26 @@ TerminalInstance createPtyTerminalInstance({
     );
   }
 }
+
+/// The longest an argument may be before it is summarised rather than printed.
+///
+/// Generous enough that an ordinary path, flag or prompt fragment survives
+/// whole: what this is for is the outliers.
+const int _maxArgumentInMessage = 120;
+
+/// [arguments] as one line, with anything unreadably long summarised.
+///
+/// A shell-integrated PowerShell pane is launched with `-EncodedCommand` and a
+/// base64 blob that runs to ~4,600 characters. Printed verbatim into a pane
+/// that failed to start, it pushed the one sentence that explains the failure —
+/// the exception, at the end — off the visible buffer, so the error message
+/// hid its own error message. The length is kept because "it was 4,612
+/// characters" is occasionally the diagnosis, and the flag before it is kept
+/// because that is what says which argument got elided.
+String describeLaunchArguments(List<String> arguments) => [
+  for (final argument in arguments)
+    if (argument.length <= _maxArgumentInMessage)
+      argument
+    else
+      '<${argument.length} characters elided>',
+].join(' ');
