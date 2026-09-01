@@ -8,6 +8,7 @@ import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:chitragupta/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
@@ -111,6 +112,42 @@ void main() {
     await ref.read(cliStoreSyncRunnerProvider)();
 
     expect(SessionDao(db).getById('s1')!.title, 'test me now');
+  });
+
+  test('a phantom row learns its id and its name in one slot', () async {
+    // The two halves of the owner's report, together: the session was launched
+    // by the app, `agy` minted an id we were never told, and the user renamed
+    // in the CLI. `cliStoreSyncRunnerProvider` runs attribution before the
+    // title sync precisely so both land on the same slot — the title sync can
+    // only match a row that has an id.
+    writeStore(title: 'test me now');
+    File(
+      p.join(storeHome, 'conversations', '$conversation.db'),
+    ).setLastModifiedSync(testTime.add(const Duration(seconds: 5)));
+    SessionDao(db).delete('s1');
+    SessionDao(db).insert(
+      Session(
+        id: 's2',
+        repositoryId: 'r1',
+        agentInstallationId: 'a1',
+        title: 'New session',
+        useWorktree: false,
+        workingDirectory: const EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\src\demo\app',
+        ),
+        status: SessionStatus.running,
+        createdAt: testTime,
+      ),
+    );
+    final ref = container();
+    addTearDown(ref.dispose);
+
+    await ref.read(cliStoreSyncRunnerProvider)();
+
+    final row = SessionDao(db).getById('s2')!;
+    expect(row.externalSessionId, conversation);
+    expect(row.title, 'test me now');
   });
 
   test('with no annotation the row keeps the name it had', () async {
