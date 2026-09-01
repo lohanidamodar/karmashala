@@ -544,8 +544,15 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         // Only while there is a split to collapse, and only then: with one
         // pane the tab strip's own close button is the way, and two words for
         // one act in two places is how a menu stops being read.
-        if (_isSplit(paneId))
+        if (_isSplit(paneId)) ...[
+          // The way back out of a split, beside the way to close one. The
+          // region this pane leaves goes with it — see [movePaneToNewTab].
+          const PopupMenuItem(
+            value: 'untangle',
+            child: Text('Move pane to a new tab'),
+          ),
           const PopupMenuItem(value: 'close', child: Text('Close pane')),
+        ],
         // Closing the tab only detaches; this is how a session actually ends.
         const PopupMenuItem(value: 'end', child: Text('End session')),
       ],
@@ -563,6 +570,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         await pasteIntoTerminal(session.terminal, controller: session.controller);
       case 'find':
         _actions.openSearch();
+      case 'untangle':
+        _sessions.movePaneToNewTab(paneId);
       case 'close':
         _sessions.closePane(paneId);
       case 'end':

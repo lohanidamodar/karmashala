@@ -22,6 +22,7 @@ import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../theme/app_icons.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
@@ -152,6 +153,12 @@ class QuickOpenSources {
         keywords: const ['tabs', 'terminal', 'switch', 'window'],
         onSelect: () => TabPicker.show(context, terminalTabEntries),
       ),
+      // Moving a tab into a split, and taking a pane back out, are drags —
+      // and a feature reachable only by dragging is one some people cannot
+      // reach at all. Same two verbs, no mouse. Listed only when they have
+      // somewhere to act: a command that is always offered and usually inert
+      // is noise in a palette this size.
+      ..._splitCommands(),
       _command(
         'Toggle Explorer',
         icon: AppIcons.treeStructure,
@@ -193,6 +200,33 @@ class QuickOpenSources {
         keywords: const ['preferences', 'options'],
         onSelect: () => SettingsScreen.show(context),
       ),
+    ];
+  }
+
+  /// The keyboard's way to do what dragging a tab into an empty split does,
+  /// and the way back out again.
+  List<QuickOpenItem> _splitCommands() {
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final slot = sessions.emptySlotInActiveTab();
+    final pane = sessions.paneMovableToNewTab();
+    return [
+      if (slot != null)
+        _command(
+          'Move a tab into the empty split…',
+          subtitle: 'Fill the empty region of the split you are in',
+          icon: AppIcons.squareSplitHorizontal,
+          keywords: const ['split', 'move', 'tab', 'pane', 'drag'],
+          onSelect: () =>
+              TabPicker.show(context, (ref) => tabsMovableInto(ref, slot)),
+        ),
+      if (pane != null)
+        _command(
+          'Move this pane to a new tab',
+          subtitle: 'Take the focused pane out of its split',
+          icon: AppIcons.terminalWindow,
+          keywords: const ['split', 'unsplit', 'pane', 'tab', 'move'],
+          onSelect: () => sessions.movePaneToNewTab(pane),
+        ),
     ];
   }
 

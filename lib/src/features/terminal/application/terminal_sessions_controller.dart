@@ -539,6 +539,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return null;
   }
 
+  /// The focused pane, when it is one that could be pulled out of its split
+  /// into a tab of its own — what the command palette offers as the way back.
+  String? paneMovableToNewTab() {
+    final tab = _activeTab;
+    if (tab == null || tab.layout.panes.length < 2) return null;
+    return _isEmptyRegion(tab.focusedPaneId) ? null : tab.focusedPaneId;
+  }
+
   /// Starts [profile] in the empty region [slotPaneId] and focuses it. Returns
   /// the new pane's id, or `null` when that is not an empty region.
   ///
