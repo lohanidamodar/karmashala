@@ -27,6 +27,15 @@ class AgentResume {
   final AgentResumeStyle style;
   final String token;
 
+  /// Whether this agent can be told to continue a conversation at all.
+  ///
+  /// The question a caller has to ask **before** building a command line, and
+  /// the reason it is exposed rather than left implicit in an empty argument
+  /// list: an unsupported resume and a resume with nothing to resume both come
+  /// back from [argumentsFor] as `[]`, and only the first of them means "do not
+  /// hand this to the user as a resume command".
+  bool get isSupported => style != AgentResumeStyle.unsupported;
+
   List<String> argumentsFor(String sessionId) =>
       style == AgentResumeStyle.unsupported ? const [] : [token, sessionId];
 }

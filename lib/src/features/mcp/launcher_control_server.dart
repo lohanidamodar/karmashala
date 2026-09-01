@@ -2370,6 +2370,15 @@ class LauncherControlServer implements SessionMcp {
     if (repo == null || env == null || install == null) {
       throw StateError('Session repository, environment, or agent is missing.');
     }
+    // Before the terminal is even resolved: this surface had no guard at all,
+    // so an agent the resume builder could not express opened a terminal
+    // running a *new* conversation and the tool reported success.
+    final refusal = resumeRefusalFor(
+      _container.read(agentRegistryProvider),
+      session.cli,
+      session.externalId,
+    );
+    if (refusal != null) throw StateError(refusal);
     final terminal = await _container.read(
       defaultSystemTerminalProvider.future,
     );
@@ -2383,6 +2392,7 @@ class LauncherControlServer implements SessionMcp {
       environment: env,
       cwd: repo.path,
       permissionMode: _permissionFor(session.cli),
+      registry: _container.read(agentRegistryProvider),
     );
     await _container
         .read(systemTerminalServiceProvider)

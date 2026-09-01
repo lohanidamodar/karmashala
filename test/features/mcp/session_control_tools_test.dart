@@ -3,7 +3,13 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/built_in_agents.dart';
+import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
+import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -26,6 +32,15 @@ import '../terminal/fake_instance.dart';
 ///
 /// Nothing here inspects a schema. A tool that declares the right arguments and
 /// then renames nothing is the failure these tests exist to catch.
+
+/// An agent with no command-line resume convention: the default, and the shape
+/// every agent outside the old `claudeCode`/`codex` switch effectively had.
+const _silent = AgentDescriptor(
+  id: 'silent',
+  displayName: 'Silent Agent',
+  binaries: AgentBinaries(windows: ['silent'], posix: ['silent']),
+);
+
 void main() {
   late Directory tmp;
   late AppDatabase db;
@@ -45,6 +60,12 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
+        // The built-ins plus one agent that declares no way to continue a
+        // conversation — the case `open_session` has to refuse rather than
+        // silently start something new.
+        agentRegistryProvider.overrideWithValue(
+          const AgentRegistry([...builtInAgentDescriptors, _silent]),
+        ),
       ],
     );
     server = LauncherControlServer(container);
@@ -400,6 +421,45 @@ void main() {
         'permissionMode': 'acceptEdits',
       });
       expect(result.text, isNot(contains('Unknown permissionMode')));
+    });
+  });
+
+  group('open_session for an agent that cannot resume', () {
+    // The MCP external-terminal open was the fourth surface building a resume
+    // command from a hard-coded switch, and the only one with no guard at all:
+    // an agent outside that switch got the bare executable, so the tool opened
+    // a terminal running a *new* conversation and reported success.
+    setUp(() {
+      AgentInstallationDao(db).insert(
+        agentInstallation(
+          id: 'a-silent',
+          agentId: 'silent',
+          path: r'C:\bin\silent.exe',
+        ),
+      );
+      ImportedSessionDao(db).insertIfAbsent(
+        ImportedSession(
+          id: 'i-silent',
+          repositoryId: 'r1',
+          cli: 'silent',
+          externalId: 'ext-9',
+          environmentId: 'windows',
+          filePath: '/store/ext-9.jsonl',
+          storeHome: '/store',
+          isSubagent: false,
+          preview: 'earlier work',
+          createdAt: testTime,
+        ),
+      );
+    });
+
+    test('is refused in words rather than opened blind', () async {
+      final result = await callTool('open_session', {'id': 'i-silent'});
+
+      expect(result.isError, isTrue);
+      expect(result.text, contains('Silent Agent'));
+      expect(result.text, contains('ext-9'));
+      expect(result.text, contains('start a new'));
     });
   });
 }
