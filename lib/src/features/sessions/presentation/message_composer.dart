@@ -220,6 +220,13 @@ class _MessageComposerState extends State<MessageComposer> {
               ),
               const SizedBox(width: 8),
               IconButton.filled(
+                // Named, because it is icon-only and Narrator reads the
+                // semantics tree rather than a hover: without this the most
+                // important control in the composer announced as "button".
+                // The chord is in the label for the same reason the toolbar
+                // puts chords in tooltips — it is the faster way to send, and
+                // the only place that says so.
+                tooltip: _busy ? 'Sending…' : 'Send (Enter)',
                 onPressed: canType ? _send : null,
                 icon: _busy
                     ? const SizedBox(

@@ -306,17 +306,17 @@ void main() {
     tester,
   ) async {
     // The same two window sizes, with the conversation, the composer and the
-    // delivery strip around it. Focus and semantics are measured on the tile
-    // above instead of here: this surface already fails the semantics check
-    // without any subagent in it — an unnamed 48x48 button, reproduced on
-    // `transcript()` with no `SubagentRef` at all — and inheriting someone
-    // else's finding would make this gate say nothing about this feature.
+    // delivery strip around it. **Semantics is on**: the unnamed 48x48 button
+    // this originally inherited was the composer's send button, now named, so
+    // the check passes and this surface is held to it. Focus is still off — the
+    // view's Tab ring does not close at 720x560 (13 stops, then a revisit),
+    // which is a pre-existing traversal defect recorded as its own bug.
+    // Inheriting that one would make this gate say nothing about this feature.
     final ref = reference();
     await expectSurvivesWindowMatrix(
       tester,
       matrix: const [minimumWindow, desktopWindow],
       checkFocus: false,
-      checkSemantics: false,
       build: () => build(
         messages: transcript(subagent: ref),
         turns: {ref.filePath: delegateTurns},
