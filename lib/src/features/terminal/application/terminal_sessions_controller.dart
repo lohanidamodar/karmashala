@@ -660,16 +660,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _detached.removeAt(index);
     _detachedMutated();
 
-    final tabId = _newId();
-    _tabs.add(
-      TerminalTab(
-        id: tabId,
-        layout: PaneLayout.single(paneId),
-        focusedPaneId: paneId,
-      ),
-    );
-    _tabsMutated();
-    _activeTabId = tabId;
+    final tabId = _newTabFor(paneId);
     _publish();
     persistWorkspace();
     _focusActivePane();
@@ -751,6 +742,51 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _publish();
     persistWorkspace();
     _focusActivePane();
+  }
+
+  /// Runs [launch] in the pane [paneId] already has, keeping everything in its
+  /// buffer, and brings that pane back on screen. Returns the tab it is now in,
+  /// or `null` when there is no such pane or something is still running in it.
+  ///
+  /// The counterpart to [openAgentTab] for a session that already has a pane —
+  /// which, after a restart, every restored session does. That pane is the
+  /// session's own record of itself and the reason its scrollback was kept, so
+  /// resuming *into* it is what leaves the user one terminal for one session
+  /// rather than a dormant pane and a live one side by side.
+  ///
+  /// Unlike [startPane] the command is the caller's, not the pane's: a resume
+  /// is a different command line from the launch that was recorded, and
+  /// re-running the recorded one would start a new conversation instead of
+  /// continuing the stored one.
+  ///
+  /// Refusing a live pane is the same rule [startPane] applies, and for the
+  /// same reason: the caller wants a process for this session, and taking one
+  /// that is already running away from it is not that.
+  String? startAgentInPane(String paneId, AgentPaneLaunch launch) {
+    final existing = _instances[paneId];
+    if (existing == null || existing.liveness.value.isLive) return null;
+
+    // Asked for before the pane is released, and through the same helper
+    // [startPane] uses: a dormant pane hands back exactly what was restored
+    // without ever building the buffer the restore did not build.
+    final scrollback =
+        _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
+    _releasePane(paneId);
+    _adopt(
+      paneId,
+      ref.read(terminalInstanceFactoryProvider)(
+        id: paneId,
+        // Unused for an agent pane, as in [openAgentTab].
+        profile: TerminalProfile.powerShell,
+        workingDirectory: launch.workingDirectory,
+        restoredScrollback: scrollback,
+        agentLaunch: launch,
+      ),
+    );
+    final tabId = _showPane(paneId);
+    _publish();
+    persistWorkspace();
+    return tabId;
   }
 
   // --- persistence -----------------------------------------------------------
@@ -1275,6 +1311,38 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   }
 
   TerminalTab? _tabContaining(String paneId) => _tabById(_paneOwner[paneId]);
+
+  /// Puts [paneId] on screen wherever it currently lives: focused in the tab
+  /// that holds it, or — for one in the background list — back in a tab of its
+  /// own. Returns that tab's id.
+  String _showPane(String paneId) {
+    final tab = _tabContaining(paneId);
+    if (tab != null) {
+      focusPane(paneId);
+      return tab.id;
+    }
+    _detached.removeWhere((s) => s.paneId == paneId);
+    _detachedMutated();
+    final tabId = _newTabFor(paneId);
+    _publish();
+    _focusActivePane();
+    return tabId;
+  }
+
+  /// Adds a tab holding [paneId] on its own and makes it the active one.
+  String _newTabFor(String paneId) {
+    final tabId = _newId();
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(paneId),
+        focusedPaneId: paneId,
+      ),
+    );
+    _tabsMutated();
+    _activeTabId = tabId;
+    return tabId;
+  }
 
   void _replaceTab(TerminalTab updated) {
     final index = _tabIndex[updated.id];

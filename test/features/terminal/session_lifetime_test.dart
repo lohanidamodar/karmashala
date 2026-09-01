@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
@@ -291,6 +292,162 @@ void main() {
       expect(restarted, isNot(same(dead)));
       expect(dead.disposed, isTrue);
       expect(restarted.restored, contains('output before it died'));
+    });
+  });
+
+  /// Resuming a session it already has a pane for.
+  ///
+  /// [TerminalSessionsController.startPane] re-runs what the pane recorded,
+  /// which is the retry a user asks for from the pane itself. A session being
+  /// resumed needs the other half: a *different* command line — the resume one
+  /// — run in the buffer the pane kept, because the alternative is a second
+  /// pane for a session that already has one.
+  group('resuming into an existing pane', () {
+    test('a dormant agent pane runs the command it is given, above what it '
+        'kept', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      final first = fakeTerminalContainer(database: db);
+      final controller = first.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final opened = controller.openAgentTab(
+        const AgentPaneLaunch(
+          agentId: 'sharing',
+          executable: 'sharing',
+          arguments: ['--session-id', 'sess-1'],
+          workingDirectory: r'C:\ws',
+          sessionId: 'sess-1',
+          title: 'Earlier work',
+        ),
+      );
+      controller.instanceFor(opened.paneId)!.terminal.write('yesterday\r\n');
+      controller.persistWorkspace();
+      first.dispose();
+
+      final next = fakeTerminalContainer(database: db);
+      addTearDown(next.dispose);
+      final restored = next.read(terminalSessionsControllerProvider.notifier);
+      expect(
+        restored.instanceFor(opened.paneId),
+        isA<DormantTerminalInstance>(),
+      );
+
+      final tabId = restored.startAgentInPane(
+        opened.paneId,
+        const AgentPaneLaunch(
+          agentId: 'sharing',
+          executable: 'sharing',
+          arguments: ['--resume', 'ext-1'],
+          workingDirectory: r'C:\ws',
+          sessionId: 'sess-1',
+        ),
+      );
+
+      final state = next.read(terminalSessionsControllerProvider);
+      // The pane it already had, in the tab it was already in.
+      expect(tabId, state.tabs.single.id);
+      expect(state.tabs.single.layout.panes, [opened.paneId]);
+      expect(state.livenessOf(opened.paneId), PaneLiveness.live);
+
+      final started =
+          restored.instanceFor(opened.paneId)! as FakeTerminalInstance;
+      // The resume command, not the one the pane recorded — re-running that
+      // would start a new conversation rather than continue the stored one.
+      expect(started.agentLaunch!.arguments, ['--resume', 'ext-1']);
+      // And the scrollback that was the whole reason to keep the pane.
+      expect(started.restored, contains('yesterday'));
+    });
+
+    test('a dormant pane left in the background comes back as a tab', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      final first = fakeTerminalContainer(database: db);
+      final controller = first.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final opened = controller.openAgentTab(
+        const AgentPaneLaunch(
+          agentId: 'sharing',
+          executable: 'sharing',
+          sessionId: 'sess-1',
+        ),
+      );
+      controller.closeTab(opened.tabId);
+      controller.persistWorkspace();
+      first.dispose();
+
+      final next = fakeTerminalContainer(database: db);
+      addTearDown(next.dispose);
+      final restored = next.read(terminalSessionsControllerProvider.notifier);
+      expect(
+        next.read(terminalSessionsControllerProvider).detached,
+        hasLength(1),
+      );
+
+      final tabId = restored.startAgentInPane(
+        opened.paneId,
+        const AgentPaneLaunch(
+          agentId: 'sharing',
+          executable: 'sharing',
+          arguments: ['--resume', 'ext-1'],
+          sessionId: 'sess-1',
+        ),
+      );
+
+      final state = next.read(terminalSessionsControllerProvider);
+      expect(state.detached, isEmpty);
+      expect(state.tabs.single.id, tabId);
+      expect(state.activeTabId, tabId);
+      expect(state.tabs.single.layout.panes, [opened.paneId]);
+    });
+
+    test('a pane that is not there refuses, so the caller opens its own', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+
+      expect(
+        container
+            .read(terminalSessionsControllerProvider.notifier)
+            .startAgentInPane(
+              'no-such-pane',
+              const AgentPaneLaunch(agentId: 'sharing', executable: 'sharing'),
+            ),
+        isNull,
+      );
+    });
+
+    test('a pane something is still running in refuses, rather than killing '
+        'it', () {
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final opened = controller.openAgentTab(
+        const AgentPaneLaunch(
+          agentId: 'sharing',
+          executable: 'sharing',
+          sessionId: 'sess-1',
+        ),
+      );
+      final live = controller.instanceFor(opened.paneId)!;
+
+      expect(
+        controller.startAgentInPane(
+          opened.paneId,
+          const AgentPaneLaunch(
+            agentId: 'sharing',
+            executable: 'sharing',
+            arguments: ['--resume', 'ext-1'],
+          ),
+        ),
+        isNull,
+      );
+      expect(controller.instanceFor(opened.paneId), same(live));
+      expect((live as FakeTerminalInstance).disposed, isFalse);
     });
   });
 
