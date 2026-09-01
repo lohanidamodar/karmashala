@@ -48,6 +48,7 @@ class CodexStoreReader {
           storeHome: codexHome,
           title: threadNames[meta.id],
           preview: meta.preview,
+          startedAt: meta.startedAt,
           modifiedAt: modified,
         ),
       );
@@ -58,6 +59,7 @@ class CodexStoreReader {
   Future<_CodexMeta?> _readRollout(File file) async {
     String? cwd;
     String? id;
+    DateTime? startedAt;
     String preview = '';
     var lines = 0;
     try {
@@ -81,6 +83,14 @@ class CodexStoreReader {
           if (payload is Map) {
             cwd ??= payload['cwd'] as String?;
             id ??= payload['id'] as String?;
+            // The payload's own timestamp, not the envelope's. They are not the
+            // same moment: in the owner's rollout the conversation began at
+            // 10:11:12.953Z and the line recording that was flushed at
+            // 10:11:42.945Z — thirty seconds later. Attribution compares this
+            // against when a session row was written, so it wants the start.
+            startedAt ??=
+                _parseTime(payload['timestamp']) ??
+                _parseTime(json['timestamp']);
           }
         }
         cwd ??= json['cwd'] as String?;
@@ -91,7 +101,18 @@ class CodexStoreReader {
 
     if (cwd == null || cwd.isEmpty) return null;
     id ??= _idFromFileName(p.basename(file.path));
-    return _CodexMeta(cwd: cwd, id: id, preview: preview);
+    return _CodexMeta(
+      cwd: cwd,
+      id: id,
+      preview: preview,
+      startedAt: startedAt,
+    );
+  }
+
+  /// An ISO-8601 instant, in UTC, or null for anything else.
+  static DateTime? _parseTime(Object? value) {
+    if (value is! String || value.isEmpty) return null;
+    return DateTime.tryParse(value)?.toUtc();
   }
 
   /// `rollout-2026-05-25T16-21-53-<uuid>.jsonl` → `<uuid>`.
@@ -158,8 +179,10 @@ class _CodexMeta {
     required this.cwd,
     required this.id,
     required this.preview,
+    this.startedAt,
   });
   final String cwd;
   final String id;
   final String preview;
+  final DateTime? startedAt;
 }
