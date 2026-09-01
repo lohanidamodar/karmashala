@@ -38,8 +38,15 @@ class FakeTerminalInstance
     this.restored,
     this.agentLaunch,
     Terminal? adoptTerminal,
+    bool shellIntegration = false,
   }) : adopted = adoptTerminal {
     terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
+    // Attached on the same condition a real pane attaches it, so a test can
+    // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —
+    // by writing the markers a shell would emit.
+    if (shellIntegration) {
+      commandBlocks = CommandBlockRecorder(terminal)..attach();
+    }
     if (adoptTerminal == null && restored != null && restored!.isNotEmpty) {
       terminal.write(restored!);
     }
@@ -72,9 +79,11 @@ class FakeTerminalInstance
   @override
   final ScrollController scrollController = ScrollController();
 
-  /// The fake never runs a shell, so it has no command boundaries.
+  /// Null unless the pane was built with shell integration, exactly as a real
+  /// one is: the UI has to tell "no integration" from "integrated, nothing run
+  /// yet".
   @override
-  CommandBlockRecorder? get commandBlocks => null;
+  CommandBlockRecorder? commandBlocks;
 
   /// Live until disposed, so the fake exercises the same detach/end paths a
   /// real PTY does.
@@ -220,6 +229,7 @@ ProviderContainer fakeTerminalContainer({AppDatabase? database}) =>
 fakeTerminalOverrides({
   AppDatabase? database,
   TerminalInstanceFactory? instanceFactory,
+  bool shellIntegration = false,
 }) {
   return [
     if (database != null) databaseProvider.overrideWithValue(database),
@@ -234,7 +244,7 @@ fakeTerminalOverrides({
     ),
     // Off unless a test says otherwise; also keeps the terminal controller
     // from pulling in settings (and therefore a database) just to open a pane.
-    shellIntegrationEnabledProvider.overrideWithValue(false),
+    shellIntegrationEnabledProvider.overrideWithValue(shellIntegration),
     // The delivery strip polls `gh` on a periodic timer, which would outlive
     // the widget tree and trip the pending-timer check in every test that
     // renders a session. Same reason as the autosave above; tests that care
@@ -267,4 +277,5 @@ TerminalInstance defaultFakeInstanceFactory({
   restored: restoredScrollback,
   agentLaunch: agentLaunch,
   adoptTerminal: adoptTerminal,
+  shellIntegration: shellIntegration,
 );

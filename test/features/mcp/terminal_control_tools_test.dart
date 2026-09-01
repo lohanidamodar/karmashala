@@ -120,7 +120,9 @@ void main() {
       expect(state().tabs, hasLength(1));
       expect(state().tabs.single.id, structured['tabId']);
       expect(state().activeTabId, structured['tabId']);
-      final instance = controller().instanceFor(structured['paneId']! as String);
+      final instance = controller().instanceFor(
+        structured['paneId']! as String,
+      );
       expect(instance, isNotNull);
       expect(instance!.workingDirectory, r'C:\work');
     });
@@ -185,17 +187,22 @@ void main() {
       expect(result.isError, isTrue);
     });
 
-    test('it says it did not wait, so nobody reads success as done', () async {
+    test('an un-integrated pane admits the exit code is unknown', () async {
+      // These fakes have no shell integration, which is the honest half of the
+      // waiting tool: it returns at once and says it cannot know how the
+      // command ended, rather than reporting a zero nobody gave it.
+      // `terminal_run_test.dart` covers the waiting half.
       final opened =
           (await callTool('terminal_open')).structured! as Map<String, Object?>;
       final result = await callTool('terminal_run', {
         'paneId': opened['paneId'],
         'command': 'sleep 60',
       });
-      expect(
-        (result.structured! as Map)['note'],
-        contains('Nothing here waits'),
-      );
+      final structured = result.structured! as Map<String, Object?>;
+      expect(structured['finished'], isFalse);
+      expect(structured['exitCode'], isNull);
+      expect(structured['exitCodeKnown'], isFalse);
+      expect(structured['note'], contains('UNKNOWN'));
     });
   });
 
@@ -231,8 +238,7 @@ void main() {
           (await callTool('terminal_open')).structured! as Map<String, Object?>;
 
       final structured =
-          (await callTool('terminal_list')).structured!
-              as Map<String, Object?>;
+          (await callTool('terminal_list')).structured! as Map<String, Object?>;
       final tabs = structured['tabs']! as List<Object?>;
       final tab = tabs.single as Map<String, Object?>;
 
@@ -253,12 +259,10 @@ void main() {
       await callTool('terminal_close', {'tabId': opened['tabId']});
 
       final structured =
-          (await callTool('terminal_list')).structured!
-              as Map<String, Object?>;
+          (await callTool('terminal_list')).structured! as Map<String, Object?>;
 
       expect(structured['tabs'], isEmpty);
-      final detached =
-          (structured['detached']! as List<Object?>).single as Map;
+      final detached = (structured['detached']! as List<Object?>).single as Map;
       expect(detached['paneId'], opened['paneId']);
       expect(detached['live'], isTrue);
     });
