@@ -187,6 +187,25 @@ Future<void> _pump(Socket socket, ReconnectingTransport transport) async {
     cancelOnError: true,
   );
 
+  // The write half, which had no error handler at all while the read half
+  // above has had one all along. `_write` is `socket.add(...)`: fire and
+  // forget, so a write that fails does not throw at the call site — the error
+  // arrives later on `socket.done`, and with nobody listening it escaped as an
+  // unhandled async error. On a phone that is the ordinary case, not an exotic
+  // one: the desktop goes away, sleeps, or changes network between two frames,
+  // and the next write fails with "An existing connection was forcibly closed
+  // by the remote host". A link that dies has to end the same way whichever
+  // half noticed it.
+  unawaited(
+    socket.done.then<void>(
+      (_) {},
+      onError: (Object error) {
+        transport.onLog?.call('link failed while writing: $error');
+        if (!ended.isCompleted) ended.complete();
+      },
+    ),
+  );
+
   await ended.future;
   await subscription.cancel();
   socket.destroy();
