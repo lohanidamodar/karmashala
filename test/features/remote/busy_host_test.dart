@@ -248,4 +248,38 @@ void main() {
       const Duration(seconds: 2),
     ));
   });
+
+  test('subscribing to every session costs no transcript reads at all',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
+    // The cause behind the symptom this file was written about, reproduced on
+    // the owner's phone on 2026-09-02: opening a project made it subscribe to
+    // ~25 sessions, the host parsed a transcript before answering each, two
+    // timed out, and the phone concluded the link was dead and tore it down —
+    // which is the same report as "the connection keeps dropping".
+    //
+    // Counted rather than timed, per the house rule: the property is that a
+    // subscribe reads nothing, so it cannot be slow for a big store.
+    await startService(pollInterval: Duration.zero);
+    final client = await connectedPhone();
+    fake.transcriptReads = 0;
+
+    for (var i = 0; i < _sessionCount; i++) {
+      await client.subscribeSession('s$i');
+    }
+
+    expect(
+      fake.transcriptReads,
+      0,
+      reason: 'a subscribe is bookkeeping — the phone asks for history itself',
+    );
+
+    // And the sweep follows what the phone actually reads, not what it
+    // subscribed to, so one open session costs one read however many are
+    // subscribed.
+    await client.transcript('s3');
+    fake.transcriptReads = 0;
+    await service!.pollTranscriptsNow();
+
+    expect(fake.transcriptReads, 1, reason: 'only the session being read');
+  });
 }
