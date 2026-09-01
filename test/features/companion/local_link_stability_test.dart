@@ -20,6 +20,7 @@ import 'package:karmashala/src/features/companion/client/remote_companion_gatewa
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala/src/features/remote/client/companion_store.dart'
     as stored;
+import 'package:karmashala/src/features/remote/client/companion_client.dart';
 import 'package:karmashala/src/features/remote/client/lan_path.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_wire.dart';
@@ -537,4 +538,67 @@ void main() {
       const Duration(seconds: 30),
     ));
   });
+
+  // The direct path and the generation window.
+  //
+  // `lan hello for an unknown rendezvous` in the owner's log: the phone opened
+  // a direct link, named a rendezvous the host was no longer holding, and the
+  // host closed the link. The relay path walks the window forward when the two
+  // counters have drifted — `rendezvousFor`'s own contract — and the LAN path
+  // named exactly one generation, so a phone whose counter fell behind could
+  // never use the direct path again. It cools the host down for two minutes
+  // after each refusal, so this is not a blip that heals; only a relay
+  // connection resyncs the counters.
+  test('the direct path walks the generation window like the relay does',
+      timeout: const Timeout(Duration(minutes: 3)), () async {
+    final started = await startService();
+    // A first pairing, over the relay: the phone connects at generation 0 and
+    // writes down 1 for next time.
+    final first = await pairedPhone();
+    await first.close();
+    gateways.remove(first);
+
+    // The host moves on without this phone — the shape a retired generation
+    // leaves behind, and the shape a counter bump that did not reach the
+    // keystore leaves behind. Driven with a throwaway store so the phone's own
+    // saved counter stays where it was.
+    final record = (await stored.CompanionPairing.load(store))!;
+    // One rendezvous past where the phone will dial. The host adopts whatever
+    // carries traffic and slides its window onto it, closing what is below —
+    // so the phone's own counter is now under the window.
+    final ahead = CompanionClient(
+      pairing: record.withGeneration(record.generation + 1),
+      store: stored.InMemoryCompanionStore(),
+      relayFactory: (url, rendezvous) => RelayTransport(
+        endpoint: RelayTransport.endpointFor(url, rendezvous),
+        backoff: fastBackoff(),
+        heartbeat: heartbeat,
+      )..start(),
+    );
+    await ahead.connect(helloTimeout: const Duration(seconds: 5));
+    await ahead.close();
+
+    // The phone comes back, still holding 1, and the desktop is on the same
+    // network — its real LAN listener, dialled for real.
+    final scout = ScriptedScout(
+      attemptTimeout: const Duration(milliseconds: 800),
+    );
+    final gateway = makeGateway(scout: scout);
+    scout.hear(
+      DiscoveredHost(
+        address: InternetAddress('127.0.0.1'),
+        advert: LanAdvert(port: started.lanPortBound!, tag: 'test'),
+        seenAt: DateTime.now(),
+      ),
+    );
+
+    await awaitLink(gateway, CompanionLinkState.connected);
+
+    expect(
+      gateway.linkPath,
+      CompanionLinkPath.lan,
+      reason: 'the host is one rendezvous ahead, not unreachable',
+    );
+  });
+
 }
