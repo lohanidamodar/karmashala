@@ -276,6 +276,87 @@ class AgentMcpSupport {
   }
 }
 
+/// How an agent CLI is handed the first thing to say.
+enum AgentPromptStyle {
+  /// A trailing positional argument, e.g. `claude "do the thing"`.
+  positional,
+
+  /// A flag carrying the prompt as its value, e.g.
+  /// `agy --prompt-interactive "do the thing"`.
+  flag,
+
+  /// The CLI takes no opening prompt on its command line.
+  unsupported,
+}
+
+/// Whether an agent can be given an opening prompt at launch, and **how**.
+///
+/// Modelled like [AgentResume] and [AgentMcpSupport] rather than as the bool it
+/// replaced, because *whether* and *how* turned out to be different questions
+/// and the bool could only hold the first. It read "a trailing positional is
+/// taken as the prompt", so an agent that takes one behind a flag had to be
+/// declared as taking none at all — which is how Antigravity ended up the one
+/// CLI a fan-out could not hand a task to, despite `agy` having accepted an
+/// opening prompt the whole time.
+///
+/// Defaults to [AgentPromptStyle.unsupported], for the same reason the bool
+/// defaulted to false: an agent nobody has checked is launched bare rather than
+/// handed a stray argument it may read as a subcommand.
+class AgentPromptSupport {
+  /// The prompt is the trailing positional argument. Claude Code and Codex.
+  const AgentPromptSupport.positional({this.evidence = ''})
+    : style = AgentPromptStyle.positional,
+      token = '';
+
+  /// The prompt is the value of [token], emitted as **two** argv entries.
+  ///
+  /// Two rather than one `--flag=value` token because that is what the CLIs
+  /// this models actually parse: `agy` uses Go's `flag` package, which reads
+  /// the value as the next argument and exits on `flag needs an argument:
+  /// -prompt-interactive` when there is none. Nothing here is variadic, so
+  /// unlike Claude's `--mcp-config` the pair cannot swallow what follows it.
+  const AgentPromptSupport.flag(this.token, {this.evidence = ''})
+    : style = AgentPromptStyle.flag;
+
+  /// Nothing is known to work. The default.
+  const AgentPromptSupport.unsupported()
+    : style = AgentPromptStyle.unsupported,
+      token = '',
+      evidence = '';
+
+  final AgentPromptStyle style;
+
+  /// The flag the prompt rides on, for [AgentPromptStyle.flag]. Empty for the
+  /// other two, which name no option.
+  final String token;
+
+  /// Where this was verified — the `--help` line it was read off — so a future
+  /// CLI version can be re-checked rather than trusted.
+  final String evidence;
+
+  /// Whether this agent takes an opening prompt on its command line at all.
+  ///
+  /// The question the refusal gates ask *before* building a command line, and
+  /// separate from [argumentsFor] for [AgentResume.isSupported]'s reason: an
+  /// unsupported prompt and an empty prompt both come back as `[]`, and only
+  /// the first means "tell the user this message would be dropped".
+  bool get isSupported => style != AgentPromptStyle.unsupported;
+
+  /// The arguments that deliver [prompt], or nothing when it cannot be given.
+  ///
+  /// An empty [prompt] yields nothing whatever the style: for a flag that is
+  /// not a weaker launch but a failed one, since `agy --prompt-interactive`
+  /// with no value refuses to start at all.
+  List<String> argumentsFor(String prompt) {
+    if (prompt.isEmpty) return const [];
+    return switch (style) {
+      AgentPromptStyle.positional => [prompt],
+      AgentPromptStyle.flag => [token, prompt],
+      AgentPromptStyle.unsupported => const [],
+    };
+  }
+}
+
 /// Executable base names to probe, per execution-environment kind. Each list is
 /// tried in order and the first hit wins.
 ///
@@ -410,7 +491,7 @@ class AgentLaunchSpec {
     this.sessionIdAssignment = const AgentSessionIdAssignment.unsupported(),
     this.sessionIdAnnouncement = const AgentSessionIdAnnouncement.none(),
     this.continueLatest = const AgentContinueSupport.unsupported(),
-    this.acceptsPromptArgument = false,
+    this.prompt = const AgentPromptSupport.unsupported(),
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
     this.missingConversation = const AgentMissingConversationRules(),
@@ -483,14 +564,18 @@ class AgentLaunchSpec {
   /// to unsupported.
   final AgentContinueSupport continueLatest;
 
-  /// Whether a trailing positional argument is taken as the opening prompt.
+  /// Whether this agent takes an opening prompt on its command line, and how.
+  /// See [AgentPromptSupport]. Defaults to unsupported.
   ///
   /// This is how a session's first message is delivered: typing it into the PTY
   /// instead would race the agent's own startup, which takes seconds and shows
-  /// no reliable "ready" marker. Defaults to **false**, so an agent nobody has
-  /// checked is launched bare rather than handed a stray argument it may read as
-  /// a subcommand.
-  final bool acceptsPromptArgument;
+  /// no reliable "ready" marker.
+  final AgentPromptSupport prompt;
+
+  /// Whether an opening prompt can be delivered at all — [prompt]'s *whether*,
+  /// for the refusal gates that only ever asked that. They read the same answer
+  /// they always did; what widened underneath them is the *how*.
+  bool get acceptsPromptArgument => prompt.isSupported;
 
   /// The arguments for [mode], or nothing when this agent cannot be told.
   ///

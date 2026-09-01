@@ -72,15 +72,16 @@ void main() {
     test('Antigravity declares neither route', () {
       final descriptor = _descriptor(AgentIds.antigravity);
       expect(descriptor.launch.fork.style, AgentForkStyle.unsupported);
-      // Not merely untested: it has no readable *transcript* to build a
-      // packet from and does not take an opening prompt to deliver one with.
-      // The store is read now — identity, directory, name — but a handoff
+      // Not merely untested: it has no readable *transcript* to build a packet
+      // from. The store is read now — identity, directory, name — but a handoff
       // packet is quoted from messages, and those stay protobuf, which is why
       // `antigravityStore` exists as a value distinct from the two transcript
       // formats.
+      //
+      // Delivery is no longer the blocker it was: `--prompt-interactive` can
+      // carry a packet in. What is still missing is a packet to carry.
       expect(descriptor.store!.format, AgentStoreFormat.antigravityStore);
       expect(agentSupportsChatView(descriptor), isFalse);
-      expect(descriptor.launch.acceptsPromptArgument, isFalse);
     });
 
     test('every native fork states where it was verified', () {

@@ -52,7 +52,7 @@ const _prompting = AgentDescriptor(
     permissionModes: {
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
     },
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
       evidence: 'p --help',

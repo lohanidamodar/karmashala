@@ -52,7 +52,7 @@ const _talkative = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
     permissionModes: {
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
     },

@@ -1206,8 +1206,10 @@ class SessionLauncher {
 ///
 /// Order matters and is the order the shipped agents want: the MCP flag, then
 /// global flags, then the session-id flag, then the resume convention (which
-/// for Codex is a *subcommand* and must follow the globals), then the prompt as
-/// a positional argument.
+/// for Codex is a *subcommand* and must follow the globals), then the prompt in
+/// whichever shape the descriptor's [AgentPromptSupport] names — a trailing
+/// positional for Claude and Codex, a flag and its value for Antigravity.
+///
 /// [forkSessionId] **replaces** the resume convention rather than adding to it:
 /// Codex forks with a `fork` subcommand *instead of* `resume`, and emitting
 /// both would put two subcommands on one command line. Claude's fork is its own
@@ -1238,10 +1240,11 @@ List<String> agentPaneArguments(
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),
     if (!forking && resumeSessionId != null && resumeSessionId.isNotEmpty)
       ...?launch?.interactiveResume.argumentsFor(resumeSessionId),
-    if (trimmedPrompt != null &&
-        trimmedPrompt.isNotEmpty &&
-        (launch?.acceptsPromptArgument ?? false))
-      trimmedPrompt,
+    // Last, and spread rather than appended: the prompt is a positional for
+    // Claude and Codex but two argv entries for Antigravity, and which of those
+    // it is belongs to the descriptor rather than to this call site.
+    if (trimmedPrompt != null)
+      ...?launch?.prompt.argumentsFor(trimmedPrompt),
   ];
 }
 

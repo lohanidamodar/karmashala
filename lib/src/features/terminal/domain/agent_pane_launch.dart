@@ -1,6 +1,5 @@
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_registry.dart';
-import '../../settings/domain/permission_mode.dart';
 
 /// The environment variable an agent running in one of our panes is told its
 /// Karmashala session id through.
@@ -152,24 +151,3 @@ class AgentPaneLaunch {
     );
   }
 }
-
-/// The command-line arguments for running [descriptor] **interactively**.
-///
-/// Deliberately not [AgentLaunchSpec.baseArguments]: those are the headless
-/// protocol flags the adapters need (`--output-format stream-json`,
-/// `app-server`), and passing them to a PTY launch would produce a machine
-/// protocol on a human's screen. What an interactive launch does share is the
-/// permission flags and the agent's *interactive* resume convention — which is
-/// why the descriptor records two of those.
-///
-/// An agent the registry has never heard of gets no arguments at all rather than
-/// another agent's flags.
-List<String> interactiveAgentArguments(
-  AgentDescriptor? descriptor,
-  PermissionMode permissionMode, {
-  String? resumeSessionId,
-}) => [
-  ...?descriptor?.launch.permissionArgumentsFor(permissionMode),
-  if (resumeSessionId != null && resumeSessionId.isNotEmpty)
-    ...?descriptor?.launch.interactiveResume.argumentsFor(resumeSessionId),
-];
