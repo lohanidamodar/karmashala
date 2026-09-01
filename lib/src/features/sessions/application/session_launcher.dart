@@ -284,7 +284,8 @@ class SessionLauncher {
   /// next launch rather than implying the live agent has been re-governed.
   void setPermissionMode(String sessionId, PermissionMode? mode) {
     _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
-    _bump();
+    // One row's own policy. Only the chip that draws it is watching.
+    _publish(SessionChange.reconfigured(sessionId));
   }
 
   /// The single default-installation resolution.
@@ -401,7 +402,8 @@ class SessionLauncher {
       ..focusPane(paneId);
     _ref.read(terminalVisibleProvider.notifier).set(true);
     _ref.read(selectedSessionIdProvider.notifier).select(sessionId);
-    _bump();
+    // Where this session is on screen moved; nothing was created or renamed.
+    _publish(SessionChange.moved(sessionId));
     return true;
   }
 
@@ -552,7 +554,7 @@ class SessionLauncher {
     );
     if (presence != ConversationPresence.absent) return;
     _ref.read(sessionDaoProvider).updateStatus(minted.id, SessionStatus.failed);
-    _bump();
+    _publish(SessionChange.statusChanged(minted.id));
     throw SessionConversationMissing(
       agentName: agentDisplayName(request.installation.agentId),
       conversationId: externalId,
@@ -1160,7 +1162,12 @@ class SessionLauncher {
     return instance.terminal;
   }
 
+  /// The coarse word, for a launch: it mints a row, writes a status, claims a
+  /// pane and may learn a conversation id, all at once.
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
+
+  void _publish(SessionChange change) =>
+      _ref.read(sessionsRevisionProvider.notifier).changed(change);
 }
 
 /// The interactive command-line arguments for one agent launch.

@@ -20,7 +20,7 @@ import 'delivery_providers.dart';
 import 'session_chat_source.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
-import 'session_ui_providers.dart';
+import 'session_signals.dart';
 import 'session_working_directory.dart';
 
 /// One agent this session could be continued in.
@@ -668,9 +668,11 @@ class SessionContinuation {
 /// to answer a yes/no question.
 final sessionContinuationProvider = Provider.autoDispose
     .family<SessionContinuation, String>((ref, sessionId) {
-      // The session's own row and the installed agents both move under this;
-      // the revision is what every other session mutation already bumps.
-      ref.watch(sessionsRevisionProvider);
+      // The session's own row and the installed agents both move under this.
+      // Narrowed to the row: an agent being installed publishes no session
+      // change of its own, so it still arrives as an untargeted bump, which
+      // [SessionSignals.forSession] deliberately counts.
+      ref.watchSession(sessionId);
       final service = ref.watch(sessionHandoffServiceProvider);
       return SessionContinuation(
         targets: service.targetsFor(sessionId),

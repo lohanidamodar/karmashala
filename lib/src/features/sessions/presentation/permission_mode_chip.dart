@@ -7,7 +7,7 @@ import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_permission_options.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../application/session_launcher.dart';
-import '../application/session_ui_providers.dart';
+import '../application/session_signals.dart';
 
 /// The composer's permission control: the mode this session will run under, and
 /// a menu of the modes its agent can actually be put into.
@@ -61,9 +61,9 @@ class PermissionModeChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // The row is what the mode lives on, so a write has to be able to redraw
-    // this. `setPermissionMode` bumps the same revision every other session
-    // mutation does.
-    ref.watch(sessionsRevisionProvider);
+    // this — and only a write to *this* row does. `setPermissionMode`
+    // publishes `SessionChange.reconfigured` against the same id.
+    ref.watchSession(sessionId);
     final launcher = ref.read(sessionLauncherProvider);
     final effective = launcher.effectivePermissionFor(sessionId);
     if (effective == null) return const SizedBox.shrink();

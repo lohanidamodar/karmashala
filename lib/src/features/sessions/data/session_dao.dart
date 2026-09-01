@@ -225,6 +225,26 @@ class SessionDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// The rows named by [ids], oldest first, in one indexed query.
+  ///
+  /// For the callers that already know which handful of sessions they are
+  /// describing — the follow-up inbox names one row per open follow-up — and
+  /// were reaching for [getAll] only to build a lookup map out of it. The
+  /// difference is the whole point of `session_signal_cost_test.dart`: a scan
+  /// costs the user every session they have ever opened, and this costs the
+  /// ones actually on screen.
+  List<Session> getByIds(Iterable<String> ids) {
+    final unique = ids.toSet().toList();
+    if (unique.isEmpty) return const [];
+    final placeholders = List.filled(unique.length, '?').join(', ');
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE id IN ($placeholders) '
+      'ORDER BY created_at, id;',
+      unique,
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   /// Sessions targeting [repositoryId].
   List<Session> getByRepository(String repositoryId) {
     final rows = _db.query(

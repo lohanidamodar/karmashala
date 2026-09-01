@@ -5,7 +5,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'checkout_default.dart';
 import 'picked_checkouts.dart';
@@ -34,8 +34,13 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   final tab = ref.watch(
     terminalSessionsControllerProvider.select((s) => s.activeTab),
   );
-  // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
-  ref.watch(sessionsRevisionProvider);
+  // Adopting a pane, or launching into one, rewrites `pane_id` on the row —
+  // and that is the only session fact this reads. A title sync used to make
+  // every tab switch re-answer a question no title can change.
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.placement,
+  });
   if (tab == null) return null;
   final siblings = tab.layout.panes.toSet();
   // The indexed query returns only sessions belonging to this tab. The focused

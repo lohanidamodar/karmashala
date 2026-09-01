@@ -7,6 +7,7 @@ import '../../git/domain/file_change.dart';
 import '../../repositories/application/repository_providers.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
+import 'session_signals.dart';
 import 'session_ui_providers.dart';
 
 /// Why a worktree was left where it is.
@@ -136,7 +137,12 @@ class SessionArchiveService {
     _ref
         .read(sessionDaoProvider)
         .markArchived(sessionId, _ref.read(clockProvider).nowUtc());
-    _ref.read(sessionsRevisionProvider.notifier).bump();
+    // The row's status moved and the worktree it named is gone — a workspace
+    // fact as much as a session one. Its *name* did not change, so nothing
+    // that only draws names re-reads.
+    _ref
+        .read(sessionsRevisionProvider.notifier)
+        .changed(SessionChange.archived(sessionId));
     return const ArchiveOutcome.archived();
   }
 }
