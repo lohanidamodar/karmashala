@@ -2002,7 +2002,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (instance == null) return;
     _livenessMutated();
     _unlisten(paneId, instance);
-    _dirty.remove(paneId);
+    // Both halves of the debt. Dropping only the flag left the pane's
+    // *unsaved age* behind for the life of the container — one entry per pane
+    // closed while dirty, and Diagnostics reporting an ever-growing "oldest
+    // unsaved" beside zero dirty panes, which is exactly the "my work is not
+    // being written" signal it exists to give.
+    _markClean(paneId);
     _encoded.remove(paneId);
     instance.dispose();
   }
