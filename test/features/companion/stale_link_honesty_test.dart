@@ -119,7 +119,9 @@ void main() {
 
   Future<RemoteCompanionGateway> pairedPhone() async {
     final gateway = makeGateway();
-    final session = await service!.beginPairing(capabilities: CapabilitySet.all);
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet.all,
+    );
     await gateway.pairWithQr(session.payload.encode());
     await session.done;
     await awaitLink(gateway, CompanionLinkState.connected);
@@ -156,150 +158,173 @@ void main() {
     }
   }
 
-  test('a phone left with only a cached list does not call itself connected',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+  test(
+    'a phone left with only a cached list does not call itself connected',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
 
-    goSilent();
+      goSilent();
 
-    // Two in a row, with nothing answered in between. One is a busy desktop —
-    // everything for one device is serialised on a single chain, so a slow
-    // binding call holds up whatever is behind it — and that must not cost the
-    // link. Two is a link carrying frames one way and bringing nothing back.
-    await expectLater(
-      gateway.listSessions(),
-      throwsA(isA<GatewayException>()),
-    );
-    await expectLater(
-      gateway.listSessions(),
-      throwsA(isA<GatewayException>()),
-    );
+      // Two in a row, with nothing answered in between. One is a busy desktop —
+      // everything for one device is serialised on a single chain, so a slow
+      // binding call holds up whatever is behind it — and that must not cost the
+      // link. Two is a link carrying frames one way and bringing nothing back.
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(isA<GatewayException>()),
+      );
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(isA<GatewayException>()),
+      );
 
-    expect(
-      gateway.link,
-      isNot(CompanionLinkState.connected),
-      reason: 'every live request timed out; "connected" is not a true thing '
-          'to say about that link',
-    );
-    expect(
-      gateway.linkTrouble,
-      isNotNull,
-      reason: 'and it has to say what is actually happening, not go quiet',
-    );
-    expect(gateway.linkTrouble, contains('not answering'));
+      expect(
+        gateway.link,
+        isNot(CompanionLinkState.connected),
+        reason:
+            'every live request timed out; "connected" is not a true thing '
+            'to say about that link',
+      );
+      expect(
+        gateway.linkTrouble,
+        isNotNull,
+        reason: 'and it has to say what is actually happening, not go quiet',
+      );
+      expect(gateway.linkTrouble, contains('not answering'));
 
-    // The cache is not the problem and is not thrown away: what the desktop
-    // last sent is still the best thing to show.
-    expect(
-      (await gateway.watchSessions().first).map((s) => s.id),
-      ['s1', 's2'],
-    );
-  });
+      // The cache is not the problem and is not thrown away: what the desktop
+      // last sent is still the best thing to show.
+      expect((await gateway.watchSessions().first).map((s) => s.id), [
+        's1',
+        's2',
+      ]);
+    },
+  );
 
-  test('one slow answer is still a link — a busy desktop is not a lost one',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    await gateway.listSessions();
+  test(
+    'one slow answer is still a link — a busy desktop is not a lost one',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      await gateway.listSessions();
 
-    final claimed = <CompanionLinkState>[];
-    final watching = gateway.linkStates.listen(claimed.add);
-    addTearDown(watching.cancel);
+      final claimed = <CompanionLinkState>[];
+      final watching = gateway.linkStates.listen(claimed.add);
+      addTearDown(watching.cancel);
 
-    // Slower than the phone will wait, but not for ever: exactly one call is
-    // lost to it.
-    fake.stageCost = const Duration(milliseconds: 900);
-    await expectLater(
-      gateway.listSessions(),
-      throwsA(isA<GatewayException>()),
-    );
-    fake.stageCost = Duration.zero;
-    // Everything for one device runs on one chain, so the slow handler has to
-    // drain off it before the next request is even read.
-    await Future<void>.delayed(const Duration(seconds: 3));
-    expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
-    await watching.cancel();
+      // Slower than the phone will wait, but not for ever: exactly one call is
+      // lost to it.
+      fake.stageCost = const Duration(milliseconds: 900);
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(isA<GatewayException>()),
+      );
+      fake.stageCost = Duration.zero;
+      // Everything for one device runs on one chain, so the slow handler has to
+      // drain off it before the next request is even read.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+      await watching.cancel();
 
-    expect(
-      claimed.where((s) => s != CompanionLinkState.connected),
-      isEmpty,
-      reason: 'one call the desktop was too busy to answer is not an outage',
-    );
-  });
+      expect(
+        claimed.where((s) => s != CompanionLinkState.connected),
+        isEmpty,
+        reason: 'one call the desktop was too busy to answer is not an outage',
+      );
+    },
+  );
 
-  test('the owner\'s phone, end to end: a counter bump that never landed no '
-      'longer costs the desktop', timeout: const Timeout(Duration(minutes: 3)),
-      () async {
-    await startService();
-    final gateway = await pairedPhone();
-    expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
-    await gateway.close();
-    gateways.remove(gateway);
+  test(
+    'the owner\'s phone, end to end: a counter bump that never landed no '
+    'longer costs the desktop',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+      await gateway.close();
+      gateways.remove(gateway);
 
-    // The counter bump the last connection made never reached the keystore —
-    // a write that timed out, or Android killing the app before it landed. So
-    // the phone comes back holding the generation it has ALREADY used, and
-    // builds a fresh channel on it: the desktop greets it (the hello never
-    // goes through a channel) and can then admit nothing it sends.
-    rewindStoredGeneration();
+      // The counter bump the last connection made never reached the keystore —
+      // a write that timed out, or Android killing the app before it landed. So
+      // the phone comes back holding the generation it has ALREADY used, and
+      // builds a fresh channel on it: the desktop greets it (the hello never
+      // goes through a channel) and can then admit nothing it sends.
+      rewindStoredGeneration();
 
-    final reopened = makeGateway();
-    await awaitLink(reopened, CompanionLinkState.connected);
+      final reopened = makeGateway();
+      await awaitLink(reopened, CompanionLinkState.connected);
 
-    // The first call is still lost: the desktop only learns the channel is
-    // stale by being handed a frame it cannot open, and that frame is this
-    // one. What matters is what happens next.
-    await expectLater(
-      reopened.listSessions(),
-      throwsA(isA<GatewayException>()),
-    );
-    expect(
-      hostLog.where((line) => line.startsWith('retiring generation')),
-      isNotEmpty,
-      reason: 'the desktop has to notice, say so, and leave the poisoned '
-          'generation behind — before this it refused every frame in silence '
-          'and the phone waited on it for as long as the app stayed open',
-    );
+      // The first call is still lost: the desktop only learns the channel is
+      // stale by being handed a frame it cannot open, and that frame is this
+      // one. What matters is what happens next.
+      await expectLater(
+        reopened.listSessions(),
+        throwsA(isA<GatewayException>()),
+      );
+      expect(
+        hostLog.where((line) => line.startsWith('retiring generation')),
+        isNotEmpty,
+        reason:
+            'the desktop has to notice, say so, and leave the poisoned '
+            'generation behind — before this it refused every frame in silence '
+            'and the phone waited on it for as long as the app stayed open',
+      );
 
-    // Then it heals itself: nobody re-pairs, nobody touches a setting, and
-    // everything the owner could not do works.
-    await eventually(
-      () async {
+      // Then it heals itself: nobody re-pairs, nobody touches a setting, and
+      // everything the owner could not do works.
+      await eventually(() async {
         try {
           await reopened.listSessions();
           return true;
         } on Object {
           return false;
         }
-      },
-      reason: 'the phone comes back on the generation the desktop moved to',
-    );
-    expect((await reopened.listSessions()).map((s) => s.id), ['s1', 's2']);
-    expect(reopened.link, CompanionLinkState.connected);
-    expect(reopened.linkTrouble, isNull);
-  });
+      }, reason: 'the phone comes back on the generation the desktop moved to');
+      expect((await reopened.listSessions()).map((s) => s.id), ['s1', 's2']);
+      expect(reopened.link, CompanionLinkState.connected);
+      expect(reopened.linkTrouble, isNull);
+    },
+  );
 
-  test('the phone that stopped believing itself comes back on its own',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    await gateway.listSessions();
+  test(
+    'the phone that stopped believing itself comes back on its own',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      await gateway.listSessions();
 
-    goSilent();
-    for (var i = 0; i < 2; i++) {
-      await gateway.listSessions().then<void>(
-        (_) {},
-        onError: (Object _) {},
-      );
-    }
-    expect(gateway.link, isNot(CompanionLinkState.connected));
+      goSilent();
+      for (var i = 0; i < 2; i++) {
+        await gateway.listSessions().then<void>((_) {}, onError: (Object _) {});
+      }
+      expect(gateway.link, isNot(CompanionLinkState.connected));
 
-    // The desktop finishes whatever held it up. Nobody taps anything.
-    fake.stageCost = Duration.zero;
-    await awaitLink(gateway, CompanionLinkState.connected);
-    expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
-    expect(gateway.linkTrouble, isNull, reason: 'the trouble is over');
-  });
+      // The desktop finishes whatever held it up. Nobody taps anything.
+      fake.stageCost = Duration.zero;
+      await awaitLink(gateway, CompanionLinkState.connected);
+      // `eventually`, like the sibling case above, and for the same reason: what
+      // is promised is that the phone comes back on its own, not that the very
+      // first request after the first `connected` edge lands. A link may still
+      // drop once more between the two — `_requireClient` re-declares it dead and
+      // the loop re-dials — and on a loaded machine it intermittently did,
+      // failing this case roughly one run in three while the behaviour under test
+      // was fine.
+      await eventually(() async {
+        try {
+          await gateway.listSessions();
+          return true;
+        } on Object {
+          return false;
+        }
+      }, reason: 'the phone comes back with nobody touching it');
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+      expect(gateway.linkTrouble, isNull, reason: 'the trouble is over');
+    },
+  );
 }

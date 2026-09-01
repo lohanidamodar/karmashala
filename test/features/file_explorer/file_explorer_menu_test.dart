@@ -37,7 +37,7 @@ void main() {
   );
 
   final windows = ExecutionEnvironment(
-    id: localWindowsEnvironmentId,
+    id: localHostEnvironmentId,
     kind: EnvironmentKind.windowsNative,
     name: 'Windows',
     createdAt: testTime,

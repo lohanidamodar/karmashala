@@ -72,13 +72,19 @@ void main() {
     return container;
   }
 
-  String windowsEnvironmentId() => ExecutionEnvironmentDao(
+  /// The bootstrapped local host, whichever OS the suite is running on.
+  ///
+  /// Not `kind == windowsNative`: on a Mac the host row is `localPosix`, and
+  /// this used to throw `Bad state: No element` before the store was ever
+  /// looked at. These cases are about a **local** store, not a Windows one —
+  /// the WSL and SSH cases below name their environments explicitly.
+  String localEnvironmentId() => ExecutionEnvironmentDao(
     db,
-  ).getAll().firstWhere((e) => e.kind == EnvironmentKind.windowsNative).id;
+  ).getAll().firstWhere((e) => isLocalHost(e.kind)).id;
 
-  _StubLocator windowsStore() => _StubLocator([
+  _StubLocator localStore() => _StubLocator([
     CliStore(
-      environmentId: windowsEnvironmentId(),
+      environmentId: localEnvironmentId(),
       homesByAgentId: {'claudeCode': claudeHome.path},
     ),
   ]);
@@ -100,7 +106,7 @@ void main() {
       }),
     );
     final service = containerWith(
-      windowsStore(),
+      localStore(),
     ).read(agentHookInstallationServiceProvider);
 
     final installed = await service.installAll(endpoint);
@@ -128,7 +134,7 @@ void main() {
 
   test('uninstalling twice is a no-op the second time', () async {
     final service = containerWith(
-      windowsStore(),
+      localStore(),
     ).read(agentHookInstallationServiceProvider);
     await service.installAll(endpoint);
     await service.uninstallAll();
@@ -441,7 +447,7 @@ void main() {
           homesByAgentId: {'claudeCode': broken.path},
         ),
         CliStore(
-          environmentId: windowsEnvironmentId(),
+          environmentId: localEnvironmentId(),
           homesByAgentId: {'claudeCode': claudeHome.path},
         ),
       ]),
@@ -459,7 +465,7 @@ void main() {
     expect(failed.installed, isFalse);
     expect(failed.skippedBecause, contains('FormatException'));
     final good = results.singleWhere(
-      (r) => r.environmentId == windowsEnvironmentId(),
+      (r) => r.environmentId == localEnvironmentId(),
     );
     expect(good.installed, isTrue);
     expect(settings().readAsStringSync(), contains(agentHookMarker));

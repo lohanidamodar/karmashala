@@ -41,7 +41,7 @@ class ProjectsController extends Notifier<List<Project>> {
     required String path,
   }) async {
     final root = EnvironmentPath(
-      environmentId: localWindowsEnvironmentId,
+      environmentId: localHostEnvironmentId,
       path: path,
     );
     final result = await ref
@@ -121,7 +121,7 @@ class ProjectsController extends Notifier<List<Project>> {
     required String targetEnvironmentId,
   }) async {
     final dao = ref.read(executionEnvironmentDaoProvider);
-    final windows = dao.getById(localWindowsEnvironmentId);
+    final windows = dao.getById(localHostEnvironmentId);
     final target = dao.getById(targetEnvironmentId) ?? windows;
     if (windows == null || target == null) {
       throw StateError('No execution environments available.');
@@ -157,7 +157,7 @@ class ProjectsController extends Notifier<List<Project>> {
     // the scan runs on the Windows host, the rows belong to the project's own
     // environment.
     final dao = ref.read(executionEnvironmentDaoProvider);
-    final windows = dao.getById(localWindowsEnvironmentId);
+    final windows = dao.getById(localHostEnvironmentId);
     final environment = dao.getById(project.root.environmentId) ?? windows;
     if (windows == null || environment == null) {
       throw StateError('No execution environments available.');

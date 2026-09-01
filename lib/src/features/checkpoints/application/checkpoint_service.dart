@@ -386,7 +386,9 @@ class CheckpointService {
   /// remote repository has neither within reach, so SSH fails with a sentence
   /// rather than a `FileSystemException` from three layers down.
   HostPathOf _hostPathFor(ExecutionEnvironment env) => switch (env.kind) {
-    EnvironmentKind.windowsNative => sameEnvironmentPath,
+    // Already this process's own filesystem, whichever local OS it is.
+    EnvironmentKind.windowsNative ||
+    EnvironmentKind.localPosix => sameEnvironmentPath,
     EnvironmentKind.wsl =>
       (path) => const PathTranslator()
           .translate(

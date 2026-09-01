@@ -4,13 +4,13 @@ import '../../features/ssh/application/ssh_providers.dart';
 import 'command_runner.dart';
 import 'command_runner_factory.dart';
 import 'path_translator.dart';
-import 'windows_command_runner.dart';
+import 'local_command_runner.dart';
 
 /// The command runner for the **Windows host** — used to run host tools such as
 /// `wsl.exe` (e.g. for environment discovery). Overridden in tests with a
 /// `FakeCommandRunner`.
 final hostCommandRunnerProvider = Provider<CommandRunner>(
-  (ref) => const WindowsCommandRunner(),
+  (ref) => const LocalCommandRunner(),
 );
 
 /// Provides the [PathTranslator] for explicit Windows⇄WSL path translation.

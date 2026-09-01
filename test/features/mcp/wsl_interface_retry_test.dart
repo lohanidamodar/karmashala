@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/second_local_address.dart';
 
 /// Looking for the WSL switch once, at startup, and never again.
 ///
@@ -17,7 +18,12 @@ import '../../support/fixtures.dart';
 /// the adapter sat there the whole time. The moment an app that starts with
 /// Windows looks is the moment it is least likely to be true: WSL starts
 /// later.
-void main() {
+void main() async {
+  // See [findSecondLocalAddress]: `127.0.0.2` is bindable on Windows and Linux
+  // but not on macOS, which assigns only `127.0.0.1` to `lo0`.
+  final secondAddress = await findSecondLocalAddress();
+  final skip = secondAddress == null ? noSecondAddressReason : null;
+
   late Directory tmp;
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_wslretry_'));
@@ -28,7 +34,7 @@ void main() {
   /// Stands in for the WSL switch. Deliberately NOT 127.0.0.1: the control
   /// server already holds that address on this port, so using it would test
   /// nothing but a collision — as it did on the first run of these tests.
-  final switchAddress = InternetAddress('127.0.0.2');
+  final switchAddress = secondAddress ?? InternetAddress.loopbackIPv4;
 
   Future<int> freePort() async {
     final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
@@ -50,6 +56,9 @@ void main() {
       useLocalSocket: false,
       preferredPort: await freePort(),
       wslHostAddress: lookup,
+      // The lookup is injected, so the WSL listener is wanted whatever OS is
+      // running the suite.
+      hostCanHaveWsl: true,
       retryWslEvery: retryEvery,
     );
     addTearDown(() async {
@@ -79,7 +88,7 @@ void main() {
       isNotNull,
       reason: 'the retry found it without anyone restarting the app',
     );
-  });
+  }, skip: skip);
 
   test('hooks skipped at startup are installed once it binds', () async {
     // Hooks are written at startup against the endpoint of that moment, so a
@@ -97,7 +106,7 @@ void main() {
 
     expect(announced, 1, reason: 'exactly once, on the transition');
     expect(server.hookEndpoint!.wslHost, isNotNull);
-  });
+  }, skip: skip);
 
   test('a switch present at startup announces nothing', () async {
     // The ordinary case: bound on the first attempt, so hooks are already
@@ -112,7 +121,7 @@ void main() {
 
     expect(server.wslHost, isNotNull);
     expect(announced, 0);
-  });
+  }, skip: skip);
 
   test('stopping ends the retry', () async {
     final server = await start(lookup: () async => null);
@@ -121,5 +130,5 @@ void main() {
     // Nothing should still be looking; a pending timer would fail the test.
     await Future<void>.delayed(const Duration(milliseconds: 120));
     expect(server.wslHost, isNull);
-  });
+  }, skip: skip);
 }

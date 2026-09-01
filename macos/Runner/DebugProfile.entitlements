@@ -2,10 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Not sandboxed, and it cannot be. Karmashala's whole job is to run the
+	     user's own agent CLIs (claude, codex, antigravity) in a PTY against
+	     project folders anywhere on disk, and to read the CLIs' own state under
+	     ~/.claude, ~/.codex and friends. The App Sandbox confines a process to
+	     its container and to files the user hands it through a system open
+	     panel, one at a time — so under it, project discovery, CLI detection,
+	     the file explorer, the git pane and every spawned agent read nothing.
+	     This is a developer tool shipped outside the Mac App Store, which is
+	     the same trade every terminal and editor on macOS makes. -->
 	<key>com.apple.security.app-sandbox</key>
-	<true/>
+	<false/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
+	<!-- Outgoing: the relay client, GitHub, and the MCP bridge dialling the
+	     control server. Absent before, which would have failed every one of
+	     them the moment the sandbox was on. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<!-- Incoming: the launcher control server, the LAN transport server, and
+	     the local relay. -->
 	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>

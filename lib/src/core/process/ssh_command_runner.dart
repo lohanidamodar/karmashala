@@ -39,7 +39,7 @@ const int kSshSignalExitCode = 128;
 
 /// Runs commands on a remote host over SSH.
 ///
-/// The third [CommandRunner] beside `WindowsCommandRunner` and
+/// The third [CommandRunner] beside `LocalCommandRunner` and
 /// `WslCommandRunner`, and the reason agent discovery, Git and everything else
 /// can target a remote machine without knowing SSH exists: they build the same
 /// [CommandRequest] and this translates it for the wire.

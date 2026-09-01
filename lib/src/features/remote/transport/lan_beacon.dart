@@ -125,16 +125,28 @@ class LanBeacon {
   LanBeacon._(this._socket, this._timer);
 
   /// Starts advertising [port] under [tag] until [stop].
+  ///
+  /// [bindAddress] is which interface the adverts leave by; the default —
+  /// every interface — is what the desktop wants. Tests pass the loopback
+  /// address so the suite never sprays datagrams onto the machine's real
+  /// network, and so it keeps working where the OS withholds permission to use
+  /// one (macOS 15+ denies multicast outright until the user grants Local
+  /// Network access, which no headless test run can do).
   static Future<LanBeacon> advertise({
     required int port,
     required String tag,
     Duration interval = kLanBeaconInterval,
     InternetAddress? group,
     int beaconPort = kLanBeaconPort,
+    InternetAddress? bindAddress,
   }) async {
     final target = group ?? kLanBeaconGroup;
-    final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+    final socket = await RawDatagramSocket.bind(
+      bindAddress ?? InternetAddress.anyIPv4,
+      0,
+    );
     socket.multicastLoopback = true;
+    if (bindAddress != null) _sendMulticastFrom(socket, bindAddress);
     final payload = LanAdvert(port: port, tag: tag).encode();
     void announce() {
       try {
@@ -181,17 +193,46 @@ class LanDiscovery {
   /// Android needs a multicast lock held for this to receive anything; that is
   /// the companion loop's job, and is why this can look silent on a phone while
   /// working on desktop.
+  ///
+  /// The group is joined on **every** interface rather than on the default one.
+  /// A bare `joinMulticast(group)` leaves the choice to the OS, which picks one
+  /// — and the one it picks is routinely not the one the host is advertising
+  /// on. Every desktop this runs on is multi-homed: Windows carries the WSL and
+  /// Hyper-V switches, macOS carries `lo0`, `awdl0` and `llw0` beside the real
+  /// adapter, and a VPN adds another. Joining everywhere is what makes the
+  /// direct path find a host that is right there.
+  ///
+  /// A refusal on one interface is skipped rather than fatal: `awdl0` and
+  /// friends come and go, and one that will not take the join must not cost the
+  /// discovery the interfaces that would have.
   static Future<LanDiscovery> start({
     InternetAddress? group,
     int beaconPort = kLanBeaconPort,
     Duration timeout = kLanHostTimeout,
   }) async {
+    final target = group ?? kLanBeaconGroup;
     final socket = await RawDatagramSocket.bind(
       InternetAddress.anyIPv4,
       beaconPort,
       reuseAddress: true,
     );
-    socket.joinMulticast(group ?? kLanBeaconGroup);
+    var joined = 0;
+    for (final interface in await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+      includeLoopback: true,
+    )) {
+      try {
+        socket.joinMulticast(target, interface);
+        joined++;
+      } on OSError {
+        // This interface will not carry the group; others may.
+      } on SocketException {
+        // Same.
+      }
+    }
+    // Nothing enumerable to join on — fall back to letting the OS choose, which
+    // is still better than a socket that has joined nothing at all.
+    if (joined == 0) socket.joinMulticast(target);
     return LanDiscovery._(socket, timeout);
   }
 
@@ -215,5 +256,40 @@ class LanDiscovery {
   Future<void> stop() async {
     _socket.close();
     await _found.close();
+  }
+}
+
+/// Pins [socket]'s outgoing multicast to the interface holding [address].
+///
+/// Binding a datagram socket to an address sets where its packets say they are
+/// *from*; it does not decide which interface they leave by. That is chosen
+/// from the routing table, and for a multicast group the matching route is the
+/// blanket `224.0.0.0/4` one — which on this machine points at the Wi-Fi
+/// adapter no matter what the socket is bound to. The interface is also
+/// resolved on the socket's **first send** and cached, so a beacon that starts
+/// advertising before anything has joined the group keeps using that answer for
+/// its whole life.
+///
+/// That combination is what made a beacon bound to loopback undiscoverable: it
+/// sent its first datagram out of the Wi-Fi adapter, and every datagram after
+/// it, while the listener that joined a moment later was waiting on `lo0`.
+/// Reversing the order hid the bug — which is why it looked like a race.
+///
+/// `IP_MULTICAST_IF` says it outright. There is no `dart:io` accessor for it,
+/// so it goes through [RawSocketOption] with the platform's own option number,
+/// and a platform that refuses is left with the routing table it had.
+void _sendMulticastFrom(RawDatagramSocket socket, InternetAddress address) {
+  // IPPROTO_IP is 0 everywhere. IP_MULTICAST_IF is 9 on the BSDs (macOS
+  // included) and on Winsock, and 32 on Linux.
+  const level = 0;
+  final option = Platform.isLinux ? 32 : 9;
+  try {
+    socket.setRawOption(
+      RawSocketOption(level, option, address.rawAddress),
+    );
+  } on OSError {
+    // Left to the routing table, which is what it did before this existed.
+  } on SocketException {
+    // Same.
   }
 }

@@ -85,7 +85,7 @@ class CodeEditorService {
         runInShell: editor.kind != CodeEditorKind.custom,
         workingDirectory: editor.kind == CodeEditorKind.custom
             ? EnvironmentPath(
-                environmentId: localWindowsEnvironmentId,
+                environmentId: localHostEnvironmentId,
                 path: windowsPath,
               )
             : null,

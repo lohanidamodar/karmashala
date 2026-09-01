@@ -15,7 +15,7 @@ import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/logging/app_logger.dart';
 import 'src/core/logging/diagnostics.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
-import 'src/core/process/windows_command_runner.dart';
+import 'src/core/process/local_command_runner.dart';
 import 'src/core/util/clock.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
@@ -72,7 +72,7 @@ Future<void> main() async {
   final environmentDao = ExecutionEnvironmentDao(database);
   ensureLocalEnvironment(environmentDao, clock);
   final discovered = await EnvironmentDiscoveryService(
-    host: const WindowsCommandRunner(),
+    host: const LocalCommandRunner(),
     clock: clock,
     logger: logger,
   ).discover();

@@ -14,6 +14,83 @@ FakeCommandRunnerFactory _homeIs(String home) => FakeCommandRunnerFactory(
 );
 
 void main() {
+  group('the local host store', () {
+    // These cases exist because there were none. Every case in this file used
+    // to name a WSL store, and the local one was only ever built when
+    // `USERPROFILE` happened to be set — which it never is off Windows. So a
+    // Mac located no store at all, and with no store there is nothing to read:
+    // no detected projects, no sessions, no chat to adopt. The suite was
+    // green throughout.
+
+    test('a POSIX desktop reads \$HOME, with POSIX separators', () async {
+      final stores = await CliStoreLocator(
+        runnerFactory: _homeIs('/home/me'),
+        environment: const {'HOME': '/Users/me'},
+      ).locate([posixEnv()]);
+
+      final local = stores.single;
+      expect(local.environmentId, posixEnv().id);
+      expect(local.claudeHome, '/Users/me/.claude');
+      expect(local.codexHome, '/Users/me/.codex');
+      expect(local.claudeHome, isNot(contains(r'\')));
+    });
+
+    test(
+      'a Windows desktop reads %USERPROFILE%, with Windows separators',
+      () async {
+        final stores = await CliStoreLocator(
+          runnerFactory: _homeIs('/home/me'),
+          environment: const {'USERPROFILE': r'C:\Users\me'},
+        ).locate([windowsEnv()]);
+
+        final local = stores.single;
+        expect(local.claudeHome, r'C:\Users\me\.claude');
+        expect(local.codexHome, r'C:\Users\me\.codex');
+      },
+    );
+
+    test('each host is asked only for the variable it actually sets', () async {
+      // `USERPROFILE` on a Mac and `HOME` on Windows are both absent or
+      // meaningless; neither is a fallback for the other, and reading the
+      // wrong one would point the scan at a directory that is not the store.
+      expect(
+        await CliStoreLocator(
+          runnerFactory: _homeIs('/home/me'),
+          environment: const {'USERPROFILE': r'C:\Users\me'},
+        ).locate([posixEnv()]),
+        isEmpty,
+      );
+      expect(
+        await CliStoreLocator(
+          runnerFactory: _homeIs('/home/me'),
+          environment: const {'HOME': '/Users/me'},
+        ).locate([windowsEnv()]),
+        isEmpty,
+      );
+    });
+
+    test(
+      'a blank home yields no store rather than a store at the root',
+      () async {
+        final stores = await CliStoreLocator(
+          runnerFactory: _homeIs('/home/me'),
+          environment: const {'HOME': '   '},
+        ).locate([posixEnv()]);
+
+        expect(stores, isEmpty);
+      },
+    );
+
+    test('WSL is still located beside a Windows desktop', () async {
+      final stores = await CliStoreLocator(
+        runnerFactory: _homeIs('/home/me'),
+        environment: const {'USERPROFILE': r'C:\Users\me'},
+      ).locate([windowsEnv(), wslEnv()]);
+
+      expect(stores.map((s) => s.environmentId), ['windows', 'wsl:Ubuntu']);
+    });
+  });
+
   test('builds one home per descriptor that declares a store', () async {
     final stores = await CliStoreLocator(
       runnerFactory: _homeIs('/home/me'),

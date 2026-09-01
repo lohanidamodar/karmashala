@@ -15,6 +15,7 @@ import '../application/environment_scan_controller.dart';
 import '../application/environments_controller.dart';
 import '../domain/environment_kind.dart';
 import '../domain/execution_environment.dart';
+import '../domain/local_environment.dart';
 
 /// Every place Karmashala can run an agent, and what it found there.
 ///
@@ -202,13 +203,15 @@ class _EnvironmentCard extends ConsumerWidget {
   }
 
   static IconData _iconFor(EnvironmentKind kind) => switch (kind) {
-    EnvironmentKind.windowsNative => AppIcons.target,
+    EnvironmentKind.windowsNative || EnvironmentKind.localPosix =>
+      AppIcons.target,
     EnvironmentKind.wsl => AppIcons.terminal,
     EnvironmentKind.ssh => AppIcons.globe,
   };
 
   static String _kindLabel(EnvironmentKind kind) => switch (kind) {
     EnvironmentKind.windowsNative => 'WINDOWS',
+    EnvironmentKind.localPosix => localHostEnvironmentName.toUpperCase(),
     EnvironmentKind.wsl => 'WSL',
     EnvironmentKind.ssh => 'SSH',
   };

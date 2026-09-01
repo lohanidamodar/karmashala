@@ -15,6 +15,7 @@ import '../../agents/domain/agent_usage.dart';
 import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
 import 'agent_detection_section.dart';
 import '../domain/permission_mode.dart';
@@ -66,7 +67,7 @@ class AgentsPage extends ConsumerWidget {
                           value: install.id,
                           child: Text(
                             '${_agentLabel(install.agentId)} · '
-                            '${install.environmentId}',
+                            '${ref.watch(environmentLabelForIdProvider(install.environmentId))}',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -319,7 +320,8 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
               children: [
                 Expanded(
                   child: Text(
-                    '$label · ${widget.installation.environmentId}',
+                    '$label · '
+                    '${ref.watch(environmentLabelForIdProvider(widget.installation.environmentId))}',
                     style: MonoStyles.body,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -533,7 +535,11 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                 const SizedBox(width: Insets.sm),
                 Expanded(
                   child: Text(
-                    _installation.environmentId,
+                    ref.watch(
+                      environmentLabelForIdProvider(
+                        _installation.environmentId,
+                      ),
+                    ),
                     style: MonoStyles.body,
                   ),
                 ),
@@ -587,7 +593,8 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                     tooltip: 'Switch this install to a saved account',
                     onSelected: (account) => _run(
                       () => controller.switchTo(_installation, account),
-                      'Switched ${_installation.environmentId} to '
+                      'Switched '
+                      '${ref.read(environmentLabelForIdProvider(_installation.environmentId))} to '
                       '${account.email}.',
                     ),
                     itemBuilder: (_) => [

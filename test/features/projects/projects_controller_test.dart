@@ -23,7 +23,7 @@ void main() {
   late ProviderContainer container;
 
   EnvironmentPath root(String path) =>
-      EnvironmentPath(environmentId: localWindowsEnvironmentId, path: path);
+      EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   setUp(() {
     db = AppDatabase.memory();

@@ -13,19 +13,53 @@ import '../domain/agent_registry.dart';
 /// The command that locates an executable by name in a given environment:
 /// `where` on Windows, `command -v` in a POSIX environment.
 ///
-/// The POSIX lookup runs through a login shell (`bash -lc`) so the machine's
-/// PATH additions — e.g. `~/.local/bin` sourced from `~/.profile`, where agent
-/// CLIs are commonly installed — are present. A bare `which` runs in a
-/// non-login shell that can't see them, so those agents go undetected. This is
-/// as true of a remote host over SSH as it is of a WSL distribution, which is
-/// why both take the same branch.
-CommandRequest locateRequest(EnvironmentKind kind, String executableName) =>
-    isPosixShell(kind)
-    ? CommandRequest(
-        executable: 'bash',
-        arguments: ['-lc', 'command -v $executableName'],
-      )
-    : CommandRequest(executable: 'where', arguments: [executableName]);
+/// The POSIX lookup runs through a **login** shell so the machine's PATH
+/// additions — e.g. `~/.local/bin`, where agent CLIs are commonly installed —
+/// are present. A bare `which` runs in a non-login shell that cannot see them,
+/// so those agents go undetected.
+///
+/// Which login shell differs by environment, and it matters:
+///
+/// - WSL and SSH get `bash`, which is what those environments are configured
+///   through and what is guaranteed to be installed in a distribution.
+/// - The **local** POSIX host gets the *owner's* shell from `$SHELL`, because
+///   on macOS that is `zsh` and has been since Catalina. `bash -l` there reads
+///   `~/.bash_profile` and never `~/.zprofile`, so on a stock Mac — where PATH
+///   is set in the zsh files and often nowhere else — every agent CLI is
+///   invisible to a bash login shell while working perfectly in the user's
+///   terminal.
+///
+/// [loginShell] overrides the local host's shell, so the branch is testable
+/// without depending on the shell of whoever runs the suite.
+CommandRequest locateRequest(
+  EnvironmentKind kind,
+  String executableName, {
+  String? loginShell,
+}) {
+  if (!isPosixShell(kind)) {
+    return CommandRequest(executable: 'where', arguments: [executableName]);
+  }
+  final shell = kind == EnvironmentKind.localPosix
+      ? (loginShell ?? localLoginShell())
+      : 'bash';
+  return CommandRequest(
+    executable: shell,
+    arguments: ['-lc', 'command -v $executableName'],
+  );
+}
+
+/// The owner's login shell on this machine, or `bash` when `$SHELL` says
+/// nothing usable.
+///
+/// Only an absolute path is trusted. `$SHELL` is inherited from whatever
+/// launched the app, and a relative or empty value would make the probe spawn
+/// something off `PATH` — which is the one thing this function exists to stop
+/// depending on.
+String localLoginShell() {
+  final shell = Platform.environment['SHELL']?.trim();
+  if (shell == null || shell.isEmpty || !shell.startsWith('/')) return 'bash';
+  return shell;
+}
 
 /// A command that succeeds in [kind] iff the environment can run anything at
 /// all, or `null` when the question does not arise.
@@ -36,9 +70,13 @@ CommandRequest locateRequest(EnvironmentKind kind, String executableName) =>
 /// a re-detect that deleted a running machine's installations because the
 /// distro happened to be shut down would be a lie wearing a scan's clothes.
 ///
-/// Windows-native returns `null`: it is the host executing this code, so
-/// spawning a process to establish that it exists proves nothing.
-CommandRequest? reachabilityRequest(EnvironmentKind kind) => isPosixShell(kind)
+/// The **local host** returns `null`, whichever OS it is: it is the machine
+/// executing this code, so spawning a process to establish that it exists
+/// proves nothing. Only an environment that can be *away* — a WSL distribution
+/// that is shut down, an SSH host that is off the network — has a reachability
+/// question worth asking.
+CommandRequest? reachabilityRequest(EnvironmentKind kind) =>
+    isPosixShell(kind) && !isLocalHost(kind)
     ? const CommandRequest(executable: 'bash', arguments: ['-lc', 'exit 0'])
     : null;
 

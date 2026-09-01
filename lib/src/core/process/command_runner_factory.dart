@@ -3,7 +3,7 @@ import '../../features/environments/domain/execution_environment.dart';
 import '../../features/ssh/data/ssh_connection_pool.dart';
 import 'command_runner.dart';
 import 'ssh_command_runner.dart';
-import 'windows_command_runner.dart';
+import 'local_command_runner.dart';
 import 'wsl_command_runner.dart';
 
 /// Creates the right [CommandRunner] for a given execution environment.
@@ -27,7 +27,8 @@ class CommandRunnerFactory {
   CommandRunner forEnvironment(ExecutionEnvironment environment) {
     switch (environment.kind) {
       case EnvironmentKind.windowsNative:
-        return const WindowsCommandRunner();
+      case EnvironmentKind.localPosix:
+        return const LocalCommandRunner();
       case EnvironmentKind.wsl:
         final distro = environment.wslDistribution;
         if (distro == null) {

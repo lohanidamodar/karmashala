@@ -103,7 +103,7 @@ class RevealInFileManager {
           .translate(
             path,
             from: owner,
-            to: localWindowsEnvironment(owner.createdAt),
+            to: windowsHostEnvironment(owner.createdAt),
           )
           .path;
     } on PathTranslationException {

@@ -479,6 +479,14 @@ void main() {
     final gateway = await pairedPhone();
     final pairedAt = DateTime.now();
 
+    // A round-trip before the move, because `pairedPhone` waits on the
+    // *phone's* link state and that is only half the link: the desktop is
+    // still finishing its own side. `updateRelays` announces to the devices it
+    // has a live link to and silently skips the rest, so moving the relay in
+    // that gap means the announcement is never sent at all and the phone is
+    // left dialling an address nobody is at.
+    expect((await gateway.listSessions()).single.id, 's1');
+
     // The desktop's LAN address moves under it: a DHCP renew, a Wi-Fi band
     // switch, a VPN coming up. The relay is the same server on a new address.
     final moved = await RelayServer.bind(
@@ -489,6 +497,20 @@ void main() {
     addTearDown(moved.close);
     final movedUri = Uri.parse('ws://127.0.0.1:${moved.port}');
     await service!.updateRelays(localRelayUrl: movedUri, hostedEnabled: false);
+    // The announcement goes out on the link that is still up, then the
+    // listeners re-point — [RemoteHostService.updateRelays] is explicit that
+    // the order matters. Awaiting it only means the frame was *sent*, so the
+    // old relay stays up until the phone has written the new address down;
+    // cutting the socket from under a frame in flight is not the move this
+    // test is about.
+    await until(
+      () =>
+          store.values[stored.CompanionPairing.storeKey]?.contains(
+            '${moved.port}',
+          ) ??
+          false,
+      reason: 'the phone writes down the new address before the old one goes',
+    );
     await relay.close();
 
     // Nothing is touched on the phone. It must find the desktop again on its

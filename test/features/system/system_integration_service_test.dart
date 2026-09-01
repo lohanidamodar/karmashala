@@ -6,6 +6,8 @@ import 'package:karmashala/src/features/system/native_status.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:flutter/widgets.dart' show Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_native_adapters.dart';
@@ -62,7 +64,13 @@ void main() {
 
         expect(natives.window.listeners, contains(service));
         expect(natives.tray.listeners, contains(service));
-        expect(natives.tray.icon, 'assets/tray_icon.ico');
+        // `.ico` on Windows, `.png` everywhere else: macOS hands the path to
+        // NSImage and Linux to the icon theme, and neither decodes ICO — an
+        // `.ico` there is a status item that draws nothing at all.
+        expect(
+          natives.tray.icon,
+          Platform.isWindows ? 'assets/tray_icon.ico' : 'assets/tray_icon.png',
+        );
         expect(natives.tray.tooltip, 'Karmashala');
         expect(natives.tray.menu, isNotNull);
         expect(natives.autoStart.setupCalled, isTrue);
@@ -301,6 +309,27 @@ void main() {
       expect(natives.window.visible, isFalse);
       expect(natives.window.destroyed, isFalse);
       expect(quitCalls, isEmpty);
+    });
+
+    test('close to tray quits when there is no tray to close to', () async {
+      // Stock GNOME has no StatusNotifier host unless an AppIndicator extension
+      // is installed, so `setIcon` fails and nothing appears. Hiding there is
+      // not close-to-tray, it is a window with no way back — and on Wayland the
+      // global hotkey cannot rescue it either, because keybinder is X11-only.
+      natives.tray.setIconFailure = Failure(StateError('no tray'), times: 99);
+
+      await build();
+      settings().setCloseToTray(true);
+      await pumpEventQueue();
+
+      service.onWindowClose();
+      await pumpEventQueue();
+
+      expect(statusOf(NativeSetting.trayIcon)!.ok, isFalse);
+      expect(quitCalls, [
+        'shutdown',
+      ], reason: 'the X still runs the ordered teardown rather than hiding');
+      expect(natives.window.destroyed, isTrue);
     });
 
     test('without close to tray it shuts down, then destroys', () async {

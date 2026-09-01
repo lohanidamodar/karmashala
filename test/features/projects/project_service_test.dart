@@ -19,7 +19,7 @@ void main() {
   late FakeRepositoryDiscoveryService discovery;
 
   EnvironmentPath root(String path) =>
-      EnvironmentPath(environmentId: localWindowsEnvironmentId, path: path);
+      EnvironmentPath(environmentId: localHostEnvironmentId, path: path);
 
   ProjectService build() => ProjectService(
     projectDao: projectDao,
@@ -32,7 +32,7 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
-      ..upsert(windowsEnv(id: localWindowsEnvironmentId))
+      ..upsert(windowsEnv(id: localHostEnvironmentId))
       ..upsert(wslEnv());
     projectDao = ProjectDao(db);
     repositoryDao = RepositoryDao(db);
@@ -82,8 +82,8 @@ void main() {
     ];
     final added = await build().rediscover(
       created.project,
-      projectEnvironment: windowsEnv(id: localWindowsEnvironmentId),
-      windows: windowsEnv(id: localWindowsEnvironmentId),
+      projectEnvironment: windowsEnv(id: localHostEnvironmentId),
+      windows: windowsEnv(id: localHostEnvironmentId),
     );
 
     expect(added.map((r) => r.name), ['api']);
@@ -109,8 +109,8 @@ void main() {
     ];
     final added = await build().rediscover(
       created.project,
-      projectEnvironment: windowsEnv(id: localWindowsEnvironmentId),
-      windows: windowsEnv(id: localWindowsEnvironmentId),
+      projectEnvironment: windowsEnv(id: localHostEnvironmentId),
+      windows: windowsEnv(id: localHostEnvironmentId),
     );
 
     expect(added.map((r) => r.name), [
@@ -133,7 +133,7 @@ void main() {
     final created = await build().createProjectForEnvironment(
       name: 'W',
       windowsScanPath: r'C:\ws',
-      windows: windowsEnv(id: localWindowsEnvironmentId),
+      windows: windowsEnv(id: localHostEnvironmentId),
       target: wslEnv(),
     );
     discovery.calls.clear();
@@ -145,7 +145,7 @@ void main() {
     final added = await build().rediscover(
       created.project,
       projectEnvironment: wslEnv(),
-      windows: windowsEnv(id: localWindowsEnvironmentId),
+      windows: windowsEnv(id: localHostEnvironmentId),
     );
 
     expect(
@@ -174,7 +174,7 @@ void main() {
     final result = await build().createProjectForEnvironment(
       name: 'Workspace',
       windowsScanPath: r'C:\ws',
-      windows: windowsEnv(id: localWindowsEnvironmentId),
+      windows: windowsEnv(id: localHostEnvironmentId),
       target: wslEnv(),
     );
 
@@ -195,8 +195,8 @@ void main() {
       final result = await build().createProjectForEnvironment(
         name: 'Workspace',
         windowsScanPath: r'C:\ws',
-        windows: windowsEnv(id: localWindowsEnvironmentId),
-        target: windowsEnv(id: localWindowsEnvironmentId),
+        windows: windowsEnv(id: localHostEnvironmentId),
+        target: windowsEnv(id: localHostEnvironmentId),
       );
       expect(result.project.root.path, r'C:\ws');
       expect(result.repositories.single.path.environmentId, 'windows');

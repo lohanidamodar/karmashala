@@ -128,7 +128,7 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
   /// back on it, which is what [RevealInFileManager] needs to answer
   /// "can this be shown?" without guessing.
   EnvironmentPath get _path => EnvironmentPath(
-    environmentId: localWindowsEnvironmentId,
+    environmentId: localHostEnvironmentId,
     path: widget.entry.windowsPath,
   );
 

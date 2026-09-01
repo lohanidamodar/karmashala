@@ -35,7 +35,7 @@ class NewProjectDialog extends ConsumerStatefulWidget {
 class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   final _nameController = TextEditingController();
   final _folderController = TextEditingController();
-  String _targetId = localWindowsEnvironmentId;
+  String _targetId = localHostEnvironmentId;
   bool _busy = false;
   String? _error;
 
@@ -64,8 +64,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   /// The path as it will be stored for the chosen target (for the preview).
   String? _targetPreview(List<ExecutionEnvironment> environments) {
     final folder = _folderController.text.trim();
-    if (folder.isEmpty || _targetId == localWindowsEnvironmentId) return null;
-    final windows = _envById(environments, localWindowsEnvironmentId);
+    if (folder.isEmpty || _targetId == localHostEnvironmentId) return null;
+    final windows = _envById(environments, localHostEnvironmentId);
     final target = _envById(environments, _targetId);
     if (windows == null || target == null) return null;
     try {
@@ -166,7 +166,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                     ),
               ],
               onChanged: (v) =>
-                  setState(() => _targetId = v ?? localWindowsEnvironmentId),
+                  setState(() => _targetId = v ?? localHostEnvironmentId),
             ),
             const SizedBox(height: 12),
             Row(

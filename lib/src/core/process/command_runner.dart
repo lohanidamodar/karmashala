@@ -60,7 +60,7 @@ class CommandException implements Exception {
 ///
 /// Features depend on a [CommandRunner], never on `dart:io` `Process` directly
 /// (architecture constraint 6). Each runner targets one execution environment
-/// ([environmentId]); implementations: `WindowsCommandRunner`,
+/// ([environmentId]); implementations: `LocalCommandRunner`,
 /// `WslCommandRunner`, and `FakeCommandRunner` (tests).
 ///
 /// Streaming execution (for live agent sessions) is added in Loop 6; Loop 3

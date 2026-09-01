@@ -15,6 +15,7 @@ import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/second_local_address.dart';
 
 /// The config file a launching session is handed, and whose namespace its path
 /// is spelled in.
@@ -25,11 +26,26 @@ import '../../support/fixtures.dart';
 /// in this codebase is — explicitly, with both environments in hand — and the
 /// cases below are mostly about that, plus the fail-closed rules that keep a
 /// launch identical to today's when there is nothing honest to hand it.
-void main() {
+void main() async {
+  // Only the WSL case needs a second bindable address; see
+  // [findSecondLocalAddress].
+  final secondAddress = await findSecondLocalAddress();
+  final skipWsl = secondAddress == null ? noSecondAddressReason : null;
+
+  /// The WSL case additionally translates the config file's *own* path from a
+  /// Windows drive into `/mnt/...`, so the temp directory it runs in has to be
+  /// on a Windows disk. On a Mac the fixture path is `/var/folders/...`, which
+  /// is not a Windows path and has no `/mnt` form — the translation correctly
+  /// refuses, and the case cannot run.
+  final skipWslPath = Platform.isWindows
+      ? skipWsl
+      : 'Translates a Windows drive path into its /mnt form, so it needs a '
+            'temp directory on a Windows disk.';
+
   late Directory tmp;
   late ProviderContainer container;
 
-  final wslStandIn = InternetAddress('127.0.0.2');
+  final wslStandIn = secondAddress ?? InternetAddress.loopbackIPv4;
 
   Future<LauncherControlServer> startServer({
     HandshakePermissions? permissions,
@@ -50,6 +66,8 @@ void main() {
       socketDirectory: p.join(tmp.path, 'ipc'),
       sessionConfigDirectory: configDirectory ?? p.join(tmp.path, 'mcp'),
       wslHostAddress: () async => wslStandIn,
+      // The stand-in is injected, so the second listener is wanted on any host.
+      hostCanHaveWsl: true,
     );
     addTearDown(() async {
       await server.stop();
@@ -77,16 +95,20 @@ void main() {
   group('the name the file has in the agent\'s own namespace', () {
     test('a Windows agent is given the path as written', () {
       expect(
-        agentConfigPathFor(r'C:\Users\dlohani\AppData\Roaming\x\s.json',
-            EnvironmentKind.windowsNative),
+        agentConfigPathFor(
+          r'C:\Users\dlohani\AppData\Roaming\x\s.json',
+          EnvironmentKind.windowsNative,
+        ),
         r'C:\Users\dlohani\AppData\Roaming\x\s.json',
       );
     });
 
     test('a WSL agent is given the drive mount', () {
       expect(
-        agentConfigPathFor(r'C:\Users\dlohani\AppData\Roaming\x\s.json',
-            EnvironmentKind.wsl),
+        agentConfigPathFor(
+          r'C:\Users\dlohani\AppData\Roaming\x\s.json',
+          EnvironmentKind.wsl,
+        ),
         '/mnt/c/Users/dlohani/AppData/Roaming/x/s.json',
       );
     });
@@ -101,13 +123,12 @@ void main() {
       );
     });
 
-    test('an SSH agent is given nothing, because the file is not on its disk',
-        () {
-      expect(
-        agentConfigPathFor(r'C:\x\s.json', EnvironmentKind.ssh),
-        isNull,
-      );
-    });
+    test(
+      'an SSH agent is given nothing, because the file is not on its disk',
+      () {
+        expect(agentConfigPathFor(r'C:\x\s.json', EnvironmentKind.ssh), isNull);
+      },
+    );
   });
 
   group('the file an agent is asked to open', () {
@@ -140,13 +161,13 @@ void main() {
       expect(access.configPath, isNot(contains(r'\')));
       expect(access.configPath, endsWith('/mcp/session-s1.json'));
       // And the URL inside it is the one WSL can actually dial.
-      expect(access.url, startsWith('http://127.0.0.2:'));
+      expect(access.url, startsWith('http://${wslStandIn.address}:'));
       // The file itself is where Windows put it, holding that URL.
       expect(
         entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'))['url'],
         access.url,
       );
-    });
+    }, skip: skipWslPath);
 
     test('one file per session, each speaking only for its own', () async {
       // The URL in the file is the identity, so a shared config would be two
@@ -243,9 +264,7 @@ void main() {
       // The file holds a credential for the app's whole tool surface. If the
       // owner-only ACL did not apply there is no boundary to put it behind, so
       // it is not written and the launch is the one that happened yesterday.
-      final server = await startServer(
-        permissions: _RefusingDirectoryOnly(),
-      );
+      final server = await startServer(permissions: _RefusingDirectoryOnly());
 
       expect(
         server.accessFor(
@@ -269,28 +288,33 @@ void main() {
       );
     });
 
-    test('a stale config from a previous run never reaches a new session',
-        () async {
-      final directory = p.join(tmp.path, 'mcp');
-      Directory(directory).createSync(recursive: true);
-      final stale = File(p.join(directory, 'session-s1.json'))
-        ..writeAsStringSync(
-          '{"mcpServers":{"karmashala":{"type":"http",'
-          '"url":"http://127.0.0.1:1/mcp/dead-token"}}}',
+    test(
+      'a stale config from a previous run never reaches a new session',
+      () async {
+        final directory = p.join(tmp.path, 'mcp');
+        Directory(directory).createSync(recursive: true);
+        final stale = File(p.join(directory, 'session-s1.json'))
+          ..writeAsStringSync(
+            '{"mcpServers":{"karmashala":{"type":"http",'
+            '"url":"http://127.0.0.1:1/mcp/dead-token"}}}',
+          );
+
+        final server = await startServer(configDirectory: directory);
+
+        // Gone at startup, not merely overwritten later: a session that is never
+        // launched again must not leave a file naming a port this run reused.
+        expect(stale.existsSync(), isFalse);
+        final access = server.accessFor(
+          sessionId: 's1',
+          environment: windowsEnv(),
+          withConfigFile: true,
+        )!;
+        expect(
+          entryIn(access.configPath!)['url'],
+          isNot(contains('dead-token')),
         );
-
-      final server = await startServer(configDirectory: directory);
-
-      // Gone at startup, not merely overwritten later: a session that is never
-      // launched again must not leave a file naming a port this run reused.
-      expect(stale.existsSync(), isFalse);
-      final access = server.accessFor(
-        sessionId: 's1',
-        environment: windowsEnv(),
-        withConfigFile: true,
-      )!;
-      expect(entryIn(access.configPath!)['url'], isNot(contains('dead-token')));
-    });
+      },
+    );
   });
 
   test('the launcher reads the wiring off a provider it does not own', () async {
