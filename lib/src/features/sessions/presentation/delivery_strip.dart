@@ -6,6 +6,10 @@ import '../../../app/theme/design_tokens.dart';
 import '../../git/application/remote_links.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../github/domain/pull_request_snapshot.dart';
+import '../../verification/application/review_session_service.dart';
+import '../../verification/application/verification_providers.dart';
+import '../../verification/presentation/review_action.dart';
+import '../../verification/presentation/review_invitation.dart';
 import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/delivery_providers.dart';
 import '../application/session_actions.dart';
@@ -208,6 +212,25 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     void continueWith() =>
         ContinueWithDialog.show(context, widget.sessionId);
 
+    // In the row of controls, not in the line of facts: "facts above, controls
+    // below" is this strip's redesign, and a pressable thing among the stage
+    // and the branch would undo it. Directly under the verdict is as beside it
+    // as that separation allows.
+    final invitation = ReviewInvitation.forVerdict(
+      ref.watch(sessionVerdictProvider(widget.sessionId)).state,
+    );
+    // Hidden rather than disabled when nobody can be asked, matching the
+    // follow-up row: this strip is on *every* session, so a dead control here
+    // reads as a broken feature rather than as a machine with one agent on it.
+    // The refusal keeps its home on [ReviewAction]'s own button, where the
+    // control is the surface's subject. Short-circuited because the answer
+    // costs three row lookups a rebuild.
+    final review =
+        invitation != null &&
+            ref.watch(sessionReviewOfferProvider(widget.sessionId)).isPossible
+        ? invitation
+        : null;
+
     if (widget.hostedOnTerminal) {
       // The action row, and only the action row. Every button in it is the
       // bar's own pill at the bar's own weight, so the row reads as a row of
@@ -225,6 +248,16 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
               onPressed: _busy || !offered.isEnabled
                   ? null
                   : () => _press(offered.action, delivery),
+            ),
+          if (review != null)
+            ReviewAction(
+              sessionId: widget.sessionId,
+              builder: (context, offer) => _BarAction(
+                icon: AppIcons.listMagnifyingGlass,
+                label: review.label,
+                tooltip: offer.tooltip,
+                onPressed: _busy ? null : offer.onPressed,
+              ),
             ),
           if (canContinue)
             _BarAction(
@@ -244,6 +277,16 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
           onPressed: _busy || !offered.isEnabled
               ? null
               : () => _press(offered.action, delivery),
+        ),
+      if (review != null)
+        ReviewAction(
+          sessionId: widget.sessionId,
+          builder: (context, offer) => ActionChip(
+            avatar: const Icon(AppIcons.listMagnifyingGlass, size: 14),
+            label: Text(review.label),
+            tooltip: offer.tooltip,
+            onPressed: _busy ? null : offer.onPressed,
+          ),
         ),
       if (canContinue)
         ActionChip(

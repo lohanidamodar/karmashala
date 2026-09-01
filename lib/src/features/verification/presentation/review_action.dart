@@ -23,11 +23,17 @@ import '../application/review_session_service.dart';
 /// happens. A review is capped by `carryReviewPermission` and can only ever be
 /// less permissive than the session it checks, so there is nothing a
 /// confirmation would protect against. The cap's own sentence is the tooltip.
+///
+/// What it does guarantee is narrower and worth stating: **an agent starts on a
+/// press and on nothing else.** Drawing this control, or watching the offer
+/// behind it, starts nothing; and where there is a real choice of reviewer the
+/// press opens a menu, so a stray click cannot pick one for you.
 class ReviewAction extends ConsumerStatefulWidget {
   const ReviewAction({
     required this.sessionId,
     this.claim,
     this.compact = false,
+    this.builder,
     super.key,
   });
 
@@ -42,8 +48,45 @@ class ReviewAction extends ConsumerStatefulWidget {
   /// Draw for a narrow column: shorter labels, same behaviour.
   final bool compact;
 
+  /// Draw this control in the host's own shape instead of the default button.
+  ///
+  /// The decision stays here — who can be asked, what the refusal says, one
+  /// press or a menu — and only the rectangle moves. The delivery strip needs
+  /// it because that row spent a redesign making every control the same pill
+  /// (see `_BarAction`), and an `OutlinedButton` dropped into it would be the
+  /// fourth shape that redesign removed. A second copy of the *logic* is what
+  /// this widget's doc exists to prevent; a second copy of the padding is not.
+  final ReviewActionBuilder? builder;
+
   @override
   ConsumerState<ReviewAction> createState() => _ReviewActionState();
+}
+
+/// Draws the review control from [ReviewActionPresentation].
+typedef ReviewActionBuilder =
+    Widget Function(BuildContext context, ReviewActionPresentation offer);
+
+/// What the review control says and does right now.
+///
+/// Everything a host needs to draw its own shape, and nothing it could use to
+/// start a review by another route: [onPressed] is the only way in, and it is
+/// the same callback the default button carries.
+class ReviewActionPresentation {
+  const ReviewActionPresentation({
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  /// The default words, for a host with none of its own.
+  final String label;
+
+  /// Why it cannot be pressed, or what pressing it will do. Never empty — the
+  /// refusal is the whole point of the control when it is dead.
+  final String tooltip;
+
+  /// Null when nobody can be asked, or while a press is already in flight.
+  final VoidCallback? onPressed;
 }
 
 class _ReviewActionState extends ConsumerState<ReviewAction> {
@@ -144,20 +187,27 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
         if (target.canReview) target,
     ];
     final only = usable.length == 1 ? usable.single : null;
-    return Tooltip(
-      message: offer.isPossible
+    final presentation = ReviewActionPresentation(
+      label: _label(only),
+      tooltip: offer.isPossible
           ? (only == null
                 ? 'Ask another agent to read this diff and record a verdict.'
                 : _tooltipFor(only))
           // Never null when the button is dead: the reason is the whole point
           // of the control in this state.
           : offer.refusal ?? 'No other agent can be asked to check this work.',
+      onPressed: offer.isPossible && !_busy
+          ? () => _press(usable, offer.preferred)
+          : null,
+    );
+    final builder = widget.builder;
+    if (builder != null) return builder(context, presentation);
+    return Tooltip(
+      message: presentation.tooltip,
       child: OutlinedButton.icon(
-        onPressed: offer.isPossible && !_busy
-            ? () => _press(usable, offer.preferred)
-            : null,
+        onPressed: presentation.onPressed,
         icon: const Icon(AppIcons.listMagnifyingGlass, size: Chrome.iconSmall),
-        label: Text(_label(only)),
+        label: Text(presentation.label),
       ),
     );
   }
