@@ -42,7 +42,7 @@ const _rover = AgentDescriptor(
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
       PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
   ),
 );
 
@@ -56,7 +56,7 @@ const _flaky = AgentDescriptor(
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
       PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
   ),
 );
 

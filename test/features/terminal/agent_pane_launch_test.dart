@@ -585,6 +585,93 @@ void main() {
         ),
         ['--permission-mode', 'manual', 'do the thing'],
       );
+      // Codex takes it the same way, and both lists are pinned here because
+      // widening the model to carry a *flag* must not move the two CLIs that
+      // were already right.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.codex),
+          PermissionMode.ask,
+          prompt: '  do the thing  ',
+        ),
+        ['--ask-for-approval', 'on-request', 'do the thing'],
+      );
+    });
+
+    test('Antigravity takes its opening prompt behind a flag', () {
+      // Two argv entries, not one: `agy` parses `--prompt-interactive` with
+      // Go's flag package, which reads the value as the *next* argument.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+          prompt: '  do the thing  ',
+        ),
+        ['--prompt-interactive', 'do the thing'],
+      );
+      // Beside the permission and resume flags rather than instead of them.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.acceptEdits,
+          resumeSessionId: 'c1',
+          prompt: 'carry on',
+        ),
+        [
+          '--mode',
+          'accept-edits',
+          '--conversation',
+          'c1',
+          '--prompt-interactive',
+          'carry on',
+        ],
+      );
+    });
+
+    test('an Antigravity pane with no prompt gets neither flag nor value', () {
+      // The flag is worthless without a value — `agy --prompt-interactive`
+      // with nothing after it exits on `flag needs an argument: -i`.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+        ),
+        isEmpty,
+      );
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+          prompt: '   ',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a prompt with spaces and quotes survives to the CLI', () {
+      // The prompt stays **one** argv entry all the way down, and the quoting
+      // that keeps it one is `quoteWindowsCommandArgument`'s job — the same
+      // guarantee Claude's positional prompt has always had. Asserted through
+      // the real pane launch because that is where the two meet: the flag
+      // token must come out bare and the value quoted, not the pair joined.
+      const prompt = 'say "hi" to a b';
+      final launch = AgentPaneLaunch(
+        agentId: AgentIds.antigravity,
+        executable: 'agy',
+        arguments: agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+          prompt: prompt,
+        ),
+      );
+      expect(launch.commandArguments, ['--prompt-interactive', prompt]);
+
+      final pty = agentPtyLaunchFor(launch);
+      expect(pty.executable, 'cmd.exe');
+      expect(
+        pty.arguments.last,
+        r'agy --prompt-interactive "say \"hi\" to a b"',
+      );
     });
 
     test('an agent that has never been checked is launched bare', () {
@@ -592,14 +679,6 @@ void main() {
       // handed another agent's permission flag.
       expect(
         agentPaneArguments(null, PermissionMode.bypass, prompt: 'hello'),
-        isEmpty,
-      );
-      expect(
-        agentPaneArguments(
-          registry.byId(AgentIds.antigravity),
-          PermissionMode.ask,
-          prompt: 'hello',
-        ),
         isEmpty,
       );
     });

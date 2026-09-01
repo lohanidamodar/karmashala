@@ -49,7 +49,7 @@ const _forker = AgentDescriptor(
     },
     interactiveResume: AgentResume.flag('--resume'),
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
       extraArguments: ['--fork-session'],
