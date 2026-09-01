@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:chitragupta/src/app/shell/workbench.dart';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/features/explorer/application/session_context.dart';
 import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
@@ -424,19 +425,16 @@ void main() {
   });
 
   group('publication: what one pane exiting costs everything else', () {
-    // T8's remainder, **measured rather than changed**. Three consumers still
-    // watch the whole `TerminalSessionsState`, and all three are outside this
-    // branch's territory:
+    // T8's remainder, now **closed**. Three consumers used to watch the whole
+    // `TerminalSessionsState` and be told about every process that died
+    // anywhere: `app/shell/status_bar.dart` (for `detached.length`),
+    // `explorer/application/session_context.dart`
+    // (`activePaneSessionIdProvider`, which answered by walking every session
+    // row), and the workbench's tab strip (for the liveness dot on each tab).
     //
-    // * `app/shell/status_bar.dart` — to read `detached.length`;
-    // * `app/shell/workbench.dart` — to notice whether the selected session
-    //   still has a pane;
-    // * `explorer/application/session_context.dart` —
-    //   `activePaneSessionIdProvider`, which additionally answers by walking
-    //   **every session row**, so a process exiting anywhere is a full scan.
-    //
-    // What is pinned here is only what must stay true however they are
-    // narrowed; the rest is printed, so whoever narrows them has a before.
+    // The first two were narrowed with a `select`; the strip could not be,
+    // because it genuinely draws liveness — so the watch moved *into the
+    // chip*, one tab at a time. Both halves are asserted below as counts.
 
     Session sessionRow(int i) => Session(
       id: 's$i',
@@ -565,6 +563,126 @@ void main() {
           walked[n],
           0,
           reason: 'no session row is walked because a process somewhere died',
+        );
+      }
+    });
+
+    testWidgets('a pane dying rebuilds its own tab chip and no other', (
+      tester,
+    ) async {
+      // The strip's own half of T8, counted the way
+      // `explorer_rebuild_triggers_test.dart` counts the Explorer's: a rebuilt
+      // chip is a **new widget instance**, so identity is the counter. It needs
+      // no instrumentation inside the widgets and cannot be fooled by a chip
+      // that rebuilt to the same pixels.
+      //
+      // The window is deliberately wider than a hundred tabs need. The strip
+      // virtualises, and a virtualised list would report only the dozen chips
+      // it happened to have built — the count wanted here is the whole strip.
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(13000, 800);
+      addTearDown(tester.view.reset);
+
+      /// Every chip on screen, by the title that identifies its tab.
+      Map<String, TerminalTabChip> chips() => {
+        for (final chip in tester.widgetList<TerminalTabChip>(
+          find.byType(TerminalTabChip),
+        ))
+          chip.title: chip,
+      };
+
+      final rebuiltAtTheExit = <int, int>{};
+      final rebuiltElsewhere = <int, int>{};
+      final exitCount = <int, int>{};
+
+      for (final n in scale) {
+        final database = AppDatabase.memory();
+        final container = ProviderContainer(
+          overrides: fakeTerminalOverrides(database: database),
+        );
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        final tabIds = [
+          for (var i = 0; i < n; i++)
+            controller.openTab(
+              TerminalProfile.powerShell,
+              workingDirectory: r'C:\src\p' '$i',
+            ),
+        ];
+        // Opening activates, so the strip would otherwise start scrolled to
+        // the far end with the last tab in front.
+        controller.activateTab(tabIds.first);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final before = chips();
+        expect(before.length, n, reason: 'every tab draws a chip');
+
+        // Ten panes at the far end of the strip lose their process — a build
+        // finishing, an ssh session dropping, an agent ending its turn. The
+        // tab in front is never one of them.
+        final dying = n < 10 ? n : 10;
+        final tabs = container.read(terminalSessionsControllerProvider).tabs;
+        final died = <String>{};
+        for (var i = tabs.length - dying; i < tabs.length; i++) {
+          final tab = tabs[i];
+          died.add(controller.titleForTab(tab.id));
+          (controller.instanceFor(tab.layout.panes.single)!
+                      as FakeTerminalInstance)
+                  .livenessNotifier
+                  .value =
+              PaneLiveness.exited;
+          await tester.pump();
+        }
+
+        final after = chips();
+        var atTheExit = 0;
+        var elsewhere = 0;
+        for (final entry in after.entries) {
+          if (identical(entry.value, before[entry.key])) continue;
+          died.contains(entry.key) ? atTheExit++ : elsewhere++;
+        }
+        rebuiltAtTheExit[n] = atTheExit;
+        rebuiltElsewhere[n] = elsewhere;
+        exitCount[n] = dying;
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        database.close();
+      }
+
+      // ignore: avoid_print
+      print('N tabs | exits | chips rebuilt at the exit | chips rebuilt elsewhere');
+      for (final n in scale) {
+        // ignore: avoid_print
+        print(
+          '${n.toString().padLeft(6)} | ${exitCount[n]!.toString().padLeft(5)} | '
+          '${rebuiltAtTheExit[n]!.toString().padLeft(24)} | '
+          '${rebuiltElsewhere[n]}',
+        );
+      }
+
+      for (final n in scale) {
+        expect(
+          rebuiltAtTheExit[n],
+          exitCount[n],
+          reason:
+              'the dot still moves: every tab that lost a process redraws, at '
+              'every N',
+        );
+        expect(
+          rebuiltElsewhere[n],
+          0,
+          reason:
+              'and nothing else does — the strip is no longer told about a '
+              'process dying in a tab it is not drawing',
         );
       }
     });
