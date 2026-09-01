@@ -524,6 +524,16 @@ const _antigravity = AgentDescriptor(
     // "already has an active writer", printed as it exits. Antigravity's line
     // is a warning inside a session that goes on working, so listing it there
     // would report a live session as a failed resume.
+    //
+    // `missingConversation` is undeclared for the same reason, and it is the
+    // near miss worth writing down. The 1.1.22 binary does carry the strings
+    // `conversation not found` and "GetConversationDetail: conversation %s not
+    // found locally, searching fallback import dirs" — but whether either
+    // reaches the pane, and in what form, has not been observed, and the one
+    // run that would settle it (`agy --conversation=<bogus uuid>`) risks
+    // leaving a junk conversation in the user's own store if the CLI starts
+    // fresh instead of failing. A marker that never matches costs an
+    // explanation; one that matches a live session reports it as dead.
     allowsConcurrentResume: false,
     // `fork` stays unsupported, now on evidence rather than on the default:
     // `agy --help` lists every subcommand it has (agent, changelog, help,
