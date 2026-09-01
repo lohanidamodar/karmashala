@@ -9,6 +9,7 @@ import '../../../app/widgets/desktop_dialog.dart';
 import '../../../core/process/path_translator.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_label.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
@@ -80,21 +81,14 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     }
   }
 
-  /// How an environment is named in the dropdown.
+  /// How an environment is named in the dropdown — the app's one vocabulary
+  /// for that, shared with what the phone is told each checkout lives in.
   ///
-  /// Exhaustive over [EnvironmentKind] on purpose. The previous
-  /// `windowsNative ? 'Windows' : 'WSL · …'` offered an SSH host as
-  /// `WSL · build-box`, and picking it got as far as `_create()` before
-  /// `PathTranslator` refused the translation and a raw exception string
-  /// landed in the error line. SSH rows are filtered out of the list above —
-  /// a project cannot be created in one — and this arm exists so a fourth
-  /// kind is a compile error rather than another mislabelled row.
+  /// A row that carries no name worth showing falls back to its own id, which
+  /// is at least a thing the user can match against the environments list; a
+  /// dropdown cannot render nothing.
   static String _environmentLabel(ExecutionEnvironment env) =>
-      switch (env.kind) {
-        EnvironmentKind.windowsNative => 'Windows',
-        EnvironmentKind.wsl => 'WSL · ${env.wslDistribution ?? env.name}',
-        EnvironmentKind.ssh => 'SSH · ${env.name}',
-      };
+      environmentLabel(env) ?? env.id;
 
   ExecutionEnvironment? _envById(List<ExecutionEnvironment> envs, String id) {
     for (final e in envs) {
