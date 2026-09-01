@@ -20,6 +20,7 @@ import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
+import '../domain/persistence_telemetry.dart';
 import '../domain/pane_restart.dart';
 import '../domain/pane_title.dart';
 import '../domain/terminal_profile.dart';
@@ -186,6 +187,21 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// Panes whose buffer changed since their last snapshot.
   final Set<String> _dirty = {};
+
+  /// When each dirty pane *became* dirty, on [_uptime]'s monotonic scale.
+  ///
+  /// Written only on the clean→dirty transition, which `Set.add`'s return value
+  /// already reports for free: `markDirty` runs on every terminal notification
+  /// of every pane, so reading a clock there would be a per-frame,
+  /// per-pane cost for a number nobody reads more than once a second.
+  final Map<String, Duration> _dirtySince = {};
+
+  /// Monotonic, so an unsaved age cannot be distorted by the wall clock moving.
+  final Stopwatch _uptime = Stopwatch()..start();
+
+  /// What the last completed scrollback write cost and covered. Null until one
+  /// has run — reported as "not recorded" rather than as zero.
+  ScrollbackWrite? _lastWrite;
 
   /// The last encoding written for each pane.
   ///
@@ -395,6 +411,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _dirtyListeners.clear();
     _livenessListeners.clear();
     _dirty.clear();
+    _dirtySince.clear();
     _encoded.clear();
     _tabs.clear();
     _detached.clear();
@@ -1316,6 +1333,38 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// rather than its idle one.
   bool get hasDirtyScrollback => _dirty.isNotEmpty;
 
+  /// Forgets a pane's debt in both places at once.
+  void _markClean(String paneId) {
+    _dirty.remove(paneId);
+    _dirtySince.remove(paneId);
+  }
+
+  /// What persistence currently owes, and what the last write cost.
+  ///
+  /// Read by Settings → Diagnostics. Built on demand rather than published,
+  /// because a value that changed whenever a pane's buffer moved would rebuild
+  /// a settings page from the terminal's hot path.
+  ///
+  /// The one question it exists to answer is whether the autosave is keeping
+  /// up: a dirty count that does not fall, or an oldest-unsaved age that keeps
+  /// climbing, is the shape of "my work is not being written" — which is the
+  /// class of problem that was previously invisible until a workspace came
+  /// back missing output.
+  PersistenceTelemetry get persistenceTelemetry {
+    final now = _uptime.elapsed;
+    Duration? oldest;
+    for (final since in _dirtySince.values) {
+      final age = now - since;
+      if (oldest == null || age > oldest) oldest = age;
+    }
+    return PersistenceTelemetry(
+      dirtyPanes: _dirty.length,
+      livePanes: _instances.length,
+      oldestUnsaved: oldest,
+      lastWrite: _lastWrite,
+    );
+  }
+
   /// Re-encodes the panes whose buffers changed, **for at most [budget] of
   /// main-isolate time**, returning the pane ids written.
   ///
@@ -1340,18 +1389,26 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final written = <String>[];
     final spent = Stopwatch()..start();
     try {
+      final started = _uptime.elapsed;
       for (final paneId in _dirty.toList()) {
         final instance = _instances[paneId];
         if (instance == null) {
           // A pane that has gone owes nothing; drop it rather than retrying it
           // on every tick from here to shutdown.
-          _dirty.remove(paneId);
+          _markClean(paneId);
           continue;
         }
         dao.saveScrollback(paneId, _scrollbackOf(paneId, instance));
         written.add(paneId);
         if (spent.elapsed >= budget) break;
       }
+      // Recorded even for a run that hit its budget: a write that keeps being
+      // cut off is exactly what the diagnostics page is for.
+      _lastWrite = ScrollbackWrite(
+        panes: written.length,
+        took: spent.elapsed,
+        at: started,
+      );
     } catch (error, stack) {
       _log.warning('Could not autosave terminal scrollback.', error, stack);
     }
@@ -1384,7 +1441,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final held = _heldScrollbackOf(instance);
     if (held != null) {
       _encoded[paneId] = held;
-      _dirty.remove(paneId);
+      _markClean(paneId);
       return held;
     }
     if (!refresh || !_dirty.contains(paneId)) {
@@ -1396,7 +1453,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // Written, so no longer owed a write. Clearing per pane rather than in bulk
     // means a pane that was somehow not persisted keeps its flag, which is the
     // safe direction to be wrong in.
-    _dirty.remove(paneId);
+    _markClean(paneId);
     return encoded;
   }
 
@@ -1706,7 +1763,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // buffer cannot change and there is nothing to track — and reaching for
     // `terminal` here would build the very buffer the restore is avoiding.
     if (instance is! DormantTerminalInstance) {
-      void markDirty() => _dirty.add(paneId);
+      // `add` answers whether this is the transition, so the clock is read once
+      // per dirty spell rather than once per notification.
+      void markDirty() {
+        if (_dirty.add(paneId)) _dirtySince[paneId] = _uptime.elapsed;
+      }
       _dirtyListeners[paneId] = markDirty;
       instance.terminal.addListener(markDirty);
     }
