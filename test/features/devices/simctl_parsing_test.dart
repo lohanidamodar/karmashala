@@ -118,22 +118,80 @@ void main() {
   });
 
   group('parseSimctlScreenSize', () {
-    test('takes the first width/height pair', () {
-      const output = '''
-Device Set: /Users/me/Library/Developer/CoreSimulator/Devices
-  Device: iPhone 17 Pro
-    Port: com.apple.CoreSimulator.SimDisplay
-      Display: 0
-        width: 1206
-        height: 2622
-''';
-      expect(parseSimctlScreenSize(output), (width: 1206, height: 2622));
+    /// Real output from a booted iPhone 17 Pro on Xcode 26.6.
+    const enumerate = """
+Port:
+    UUID: 08246516-F8D9-42CB-A4E5-CF060FFC65D7
+    Class: Unknown
+    Port Identifier: com.apple.display.captureservice
+    Power state: On
+
+Port:
+    UUID: 847B14E3-B8EC-4BE0-9565-E8B8E956CCFD
+    Class: Display
+    Port Identifier: com.apple.framebuffer.display
+    Power state: On
+    Display class: 1
+    Default width: 720
+    Default height: 480
+    Default pixel format: 'BGRA'
+
+Port:
+    UUID: D6162B93-A4C8-4613-AB8B-AD6959364223
+    Class: Display
+    Port Identifier: com.apple.framebuffer.display
+    Power state: On
+    Display class: 0
+    Default width: 1206
+    Default height: 2622
+    Default pixel format: 'BGRA'
+    IOSurface port:
+        width              = 1206
+        height             = 2622
+        bytes per row      = 4864
+""";
+
+    test('takes the phone, not the first display in the list', () {
+      // The first width/height pair here is a 720x480 display with
+      // `Display class: 1`. Taking it — or the first `width:` line anywhere,
+      // which also matches the IOSurface sub-block — reports a 720x480 phone,
+      // and every coordinate derived from it is wrong. Caught by running this
+      // against a real booted simulator, where it returned null.
+      expect(parseSimctlScreenSize(enumerate), (width: 1206, height: 2622));
+    });
+
+    test('falls back to the largest display when none declares class 0', () {
+      const noInternal = """
+Port:
+    Class: Display
+    Display class: 2
+    Default width: 100
+    Default height: 100
+
+Port:
+    Class: Display
+    Display class: 1
+    Default width: 800
+    Default height: 600
+""";
+      expect(parseSimctlScreenSize(noInternal), (width: 800, height: 600));
     });
 
     test('null when the shape is not the one this build knows', () {
       expect(parseSimctlScreenSize(''), isNull);
-      expect(parseSimctlScreenSize('width: 0\nheight: 0'), isNull);
-      expect(parseSimctlScreenSize('width: 100'), isNull);
+      expect(parseSimctlScreenSize('Port:\n    Class: Display'), isNull);
+      expect(
+        parseSimctlScreenSize(
+          'Port:\n    Class: Display\n    Default width: 0\n'
+          '    Default height: 9',
+        ),
+        isNull,
+      );
+      expect(
+        parseSimctlScreenSize('width = 1206\nheight = 2622'),
+        isNull,
+        reason: 'the IOSurface sub-block alone is not a display',
+      );
     });
   });
 }

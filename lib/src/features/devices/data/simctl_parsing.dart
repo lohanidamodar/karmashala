@@ -59,27 +59,46 @@ List<IosSimulator> parseSimctlDevices(String json) {
   return simulators;
 }
 
-/// Pixel dimensions from `xcrun simctl io <udid> enumerate`.
+/// Pixel dimensions of the device's own screen, from
+/// `xcrun simctl io <udid> enumerate`.
 ///
-/// The output is an indented tree of display descriptors; the numbers wanted
-/// are the first `width`/`height` pair under a display, which is the internal
-/// screen. Returns null when the shape is not recognised, which reads as "ask
-/// something else" rather than as a guess.
+/// The output is a list of `Port:` blocks, and **the first width/height pair in
+/// it is not the phone**. A booted iPhone 17 Pro enumerates two displays: one
+/// at 720x480 with `Display class: 1`, and the real screen at 1206x2622 with
+/// `Display class: 0`. Taking the first pair — or the first `width:` line
+/// anywhere, which also matches the `IOSurface port:` sub-block — reports a
+/// 720x480 phone, and every coordinate derived from it is wrong.
+///
+/// So the internal display is selected by `Display class: 0`, falling back to
+/// the largest display when no block declares one, and `null` when the output
+/// is not this shape at all.
+///
+/// These are **pixels**. `idb ui describe-all` reports frames, and takes taps,
+/// in points; on a 3x device the two differ by a factor of three.
 ({int width, int height})? parseSimctlScreenSize(String output) {
-  int? width;
-  int? height;
-  for (final line in output.split('\n')) {
-    final trimmed = line.trim();
-    final match = RegExp(r'^(width|height):\s*(\d+)$').firstMatch(trimmed);
-    if (match == null) continue;
-    final value = int.tryParse(match.group(2)!);
-    if (value == null || value <= 0) continue;
-    if (match.group(1) == 'width') {
-      width ??= value;
-    } else {
-      height ??= value;
+  ({int width, int height, int displayClass})? best;
+
+  for (final block in output.split(RegExp(r'\n\s*\n'))) {
+    if (!block.contains('Class: Display')) continue;
+    final width = _intAfter(block, 'Default width');
+    final height = _intAfter(block, 'Default height');
+    if (width == null || height == null) continue;
+    if (width <= 0 || height <= 0) continue;
+    final displayClass = _intAfter(block, 'Display class') ?? -1;
+    // The internal screen, whatever else is attached.
+    if (displayClass == 0) return (width: width, height: height);
+    if (best == null || width * height > best.width * best.height) {
+      best = (width: width, height: height, displayClass: displayClass);
     }
-    if (width != null && height != null) return (width: width, height: height);
   }
-  return null;
+  if (best == null) return null;
+  return (width: best.width, height: best.height);
+}
+
+int? _intAfter(String block, String label) {
+  final match = RegExp(
+    '^\\s*${RegExp.escape(label)}:\\s*(\\d+)\\s*\$',
+    multiLine: true,
+  ).firstMatch(block);
+  return match == null ? null : int.tryParse(match.group(1)!);
 }
