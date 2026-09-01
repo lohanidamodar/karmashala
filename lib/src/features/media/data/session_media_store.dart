@@ -169,9 +169,7 @@ class SessionMediaStore {
     var linesDecoded = 0;
     var bytesExtracted = 0;
 
-    Future<void> handle(String line, int endOffset) async {
-      scanned = endOffset;
-      if (line.isEmpty || !_mightHoldMedia(line)) return;
+    Future<void> decode(String line) async {
       final Object? decoded;
       try {
         decoded = jsonDecode(line);
@@ -195,6 +193,12 @@ class SessionMediaStore {
         bytesExtracted += item.extracted;
         items.add(item.item);
       }
+    }
+
+    Future<void>? handle(String line, int endOffset) {
+      scanned = endOffset;
+      if (line.isEmpty || !_mightHoldMedia(line)) return null;
+      return decode(line);
     }
 
     try {
@@ -231,7 +235,7 @@ class SessionMediaStore {
   static Future<int> _readLines(
     File file, {
     required int from,
-    required Future<void> Function(String line, int endOffset) onLine,
+    required Future<void>? Function(String line, int endOffset) onLine,
   }) async {
     var read = 0;
     var chunkOffset = from;
@@ -251,10 +255,11 @@ class SessionMediaStore {
           line = utf8.decode(partial.takeBytes(), allowMalformed: true);
         }
         // `\r\n` transcripts exist; the reader trims nothing, so neither can we.
-        await onLine(
+        final work = onLine(
           line.endsWith('\r') ? line.substring(0, line.length - 1) : line,
           chunkOffset + i + 1,
         );
+        if (work != null) await work;
         lineStart = i + 1;
       }
       if (lineStart < chunk.length) {

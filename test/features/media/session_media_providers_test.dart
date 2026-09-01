@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -112,6 +113,46 @@ void main() {
 
     expect(await container.read(sessionMediaProvider('i1').future), isEmpty);
   });
+
+  test(
+    'an append is noticed when the modification time does not move',
+    () async {
+      final transcript = writeTranscript(dir, 'coarse-clock.jsonl', [
+        textLine(at: '2026-09-01T10:00:00.000Z', role: 'user', text: 'hello'),
+      ]);
+      final originalModified = transcript.lastModifiedSync();
+      ImportedSessionDao(db)
+          .insertIfAbsent(imported(filePath: transcript.path));
+      final container = containerFor();
+      final nextItems = Completer<List<SessionMediaItem>>();
+      var sawInitial = false;
+      final subscription = container.listen(sessionMediaProvider('i1'), (
+        _,
+        value,
+      ) {
+        final items = value.asData?.value;
+        if (items == null) return;
+        if (!sawInitial) {
+          sawInitial = true;
+        } else if (items.isNotEmpty && !nextItems.isCompleted) {
+          nextItems.complete(items);
+        }
+      });
+      addTearDown(subscription.close);
+
+      expect(await container.read(sessionMediaProvider('i1').future), isEmpty);
+      appendTranscript(transcript, [
+        pastedImageLine(at: '2026-09-01T10:01:00.000Z'),
+      ]);
+      transcript.setLastModifiedSync(originalModified);
+
+      final items = await nextItems.future.timeout(
+        kSessionMediaPollInterval + const Duration(seconds: 2),
+      );
+      expect(items, hasLength(1));
+      expect(items.single.origin, SessionMediaOrigin.pasted);
+    },
+  );
 
   test('a session nobody has heard of yields nothing', () async {
     final container = containerFor();

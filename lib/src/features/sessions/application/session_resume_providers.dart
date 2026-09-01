@@ -32,7 +32,6 @@ AgentDescriptor? sessionDescriptor(Ref ref, String agentInstallationId) {
 final sessionWhereaboutsProvider = Provider.autoDispose
     .family<SessionWhereabouts, String>((ref, sessionId) {
       ref.watch(sessionsRevisionProvider);
-      ref.watch(terminalSessionsControllerProvider);
 
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return const SessionWhereabouts();
@@ -57,13 +56,20 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
 
+      // A session card needs only its own pane. Watching the whole workspace
+      // made every visible card recompute when a tab was activated or an
+      // unrelated process exited — O(session cards) work on the switch path.
+      // The session revision above handles a row moving to another pane; this
+      // narrow family handles the only terminal fact used below.
+      final liveness = ref.watch(terminalPaneLivenessProvider(paneId));
+
       final instance = ref
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(paneId);
       if (instance == null) {
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
-      if (instance.liveness.value.isLive) {
+      if (liveness.isLive) {
         return const SessionWhereabouts(hostedLive: true);
       }
 
@@ -72,7 +78,7 @@ final sessionWhereaboutsProvider = Provider.autoDispose
       // another process held the conversation before the app restarted, which
       // is not evidence about now — and reading it would build the very buffer
       // `DormantTerminalInstance` keeps unparsed, on every Explorer tap.
-      if (instance.liveness.value == PaneLiveness.restored) {
+      if (liveness == PaneLiveness.restored) {
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
 

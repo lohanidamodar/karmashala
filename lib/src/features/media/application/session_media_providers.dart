@@ -194,24 +194,33 @@ final sessionMediaProvider = StreamProvider.autoDispose
       final file = File(path);
       SessionMediaScan? scan;
       DateTime? lastModified;
+      int? lastSize;
       var first = true;
       while (true) {
         DateTime? modified;
+        int? size;
         try {
           // `stat()` rather than the synchronous pair: this runs on the UI
           // isolate and the transcript can live on a `\\wsl.localhost\…` share,
           // where the synchronous form measures 1.19 ms against 0.07 ms locally
           // (the measurement in `sessionChatTranscriptProvider`).
           final stat = await file.stat();
-          modified = stat.type == FileSystemEntityType.notFound
-              ? null
-              : stat.modified;
+          if (stat.type != FileSystemEntityType.notFound) {
+            modified = stat.modified;
+            size = stat.size;
+          }
         } catch (_) {
           modified = null;
+          size = null;
         }
-        if (first || modified != lastModified) {
+        // Some network shares and older filesystems expose coarse modification
+        // times. An append can therefore change the transcript without moving
+        // `modified`; size is the cheap second half of the file identity and
+        // keeps new media from waiting for a later write to become visible.
+        if (first || modified != lastModified || size != lastSize) {
           first = false;
           lastModified = modified;
+          lastSize = size;
           try {
             scan = await store.refresh(path, source.cli, previous: scan);
             yield scan.newestFirst;
