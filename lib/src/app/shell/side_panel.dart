@@ -16,6 +16,7 @@ import '../../features/devices/presentation/device_pane.dart';
 import '../../features/file_explorer/presentation/file_explorer_view.dart';
 import '../../features/git/presentation/changes_view.dart';
 import '../../features/github/presentation/github_view.dart';
+import '../../features/media/presentation/session_media_panel.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/notes/presentation/notes_view.dart';
@@ -49,6 +50,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.device => AppIcons.deviceMobile,
     SidePanelSurface.verification => AppIcons.checkCircle,
     SidePanelSurface.browser => AppIcons.globe,
+    SidePanelSurface.media => AppIcons.image,
     SidePanelSurface.repository => AppIcons.bookBookmark,
     SidePanelSurface.notes => AppIcons.note,
     SidePanelSurface.logs => AppIcons.article,
@@ -299,6 +301,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.files => const FileExplorerView(),
     SidePanelSurface.device => const DevicePane(),
     SidePanelSurface.browser => const BrowserPane(),
+    SidePanelSurface.media => const SessionMediaPanel(),
     SidePanelSurface.verification => const VerificationView(),
     SidePanelSurface.repository => const RepositoryInfoView(),
     SidePanelSurface.notes => const NotesView(),
