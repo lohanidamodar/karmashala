@@ -138,12 +138,14 @@ class ScaleWorkspace {
     this.database,
     this.schedule,
     this.terminalsByPane,
+    this.instancesByPane,
   );
 
   factory ScaleWorkspace({AppDatabase? database}) {
     final db = database ?? CountingDatabase();
     final schedule = RecordedSchedule();
     final terminals = <String, CountingTerminal>{};
+    final instances = <String, FakeTerminalInstance>{};
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -171,7 +173,7 @@ class ScaleWorkspace {
               terminal.write(restoredScrollback);
             }
             terminals[id] = terminal;
-            return FakeTerminalInstance(
+            return instances[id] = FakeTerminalInstance(
               id: id,
               title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
               profileId: agentLaunch?.profileId ?? profile.id,
@@ -191,6 +193,7 @@ class ScaleWorkspace {
       db,
       schedule,
       terminals,
+      instances,
     );
   }
 
@@ -202,6 +205,23 @@ class ScaleWorkspace {
   /// Every terminal the factory has ever built, by pane id — including panes
   /// that have since been closed, which is what makes a leak visible.
   final Map<String, CountingTerminal> terminalsByPane;
+
+  /// Every pane the factory has ever built, by pane id — closed ones included,
+  /// so a pane that was never disposed is countable.
+  final Map<String, FakeTerminalInstance> instancesByPane;
+
+  /// Panes that were built and never disposed. Equal to the number of live
+  /// panes, or something is holding a terminal open.
+  int get undisposedPanes =>
+      instancesByPane.values.where((pane) => !pane.disposed).length;
+
+  /// Listeners still attached to every terminal ever built. The controller
+  /// attaches two per live pane (dirty tracking and liveness) and `_unlisten`
+  /// exists to take them off again.
+  int get liveTerminalListeners => terminalsByPane.values.fold(
+    0,
+    (sum, terminal) => sum + terminal.listenerCount,
+  );
 
   TerminalSessionsState get state =>
       container.read(terminalSessionsControllerProvider);
@@ -263,6 +283,20 @@ class ScaleWorkspace {
 
   int get storedTabRows =>
       database.query('SELECT COUNT(*) AS n FROM terminal_tabs;').first['n']!
+          as int;
+
+  /// The copy a save takes when it loses something. Bounded rather than
+  /// growing: each backup replaces the last.
+  int get backupTabRows =>
+      database
+              .query('SELECT COUNT(*) AS n FROM terminal_tabs_backup;')
+              .first['n']!
+          as int;
+
+  int get backupPaneRows =>
+      database
+              .query('SELECT COUNT(*) AS n FROM terminal_panes_backup;')
+              .first['n']!
           as int;
 
   void dispose() {
