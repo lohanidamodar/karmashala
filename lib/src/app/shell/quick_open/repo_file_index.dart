@@ -79,8 +79,7 @@ class RepoIndexStats {
 ///
 /// The file bound alone was not enough. A tree of twenty thousand empty
 /// directories trips none of it — there are no files to count — and the walk
-/// used to grind through all of them; see the numbers in
-/// `docs/loop-reports/loop-62.md`.
+/// used to grind through all of them.
 ///
 /// **Fresh on purpose, too.** The index used to be walked once per root and
 /// then trusted for the lifetime of the process, which in an ADE means files an

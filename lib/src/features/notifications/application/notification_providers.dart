@@ -116,7 +116,7 @@ final windowRaiseRequestProvider =
 /// Where a notification is actually delivered.
 ///
 /// Windows is the platform this was verified on; macOS and Linux go down the
-/// same code path but were not exercised (see `docs/loop-reports/loop-42.md`).
+/// same code path but were not exercised.
 /// Anywhere else falls back to silence. Constructing the presenter is cheap and
 /// safe: it does not touch the platform channel until the first
 /// [NotificationPresenter.show].
