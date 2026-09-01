@@ -5,7 +5,7 @@ import '../../agents/domain/agent_status.dart';
 import '../../sessions/application/decision_recorder.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/domain/session_status.dart';
 import '../domain/checkpoint.dart';
 import 'checkpoint_providers.dart';
@@ -35,9 +35,14 @@ class SessionCheckpointRecorder extends Notifier<int> {
 
   @override
   int build() {
-    // Re-read the session list whenever it changes, so a session started after
-    // this was built is watched too.
-    ref.watch(sessionsRevisionProvider);
+    // Re-read the session list when a row appears, goes away or changes
+    // status, so a session started after this was built is watched too. A full
+    // table scan plus one `ref.listen` per running row, so it must not run for
+    // a rename — which is published on a timer by the CLI store sweep.
+    ref.watchSessionKinds(const {
+      SessionChangeKind.membership,
+      SessionChangeKind.status,
+    });
 
     final sessions = ref
         .read(sessionDaoProvider)

@@ -7,7 +7,7 @@ import '../../git/domain/git_worktree.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/domain/session.dart';
 import 'checkout.dart';
 
@@ -290,7 +290,16 @@ SessionPlacement placeSessions(
 /// here keeps one source of truth rather than a second, staler copy.
 final projectSessionLocationsProvider = Provider.autoDispose
     .family<List<SessionLocation>, String>((ref, projectId) {
-      ref.watch(sessionsRevisionProvider);
+      // The tree draws each session's name and status under the directory it
+      // works in, so almost everything about a row reaches it — but not a
+      // permission mode, which nothing here shows.
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.title,
+        SessionChangeKind.status,
+        SessionChangeKind.placement,
+        SessionChangeKind.workspace,
+      });
       final repositoryDao = ref.read(repositoryDaoProvider);
       final sessionDao = ref.read(sessionDaoProvider);
       final importedDao = ref.read(importedSessionDaoProvider);

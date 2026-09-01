@@ -40,7 +40,10 @@ class SessionActions {
 
   void renameNative(String id, String title) {
     _ref.read(sessionDaoProvider).updateTitle(id, title);
-    _bump();
+    // The narrowest fact the app publishes, and the most frequent: nothing but
+    // this row's name moved. See `session_signal_cost_test.dart` for what the
+    // coarse word used to cost — 108 session reads at a hundred sessions.
+    _publish(SessionChange.renamed(id));
   }
 
   Future<void> deleteNative(String id, {bool deleteFromCli = true}) async {
@@ -78,7 +81,7 @@ class SessionActions {
     if (_ref.read(selectedSessionIdProvider) == id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
-    _bump();
+    _publish(SessionChange.removed(id));
   }
 
   Future<void> renameImported(ImportedSession session, String title) async {
@@ -90,7 +93,7 @@ class SessionActions {
     } catch (_) {
       // CLI store unavailable — the workspace title is still updated.
     }
-    _bump();
+    _publish(SessionChange.renamed(session.id));
   }
 
   Future<void> deleteImported(
@@ -104,7 +107,7 @@ class SessionActions {
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
-    _bump();
+    _publish(SessionChange.removed(session.id));
   }
 
   /// Resumes an imported CLI session in place: it becomes a live native session
@@ -187,7 +190,7 @@ class SessionActions {
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
-    _bump();
+    _publish(SessionChange.removed(session.id));
   }
 
   /// Resumes [session] and immediately sends [text] to it — the flow behind the
@@ -726,7 +729,8 @@ class SessionActions {
       _ref
           .read(sessionDaoProvider)
           .updateExternalSessionId(session.id, recovered);
-      _bump();
+      // Which conversation this row is on: a placement, not a name.
+      _publish(SessionChange.moved(session.id));
       return recovered;
     } catch (_) {
       return null;
@@ -769,7 +773,12 @@ class SessionActions {
     storeHome: session.storeHome,
   );
 
+  /// The coarse word, for the paths that genuinely move several things at
+  /// once — a resume launches a process, writes a status and claims a pane.
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
+
+  void _publish(SessionChange change) =>
+      _ref.read(sessionsRevisionProvider.notifier).changed(change);
 }
 
 final sessionActionsProvider = Provider<SessionActions>(

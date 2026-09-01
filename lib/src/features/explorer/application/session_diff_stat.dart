@@ -4,7 +4,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/domain/session_delivery.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
@@ -234,7 +234,16 @@ class ProjectSummary {
 /// workspace mutation, while attention can change on every status cycle. The
 /// latter must not turn into a database sweep.
 final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
-  ref.watch(sessionsRevisionProvider);
+  // Three unfiltered table scans, so this is the watcher it matters most to
+  // narrow. A row's *name* is not its placement, and neither is its status:
+  // only rows appearing, going away, or moving to another repository can
+  // change this map. `session_signal_cost_test.dart` pins it at zero reads for
+  // a rename.
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.placement,
+    SessionChangeKind.workspace,
+  });
   final repositories = {
     for (final repository in ref.read(repositoryDaoProvider).getAll())
       repository.id: repository.projectId,
@@ -286,7 +295,14 @@ final projectAttentionCountsProvider = Provider<Map<String, int>>((ref) {
 /// asked for is not a number worth 345 subprocesses.
 final projectSummaryProvider = Provider.autoDispose
     .family<ProjectSummary, String>((ref, projectId) {
-      ref.watch(sessionsRevisionProvider);
+      // A header counts sessions and running sessions; it never names one. So
+      // a rename leaves every project header asleep — the same rule the
+      // attention count above already holds.
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.status,
+        SessionChangeKind.workspace,
+      });
       final repositories = ref
           .read(repositoryDaoProvider)
           .getByProject(projectId);

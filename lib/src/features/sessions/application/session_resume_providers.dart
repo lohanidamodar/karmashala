@@ -11,7 +11,7 @@ import '../domain/session_launch.dart';
 import '../domain/session_resume.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';
-import 'session_ui_providers.dart';
+import 'session_signals.dart';
 
 /// The agent descriptor behind session [sessionId], or null.
 AgentDescriptor? sessionDescriptor(Ref ref, String agentInstallationId) {
@@ -31,7 +31,12 @@ AgentDescriptor? sessionDescriptor(Ref ref, String agentInstallationId) {
 /// per session per tick to learn nothing new.
 final sessionWhereaboutsProvider = Provider.autoDispose
     .family<SessionWhereabouts, String>((ref, sessionId) {
-      ref.watch(sessionsRevisionProvider);
+      // Only this session's own row. The Explorer builds one of these per card,
+      // so watching the whole revision meant a `getById` per visible row on
+      // every rename — 100 reads at a hundred sessions, measured in
+      // `session_signal_cost_test.dart`. This is the same narrowing
+      // `terminalPaneLivenessProvider` below already gave the terminal half.
+      ref.watchSession(sessionId);
 
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return const SessionWhereabouts();

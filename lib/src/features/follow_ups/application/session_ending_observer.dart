@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/domain/session_status.dart';
 import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';
@@ -48,9 +48,13 @@ class SessionEndingObserver extends Notifier<int> {
 
   @override
   int build() {
-    // Re-read whenever the workspace changes, so a session started after this
-    // was built is watched too.
-    ref.watch(sessionsRevisionProvider);
+    // Re-read when a session appears, goes away or ends — a full table scan
+    // and one `ref.listen` per running row, so it must not run for anything
+    // else. A rename in particular says nothing this sweep can act on.
+    ref.watchSessionKinds(const {
+      SessionChangeKind.membership,
+      SessionChangeKind.status,
+    });
 
     final sessions = ref.read(sessionDaoProvider).getAll();
     final service = ref.read(followUpServiceProvider);

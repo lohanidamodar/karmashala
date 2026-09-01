@@ -46,7 +46,9 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    ref.watch(sessionsRevisionProvider);
+    // One imported record, drawn by id. Another session moving says nothing
+    // about it.
+    ref.watchSession(widget.sessionId);
     final session = ref
         .read(importedSessionDaoProvider)
         .getById(widget.sessionId);

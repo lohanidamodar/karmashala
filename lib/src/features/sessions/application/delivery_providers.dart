@@ -16,7 +16,7 @@ import '../domain/delivery_action.dart';
 import '../domain/session_delivery.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
-import 'session_ui_providers.dart';
+import 'session_signals.dart';
 
 /// How often the pull request and its checks are re-read while the app is in
 /// front, or [Duration.zero] for never.
@@ -115,7 +115,16 @@ final deliveryPollProvider = NotifierProvider<DeliveryPollController, int>(
 /// say, not an error banner in a tree.
 final checkoutDeliveryProvider = FutureProvider.autoDispose
     .family<SessionDelivery, Checkout>((ref, checkout) async {
-      ref.watch(sessionsRevisionProvider);
+      // Three to five git subprocesses, one instance per visible checkout. The
+      // working tree can move when an agent starts or stops and when the
+      // workspace itself changes; it cannot move because a row was renamed or
+      // a permission mode was set, and paying five processes per checkout for
+      // either was the bill `checkout_scale_cost_test.dart` was written for.
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.status,
+        SessionChangeKind.workspace,
+      });
       final changes = ref.read(changesServiceProvider);
       final dir = checkout.path;
 
@@ -225,7 +234,9 @@ final checkoutPullRequestProvider = FutureProvider.autoDispose
 /// one session at a time, can.
 final sessionLocalDeliveryProvider = FutureProvider.autoDispose
     .family<SessionDelivery, String>((ref, sessionId) async {
-      ref.watch(sessionsRevisionProvider);
+      // One of these per drawn row. Only this session's own row decides what it
+      // says; the git behind it is [checkoutDeliveryProvider]'s to invalidate.
+      ref.watchSession(sessionId);
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return SessionDelivery.unknown;
       final repository = ref

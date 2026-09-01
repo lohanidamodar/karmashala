@@ -28,7 +28,9 @@ class SessionRepositoriesBar extends ConsumerWidget {
         .toList();
 
     final service = ref.read(sessionRepositoriesServiceProvider);
-    void bump() => ref.read(sessionsRevisionProvider.notifier).bump();
+    // Attaching or detaching a checkout moves where this session works, and
+    // nothing else about it.
+    void bump() => ref.publishSessionChange(SessionChange.moved(sessionId));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),

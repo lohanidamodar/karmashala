@@ -113,12 +113,14 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   Future<void> _stop() async {
     await ref.read(sessionEngineProvider).stop(widget.sessionId);
-    ref.read(sessionsRevisionProvider.notifier).bump();
+    ref.publishSessionChange(SessionChange.statusChanged(widget.sessionId));
   }
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(sessionsRevisionProvider);
+    // Only this session's row. The transcript of one conversation says nothing
+    // about any other, and used to redraw whenever any of them moved.
+    ref.watchSession(widget.sessionId);
     final notesEnabled = ref.watch(notesEnabledProvider);
     // A note sent back while this session was not on screen is waiting rather
     // than lost; pick it up as soon as the box exists to hold it.
