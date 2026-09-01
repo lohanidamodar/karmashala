@@ -283,9 +283,12 @@ class SessionMediaStore {
     caseSensitive: false,
   );
 
+  /// When the line says it happened, normalised to UTC — the panel measures
+  /// ages against `Clock.nowUtc`, and a timestamp written without a zone would
+  /// otherwise be read as local and come out hours wrong.
   static DateTime? _timestampOf(Map<Object?, Object?> json) {
     final value = json['timestamp'];
-    return value is String ? DateTime.tryParse(value) : null;
+    return value is String ? DateTime.tryParse(value)?.toUtc() : null;
   }
 
   // ---------------------------------------------------------------------------

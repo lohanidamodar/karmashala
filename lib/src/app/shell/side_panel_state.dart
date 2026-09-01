@@ -17,6 +17,13 @@ enum SidePanelSurface {
   browser('Browser'),
   verification('Verification'),
 
+  /// Every picture the session on screen has produced or been shown, newest
+  /// first. The owner's ask — *"where can i see this image preview in the
+  /// terminal? i can't see it"* — because a picture pasted into a terminal is
+  /// recorded as bytes with no path, and there was nowhere in the app that
+  /// showed it.
+  media('Media'),
+
   /// Named for what it holds. "Info" said nothing, so nobody opened it — and
   /// the branch and worktree list nobody could find lives in here.
   repository('Repository', scopedToRepository: true),
