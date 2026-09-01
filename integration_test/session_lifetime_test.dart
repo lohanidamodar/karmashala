@@ -184,8 +184,10 @@ void main() {
         .layout
         .panes
         .single;
-    final right = controller.splitPane(
-      SplitAxis.horizontal,
+    // Splitting leaves the new region empty, so the second shell is asked for
+    // explicitly.
+    final right = controller.openInSlot(
+      controller.splitPane(SplitAxis.horizontal)!,
       TerminalProfile.commandPrompt,
     )!;
 

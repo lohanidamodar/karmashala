@@ -11,6 +11,7 @@ import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/explorer/application/explorer_actions.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
 import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
@@ -385,6 +386,84 @@ void main() {
     // own list leaves out because the session already stands for it.
     expect(find.text('2 tabs'), findsOneWidget);
     expect(find.textContaining('Fix login redirect'), findsOneWidget);
+  });
+
+  testWidgets('the palette is the keyboard\'s way into and out of a split', (
+    tester,
+  ) async {
+    // Splitting leaves an empty region and dragging a tab into it is a mouse
+    // gesture; these two commands are the same verbs without one. A feature
+    // reachable only by dragging is one some people cannot reach at all.
+    late ProviderContainer scope;
+    await open(tester, before: (container) {
+      scope = container;
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\dev-server',
+      );
+      terminals
+        ..activateTab(
+          container.read(terminalSessionsControllerProvider).tabs.first.id,
+        )
+        ..splitPane(SplitAxis.horizontal);
+    });
+
+    await type(tester, 'move a tab into');
+    await tester.tap(find.text('Move a tab into the empty split…'));
+    await tester.pumpAndSettle();
+
+    // One row, because the tab holding the region cannot be moved into it.
+    expect(find.byType(TabPicker), findsOneWidget);
+    expect(find.text('1 tab'), findsOneWidget);
+    await press(tester, LogicalKeyboardKey.enter);
+
+    final state = scope.read(terminalSessionsControllerProvider);
+    expect(state.tabs, hasLength(1), reason: 'the tab moved into the split');
+    expect(state.activeTab!.layout.panes, hasLength(2));
+  });
+
+  testWidgets('and it offers the way back out of one', (tester) async {
+    late ProviderContainer scope;
+    await open(tester, before: (container) {
+      scope = container;
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.splitPaneWith(
+        SplitAxis.horizontal,
+        TerminalProfile.powerShell,
+      );
+    });
+
+    await type(tester, 'move this pane');
+    await tester.tap(find.text('Move this pane to a new tab'));
+    await tester.pumpAndSettle();
+
+    final state = scope.read(terminalSessionsControllerProvider);
+    expect(state.tabs, hasLength(2), reason: 'the pane took a tab of its own');
+    for (final tab in state.tabs) {
+      expect(tab.layout.panes, hasLength(1));
+    }
+  });
+
+  testWidgets('neither is listed while there is nothing to move', (
+    tester,
+  ) async {
+    await open(tester, before: (container) {
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+    });
+
+    await type(tester, 'move');
+
+    expect(find.text('Move a tab into the empty split…'), findsNothing);
+    expect(find.text('Move this pane to a new tab'), findsNothing);
   });
 
   testWidgets('opening it never starts a network or git call', (tester) async {

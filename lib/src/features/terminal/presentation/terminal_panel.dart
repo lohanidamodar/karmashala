@@ -26,7 +26,9 @@ import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../app/shell/tab_picker.dart';
 import 'command_history_sheet.dart';
+import 'empty_pane_region.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
 import 'terminal_pane_view.dart';
@@ -74,9 +76,18 @@ class TerminalActions {
     _sessions.openTab(profile, workingDirectory: workingDirFor(profile));
   }
 
-  void split(SplitAxis axis, [TerminalProfile? profile]) {
+  /// Divides the focused pane, leaving the new region empty for the user to
+  /// fill — see [TerminalSessionsController.splitPane].
+  void split(SplitAxis axis) => _sessions.splitPane(axis);
+
+  /// Starts a terminal in the empty region [slotPaneId].
+  void openInSlot(String slotPaneId, [TerminalProfile? profile]) {
     final chosen = profile ?? defaultProfile();
-    _sessions.splitPane(axis, chosen, workingDirectory: workingDirFor(chosen));
+    _sessions.openInSlot(
+      slotPaneId,
+      chosen,
+      workingDirectory: workingDirFor(chosen),
+    );
   }
 
   void closeFocusedPane() {
@@ -87,6 +98,9 @@ class TerminalActions {
   void openSearch() {
     final tab = ref.read(terminalSessionsControllerProvider).activeTab;
     if (tab == null) return;
+    // An empty region has no scrollback to search, and a search bar bound to
+    // one would answer every query with nothing.
+    if (_sessions.instanceFor(tab.focusedPaneId) == null) return;
     ref.read(terminalSearchControllerProvider.notifier).open(tab.focusedPaneId);
   }
 
@@ -406,7 +420,23 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   }) {
     final theme = Theme.of(context);
     final instance = _sessions.instanceFor(paneId);
-    if (instance == null) return const SizedBox.shrink();
+    // A pane a layout holds and the controller has no instance for is an empty
+    // region of a split — the invariant `isEmptySlot` states. It is the only
+    // way this can be null, so it is the empty state rather than nothing.
+    if (instance == null) {
+      return EmptyPaneRegion(
+        paneId: paneId,
+        focused: focused,
+        onNewTerminal: () => _actions.openInSlot(paneId),
+        onClose: () => _sessions.closePane(paneId),
+        onMoveTabHere: _canMoveATabHere(paneId)
+            ? () => TabPicker.show(
+                context,
+                (ref) => tabsMovableInto(ref, paneId),
+              )
+            : null,
+      );
+    }
     final fontSize = ref.watch(
       settingsControllerProvider.select((s) => s.terminalFontSize),
     );
@@ -468,15 +498,13 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     );
   }
 
-  /// Whether [paneId] shares its tab with another pane.
-  bool _isSplit(String paneId) {
-    for (final tab in ref.read(terminalSessionsControllerProvider).tabs) {
-      if (tab.layout.panes.contains(paneId)) {
-        return tab.layout.panes.length > 1;
-      }
-    }
-    return false;
+  /// Whether any tab could be moved into the empty region [paneId] — false
+  /// while it is the only tab there is, when the offer would lead nowhere.
+  bool _canMoveATabHere(String paneId) {
+    final tabs = ref.read(terminalSessionsControllerProvider).tabs;
+    return tabs.any((tab) => _sessions.canMoveTabIntoSlot(tab.id, paneId));
   }
+
 
   Future<void> _terminalMenu(
     BuildContext context,
@@ -507,8 +535,15 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         // Only while there is a split to collapse, and only then: with one
         // pane the tab strip's own close button is the way, and two words for
         // one act in two places is how a menu stops being read.
-        if (_isSplit(paneId))
+        if (_sessions.isPaneInSplit(paneId)) ...[
+          // The way back out of a split, beside the way to close one. The
+          // region this pane leaves goes with it — see [movePaneToNewTab].
+          const PopupMenuItem(
+            value: 'untangle',
+            child: Text('Move pane to a new tab'),
+          ),
           const PopupMenuItem(value: 'close', child: Text('Close pane')),
+        ],
         // Closing the tab only detaches; this is how a session actually ends.
         const PopupMenuItem(value: 'end', child: Text('End session')),
       ],
@@ -526,6 +561,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         await pasteIntoTerminal(session.terminal, controller: session.controller);
       case 'find':
         _actions.openSearch();
+      case 'untangle':
+        _sessions.movePaneToNewTab(paneId);
       case 'close':
         _sessions.closePane(paneId);
       case 'end':

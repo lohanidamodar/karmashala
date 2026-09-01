@@ -112,6 +112,27 @@ class PaneLayout {
     return normalized == null ? this : PaneLayout(normalized);
   }
 
+  /// Puts [node] where the leaf [leafId] is, keeping its position and its share
+  /// of the split.
+  ///
+  /// What filling an *empty region* of a split is made of. Splitting no longer
+  /// starts anything (see `TerminalSessionsController.splitPane`), so the new
+  /// region is a leaf with nothing behind it until something moves in — a new
+  /// terminal, one pane, or the whole pane tree of a tab being dragged in.
+  ///
+  /// Normalization then flattens a same-axis sub-tree into the parent, so
+  /// moving a side-by-side tab into a column gives three rows rather than a row
+  /// nested inside a column — the same rule that turns a second "split right"
+  /// into a third equal column.
+  ///
+  /// The caller owns uniqueness: [node] must not contain a pane this layout
+  /// already holds, or the same pane would appear twice.
+  PaneLayout replaceLeaf(String leafId, PaneNode node) {
+    if (!contains(leafId)) return this;
+    final normalized = _normalize(_replaceLeafIn(root, leafId, node));
+    return normalized == null ? this : PaneLayout(normalized);
+  }
+
   /// Removes [paneId], collapsing every split it leaves pointless.
   ///
   /// Returns `null` when it was the last pane.
@@ -241,6 +262,23 @@ PaneNode _splitIn(
         children: [
           for (final child in node.children)
             _splitIn(child, paneId, axis, newPaneId, splitId),
+        ],
+        weights: List.of(node.weights),
+      );
+  }
+}
+
+PaneNode _replaceLeafIn(PaneNode node, String leafId, PaneNode replacement) {
+  switch (node) {
+    case PaneLeaf():
+      return node.id == leafId ? replacement : node;
+    case PaneSplit():
+      return PaneSplit(
+        node.id,
+        axis: node.axis,
+        children: [
+          for (final child in node.children)
+            _replaceLeafIn(child, leafId, replacement),
         ],
         weights: List.of(node.weights),
       );

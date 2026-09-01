@@ -477,27 +477,181 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _focusActivePane();
   }
 
-  /// Splits the active tab's focused pane along [axis], running [profile] in the
-  /// new pane and focusing it. Returns the new pane id, or `null` if no tab is
-  /// open.
-  String? splitPane(
-    SplitAxis axis,
+  /// Divides the active tab's focused pane along [axis], leaving the new region
+  /// **empty**, and focuses it. Returns the new region's pane id, or `null`
+  /// when there is no tab, or the focused pane is itself an empty region.
+  ///
+  /// **A split starts nothing.** It used to launch a shell into the new half,
+  /// which made "I want to see two things at once" cost a process nobody asked
+  /// for and, worse, read as though the session being split had been forked.
+  /// The report: *"when splitting the middle workspace, don't automatically
+  /// start a terminal ... just create empty split where i can drag and move
+  /// existing tabs or create new tabs"*. So a split divides space, the pane it
+  /// divided carries on exactly as it was, and the user says what goes in the
+  /// room — [openInSlot] for a new terminal, [moveTabIntoSlot] for one that
+  /// already exists.
+  ///
+  /// The empty region is an ordinary leaf in the layout with no instance behind
+  /// it; see [isEmptySlot] for the invariant that makes that legible.
+  String? splitPane(SplitAxis axis) {
+    final tab = _activeTab;
+    if (tab == null) return null;
+    // Nothing to divide: an empty region cut in two is two empty regions, and
+    // a window can grow those without limit.
+    if (_isEmptyRegion(tab.focusedPaneId)) return null;
+
+    final slotId = _newId();
+    _replaceTab(
+      tab.copyWith(
+        layout: tab.layout.split(tab.focusedPaneId, axis, slotId, _newId()),
+        focusedPaneId: slotId,
+      ),
+    );
+    _focusActivePane();
+    persistWorkspace();
+    return slotId;
+  }
+
+  /// Whether [paneId] is a region of a split with nothing in it yet.
+  ///
+  /// **The invariant, stated once:** a pane id that a layout holds and
+  /// [_instances] does not is an empty region. Every other pane in a layout has
+  /// an instance, because creating one and adopting it is a single statement —
+  /// so "in a tab, no instance" cannot mean anything else, and no parallel set
+  /// of slot ids has to be kept in step with the layout.
+  bool isEmptySlot(String paneId) =>
+      _isEmptyRegion(paneId) && _tabContaining(paneId) != null;
+
+  /// [isEmptySlot] without the tab lookup, for callers that already hold the
+  /// tab.
+  bool _isEmptyRegion(String paneId) => !_instances.containsKey(paneId);
+
+  /// The first empty region of the active tab, if it has one.
+  ///
+  /// What the command palette offers to move a tab into, so the drag has an
+  /// equivalent that never needs a mouse.
+  String? emptySlotInActiveTab() {
+    final tab = _activeTab;
+    if (tab == null) return null;
+    for (final paneId in tab.layout.panes) {
+      if (_isEmptyRegion(paneId)) return paneId;
+    }
+    return null;
+  }
+
+  /// The focused pane, when it is one that could be pulled out of its split
+  /// into a tab of its own — what the command palette offers as the way back.
+  String? paneMovableToNewTab() {
+    final tab = _activeTab;
+    if (tab == null || _occupiedPanes(tab) < 2) return null;
+    return _isEmptyRegion(tab.focusedPaneId) ? null : tab.focusedPaneId;
+  }
+
+  /// Starts [profile] in the empty region [slotPaneId] and focuses it. Returns
+  /// the new pane's id, or `null` when that is not an empty region.
+  ///
+  /// The region's own id is retired rather than reused: an empty region is not
+  /// the terminal that later occupies it, and swapping the leaf is what makes
+  /// filling one a *layout* change the pane stack can see.
+  String? openInSlot(
+    String slotPaneId,
     TerminalProfile profile, {
     String? workingDirectory,
   }) {
-    final tab = _activeTab;
-    if (tab == null) return null;
+    final tab = _tabContaining(slotPaneId);
+    if (tab == null || !_isEmptyRegion(slotPaneId)) return null;
 
     final paneId = _createPane(profile, workingDirectory: workingDirectory);
     _replaceTab(
       tab.copyWith(
-        layout: tab.layout.split(tab.focusedPaneId, axis, paneId, _newId()),
+        layout: tab.layout.replaceLeaf(slotPaneId, PaneLeaf(paneId)),
         focusedPaneId: paneId,
       ),
     );
     _focusActivePane();
     persistWorkspace();
     return paneId;
+  }
+
+  /// Whether tab [tabId] could be moved into the empty region [slotPaneId].
+  ///
+  /// Asked by the drop target before it lights up, so a drag that cannot land
+  /// says so instead of silently doing nothing — a tab cannot be dropped into a
+  /// region of itself, and only an empty region takes one at all.
+  bool canMoveTabIntoSlot(String tabId, String slotPaneId) {
+    final target = _tabContaining(slotPaneId);
+    return target != null &&
+        target.id != tabId &&
+        _tabById(tabId) != null &&
+        _isEmptyRegion(slotPaneId);
+  }
+
+  /// Moves everything in tab [tabId] into the empty region [slotPaneId], taking
+  /// that tab out of the strip. Returns whether it moved.
+  ///
+  /// This is the drop half of "drag a tab into a split", and deliberately *not*
+  /// a close followed by an open: nothing is detached, disposed or relaunched,
+  /// so the session the user dragged is the same object, mid-command and all,
+  /// on the other side of the move. A tab that is itself split moves in whole —
+  /// [PaneLayout.replaceLeaf] takes the sub-tree, and normalization flattens it
+  /// into the parent when the axes agree.
+  bool moveTabIntoSlot(String tabId, String slotPaneId) {
+    if (!canMoveTabIntoSlot(tabId, slotPaneId)) return false;
+    final target = _tabContaining(slotPaneId)!;
+    final source = _tabById(tabId)!;
+
+    _tabs.removeWhere((tab) => tab.id == source.id);
+    _tabsMutated();
+    final index = _tabIndex[target.id];
+    if (index == null) return false;
+    _tabs[index] = target.copyWith(
+      layout: target.layout.replaceLeaf(slotPaneId, source.layout.root),
+      // The pane the moved tab was showing keeps the keyboard: it is the thing
+      // the user was just looking at, and it has only changed address.
+      focusedPaneId: source.focusedPaneId,
+    );
+    _tabsMutated();
+    _activeTabId = target.id;
+    _publish();
+    persistWorkspace();
+    _focusActivePane();
+    return true;
+  }
+
+  /// Pulls [paneId] out of the split it is in and gives it a tab of its own —
+  /// the way back out, and the reverse of [moveTabIntoSlot]. Returns the new
+  /// tab's id, or `null` when the pane is not in a split.
+  ///
+  /// The region it vacates goes with it and the split collapses, which is what
+  /// VS Code does to an emptied group and what [shouldCollapseOnExit] already
+  /// says about a split whose content has gone: a split is a working surface,
+  /// and one side of it holding nothing is not a surface anyone asked for.
+  String? movePaneToNewTab(String paneId) {
+    final tab = _tabContaining(paneId);
+    if (tab == null || tab.layout.panes.length < 2) return null;
+    if (_isEmptyRegion(paneId)) return null;
+
+    // Non-null: the tab had at least two panes, so one is left.
+    final layout = tab.layout.close(paneId)!;
+    if (layout.panes.every(_isEmptyRegion)) {
+      // A tab holding nothing but empty regions is not a tab — there is
+      // nothing in it and nothing to come back to. Removed directly rather
+      // than through [closeTab]: there is no session in it to detach.
+      _tabs.removeWhere((t) => t.id == tab.id);
+    } else {
+      _tabs[_tabIndex[tab.id]!] = tab.copyWith(
+        layout: layout,
+        focusedPaneId: layout.contains(tab.focusedPaneId)
+            ? tab.focusedPaneId
+            : layout.panes.first,
+      );
+    }
+    _tabsMutated();
+    final tabId = _newTabFor(paneId);
+    _publish();
+    persistWorkspace();
+    _focusActivePane();
+    return tabId;
   }
 
   /// Closes [paneId], collapsing its split. Closes the tab if it was the last
@@ -511,7 +665,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _userClosedSinceRestore = true;
 
     final layout = tab.layout.close(paneId);
-    if (layout == null) {
+    // Nothing left, or nothing left but empty regions — the same answer either
+    // way, and for the same reason: what stays behind has to be something the
+    // user can come back to. See [movePaneToNewTab], the other way a tab can be
+    // emptied down to its regions.
+    if (layout == null || layout.panes.every(_isEmptyRegion)) {
       closeTab(tab.id, detach: detach);
       return;
     }
@@ -570,10 +728,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   String titleForTab(String tabId) {
     final tab = _tabById(tabId);
     if (tab == null) return 'Terminal';
-    final title = _titles.putIfAbsent(
-      tab.focusedPaneId,
-      () => _titleForPane(tab.focusedPaneId),
-    );
+    // An empty region has no name of its own, so a tab whose focus is sitting
+    // in one keeps the name of whatever is actually running in it rather than
+    // renaming itself "Terminal" the moment the user splits.
+    final named = _isEmptyRegion(tab.focusedPaneId)
+        ? tab.layout.panes.firstWhere(
+            (paneId) => !_isEmptyRegion(paneId),
+            orElse: () => tab.focusedPaneId,
+          )
+        : tab.focusedPaneId;
+    final title = _titles.putIfAbsent(named, () => _titleForPane(named));
     final count = tab.layout.panes.length;
     return count > 1 ? '$title ($count)' : title;
   }
@@ -981,6 +1145,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         _ => null,
       };
 
+  /// A tab as a stored row.
+  ///
+  /// An **empty region** has no instance, so it stores no pane — and restore's
+  /// `withoutMissing` drops the leaf that named it. That is deliberate: a
+  /// region is room the user cleared for something, and a reboot has already
+  /// taken away everything that could have gone in it. The layout comes back
+  /// holding what actually exists.
   StoredTerminalTab _storedTab(TerminalTab tab) {
     return StoredTerminalTab(
       id: tab.id,
@@ -1263,10 +1434,31 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final tab = _tabContaining(paneId);
     if (tab == null) return false;
     return shouldCollapseOnExit(
-      isSplit: tab.layout.panes.length > 1,
+      // Regions with something in them, not regions. The rule's "last pane in
+      // a tab stays" exception is about output somebody may still be reading,
+      // and an empty region is not another pane to read it in — counting one
+      // would take the tab, and the scrollback with it, the moment a shell
+      // beside a cleared region exited.
+      isSplit: _occupiedPanes(tab) > 1,
       isAgentSession: instance.agentLaunch != null,
       exitCode: instance.exitCode,
     );
+  }
+
+  /// How many of [tab]'s regions actually hold a terminal.
+  int _occupiedPanes(TerminalTab tab) {
+    var count = 0;
+    for (final paneId in tab.layout.panes) {
+      if (!_isEmptyRegion(paneId)) count++;
+    }
+    return count;
+  }
+
+  /// Whether [paneId] shares its tab with another pane that has something in
+  /// it — what "in a split" means to the menus that offer to close or move one.
+  bool isPaneInSplit(String paneId) {
+    final tab = _tabContaining(paneId);
+    return tab != null && _occupiedPanes(tab) > 1;
   }
 
   /// Detaches [paneId] if a process is still running behind it, and releases it

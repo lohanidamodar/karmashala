@@ -80,8 +80,10 @@ void main() {
     controller.openTab(TerminalProfile.powerShell);
     final tab = container.read(terminalSessionsControllerProvider).tabs.single;
     final first = tab.layout.panes.single;
-    final second = controller.splitPane(
-      SplitAxis.horizontal,
+    // Splitting clears room and starts nothing, so a second *live* pane is
+    // two calls now: divide, then fill.
+    final second = controller.openInSlot(
+      controller.splitPane(SplitAxis.horizontal)!,
       TerminalProfile.commandPrompt,
     )!;
     return (first, second);
@@ -183,7 +185,10 @@ void main() {
     // one pane always gets written — progress is guaranteed — and no more.
     controller.openTab(TerminalProfile.powerShell);
     for (var i = 0; i < 5; i++) {
-      controller.splitPane(SplitAxis.horizontal, TerminalProfile.powerShell);
+      controller.openInSlot(
+        controller.splitPane(SplitAxis.horizontal)!,
+        TerminalProfile.powerShell,
+      );
     }
     final panes = container
         .read(terminalSessionsControllerProvider)

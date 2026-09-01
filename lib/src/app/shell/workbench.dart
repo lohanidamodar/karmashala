@@ -789,13 +789,27 @@ class _TabChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-    return TerminalTabChip(
-      title: sessions.titleForTab(tab.id),
+    final title = sessions.titleForTab(tab.id);
+    final chip = TerminalTabChip(
+      title: title,
       liveness: _liveness(ref),
       selected: selected,
       onTap: () => activateTerminalTab(ref, tab.id),
       onClose: () => sessions.closeTab(tab.id),
       onEnd: () => sessions.closeTab(tab.id, detach: false),
+    );
+
+    // Dropping a tab on an empty region of a split moves it there — VS Code's
+    // gesture, and half the reason a split can be made empty at all. The
+    // payload is the tab id and `EmptyPaneRegion` is the only thing that takes
+    // one; the keyboard reaches the same verb from the region's own "Move a tab
+    // here…" and from the command palette, because a drag alone is not an
+    // affordance everybody has.
+    return Draggable<String>(
+      data: tab.id,
+      feedback: _TabDragFeedback(title: title),
+      childWhenDragging: Opacity(opacity: 0.4, child: chip),
+      child: chip,
     );
   }
 
@@ -817,6 +831,56 @@ class _TabChip extends ConsumerWidget {
       }
     }
     return strongest;
+  }
+}
+
+/// What a dragged tab looks like under the pointer.
+///
+/// Deliberately not the chip itself: the chip is as wide as the strip gave it
+/// and carries a close button, and dragging a control that can still be clicked
+/// reads as a bug. A label is enough to say which tab is in flight.
+class _TabDragFeedback extends StatelessWidget {
+  const _TabDragFeedback({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(Radii.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.xs,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              AppIcons.terminal,
+              size: Chrome.icon,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: Insets.xs),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

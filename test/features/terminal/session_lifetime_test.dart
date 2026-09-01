@@ -193,7 +193,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       final tabId = controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;
@@ -544,7 +544,7 @@ void main() {
       // without disposing the container, so a tab only written on close is a
       // tab that never comes back.
       controller.openTab(TerminalProfile.powerShell);
-      controller.splitPane(SplitAxis.vertical, TerminalProfile.commandPrompt);
+      controller.splitPaneWith(SplitAxis.vertical, TerminalProfile.commandPrompt);
 
       expect(db.query('SELECT id FROM terminal_tabs;').length, 1);
       expect(db.query('SELECT id FROM terminal_panes;').length, 2);

@@ -80,7 +80,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;
@@ -106,7 +106,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;
@@ -141,7 +141,7 @@ void main() {
           .layout
           .panes
           .single;
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;
@@ -153,6 +153,34 @@ void main() {
       final state = container.read(terminalSessionsControllerProvider);
       expect(state.tabs, hasLength(1), reason: 'the tab is not a casualty');
       expect(state.activeTab!.layout.panes, hasLength(1));
+    });
+
+    test('stays when the only thing beside it is an empty region', () async {
+      // The "last pane in a tab" exception is about output somebody may still
+      // be reading, and an empty region is not another pane to read it in.
+      // Counting regions rather than panes would close the tab — and the
+      // scrollback with it — the moment a shell beside a cleared region exited.
+      final container = fakeTerminalContainer();
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      final only = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      controller.splitPane(SplitAxis.horizontal);
+
+      (controller.instanceFor(only)! as FakeTerminalInstance).exitCleanly();
+      await Future<void>.delayed(Duration.zero);
+
+      final state = container.read(terminalSessionsControllerProvider);
+      expect(state.tabs, hasLength(1), reason: 'the tab is not a casualty');
+      expect(state.activeTab!.layout.panes, contains(only));
+      expect(state.livenessOf(only), PaneLiveness.exited);
     });
 
     test('stays when it is the only pane in its tab', () async {
