@@ -6,7 +6,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 /// One Antigravity CLI conversation, as far as its store makes it readable.
 ///
-/// `docs/ANTIGRAVITY_SUPPORT_2026-08-31.md` concluded that this store was
+/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` concluded that this store was
 /// "permanently unreadable" and recorded `AgentStoreFormat.none` on that
 /// finding. The finding was drawn from one file — `conversations/<id>.db`,
 /// whose payload columns really are opaque protobuf — and generalised to the

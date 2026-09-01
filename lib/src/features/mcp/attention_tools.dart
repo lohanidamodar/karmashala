@@ -9,7 +9,7 @@ import '../notifications/domain/inbox_item.dart';
 /// Notes are the app's own scratchpad; the inbox is every session that needs
 /// somebody. Both were readable only by a person looking at the panel, which
 /// made "an agent finished and is waiting" a fact only a human could act on —
-/// the failure `docs/ORCHESTRATION_GAPS_2026-08-31.md` calls the human being
+/// the failure the orchestration-gaps note calls the human being
 /// the message bus.
 class AttentionControlTools {
   AttentionControlTools(this._container, {this.callerSessionId});

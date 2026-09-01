@@ -73,7 +73,19 @@ String? _configHome(Map<String, String> environment) {
   if (xdg != null && xdg.isNotEmpty) return xdg;
   final home = environment['HOME'];
   if (home == null || home.isEmpty) return null;
-  return p.join(home, '.config');
+  return p.posix.join(home, '.config');
+}
+
+/// The separator style a discovered root belongs to.
+///
+/// These paths describe *another* platform's disk as often as this one's: the
+/// suite runs on Windows and asserts the macOS and Linux locations, and a
+/// `p.join` there spelled `/Users/a/.config\ghostty\themes`. The branch that
+/// found the root already knows the answer — `APPDATA` is Windows, `HOME` and
+/// `XDG_CONFIG_HOME` are POSIX — so it is chosen rather than inferred.
+p.Context _contextFor(Map<String, String> environment) {
+  final appData = environment['APPDATA'];
+  return appData != null && appData.isNotEmpty ? p.windows : p.posix;
 }
 
 /// Where Ghostty keeps user themes.
@@ -81,9 +93,10 @@ String? _configHome(Map<String, String> environment) {
 /// The reference implementation returns nothing on Windows, which makes a named
 /// theme unresolvable there, so this looks beside the config on every host.
 List<Directory> ghosttyThemeDirectories({Map<String, String>? environment}) {
-  final config = _configHome(environment ?? Platform.environment);
+  final env = environment ?? Platform.environment;
+  final config = _configHome(env);
   if (config == null) return const [];
-  return [Directory(p.join(config, 'ghostty', 'themes'))];
+  return [Directory(_contextFor(env).join(config, 'ghostty', 'themes'))];
 }
 
 /// Where Warp keeps user themes.
@@ -99,12 +112,12 @@ List<Directory> warpThemeDirectories({Map<String, String>? environment}) {
   if (appData != null && appData.isNotEmpty) {
     return [
       for (final channel in _warpChannels)
-        Directory(p.join(appData, 'warp', channel, 'data', 'themes')),
+        Directory(p.windows.join(appData, 'warp', channel, 'data', 'themes')),
     ];
   }
   final home = env['HOME'];
   if (home == null || home.isEmpty) return const [];
-  return [Directory(p.join(home, '.warp', 'themes'))];
+  return [Directory(p.posix.join(home, '.warp', 'themes'))];
 }
 
 /// Scans [directories] for theme files of [format].

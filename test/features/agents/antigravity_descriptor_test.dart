@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Every agent fact in this repo carries the `--help` output it was read from,
 /// and Antigravity was the exception: Loop 10 shipped its adapter against a
 /// fake process and recorded "no real CLI", and everything downstream inherited
-/// that. `docs/ANTIGRAVITY_SUPPORT_2026-08-31.md` records what interrogating a
+/// that. `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` records what interrogating a
 /// real installation produced.
 ///
 /// The load-bearing discovery is in the first test. The CLI is `agy`; nothing
