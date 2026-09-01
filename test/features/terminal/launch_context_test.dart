@@ -55,7 +55,7 @@ void main() {
   });
 
   group('a shell profile opens into its context', () {
-    test('a WSL profile on a Windows host runs wsl.exe', () {
+    test('a WSL profile on a Windows host runs wsl.exe through cmd.exe', () {
       const profile = TerminalProfile(
         id: 'wsl:Ubuntu',
         label: 'Ubuntu',
@@ -67,8 +67,8 @@ void main() {
         context: LaunchContext.forProfile(profile, hostIsWindows: true),
         workingDirectory: r'C:\repo',
       );
-      expect(launch.executable, 'wsl.exe');
-      expect(launch.arguments, ['-d', 'Ubuntu', '--cd', r'C:\repo']);
+      expect(launch.executable, 'cmd.exe');
+      expect(launch.arguments, ['/c', r'wsl.exe -d Ubuntu --cd C:\repo']);
     });
 
     test('every profile on a POSIX host opens the login shell', () {

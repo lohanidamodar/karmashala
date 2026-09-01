@@ -77,8 +77,8 @@ void main() {
         wslDistribution: 'Ubuntu',
       );
       final launch = ptyLaunchFor(wsl, shellIntegration: true);
-      expect(launch.executable, 'wsl.exe');
-      expect(launch.arguments, const ['-d', 'Ubuntu']);
+      expect(launch.executable, 'cmd.exe');
+      expect(launch.arguments, const ['/c', 'wsl.exe -d Ubuntu']);
     });
   });
 
