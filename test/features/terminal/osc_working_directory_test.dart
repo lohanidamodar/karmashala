@@ -1,6 +1,10 @@
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/domain/working_directory_osc.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'fake_instance.dart';
 
 /// OSC 7 — the shell telling the pane which directory it is in *now*.
 ///
@@ -136,6 +140,182 @@ void main() {
         ..dispatch('7', ['file:///a']);
 
       expect(seen, ['first', 'second']);
+    });
+  });
+
+  group('a pane learns where it is', () {
+    test('with integration on, both listeners get the stream', () {
+      final pane = FakeTerminalInstance(
+        id: 'p1',
+        title: 'PowerShell',
+        profileId: 'powershell',
+        workingDirectory: r'C:\ws',
+        shellIntegration: true,
+      );
+      addTearDown(pane.dispose);
+
+      pane.terminal.write('\x1b]7;file:///C:/ws/lib\x07\x1b]133;A\x07');
+
+      expect(pane.workingDirectory, r'C:\ws\lib',
+          reason: 'the directory tracker saw OSC 7');
+      expect(pane.commandBlocks!.tracker.pending, isNotNull,
+          reason: 'the recorder saw OSC 133 through the same slot');
+    });
+
+    test('with integration off, OSC 7 still works', () {
+      // A recorder only exists when shell integration is on; the directory has
+      // to follow a `cd` either way, because plenty of shells emit OSC 7 on
+      // their own.
+      final pane = FakeTerminalInstance(
+        id: 'p1',
+        title: 'Ubuntu',
+        profileId: 'wsl:Ubuntu',
+        workingDirectory: '/home/me',
+      );
+      addTearDown(pane.dispose);
+      expect(pane.commandBlocks, isNull);
+
+      pane.terminal.write('\x1b]7;file:///home/me/src\x07');
+
+      expect(pane.workingDirectory, '/home/me/src');
+    });
+
+    test('the launch directory is the answer until a shell says otherwise', () {
+      final pane = FakeTerminalInstance(
+        id: 'p1',
+        title: 'PowerShell',
+        profileId: 'powershell',
+        workingDirectory: r'C:\ws',
+      );
+      addTearDown(pane.dispose);
+
+      // Not an OSC 7 we can read: the pane keeps what it launched with rather
+      // than forgetting where it is.
+      pane.terminal.write('\x1b]7;file://otherbox/home/me\x07');
+
+      expect(pane.workingDirectory, r'C:\ws');
+    });
+
+    test('the same directory twice notifies once', () {
+      final pane = FakeTerminalInstance(
+        id: 'p1',
+        title: 'PowerShell',
+        profileId: 'powershell',
+        workingDirectory: r'C:\ws',
+      );
+      addTearDown(pane.dispose);
+      var notifications = 0;
+      pane.directory.addListener(() => notifications++);
+
+      pane.terminal
+        ..write('\x1b]7;file:///C:/ws/lib\x07')
+        ..write('\x1b]7;file:///C:/ws/lib\x07')
+        ..write('\x1b]7;file:///C:/ws/lib\x07');
+
+      expect(notifications, 1,
+          reason: 'a shell that re-emits OSC 7 on every prompt redraw must not '
+              'republish the workspace per prompt');
+    });
+  });
+
+  group('through the controller', () {
+    late TerminalSessionsController controller;
+    late ProviderContainer container;
+
+    setUp(() {
+      container = fakeTerminalContainer();
+      controller = container.read(terminalSessionsControllerProvider.notifier);
+    });
+    tearDown(() => container.dispose());
+
+    TerminalSessionsState get$() =>
+        container.read(terminalSessionsControllerProvider);
+
+    String onlyPaneOf(String tabId) =>
+        get$().tabs.firstWhere((t) => t.id == tabId).layout.panes.single;
+
+    FakeTerminalInstance paneOf(String tabId) =>
+        controller.instanceFor(onlyPaneOf(tabId))! as FakeTerminalInstance;
+
+    test('the tab label follows a cd', () {
+      final tab = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws\karmashala',
+      );
+      expect(controller.titleForTab(tab), 'ws/karmashala');
+
+      paneOf(tab).terminal.write('\x1b]7;file:///C:/ws/karmashala/lib\x07');
+
+      expect(controller.titleForTab(tab), 'karmashala/lib');
+    });
+
+    test('a cd republishes, so the tab strip actually rebuilds', () {
+      final tab = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws',
+      );
+      final before = get$();
+
+      paneOf(tab).terminal.write('\x1b]7;file:///C:/ws/lib\x07');
+
+      expect(get$(), isNot(before));
+      expect(get$().directoryOf(onlyPaneOf(tab)), r'C:\ws\lib');
+    });
+
+    test('a cd tells the topology nothing, and that pane once', () {
+      final tab = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws',
+      );
+      final pane = onlyPaneOf(tab);
+      var topologyRebuilds = 0;
+      var directoryRebuilds = 0;
+      final onTopology = container.listen(
+        terminalSessionsControllerProvider.select((s) => s.tabs),
+        (_, _) => topologyRebuilds++,
+      );
+      final onDirectory = container.listen(
+        terminalSessionsControllerProvider.select((s) => s.directoryOf(pane)),
+        (_, _) => directoryRebuilds++,
+      );
+      addTearDown(onTopology.close);
+      addTearDown(onDirectory.close);
+
+      paneOf(tab).terminal
+        ..write('\x1b]7;file:///C:/ws/lib\x07')
+        ..write('\x1b]7;file:///C:/ws/lib\x07');
+
+      expect(topologyRebuilds, 0);
+      expect(directoryRebuilds, 1, reason: 'one republish per cd, and no more');
+    });
+
+    test('a closed pane can no longer republish', () {
+      final tab = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws',
+      );
+      final pane = paneOf(tab);
+      controller.closeTab(tab);
+
+      // Would throw on a disposed notifier if the listener were still attached.
+      expect(() => pane.terminal.write('\x1b]7;file:///C:/ws/lib\x07'),
+          returnsNormally);
+    });
+
+    test('the stored record is where the pane ended up, not where it began', () {
+      // A restored pane reopens in the directory the user left it in: the
+      // launch directory is an artefact of how the pane was opened, and the
+      // scrollback it comes back holding is the *observed* directory's. It
+      // starts nothing — the directory only decides where a shell would spawn
+      // if the user presses Start.
+      final tab = controller.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\ws',
+      );
+      paneOf(tab).terminal.write('\x1b]7;file:///C:/ws/lib\x07');
+
+      expect(controller.instanceFor(onlyPaneOf(tab))!.workingDirectory,
+          r'C:\ws\lib');
     });
   });
 

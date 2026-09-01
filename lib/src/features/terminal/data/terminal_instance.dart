@@ -17,6 +17,7 @@ import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
+import '../domain/working_directory_osc.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
@@ -32,10 +33,25 @@ abstract class TerminalInstance {
   String get title;
   Terminal get terminal;
 
-  /// The [TerminalProfile] id this pane was launched from, and the directory it
-  /// started in — kept so the pane can be recreated after a restart.
+  /// The [TerminalProfile] id this pane was launched from — kept so the pane
+  /// can be recreated after a restart.
   String get profileId;
+
+  /// The directory the pane is in **now**: where it was launched until the
+  /// shell says it has moved (OSC 7), and where it has moved to after that.
+  ///
+  /// Live rather than fixed because everything that reads it wants the current
+  /// answer, not the launch one: relative-path link resolution joins onto it,
+  /// the tab label is derived from it, the workspace record a pane is restored
+  /// from stores it, and the MCP terminal tools report it.
   String? get workingDirectory;
+
+  /// [workingDirectory] as something to listen to.
+  ///
+  /// Listenable for exactly the reason [liveness] is — so the tab label follows
+  /// a `cd` without anything polling for one. Notifies once per *change*: a
+  /// shell that re-emits OSC 7 on every prompt redraw says nothing new.
+  ValueListenable<String?> get directory;
 
   /// The agent CLI this pane runs, or `null` for a plain shell.
   ///
@@ -155,6 +171,73 @@ abstract interface class AdoptableTerminalInstance {
   Terminal? get adoptableBuffer;
 }
 
+/// A [ValueListenable] that holds one value and never notifies.
+///
+/// What [TerminalInstance.directory] is for a pane whose shell can never report
+/// one: an error pane never started a process, and a dormant pane is replayed
+/// history. Allocated once per instance rather than per read, so adding and
+/// removing a listener reach the same object.
+class UnchangingValue<T> implements ValueListenable<T> {
+  const UnchangingValue(this.value);
+
+  @override
+  final T value;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+/// A pane's working directory: the one it launched in, then whatever the shell
+/// reports with OSC 7.
+///
+/// A [ValueNotifier] on purpose — it drops a write of the value it already
+/// holds, which is the whole of the "one republish per `cd`" rule. A shell that
+/// emits OSC 7 from its prompt function emits it on every redraw, and that must
+/// cost nothing.
+class WorkingDirectoryTracker {
+  WorkingDirectoryTracker(String? launchedIn, {String? hostname})
+    : _hostname = hostname ?? localHostname,
+      _directory = ValueNotifier(launchedIn);
+
+  /// This machine's name, read once: a syscall, and it cannot change while the
+  /// app runs. Null when the host will not say, which makes every named host
+  /// foreign — see [workingDirectoryFromOsc].
+  static final String? localHostname = () {
+    try {
+      return Platform.localHostname;
+    } catch (_) {
+      return null;
+    }
+  }();
+
+  final ValueNotifier<String?> _directory;
+  final String? _hostname;
+  bool _disposed = false;
+
+  ValueListenable<String?> get listenable => _directory;
+
+  String? get value => _directory.value;
+
+  /// One OSC from the pane's [OscRouter].
+  ///
+  /// A sequence we cannot read leaves the directory alone: `null` from the
+  /// parser means *no answer*, never *the pane has no directory*.
+  void handleOsc(String code, List<String> args) {
+    if (_disposed) return;
+    final reported = workingDirectoryFromOsc(code, args, hostname: _hostname);
+    if (reported != null) _directory.value = reported;
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _directory.dispose();
+  }
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -187,13 +270,13 @@ class PtyTerminalInstance
     required this.title,
     required this.profileId,
     required PtyLaunch launch,
-    this.workingDirectory,
+    String? workingDirectory,
     this.agentLaunch,
     String? restoredScrollback,
     bool shellIntegration = false,
     TerminalIngestBudget? ingestBudget,
     Terminal? adoptTerminal,
-  }) {
+  }) : _cwd = WorkingDirectoryTracker(workingDirectory) {
     // The buffer the pane this one replaces was already holding, when there is
     // one. Handlers are set either way rather than only on the fresh path: the
     // two are the same values, and a branch here is a branch that can drift.
@@ -209,8 +292,10 @@ class PtyTerminalInstance
       // which exist only with shell integration on, and the OSC 7 working
       // directory, which must work either way.
       ..onPrivateOSC = _osc.dispatch;
-    // Registered before the process starts, so no marker can be missed. When
-    // the shell is not integrated this stays null and nothing else changes.
+    // Registered before the process starts, so no sequence can be missed. The
+    // directory listens unconditionally: plenty of shells emit OSC 7 with no
+    // help from us, and integration is about OSC 133.
+    _osc.add(_cwd.handleOsc);
     if (shellIntegration) {
       commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
@@ -227,7 +312,7 @@ class PtyTerminalInstance
     // the host environment so Windows shells get SystemRoot/WINDIR/etc. (without
     // them powershell.exe/cmd.exe and wsl.exe fail to start) — sanitized so a
     // POSIX env leaked from launching via WSL doesn't break wsl.exe.
-    final workingDirectory =
+    final startIn =
         (launch.workingDirectory != null &&
             Directory(launch.workingDirectory!).existsSync())
         ? launch.workingDirectory
@@ -236,7 +321,7 @@ class PtyTerminalInstance
       launch.executable,
       arguments: launch.arguments,
       environment: _ptyEnvironment(launch.environment),
-      workingDirectory: workingDirectory,
+      workingDirectory: startIn,
     );
 
     // Buffer the raw PTY bytes and hand them to the terminal once per frame.
@@ -286,8 +371,16 @@ class PtyTerminalInstance
   final String title;
   @override
   final String profileId;
+
+  /// Seeded with the directory the pane launched in, then kept current by the
+  /// shell's own OSC 7.
+  final WorkingDirectoryTracker _cwd;
+
   @override
-  final String? workingDirectory;
+  String? get workingDirectory => _cwd.value;
+
+  @override
+  ValueListenable<String?> get directory => _cwd.listenable;
 
   /// Owns `terminal.onPrivateOSC` for this pane's whole life and fans it out —
   /// see the constructor.
@@ -410,6 +503,9 @@ class PtyTerminalInstance
     // and a ValueNotifier throws if written to after disposal.
     _liveness.value = PaneLiveness.exited;
     _liveness.dispose();
+    // After this the tracker ignores OSC rather than writing to a disposed
+    // notifier — the parser can still flush a sequence it was part-way through.
+    _cwd.dispose();
     unawaited(_outputSubscription.cancel());
     _coalescer.dispose();
     focusNode.dispose();
@@ -530,6 +626,13 @@ class ErrorTerminalInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// An error pane never started a shell, so nothing can ever report a `cd`.
+  @override
+  late final ValueListenable<String?> directory = UnchangingValue(
+    workingDirectory,
+  );
+
   @override
   final AgentPaneLaunch? agentLaunch;
   @override
@@ -615,6 +718,14 @@ class DormantTerminalInstance
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// Replayed history with nothing running behind it: the directory it holds is
+  /// the one the pane was last observed in, and nothing here can move it.
+  @override
+  late final ValueListenable<String?> directory = UnchangingValue(
+    workingDirectory,
+  );
+
   @override
   final AgentPaneLaunch? agentLaunch;
 

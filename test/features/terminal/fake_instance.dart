@@ -35,16 +35,19 @@ class FakeTerminalInstance
     required this.id,
     required this.title,
     required this.profileId,
-    this.workingDirectory,
+    String? workingDirectory,
     this.restored,
     this.agentLaunch,
     Terminal? adoptTerminal,
     bool shellIntegration = false,
-  }) : adopted = adoptTerminal {
+  }) : adopted = adoptTerminal,
+       _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
     // Wired exactly as a real pane wires it: the pane owns xterm's single OSC
-    // slot and fans it out.
+    // slot and fans it out, so a test can write OSC 7 and OSC 133 at the same
+    // buffer and have both land.
     terminal.onPrivateOSC = _osc.dispatch;
+    _osc.add(_cwd.handleOsc);
     // Attached on the same condition a real pane attaches it, so a test can
     // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —
     // by writing the markers a shell would emit.
@@ -67,10 +70,16 @@ class FakeTerminalInstance
   @override
   final String profileId;
 
+  /// The launch directory until a test writes an OSC 7, exactly as a real
+  /// pane's is.
+  final WorkingDirectoryTracker _cwd;
   final OscRouter _osc = OscRouter();
 
   @override
-  final String? workingDirectory;
+  String? get workingDirectory => _cwd.value;
+
+  @override
+  ValueListenable<String?> get directory => _cwd.listenable;
 
   @override
   final AgentPaneLaunch? agentLaunch;
@@ -178,6 +187,7 @@ class FakeTerminalInstance
     disposed = true;
     livenessNotifier.value = PaneLiveness.exited;
     livenessNotifier.dispose();
+    _cwd.dispose();
     focusNode.dispose();
     scrollController.dispose();
   }
