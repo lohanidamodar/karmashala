@@ -25,6 +25,7 @@ import 'cli_detection_service.dart';
 import 'project_import_service.dart';
 import 'session_adoption_service.dart';
 import 'session_auto_import_service.dart';
+import 'session_title_sync_service.dart';
 
 final cliDetectionServiceProvider = Provider<CliDetectionService>(
   (ref) => CliDetectionService(registry: ref.watch(agentRegistryProvider)),
@@ -92,6 +93,34 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
     // A row appearing in the tree is exactly what the revision counter is for.
     onAdopted: (_) => ref.read(sessionsRevisionProvider.notifier).bump(),
   );
+});
+
+/// Copies a CLI's own name for a conversation into the session row running it.
+///
+/// The rename the owner reported: `/rename` typed into `agy`, "New session"
+/// still in the sidebar. Nothing in the app read a title *back* out of a CLI
+/// store for any agent — see the service's own doc.
+final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) {
+  return SessionTitleSyncService(
+    sessionDao: ref.watch(sessionDaoProvider),
+    agents: ref.watch(agentRegistryProvider),
+    scanStores: () => scanCliStores(ref),
+    // A row changing its name in the tree is what the revision counter is for.
+    onRenamed: (_, _) => ref.read(sessionsRevisionProvider.notifier).bump(),
+  );
+});
+
+/// Reconciles session rows against what the CLI stores now say.
+///
+/// Exposed as a function provider, like [autoImportRunnerProvider], so the
+/// status registry's store slot has one line to run and a test can drive the
+/// whole chain through the real providers. The order is stated here rather than
+/// assumed at the call site: attribution learns a conversation id, and the title
+/// sync can only match a row that has one.
+final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
+  return () async {
+    await ref.read(sessionTitleSyncServiceProvider).sync();
+  };
 });
 
 /// Every tracked pane, in the shape adoption reads them.

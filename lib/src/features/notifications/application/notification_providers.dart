@@ -189,7 +189,12 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
     onCycle: (mayScanStores) async {
       final adoption = ref.read(sessionAdoptionServiceProvider);
       adoption.observePanes();
-      if (mayScanStores) await adoption.sweep();
+      if (!mayScanStores) return;
+      await adoption.sweep();
+      // The same slot, for the same reason: reconciling a session row against
+      // its CLI's store is disk work, and it is gated on there being a row
+      // waiting for it — see `cliStoreSyncRunnerProvider`.
+      await ref.read(cliStoreSyncRunnerProvider)();
     },
   );
   ref.onDispose(registry.dispose);
