@@ -35,7 +35,7 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory tmp;
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_failclosed_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_failclosed_'));
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });

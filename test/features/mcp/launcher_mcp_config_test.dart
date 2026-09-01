@@ -30,7 +30,7 @@ void main() {
   late LauncherControlServer server;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_mcp_config_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_mcp_config_');
     db = AppDatabase.memory();
     container = ProviderContainer(
       overrides: [
@@ -100,7 +100,7 @@ void main() {
   });
 
   test('no URL is offered when the endpoint could not be secured', () async {
-    final other = Directory.systemTemp.createTempSync('chitra_mcp_closed_');
+    final other = Directory.systemTemp.createTempSync('karmashala_mcp_closed_');
     addTearDown(() {
       if (other.existsSync()) other.deleteSync(recursive: true);
     });

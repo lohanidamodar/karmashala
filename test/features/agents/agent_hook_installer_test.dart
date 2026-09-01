@@ -16,7 +16,7 @@ void main() {
 
   late Directory home;
   setUp(() {
-    home = Directory.systemTemp.createTempSync('chitra_hookcfg_');
+    home = Directory.systemTemp.createTempSync('karmashala_hookcfg_');
   });
   tearDown(() => home.deleteSync(recursive: true));
 

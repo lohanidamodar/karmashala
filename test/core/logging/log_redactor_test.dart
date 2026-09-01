@@ -117,13 +117,13 @@ void main() {
         rules: [
           RedactionRule(
             name: 'test rule',
-            pattern: RegExp(r'\bCHITRA-[0-9]{4}\b'),
+            pattern: RegExp(r'\bKARMA-[0-9]{4}\b'),
             replacement: '[redacted:code]',
           ),
         ],
       );
       expect(
-        custom.apply('pair with CHITRA-4821'),
+        custom.apply('pair with KARMA-4821'),
         'pair with [redacted:code]',
       );
     });

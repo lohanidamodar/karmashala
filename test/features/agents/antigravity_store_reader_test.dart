@@ -17,7 +17,7 @@ void main() {
   late String storeHome;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_agy_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_agy_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
   });
   tearDown(() {

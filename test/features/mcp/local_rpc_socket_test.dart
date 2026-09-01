@@ -23,7 +23,7 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory tmp;
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_ipc_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_ipc_'));
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });

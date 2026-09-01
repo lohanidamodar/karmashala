@@ -24,7 +24,7 @@ void main() {
 
   late Directory home;
   setUp(() {
-    home = Directory.systemTemp.createTempSync('chitra_agyhook_');
+    home = Directory.systemTemp.createTempSync('karmashala_agyhook_');
     // The store the locator hands the installer, and the sibling directory the
     // CLI actually reads its customizations from.
     Directory(p.join(home.path, '.gemini', 'antigravity-cli')).createSync(

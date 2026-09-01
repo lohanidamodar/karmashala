@@ -9,7 +9,7 @@ void main() {
   late Directory tmp;
   const service = LocalRepositoryDiscoveryService();
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_disc_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_disc_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   EnvironmentPath rootAt(String path) =>

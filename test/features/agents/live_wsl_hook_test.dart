@@ -51,7 +51,7 @@ void main() {
   late String uncHome;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_livewsl_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_livewsl_');
     container = ProviderContainer(
       overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
     );
@@ -63,7 +63,7 @@ void main() {
     );
     // A store home of our own, so nothing here can touch the user's real
     // agent configuration.
-    wslHome = await _wsl(['mktemp', '-d', '-t', 'chitra-hook-XXXXXX']);
+    wslHome = await _wsl(['mktemp', '-d', '-t', 'karmashala-hook-XXXXXX']);
     uncHome = await _wsl(['wslpath', '-w', wslHome]);
   });
 

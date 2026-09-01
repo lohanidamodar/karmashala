@@ -26,7 +26,7 @@ void main() async {
 
   late Directory tmp;
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_wslretry_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_wslretry_'));
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });

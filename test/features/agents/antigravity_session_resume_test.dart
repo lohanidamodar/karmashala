@@ -26,7 +26,7 @@ void main() {
   final launchedAt = DateTime.utc(2026, 9, 1, 9, 45);
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_agy_resume_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_agy_resume_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
   });
   tearDown(() {

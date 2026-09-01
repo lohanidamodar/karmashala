@@ -88,7 +88,7 @@ AppDatabase seededDatabase() {
 
 void main() {
   late Directory tmp;
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_phantom_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_phantom_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   String storeHome() => p.join(tmp.path, '.claude');

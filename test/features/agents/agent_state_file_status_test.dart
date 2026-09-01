@@ -14,7 +14,7 @@ void main() {
   final antigravity = AgentRegistry.builtIn.byId('antigravity')!;
 
   late Directory tmp;
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_status_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_status_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   /// Writes [lines] and returns the file's path.

@@ -16,7 +16,7 @@ void main() {
   final wsl = wslEnv();
   final ssh = sshEnvFixture();
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_presence_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_presence_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   Future<CheckoutPresence> ask(

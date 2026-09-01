@@ -24,7 +24,7 @@ void main() {
   late LauncherControlServer server;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_fanout_mcp_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_fanout_mcp_');
     db = seedDatabase();
     addTearDown(db.close);
     container = ProviderContainer(

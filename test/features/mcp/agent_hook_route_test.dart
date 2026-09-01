@@ -29,7 +29,7 @@ void main() {
   late AgentHookEndpoint endpoint;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_hooks_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_hooks_');
     container = ProviderContainer(
       overrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
     );

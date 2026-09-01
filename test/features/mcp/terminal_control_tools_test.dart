@@ -29,7 +29,7 @@ void main() {
   late LauncherControlServer server;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_term_tools_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_term_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     container = ProviderContainer(

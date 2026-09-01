@@ -80,7 +80,7 @@ branch refs/heads/$worktreeBranch
 ''' : ''}''';
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_worktree_tools_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_worktree_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project());
