@@ -31,6 +31,19 @@ const String _kNotPaired = 'This phone is not paired with a host.';
 const String _kUnreachable =
     'The host is unreachable right now, so nothing was sent.';
 
+/// A request that went out and was not answered in time.
+///
+/// Deliberately *not* [_kUnreachable]. The owner's report was exactly this
+/// sentence being wrong: "this did not work host is unreachable now. which is
+/// not the case host is here this session is running on the host" — said while
+/// the status bar beside it read "Working · running here". Both halves of that
+/// sentence are false for a timeout: the host is demonstrably reachable, since
+/// the link is carrying frames, and the request *was* sent. Only the answer is
+/// missing, and the honest reason is usually that the desktop is busy.
+const String _kUnanswered =
+    'The desktop did not answer in time. The link is up, so it is busy with '
+    'something else.';
+
 /// How long a beacon host that refused a direct dial is left alone by the LAN
 /// *upgrade* — the one that spends a working link on the attempt.
 ///
@@ -2023,7 +2036,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     } on RemoteApiException catch (error) {
       if (error.code == null) {
         _noteUnanswered();
-        throw const GatewayException(_kUnreachable);
+        throw const GatewayException(_kUnanswered);
       }
       // A refusal is an ANSWER: the desktop read the frame and said no, which
       // is the strongest possible evidence the link works.

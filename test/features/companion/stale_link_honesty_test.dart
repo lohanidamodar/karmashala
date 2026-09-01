@@ -363,4 +363,39 @@ void main() {
       expect(gateway.linkTrouble, isNull, reason: 'the trouble is over');
     },
   );
+
+  test(
+    'a request the desktop did not answer says so, not "unreachable"',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+
+      goSilent();
+
+      // The owner's own objection, in their words: "this did not work host is
+      // unreachable now. which is not the case host is here this session is
+      // running on the host" — said while the status bar beside it still read
+      // "running here". Both halves of the old sentence were false for a
+      // timeout: the host is demonstrably reachable, because the link is
+      // carrying frames, and the request *was* sent. Only the answer is
+      // missing.
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(
+          isA<GatewayException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('did not answer'),
+              contains('busy'),
+              isNot(contains('unreachable')),
+              isNot(contains('nothing was sent')),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
