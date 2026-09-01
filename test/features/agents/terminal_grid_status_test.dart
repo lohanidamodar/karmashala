@@ -90,6 +90,58 @@ void main() {
       final report = classify('claude-code-trust-prompt', 1.0);
       expect(report?.status, AgentActivityStatus.awaitingApproval);
       expect(report?.source, AgentStatusSource.terminalGrid);
+      expect(report?.waiting, AgentWaitKind.approval);
+    });
+
+    test('the idle footer of a bypass session is not an approval', () {
+      // The owner's live screen at the moment the app claimed an approval was
+      // pending. Nothing is highlighted and nothing is open to confirm, and the
+      // footer does not mention shift+tab at all: bypass mode replaces that
+      // segment, which is why this screen used to match no rule.
+      final report = const TerminalGridStatusSource().read(
+        AgentRegistry.builtIn.byId(AgentIds.claudeCode)!,
+        const [
+          '> ',
+          '  bypass permissions on \u00b7 1 shell \u00b7 \u2190 for agents \u00b7 \u2193 to manage',
+        ],
+        DateTime.utc(2026, 8, 30),
+        sessionId: 's',
+      );
+
+      expect(report?.status, AgentActivityStatus.idle);
+      expect(report?.waiting, AgentWaitKind.input);
+    });
+
+    test('a permission prompt still says an approval is open', () {
+      // A tool-permission modal, which ends in the same pair the workspace
+      // trust modal does. Both are real prompts with a highlighted option, and
+      // both must keep reaching the buttons that answer them.
+      final report = const TerminalGridStatusSource().read(
+        AgentRegistry.builtIn.byId(AgentIds.claudeCode)!,
+        const [
+          '  Bash command',
+          '  rm -rf build/',
+          '',
+          '  Do you want to proceed?',
+          '  \u276f 1. Yes',
+          '    2. No, and tell Claude what to do differently',
+          '',
+          '  Enter to confirm \u00b7 Esc to cancel',
+        ],
+        DateTime.utc(2026, 8, 30),
+        sessionId: 's',
+      );
+
+      expect(report?.status, AgentActivityStatus.awaitingApproval);
+      expect(report?.waiting, AgentWaitKind.approval);
+    });
+
+    test('the captured idle screen waits on input, never on an approval', () {
+      for (final fraction in [0.3, 0.85]) {
+        final report = classify('claude-code-tui', fraction);
+        expect(report?.status, AgentActivityStatus.idle, reason: '$fraction');
+        expect(report?.waiting, AgentWaitKind.input, reason: '$fraction');
+      }
     });
 
     test('a prompt drawn over a spinner reads as waiting, not working', () {
@@ -138,6 +190,17 @@ void main() {
       );
       expect(report?.status, AgentActivityStatus.awaitingApproval);
       expect(report?.source, AgentStatusSource.terminalGrid);
+      expect(report?.waiting, AgentWaitKind.approval);
+      // The asymmetry this whole type exists for: Codex's prompt names Enter
+      // and names no way to decline, which is a different question from whether
+      // a prompt is open at all.
+      final rules = AgentRegistry.builtIn.byId(AgentIds.codex)!.approval;
+      expect(rules.approve, isNotNull);
+      expect(rules.deny, isNull);
+    });
+
+    test('a working Codex screen claims nothing about a prompt', () {
+      expect(classify('codex-tui', 0.5)?.waiting, AgentWaitKind.unrecorded);
     });
 
     test('claims nothing once it stops saying it is working', () {

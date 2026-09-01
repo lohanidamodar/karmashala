@@ -21,8 +21,11 @@ void main() {
     );
   });
 
-  String body(String sessionId) =>
-      jsonEncode({'session_id': sessionId, 'cwd': r'C:\src\demo'});
+  String body(String sessionId, {String? message}) => jsonEncode({
+    'session_id': sessionId,
+    'cwd': r'C:\src\demo',
+    'message': ?message,
+  });
 
   test('maps Claude hook events onto the status machine', () {
     const expected = {
@@ -118,6 +121,61 @@ void main() {
       receiver.handle(agentId: null, event: null, body: '').status,
       AgentActivityStatus.unknown,
     );
+  });
+
+  group('Claude Code fires one Notification for two different things', () {
+    // The live misclassification: a finished turn posted a message, Claude Code
+    // nudged with `Notification`, and the app offered Approve — which types
+    // Enter into a prompt with nothing highlighted and submits the composer.
+    test('a nudge about an idle prompt is waiting on input, not approval', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: body('s1', message: 'Claude is waiting for your input'),
+      );
+
+      expect(report.status, AgentActivityStatus.awaitingApproval);
+      expect(report.waiting, AgentWaitKind.input);
+      expect(report.evidence, ['Claude is waiting for your input']);
+    });
+
+    test('a permission request is an approval', () {
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: body('s1', message: 'Claude needs your permission to use Bash'),
+      );
+
+      expect(report.status, AgentActivityStatus.awaitingApproval);
+      expect(report.waiting, AgentWaitKind.approval);
+    });
+
+    test('a message we do not recognise claims no approval', () {
+      // The safe direction. A reworded prompt costs an Approve button; a
+      // guessed one sends Enter into a session that may have no prompt open.
+      for (final message in [null, '', 'Something else entirely']) {
+        final report = receiver.handle(
+          agentId: 'claudeCode',
+          event: 'Notification',
+          body: body('s1', message: message),
+        );
+        expect(report.waiting, AgentWaitKind.unrecorded, reason: '$message');
+      }
+    });
+
+    test('events that are not about waiting record no wait kind', () {
+      for (final event in ['PreToolUse', 'Stop']) {
+        expect(
+          receiver.handle(
+            agentId: 'claudeCode',
+            event: event,
+            body: body('s1'),
+          ).waiting,
+          AgentWaitKind.unrecorded,
+          reason: event,
+        );
+      }
+    });
   });
 
   test('clear() drops everything recorded', () {

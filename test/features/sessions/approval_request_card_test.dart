@@ -99,6 +99,9 @@ AgentStatusReport report({
   AgentActivityStatus status = AgentActivityStatus.awaitingApproval,
   AgentStatusSource source = AgentStatusSource.terminalGrid,
   List<String> evidence = const [],
+  // Most of these cases are about an open prompt, which is the only kind the
+  // card may answer. The other two kinds have their own tests below.
+  AgentWaitKind waiting = AgentWaitKind.approval,
 }) => AgentStatusReport(
   agentId: agentId,
   sessionId: 's1',
@@ -106,6 +109,7 @@ AgentStatusReport report({
   source: source,
   observedAt: testTime,
   evidence: evidence,
+  waiting: waiting,
 );
 
 void main() {
@@ -249,6 +253,87 @@ void main() {
 
     expect(find.textContaining('no live terminal here'), findsOneWidget);
     expect(find.byType(FilledButton), findsNothing);
+  });
+
+  group('a session with no prompt open is never offered a key', () {
+    // The live misclassification, reproduced end to end. Claude Code finished a
+    // turn, posted a message and nudged; the card announced an approval and
+    // offered Approve, which sends Enter — and at an idle prompt Enter submits
+    // whatever is in the composer.
+    testWidgets('an idle nudge says so and offers nothing to press', (
+      tester,
+    ) async {
+      final h = harness(
+        agentId: AgentIds.claudeCode,
+        report: report(
+          agentId: AgentIds.claudeCode,
+          source: AgentStatusSource.hook,
+          evidence: const ['Claude is waiting for your input'],
+          waiting: AgentWaitKind.input,
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Claude Code is waiting for your input'),
+        findsOneWidget,
+      );
+      expect(find.text('Claude is waiting for your input'), findsOneWidget);
+      expect(find.textContaining('nothing to approve'), findsOneWidget);
+      // The whole point: no key is offered into a session with no prompt open.
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+      expect(find.text('Approve'), findsNothing);
+      expect(find.text('Deny'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Terminal view'), findsOneWidget);
+    });
+
+    testWidgets('an unrecognised notice refuses to guess an approval', (
+      tester,
+    ) async {
+      final h = harness(
+        agentId: AgentIds.claudeCode,
+        report: report(
+          agentId: AgentIds.claudeCode,
+          source: AgentStatusSource.hook,
+          evidence: const ['Something we have never seen'],
+          waiting: AgentWaitKind.unrecorded,
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('needs your attention'), findsOneWidget);
+      expect(find.textContaining('cannot tell'), findsOneWidget);
+      expect(find.byType(FilledButton), findsNothing);
+      expect(find.byType(OutlinedButton), findsNothing);
+    });
+
+    testWidgets('Codex keeps its Continue button when a prompt is open', (
+      tester,
+    ) async {
+      // The asymmetry survives the split: Codex names Enter and names no way to
+      // decline, and that is a different question from whether a prompt is open.
+      final h = harness(
+        agentId: AgentIds.codex,
+        report: report(
+          agentId: AgentIds.codex,
+          evidence: const ['Press enter to continue'],
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+      expect(find.byType(OutlinedButton), findsNothing);
+    });
   });
 
   testWidgets('hosted on the terminal, it stops pointing at the terminal', (

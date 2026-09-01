@@ -38,11 +38,19 @@ class TerminalGridStatusSource {
     final rules = descriptor.grid;
     if (rules.isEmpty || tailLines.isEmpty) return null;
 
-    for (final (status, matchers) in [
-      (AgentActivityStatus.failed, rules.failed),
-      (AgentActivityStatus.awaitingApproval, rules.awaitingApproval),
-      (AgentActivityStatus.working, rules.working),
-      (AgentActivityStatus.idle, rules.idle),
+    // The wait kind travels with the bucket that matched, because only this
+    // source can see the difference: an approval matcher fires on a drawn modal
+    // with options, and an idle matcher fires on the agent's own "I am at my
+    // prompt" footer, which is positive evidence that no modal is over it.
+    for (final (status, waiting, matchers) in [
+      (AgentActivityStatus.failed, AgentWaitKind.unrecorded, rules.failed),
+      (
+        AgentActivityStatus.awaitingApproval,
+        AgentWaitKind.approval,
+        rules.awaitingApproval,
+      ),
+      (AgentActivityStatus.working, AgentWaitKind.unrecorded, rules.working),
+      (AgentActivityStatus.idle, AgentWaitKind.input, rules.idle),
     ]) {
       final hit = _firstMatch(matchers, tailLines);
       if (hit == null) continue;
@@ -53,6 +61,7 @@ class TerminalGridStatusSource {
         source: AgentStatusSource.terminalGrid,
         observedAt: now,
         detail: hit,
+        waiting: waiting,
         // Only for an approval, and only the rows themselves.
         //
         // `detail` is the matcher that fired — `Enter to confirm` — which
