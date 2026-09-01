@@ -46,6 +46,9 @@ typedef MigrationStep = void Function(Database db);
 ///   handoff packet was carrying a transcript instead of.
 /// * **v24** — Index the pane hosting a session so switching terminal tabs does
 ///   not scan every historical session row.
+/// * **v25** — G2: what a session left behind when it ended, so a crash or an
+///   unfinished check is still waiting in the morning rather than scrolling
+///   past at 14:32.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -71,7 +74,44 @@ final Map<int, MigrationStep> schemaMigrations = {
   22: _migrateToV22,
   23: _migrateToV23,
   24: _migrateToV24,
+  25: _migrateToV25,
 };
+
+/// What a session left behind when it ended.
+///
+/// **Deliberately backfills nothing.** Every session already in the database
+/// has ended in one way or another, and minting a follow-up for each would open
+/// the app on a wall of notices about work the user finished with weeks ago —
+/// the fastest possible way to teach someone to ignore the list. Follow-ups
+/// begin from the first ending this build observes.
+///
+/// No foreign key on `session_id`, matching `verification_runs`: a notice about
+/// a session must not be able to take that session's row with it, and a session
+/// deleted out from under a follow-up is something the reader resolves rather
+/// than a constraint violation.
+void _migrateToV25(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_follow_ups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      ending TEXT NOT NULL,
+      summary TEXT,
+      raised_at TEXT NOT NULL,
+      resolved_at TEXT,
+      resolution TEXT
+    );
+  ''');
+  // At most one *open* follow-up per session, enforced here rather than in the
+  // DAO because the writer is a poll: it re-reads the same ended rows on every
+  // session-revision bump, and without this the list would grow by an identical
+  // row per bump. Resolved rows are exempt — the same session ending twice over
+  // a week is two things to come back to, and only the later one is still open.
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_follow_ups_open '
+    'ON session_follow_ups (session_id) WHERE resolved_at IS NULL;',
+  );
+}
 
 void _migrateToV24(Database db) {
   db.execute(
