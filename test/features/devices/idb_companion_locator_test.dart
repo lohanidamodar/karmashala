@@ -33,6 +33,7 @@ void main() {
     plant('checkout/macos/Vendor/idb-companion');
 
     final found = IdbCompanionLocator(
+      hostIsMacOs: true,
       resolvedExecutable: p.join(contents.path, 'MacOS', 'karmashala'),
       workingDirectory: p.join(tmp.path, 'checkout'),
       environment: const {},
@@ -46,6 +47,7 @@ void main() {
     plant('checkout/macos/Vendor/idb-companion');
 
     final found = IdbCompanionLocator(
+      hostIsMacOs: true,
       resolvedExecutable: p.join(tmp.path, 'nowhere', 'app'),
       workingDirectory: p.join(tmp.path, 'checkout'),
       environment: const {},
@@ -60,6 +62,7 @@ void main() {
     final exe = plant('brew/bin');
 
     final found = IdbCompanionLocator(
+      hostIsMacOs: true,
       resolvedExecutable: p.join(tmp.path, 'nowhere', 'app'),
       workingDirectory: p.join(tmp.path, 'nowhere'),
       environment: {'PATH': '${p.dirname(exe)}:/usr/bin'},
@@ -75,6 +78,7 @@ void main() {
     final exe = plant('brew/bin', withResources: false);
 
     final found = IdbCompanionLocator(
+      hostIsMacOs: true,
       resolvedExecutable: p.join(tmp.path, 'nowhere', 'app'),
       workingDirectory: p.join(tmp.path, 'nowhere'),
       environment: {'PATH': p.dirname(exe)},
@@ -88,12 +92,32 @@ void main() {
     // what simctl alone can do.
     expect(
       IdbCompanionLocator(
+        hostIsMacOs: true,
         resolvedExecutable: p.join(tmp.path, 'nowhere', 'app'),
         workingDirectory: p.join(tmp.path, 'nowhere'),
         environment: const {'PATH': '/does/not/exist'},
       ).locate(),
       isNull,
     );
+  });
+
+  test('off macOS it finds nothing, without touching the filesystem', () {
+    // The binary is never shipped to Windows or Linux: it lives under macos/,
+    // which those builds do not read, and it is deliberately not a Flutter
+    // asset — assets are copied into every platform's bundle. So a search
+    // there is guaranteed to come up empty, and stat-ing every PATH entry to
+    // establish that is work no Windows user should pay for on each refresh.
+    final exe = plant('brew/bin');
+
+    final found = IdbCompanionLocator(
+      hostIsMacOs: false,
+      resolvedExecutable: p.join(tmp.path, 'nowhere', 'app'),
+      workingDirectory: p.join(tmp.path, 'nowhere'),
+      // Even with one sitting right there on PATH.
+      environment: {'PATH': p.dirname(exe)},
+    ).locate();
+
+    expect(found, isNull);
   });
 
   group('the socket path', () {

@@ -65,6 +65,9 @@ dependencies:
   xterm:
     path: packages/xterm
   yaml: ^3.1.4
+  grpc: ^5.1.0
+  protobuf: ^6.0.0
+  fixnum: ^1.1.1
 
 # Dart-only stand-ins for the two Windows plugin implementations, whose C++
 # needs ATL and /await — both gone from the VS 2026 toolchain (MSVC 14.51).
@@ -113,6 +116,13 @@ flutter:
     # The same two for macOS and Linux, whose trays cannot decode an .ico.
     - assets/tray_icon.png
     - assets/tray_icon_attention.png
+    # NOTE: the vendored idb_companion is deliberately NOT listed here.
+    # A Flutter asset is copied into every platform's bundle, so declaring it
+    # would ship a 43 MB macOS-only arm64 binary inside the Windows and Linux
+    # builds. It lives under macos/Vendor (git-ignored, fetched by
+    # tool/vendor/fetch_idb_companion.sh) and is resolved at runtime by
+    # IdbCompanionLocator.
+    #
     # scrcpy-server (Apache-2.0) is deployed to the device to produce H.264 for
     # the device pane's live view. Its version must match kScrcpyVersion.
     - assets/scrcpy/

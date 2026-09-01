@@ -46,11 +46,16 @@ enum IdbCompanionSource {
 /// while video and touch still work, which is the confusing half-broken state
 /// this check exists to prevent.
 class IdbCompanionLocator {
-  const IdbCompanionLocator({
+  IdbCompanionLocator({
     this.environment,
     this.resolvedExecutable,
     this.workingDirectory,
-  });
+    bool? hostIsMacOs,
+  }) : _hostIsMacOs = hostIsMacOs ?? Platform.isMacOS;
+
+  /// Whether this host can have a companion at all. Injected so both answers
+  /// stay reachable from a test on either OS.
+  final bool _hostIsMacOs;
 
   /// Injected so the search is testable off macOS and without a real install.
   final Map<String, String>? environment;
@@ -65,7 +70,15 @@ class IdbCompanionLocator {
   ///
   /// Never throws: on Windows, Linux, or an Intel Mac the honest answer is
   /// "there is none", and the pane degrades to what `simctl` alone can do.
+  ///
+  /// Off macOS this returns before touching the filesystem. The binary is not
+  /// shipped there — it lives under `macos/`, which no Windows or Linux build
+  /// reads, and it is deliberately **not** a Flutter asset, because assets are
+  /// copied into every platform's bundle — so searching is guaranteed to find
+  /// nothing, and stat-ing every entry of `PATH` to establish that is work no
+  /// Windows user should pay for on every refresh.
   IdbCompanionLocation? locate() {
+    if (!_hostIsMacOs) return null;
     for (final candidate in _candidates()) {
       final location = _accept(candidate.$1, candidate.$2);
       if (location != null) return location;

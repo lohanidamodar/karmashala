@@ -266,7 +266,7 @@ packages:
     source: hosted
     version: "0.9.3+5"
   fixnum:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: fixnum
       sha256: b6dc7065e46c974bc7c5f143080a6764ec7a4be6da1285ececdc37be96de53be
@@ -464,6 +464,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.3"
+  grpc:
+    dependency: "direct main"
+    description:
+      name: grpc
+      sha256: "86be3a7d39ad865b214a7370021ac80e68939238b507730de6d97fc662cb2723"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.1.0"
   highlight:
     dependency: "direct main"
     description:
@@ -528,6 +536,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.6.0"
+  http2:
+    dependency: transitive
+    description:
+      name: http2
+      sha256: "382d3aefc5bd6dc68c6b892d7664f29b5beb3251611ae946a98d35158a82bbfa"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.1"
   http_multi_server:
     dependency: transitive
     description:
@@ -939,6 +955,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.5"
+  protobuf:
+    dependency: "direct main"
+    description:
+      name: protobuf
+      sha256: "75ec242d22e950bdcc79ee38dd520ce4ee0bc491d7fadc4ea47694604d22bf06"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.0"
   pub_semver:
     dependency: transitive
     description:
