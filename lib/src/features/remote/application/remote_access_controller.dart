@@ -15,6 +15,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/domain/inbox_item.dart';
@@ -104,6 +105,13 @@ class RemoteAccessController {
           hostId: _ref.read(hostDeviceIdProvider),
           bindings: _ref.read(remoteHostBindingsProvider),
           relay: hosted,
+          // Without this the host kept its whole side of the story to itself.
+          // The embedded relay logs (it is handed the same logger), so a log
+          // full of "a socket is waiting" and nothing else read as "the two
+          // ends never meet" — while the desktop was in fact refusing every
+          // frame the phone sent, and could not say so. Lifecycle only: the
+          // service never logs a rendezvous id, a payload or a key.
+          onLog: AppLogger.named('remote').info,
           onDevicesChanged: () =>
               _ref.read(pairedDevicesRevisionProvider.notifier).bump(),
         );
