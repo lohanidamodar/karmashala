@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -219,6 +220,18 @@ class SessionLauncher {
   SessionLauncher(this._ref);
 
   final Ref _ref;
+
+  /// Every launch says what it decided.
+  ///
+  /// This path had no logging at all, and four of the bugs found in it were
+  /// silent by construction: a permission mode written over the row it was
+  /// reusing, `external_session_id` never stored for one agent, a resume that
+  /// quietly started a new conversation, and a dormant pane not being reused so
+  /// one session got two terminals. None of them threw; each produced a
+  /// plausible-looking session that was wrong in a way only the command line
+  /// showed. One line per launch, naming what was chosen, is what makes the
+  /// next one of those answerable from a log instead of a repro.
+  static final _log = AppLogger.named('sessions.launch');
 
   /// The single permission-mode resolution in the app.
   ///
@@ -940,6 +953,21 @@ class SessionLauncher {
         : (tabId: resumedTab, paneId: dormant!);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
     _ref.read(terminalVisibleProvider.notifier).set(true);
+    // Deliberately after the pane is claimed, so it reports what happened
+    // rather than what was intended. `resumed` is the dormant-pane reuse: when
+    // it is false for a session that has a restored pane, the user is about to
+    // be looking at two terminals for one session.
+    _log.info(
+      'Started ${session.id} in a pane: agent=${request.installation.agentId} '
+      'mode=${permissionMode.name} pane=${opened.paneId} '
+      'resumed=${resumedTab != null} '
+      'conversation=${request.resumeExternalSessionId ?? 'new'} '
+      'worktree=${request.useWorktree} '
+      // The ordinary answer is often "none" and that is not an error — but it
+      // is the answer to "why can't the agent see Karmashala's tools", which
+      // was previously only discoverable by reading the launched command line.
+      'mcp=${mcp == null ? 'none' : 'yes'}',
+    );
     return SessionLaunchResult(
       session: session.copyWith(paneId: opened.paneId),
       paneId: opened.paneId,
