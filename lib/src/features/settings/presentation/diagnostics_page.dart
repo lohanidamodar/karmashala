@@ -13,6 +13,7 @@ import '../application/settings_controller.dart';
 import '../domain/diagnostics_settings.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
+import 'watch_set_section.dart';
 
 /// Settings → Diagnostics: the debug-mode switch, and what happens to the log.
 ///
@@ -118,6 +119,9 @@ class DiagnosticsPage extends ConsumerWidget {
             ],
           ),
         ),
+        // Last because it is the one section that reads rather than sets. See
+        // [WatchSetSection] for what it is answering.
+        const WatchSetSection(),
       ],
     );
   }

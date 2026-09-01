@@ -433,6 +433,33 @@ class SessionStatusRegistry {
     });
   }
 
+  /// [coverage] now, and again whenever a cycle measures something different.
+  ///
+  /// The log line is edge-triggered for the reason [_measure] gives, and a UI
+  /// needs the same discipline for the same reason: this runs every 1.2
+  /// seconds, and a row that repainted on each of them would be a ticker rather
+  /// than a readout. Yields immediately — `null` before the first cycle — so
+  /// "nothing measured yet" is a state a reader can render rather than a wait.
+  ///
+  /// `Stream.multi` rather than a generator, exactly as in [reportsFor]: this
+  /// can sit silent for a long time, and a cancellation must not wait for the
+  /// next value.
+  Stream<SessionStatusCoverage?> get coverageReports =>
+      Stream<SessionStatusCoverage?>.multi((controller) {
+        var last = coverage;
+        controller.add(last);
+        final subscription = _changes.stream.listen(
+          (_) {
+            final next = coverage;
+            if (next == last) return;
+            last = next;
+            controller.add(next);
+          },
+          onDone: controller.close,
+        );
+        controller.onCancel = subscription.cancel;
+      });
+
   /// Sessions a hook just changed the status of, as the callback lands.
   ///
   /// The event path. `AgentStatusWatcher` listens here so an approval request

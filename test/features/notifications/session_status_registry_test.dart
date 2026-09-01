@@ -568,6 +568,34 @@ void main() {
       expect(registry.coverage, coverage);
     });
 
+    test('coverage is watchable, and an unchanged cycle is silent', () async {
+      // The number reaches the log and (now) a Diagnostics row. A row can only
+      // show it if the registry says when it moved, and must not repaint 50
+      // times a minute when it did not.
+      final registry = build();
+      addTearDown(registry.dispose);
+      final seen = <SessionStatusCoverage?>[];
+      final sub = registry.coverageReports.listen(seen.add);
+      addTearDown(sub.cancel);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(seen, [null], reason: 'nothing has been measured yet');
+
+      await registry.cycle();
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, hasLength(2));
+      expect(seen.last?.tracked, 0);
+
+      await registry.cycle();
+      await Future<void>.delayed(Duration.zero);
+      expect(seen, hasLength(2), reason: 'the measurement did not move');
+
+      addHookedSessions(3);
+      await registry.cycle();
+      await Future<void>.delayed(Duration.zero);
+      expect(seen.last?.tracked, 3);
+    });
+
     test('a session queued for a probe is not one we stopped watching', () {
       // The distinction the whole registry turns on, stated as a number a
       // human can read: 76 sessions with no transcript read yet is a healthy

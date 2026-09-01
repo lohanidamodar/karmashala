@@ -27,7 +27,9 @@ import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
 import 'package:chitragupta/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:chitragupta/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
 import 'package:chitragupta/src/features/settings/presentation/settings_nav.dart';
+import 'package:chitragupta/src/features/settings/presentation/watch_set_section.dart';
 import 'package:chitragupta/src/features/settings/presentation/settings_screen.dart';
 import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
 import 'package:chitragupta/src/features/ssh/presentation/remote_file_browser_dialog.dart';
@@ -463,7 +465,9 @@ void main() {
     // The Loop 79 master-detail redesign, in every standard cell plus the
     // desktop 125% cell — the scale the in-app text-size setting offers, at
     // the size it will actually be used.
-    ProviderContainer prepared() {
+    /// [coverage] stands in for the status registry's watch-set measurement,
+    /// which no cycle has produced in a widget test.
+    ProviderContainer prepared({SessionStatusCoverage? coverage}) {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
@@ -473,6 +477,10 @@ void main() {
           ...noProcessOverrides(),
           // Theme discovery reads real Ghostty/Warp directories.
           discoveredTerminalThemesProvider.overrideWithValue(const []),
+          if (coverage != null)
+            sessionStatusCoverageProvider.overrideWith(
+              (ref) => Stream.value(coverage),
+            ),
         ],
       );
       addTearDown(container.dispose);
@@ -487,6 +495,50 @@ void main() {
         because:
             'the nav rail, the filter and the appearance rows must hold at '
             'the minimum window and at 125% text',
+      );
+    });
+
+    testWidgets('the diagnostics section, watch-set readout and all', (
+      tester,
+    ) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          prepared(),
+          const SettingsScreen(initialSection: SettingsSectionId.diagnostics),
+        ),
+        matrix: const [...windowMatrix, desktopLargeText],
+        because:
+            'the watch-set rows put a long sentence of help beside a number, '
+            'which is the shape that wraps badly at the minimum window',
+      );
+    });
+
+    testWidgets('the diagnostics section with a coverage readout to show', (
+      tester,
+    ) async {
+      // The measured state, not the "nothing yet" one: three value rows and,
+      // when the rotation is behind, a paragraph of error text under them.
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          prepared(
+            coverage: const SessionStatusCoverage(
+              tracked: 900,
+              hookAnswered: 10,
+              probeCandidates: 890,
+              probed: 24,
+              neverProbed: 400,
+              probeFailures: 3,
+              rotationPeriod: Duration(seconds: 150),
+            ),
+          ),
+          const SettingsScreen(initialSection: SettingsSectionId.diagnostics),
+        ),
+        matrix: const [...windowMatrix, desktopLargeText],
+        because:
+            'the behind-rotation warning is the longest text the page can '
+            'show',
       );
     });
 

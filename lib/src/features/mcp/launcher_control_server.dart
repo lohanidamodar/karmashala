@@ -58,6 +58,7 @@ import 'handshake_file_permissions.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
+import 'mcp_session_token_reaper.dart';
 import 'mcp_tool_catalogue.dart';
 import 'session_mcp.dart';
 import 'session_tools.dart';
@@ -193,6 +194,14 @@ class LauncherControlServer implements SessionMcp {
   /// Where a session's own MCP URL is built from, and what mints the token in
   /// it.
   McpCallerRegistry get callers => _callers;
+
+  /// Retires those tokens when their sessions end. Started with the server and
+  /// stopped with it, because a token only exists while the server does.
+  late final McpSessionTokenReaper _tokenReaper = McpSessionTokenReaper(
+    _container,
+    _callers,
+    logger: _logger,
+  );
 
   /// The MCP endpoint URL for an unattributed caller, or null when nothing is
   /// served — the hardening failed, or the server is not started.
@@ -435,6 +444,7 @@ class LauncherControlServer implements SessionMcp {
     );
     _publishSessionMcp(this);
     _startCheckpointRecorder();
+    _tokenReaper.start();
   }
 
   /// Also listens on the WSL virtual switch's host address, so an agent inside
@@ -604,6 +614,7 @@ class LauncherControlServer implements SessionMcp {
   }
 
   Future<void> stop() async {
+    _tokenReaper.stop();
     await _server?.close(force: true);
     await _wslServer?.close(force: true);
     await _socketServer?.close();
@@ -1297,7 +1308,11 @@ class LauncherControlServer implements SessionMcp {
           'The full record of one fan-out comparison: the prompt, the winner, '
           'the merge commit, and every candidate with its session, branch, '
           'worktree (and whether that worktree has been removed), diff stat, '
-          'verification verdict and failure reason. Use this to report on a '
+          'verification verdict and failure reason. Each verdict says who '
+          'produced it: attribution is "author" when the candidate graded '
+          'itself, "independent" when another session did, and "notRecorded" '
+          'when nobody recorded a verifier — a self-graded pass is not '
+          'evidence, so say which one it was when you report on a '
           'comparison the user ran.',
       'inputSchema': {
         'type': 'object',
@@ -1767,6 +1782,15 @@ class LauncherControlServer implements SessionMcp {
                 'verdict': evidence.verdict.name,
                 'label': evidence.label,
                 'runId': evidence.runId,
+                // Present even when null, unlike every optional field above.
+                // An omitted producer reads as a gap in the tool rather than a
+                // gap in the record, which is exactly how a self-graded pass
+                // comes to be read as a checked one — the thing G3 exists to
+                // stop. Every human-facing surface already says this; an agent
+                // reading a comparison was the last one that could not.
+                'producedBySessionId': evidence.producerSessionId,
+                'attribution': candidate.evidenceAttribution.name,
+                'attributionLabel': candidate.evidenceAttribution.label,
               },
             'failure': candidate.failure,
             'notes': candidate.notes,
