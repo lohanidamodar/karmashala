@@ -40,7 +40,9 @@ void main() {
     if (altBuffer) {
       // What an agent CLI does: take the display and draw the whole screen.
       terminal.write('\x1b[?1049h');
-      terminal.write('the frame it was detached on');
+      // Ends the line, so what a refresh draws next starts in column zero and
+      // the assertions below are about content rather than about wrapping.
+      terminal.write('the frame it was detached on\r\n');
     }
     final park = ScrollbackPark(terminal)..park();
     final screen = ColdScreen(
@@ -163,7 +165,7 @@ void main() {
     );
   });
 
-  test('a pane on the alternate buffer is left exactly as it was', () {
+  test('the history a pane on the alternate buffer kept is not touched', () {
     var now = Duration.zero;
     final terminal = Terminal(maxLines: 1000)..resize(40, 10);
     for (var i = 0; i < 200; i++) {
@@ -187,8 +189,8 @@ void main() {
       terminal.mainBuffer.lines.length,
       before,
       reason:
-          'the reattach replay is what redraws a TUI, and a half-applied '
-          'redraw underneath it would only be applied twice',
+          'the redraw goes to the buffer the program is drawing into, and the '
+          'main buffer holds the only copy of a history nothing snapshotted',
     );
   });
 
@@ -263,6 +265,31 @@ void main() {
       );
     });
 
+    test('a hundred of them still cost one pool, not a hundred', () {
+      var now = Duration.zero;
+      final budget = TerminalIngestBudget(warmPoolBytes: 4096, clock: () => now);
+      final panes = [
+        for (var i = 0; i < 100; i++) coldPane(budget: budget, altBuffer: true),
+      ];
+
+      for (final pane in panes) {
+        pane.screen.add(utf8Bytes('x' * 1000));
+      }
+
+      expect(
+        budget.granted[IngestTier.cold],
+        lessThanOrEqualTo(4096),
+        reason:
+            'a hundred detached agents each drawing a full-screen UI is the '
+            'scale target, and refreshing them is one pool like any other',
+      );
+      expect(
+        [for (final pane in panes) pane.screen.refreshes].fold(0, (a, b) => a + b),
+        lessThan(100),
+        reason: 'the pool ran out, and the panes that missed it simply waited',
+      );
+    });
+
     test('does not go on showing the frame it was detached on', () {
       final tui = coldPane(altBuffer: true);
 
@@ -278,6 +305,85 @@ void main() {
             'a grid read at detach and never again is exactly the failure '
             'ColdScreen exists to prevent',
       );
+    });
+  });
+
+  group('coming back', () {
+    ColdIngest coldIngest({
+      bool altBuffer = false,
+      Duration refreshInterval = Duration.zero,
+      IngestClock? clock,
+    }) {
+      final terminal = Terminal(maxLines: 1000)..resize(40, 10);
+      for (var i = 0; i < 200; i++) {
+        terminal.write('history line $i\r\n');
+      }
+      if (altBuffer) terminal.write('\x1b[?1049h');
+      return ColdIngest(
+        terminal: terminal,
+        budget: TerminalIngestBudget(clock: clock ?? () => Duration.zero),
+        clock: clock,
+        refreshInterval: refreshInterval,
+      )..detach(Uint8List(0));
+    }
+
+    test('a pane the park declined draws what arrived once, not twice', () {
+      final cold = coldIngest(altBuffer: true);
+      expect(cold.isParked, isFalse);
+
+      cold.add(utf8Bytes('esc to interrupt\r\n'));
+      expect(
+        cold.spooledBytes,
+        0,
+        reason:
+            'nothing spooled is how nothing can be replayed over the top of '
+            'what the refresh already drew',
+      );
+
+      cold.reattach();
+
+      expect(
+        'esc to interrupt'.allMatches(cold.terminal.buffer.getText()).length,
+        1,
+      );
+    });
+
+    test('what the interval was still holding back is flushed, not lost', () {
+      var now = Duration.zero;
+      final cold = coldIngest(
+        altBuffer: true,
+        refreshInterval: kColdScreenRefreshInterval,
+        clock: () => now,
+      );
+
+      cold.add(utf8Bytes('first frame\r\n'));
+      // Inside the interval, so an ordinary chunk waits for the next one — and
+      // for a pane with no spool behind it, reattach is that next one.
+      cold.add(utf8Bytes('esc to interrupt\r\n'));
+      expect(cold.screen.pendingBytes, greaterThan(0));
+
+      cold.reattach();
+
+      expect(cold.screen.pendingBytes, 0);
+      final text = cold.terminal.buffer.getText();
+      expect('esc to interrupt'.allMatches(text).length, 1);
+      expect('first frame'.allMatches(text).length, 1);
+    });
+
+    test('a parked pane still rebuilds itself from the whole spool', () {
+      final cold = coldIngest();
+      cold.add(utf8Bytes('while detached\r\n'));
+      expect(cold.spooledBytes, greaterThan(0));
+
+      cold.reattach();
+
+      final text = cold.terminal.mainBuffer.getText();
+      expect(
+        'while detached'.allMatches(text).length,
+        1,
+        reason: 'the unpark clears the buffer, so only the replay survives',
+      );
+      expect(text, contains('history line 199'), reason: 'history came back');
     });
   });
 }

@@ -246,6 +246,49 @@ void main() {
         reason: 'the screen, and nothing above it',
       );
     });
+
+    test('costs the same whether or not a full-screen program owns it', () {
+      final normal = _coldBurst(seconds: 5);
+      final tui = _coldBurst(seconds: 5, altBuffer: true);
+      // ignore: avoid_print
+      print(
+        'cold TUI pane · ${tui.bytesIn} bytes in · ${tui.bytesParsed} bytes '
+        'parsed · ${tui.refreshes} screen refreshes · ${tui.linesAllocated} '
+        'lines allocated · ${tui.screenLines} lines behind the screen',
+      );
+
+      expect(
+        tui.bytesParsed,
+        normal.bytesParsed,
+        reason:
+            'a cold pane parses its screen out of the shared pool, and which '
+            'buffer it is drawing into is not a reason to spend more of it',
+      );
+      expect(
+        tui.refreshes,
+        normal.refreshes,
+        reason: 'one parse per interval, the same interval',
+      );
+      expect(
+        tui.screenLines,
+        kPerfRows,
+        reason:
+            'the alternate buffer is the viewport, so the memory floor is the '
+            'one the park already established for everything else',
+      );
+      expect(
+        tui.linesAllocated,
+        lessThanOrEqualTo(normal.linesAllocated),
+        reason: 'and it churns no more lines drawing the same bytes',
+      );
+      expect(
+        tui.spooled,
+        0,
+        reason:
+            'nothing is spooled behind a screen that is drawn in place — which '
+            'is what keeps a reattach from writing every byte a second time',
+      );
+    });
   });
 
   group('where the work lands', () {
@@ -413,31 +456,30 @@ class _Pane {
 }
 
 /// A detached pane: bytes go to a bounded spool undecoded, and only its screen
-/// is refreshed, out of the shared pool. Exactly `PtyTerminalInstance`'s cold
-/// branch.
+/// is refreshed, out of the shared pool. Through the real [ColdIngest], so this
+/// measures `PtyTerminalInstance`'s cold branch rather than a copy of it.
 class _ColdPane {
   _ColdPane({
     required TerminalIngestBudget budget,
     required Duration Function() clock,
+    bool altBuffer = false,
   }) {
     terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
       ..resize(kPerfColumns, kPerfRows);
-    // Park it the way going cold does, so `ColdScreen` will touch it at all.
     terminal.write(corpusText(PerfCorpus.plainLog));
-    park = ScrollbackPark(terminal)..park();
-    coldScreen = ColdScreen(
-      terminal: terminal,
-      park: park,
-      budget: budget,
-      clock: clock,
-    );
+    // A full-screen program takes the display, which is what makes the park
+    // decline the pane — the case the cold screen used to skip entirely.
+    if (altBuffer) terminal.write('\x1b[?1049h');
+    cold = ColdIngest(terminal: terminal, budget: budget, clock: clock)
+      ..detach(Uint8List(0));
     _sweepNewLines();
   }
 
   late final Terminal terminal;
-  late final ScrollbackPark park;
-  late final ColdScreen coldScreen;
-  final ScrollbackSpool spool = ScrollbackSpool();
+  late final ColdIngest cold;
+  ScrollbackPark get park => cold.park;
+  ColdScreen get coldScreen => cold.screen;
+  ScrollbackSpool get spool => cold.spool;
   final Expando<bool> _counted = Expando<bool>();
 
   int bytesIn = 0;
@@ -452,8 +494,7 @@ class _ColdPane {
         end < bytes.length ? end : null,
       );
       bytesIn += chunk.length;
-      spool.add(chunk);
-      coldScreen.add(chunk);
+      cold.add(chunk);
       linesAllocated += _sweepNewLines();
     }
   }
@@ -469,6 +510,11 @@ class _ColdPane {
   set parsed(int value) => _parsed = value;
 
   int get linesHeld => terminal.mainBuffer.lines.length;
+
+  /// Lines behind the *screen* — the alternate buffer for a pane a full-screen
+  /// program owns, which is the viewport by construction, and the same trimmed
+  /// main buffer as [linesHeld] for every other pane.
+  int get screenLines => terminal.buffer.lines.length;
 
   int _sweepNewLines() {
     final lines = terminal.lines;
@@ -720,15 +766,20 @@ typedef _ColdMeasured = ({
   int refreshes,
   int linesAllocated,
   int linesHeld,
+  int screenLines,
   int spooled,
   int screenDropped,
 });
 
 /// A detached pane taking a burst over [seconds] of simulated time.
-_ColdMeasured _coldBurst({required int seconds}) {
+_ColdMeasured _coldBurst({required int seconds, bool altBuffer = false}) {
   var now = Duration.zero;
   final budget = TerminalIngestBudget(clock: () => now);
-  final pane = _ColdPane(budget: budget, clock: () => now);
+  final pane = _ColdPane(
+    budget: budget,
+    clock: () => now,
+    altBuffer: altBuffer,
+  );
   final bytes = _corpusBytes(PerfCorpus.plainLog, 8);
 
   final framesPerSecond =
@@ -750,6 +801,7 @@ _ColdMeasured _coldBurst({required int seconds}) {
     refreshes: pane.coldScreen.refreshes,
     linesAllocated: pane.linesAllocated,
     linesHeld: pane.linesHeld,
+    screenLines: pane.screenLines,
     spooled: pane.spool.length,
     screenDropped: pane.screenDropped,
   );

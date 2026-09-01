@@ -20,9 +20,7 @@ import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
-import 'scrollback_park.dart';
 import 'pty_output_coalescer.dart';
-import 'scrollback_spool.dart';
 import 'terminal_ingest_budget.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
@@ -243,11 +241,7 @@ class PtyTerminalInstance
       onData: terminal.write,
       budget: ingestBudget,
     );
-    _coldScreen = ColdScreen(
-      terminal: terminal,
-      park: _park,
-      budget: ingestBudget,
-    );
+    _cold = ColdIngest(terminal: terminal, budget: ingestBudget);
     _outputSubscription = _pty.output.listen(_onPtyBytes);
 
     // Captured while the process is certainly alive: `pid` is only safe to act
@@ -318,23 +312,17 @@ class PtyTerminalInstance
   bool _exited = false;
   Future<void>? _reap;
 
-  /// Where a cold pane's output goes instead of into the parser.
-  final ScrollbackSpool _spool = ScrollbackSpool();
-
   IngestTier _tier = IngestTier.hot;
 
-  /// The scrollback this pane gives up while it is cold.
-  late final ScrollbackPark _park = ScrollbackPark(terminal);
-
-  /// What keeps the pane's *screen* current while its scrollback is parked, so
-  /// a detached session does not go dark for the status sources.
-  late final ColdScreen _coldScreen;
+  /// Where this pane's output goes, and what redraws its screen, while nobody
+  /// can see it. Also what decides whether it parks at all.
+  late final ColdIngest _cold;
 
   @override
   IngestTier get ingestTier => _tier;
 
   @override
-  String? get parkedScrollback => _park.parked;
+  String? get parkedScrollback => _cold.parkedScrollback;
 
   /// This pane's buffer, once its process has gone and while the buffer really
   /// is the history.
@@ -349,24 +337,21 @@ class PtyTerminalInstance
   /// a stale TUI frame.
   @override
   Terminal? get adoptableBuffer =>
-      _exited && !_park.isParked && !terminal.isUsingAltBuffer ? terminal : null;
+      _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
 
-  /// Bytes the spool discarded while this pane was cold. Diagnostics, and what
-  /// the replay reads to decide whether to admit to a gap.
+  /// Bytes this pane is holding for a replay. Diagnostics, and what the
+  /// ingest-tier tests assert on.
   @visibleForTesting
-  int get spooledBytes => _spool.length;
+  int get spooledBytes => _cold.spooledBytes;
 
-  /// Reads the pipe. A pane nobody can see does not parse: its bytes go
-  /// straight into a bounded spool, undecoded, and are replayed only if the
-  /// session comes back. Something still has to *read* the pipe, or the child
-  /// blocks on a full OS buffer.
+  /// Reads the pipe. A pane nobody can see does not parse its output stream:
+  /// its bytes go to [ColdIngest], which keeps only the screen readable and
+  /// holds the rest undecoded. Something still has to *read* the pipe, or the
+  /// child blocks on a full OS buffer.
   void _onPtyBytes(Uint8List bytes) {
     if (_disposed) return;
     if (_tier == IngestTier.cold) {
-      _spool.add(bytes);
-      // The spool is what the pane replays when it comes back; this is what
-      // anyone reading the grid meanwhile sees.
-      _coldScreen.add(bytes);
+      _cold.add(bytes);
       return;
     }
     _coalescer.add(bytes);
@@ -379,10 +364,9 @@ class PtyTerminalInstance
     _tier = tier;
     _coalescer.tier = tier;
     if (tier == IngestTier.cold) {
-      // Take what is already queued with us rather than parsing it on the way
-      // out: going cold must not cost a flush.
-      _spool.add(_coalescer.takePending());
-      if (_park.park()) {
+      // Hand over what is already queued rather than parsing it on the way out:
+      // going cold must not cost a flush of the coalescer.
+      if (_cold.detach(_coalescer.takePending())) {
         // The blocks whose prompt line just went are what held those lines
         // alive, through their anchors; dropping them is what actually releases
         // the memory. A replayed window carries no OSC 133 markers anyway, so
@@ -390,52 +374,18 @@ class PtyTerminalInstance
         commandBlocks?.tracker.pruneEvicted();
       }
     } else if (wasCold) {
-      // Before the replay, not after: what the screen refresh drew is about to
-      // be written again, in order, from the spool.
-      _coldScreen.reset();
-      _park.unpark();
-      _replaySpool();
+      _cold.reattach();
     }
   }
 
-  /// Writes text the app generated wherever this pane's output is going.
-  ///
-  /// A cold pane is not parsing, so its notice belongs in the spool among the
-  /// process output it arrived with — writing it into a parked buffer would put
-  /// it above history that came before it.
+  /// Writes text the app generated wherever this pane's output is going — the
+  /// buffer while it is visible, and [ColdIngest] while it is not.
   void _emit(String text) {
     if (_tier == IngestTier.cold) {
-      _spool.add(const Utf8Encoder().convert(text));
-      // "[process exited]" is the one notice that cannot wait for an interval:
-      // nothing further is ever going to arrive to carry it.
-      _coldScreen.write(text);
+      _cold.emit(text);
       return;
     }
     terminal.write(text);
-  }
-
-  /// Writes what arrived while this pane was cold into its buffer.
-  ///
-  /// One write, bounded by the spool's own cap, so bringing a session back is
-  /// a single parse of at most a few hundred screens rather than however much
-  /// the process produced while it was away.
-  void _replaySpool() {
-    final dropped = _spool.droppedBytes;
-    final bytes = _spool.drain();
-    _spool.reset();
-    if (bytes.isEmpty && dropped == 0) return;
-    if (dropped > 0) {
-      // Bytes below a kibibyte rather than a rounded-down "0 KiB", which reads
-      // as a bug in the notice rather than as a small gap in the output.
-      final lost = dropped >= 1024 ? '${dropped ~/ 1024} KiB' : '$dropped bytes';
-      terminal.write(
-        '\r\n\x1b[90m[\u2026 $lost of output while detached was '
-        'dropped]\x1b[0m\r\n',
-      );
-    }
-    if (bytes.isNotEmpty) {
-      terminal.write(const Utf8Decoder(allowMalformed: true).convert(bytes));
-    }
   }
 
   @override
