@@ -224,6 +224,47 @@ class AgentMcpSupport {
         AgentMcpStyle.inlineUrl => [flag, '$urlKey=$url'],
         AgentMcpStyle.unsupported => const [],
       };
+
+  /// [arguments] with anything [argumentsFor] wrote taken back out.
+  ///
+  /// For reading back a launch recorded before these flags were understood to
+  /// be volatile, when they were stored alongside the durable ones. Every value
+  /// in such a flag is dead by the next start — the config file is deleted by
+  /// `SessionMcpConfigs.prepare`, the port is rebound, the credential is
+  /// re-minted — and replaying one does not weaken the launch, it fails it:
+  ///
+  ///   Error: Invalid MCP configuration:
+  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///
+  /// So a workspace stored by the old code has to be repaired on the way in, or
+  /// installing the fix leaves every pane the user already had just as broken.
+  /// Matched on **our own** value and never on the flag alone: Codex's `-c`
+  /// takes any config override, and a user's `-c model=…` is not ours to drop.
+  List<String> withoutArgumentsIn(List<String> arguments) {
+    switch (style) {
+      case AgentMcpStyle.unsupported:
+        return arguments;
+      case AgentMcpStyle.configFile:
+        return [
+          for (final argument in arguments)
+            if (!argument.startsWith('$flag=')) argument,
+        ];
+      case AgentMcpStyle.inlineUrl:
+        final kept = <String>[];
+        for (var i = 0; i < arguments.length; i++) {
+          // Two tokens, dropped as two: a dangling `-c` left behind would take
+          // whatever argument came next as its value.
+          if (arguments[i] == flag &&
+              i + 1 < arguments.length &&
+              arguments[i + 1].startsWith('$urlKey=')) {
+            i++;
+            continue;
+          }
+          kept.add(arguments[i]);
+        }
+        return kept;
+    }
+  }
 }
 
 /// Executable base names to probe, per execution-environment kind. Each list is

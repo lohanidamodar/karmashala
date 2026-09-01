@@ -154,7 +154,9 @@ PtyLaunch agentPtyLaunchFor(AgentPaneLaunch launch, {LaunchContext? context}) =>
     wrapForPty(
       ShellCommand(
         executable: launch.executable,
-        arguments: launch.arguments,
+        // `commandArguments`, not `arguments`: the MCP flags are rebuilt for
+        // this start and sit beside the stored ones rather than inside them.
+        arguments: launch.commandArguments,
         workingDirectory: launch.workingDirectory,
         environment: {
           if (launch.sessionId != null)

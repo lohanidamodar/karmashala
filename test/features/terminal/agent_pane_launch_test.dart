@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
+import 'package:chitragupta/src/features/sessions/application/session_mcp_arguments.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
@@ -357,8 +358,164 @@ void main() {
     });
   });
 
+  /// The MCP flags name a config file deleted on every app start, a port
+  /// rebound on every app start, and a credential minted fresh on every app
+  /// start. Storing them made a restored pane replay all three, and the owner's
+  /// agent refused to run:
+  ///
+  ///   Error: Invalid MCP configuration:
+  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  group('the volatile MCP flags are never part of the record', () {
+    test('a launch that ran with them is stored without them', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: 'claude',
+        arguments: ['--permission-mode', 'manual', '--resume', 'sid'],
+        mcpArguments: [r'--mcp-config=C:\x\mcp\session-abc.json'],
+        workingDirectory: '/repo',
+        sessionId: 's',
+      );
+      final stored = jsonDecode(jsonEncode(launch.toJson())) as Map;
+
+      expect(stored['arguments'], [
+        '--permission-mode',
+        'manual',
+        '--resume',
+        'sid',
+      ]);
+      expect(jsonEncode(stored), isNot(contains('mcp')));
+
+      final back = AgentPaneLaunch.fromJson(stored)!;
+      expect(back.mcpArguments, isEmpty);
+      expect(back.commandArguments, [
+        '--permission-mode',
+        'manual',
+        '--resume',
+        'sid',
+      ]);
+    });
+
+    test('what actually runs is the flags of now, then the stored intent', () {
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: 'claude',
+        arguments: ['--permission-mode', 'manual', 'say hello'],
+        mcpArguments: ['--mcp-config=/now.json'],
+      );
+      // MCP first: Codex's `-c` is a global option and its resume is a
+      // subcommand, so everything global has to be on the left of it.
+      expect(launch.commandArguments, [
+        '--mcp-config=/now.json',
+        '--permission-mode',
+        'manual',
+        'say hello',
+      ]);
+      expect(
+        agentPtyLaunchFor(launch).arguments.last,
+        contains('--mcp-config=/now.json'),
+      );
+    });
+
+    test('a record written before the fix is stripped on the way in', () {
+      // The owner's saved workspace holds rows in exactly this shape. Reading
+      // one back has to drop the flag rather than replay it, or installing the
+      // fix leaves every pane they already had just as broken.
+      final back = AgentPaneLaunch.fromJson({
+        'agentId': 'claudeCode',
+        'executable': 'claude',
+        'arguments': [
+          r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
+              r'\chitragupta\mcp\session-95659659.json',
+          '--permission-mode',
+          'acceptEdits',
+          '--resume',
+          'sid',
+        ],
+        'sessionId': 's',
+      })!;
+
+      expect(back.commandArguments, [
+        '--permission-mode',
+        'acceptEdits',
+        '--resume',
+        'sid',
+      ]);
+    });
+
+    test("Codex's inline pair is stripped as a pair", () {
+      // `-c <key>=<url>` is two tokens, and dropping only the value would leave
+      // a dangling `-c` that takes the next argument as its own.
+      final back = AgentPaneLaunch.fromJson({
+        'agentId': 'codex',
+        'executable': 'codex',
+        'arguments': [
+          '-c',
+          'mcp_servers.chitragupta.url=http://127.0.0.1:51234/mcp/dead-token',
+          '--ask-for-approval',
+          'on-request',
+          'resume',
+          'sid',
+        ],
+        'sessionId': 's',
+      })!;
+
+      expect(back.commandArguments, [
+        '--ask-for-approval',
+        'on-request',
+        'resume',
+        'sid',
+      ]);
+    });
+
+    test('a `-c` that is not ours is left alone', () {
+      // Codex takes `-c` for any config override; only the key we write is ours
+      // to remove.
+      final back = AgentPaneLaunch.fromJson({
+        'agentId': 'codex',
+        'executable': 'codex',
+        'arguments': ['-c', 'model="gpt-5"', 'resume', 'sid'],
+      })!;
+
+      expect(back.commandArguments, ['-c', 'model="gpt-5"', 'resume', 'sid']);
+    });
+  });
+
   group('interactive arguments come from the registry', () {
     final registry = AgentRegistry.builtIn;
+
+    test('a pane and an external terminal build the same command line', () {
+      // "Open this in Windows Terminal instead" must produce the same agent, on
+      // the same endpoint, speaking as the same session — and the pane now
+      // assembles its line from two halves (durable arguments on the stored
+      // record, volatile MCP flags rebuilt at each start) while the external
+      // terminal still builds one list. This is what stops them drifting apart.
+      const url = 'http://127.0.0.1:51234/mcp/tok';
+      final descriptor = registry.byId(AgentIds.claudeCode);
+      final external = agentPaneArguments(
+        descriptor,
+        PermissionMode.acceptEdits,
+        sessionId: 'uuid',
+        prompt: 'hello',
+        mcpUrl: url,
+        mcpConfigPath: '/c.json',
+      );
+      final pane = AgentPaneLaunch(
+        agentId: AgentIds.claudeCode,
+        executable: 'claude',
+        arguments: agentPaneArguments(
+          descriptor,
+          PermissionMode.acceptEdits,
+          sessionId: 'uuid',
+          prompt: 'hello',
+        ),
+        mcpArguments: agentMcpArguments(
+          descriptor,
+          url: url,
+          configPath: '/c.json',
+        ),
+      );
+      expect(pane.commandArguments, external);
+    });
 
     test('protocol base arguments are never used for a PTY launch', () {
       // `--output-format stream-json` on a TTY would put a machine protocol on

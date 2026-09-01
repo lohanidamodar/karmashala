@@ -33,6 +33,7 @@ import '../domain/session_naming.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'decision_recorder.dart';
+import 'session_mcp_arguments.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
 import 'session_working_directory.dart';
@@ -870,6 +871,10 @@ class SessionLauncher {
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,
       executable: request.installation.executable.path,
+      // The two halves are kept apart on the record rather than joined into one
+      // list: this is the launch the pane is *stored* as, and the MCP flags are
+      // dead the moment this app process is. `commandArguments` puts them back
+      // together in the order the agents want.
       arguments: agentPaneArguments(
         descriptor,
         permissionMode,
@@ -877,8 +882,11 @@ class SessionLauncher {
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
-        mcpUrl: mcp?.url,
-        mcpConfigPath: mcp?.configPath,
+      ),
+      mcpArguments: agentMcpArguments(
+        descriptor,
+        url: mcp?.url,
+        configPath: mcp?.configPath,
       ),
       workingDirectory: workingDirectory.path,
       wslDistribution: environment.wslDistribution,
@@ -991,23 +999,12 @@ class SessionLauncher {
     Session session,
     AgentDescriptor? descriptor,
     ExecutionEnvironment environment,
-  ) {
-    try {
-      final mcp = _ref.read(sessionMcpProvider);
-      final support = descriptor?.launch.mcp;
-      if (mcp == null || support == null || !support.isSupported) return null;
-      return mcp.accessFor(
-        sessionId: session.id,
-        environment: environment,
-        withConfigFile: support.needsConfigFile,
-      );
-    } on Object {
-      // Wiring an agent to the tool surface is an enhancement. Nothing about it
-      // is worth failing a launch over, so the one thing this must not do is
-      // throw into the caller.
-      return null;
-    }
-  }
+  ) => sessionMcpAccessFor(
+    _ref,
+    sessionId: session.id,
+    descriptor: descriptor,
+    environment: environment,
+  );
 
   /// The attribution for a session spawned by [parentSessionId], or `null` for
   /// one the user started. Reads the parent's real title so the prefix and the
@@ -1173,8 +1170,7 @@ List<String> agentPaneArguments(
     // *subcommand*: everything global has to be on the left of it. Nothing
     // here is variadic — Claude's config flag is deliberately one
     // `--flag=value` token — so nothing downstream can be swallowed.
-    if (mcpUrl != null && mcpUrl.isNotEmpty)
-      ...?launch?.mcp.argumentsFor(url: mcpUrl, configPath: mcpConfigPath),
+    ...agentMcpArguments(descriptor, url: mcpUrl, configPath: mcpConfigPath),
     ...?launch?.permissionArgumentsFor(permissionMode),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
