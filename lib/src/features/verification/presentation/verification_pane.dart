@@ -17,6 +17,7 @@ import '../domain/verdict_attribution.dart';
 import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
 import 'attribution_mark.dart';
+import 'review_action.dart';
 
 /// The verification pane: the runs that have been recorded, and what each one
 /// proved.
@@ -228,6 +229,15 @@ class _RunDetail extends ConsumerWidget {
               ),
               _SessionRow(run: run),
               _VerifierRow(run: run),
+              // Directly under who graded it, because that row is where a
+              // self-graded pass becomes legible and this is the answer to it.
+              if (run.sessionId case final sessionId?) ...[
+                const SizedBox(height: Insets.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ReviewAction(sessionId: sessionId),
+                ),
+              ],
               const SizedBox(height: Insets.lg),
               _SectionTitle('Steps (${run.steps.length})'),
               if (run.steps.isEmpty)
