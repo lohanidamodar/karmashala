@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_search_controller.dart';
+import '../domain/pane_search.dart';
 import '../domain/terminal_search.dart';
 
-/// Find-in-scrollback bar: query field, case and regex toggles, match count and
+/// Find bar: query field, case / regex / all-panes toggles, match count and
 /// next/previous navigation.
 ///
 /// Enter and Shift+Enter step through matches and Escape closes, all bound here
@@ -57,7 +58,10 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: Insets.sm),
+            // Flexed against the jump button below so a long pane name cannot
+            // push the controls off the end of the row.
             Expanded(
+              flex: 3,
               child: CallbackShortcuts(
                 bindings: {
                   const SingleActivator(LogicalKeyboardKey.escape):
@@ -65,6 +69,8 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
                   const SingleActivator(LogicalKeyboardKey.enter): _search.next,
                   const SingleActivator(LogicalKeyboardKey.enter, shift: true):
                       _search.previous,
+                  const SingleActivator(LogicalKeyboardKey.enter, control: true):
+                      _search.revealCurrent,
                 },
                 child: TextField(
                   controller: _controller,
@@ -85,6 +91,22 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
             ),
             _CountLabel(state: state),
             const SizedBox(width: Insets.xs),
+            if (state.currentIsElsewhere)
+              // Where the selected hit actually is, and the way to get there.
+              // Stepping deliberately does not jump — see
+              // `TerminalSearchController.revealCurrent`.
+              Flexible(
+                child: TextButton.icon(
+                  onPressed: _search.revealCurrent,
+                  icon: const Icon(AppIcons.arrowSquareOut),
+                  label: Text(
+                    state.currentPaneTitle ?? 'Other pane',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            if (state.crossPane && state.query.isNotEmpty)
+              _SweepLabel(state: state),
             IconButton(
               tooltip: 'Match case',
               isSelected: state.caseSensitive,
@@ -101,6 +123,13 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
               visualDensity: VisualDensity.compact,
               icon: Text('.*', style: theme.textTheme.labelSmall),
               onPressed: _search.toggleRegex,
+            ),
+            IconButton(
+              tooltip: 'Search every open pane',
+              isSelected: state.crossPane,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(AppIcons.terminalWindow),
+              onPressed: _search.toggleCrossPane,
             ),
             IconButton(
               tooltip: 'Previous match (Shift+Enter)',
@@ -121,6 +150,50 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
               onPressed: _search.close,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// How far the cross-pane sweep got.
+///
+/// Panes left over with nothing still running means the sweep hit its match
+/// budget and stopped, which is a partial answer and has to look like one.
+class _SweepLabel extends StatelessWidget {
+  const _SweepLabel({required this.state});
+
+  final TerminalSearchState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (state.panesPending == 0 && !state.scanning) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+        child: Text(
+          '${state.panesSearched} panes',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    final total = state.panesSearched + state.panesPending;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
+      child: Tooltip(
+        message: state.scanning
+            ? 'Reading the other panes a pane at a time, so the terminal '
+                  'keeps its frames.'
+            : 'Stopped at $kCrossPaneMatchBudget matches. Narrow the query to '
+                  'reach the rest.',
+        child: Text(
+          '${state.panesSearched} of $total panes',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontStyle: FontStyle.italic,
+          ),
         ),
       ),
     );
