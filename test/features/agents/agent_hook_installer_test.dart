@@ -12,7 +12,7 @@ void main() {
   const installer = AgentHookInstaller();
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
   final claude = AgentRegistry.builtIn.byId('claudeCode')!;
-  final antigravity = AgentRegistry.builtIn.byId('antigravity')!;
+  final codex = AgentRegistry.builtIn.byId('codex')!;
 
   late Directory home;
   setUp(() {
@@ -224,7 +224,7 @@ void main() {
 
   test('an agent with no hook spec installs nothing', () async {
     final installed = await installer.install(
-      descriptor: antigravity,
+      descriptor: codex,
       storeHome: home.path,
       endpoint: endpoint,
       environment: EnvironmentKind.windowsNative,
@@ -403,6 +403,90 @@ void main() {
     });
   });
 
+  group('the reported result is read back off the disk', () {
+    test('a replace that lands nothing is not reported as installed', () async {
+      // The bug this whole group exists for: `install` used to `return true`
+      // straight after `_rewrite`, so *every* way a write can fail without
+      // throwing was reported as a success that nobody would ever look into.
+      configFile().writeAsStringSync('{"model": "opus"}');
+      const silent = AgentHookInstaller(replace: _replaceButChangeNothing);
+
+      final installed = await silent.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isFalse);
+      expect(configFile().readAsStringSync(), '{"model": "opus"}');
+    });
+
+    test('a config rewritten behind us is not reported as installed', () async {
+      // What actually happened on the owner's machine. Claude Code rewrites
+      // `settings.json` from the copy it loaded at *its* startup, so an install
+      // that landed at 11:25 was gone by 11:39 — and the app went on saying
+      // "1 installed" because the claim was never checked against the file.
+      await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+      configFile().writeAsStringSync('{"model": "opus", "hooks": {}}');
+
+      const silent = AgentHookInstaller(replace: _replaceButChangeNothing);
+      final installed = await silent.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isFalse);
+    });
+
+    test('a real-world config keeps our marker through the splice', () async {
+      // Shaped like the owner's own file: keys that differ only by case, an
+      // escaped quote inside a permission string, a Windows path with
+      // backslashes, and another tool's hooks already in the block. Every one
+      // of those is something the byte-splice has to walk past, and the read
+      // -back is what proves it did.
+      configFile().writeAsStringSync(
+        r'{"permissions": {"allow": ["Bash(node -e \":*)", '
+        '"Read(//tmp/x/**)"], '
+        r'"additionalDirectories": ["g:\\dev\\p\\.claude"]}, '
+        '"projects": {"g:/x": 1, "G:/x": 2}, '
+        '"hooks": {"Stop": [{"hooks": [{"type": "command", '
+        '"command": "other-tool-hook"}]}]}, "model": "opus"}',
+      );
+
+      final installed = await installer.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isTrue);
+      final raw = configFile().readAsStringSync();
+      expect(raw, contains('"g:/x": 1'));
+      expect(raw, contains('"G:/x": 2'));
+      expect(raw, contains(r'Bash(node -e \":*)'));
+      expect(commandsFor('Stop').map((h) => h['command']), [
+        'other-tool-hook',
+        contains(agentHookMarker),
+      ]);
+      for (final event in claude.hooks!.eventStatus.keys) {
+        expect(
+          commandsFor(event).map((h) => h['command']),
+          contains(contains(agentHookMarker)),
+          reason: '$event should carry our callback',
+        );
+      }
+    });
+  });
+
   test('a hook that cannot deliver costs the agent nothing', () {
     // The owner watched `curl: (52) Empty reply from server` print into a live
     // Claude session, and the shell exit non-zero, because the app happened
@@ -426,3 +510,15 @@ void main() {
 /// staging the new config and moving it into place.
 Future<void> _refuseToReplace(File staged, File destination) =>
     throw const FileSystemException('replace refused');
+
+/// A replace step that reports success and moves nothing.
+///
+/// Stands in for every way a write can fail to land without raising: a config
+/// the agent CLI rewrites from its own in-memory copy moments later, a
+/// filesystem that swallows the move over a `\\wsl.localhost` share, a rename
+/// onto a file another process holds open. The owner's machine showed the
+/// symptom — `Agent hooks: 1 installed, 1 skipped` in the log, and not one
+/// `chitragupta-agent-hook` anywhere under `~/.claude` — and a reported install
+/// that wrote nothing is worse than a reported skip, because the skip is the
+/// only one of the two that ever gets investigated.
+Future<void> _replaceButChangeNothing(File staged, File destination) async {}

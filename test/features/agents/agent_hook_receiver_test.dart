@@ -95,8 +95,11 @@ void main() {
   });
 
   test('an agent with no hook spec is unknown', () {
+    // Codex, since Antigravity gained real hooks. Codex is told what happened
+    // through its `notify` program, not through a hook config, so there is no
+    // event name here for the receiver to classify.
     final report = receiver.handle(
-      agentId: 'antigravity',
+      agentId: 'codex',
       event: 'Stop',
       body: body('s1'),
     );

@@ -186,12 +186,30 @@ class AgentStateFileRules {
   final Duration activityWindow;
 }
 
+/// How one agent writes a hook handler for an event.
+///
+/// Two shipped CLIs, two shapes, and the difference is not decorative — a flat
+/// handler where a grouped one is expected is a hook that never fires.
+enum AgentHookEntryStyle {
+  /// `{"hooks": [{"type": "command", "command": …}]}` — Claude Code, which
+  /// wraps handlers in a group so a `matcher` can select tools.
+  grouped,
+
+  /// `{"type": "command", "command": …}` — the handler object itself.
+  ///
+  /// Antigravity's `PreInvocation`, `PostInvocation` and `Stop` take a flat
+  /// list: those events have nothing to match on, and its own documentation
+  /// calls the wrapper "Grouped" for the tool events only.
+  flat,
+}
+
 /// How to install callbacks into an agent's own hook configuration, and what
 /// each callback means.
 class AgentHookSpec {
   const AgentHookSpec({
     required this.configFileName,
     this.configKey = 'hooks',
+    this.entryStyle = AgentHookEntryStyle.grouped,
     this.sessionIdPath = const ['session_id'],
     this.cwdPath = const ['cwd'],
     this.messagePath = const [],
@@ -199,11 +217,27 @@ class AgentHookSpec {
     required this.eventStatus,
   });
 
-  /// Config file inside the agent's store home, e.g. `settings.json`.
+  /// The config file, relative to the agent's store home — `settings.json`, or
+  /// a path that walks out of it.
+  ///
+  /// Relative rather than a bare name because an agent's hook file need not
+  /// live in its store. Antigravity keeps its data in
+  /// `~/.gemini/antigravity-cli` and reads its customizations from
+  /// `~/.gemini/config`, so its spec names `../config/hooks.json`; a file
+  /// written inside the store home would be a file the CLI never opens, which
+  /// is indistinguishable from not installing at all.
   final String configFileName;
 
-  /// Top-level key in that file holding the hook map.
+  /// Top-level key in that file holding the event map.
+  ///
+  /// For Claude Code that is the file's `hooks` section. For Antigravity the
+  /// file's top level *is* a map of hook **names**, so the key is our own name
+  /// — which puts every other tool's hooks in sibling keys the byte-splice
+  /// never touches.
   final String configKey;
+
+  /// The shape of one installed handler in this agent's config.
+  final AgentHookEntryStyle entryStyle;
 
   /// Where the agent's session id sits in the hook payload.
   final List<String> sessionIdPath;

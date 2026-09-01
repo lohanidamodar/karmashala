@@ -371,9 +371,11 @@ void main() {
       registry.byId('codex')!.statusStrategy,
       AgentStatusStrategy.stateFile,
     );
+    // Antigravity's hooks are documented only in a skill the CLI ships, never
+    // in `--help`, which is why this said `none` until a live run fired them.
     expect(
       registry.byId('antigravity')!.statusStrategy,
-      AgentStatusStrategy.none,
+      AgentStatusStrategy.hooks,
     );
   });
 }

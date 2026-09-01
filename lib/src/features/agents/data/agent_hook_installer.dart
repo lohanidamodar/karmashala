@@ -7,6 +7,7 @@ import '../../../core/util/json_object_splice.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
+import '../domain/agent_status.dart';
 
 /// Marks the hook entries Chitragupta owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.
@@ -34,10 +35,27 @@ class AgentHookInstaller {
   /// otherwise a claim with no test behind it.
   final Future<void> Function(File staged, File destination) replace;
 
-  /// Writes one hook entry per event the descriptor declares. Returns `false`
-  /// when the agent has no hook configuration to write into. Throws
-  /// [FormatException] if the existing config is not a JSON object, leaving it
-  /// untouched.
+  /// Writes one hook entry per event the descriptor declares. Returns whether
+  /// the config **on disk** now carries this endpoint's callback for every one
+  /// of them. Throws [FormatException] if the existing config is not a JSON
+  /// object, leaving it untouched.
+  ///
+  /// **The answer is read back, never assumed.** This used to `return true` the
+  /// moment `_rewrite` came back, which made the return value a statement about
+  /// intent rather than about the file — so every way a write can fail without
+  /// raising was reported as a success. The owner's machine showed exactly that:
+  ///
+  ///   2026-09-01 11:25:53 I bootstrap: Agent hooks: 1 installed, 1 skipped.
+  ///
+  /// and not one `chitragupta-agent-hook` anywhere under `~/.claude`, on either
+  /// side of the machine, while `notifications.status` reported `0 by hook` all
+  /// day. The most likely way it got there is the one this cannot prevent and
+  /// must therefore report: an agent CLI rewrites its own `settings.json` from
+  /// the copy it loaded at *its* start-up (`settings.json` on that machine was
+  /// written at 11:39, fourteen minutes after the install), and our entries go
+  /// with it. Nothing here can stop that. What it can do is stop claiming the
+  /// hooks are there — a reported install that wrote nothing is worse than a
+  /// reported skip, because only the skip ever gets investigated.
   ///
   /// **Idempotent to the byte.** An event whose entry already spells the exact
   /// command for this [endpoint] is left alone, so a relaunch that happens to
@@ -72,17 +90,66 @@ class AgentHookInstaller {
         if (_alreadyCurrent(entries, command)) continue;
         hooks[event] = [
           ..._withoutOurs(entries),
-          {
-            'hooks': [
-              {'type': 'command', 'command': command},
-            ],
-          },
+          _entry(spec.entryStyle, command),
         ];
         changed = true;
       }
       return changed;
     });
-    return true;
+    return installedEvents(
+          descriptor: descriptor,
+          storeHome: storeHome,
+          endpoint: endpoint,
+          environment: environment,
+        ).length ==
+        spec.eventStatus.length;
+  }
+
+  /// The declared events whose entry is on disk **right now**, spelling this
+  /// [endpoint]'s command.
+  ///
+  /// Separate from [install] because the count is worth reporting on its own: a
+  /// partial install — some events ours, one left alone because the user's
+  /// config holds a shape we do not understand there — is a real state, and
+  /// "installed: false" with no number is not enough to act on.
+  ///
+  /// Reads the file rather than any cached decode. A config that vanished, was
+  /// truncated or stopped being JSON between the write and this call answers
+  /// "none", which is the truth about what will fire.
+  Set<String> installedEvents({
+    required AgentDescriptor descriptor,
+    required String storeHome,
+    required AgentHookEndpoint endpoint,
+    required EnvironmentKind environment,
+  }) {
+    final spec = descriptor.hooks;
+    if (spec == null) return const {};
+    final file = configFileFor(descriptor, storeHome)!;
+    Map<String, Object?> hooks;
+    try {
+      final raw = file.readAsStringSync();
+      final decoded = jsonDecode(raw.trim().isEmpty ? '{}' : raw);
+      if (decoded is! Map<String, Object?>) return const {};
+      final current = decoded[spec.configKey];
+      hooks = current is Map<String, Object?> ? current : const {};
+    } on Object {
+      return const {};
+    }
+
+    final found = <String>{};
+    for (final event in spec.eventStatus.keys) {
+      final entries = hooks[event];
+      if (entries is! List) continue;
+      final command = hookCommand(
+        descriptor: descriptor,
+        event: event,
+        endpoint: endpoint,
+        environment: environment,
+      );
+      if (command == null) continue;
+      if (_alreadyCurrent(entries, command)) found.add(event);
+    }
+    return found;
   }
 
   /// Removes the entries this app installed. Returns whether anything changed.
@@ -165,7 +232,7 @@ class AgentHookInstaller {
     bool Function(Map<String, Object?> hooks) edit,
   ) async {
     final spec = descriptor.hooks!;
-    final file = File(p.join(storeHome, spec.configFileName));
+    final file = configFileFor(descriptor, storeHome)!;
     final raw = await file.exists() ? await file.readAsString() : '{}';
     final trimmed = raw.trim().isEmpty ? '{}' : raw;
 
@@ -179,6 +246,16 @@ class AgentHookInstaller {
         : <String, Object?>{};
 
     if (!edit(hooks)) return false;
+
+    // The config need not sit in the store home, so its directory can be one
+    // the CLI has not created yet — `~/.gemini/config` beside
+    // `~/.gemini/antigravity-cli`. Created only when the **store** is really
+    // there, so a machine without this agent installed never gets an empty
+    // config directory in its home from us.
+    final parent = file.parent;
+    if (!parent.existsSync() && Directory(storeHome).existsSync()) {
+      await parent.create(recursive: true);
+    }
 
     final updated = replaceTopLevelJsonValue(
       trimmed,
@@ -215,6 +292,32 @@ class AgentHookInstaller {
     }
   }
 
+  /// The file [descriptor]'s hooks are configured in, or `null` when it has no
+  /// hook spec.
+  ///
+  /// [AgentHookSpec.configFileName] is a path *relative to the store home*, so
+  /// it can walk out of it: Antigravity keeps its data in
+  /// `~/.gemini/antigravity-cli` and reads `~/.gemini/config/hooks.json`, its
+  /// sibling. Normalized rather than joined blindly, so the `..` is resolved
+  /// here instead of being handed to the filesystem — a `\\wsl.localhost` UNC
+  /// store home is one of the paths this has to survive.
+  File? configFileFor(AgentDescriptor descriptor, String storeHome) {
+    final spec = descriptor.hooks;
+    if (spec == null) return null;
+    return File(p.normalize(p.join(storeHome, spec.configFileName)));
+  }
+
+  /// One installed handler, in the shape this agent reads.
+  Map<String, Object?> _entry(AgentHookEntryStyle style, String command) =>
+      switch (style) {
+        AgentHookEntryStyle.grouped => {
+          'hooks': [
+            {'type': 'command', 'command': command},
+          ],
+        },
+        AgentHookEntryStyle.flat => {'type': 'command', 'command': command},
+      };
+
   /// [entries] with our own entries removed. Everything else is carried over
   /// untouched — the list belongs to the user, and only the entries carrying
   /// [agentHookMarker] are ours to drop.
@@ -229,22 +332,30 @@ class AgentHookInstaller {
   bool _alreadyCurrent(List<Object?> entries, String command) {
     final ours = entries.where(_isOurs).toList();
     if (ours.length != 1) return false;
-    final hooks = (ours.single as Map)['hooks'];
-    if (hooks is! List || hooks.length != 1) return false;
-    final hook = hooks.single;
-    return hook is Map && hook['command'] == command;
+    final commands = _commandsIn(ours.single).toList();
+    return commands.length == 1 && commands.single == command;
   }
 
-  bool _isOurs(Object? entry) {
-    if (entry is! Map) return false;
-    final hooks = entry['hooks'];
-    if (hooks is! List) return false;
-    return hooks.any(
-      (hook) =>
-          hook is Map &&
-          hook['command'] is String &&
-          (hook['command'] as String).contains(agentHookMarker),
-    );
+  bool _isOurs(Object? entry) =>
+      _commandsIn(entry).any((command) => command.contains(agentHookMarker));
+
+  /// Every command string an entry carries, whichever shape it is written in.
+  ///
+  /// Both styles are read regardless of what this agent's spec declares: a
+  /// config written by an earlier build, or hand-edited, is still ours to
+  /// recognise and take back out on uninstall.
+  Iterable<String> _commandsIn(Object? entry) sync* {
+    if (entry is! Map) return;
+    final grouped = entry['hooks'];
+    if (grouped is List) {
+      for (final hook in grouped) {
+        if (hook is Map && hook['command'] is String) {
+          yield hook['command']! as String;
+        }
+      }
+      return;
+    }
+    if (entry['command'] is String) yield entry['command']! as String;
   }
 }
 
