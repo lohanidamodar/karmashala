@@ -513,6 +513,23 @@ class _PaneApproval extends ConsumerWidget {
 /// While the conversation is up its composer already carries the permission
 /// chip and the delivery strip, so the bar is down to the toggle rather than a
 /// second copy of them.
+///
+/// **Two lines, not one flow.** A quiet [DeliveryStateLine] carrying what is
+/// true — the stage, the branch, the counts — over one action row carrying what
+/// can be done about it, with the permission control at its left end and the
+/// view toggle at its right. Everything used to be poured into a single [Wrap],
+/// which sorted itself by whatever fitted: the facts and the buttons ran
+/// together at the same weight, `Commit` ended up stranded beside the branch
+/// name a row above its three siblings, and the toggle — centred against a
+/// two-row block — lined up with nothing. Grouping is the fix, and it is a
+/// layout rather than a rule: facts cannot interleave with actions because they
+/// are no longer in the same run.
+///
+/// The row is aligned to its **start** so that the two ends keep the action
+/// row's own line when the actions wrap on a narrow window, instead of drifting
+/// to the middle of a two-run block. Every control on the row is the same
+/// height by construction (`kBarControlPad`), so aligning to the start and
+/// aligning to the centre are the same thing while there is one run.
 class _SessionBar extends ConsumerWidget {
   const _SessionBar({
     required this.session,
@@ -551,31 +568,43 @@ class _SessionBar extends ConsumerWidget {
             horizontal: Insets.sm,
             vertical: 2,
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (sessionId == null)
-                const Spacer()
-              else ...[
-                Padding(
-                  padding: const EdgeInsets.only(right: Insets.sm),
-                  child: PermissionModeChip(sessionId: sessionId),
-                ),
-                // The delivery lifecycle takes the room the other two do not:
-                // it is the part that has something new to say as the work
-                // moves, and the part that wraps when there is no room left.
-                Expanded(
-                  child: DeliveryStrip(
-                    sessionId: sessionId,
-                    hostedOnTerminal: true,
-                  ),
-                ),
-              ],
-              if (selected != null)
-                _ViewToggle(
-                  onTerminal: onTerminal,
-                  onChat: onChat,
-                  onTerminalView: onTerminalView,
-                ),
+              // Full width and above everything, so the facts read as a caption
+              // over the row rather than as the first item in it.
+              if (sessionId != null) DeliveryStateLine(sessionId: sessionId),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (sessionId == null)
+                    const Spacer()
+                  else ...[
+                    PermissionModeChip(sessionId: sessionId),
+                    const SizedBox(width: Insets.sm),
+                    // The delivery actions take the room the other two do not:
+                    // they are the part that has something new to say as the
+                    // work moves, and the part that wraps when there is no room
+                    // left. They wrap *within* this box, so a second run stays
+                    // inside the group instead of pushing the ends around.
+                    Expanded(
+                      child: DeliveryStrip(
+                        sessionId: sessionId,
+                        hostedOnTerminal: true,
+                      ),
+                    ),
+                  ],
+                  if (selected != null) ...[
+                    const SizedBox(width: Insets.sm),
+                    _ViewToggle(
+                      onTerminal: onTerminal,
+                      onChat: onChat,
+                      onTerminalView: onTerminalView,
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),
@@ -1106,8 +1135,14 @@ class _ViewToggle extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             child: Container(
-              height: 22,
-              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+              // Padded rather than fixed at 22px: the halves have to grow with
+              // the ambient text scale like the permission control and the
+              // actions beside them, or the row stops sharing a centre-line at
+              // exactly the sizes an accessibility setting asks for.
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.sm,
+                vertical: kBarControlPad,
+              ),
               color: selected
                   ? scheme.primary.withValues(alpha: 0.14)
                   : Colors.transparent,
@@ -1128,35 +1163,32 @@ class _ViewToggle extends StatelessWidget {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(left: Insets.sm),
-      child: ClipRRect(
+    // No padding of its own: the bar spaces its own row, and a control whose
+    // bounds include a margin is a control whose centre-line is a guess.
+    //
+    // A `Container` with the border on its decoration rather than a `ClipRRect`
+    // over a `DecoratedBox`, because only the first *reserves* the border's
+    // pixel: the second painted the outline inside the halves and left the
+    // toggle two pixels shorter than the permission control and the actions,
+    // which is one pixel of drift on the centre-line the row is built around.
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(Radii.sm),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: Border.all(color: scheme.outlineVariant),
-            borderRadius: BorderRadius.circular(Radii.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          half(
+            AppIcons.terminal,
+            'Terminal',
+            'Terminal view',
+            onTerminal,
+            onTerminalView,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              half(
-                AppIcons.terminal,
-                'Terminal',
-                'Terminal view',
-                onTerminal,
-                onTerminalView,
-              ),
-              half(
-                AppIcons.chatCircle,
-                'Chat',
-                'Chat view',
-                !onTerminal,
-                onChat,
-              ),
-            ],
-          ),
-        ),
+          half(AppIcons.chatCircle, 'Chat', 'Chat view', !onTerminal, onChat),
+        ],
       ),
     );
   }
