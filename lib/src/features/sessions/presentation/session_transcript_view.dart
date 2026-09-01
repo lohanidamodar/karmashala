@@ -7,6 +7,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
+import '../../editor/application/code_editor_providers.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -18,6 +20,7 @@ import '../application/session_engine_provider.dart';
 import '../application/session_providers.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
+import '../domain/tool_activity.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
 import 'agent_status_badge.dart';
@@ -84,6 +87,27 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         );
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       const SnackBar(content: Text('Saved to Notes.')),
+    );
+  }
+
+  /// Translates a path the agent wrote into one this process can open, or null
+  /// when the session's environment is unknown.
+  ///
+  /// The agent may be running in WSL while `dart:io` here is the Windows host,
+  /// so `/mnt/c/…/shot.png` has to become `C:\…\shot.png` before an image can
+  /// be drawn. Explicit, environment-aware, and the same call every other
+  /// feature makes — `EditorActions.windowsPathFor`.
+  String? Function(String)? _hostPathResolver() {
+    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    if (session == null) return null;
+    final environmentId = ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.environmentId;
+    if (environmentId == null) return null;
+    final editor = ref.read(editorActionsProvider);
+    return (path) => editor.windowsPathFor(
+      EnvironmentPath(environmentId: environmentId, path: path),
     );
   }
 
@@ -161,6 +185,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (messages) => ChatTranscriptView(
               messages: messages,
+              resolveHostPath: _hostPathResolver(),
               // Null when Notes is off: the transcript never learns the
               // feature exists, so there is nothing left behind to hide.
               onSaveNote: notesEnabled ? _saveNote : null,
@@ -237,12 +262,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
-  /// The agent's own transcript as chat messages. Tool lines are dropped: the
-  /// terminal view already shows them, in the form the agent drew them.
+  /// The agent's own transcript as chat messages.
+  ///
+  /// Tool lines used to be dropped here, on the argument that the terminal view
+  /// already showed them. The owner's report retired that argument: the
+  /// conversation is where they read what the agent did, and a session whose
+  /// commands and screenshots are invisible is a session they have to go and
+  /// watch in a second window.
   List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) => [
     for (final message in messages)
-      if (message.role != 'tool')
-        ChatMessage(role: message.role, text: message.text),
+      ChatMessage(
+        role: message.role,
+        text: message.text,
+        tool: message.tool,
+      ),
   ];
 
   /// Maps the persisted event log to displayable chat messages, dropping
@@ -263,11 +296,35 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           messages.add(
             const ChatMessage(role: 'error', text: 'Session failed.'),
           );
+        case SessionEventTypes.toolCall:
+          _addToolCall(messages, event.payload);
         case SessionEventTypes.sessionCancelled:
           messages.add(const ChatMessage(role: 'tool', text: 'Session ended.'));
       }
     }
     return messages;
+  }
+
+  /// A tool call from the engine's own event log.
+  ///
+  /// The adapter records `name` and `input` (`parseClaudeMessage`), so a native
+  /// session can show what ran for the same reason a PTY one can. It cannot yet
+  /// show what came back: `SessionEventTypes.toolResult` is named but nothing
+  /// emits it, and inventing an answer would be worse than admitting there
+  /// isn't one.
+  void _addToolCall(List<ChatMessage> out, String payload) {
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map<String, dynamic>) return;
+      final name = decoded['name'];
+      if (name is! String || name.isEmpty) return;
+      final activity = toolActivityFor(name, decoded['input']);
+      out.add(
+        ChatMessage(role: 'tool', text: activity.summary, tool: activity),
+      );
+    } on FormatException {
+      // not JSON
+    }
   }
 
   void _addText(List<ChatMessage> out, String role, String payload) {
