@@ -1297,7 +1297,11 @@ class LauncherControlServer implements SessionMcp {
           'The full record of one fan-out comparison: the prompt, the winner, '
           'the merge commit, and every candidate with its session, branch, '
           'worktree (and whether that worktree has been removed), diff stat, '
-          'verification verdict and failure reason. Use this to report on a '
+          'verification verdict and failure reason. Each verdict says who '
+          'produced it: attribution is "author" when the candidate graded '
+          'itself, "independent" when another session did, and "notRecorded" '
+          'when nobody recorded a verifier — a self-graded pass is not '
+          'evidence, so say which one it was when you report on a '
           'comparison the user ran.',
       'inputSchema': {
         'type': 'object',
@@ -1767,6 +1771,15 @@ class LauncherControlServer implements SessionMcp {
                 'verdict': evidence.verdict.name,
                 'label': evidence.label,
                 'runId': evidence.runId,
+                // Present even when null, unlike every optional field above.
+                // An omitted producer reads as a gap in the tool rather than a
+                // gap in the record, which is exactly how a self-graded pass
+                // comes to be read as a checked one — the thing G3 exists to
+                // stop. Every human-facing surface already says this; an agent
+                // reading a comparison was the last one that could not.
+                'producedBySessionId': evidence.producerSessionId,
+                'attribution': candidate.evidenceAttribution.name,
+                'attributionLabel': candidate.evidenceAttribution.label,
               },
             'failure': candidate.failure,
             'notes': candidate.notes,
