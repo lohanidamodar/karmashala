@@ -118,7 +118,7 @@ class SystemPage extends ConsumerWidget {
                 label: 'Keep system awake',
                 help:
                     'Prevent the display and system from sleeping while '
-                    'Chitragupta is running.',
+                    'Karmashala is running.',
                 value: settings.keepAwake,
                 onChanged: controller.setKeepAwake,
               ),
@@ -140,7 +140,7 @@ class SystemPage extends ConsumerWidget {
               ),
               SettingsSwitchRow(
                 label: 'Start at login',
-                help: 'Launch Chitragupta automatically when you sign in.',
+                help: 'Launch Karmashala automatically when you sign in.',
                 value: settings.autoStart,
                 onChanged: controller.setAutoStart,
               ),
@@ -181,7 +181,7 @@ class LauncherHotkeySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'A global shortcut that brings Chitragupta forward from any app '
+            'A global shortcut that brings Karmashala forward from any app '
             'with quick open ready, and puts it away again when it is already '
             'in front.',
             style: theme.textTheme.bodySmall,

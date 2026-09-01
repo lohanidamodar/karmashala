@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/agents/data/antigravity_adapter.dart';
-import 'package:chitragupta/src/features/agents/data/claude_code_adapter.dart';
-import 'package:chitragupta/src/features/agents/data/codex_adapter.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_adapter.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/data/antigravity_adapter.dart';
+import 'package:karmashala/src/features/agents/data/claude_code_adapter.dart';
+import 'package:karmashala/src/features/agents/data/codex_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

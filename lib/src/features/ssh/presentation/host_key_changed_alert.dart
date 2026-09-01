@@ -187,7 +187,7 @@ class ForgetHostKeyDialog extends ConsumerWidget {
       content: SizedBox(
         width: 460,
         child: Text(
-          'Chitragupta will stop recognising $host:$port. The next connection '
+          'Karmashala will stop recognising $host:$port. The next connection '
           'is treated as a first connection: you will be shown the '
           'fingerprint it presents and asked whether to trust it.\n\n'
           'Do this only if you know why the key changed — a rebuilt machine, a '

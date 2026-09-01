@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
+import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

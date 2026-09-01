@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/terminal/data/process_shutdown.dart';
+import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeProcess {

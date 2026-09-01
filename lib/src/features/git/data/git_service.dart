@@ -72,7 +72,7 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
 
 /// Computes the directory for a session worktree of [repo].
 ///
-/// Worktrees are placed in a sibling `.chitragupta-worktrees/` folder so they
+/// Worktrees are placed in a sibling `.karmashala-worktrees/` folder so they
 /// never nest inside the repository. Path joining is **environment-aware**
 /// (Windows vs POSIX separators) so Windows and WSL paths stay valid.
 EnvironmentPath worktreePathFor(
@@ -83,7 +83,7 @@ EnvironmentPath worktreePathFor(
   final ctx = kind == EnvironmentKind.windowsNative ? p.windows : p.posix;
   final parent = ctx.dirname(repo.path);
   final base = ctx.basename(repo.path);
-  final dir = ctx.join(parent, '.chitragupta-worktrees', '$base-$worktreeName');
+  final dir = ctx.join(parent, '.karmashala-worktrees', '$base-$worktreeName');
   return EnvironmentPath(environmentId: repo.environmentId, path: dir);
 }
 
@@ -488,7 +488,7 @@ class GitService {
     message,
   ], 'commit-tree');
 
-  /// Points [ref] at [sha]. Refs under `refs/chitragupta/` are invisible to
+  /// Points [ref] at [sha]. Refs under `refs/karmashala/` are invisible to
   /// `git branch`, `git log` and `git status`, and are never pushed.
   Future<void> updateRef(EnvironmentPath repo, String ref, String sha) async {
     final result = await _git(repo, ['update-ref', ref, sha]);
@@ -602,12 +602,12 @@ class GitService {
 }
 
 /// The branch name in the shadow git directory's `HEAD`. It never exists.
-const kCheckpointHeadBranch = 'chitragupta-checkpoints';
+const kCheckpointHeadBranch = 'karmashala-checkpoints';
 
 /// Who checkpoint commits are attributed to. They are never pushed and never
 /// merged, so this is a label, not an identity claim.
-const kCheckpointAuthorName = 'Chitragupta';
-const kCheckpointAuthorEmail = 'checkpoints@chitragupta.local';
+const kCheckpointAuthorName = 'Karmashala';
+const kCheckpointAuthorEmail = 'checkpoints@karmashala.local';
 
 /// Where the private checkpoint index and its scratch patch live for one
 /// repository or worktree.
@@ -622,6 +622,6 @@ class CheckpointGitDirs {
   /// worktree of the repository.
   final String commonDir;
 
-  String get shadowGitDir => '$gitDir/chitragupta';
+  String get shadowGitDir => '$gitDir/karmashala';
   String get patchFile => '$shadowGitDir/apply.patch';
 }

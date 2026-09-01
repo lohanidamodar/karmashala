@@ -1,6 +1,6 @@
 import 'dart:ui' show Size;
 
-import 'package:chitragupta/src/features/system/native_adapters.dart';
+import 'package:karmashala/src/features/system/native_adapters.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';

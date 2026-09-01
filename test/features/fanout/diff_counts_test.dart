@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/fanout/domain/diff_counts.dart';
+import 'package:karmashala/src/features/fanout/domain/diff_counts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Counting a diff looks trivial and is not: `+++ b/file` starts with `+`,

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:chitragupta/src/features/remote/transport/lan_beacon.dart';
+import 'package:karmashala/src/features/remote/transport/lan_beacon.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A group and port of this test's own, so a real host advertising on the LAN
@@ -24,10 +24,10 @@ void main() {
     });
 
     test('names the service the design asked for', () {
-      expect(kLanServiceName, '_chitragupta._tcp');
+      expect(kLanServiceName, '_karmashala._tcp');
       expect(
         utf8.decode(const LanAdvert(port: 1, tag: 't').encode()),
-        contains('_chitragupta._tcp'),
+        contains('_karmashala._tcp'),
       );
     });
 

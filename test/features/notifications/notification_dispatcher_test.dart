@@ -1,9 +1,9 @@
-import 'package:chitragupta/src/features/notifications/application/notification_dispatcher.dart';
-import 'package:chitragupta/src/features/notifications/data/notification_presenter.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_request.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/notifications/application/notification_dispatcher.dart';
+import 'package:karmashala/src/features/notifications/data/notification_presenter.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _RecordingPresenter implements NotificationPresenter {

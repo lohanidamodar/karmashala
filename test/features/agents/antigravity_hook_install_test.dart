@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_installer.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -38,7 +38,7 @@ void main() {
 
   Map<String, Object?> ours() {
     final root = jsonDecode(hooksFile().readAsStringSync()) as Map;
-    return (root['chitragupta'] as Map).cast<String, Object?>();
+    return (root['karmashala'] as Map).cast<String, Object?>();
   }
 
   group('the descriptor', () {
@@ -139,7 +139,7 @@ void main() {
           {'command': './lint.sh'},
         ],
       });
-      expect((root['chitragupta'] as Map).keys, contains('Stop'));
+      expect((root['karmashala'] as Map).keys, contains('Stop'));
     });
 
     test('uninstall takes ours back out and leaves theirs', () async {

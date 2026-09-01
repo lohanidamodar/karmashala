@@ -36,7 +36,7 @@ class HostGitFiles implements GitFiles {
 /// can open.
 ///
 /// The identity is correct for a Windows repository driven by the Windows app —
-/// the case Chitragupta is built around — and wrong for anything the host
+/// the case Karmashala is built around — and wrong for anything the host
 /// cannot reach directly, which is why it is a seam rather than an assumption.
 typedef HostPathOf = String Function(String environmentPath);
 

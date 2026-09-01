@@ -9,18 +9,18 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
-import 'package:chitragupta/src/features/remote/client/companion_client.dart';
-import 'package:chitragupta/src/features/remote/client/companion_pairing_client.dart';
-import 'package:chitragupta/src/features/remote/client/companion_store.dart';
-import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
-import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
-import 'package:chitragupta/src/features/remote/pairing/pairing_payload.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
-import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala/src/features/remote/client/companion_client.dart';
+import 'package:karmashala/src/features/remote/client/companion_pairing_client.dart';
+import 'package:karmashala/src/features/remote/client/companion_store.dart';
+import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_payload.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
+import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bindings.dart';

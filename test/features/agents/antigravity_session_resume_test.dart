@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/data/antigravity_session_resume.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/data/antigravity_session_resume.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

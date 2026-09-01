@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/cli_detection/data/claude_store_reader.dart';
-import 'package:chitragupta/src/features/cli_detection/data/codex_store_reader.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/cli_detection/data/claude_store_reader.dart';
+import 'package:karmashala/src/features/cli_detection/data/codex_store_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

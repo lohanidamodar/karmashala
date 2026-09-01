@@ -1,20 +1,20 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/ssh_command_runner.dart';
-import 'package:chitragupta/src/core/process/windows_command_runner.dart';
-import 'package:chitragupta/src/core/process/wsl_command_runner.dart';
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/features/agents/data/agent_discovery_service.dart';
-import 'package:chitragupta/src/features/environments/data/environment_discovery_service.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/ssh/data/known_host_dao.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_connection.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_host_key_verifier.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/ssh_command_runner.dart';
+import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/core/process/wsl_command_runner.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart';
+import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../test/support/fakes.dart';
@@ -38,8 +38,8 @@ import '../../test/support/fixtures.dart';
 /// moved it here beside `paint_bench.dart`.
 ///
 /// Needs the same environment as the live SSH suite:
-/// `CHITRAGUPTA_SSH_HOST`, `CHITRAGUPTA_SSH_USER`, `CHITRAGUPTA_SSH_KEY`, and
-/// `CHITRAGUPTA_SSH_PORT` if it is not 22. Without them it skips with a reason
+/// `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY`, and
+/// `KARMASHALA_SSH_PORT` if it is not 22. Without them it skips with a reason
 /// rather than passing.
 String? _env(String name) {
   final value = Platform.environment[name];
@@ -47,18 +47,18 @@ String? _env(String name) {
 }
 
 void main() {
-  final address = _env('CHITRAGUPTA_SSH_HOST');
-  final username = _env('CHITRAGUPTA_SSH_USER');
-  final keyPath = _env('CHITRAGUPTA_SSH_KEY');
-  final port = int.tryParse(_env('CHITRAGUPTA_SSH_PORT') ?? '22') ?? 22;
+  final address = _env('KARMASHALA_SSH_HOST');
+  final username = _env('KARMASHALA_SSH_USER');
+  final keyPath = _env('KARMASHALA_SSH_KEY');
+  final port = int.tryParse(_env('KARMASHALA_SSH_PORT') ?? '22') ?? 22;
 
   if (address == null || username == null || keyPath == null) {
     test(
       'SSH latency benchmark',
       () {},
       skip:
-          'Set CHITRAGUPTA_SSH_HOST, CHITRAGUPTA_SSH_USER and '
-          'CHITRAGUPTA_SSH_KEY to run the SSH latency benchmark.',
+          'Set KARMASHALA_SSH_HOST, KARMASHALA_SSH_USER and '
+          'KARMASHALA_SSH_KEY to run the SSH latency benchmark.',
     );
     return;
   }

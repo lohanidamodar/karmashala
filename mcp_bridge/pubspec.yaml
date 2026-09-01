@@ -1,6 +1,6 @@
-name: chitragupta_mcp
+name: karmashala_mcp
 description: >-
-  Standalone MCP (Model Context Protocol) stdio bridge for the Chitragupta
+  Standalone MCP (Model Context Protocol) stdio bridge for the Karmashala
   launcher agent. Forwards tool calls to the running app's control server. Kept
   as its own dependency-free package so it compiles to a small standalone exe
   (the main app package pulls in build-hook plugins that block `dart compile`).
@@ -10,5 +10,5 @@ environment:
   sdk: ^3.9.0
 
 dependencies:
-  chitragupta_local_ipc:
+  karmashala_local_ipc:
     path: ../packages/local_ipc

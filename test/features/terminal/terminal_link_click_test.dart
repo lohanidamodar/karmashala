@@ -1,10 +1,10 @@
-import 'package:chitragupta/src/app/shell/workbench.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_link_actions.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
-import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_link_actions.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

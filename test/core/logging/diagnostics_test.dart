@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/core/logging/app_logger.dart';
-import 'package:chitragupta/src/core/logging/diagnostics.dart';
-import 'package:chitragupta/src/core/logging/log_buffer.dart';
-import 'package:chitragupta/src/core/logging/log_entry.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala/src/core/logging/log_buffer.dart';
+import 'package:karmashala/src/core/logging/log_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 
@@ -105,7 +105,7 @@ void main() {
       AppLogger.named('ssh.hostkey').warning('mismatch', 'host key $hostKey');
       AppLogger.named(
         'remote',
-      ).warning('giving up', StateError(r'at C:\Users\dlohani\.chitragupta'));
+      ).warning('giving up', StateError(r'at C:\Users\dlohani\.karmashala'));
 
       final text = diagnostics.buffer
           .snapshot()

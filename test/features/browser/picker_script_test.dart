@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/browser/data/picker_script.dart';
+import 'package:karmashala/src/features/browser/data/picker_script.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,4 +1,4 @@
-# Chitragupta - Agent development environment
+# Karmashala - Agent development environment
 
 ## 1. Project Context
 

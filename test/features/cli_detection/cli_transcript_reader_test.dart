@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/cli_detection/data/cli_transcript_reader.dart';
-import 'package:chitragupta/src/features/sessions/domain/tool_activity.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
+import 'package:karmashala/src/features/sessions/domain/tool_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

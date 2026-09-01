@@ -613,8 +613,8 @@ class SessionActions {
     throw StateError(
       'Opening this in an external terminal would start a new '
       '${descriptor!.displayName} conversation instead of continuing '
-      '$externalId: Chitragupta only builds external-terminal resume commands '
-      'for Claude Code and Codex. Open the session in Chitragupta instead, '
+      '$externalId: Karmashala only builds external-terminal resume commands '
+      'for Claude Code and Codex. Open the session in Karmashala instead, '
       'where the agent is launched from its own registry entry.',
     );
   }

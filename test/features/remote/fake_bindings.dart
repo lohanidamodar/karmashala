@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/application/host_bindings.dart';
-import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
-import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/application/host_bindings.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 
 /// In-memory bindings: sessions, transcripts and recorded actions, with no
 /// providers, processes or terminals anywhere near them.
@@ -130,8 +130,8 @@ class FakeRemoteBindings {
         checkouts: [
           RemoteCheckoutOption(
             repositoryId: repositoryId,
-            name: 'chitragupta',
-            path: r'C:\work\chitragupta',
+            name: 'karmashala',
+            path: r'C:\work\karmashala',
             branch: 'main',
             agents: [
               RemoteAgentOption(

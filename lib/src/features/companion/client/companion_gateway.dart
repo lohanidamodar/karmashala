@@ -45,7 +45,7 @@ enum CompanionLinkState { disconnected, connecting, connected }
 /// narrates. [failed] is terminal for the attempt; everything before walks
 /// forward in declaration order.
 enum CompanionPairingStage {
-  /// The scanned or typed input parsed as a Chitragupta code.
+  /// The scanned or typed input parsed as a Karmashala code.
   codeAccepted,
 
   /// Dialling — the LAN and the relay race; first sealed answer wins.

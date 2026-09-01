@@ -5,8 +5,8 @@
 /// pinned here away from any widget.
 library;
 
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/presentation/project_group.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/project_group.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';

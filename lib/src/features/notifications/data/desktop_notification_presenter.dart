@@ -50,7 +50,7 @@ class DesktopNotificationPresenter implements NotificationPresenter {
     if (_ready) return true;
     if (_unavailable || !isSupportedHere) return false;
     try {
-      await localNotifier.setup(appName: 'Chitragupta');
+      await localNotifier.setup(appName: 'Karmashala');
       _ready = true;
       return true;
     } catch (error, stack) {

@@ -20,7 +20,7 @@
 /// model in this path — the packet is assembled from files while the user waits,
 /// before anything is launched. Writing one would mean either spending a turn of
 /// the user's quota on the very agent whose quota may be why they are handing
-/// off, or having Chitragupta paraphrase a conversation it does not understand.
+/// off, or having Karmashala paraphrase a conversation it does not understand.
 /// Both produce a confident recap that can be wrong in ways the receiving agent
 /// cannot detect.
 ///
@@ -217,7 +217,7 @@ class HandoffPacket {
   final int omittedDecisions;
 
   /// Whatever the user typed as still-open work. Free text, one item per line,
-  /// passed through unedited — Chitragupta has no idea which of these are done.
+  /// passed through unedited — Karmashala has no idea which of these are done.
   final List<String> unresolvedTasks;
 
   /// Whether this packet is standing in for a fork the CLI could not perform.

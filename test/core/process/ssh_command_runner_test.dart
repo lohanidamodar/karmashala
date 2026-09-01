@@ -1,12 +1,12 @@
-import 'package:chitragupta/src/core/process/command_runner_factory.dart';
-import 'package:chitragupta/src/core/process/ssh_command_runner.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/ssh/data/known_host_dao.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_connection_pool.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_host_dao.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala/src/core/process/command_runner_factory.dart';
+import 'package:karmashala/src/core/process/ssh_command_runner.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_connection_pool.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

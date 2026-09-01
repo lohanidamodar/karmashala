@@ -3,20 +3,20 @@ library;
 
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/core/util/id_generator_provider.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/presentation/environments_section.dart';
-import 'package:chitragupta/src/features/ssh/data/known_host_dao.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_host_dao.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host_key.dart';
-import 'package:chitragupta/src/features/ssh/presentation/ssh_hosts_section.dart';
-import 'package:chitragupta/src/features/ssh/presentation/ssh_prompt_host.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
+import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala/src/features/ssh/presentation/ssh_hosts_section.dart';
+import 'package:karmashala/src/features/ssh/presentation/ssh_prompt_host.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,28 +32,28 @@ import '../../support/fixtures.dart';
 /// fingerprint, accept it, and see the agents that are installed on it? A mock
 /// cannot answer that — it would agree with whatever the code already believes.
 ///
-/// Opt-in, like the Loop 37 live suite: set `CHITRAGUPTA_SSH_HOST`,
-/// `CHITRAGUPTA_SSH_USER`, `CHITRAGUPTA_SSH_KEY` and optionally
-/// `CHITRAGUPTA_SSH_PORT`.
+/// Opt-in, like the Loop 37 live suite: set `KARMASHALA_SSH_HOST`,
+/// `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` and optionally
+/// `KARMASHALA_SSH_PORT`.
 String? _env(String name) {
   final value = Platform.environment[name];
   return value == null || value.isEmpty ? null : value;
 }
 
 void main() {
-  final address = _env('CHITRAGUPTA_SSH_HOST');
-  final username = _env('CHITRAGUPTA_SSH_USER');
-  final keyPath = _env('CHITRAGUPTA_SSH_KEY');
-  final port = _env('CHITRAGUPTA_SSH_PORT') ?? '22';
-  final browseDir = _env('CHITRAGUPTA_SSH_BROWSE_DIR');
+  final address = _env('KARMASHALA_SSH_HOST');
+  final username = _env('KARMASHALA_SSH_USER');
+  final keyPath = _env('KARMASHALA_SSH_KEY');
+  final port = _env('KARMASHALA_SSH_PORT') ?? '22';
+  final browseDir = _env('KARMASHALA_SSH_BROWSE_DIR');
 
   if (address == null || username == null || keyPath == null) {
     test(
       'live SSH UI tests are skipped',
       () {},
       skip:
-          'Set CHITRAGUPTA_SSH_HOST, CHITRAGUPTA_SSH_USER and '
-          'CHITRAGUPTA_SSH_KEY to run the live SSH UI suite.',
+          'Set KARMASHALA_SSH_HOST, KARMASHALA_SSH_USER and '
+          'KARMASHALA_SSH_KEY to run the live SSH UI suite.',
     );
     return;
   }
@@ -295,7 +295,7 @@ void main() {
       // `testWidgets` takes only a bool for `skip`, which is why this used to
       // be the one skip in the repo with no reason attached to it.
       markTestSkipped(
-        'Set CHITRAGUPTA_SSH_BROWSE_DIR to a directory on the host that '
+        'Set KARMASHALA_SSH_BROWSE_DIR to a directory on the host that '
         'contains a file, a dotfile and a "nested" subdirectory.',
       );
       return;

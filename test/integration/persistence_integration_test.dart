@@ -1,11 +1,11 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
-import 'package:chitragupta/src/features/environments/application/environment_providers.dart';
-import 'package:chitragupta/src/features/projects/application/project_providers.dart';
-import 'package:chitragupta/src/features/repositories/application/repository_providers.dart';
-import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
+import 'package:karmashala/src/features/environments/application/environment_providers.dart';
+import 'package:karmashala/src/features/projects/application/project_providers.dart';
+import 'package:karmashala/src/features/repositories/application/repository_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

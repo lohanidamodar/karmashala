@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/explorer/application/checkout.dart';
-import 'package:chitragupta/src/features/explorer/application/project_tree.dart';
-import 'package:chitragupta/src/features/git/domain/git_worktree.dart';
-import 'package:chitragupta/src/features/repositories/domain/repository.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/explorer/application/checkout.dart';
+import 'package:karmashala/src/features/explorer/application/project_tree.dart';
+import 'package:karmashala/src/features/git/domain/git_worktree.dart';
+import 'package:karmashala/src/features/repositories/domain/repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

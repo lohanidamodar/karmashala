@@ -21,19 +21,19 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/process_handle.dart';
-import 'package:chitragupta/src/core/process/windows_command_runner.dart';
-import 'package:chitragupta/src/features/devices/data/adb_service.dart';
-import 'package:chitragupta/src/features/devices/data/android_sdk_discovery.dart';
-import 'package:chitragupta/src/features/devices/domain/device_input.dart';
-import 'package:chitragupta/src/features/environments/domain/local_environment.dart';
-import 'package:chitragupta/src/features/devices/domain/ui_node.dart';
-import 'package:chitragupta/src/features/browser/data/browser_service.dart';
-import 'package:chitragupta/src/features/verification/application/verification_service.dart';
-import 'package:chitragupta/src/features/verification/application/verification_tools.dart';
-import 'package:chitragupta/src/features/verification/data/verification_artifact_store.dart';
-import 'package:chitragupta/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/process_handle.dart';
+import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/features/devices/data/adb_service.dart';
+import 'package:karmashala/src/features/devices/data/android_sdk_discovery.dart';
+import 'package:karmashala/src/features/devices/domain/device_input.dart';
+import 'package:karmashala/src/features/environments/domain/local_environment.dart';
+import 'package:karmashala/src/features/devices/domain/ui_node.dart';
+import 'package:karmashala/src/features/browser/data/browser_service.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
+import 'package:karmashala/src/features/verification/application/verification_tools.dart';
+import 'package:karmashala/src/features/verification/data/verification_artifact_store.dart';
+import 'package:karmashala/src/features/verification/data/verification_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

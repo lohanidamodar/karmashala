@@ -7,22 +7,22 @@ library;
 
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/remote_companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/secure_companion_store.dart';
-import 'package:chitragupta/src/features/remote/application/host_bindings.dart';
-import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
-import 'package:chitragupta/src/features/remote/client/companion_store.dart'
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/remote_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
+import 'package:karmashala/src/features/remote/application/host_bindings.dart';
+import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala/src/features/remote/client/companion_store.dart'
     as stored;
-import 'package:chitragupta/src/features/remote/client/lan_path.dart';
-import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
-import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/lan_beacon.dart';
-import 'package:chitragupta/src/features/remote/transport/lan_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala/src/features/remote/client/lan_path.dart';
+import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/lan_beacon.dart';
+import 'package:karmashala/src/features/remote/transport/lan_transport.dart';
+import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../remote/fake_bindings.dart';
@@ -524,7 +524,7 @@ void main() {
         isA<PairingException>().having(
           (e) => e.message,
           'message',
-          contains('not a Chitragupta pairing code'),
+          contains('not a Karmashala pairing code'),
         ),
       ),
     );
@@ -544,7 +544,7 @@ void main() {
           isA<PairingException>().having(
             (e) => e.message,
             'message',
-            contains('not a Chitragupta pairing code'),
+            contains('not a Karmashala pairing code'),
           ),
         ),
       );

@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/features/browser/application/browser_tool_schemas.dart';
-import 'package:chitragupta/src/features/browser/application/browser_tools.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/browser/application/browser_tool_schemas.dart';
+import 'package:karmashala/src/features/browser/application/browser_tools.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_browser.dart';
@@ -166,13 +166,13 @@ void main() {
     test('a picked element is introduced as the user\'s choice', () async {
       final (tools, fake) = await connectedTools();
       fake.onEvaluate = (expression) {
-        if (expression.contains('__chitraguptaPicker')) return true;
+        if (expression.contains('__karmashalaPicker')) return true;
         return null;
       };
       final pending = tools.call('browser_pick', {'timeoutSeconds': 5});
       await Future<void>.delayed(Duration.zero);
       fake.socket.emitEvent('Runtime.bindingCalled', {
-        'name': '__chitraguptaPick',
+        'name': '__karmashalaPick',
         'payload': jsonEncode({
           'ok': true,
           'selector': '#go',

@@ -67,7 +67,7 @@ class RestoreOutcome {
 ///
 /// Nothing touches the user's index, `HEAD`, working tree, branches, stash or
 /// remotes. The repository gains objects — which is what a snapshot *is* — and
-/// one ref per session under `refs/chitragupta/`, which keeps them from being
+/// one ref per session under `refs/karmashala/`, which keeps them from being
 /// garbage collected and stays out of `git branch`, `git log` and `git status`.
 class CheckpointService {
   CheckpointService({

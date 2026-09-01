@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/sessions/domain/session_attribution.dart';
+import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -10,7 +10,7 @@ void main() {
   test('the prefix names the parent by id and title', () {
     expect(
       plain.render('do the thing'),
-      '[message from the Chitragupta session "Fix the build" (abc-123)]\n\n'
+      '[message from the Karmashala session "Fix the build" (abc-123)]\n\n'
       'do the thing',
     );
   });
@@ -34,7 +34,7 @@ void main() {
 
     test('a message that merely looks like a prefix is left alone', () {
       const message =
-          '[message from the Chitragupta session "someone else" (zzz)]\n\n'
+          '[message from the Karmashala session "someone else" (zzz)]\n\n'
           'quoted by the user';
       expect(plain.stripFrom(message), message);
     });

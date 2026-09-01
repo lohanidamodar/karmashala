@@ -13,12 +13,12 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/process/process_handle.dart';
-import 'package:chitragupta/src/core/process/windows_command_runner.dart';
-import 'package:chitragupta/src/features/browser/application/browser_pane_controller.dart';
-import 'package:chitragupta/src/features/browser/application/browser_providers.dart';
-import 'package:chitragupta/src/features/browser/data/browser_service.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/process/process_handle.dart';
+import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
+import 'package:karmashala/src/features/browser/application/browser_providers.dart';
+import 'package:karmashala/src/features/browser/data/browser_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -63,7 +63,7 @@ void main() {
         expect(state().tabs, isNotEmpty);
         expect(
           profile,
-          contains('chitragupta-cdp-profile'),
+          contains('karmashala-cdp-profile'),
           reason: 'never the developer\'s own profile',
         );
 
@@ -98,7 +98,7 @@ void main() {
         // The overlay must be gone from the real page, not just from our state.
         expect(
           await service.evaluate(
-            "document.querySelectorAll('[data-chitragupta-picker]').length",
+            "document.querySelectorAll('[data-karmashala-picker]').length",
           ),
           0,
         );

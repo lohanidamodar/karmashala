@@ -1,16 +1,16 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/util/directory_change_watcher.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/git/application/changes_providers.dart';
-import 'package:chitragupta/src/features/git/application/changes_service.dart';
-import 'package:chitragupta/src/features/git/domain/file_change.dart';
+import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/directory_change_watcher.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/changes_service.dart';
+import 'package:karmashala/src/features/git/domain/file_change.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,7 +101,7 @@ void main() {
     // `touch` is a no-op on a root nothing has indexed, so the root has to be
     // known before the merge for this to prove anything. An empty temp folder,
     // because a walk of anything real is a slow non-hermetic dependency.
-    final root = Directory.systemTemp.createTempSync('chitragupta-merge').path;
+    final root = Directory.systemTemp.createTempSync('karmashala-merge').path;
     addTearDown(() => Directory(root).deleteSync(recursive: true));
     await index.index(root);
     await pumpEventQueue();

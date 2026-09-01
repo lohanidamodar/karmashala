@@ -41,7 +41,7 @@ class AppDatabase {
   /// directory (outside the project tree).
   static Future<AppDatabase> open() async {
     final dir = await getApplicationSupportDirectory();
-    final file = p.join(dir.path, 'chitragupta.sqlite');
+    final file = p.join(dir.path, 'karmashala.sqlite');
     return AppDatabase(sqlite3.open(file));
   }
 

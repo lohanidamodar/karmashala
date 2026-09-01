@@ -4,14 +4,14 @@
 /// it just started.
 library;
 
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/presentation/project_sessions_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/session_list_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/session_view_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/start_session_screen.dart';
-import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/start_session_screen.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

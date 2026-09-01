@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/browser/application/browser_pane_controller.dart';
-import 'package:chitragupta/src/features/browser/application/browser_providers.dart';
-import 'package:chitragupta/src/features/browser/presentation/browser_pane.dart';
-import 'package:chitragupta/src/features/sessions/application/session_actions.dart';
-import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
+import 'package:karmashala/src/features/browser/application/browser_providers.dart';
+import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
+import 'package:karmashala/src/features/sessions/application/session_actions.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,7 +32,7 @@ class Harness {
         targets: [for (final id in targets) fakeTarget(id, title: 'Tab $id')],
       ) {
     fake.onEvaluate = (expression) {
-      if (expression.contains('__chitraguptaPicker')) return true;
+      if (expression.contains('__karmashalaPicker')) return true;
       if (expression == 'location.href') return 'https://example.com/app';
       if (expression == 'document.title') return 'Example';
       return null;
@@ -74,12 +74,12 @@ class Harness {
     await tester.pump();
     await tester.pump();
     expect(
-      fake.expressions.any((e) => e.contains('__chitraguptaPicker')),
+      fake.expressions.any((e) => e.contains('__karmashalaPicker')),
       isTrue,
       reason: 'the pane must have installed the picker before a click counts',
     );
     fake.socket.emitEvent('Runtime.bindingCalled', {
-      'name': '__chitraguptaPick',
+      'name': '__karmashalaPick',
       'payload': _pickPayload,
     });
     await tester.pumpAndSettle();

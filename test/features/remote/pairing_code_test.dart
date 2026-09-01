@@ -7,10 +7,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/pairing/pairing_code.dart';
-import 'package:chitragupta/src/features/remote/pairing/pairing_payload.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_code.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_payload.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List _hex(String value) => Uint8List.fromList([

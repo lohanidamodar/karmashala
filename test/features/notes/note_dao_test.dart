@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/notes/data/note_dao.dart';
-import 'package:chitragupta/src/features/notes/domain/note.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/notes/data/note_dao.dart';
+import 'package:karmashala/src/features/notes/domain/note.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

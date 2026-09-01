@@ -1,6 +1,6 @@
-name: chitragupta_relay
+name: karmashala_relay
 description: >-
-  The Chitragupta relay: a small, self-hostable Dart server that pairs two
+  The Karmashala relay: a small, self-hostable Dart server that pairs two
   outbound WebSockets by rendezvous id and forwards opaque frames between a
   desktop host and its paired phone. It holds no keys and can read nothing.
 version: 0.1.0

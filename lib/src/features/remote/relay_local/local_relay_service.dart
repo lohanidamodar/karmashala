@@ -8,7 +8,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 
 import '../../../core/process/command_runner.dart';
 
@@ -17,7 +17,7 @@ import '../../../core/process/command_runner.dart';
 const int kDefaultLocalRelayPort = kDefaultRelayPort;
 
 /// The scoped inbound firewall rule the service tries to add on Windows.
-const String kFirewallRuleName = 'Chitragupta local relay';
+const String kFirewallRuleName = 'Karmashala local relay';
 
 /// One interface address the machine could be dialled on.
 typedef LanInterfaceAddress = ({String name, String ip});

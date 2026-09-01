@@ -13,8 +13,8 @@ import 'theme/ui_text_scale.dart';
 /// Provides theming and renders the desktop shell. The `ProviderScope` is
 /// installed in `main.dart` (with the database override) so that bootstrap can
 /// supply already-initialised dependencies.
-class ChitraguptaApp extends ConsumerWidget {
-  const ChitraguptaApp({super.key});
+class KarmashalaApp extends ConsumerWidget {
+  const KarmashalaApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +29,7 @@ class ChitraguptaApp extends ConsumerWidget {
       settingsControllerProvider.select((s) => s.uiTextScale),
     );
     return MaterialApp(
-      title: 'Chitragupta',
+      title: 'Karmashala',
       debugShowCheckedModeBanner: false,
       // Above the Navigator, so menus, dialogs and tooltips scale too — not
       // just the routes.

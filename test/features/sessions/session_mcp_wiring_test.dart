@@ -1,24 +1,24 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/core/util/id_generator_provider.dart';
-import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta/src/features/mcp/session_mcp.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/session_mcp.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -155,7 +155,7 @@ void main() {
 
       expect(
         args,
-        containsAllInOrder(['-c', 'mcp_servers.chitragupta.url=$_url']),
+        containsAllInOrder(['-c', 'mcp_servers.karmashala.url=$_url']),
       );
       expect(mcp.askedForAFile, isFalse);
     });
@@ -210,7 +210,7 @@ void main() {
   /// restored pane, and the agent refused:
   ///
   ///   Error: Invalid MCP configuration:
-  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///   MCP config file not found: `…/karmashala/mcp/session-<uuid>.json`
   ///
   /// `SessionMcpConfigs.prepare` empties that directory on every start, the
   /// control server binds a new port and mints a new credential — so all three
@@ -296,7 +296,7 @@ void main() {
         paneCommand(next, paneId),
         containsAllInOrder([
           '-c',
-          'mcp_servers.chitragupta.url=http://127.0.0.1:2222/mcp/today',
+          'mcp_servers.karmashala.url=http://127.0.0.1:2222/mcp/today',
         ]),
       );
       expect(paneCommand(next, paneId).join(' '), isNot(contains('yesterday')));
@@ -355,7 +355,7 @@ void main() {
             'executable': 'claude',
             'arguments': [
               r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
-                  r'\chitragupta\mcp\session-95659659.json',
+                  r'\karmashala\mcp\session-95659659.json',
               '--permission-mode',
               'manual',
               '--session-id',
@@ -467,7 +467,7 @@ void main() {
         jsonDecode(File(flag.split('=').last).readAsStringSync())
             as Map<String, Object?>;
     final url =
-        ((config['mcpServers']! as Map<String, Object?>)['chitragupta']!
+        ((config['mcpServers']! as Map<String, Object?>)['karmashala']!
             as Map<String, Object?>)['url']! as String;
 
     // 3. That URL answers a real MCP tool call…

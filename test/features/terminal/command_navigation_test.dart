@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/features/terminal/application/terminal_scroll.dart';
-import 'package:chitragupta/src/features/terminal/domain/command_blocks.dart';
-import 'package:chitragupta/src/features/terminal/presentation/command_history_sheet.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_scroll.dart';
+import 'package:karmashala/src/features/terminal/domain/command_blocks.dart';
+import 'package:karmashala/src/features/terminal/presentation/command_history_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

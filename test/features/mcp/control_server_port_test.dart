@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -111,7 +111,7 @@ void main() {
     // Hyper-V rule does not name, and WSL agents would go quiet again with
     // every test still green.
     final iss = File(
-      p.join('windows', 'installer', 'chitragupta.iss'),
+      p.join('windows', 'installer', 'karmashala.iss'),
     ).readAsStringSync();
 
     expect(

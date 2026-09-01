@@ -1,9 +1,9 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/remote_transport.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala/src/features/remote/transport/remote_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _rendezvous = RendezvousId.parse('0123456789abcdef0123456789abcdef');

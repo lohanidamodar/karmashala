@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/app/shell/quick_open/fuzzy_match.dart';
+import 'package:karmashala/src/app/shell/quick_open/fuzzy_match.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The ranking is the whole feature: a quick open that finds the thing on the

@@ -6,8 +6,8 @@
 /// here, through the raw snapshot and through a sealed-shape envelope.
 library;
 
-import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

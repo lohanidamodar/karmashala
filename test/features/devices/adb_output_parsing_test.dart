@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/features/devices/data/adb_output_parsing.dart';
-import 'package:chitragupta/src/features/devices/domain/android_device.dart';
-import 'package:chitragupta/src/features/devices/domain/logcat_entry.dart';
+import 'package:karmashala/src/features/devices/data/adb_output_parsing.dart';
+import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala/src/features/devices/domain/logcat_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -174,10 +174,10 @@ sambandha_test
         '/ com.genymobile.scrcpy.Server 4.1 scid=0a1b2c3d log_level=info\n'
         '  8359 app_process / com.genymobile.scrcpy.Server 4.1 '
         'scid=0a1b2c3d log_level=info\n'
-        ' 11026 sh -c CLASSPATH=/data/local/tmp/chitragupta-scrcpy-server.jar '
+        ' 11026 sh -c CLASSPATH=/data/local/tmp/karmashala-scrcpy-server.jar '
         'app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef\n'
         ' 11028 app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef\n';
-    const ours = '/data/local/tmp/chitragupta-scrcpy-server.jar';
+    const ours = '/data/local/tmp/karmashala-scrcpy-server.jar';
 
     test('finds both the shell and the app_process it started', () {
       expect(parseOwnedScrcpyPids(ps, jarPath: ours), [11026, 11028]);

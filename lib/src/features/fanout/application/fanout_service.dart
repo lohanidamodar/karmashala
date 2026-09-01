@@ -477,7 +477,7 @@ class FanOutService {
   /// Removes the worktrees of every result in [results] except [winner].
   ///
   /// A fan-out leaves one worktree per agent behind, and nothing used to take
-  /// them away: five agents compared meant four `.chitragupta-worktrees/…`
+  /// them away: five agents compared meant four `.karmashala-worktrees/…`
   /// directories and four checked-out branches sitting there indefinitely.
   ///
   /// It refuses, rather than asks forgiveness, in two cases:

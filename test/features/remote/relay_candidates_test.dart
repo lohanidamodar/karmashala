@@ -11,12 +11,12 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/client/companion_store.dart';
-import 'package:chitragupta/src/features/remote/client/relay_candidates.dart';
-import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
-import 'package:chitragupta/src/features/remote/pairing/pairing_payload.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
+import 'package:karmashala/src/features/remote/client/companion_store.dart';
+import 'package:karmashala/src/features/remote/client/relay_candidates.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_payload.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _local = Uri.parse('ws://192.168.1.20:8787');

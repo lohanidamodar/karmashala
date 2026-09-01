@@ -1,7 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chitragupta/src/features/terminal/domain/mouse_wheel_reporter.dart';
+import 'package:karmashala/src/features/terminal/domain/mouse_wheel_reporter.dart';
 import 'package:xterm/xterm.dart';
 
 /// Switch to the alternate screen buffer, which is where tmux, vim, less and
@@ -22,7 +22,7 @@ Future<(Terminal, List<String>)> _pumpPane(
 }) async {
   // Configured exactly as PtyTerminalInstance configures a real pane.
   final terminal = Terminal(maxLines: 1000)
-    ..mouseHandler = const ChitraguptaMouseHandler();
+    ..mouseHandler = const KarmashalaMouseHandler();
   final output = <String>[];
   terminal.onOutput = output.add;
 

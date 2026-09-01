@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/github/application/github_providers.dart';
-import 'package:chitragupta/src/features/github/domain/issue.dart';
-import 'package:chitragupta/src/features/github/domain/pull_request.dart';
-import 'package:chitragupta/src/features/github/presentation/github_view.dart';
+import 'package:karmashala/src/features/github/application/github_providers.dart';
+import 'package:karmashala/src/features/github/domain/issue.dart';
+import 'package:karmashala/src/features/github/domain/pull_request.dart';
+import 'package:karmashala/src/features/github/presentation/github_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

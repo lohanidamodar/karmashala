@@ -50,7 +50,7 @@ const Duration kLanAttemptTimeout = Duration(seconds: 2);
 /// may talk the companion into trying it again.
 const Duration kLanRetryCooldown = Duration(minutes: 2);
 
-/// Watches the LAN for Chitragupta hosts on behalf of the companion gateway.
+/// Watches the LAN for Karmashala hosts on behalf of the companion gateway.
 ///
 /// Everything is best-effort: a platform where multicast cannot be joined
 /// leaves the scout inert ([isListening] false) and the gateway on the relay.

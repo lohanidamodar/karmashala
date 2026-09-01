@@ -1,14 +1,14 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/devices/data/adb_service.dart';
-import 'package:chitragupta/src/features/devices/domain/android_device.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/verification/application/verification_service.dart';
-import 'package:chitragupta/src/features/verification/data/verification_artifact_store.dart';
-import 'package:chitragupta/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/devices/data/adb_service.dart';
+import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
+import 'package:karmashala/src/features/verification/data/verification_artifact_store.dart';
+import 'package:karmashala/src/features/verification/data/verification_dao.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../browser/fake_browser.dart';

@@ -1,4 +1,4 @@
-name: chitragupta
+name: karmashala
 description: "A new Flutter project."
 publish_to: 'none'
 version: 1.1.5+11
@@ -7,11 +7,11 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
-  chitragupta_local_ipc:
+  karmashala_local_ipc:
     path: packages/local_ipc
   # The relay server itself, embedded in the desktop app so "This computer
   # (local network)" needs nothing hosted; also started in-process by tests.
-  chitragupta_relay:
+  karmashala_relay:
     path: packages/relay
   # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
   cryptography: ^2.9.0

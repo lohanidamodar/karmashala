@@ -6,11 +6,11 @@
 /// state the screen can be in.
 library;
 
-import 'package:chitragupta/src/app/theme/design_tokens.dart';
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/presentation/project_sessions_screen.dart';
-import 'package:chitragupta/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

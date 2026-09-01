@@ -15,7 +15,7 @@ import 'settings_row.dart';
 import 'settings_section.dart';
 
 /// Settings → Tools: the external apps sessions are handed to, and the MCP
-/// bridge that lets an agent drive Chitragupta back.
+/// bridge that lets an agent drive Karmashala back.
 class ToolsPage extends StatelessWidget {
   const ToolsPage({super.key});
 
@@ -267,7 +267,7 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
   }
 }
 
-/// The MCP bridge status: whether an agent can drive Chitragupta through its
+/// The MCP bridge status: whether an agent can drive Karmashala through its
 /// own tools, and which tools are exposed.
 class McpBridgeSection extends ConsumerWidget {
   const McpBridgeSection({super.key});
@@ -284,7 +284,7 @@ class McpBridgeSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'An agent pointed at Chitragupta\'s MCP bridge can query and act '
+            'An agent pointed at Karmashala\'s MCP bridge can query and act '
             'on your projects and sessions through these built-in tools:',
             style: theme.textTheme.bodySmall,
           ),
@@ -315,7 +315,7 @@ class McpBridgeSection extends ConsumerWidget {
                 child: Text(
                   available
                       ? 'Tools available — the MCP bridge is installed.'
-                      : 'Tools unavailable — the MCP bridge (chitragupta_mcp) '
+                      : 'Tools unavailable — the MCP bridge (karmashala_mcp) '
                             'was not found next to the app.',
                   style: theme.textTheme.bodySmall,
                 ),

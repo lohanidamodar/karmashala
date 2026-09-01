@@ -1,13 +1,13 @@
-import 'package:chitragupta/src/app/chitragupta_app.dart';
-import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
-import 'package:chitragupta/src/app/shell/shell_shortcuts.dart';
-import 'package:chitragupta/src/app/shell/shell_state.dart';
-import 'package:chitragupta/src/app/shell/side_panel_state.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import 'package:karmashala/src/app/shell/shell_state.dart';
+import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,7 +80,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const ChitraguptaApp(),
+        child: const KarmashalaApp(),
       ),
     );
     await tester.pumpAndSettle();

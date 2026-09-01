@@ -54,7 +54,7 @@ class WatchSetSection extends ConsumerWidget {
                 SettingsRow(
                   label: 'Sessions watched',
                   help:
-                      'Every session Chitragupta holds a status for. Nothing '
+                      'Every session Karmashala holds a status for. Nothing '
                       'is capped by list position, so a number below the '
                       'sessions you can see is a bug worth reporting.',
                   control: _Value('${coverage.tracked}'),

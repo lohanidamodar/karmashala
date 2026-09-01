@@ -1,15 +1,15 @@
 import 'dart:async';
 
-import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/data/agent_status_service.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/notifications/application/notification_providers.dart';
-import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
-import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
-import 'package:chitragupta/src/features/sessions/presentation/agent_status_badge.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/data/agent_status_service.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/agent_status_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

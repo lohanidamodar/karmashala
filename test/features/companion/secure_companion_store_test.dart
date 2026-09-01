@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/companion/client/secure_companion_store.dart';
-import 'package:chitragupta/src/features/remote/client/companion_store.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
+import 'package:karmashala/src/features/remote/client/companion_store.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The keystore-backed store, driven through an injected backend — the real

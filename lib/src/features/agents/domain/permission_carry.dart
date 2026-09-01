@@ -46,7 +46,7 @@ class CarriedPermission {
   /// One sentence for the confirmation step, so the user reads what will
   /// happen **before** anything is launched rather than discovering it after.
   ///
-  /// Every branch names the agent. "Chitragupta cannot enforce this" invites
+  /// Every branch names the agent. "Karmashala cannot enforce this" invites
   /// the reader to blame the app for a limit that belongs to the CLI, and the
   /// user's next decision — go ahead, or pick a different agent — depends on
   /// knowing which.
@@ -54,7 +54,7 @@ class CarriedPermission {
     if (!enforced) {
       return '$targetAgentName takes no flag for ${requested.label.toLowerCase()} '
           'and nothing safer that it does understand, so it will start under '
-          'its own default and Chitragupta cannot govern it.';
+          'its own default and Karmashala cannot govern it.';
     }
     final about = switch (fit) {
       PermissionModeFit.exact => '$targetAgentName is told to use it.',

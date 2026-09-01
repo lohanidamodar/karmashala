@@ -5,11 +5,11 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/push/push_crypto.dart';
-import 'package:chitragupta/src/features/remote/push/push_fanout.dart';
-import 'package:chitragupta/src/features/remote/push/relay_push_client.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/push/push_crypto.dart';
+import 'package:karmashala/src/features/remote/push/push_fanout.dart';
+import 'package:karmashala/src/features/remote/push/relay_push_client.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 

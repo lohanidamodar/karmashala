@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

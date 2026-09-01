@@ -228,7 +228,7 @@ class TerminalThemeSection extends ConsumerWidget {
   }
 }
 
-/// Who gets a keystroke when a terminal pane has focus: Chitragupta, or the
+/// Who gets a keystroke when a terminal pane has focus: Karmashala, or the
 /// process inside the pane.
 ///
 /// This exists because the honest answer is "it depends on how you work".

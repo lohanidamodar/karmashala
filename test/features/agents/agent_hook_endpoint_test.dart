@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The callback address an agent is told to post to, per environment.

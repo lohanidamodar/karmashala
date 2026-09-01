@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/mcp/handshake_file_permissions.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta/src/features/mcp/launcher_mcp.dart';
-import 'package:chitragupta/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/launcher_mcp.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -98,7 +98,7 @@ void main() {
       final config =
           jsonDecode(File(path!).readAsStringSync()) as Map<String, Object?>;
       final entry =
-          (config['mcpServers']! as Map<String, Object?>)['chitragupta']!
+          (config['mcpServers']! as Map<String, Object?>)['karmashala']!
               as Map<String, Object?>;
 
       expect(entry['type'], 'http');
@@ -125,7 +125,7 @@ void main() {
         final config =
             jsonDecode(File(p.join(tmp.path, file)).readAsStringSync())
                 as Map<String, Object?>;
-        return ((config['mcpServers']! as Map<String, Object?>)['chitragupta']!
+        return ((config['mcpServers']! as Map<String, Object?>)['karmashala']!
                 as Map<String, Object?>)['url']!
             as String;
       }
@@ -154,7 +154,7 @@ void main() {
       final url = urlFor('s1')!;
       final toml = LauncherMcp.codexServerToml(url);
 
-      expect(toml, contains('[mcp_servers.chitragupta]'));
+      expect(toml, contains('[mcp_servers.karmashala]'));
       expect(toml, contains('url = "$url"'));
       // No bearer_token_env_var: the credential is already in the URL, so
       // nothing has to be put on the process environment for Codex to read.
@@ -168,23 +168,23 @@ void main() {
         LauncherMcp.allowedTools,
         hasLength(LauncherControlServer.toolSchemas.length),
       );
-      expect(LauncherMcp.allowedTools, contains('mcp__chitragupta__list_sessions'));
+      expect(LauncherMcp.allowedTools, contains('mcp__karmashala__list_sessions'));
     });
 
     test('the read-only list matches the annotations clients are served', () {
       expect(
         LauncherMcp.readOnlyTools,
-        contains('mcp__chitragupta__list_sessions'),
+        contains('mcp__karmashala__list_sessions'),
       );
       // A tool that ends something must never be on a pre-approval list built
       // from readOnlyHint.
       expect(
         LauncherMcp.readOnlyTools,
-        isNot(contains('mcp__chitragupta__session_end')),
+        isNot(contains('mcp__karmashala__session_end')),
       );
       expect(
         LauncherMcp.readOnlyTools,
-        isNot(contains('mcp__chitragupta__terminal_run')),
+        isNot(contains('mcp__karmashala__terminal_run')),
       );
       expect(
         LauncherMcp.readOnlyTools.length,

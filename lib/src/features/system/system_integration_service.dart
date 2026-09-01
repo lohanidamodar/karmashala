@@ -156,7 +156,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     try {
       _native.autoStart.setup(
-        appName: 'Chitragupta',
+        appName: 'Karmashala',
         appPath: Platform.resolvedExecutable,
       );
     } on Object catch (error, stack) {
@@ -184,7 +184,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     await _run(NativeSetting.trayIcon, () async {
       await _native.tray.setIcon(_kIdleTrayIcon);
-      await _native.tray.setToolTip('Chitragupta');
+      await _native.tray.setToolTip('Karmashala');
     });
 
     await apply(_settings);
@@ -375,7 +375,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Global-hotkey handler: a summon/dismiss toggle for the whole app.
   ///
-  /// Chitragupta used to answer this with a second window — a borderless
+  /// Karmashala used to answer this with a second window — a borderless
   /// always-on-top mini launcher with its own list of projects and sessions,
   /// its own size and position, and its own chat. Quick open does that job
   /// inside the window the user already has, over more than projects and
@@ -443,9 +443,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
   }
 
   String _toolTip(int count) => switch (count) {
-    0 => 'Chitragupta',
-    1 => 'Chitragupta — 1 thing needs you',
-    _ => 'Chitragupta — $count things need you',
+    0 => 'Karmashala',
+    1 => 'Karmashala — 1 thing needs you',
+    _ => 'Karmashala — $count things need you',
   };
 
   Future<void> _refreshMenu(Settings settings) async {
@@ -460,7 +460,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
           items: [
             ..._attentionMenuItems(),
             MenuItem.separator(),
-            MenuItem(key: _kMenuShow, label: 'Open Chitragupta'),
+            MenuItem(key: _kMenuShow, label: 'Open Karmashala'),
             MenuItem(key: _kMenuHide, label: 'Hide window'),
             MenuItem.separator(),
             MenuItem.checkbox(

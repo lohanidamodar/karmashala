@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/logging/app_logger.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/agents/application/agent_status_providers.dart';
-import 'package:chitragupta/src/features/mcp/control_server_status.dart';
-import 'package:chitragupta/src/features/mcp/handshake_file_permissions.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
+import 'package:karmashala/src/features/mcp/control_server_status.dart';
+import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

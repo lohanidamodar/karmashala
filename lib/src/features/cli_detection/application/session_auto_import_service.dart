@@ -52,7 +52,7 @@ class SessionAutoImportService {
       if (match == null) continue;
       final now = clock.nowUtc();
       for (final session in [...match.sessions, ...match.subagentSessions]) {
-        // A session started in Chitragupta also appears in the CLI store. Keep
+        // A session started in Karmashala also appears in the CLI store. Keep
         // the native row as the single representation instead of importing a
         // duplicate history row beside it.
         if (sessionDao.getByExternalSessionId(session.sessionId) != null) {

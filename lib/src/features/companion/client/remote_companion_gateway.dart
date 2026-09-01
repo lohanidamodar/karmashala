@@ -368,11 +368,11 @@ class RemoteCompanionGateway implements CompanionGateway {
   Stream<CompanionPairingProgress> get pairingProgress => _progress.stream;
 
   /// Where the typed code's relay setting lives in the phone's store.
-  static const String kPairingRelayStoreKey = 'chitragupta.companion.relay';
+  static const String kPairingRelayStoreKey = 'karmashala.companion.relay';
 
   /// Where this phone's own identity lives — beside the pairing records
   /// rather than inside one, because it must outlive unpairing every host.
-  static const String kDeviceIdStoreKey = 'chitragupta.remote.device_id';
+  static const String kDeviceIdStoreKey = 'karmashala.remote.device_id';
 
   /// This phone's device id: minted once, then used by every pairing it ever
   /// makes.
@@ -443,7 +443,7 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   PairingException _refusedPairingInput() {
     const refusal = PairingException(
-      'That is not a Chitragupta pairing code. Scan the QR from the '
+      'That is not a Karmashala pairing code. Scan the QR from the '
       "desktop's Remote access settings, type the code shown under it, or "
       'paste its full pairing payload here.',
     );
@@ -1513,7 +1513,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// phone. Never "check your connection": the network is demonstrably fine,
   /// since the relay answered.
   static const String _kHostAbsentTrouble =
-      'Your desktop is not answering on this relay — check that Chitragupta '
+      'Your desktop is not answering on this relay — check that Karmashala '
       'is running, and that it is set to the same relay.';
 
   /// And what "the meeting place itself would not answer" reads like. Never

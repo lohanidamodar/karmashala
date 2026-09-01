@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:chitragupta/src/features/notifications/data/desktop_notification_presenter.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_request.dart';
-import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/notifications/data/desktop_notification_presenter.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
+import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_notifier/local_notifier.dart';
@@ -109,11 +109,11 @@ void main() {
       // once the plugin has handed the toast to WinToast — proof the channel
       // round trip and the AUMID both worked, not proof anyone saw it. Seeing
       // it is the operator's job.
-      await localNotifier.setup(appName: 'Chitragupta');
+      await localNotifier.setup(appName: 'Karmashala');
       final shown = Completer<void>();
       final probe =
           LocalNotification(
-              title: 'Chitragupta delivery probe',
+              title: 'Karmashala delivery probe',
               body: 'If you can read this, toasts work on this host.',
             )
             ..onShow = () {
@@ -165,7 +165,7 @@ void main() {
       });
 
       await trayManager.setIcon('assets/tray_icon.ico');
-      await trayManager.setToolTip('Chitragupta');
+      await trayManager.setToolTip('Karmashala');
 
       // What `SystemIntegrationService._applyAttention` does, with the same
       // labels the watcher produces. Awaiting each call *is* the round trip to
@@ -173,7 +173,7 @@ void main() {
       // whether the badged icon is the one that appears has to be looked at.
       await trayManager.setIcon('assets/tray_icon_attention.ico');
       await trayManager.setToolTip(
-        'Chitragupta — ${waiting.length} sessions need you',
+        'Karmashala — ${waiting.length} sessions need you',
       );
       await trayManager.setContextMenu(
         Menu(
@@ -181,7 +181,7 @@ void main() {
             for (var i = 0; i < waiting.length; i++)
               MenuItem(key: 'attention:$i', label: waiting[i].menuLabel),
             MenuItem.separator(),
-            MenuItem(key: 'show', label: 'Open Chitragupta'),
+            MenuItem(key: 'show', label: 'Open Karmashala'),
           ],
         ),
       );

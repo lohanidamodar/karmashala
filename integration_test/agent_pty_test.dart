@@ -1,16 +1,16 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/data/terminal_grid_status_source.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
-import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
-import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/agents/data/terminal_grid_status_source.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 

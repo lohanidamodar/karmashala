@@ -1,4 +1,4 @@
-/// The coding-agent CLIs Chitragupta speaks a **protocol** for.
+/// The coding-agent CLIs Karmashala speaks a **protocol** for.
 ///
 /// This is not agent identity — that is `AgentDescriptor.id`, a plain string, so
 /// a new agent needs no member here. This enum answers a narrower question:

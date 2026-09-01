@@ -1,16 +1,16 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/session_providers.dart';
-import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_title.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_title.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,8 +43,8 @@ void main() {
 
     test('deeper than that is the last two segments', () {
       expect(
-        directoryLabel('/home/me/projects/chitragupta', home: '/home/me'),
-        'projects/chitragupta',
+        directoryLabel('/home/me/projects/karmashala', home: '/home/me'),
+        'projects/karmashala',
       );
       expect(directoryLabel(r'C:\Windows\System32'), 'Windows/System32');
     });
@@ -158,10 +158,10 @@ void main() {
     test('a plain shell with a directory is titled by it', () {
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\chitragupta',
+        workingDirectory: r'C:\src\karmashala',
       );
 
-      expect(controller.titleForTab(tabId), 'src/chitragupta');
+      expect(controller.titleForTab(tabId), 'src/karmashala');
     });
 
     test('a plain shell with no directory keeps its profile label', () {
@@ -173,7 +173,7 @@ void main() {
     test('a shell that names its own window wins over the directory', () {
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\chitragupta',
+        workingDirectory: r'C:\src\karmashala',
       );
       final pane = container
           .read(terminalSessionsControllerProvider)
@@ -195,38 +195,38 @@ void main() {
       // work. The directory is what the user asked to see.
       final tabId = controller.openTab(
         archLinux,
-        workingDirectory: '/home/me/src/chitragupta',
+        workingDirectory: '/home/me/src/karmashala',
       );
 
       writeTitle(controller, container, r'C:\Windows\System32\wsl.exe');
 
-      expect(controller.titleForTab(tabId), 'src/chitragupta');
+      expect(controller.titleForTab(tabId), 'src/karmashala');
     });
 
     test('the Windows shells are rejected by the same rule', () {
       final powerShell = controller.openTab(
         TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\chitragupta',
+        workingDirectory: r'C:\src\karmashala',
       );
       writeTitle(
         controller,
         container,
         r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe',
       );
-      expect(controller.titleForTab(powerShell), 'src/chitragupta');
+      expect(controller.titleForTab(powerShell), 'src/karmashala');
 
       final cmd = controller.openTab(
         TerminalProfile.commandPrompt,
-        workingDirectory: r'C:\src\chitragupta',
+        workingDirectory: r'C:\src\karmashala',
       );
       writeTitle(controller, container, r'C:\Windows\System32\cmd.exe');
-      expect(controller.titleForTab(cmd), 'src/chitragupta');
+      expect(controller.titleForTab(cmd), 'src/karmashala');
     });
 
     test('a title that merely contains a path is a real title', () {
       final tabId = controller.openTab(
         archLinux,
-        workingDirectory: '/home/me/src/chitragupta',
+        workingDirectory: '/home/me/src/karmashala',
       );
 
       writeTitle(controller, container, 'me@host: ~/src/app');
@@ -237,7 +237,7 @@ void main() {
     test('a path that is not the executable we launched is a real title', () {
       final tabId = controller.openTab(
         archLinux,
-        workingDirectory: '/home/me/src/chitragupta',
+        workingDirectory: '/home/me/src/karmashala',
       );
 
       // A shell reporting its directory, which is a path and nothing else. The
@@ -250,7 +250,7 @@ void main() {
     test('a bare program name is a real title', () {
       final tabId = controller.openTab(
         archLinux,
-        workingDirectory: '/home/me/src/chitragupta',
+        workingDirectory: '/home/me/src/karmashala',
       );
 
       // Only an absolute path is the launcher naming itself; a TUI is free to
@@ -263,7 +263,7 @@ void main() {
     test('a launcher path arriving later does not clobber a real title', () {
       final tabId = controller.openTab(
         archLinux,
-        workingDirectory: '/home/me/src/chitragupta',
+        workingDirectory: '/home/me/src/karmashala',
       );
 
       writeTitle(controller, container, 'vim README.md');
@@ -304,7 +304,7 @@ void main() {
     test('the pane count suffix survives all of it', () {
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\chitragupta',
+        workingDirectory: r'C:\src\karmashala',
       );
       controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
 

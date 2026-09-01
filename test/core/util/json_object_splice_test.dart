@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/core/util/json_object_splice.dart';
+import 'package:karmashala/src/core/util/json_object_splice.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
-import 'package:chitragupta/src/features/terminal/data/scrollback_spool.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_ingest_budget.dart';
-import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
+import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
+import 'package:karmashala/src/features/terminal/data/scrollback_spool.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
+import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Visibility-aware ingestion: one global parse budget, and a pane nobody can

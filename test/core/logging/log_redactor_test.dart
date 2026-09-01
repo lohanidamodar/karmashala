@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/core/logging/log_redactor.dart';
+import 'package:karmashala/src/core/logging/log_redactor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The shapes a real secret takes in this app's logs. Each is fake, but each is
@@ -92,7 +92,7 @@ void main() {
 
     test('ordinary messages are left alone', () {
       const lines = [
-        'Starting Chitragupta.',
+        'Starting Karmashala.',
         'Discovered 3 execution environment(s).',
         'session s-42 moved from working to waiting',
         'host key verification: ok',

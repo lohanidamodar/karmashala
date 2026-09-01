@@ -310,7 +310,7 @@ class _LocalRelayStatusRow extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(top: Insets.xs),
             child: Text(
-              "If the phone can't connect, allow Chitragupta in Windows "
+              "If the phone can't connect, allow Karmashala in Windows "
               'Defender Firewall.',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant,

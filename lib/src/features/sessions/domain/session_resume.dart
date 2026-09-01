@@ -147,7 +147,7 @@ class SessionWhereabouts {
           'Nothing has been lost; start a new session instead.';
     }
     if (external) {
-      return 'Started in a terminal window Chitragupta does not own, so we '
+      return 'Started in a terminal window Karmashala does not own, so we '
           'cannot see whether it is still running.';
     }
     return null;

@@ -47,7 +47,7 @@ class RevealOutcome {
 
 /// Shows a path in the host's file manager.
 ///
-/// **One helper, because there is one hard part.** Every path in Chitragupta is
+/// **One helper, because there is one hard part.** Every path in Karmashala is
 /// an [EnvironmentPath] — a path *plus the environment that owns it* — and the
 /// file manager only exists on the host. A repository checked out in WSL is
 /// `/home/me/src/app` to the agent running in it and `\\wsl.localhost\Ubuntu\
@@ -128,7 +128,7 @@ class RevealInFileManager {
     final manager = fileManager;
     if (manager == null) {
       return const RevealOutcome.failed(
-        'This platform has no file manager Chitragupta can open.',
+        'This platform has no file manager Karmashala can open.',
       );
     }
     final hostPath = hostPathFor(path);

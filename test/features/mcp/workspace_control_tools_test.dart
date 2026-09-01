@@ -1,21 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/git/application/changes_providers.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -27,7 +27,7 @@ import '../../support/fixtures.dart';
 /// The workspace tools, over the endpoint, with git answering the way a test
 /// tells it to.
 ///
-/// The rule these are really about is the last one: **a reading Chitragupta
+/// The rule these are really about is the last one: **a reading Karmashala
 /// could not take is reported as "not recorded", never as zero.** A model that
 /// reads `unpushed: 0` from a failed git call concludes the branch is pushed.
 void main() {

@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/git/domain/diff_stat.dart';
-import 'package:chitragupta/src/features/github/domain/pull_request_snapshot.dart';
-import 'package:chitragupta/src/features/sessions/domain/delivery_stage.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala/src/features/git/domain/diff_stat.dart';
+import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
+import 'package:karmashala/src/features/sessions/domain/delivery_stage.dart';
+import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The stage machine: working → committed → pushed → pr-open →

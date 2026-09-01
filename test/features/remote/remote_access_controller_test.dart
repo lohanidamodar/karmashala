@@ -4,16 +4,16 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/remote/application/remote_access_controller.dart';
-import 'package:chitragupta/src/features/remote/application/remote_host_service.dart';
-import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
-import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
+import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

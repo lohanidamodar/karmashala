@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _secret = Uint8List.fromList(List<int>.generate(32, (i) => i));

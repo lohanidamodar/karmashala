@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_permission_options.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_options.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What the permission control is allowed to offer, per agent.
@@ -115,7 +115,7 @@ void main() {
     expect(ask.isSelectable, isFalse);
     expect(ask.fitLabel, 'not enforced');
     // The sentence names the agent, so the user reads it as a property of that
-    // CLI rather than as Chitragupta being broken.
+    // CLI rather than as Karmashala being broken.
     expect(ask.summary, contains('Bypass-only CLI'));
     expect(ask.summary, contains('own default applies'));
     // Listed but not choosable — hiding it would leave the user wondering where

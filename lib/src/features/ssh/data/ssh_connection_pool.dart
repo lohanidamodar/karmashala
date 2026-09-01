@@ -10,7 +10,7 @@ import 'ssh_host_dao.dart';
 /// One [SshConnection] per host, reused for the life of the app.
 ///
 /// Reuse is not an optimisation here, it is the difference between usable and
-/// not: Chitragupta issues many small commands (a `git status`, a handful of
+/// not: Karmashala issues many small commands (a `git status`, a handful of
 /// discovery probes) and paying a TCP connect plus a key exchange for each of
 /// them turns a 3 ms local probe into a multi-hundred-millisecond one. Every
 /// runner for the same host shares this pool's connection.

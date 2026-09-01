@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/terminal/domain/mouse_wheel_reporter.dart';
+import 'package:karmashala/src/features/terminal/domain/mouse_wheel_reporter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
@@ -18,7 +18,7 @@ String? _report(
   TerminalMouseButtonState state = TerminalMouseButtonState.down,
   CellOffset position = const CellOffset(9, 18),
 }) {
-  return const ChitraguptaMouseHandler()(
+  return const KarmashalaMouseHandler()(
     TerminalMouseEvent(
       button: button,
       buttonState: state,

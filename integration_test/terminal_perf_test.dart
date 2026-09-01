@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,7 +21,7 @@ void main() {
   testWidgets('streaming a 5 MB log keeps frames inside budget', (
     tester,
   ) async {
-    final directory = await Directory.systemTemp.createTemp('chitragupta_perf');
+    final directory = await Directory.systemTemp.createTemp('karmashala_perf');
     final log = File('${directory.path}/big.log');
     final filler = 'x' * 180;
     final sink = log.openWrite();

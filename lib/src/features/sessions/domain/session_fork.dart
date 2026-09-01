@@ -63,7 +63,7 @@ class SessionForkPlan {
         if (id.isEmpty) {
           return SessionForkPlan._(
             SessionForkKind.handoff,
-            '$agentName can fork a conversation, but Chitragupta never learned '
+            '$agentName can fork a conversation, but Karmashala never learned '
             'its id for this one, so there is nothing to name on the '
             'command line. This will hand off a written recap instead — the '
             'new session will not share $agentName\'s own record of the '
@@ -94,7 +94,7 @@ class SessionForkPlan {
         // launching a blank session that has been told nothing.
         return SessionForkPlan._(
           SessionForkKind.refused,
-          'Chitragupta has no verified way to fork a $agentName conversation, '
+          'Karmashala has no verified way to fork a $agentName conversation, '
           'and none to carry one across as a written recap either. Start a '
           'new $agentName session and describe what you need instead.',
         );

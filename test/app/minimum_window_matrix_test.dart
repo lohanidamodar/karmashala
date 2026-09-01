@@ -1,43 +1,43 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/core/util/id_generator_provider.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/application/environment_health.dart';
-import 'package:chitragupta/src/features/environments/presentation/environment_health_dialog.dart';
-import 'package:chitragupta/src/features/fanout/presentation/comparison_view.dart';
-import 'package:chitragupta/src/features/fanout/presentation/fanout_dialog.dart';
-import 'package:chitragupta/src/features/git/application/changes_providers.dart';
-import 'package:chitragupta/src/features/git/domain/file_change.dart';
-import 'package:chitragupta/src/features/git/presentation/changes_view.dart';
-import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
-import 'package:chitragupta/src/features/projects/presentation/new_project_dialog.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
-import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
-import 'package:chitragupta/src/features/sessions/presentation/delivery_strip.dart';
-import 'package:chitragupta/src/features/sessions/presentation/new_session_dialog.dart';
-import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
-import 'package:chitragupta/src/features/settings/presentation/settings_nav.dart';
-import 'package:chitragupta/src/features/settings/presentation/watch_set_section.dart';
-import 'package:chitragupta/src/features/settings/presentation/settings_screen.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
-import 'package:chitragupta/src/features/ssh/presentation/remote_file_browser_dialog.dart';
-import 'package:chitragupta/src/features/ssh/presentation/ssh_host_dialog.dart';
-import 'package:chitragupta/src/features/detail/presentation/repository_info_view.dart';
-import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_theme_controller.dart';
-import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/application/environment_health.dart';
+import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
+import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
+import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/domain/file_change.dart';
+import 'package:karmashala/src/features/git/presentation/changes_view.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
+import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
+import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala/src/features/ssh/presentation/remote_file_browser_dialog.dart';
+import 'package:karmashala/src/features/ssh/presentation/ssh_host_dialog.dart';
+import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
+import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -52,7 +52,7 @@ import '../support/window_matrix.dart';
 /// The minimum-window and accessibility matrix, applied to the surfaces the
 /// audit flagged.
 ///
-/// Chitragupta supports a 720x560 window. `FanOutDialog` asks for 1180x780 and
+/// Karmashala supports a 720x560 window. `FanOutDialog` asks for 1180x780 and
 /// several dialogs ask for 420-620, and nothing in the suite pumped any of them
 /// small enough to notice. These do — at 720x560, at 1440x900 as a control, and
 /// at 720x560 with text scaled to 1.3 — and they check keyboard reachability and
@@ -238,7 +238,7 @@ void main() {
         useWorktree: true,
         worktree: const EnvironmentPath(
           environmentId: 'windows',
-          path: r'C:\src\.chitragupta-worktrees\app-s1',
+          path: r'C:\src\.karmashala-worktrees\app-s1',
         ),
         status: SessionStatus.idle,
         createdAt: testTime,

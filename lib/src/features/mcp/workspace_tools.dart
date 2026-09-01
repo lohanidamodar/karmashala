@@ -248,7 +248,7 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
   {
     'name': 'project_rescan',
     'description':
-        'Re-read a project\'s directory for checkouts Chitragupta does not '
+        'Re-read a project\'s directory for checkouts Karmashala does not '
         'know about yet — a worktree added from the command line, a clone '
         'dropped in beside the others. Returns every checkout found '
         'afterwards, not a list of what changed.',
@@ -275,7 +275,7 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
   {
     'name': 'select_checkout',
     'description':
-        'Point Chitragupta\'s Explorer, diff view and side panel at a '
+        'Point Karmashala\'s Explorer, diff view and side panel at a '
         'checkout. This is what the user sees change on screen, so use it to '
         'show someone where you are working rather than to navigate for '
         'yourself.',
@@ -306,8 +306,8 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
     'description':
         'What a session\'s checkout still owes: branch, how far ahead of and '
         'behind its base, dirty files, unpushed commits, its pull request, and '
-        'the actions Chitragupta offers on it. Omit sessionId for your own '
-        'session. Any value Chitragupta could not measure reads "not recorded" '
+        'the actions Karmashala offers on it. Omit sessionId for your own '
+        'session. Any value Karmashala could not measure reads "not recorded" '
         '— never 0, and never "none". A failed git call and a clean tree are '
         'different facts.',
     'inputSchema': {

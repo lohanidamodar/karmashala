@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -91,7 +91,7 @@ const int preferredControlPort = 47821;
 /// Cheap — one interface enumeration — and it stops at the first success.
 const Duration wslRetryInterval = Duration(seconds: 30);
 
-/// A loopback HTTP server that exposes chitragupta's data and actions to the
+/// A loopback HTTP server that exposes karmashala's data and actions to the
 /// launcher agent's MCP bridge (see `--mcp-serve`).
 ///
 /// The bridge process (spawned by the agent CLI) is a thin translator with no
@@ -262,7 +262,7 @@ class LauncherControlServer implements SessionMcp {
   /// opaque token for one session, writes this URL into that session's MCP
   /// config, and the endpoint maps the token back. The agent never has to be
   /// told its own id and cannot claim a different one, which is the same
-  /// property `CHITRAGUPTA_SESSION_ID` gives the stdio bridge — the app stamps
+  /// property `KARMASHALA_SESSION_ID` gives the stdio bridge — the app stamps
   /// identity on the process, the model does not declare it.
   ///
   /// **The environment is required, and the answer genuinely differs.** A WSL2
@@ -325,10 +325,10 @@ class LauncherControlServer implements SessionMcp {
 
   /// The one paragraph a model reads before it has called anything.
   static const String _instructions =
-      'These tools drive Chitragupta itself — the sessions, terminal tabs, '
+      'These tools drive Karmashala itself — the sessions, terminal tabs, '
       'projects, notes, inbox and delivery state of the app this agent is '
       'running inside. Tools that name a session default to the session '
-      'calling them, so omit sessionId to act on yourself. Anything Chitragupta '
+      'calling them, so omit sessionId to act on yourself. Anything Karmashala '
       'has not measured is reported as "not recorded" rather than guessed.';
 
   /// Where agents' installed hooks post to, once [start] has bound the port;
@@ -393,7 +393,7 @@ class LauncherControlServer implements SessionMcp {
     );
     _mcpEndpoint = McpHttpEndpoint(
       server: McpServer(
-        name: 'chitragupta',
+        name: 'karmashala',
         version: _serverVersion,
         // Read on every `tools/list` rather than captured, because the browser
         // and verification tools come from services that may not be up yet.
@@ -860,7 +860,7 @@ class LauncherControlServer implements SessionMcp {
           const <String, dynamic>{};
       // Which of *our* sessions is calling, when one is.
       //
-      // The bridge reads it from its own environment, which Chitragupta stamped
+      // The bridge reads it from its own environment, which Karmashala stamped
       // on the agent process when it opened the pane, so it describes the actual
       // process tree rather than something the model chose to say. That is what
       // makes the spawn-depth cap worth having: a tool argument would be a
@@ -1272,13 +1272,13 @@ class LauncherControlServer implements SessionMcp {
     {
       'name': 'list_projects',
       'description':
-          'List the projects known to Chitragupta (name, environment, path).',
+          'List the projects known to Karmashala (name, environment, path).',
       'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
     },
     {
       'name': 'list_sessions',
       'description':
-          'List coding-agent sessions — both the ones running in Chitragupta '
+          'List coding-agent sessions — both the ones running in Karmashala '
           '("kind": "native", with a status and, when an agent started it, a '
           'parentSessionId) and ones imported from a CLI store ("kind": '
           '"imported"). Optionally filter by a case-insensitive substring '
@@ -1311,7 +1311,7 @@ class LauncherControlServer implements SessionMcp {
       'name': 'open_new_session',
       'description':
           'Start a NEW agent session (not a resume) in a project, as a terminal '
-          'tab in Chitragupta. Choose the agent with agentInstallationId (from '
+          'tab in Karmashala. Choose the agent with agentInstallationId (from '
           'list_agents) or cli ("claude"/"codex"); omit both to use the '
           "configured default. repositoryId is optional (defaults to the "
           "project's first repository). The agent must be installed in the "
@@ -1382,7 +1382,7 @@ class LauncherControlServer implements SessionMcp {
     {
       'name': 'open_session',
       'description':
-          'Open one session by its id. A Chitragupta session that is still '
+          'Open one session by its id. A Karmashala session that is still '
           'running is reattached to a tab; anything else is resumed. Imported '
           'CLI sessions open in an external terminal.',
       'inputSchema': {
@@ -1510,7 +1510,7 @@ class LauncherControlServer implements SessionMcp {
           'Branch a session into a new one that shares its history up to now '
           'and then diverges. Runs the SAME agent — a fork is a branch of one '
           'conversation, not a change of provider. Uses the CLI\'s own fork '
-          'when it has one and Chitragupta knows the conversation id; '
+          'when it has one and Karmashala knows the conversation id; '
           'otherwise it falls back to a handoff packet, and the result says '
           'which happened. The original session is untouched. Use preview:true '
           'to see which route would be taken before committing to it.',
@@ -1937,7 +1937,7 @@ class LauncherControlServer implements SessionMcp {
       for (final repo in repositoryDao.getByProject(project.id)) {
         // Sessions started **in the app**. These were invisible here: every
         // session tool read only `imported_sessions`, so a session the user (or
-        // another agent) started in Chitragupta could not be listed, opened or
+        // another agent) started in Karmashala could not be listed, opened or
         // grouped — the launcher agent saw a different world from the one on
         // screen (Loop 33 §6.9).
         for (final session in sessionDao.getByRepository(repo.id)) {
@@ -2473,13 +2473,13 @@ class LauncherControlServer implements SessionMcp {
     }
 
     final env = distroEnv!;
-    final sessionName = tmuxSafeName(name ?? 'chitragupta', fallback: 'cg');
+    final sessionName = tmuxSafeName(name ?? 'karmashala', fallback: 'cg');
     final script = buildTmuxScript(sessionName, windows);
 
     // Write the script into the distro's /tmp via its UNC path, so nothing has
     // to survive quoting through the terminal → wsl → bash chain.
     final scriptWslPath =
-        '/tmp/chitragupta-tmux-${Random().nextInt(1 << 32)}.sh';
+        '/tmp/karmashala-tmux-${Random().nextInt(1 << 32)}.sh';
     final windowsEnv = _windowsEnv();
     if (windowsEnv == null) throw StateError('No Windows host environment.');
     final uncPath = _container
@@ -2603,7 +2603,7 @@ class LauncherControlServer implements SessionMcp {
     final file = File(
       p.join(
         Directory.systemTemp.path,
-        'chitragupta_${device.serial}_${DateTime.now().millisecondsSinceEpoch}.png',
+        'karmashala_${device.serial}_${DateTime.now().millisecondsSinceEpoch}.png',
       ),
     );
     await file.writeAsBytes(bytes, flush: true);
@@ -2991,7 +2991,7 @@ class LauncherControlServer implements SessionMcp {
     if (sessionId == null) {
       throw ArgumentError(
         'sessionId is required for checkpoint_capture when the caller is not '
-        'itself a Chitragupta session.',
+        'itself a Karmashala session.',
       );
     }
     final checkpoint = await _container

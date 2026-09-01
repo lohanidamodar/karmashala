@@ -83,7 +83,7 @@ String describeBrowserFailure(
           'endpoint. Close whatever owns the port, or pick another one.$suffix',
     BrowserFailure.notRunning =>
       'No browser is listening on port ${port ?? 0}. Start Chrome with '
-          '--remote-debugging-port=${port ?? 0}, or allow Chitragupta to '
+          '--remote-debugging-port=${port ?? 0}, or allow Karmashala to '
           'launch its own Chrome.$suffix',
     BrowserFailure.startupFailed =>
       'Chrome was launched but never opened its debugging port '

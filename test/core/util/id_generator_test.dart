@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import 'package:chitragupta/src/core/util/id_generator.dart';
+import 'package:karmashala/src/core/util/id_generator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

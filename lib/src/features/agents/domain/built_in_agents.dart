@@ -3,7 +3,7 @@ import 'agent_descriptor.dart';
 import 'agent_kind.dart';
 import 'agent_status.dart';
 
-/// The agents Chitragupta ships knowledge of.
+/// The agents Karmashala ships knowledge of.
 ///
 /// This list is **data**: everything the app needs to find, launch and observe
 /// these agents is here rather than spread through discovery, store location
@@ -68,7 +68,7 @@ const _claudeCode = AgentDescriptor(
     resume: AgentResume.flag('--resume'),
     interactiveResume: AgentResume.flag('--resume'),
     // `claude --session-id <uuid>` pins the CLI's session id to one we choose.
-    // Chitragupta's own session ids are already RFC-4122 v4, so one string is
+    // Karmashala's own session ids are already RFC-4122 v4, so one string is
     // both — which is what makes a PTY-hosted Claude session's transcript
     // locatable at launch instead of guessed at afterwards.
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
@@ -115,12 +115,12 @@ const _claudeCode = AgentDescriptor(
     //   $ claude --mcp-config=/tmp/c.json --output-format stream-json \
     //       --verbose -p 'Reply with the single word OK'
     //   …"mcp_servers":[{"name":"agent-browser"…},{"name":"dart"…},
-    //     {"name":"grafana"…},{"name":"chitragupta"…},
+    //     {"name":"grafana"…},{"name":"karmashala"…},
     //     {"name":"claude.ai Google Drive"…}]
     //
     // Four of the user's five servers plus ours. `--strict-mcp-config` is
     // therefore never passed: it would silently drop the user's MCP setup for
-    // every session Chitragupta opens.
+    // every session Karmashala opens.
     mcp: AgentMcpSupport.configFile(
       flag: '--mcp-config',
       evidence:
@@ -306,16 +306,16 @@ const _codex = AgentDescriptor(
     // overrides one value that would otherwise come from `~/.codex/config.toml`
     // and leaves the rest of that file — and the user's own servers — alone:
     //
-    //   $ codex mcp list -c mcp_servers.chitragupta.url=http://…/mcp/TOK
+    //   $ codex mcp list -c mcp_servers.karmashala.url=http://…/mcp/TOK
     //   Name           Command …
     //   agent-browser  …/agent-browser.exe  mcp  …  enabled
     //
     //   Name         Url                       …
-    //   chitragupta  http://…/mcp/TOK          …  enabled
+    //   karmashala  http://…/mcp/TOK          …  enabled
     //
     // **Writing the block into `config.toml` instead was rejected**, and not
     // only because editing a user's config file is invasive. That file holds
-    // one `[mcp_servers.chitragupta]` for the whole machine, so it can carry
+    // one `[mcp_servers.karmashala]` for the whole machine, so it can carry
     // exactly one URL — and the URL is what says *which session* is calling.
     // Every Codex session would have spoken as whichever one wrote last, which
     // is the one property this whole mechanism exists to provide.
@@ -330,13 +330,13 @@ const _codex = AgentDescriptor(
     // `AgentPaneLaunch`'s to give and not this descriptor's.
     mcp: AgentMcpSupport.inlineUrl(
       flag: '-c',
-      urlKey: 'mcp_servers.chitragupta.url',
+      urlKey: 'mcp_servers.karmashala.url',
       evidence:
           'codex-cli 0.151.0 --help: "-c, --config <key=value>  Override a '
           'configuration value that would otherwise be loaded from '
           '`~/.codex/config.toml`"; `codex mcp add --url` documents `url` as '
           'the streamable-HTTP key, and `codex mcp list -c '
-          'mcp_servers.chitragupta.url=…` lists it beside the user\'s own',
+          'mcp_servers.karmashala.url=…` lists it beside the user\'s own',
     ),
   ),
   store: AgentStoreSpec(
@@ -618,7 +618,7 @@ const _antigravity = AgentDescriptor(
     // name is the key — which leaves every other tool's hooks in sibling keys
     // the splice never touches, without needing the per-event merge Claude's
     // shared `hooks` block does.
-    configKey: 'chitragupta',
+    configKey: 'karmashala',
     // `PreInvocation`, `PostInvocation` and `Stop` take the handler object
     // itself. The `{matcher, hooks}` wrapper is for the tool events, which have
     // something to match on; using it here installs a hook that never fires.

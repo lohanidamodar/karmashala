@@ -23,7 +23,7 @@ import 'log_entry.dart';
 class LogFileSink {
   LogFileSink({
     required this.directory,
-    this.fileName = 'chitragupta.log',
+    this.fileName = 'karmashala.log',
     this.maxBytes = 2 * 1024 * 1024,
     this.keep = 3,
     this.flushInterval = const Duration(milliseconds: 400),
@@ -61,7 +61,7 @@ class LogFileSink {
   int _droppedPending = 0;
   String? _lastError;
 
-  /// The live file. Rotated copies are `chitragupta.1.log`, `.2.log`, …
+  /// The live file. Rotated copies are `karmashala.1.log`, `.2.log`, …
   File get file => File(p.join(directory.path, fileName));
 
   /// Why the last write failed, or null. Shown in Settings → Diagnostics.

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,20 +1,20 @@
-import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
-import 'package:chitragupta/src/app/shell/tab_picker.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/git/application/changes_providers.dart';
-import 'package:chitragupta/src/features/github/application/github_providers.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/explorer/application/explorer_actions.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
-import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
-import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/tab_picker.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/github/application/github_providers.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +30,7 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    ProjectDao(db).insert(project(name: 'Chitragupta'));
+    ProjectDao(db).insert(project(name: 'Karmashala'));
     RepositoryDao(db).insert(repository(name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db)
@@ -104,7 +104,7 @@ void main() {
     expect(find.text('Fix login redirect'), findsOneWidget);
     // Every session names where it lives, so two sessions called "Fix" in
     // different repositories are still told apart.
-    expect(find.textContaining('Chitragupta · app'), findsWidgets);
+    expect(find.textContaining('Karmashala · app'), findsWidgets);
     // Projects and repositories are their own group, not sessions.
     expect(find.text('PROJECTS & REPOSITORIES'), findsOneWidget);
   });

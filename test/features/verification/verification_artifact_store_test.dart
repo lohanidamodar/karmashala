@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/verification/data/verification_artifact_store.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_artifact.dart';
+import 'package:karmashala/src/features/verification/data/verification_artifact_store.dart';
+import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

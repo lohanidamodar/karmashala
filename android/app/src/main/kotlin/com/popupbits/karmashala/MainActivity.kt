@@ -1,4 +1,4 @@
-package com.popupbits.chitragupta
+package com.popupbits.karmashala
 
 import android.content.Context
 import android.net.wifi.WifiManager
@@ -14,7 +14,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "chitragupta/multicast_lock")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "karmashala/multicast_lock")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "acquire" -> {
@@ -33,7 +33,7 @@ class MainActivity : FlutterActivity() {
     private fun acquireMulticastLock() {
         if (multicastLock?.isHeld == true) return
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        multicastLock = wifi.createMulticastLock("chitragupta").apply {
+        multicastLock = wifi.createMulticastLock("karmashala").apply {
             setReferenceCounted(false)
             acquire()
         }

@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/agents/data/resume_conflict_source.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/agents/data/resume_conflict_source.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Captured from codex-cli 0.151.0 on 2026-08-30, by holding thread

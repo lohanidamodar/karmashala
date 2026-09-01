@@ -5,35 +5,35 @@ library;
 
 import 'dart:convert';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
-import 'package:chitragupta/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/notifications/application/notification_providers.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/projects/domain/project.dart';
-import 'package:chitragupta/src/features/remote/application/host_bindings.dart';
-import 'package:chitragupta/src/features/remote/application/remote_bindings.dart';
-import 'package:chitragupta/src/features/remote/data/paired_device_dao.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/repositories/domain/repository.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/data/session_event_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_attribution.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_event.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_event_types.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
+import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala/src/features/remote/application/host_bindings.dart';
+import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
+import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_attribution.dart';
+import 'package:karmashala/src/features/sessions/domain/session_event.dart';
+import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
+import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -308,7 +308,7 @@ void main() {
     // half-stripped — the fail-safe direction of the dray constraint.
     appendEvent('child', SessionEventTypes.userMessage, {
       'text':
-          '[message from the Chitragupta session "Old title" (parent)]\n\nkeep me whole',
+          '[message from the Karmashala session "Old title" (parent)]\n\nkeep me whole',
     });
 
     final bindings = container.read(remoteHostBindingsProvider);
@@ -317,7 +317,7 @@ void main() {
     expect(page.messages.first.text, 'do the thing');
     expect(
       page.messages.last.text,
-      '[message from the Chitragupta session "Old title" (parent)]\n\nkeep me whole',
+      '[message from the Karmashala session "Old title" (parent)]\n\nkeep me whole',
     );
   });
 

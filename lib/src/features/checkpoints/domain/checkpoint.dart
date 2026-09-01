@@ -96,5 +96,5 @@ class Checkpoint {
   /// One ref per session, not per checkpoint: the commits form a chain, so
   /// holding the tip holds all of them, and `git gc` walks the rest.
   static String refFor(String sessionId) =>
-      'refs/chitragupta/checkpoints/$sessionId';
+      'refs/karmashala/checkpoints/$sessionId';
 }

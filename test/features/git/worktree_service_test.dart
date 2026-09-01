@@ -1,13 +1,13 @@
-import 'package:chitragupta/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/git/application/git_providers.dart';
-import 'package:chitragupta/src/features/git/application/worktree_service.dart';
-import 'package:chitragupta/src/features/git/data/git_service.dart';
+import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/git/application/git_providers.dart';
+import 'package:karmashala/src/features/git/application/worktree_service.dart';
+import 'package:karmashala/src/features/git/data/git_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -49,7 +49,7 @@ void main() {
         branch: 'session/s1',
       );
 
-      expect(wt.path.path, '/home/me/.chitragupta-worktrees/app-s1');
+      expect(wt.path.path, '/home/me/.karmashala-worktrees/app-s1');
       final add = runner.requests.single;
       expect(add.executable, 'git');
       expect(add.arguments, [
@@ -59,7 +59,7 @@ void main() {
         'add',
         '-b',
         'session/s1',
-        '/home/me/.chitragupta-worktrees/app-s1',
+        '/home/me/.karmashala-worktrees/app-s1',
       ]);
     },
   );
@@ -112,7 +112,7 @@ void main() {
         worktreeName: 's1',
         branch: 'session/s1',
       );
-      expect(moved.single.path, '/home/me/.chitragupta-worktrees/app-s1');
+      expect(moved.single.path, '/home/me/.karmashala-worktrees/app-s1');
     });
 
     test('names the worktree a remove just deleted', () async {
@@ -167,7 +167,7 @@ void main() {
           ),
           const EnvironmentPath(
             environmentId: 'wsl:Ubuntu',
-            path: '/home/me/.chitragupta-worktrees/app-s1',
+            path: '/home/me/.karmashala-worktrees/app-s1',
           ),
         );
     await pumpEventQueue();
@@ -175,7 +175,7 @@ void main() {
     // The index keys on host paths, so the WSL spelling has to be translated
     // before it means anything to it.
     expect(invalidated, [
-      r'\\wsl.localhost\Ubuntu\home\me\.chitragupta-worktrees\app-s1',
+      r'\\wsl.localhost\Ubuntu\home\me\.karmashala-worktrees\app-s1',
     ]);
   });
 }

@@ -1,12 +1,12 @@
-import 'package:chitragupta/src/app/theme/app_icons.dart';
-import 'package:chitragupta/src/app/theme/app_theme.dart';
-import 'package:chitragupta/src/app/theme/design_tokens.dart';
-import 'package:chitragupta/src/app/widgets/desktop_menu.dart';
-import 'package:chitragupta/src/features/explorer/application/session_diff_stat.dart';
-import 'package:chitragupta/src/features/explorer/presentation/checkout_row.dart';
-import 'package:chitragupta/src/features/explorer/presentation/explorer_row.dart';
-import 'package:chitragupta/src/features/explorer/presentation/project_card.dart';
-import 'package:chitragupta/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
+import 'package:karmashala/src/features/explorer/presentation/checkout_row.dart';
+import 'package:karmashala/src/features/explorer/presentation/explorer_row.dart';
+import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -58,7 +58,7 @@ void main() {
       CheckoutRow(
         depth: 1,
         icon: AppIcons.gitBranch,
-        title: 'chitragupta-app',
+        title: 'karmashala-app',
         expanded: true,
         onTap: () {},
         menuItems: menu(),
@@ -277,7 +277,7 @@ void main() {
 
     testWidgets('so does the Menu key', (tester) async {
       await pump(tester);
-      Focus.of(tester.element(find.text('chitragupta-app'))).requestFocus();
+      Focus.of(tester.element(find.text('karmashala-app'))).requestFocus();
       await tester.pumpAndSettle();
 
       await tester.sendKeyEvent(LogicalKeyboardKey.contextMenu);

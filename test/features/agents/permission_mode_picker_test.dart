@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_permission_options.dart';
-import 'package:chitragupta/src/features/agents/presentation/permission_mode_picker.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_options.dart';
+import 'package:karmashala/src/features/agents/presentation/permission_mode_picker.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

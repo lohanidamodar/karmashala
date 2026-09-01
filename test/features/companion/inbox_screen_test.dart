@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/presentation/inbox_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/session_view_screen.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/inbox_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';

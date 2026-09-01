@@ -1,14 +1,14 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
-import 'package:chitragupta/src/features/fanout/application/fanout_service.dart';
-import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
-import 'package:chitragupta/src/features/verification/application/review_session_service.dart';
-import 'package:chitragupta/src/features/verification/application/verification_service.dart';
-import 'package:chitragupta/src/features/verification/application/verification_tools.dart';
-import 'package:chitragupta/src/features/verification/data/verification_artifact_store.dart';
-import 'package:chitragupta/src/features/verification/data/verification_dao.dart';
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
+import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
+import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala/src/features/verification/application/review_session_service.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
+import 'package:karmashala/src/features/verification/application/verification_tools.dart';
+import 'package:karmashala/src/features/verification/data/verification_artifact_store.dart';
+import 'package:karmashala/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

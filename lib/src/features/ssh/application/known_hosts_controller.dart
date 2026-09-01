@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/ssh_host_key.dart';
 import 'ssh_providers.dart';
 
-/// The host keys Chitragupta has been told to trust — its `known_hosts`.
+/// The host keys Karmashala has been told to trust — its `known_hosts`.
 ///
 /// Exposed as a list the user can actually see, because a pinned key that is
 /// invisible is a pinned key nobody can audit: the only way to tell a rebuilt

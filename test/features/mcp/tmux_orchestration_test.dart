@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/mcp/tmux_orchestration.dart';
+import 'package:karmashala/src/features/mcp/tmux_orchestration.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

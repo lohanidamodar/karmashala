@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
-import 'package:chitragupta/src/features/notifications/application/watched_session_loader.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
+import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -46,7 +46,7 @@ import '../../test/support/fixtures.dart';
 ///   where one `existsSync` + `lastModifiedSync` pair measures **1.19 ms**
 ///   against **0.07 ms** for the same pair on local NTFS. That is what turned
 ///   a 16 ms burst here into a **67 ms** one there. Point
-///   `CHITRAGUPTA_BENCH_TRANSCRIPT_DIR` at a real store to measure it directly
+///   `KARMASHALA_BENCH_TRANSCRIPT_DIR` at a real store to measure it directly
 ///   rather than reading the multiplier off this comment.
 ///
 /// * **which tick actually stalls the event loop** — measured against an idle

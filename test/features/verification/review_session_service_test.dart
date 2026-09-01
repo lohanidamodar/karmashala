@@ -1,13 +1,13 @@
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
-import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/verification/application/review_session_service.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

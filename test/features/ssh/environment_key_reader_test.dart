@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/ssh/data/environment_key_reader.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_connection.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/ssh/data/environment_key_reader.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

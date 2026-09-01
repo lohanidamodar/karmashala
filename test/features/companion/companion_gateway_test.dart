@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The scripted gateway the whole companion UI is built against. These pin the

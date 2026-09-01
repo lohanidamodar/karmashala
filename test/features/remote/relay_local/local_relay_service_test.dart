@@ -7,9 +7,9 @@ library;
 
 import 'dart:io';
 
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/remote/relay_local/local_relay_service.dart';
-import 'package:chitragupta/src/features/settings/domain/settings.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
+import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_command_runner.dart';
@@ -176,7 +176,7 @@ void main() {
       );
       final service = loopbackService(
         firewall: runner,
-        executablePath: r'C:\apps\chitragupta.exe',
+        executablePath: r'C:\apps\karmashala.exe',
       );
       await service.ensureRunning(0);
       addTearDown(service.stop);
@@ -190,7 +190,7 @@ void main() {
       expect(add, contains('name=$kFirewallRuleName'));
       expect(add, contains('dir=in'));
       expect(add, contains('action=allow'));
-      expect(add, contains(r'program=C:\apps\chitragupta.exe'));
+      expect(add, contains(r'program=C:\apps\karmashala.exe'));
       expect(add, contains('protocol=TCP'));
       expect(add, contains('localport=${service.status.boundPort}'));
     });

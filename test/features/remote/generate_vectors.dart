@@ -13,10 +13,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/pairing/pairing_code.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
-import 'package:chitragupta/src/features/remote/transport/sealed_channel.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_code.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
+import 'package:karmashala/src/features/remote/transport/sealed_channel.dart';
 
 const _secretHex =
     '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';

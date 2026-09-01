@@ -69,7 +69,7 @@ String encodePowerShellCommand(String script) {
 /// cmdlet straight after a failing native command inherits the stale code. The
 /// failed/succeeded flag, which is what the UI marks, is always right.
 String powerShellIntegrationScript() => r'''
-# Chitragupta OSC 133 shell integration.
+# Karmashala OSC 133 shell integration.
 # Injected at launch with -EncodedCommand, which PowerShell runs after profiles
 # have loaded. Nothing is written to the user's profile, or anywhere on disk.
 if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage' -and -not (Test-Path variable:global:__CgOsc133)) {

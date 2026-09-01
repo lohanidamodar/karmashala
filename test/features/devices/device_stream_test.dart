@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/devices/data/adb_service.dart';
-import 'package:chitragupta/src/features/devices/domain/android_device.dart';
-import 'package:chitragupta/src/features/devices/data/device_stream.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/devices/data/adb_service.dart';
+import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala/src/features/devices/data/device_stream.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -56,7 +56,7 @@ void main() {
               exitCode: 0,
               stdout:
                   ' 11026 sh -c CLASSPATH=/data/local/tmp/'
-                  'chitragupta-scrcpy-server.jar app_process / '
+                  'karmashala-scrcpy-server.jar app_process / '
                   'com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef\n'
                   ' 11028 app_process / com.genymobile.scrcpy.Server 4.1 '
                   'scid=3f3c4fef\n',

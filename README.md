@@ -1,4 +1,4 @@
-# Chitragupta
+# Karmashala
 
 A **Windows-first Flutter desktop** application: a chat-first **Agent Development
 Environment (ADE)** that manages local coding-agent CLIs (Claude Code, Codex CLI,
@@ -37,7 +37,7 @@ flutter devices   # should list "Windows (desktop)"
 > WSL one. The working SDK, emulators, and signing config live on the Windows side.
 > See [ADR 0001](docs/adr/0001-flutter-desktop.md).
 
-From PowerShell, in the project directory (e.g. `G:\dev\projects\chitragupta`):
+From PowerShell, in the project directory (e.g. `G:\dev\projects\karmashala`):
 
 ```powershell
 # 1. Fetch dependencies

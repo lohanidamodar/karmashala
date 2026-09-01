@@ -4,7 +4,7 @@
 /// spelling of the same machine on the other.
 library;
 
-import 'package:chitragupta/src/features/environments/domain/environment_label.dart';
+import 'package:karmashala/src/features/environments/domain/environment_label.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

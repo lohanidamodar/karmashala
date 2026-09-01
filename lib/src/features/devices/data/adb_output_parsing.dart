@@ -173,7 +173,7 @@ List<int> parseScrcpyForwards(String output, {required String serial}) {
 /// matched by the `scid=` its parent line carries.
 ///
 /// ```
-/// 11026 sh -c CLASSPATH=/data/local/tmp/chitragupta-scrcpy-server.jar \
+/// 11026 sh -c CLASSPATH=/data/local/tmp/karmashala-scrcpy-server.jar \
 ///       app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef …
 /// 11028 app_process / com.genymobile.scrcpy.Server 4.1 scid=3f3c4fef …
 /// ```

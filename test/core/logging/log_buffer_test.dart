@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/core/logging/log_buffer.dart';
-import 'package:chitragupta/src/core/logging/log_entry.dart';
+import 'package:karmashala/src/core/logging/log_buffer.dart';
+import 'package:karmashala/src/core/logging/log_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 
@@ -135,7 +135,7 @@ void main() {
         time: DateTime(2026, 8, 31, 12, 4, 31, 907),
         level: Level.INFO,
         channel: 'bootstrap',
-        message: 'Starting Chitragupta.',
+        message: 'Starting Karmashala.',
       ).format(withDate: true);
       expect(line, startsWith('2026-08-31 12:04:31.907 I bootstrap:'));
     });

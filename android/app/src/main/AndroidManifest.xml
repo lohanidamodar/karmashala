@@ -9,7 +9,7 @@
          MainActivity holds over its MethodChannel. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
-        android:label="Chitragupta"
+        android:label="Karmashala"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

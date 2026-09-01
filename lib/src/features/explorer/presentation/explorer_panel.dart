@@ -252,7 +252,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           title: const DesktopDialogTitle(
             icon: AppIcons.trash,
             title: 'Remove project?',
-            subtitle: 'This only changes the Chitragupta workspace.',
+            subtitle: 'This only changes the Karmashala workspace.',
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1142,7 +1142,7 @@ Future<bool?> _confirmDelete(BuildContext context, String title) {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Remove "$title" from Chitragupta.'),
+              Text('Remove "$title" from Karmashala.'),
               const SizedBox(height: 12),
               CheckboxListTile(
                 value: deleteFromCli,

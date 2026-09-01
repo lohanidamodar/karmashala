@@ -193,7 +193,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
               if (_paired == null) ...[
                 Text(
                   'The phone may only do what you grant here. Scan with the '
-                  'Chitragupta companion app, or type the code.',
+                  'Karmashala companion app, or type the code.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

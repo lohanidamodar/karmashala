@@ -78,7 +78,7 @@ class _HostKeyTrustDialogState extends State<HostKeyTrustDialog> {
             children: [
               Text(
                 'The authenticity of ${p.host}:${p.port} cannot be established. '
-                'Chitragupta has never connected to it before.',
+                'Karmashala has never connected to it before.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: Insets.lg),

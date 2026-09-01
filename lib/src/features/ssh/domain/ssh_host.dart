@@ -2,7 +2,7 @@ import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 
-/// How Chitragupta authenticates to a remote host.
+/// How Karmashala authenticates to a remote host.
 ///
 /// Password auth exists because some hosts allow nothing else, but the password
 /// itself is **never persisted** — it is asked for per connection. Key auth is
@@ -15,7 +15,7 @@ enum SshAuthMethod {
   password,
 }
 
-/// A remote machine Chitragupta can run agents on, reached over SSH.
+/// A remote machine Karmashala can run agents on, reached over SSH.
 ///
 /// This is **configuration**, not a secret store: it holds the address, the
 /// account, and *where the private key lives* — never a password, never a

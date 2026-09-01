@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/devices/data/adb_service.dart';
-import 'package:chitragupta/src/features/devices/data/uiautomator_parsing.dart';
-import 'package:chitragupta/src/features/devices/domain/android_device.dart';
-import 'package:chitragupta/src/features/devices/domain/device_input.dart';
-import 'package:chitragupta/src/features/devices/domain/logcat_entry.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/devices/data/adb_service.dart';
+import 'package:karmashala/src/features/devices/data/uiautomator_parsing.dart';
+import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala/src/features/devices/domain/device_input.dart';
+import 'package:karmashala/src/features/devices/domain/logcat_entry.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -189,20 +189,20 @@ void main() {
         'shell',
         'screencap',
         '-p',
-        '/data/local/tmp/chitragupta_screen.png',
+        '/data/local/tmp/karmashala_screen.png',
       ]);
       expect(_argv(runner, 1), [
         '-s',
         'S1',
         'pull',
-        '/data/local/tmp/chitragupta_screen.png',
+        '/data/local/tmp/karmashala_screen.png',
         r'C:\tmp\shot.png',
       ]);
       expect(_argv(runner, 2).sublist(2), [
         'shell',
         'rm',
         '-f',
-        '/data/local/tmp/chitragupta_screen.png',
+        '/data/local/tmp/karmashala_screen.png',
       ]);
       expect(bytes, [0x89, 0x50]);
     });
@@ -569,7 +569,7 @@ void main() {
     // uiautomator's own reply on success. The typo is upstream's.
     const dumped =
         'UI hierchary dumped to: '
-        '/data/local/tmp/chitragupta_ui_dump.xml';
+        '/data/local/tmp/karmashala_ui_dump.xml';
     const xml =
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<hierarchy rotation="0">'
@@ -619,14 +619,14 @@ void main() {
         'shell',
         'uiautomator',
         'dump',
-        '/data/local/tmp/chitragupta_ui_dump.xml',
+        '/data/local/tmp/karmashala_ui_dump.xml',
       ]);
       expect(_argv(runner, 1), [
         '-s',
         'S1',
         'shell',
         'cat',
-        '/data/local/tmp/chitragupta_ui_dump.xml',
+        '/data/local/tmp/karmashala_ui_dump.xml',
       ]);
       expect(_argv(runner, 2), [
         '-s',
@@ -634,7 +634,7 @@ void main() {
         'shell',
         'rm',
         '-f',
-        '/data/local/tmp/chitragupta_ui_dump.xml',
+        '/data/local/tmp/karmashala_ui_dump.xml',
       ]);
       expect(tree.nodeCount, 1);
       expect(tree.roots.single.text, 'Sign in');

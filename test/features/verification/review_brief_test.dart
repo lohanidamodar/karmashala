@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/sessions/domain/handoff_packet.dart';
-import 'package:chitragupta/src/features/verification/domain/review_brief.dart';
+import 'package:karmashala/src/features/sessions/domain/handoff_packet.dart';
+import 'package:karmashala/src/features/verification/domain/review_brief.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ReviewBrief brief({

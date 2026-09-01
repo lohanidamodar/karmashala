@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/verification/application/verification_service.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_artifact.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_run.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_step.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
+import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
+import 'package:karmashala/src/features/verification/domain/verification_run.dart';
+import 'package:karmashala/src/features/verification/domain/verification_step.dart';
+import 'package:karmashala/src/features/verification/domain/verification_target.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -186,7 +186,7 @@ void main() {
           target: const VerificationTarget.browser('https://example.com'),
         );
         h.browser.onEvaluate = (expression) =>
-            expression.contains('__chitragupta') ? null : null;
+            expression.contains('__karmashala') ? null : null;
 
         await expectLater(
           h.browser.service.click(selector: '#nothing'),

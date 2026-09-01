@@ -1,15 +1,15 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/features/checkpoints/application/checkpoint_service.dart';
-import 'package:chitragupta/src/features/checkpoints/data/checkpoint_dao.dart';
-import 'package:chitragupta/src/features/checkpoints/domain/checkpoint.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/git/data/git_files.dart';
-import 'package:chitragupta/src/features/git/data/hunk_patch.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/git/data/git_files.dart';
+import 'package:karmashala/src/features/git/data/hunk_patch.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -154,7 +154,7 @@ void main() {
       for (final call in calls.where((c) => c.contains('add'))) {
         expect(
           call,
-          contains('--git-dir=C:/src/demo/.git/chitragupta'),
+          contains('--git-dir=C:/src/demo/.git/karmashala'),
           reason: 'a checkpoint must never stage into the user index',
         );
         expect(call, contains('--work-tree=${_repo.path}'));
@@ -181,14 +181,14 @@ void main() {
 
     test('creates the private git directory once, with two files', () async {
       await service.capture(_repo, sessionId: 's1');
-      expect(files.directories, ['C:/src/demo/.git/chitragupta']);
+      expect(files.directories, ['C:/src/demo/.git/karmashala']);
       expect(
-        files.written['C:/src/demo/.git/chitragupta/commondir'],
+        files.written['C:/src/demo/.git/karmashala/commondir'],
         'C:/src/demo/.git\n',
       );
       expect(
-        files.written['C:/src/demo/.git/chitragupta/HEAD'],
-        'ref: refs/heads/chitragupta-checkpoints\n',
+        files.written['C:/src/demo/.git/karmashala/HEAD'],
+        'ref: refs/heads/karmashala-checkpoints\n',
       );
 
       trees = ['tree2'];
@@ -208,7 +208,7 @@ void main() {
         refCalls.single,
         containsAllInOrder([
           'update-ref',
-          'refs/chitragupta/checkpoints/s1',
+          'refs/karmashala/checkpoints/s1',
           'commit1',
         ]),
       );
@@ -279,7 +279,7 @@ void main() {
         isNot(contains('--cached')),
         reason: 'restoring the working tree must leave the index alone',
       );
-      expect(apply.last, 'C:/src/demo/.git/chitragupta/apply.patch');
+      expect(apply.last, 'C:/src/demo/.git/karmashala/apply.patch');
       // The patch is the checkpoint-to-now diff, reversed by git.
       final diff = gitCalls().lastWhere(
         (c) => c.contains('diff') && c.contains('--binary'),
@@ -305,7 +305,7 @@ void main() {
       expect(apply, contains('--cached'));
       expect(apply, isNot(contains('-R')));
       expect(
-        files.written['C:/src/demo/.git/chitragupta/apply.patch'],
+        files.written['C:/src/demo/.git/karmashala/apply.patch'],
         contains('@@ -1 +1 @@'),
       );
     });

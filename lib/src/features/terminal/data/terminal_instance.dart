@@ -201,10 +201,10 @@ class PtyTerminalInstance
     terminal = (adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines))
       // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
       // tmux (and anything else reading the modifier bits) from scrolling.
-      ..mouseHandler = const ChitraguptaMouseHandler()
+      ..mouseHandler = const KarmashalaMouseHandler()
       // ...and encodes every modified Enter as a bare CR, so Shift+Enter is
       // indistinguishable from submit.
-      ..inputHandler = const ChitraguptaInputHandler();
+      ..inputHandler = const KarmashalaInputHandler();
     // Attach before the process starts so no marker can be missed. When the
     // shell is not integrated this stays null and nothing else changes.
     if (shellIntegration) {
@@ -692,8 +692,8 @@ class DormantTerminalInstance
   Terminal _buildTerminal() {
     _bufferBuilt = true;
     final built = Terminal(maxLines: kLiveScrollbackMaxLines)
-      ..mouseHandler = const ChitraguptaMouseHandler()
-      ..inputHandler = const ChitraguptaInputHandler();
+      ..mouseHandler = const KarmashalaMouseHandler()
+      ..inputHandler = const KarmashalaInputHandler();
     if (restoredScrollback.isNotEmpty) built.write(restoredScrollback);
     return built;
   }

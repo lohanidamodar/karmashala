@@ -90,7 +90,7 @@ class _MessageComposerState extends State<MessageComposer> {
 
   Future<Directory> _attachmentsDir() async {
     final dir = Directory(
-      '${Directory.systemTemp.path}/chitragupta/attachments',
+      '${Directory.systemTemp.path}/karmashala/attachments',
     );
     if (!dir.existsSync()) dir.createSync(recursive: true);
     return dir;

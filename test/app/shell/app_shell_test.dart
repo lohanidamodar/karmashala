@@ -1,18 +1,18 @@
-import 'package:chitragupta/src/app/chitragupta_app.dart';
-import 'package:chitragupta/src/app/shell/app_shell.dart';
-import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
-import 'package:chitragupta/src/app/shell/shell_shortcuts.dart';
-import 'package:chitragupta/src/app/shell/shell_state.dart';
-import 'package:chitragupta/src/app/shell/side_panel.dart';
-import 'package:chitragupta/src/app/shell/side_panel_state.dart';
-import 'package:chitragupta/src/app/shell/status_bar.dart';
-import 'package:chitragupta/src/app/shell/workbench.dart';
-import 'package:chitragupta/src/app/theme/design_tokens.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/app_shell.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import 'package:karmashala/src/app/shell/shell_state.dart';
+import 'package:karmashala/src/app/shell/side_panel.dart';
+import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/shell/status_bar.dart';
+import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -50,7 +50,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const ChitraguptaApp(),
+        child: const KarmashalaApp(),
       ),
     );
     await tester.pumpAndSettle();

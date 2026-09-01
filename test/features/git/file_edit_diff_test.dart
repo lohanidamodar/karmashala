@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/git/data/file_edit_diff.dart';
-import 'package:chitragupta/src/features/git/data/file_edit_reader.dart';
-import 'package:chitragupta/src/features/git/domain/diff_line.dart';
-import 'package:chitragupta/src/features/git/domain/file_edit.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/git/data/file_edit_diff.dart';
+import 'package:karmashala/src/features/git/data/file_edit_reader.dart';
+import 'package:karmashala/src/features/git/domain/diff_line.dart';
+import 'package:karmashala/src/features/git/domain/file_edit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The shapes here are copied off real transcripts on this machine — a Claude

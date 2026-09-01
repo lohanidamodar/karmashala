@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/features/github/domain/pull_request_snapshot.dart';
-import 'package:chitragupta/src/features/sessions/domain/delivery_action.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
+import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
+import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
+import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What the delivery strip offers, and which one it highlights.

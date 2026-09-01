@@ -36,7 +36,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
 
   /// Whether [item] is still the live occupant of the slot it believes it is in.
   ///
-  /// CHITRAGUPTA FORK. `Buffer.scrollUp` moves lines by assigning
+  /// KARMASHALA FORK. `Buffer.scrollUp` moves lines by assigning
   /// `lines[i] = lines[i + n]`, so between one iteration and the next a single
   /// line object is referenced from **two** slots: the low one it was just
   /// re-homed into, and the high one that has not been overwritten yet. The
@@ -83,7 +83,7 @@ class IndexAwareCircularBuffer<T extends IndexedItem> {
     final toCyclicIndex = _getCyclicIndex(toIndex);
     final moving = _array[fromCyclicIndex];
     if (!identical(_array[toCyclicIndex], moving)) _evict(toCyclicIndex);
-    // CHITRAGUPTA FORK: `_attach` rather than `_move`. They set the same field,
+    // KARMASHALA FORK: `_attach` rather than `_move`. They set the same field,
     // but `_move` asserts the item is already attached — which an alias reaching
     // here need not be — and `_attach` restores the invariant instead of
     // tripping over it.

@@ -13,7 +13,7 @@ import 'session_card.dart';
 /// It carries four things and nothing else:
 ///
 /// ```
-/// ▾ ⑂ chitragupta-app   projects/chitragupta-app   main  3 changed   + ⋮
+/// ▾ ⑂ karmashala-app   projects/karmashala-app   main  3 changed   + ⋮
 /// ```
 ///
 /// * **what it is** — the glyph says repository, worktree, or unscanned folder;

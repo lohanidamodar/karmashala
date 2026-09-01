@@ -3,22 +3,22 @@ library;
 
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/ssh_command_runner.dart';
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/features/agents/data/agent_discovery_service.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/ssh/data/known_host_dao.dart';
-import 'package:chitragupta/src/features/ssh/data/remote_file_browser.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_connection.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_host_key_verifier.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_connection_state.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/ssh_command_runner.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
+import 'package:karmashala/src/features/ssh/data/remote_file_browser.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_connection_state.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
@@ -26,9 +26,9 @@ import '../../support/fixtures.dart';
 
 /// End-to-end tests against a **real** SSH server.
 ///
-/// They are opt-in because CI has no remote host: set `CHITRAGUPTA_SSH_HOST`,
-/// `CHITRAGUPTA_SSH_USER` and `CHITRAGUPTA_SSH_KEY` (a local private key path)
-/// to run them, plus `CHITRAGUPTA_SSH_PORT` if it is not 22. Without those the
+/// They are opt-in because CI has no remote host: set `KARMASHALA_SSH_HOST`,
+/// `KARMASHALA_SSH_USER` and `KARMASHALA_SSH_KEY` (a local private key path)
+/// to run them, plus `KARMASHALA_SSH_PORT` if it is not 22. Without those the
 /// group is skipped rather than faked — a mock cannot tell you whether the
 /// handshake, the shell quoting or the SFTP subsystem actually work.
 ///
@@ -46,18 +46,18 @@ String? _env(String name) {
 }
 
 void main() {
-  final address = _env('CHITRAGUPTA_SSH_HOST');
-  final username = _env('CHITRAGUPTA_SSH_USER');
-  final keyPath = _env('CHITRAGUPTA_SSH_KEY');
-  final port = int.tryParse(_env('CHITRAGUPTA_SSH_PORT') ?? '22') ?? 22;
+  final address = _env('KARMASHALA_SSH_HOST');
+  final username = _env('KARMASHALA_SSH_USER');
+  final keyPath = _env('KARMASHALA_SSH_KEY');
+  final port = int.tryParse(_env('KARMASHALA_SSH_PORT') ?? '22') ?? 22;
 
   if (address == null || username == null || keyPath == null) {
     test(
       'live SSH tests are skipped',
       () {},
       skip:
-          'Set CHITRAGUPTA_SSH_HOST, CHITRAGUPTA_SSH_USER and '
-          'CHITRAGUPTA_SSH_KEY to run the live SSH suite.',
+          'Set KARMASHALA_SSH_HOST, KARMASHALA_SSH_USER and '
+          'KARMASHALA_SSH_KEY to run the live SSH suite.',
     );
     return;
   }
@@ -252,14 +252,14 @@ void main() {
       final result = await runner.run(
         const CommandRequest(
           executable: 'echo',
-          arguments: [r'; id > /tmp/chitragupta-pwned #'],
+          arguments: [r'; id > /tmp/karmashala-pwned #'],
         ),
       );
-      expect(result.stdout.trim(), r'; id > /tmp/chitragupta-pwned #');
+      expect(result.stdout.trim(), r'; id > /tmp/karmashala-pwned #');
       final probe = await runner.run(
         const CommandRequest(
           executable: 'test',
-          arguments: ['-e', '/tmp/chitragupta-pwned'],
+          arguments: ['-e', '/tmp/karmashala-pwned'],
         ),
       );
       expect(probe.ok, isFalse, reason: 'the injected redirect must not run');

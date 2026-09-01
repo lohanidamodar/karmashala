@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

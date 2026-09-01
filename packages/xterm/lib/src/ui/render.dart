@@ -187,7 +187,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   @override
   void dispose() {
-    // DIVERGENCE (Chitragupta, Loop 84): the drag anchor is ours, so releasing
+    // DIVERGENCE (Karmashala, Loop 84): the drag anchor is ours, so releasing
     // it is ours too. See [_dragAnchor].
     _dragAnchor?.dispose();
     _dragAnchor = null;
@@ -263,7 +263,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     );
   }
 
-  /// DIVERGENCE (Chitragupta, Loop 84): where a drag selection started, held as
+  /// DIVERGENCE (Karmashala, Loop 84): where a drag selection started, held as
   /// a **buffer anchor** rather than re-derived from a screen position.
   ///
   /// `TerminalGestureHandler.onDragUpdate` passes the screen position the drag

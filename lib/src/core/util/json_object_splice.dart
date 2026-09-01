@@ -74,7 +74,7 @@ String replaceTopLevelJsonValue(
 ///
 /// [replaceTopLevelJsonValue] can only ever swap a value, so a block written
 /// under a name the app no longer uses could be emptied but never removed —
-/// which would have left `"chitragupta": {}` at the root of somebody's
+/// which would have left `"karmashala": {}` at the root of somebody's
 /// `hooks.json` for ever after the rename to Karmashala. Deleting our own key
 /// is the difference between tidying up after ourselves and leaving litter
 /// nothing can identify.

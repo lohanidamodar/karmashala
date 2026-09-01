@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/app/shell/quick_open/quick_open_item.dart';
-import 'package:chitragupta/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open_item.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

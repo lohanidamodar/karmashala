@@ -59,7 +59,7 @@ enum ShellWidth {
 
 /// The desktop shell: Explorer · Workbench · side panel, over a status bar.
 ///
-/// The terminal is not a dock any more. Chitragupta is terminal-primary (see
+/// The terminal is not a dock any more. Karmashala is terminal-primary (see
 /// `docs/superpowers/specs/2026-08-30-session-daemon-direction.md`), so the
 /// terminal and its tabs live in the middle of the window and the navigation
 /// stays on the left — the shape Orca, cmux, Warp and Ghostty all converge on.
@@ -412,7 +412,7 @@ class _DesktopMenuBar extends ConsumerWidget {
         content: const SizedBox(
           width: 440,
           child: Text(
-            'This clears projects and sessions from Chitragupta, then scans '
+            'This clears projects and sessions from Karmashala, then scans '
             'Claude Code and Codex stores and imports everything it finds. '
             'Repository files and CLI sessions are not deleted.',
           ),

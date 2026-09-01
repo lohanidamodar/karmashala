@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/cli_detection/application/detected_project_merger.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/detected_session.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/cli_detection/application/detected_project_merger.dart';
+import 'package:karmashala/src/features/cli_detection/domain/detected_session.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

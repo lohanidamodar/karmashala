@@ -31,8 +31,8 @@ const _wheelIds = <TerminalMouseButton, int>{
 };
 
 /// The mouse handler the app installs on every terminal.
-class ChitraguptaMouseHandler implements TerminalMouseHandler {
-  const ChitraguptaMouseHandler();
+class KarmashalaMouseHandler implements TerminalMouseHandler {
+  const KarmashalaMouseHandler();
 
   @override
   String? call(TerminalMouseEvent event) {

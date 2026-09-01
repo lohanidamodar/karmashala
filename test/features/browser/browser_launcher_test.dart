@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/browser/data/browser_launcher.dart';
-import 'package:chitragupta/src/features/browser/data/devtools_http_endpoint.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_failure.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/browser/data/browser_launcher.dart';
+import 'package:karmashala/src/features/browser/data/devtools_http_endpoint.dart';
+import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -46,7 +46,7 @@ void main() {
     runner: runner,
     locateExecutable: () => executable,
     endpointFactory: (_) => endpoint,
-    createUserDataDir: () async => r'C:\Temp\chitragupta-cdp-profile-test',
+    createUserDataDir: () async => r'C:\Temp\karmashala-cdp-profile-test',
     pollInterval: const Duration(milliseconds: 5),
   );
 
@@ -133,7 +133,7 @@ void main() {
 
       expect(result.mode, BrowserConnectionMode.spawned);
       expect(result.executable, r'C:\chrome.exe');
-      expect(result.userDataDir, r'C:\Temp\chitragupta-cdp-profile-test');
+      expect(result.userDataDir, r'C:\Temp\karmashala-cdp-profile-test');
       expect(result.process, isNotNull);
 
       final request = runner.startRequests.single;
@@ -141,7 +141,7 @@ void main() {
       expect(request.arguments, contains('--remote-debugging-port=9333'));
       expect(
         request.arguments,
-        contains(r'--user-data-dir=C:\Temp\chitragupta-cdp-profile-test'),
+        contains(r'--user-data-dir=C:\Temp\karmashala-cdp-profile-test'),
       );
     });
 

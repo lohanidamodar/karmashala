@@ -119,7 +119,7 @@ class SessionMcpConfigs {
       final file = File(p.join(directory.path, _fileNameFor(sessionId)));
       file.writeAsStringSync(
         jsonEncode({
-          'mcpServers': {'chitragupta': LauncherMcp.httpServerEntry(url)},
+          'mcpServers': {'karmashala': LauncherMcp.httpServerEntry(url)},
         }),
         flush: true,
       );

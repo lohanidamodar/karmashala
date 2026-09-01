@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

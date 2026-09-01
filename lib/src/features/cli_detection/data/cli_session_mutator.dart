@@ -7,7 +7,7 @@ import '../../agents/domain/agent_ids.dart';
 import '../domain/detected_session.dart';
 
 /// Renames and deletes detected CLI sessions on disk, matching what each CLI
-/// itself does (ported from the reference Chitragupta CLI):
+/// itself does (ported from the reference Karmashala CLI):
 ///
 /// * **Claude** rename appends a `{"type":"custom-title",…}` line (what
 ///   `/rename` writes); delete removes the `.jsonl` and any `~/.claude/sessions`

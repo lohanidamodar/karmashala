@@ -1,14 +1,14 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/app/theme/app_theme.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/verification/application/verification_providers.dart';
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_artifact.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_run.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_step.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_target.dart';
-import 'package:chitragupta/src/features/verification/presentation/verification_pane.dart';
+import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/verification/application/verification_providers.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
+import 'package:karmashala/src/features/verification/domain/verification_run.dart';
+import 'package:karmashala/src/features/verification/domain/verification_step.dart';
+import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala/src/features/verification/presentation/verification_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

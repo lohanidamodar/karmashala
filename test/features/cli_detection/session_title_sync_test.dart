@@ -1,16 +1,16 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/cli_detection/application/session_title_sync_service.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/detected_session.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/cli_detection/application/session_title_sync_service.dart';
+import 'package:karmashala/src/features/cli_detection/domain/detected_session.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -19,7 +19,7 @@ import '../../support/fixtures.dart';
 ///
 /// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §7: the owner ran `/rename test me
 /// now` **inside `agy`**, the CLI recorded it correctly, and the sidebar went on
-/// saying "New session". Chitragupta's own rename works — it was never asked.
+/// saying "New session". Karmashala's own rename works — it was never asked.
 /// Nothing in the app read a CLI's title *back* into an already-launched native
 /// session row, for any agent: app-launched rows are titled at creation and only
 /// `SessionActions.renameNative` ever changed them, and `SessionAdoptionService`

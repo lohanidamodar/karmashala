@@ -103,7 +103,7 @@ class BrowserTools {
     return _text([
       session.endpoint.description,
       await _whereAmI(),
-      'The browser pane in Chitragupta shows the same page.',
+      'The browser pane in Karmashala shows the same page.',
     ]);
   }
 

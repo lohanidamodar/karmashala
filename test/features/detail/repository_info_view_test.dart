@@ -1,12 +1,12 @@
-import 'package:chitragupta/src/app/shell/pane_scaffold.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/detail/presentation/repository_info_view.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/git/application/changes_providers.dart';
-import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/app/shell/pane_scaffold.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,8 +19,8 @@ void main() {
   group('webUrlForRemote', () {
     test('scp syntax becomes a browsable URL', () {
       expect(
-        webUrlForRemote('git@github.com:popupbits/chitragupta.git'),
-        'https://github.com/popupbits/chitragupta',
+        webUrlForRemote('git@github.com:popupbits/karmashala.git'),
+        'https://github.com/popupbits/karmashala',
       );
     });
 
@@ -33,8 +33,8 @@ void main() {
 
     test('an https remote just loses its .git', () {
       expect(
-        webUrlForRemote('https://github.com/popupbits/chitragupta.git'),
-        'https://github.com/popupbits/chitragupta',
+        webUrlForRemote('https://github.com/popupbits/karmashala.git'),
+        'https://github.com/popupbits/karmashala',
       );
     });
 

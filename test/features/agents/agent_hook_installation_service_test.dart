@@ -1,17 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/application/agent_hook_installation_service.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_installer.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
-import 'package:chitragupta/src/features/cli_detection/application/cli_detection_providers.dart';
-import 'package:chitragupta/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

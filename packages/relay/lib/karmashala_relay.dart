@@ -1,4 +1,4 @@
-/// The Chitragupta relay: a zero-knowledge pipe between a desktop host and a
+/// The Karmashala relay: a zero-knowledge pipe between a desktop host and a
 /// paired phone.
 ///
 /// It pairs two outbound WebSockets by rendezvous id and forwards opaque

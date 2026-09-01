@@ -278,7 +278,7 @@ class AdbService {
   /// `exec-out screencap -p`: the runner decodes stdout as text, which would
   /// corrupt binary PNG data.
   Future<Uint8List> screenshot(String serial, {String? hostPath}) async {
-    final devicePath = '$deviceTempDirectory/chitragupta_screen.png';
+    final devicePath = '$deviceTempDirectory/karmashala_screen.png';
     final capture = await runner.run(
       _forDevice(serial, ['shell', 'screencap', '-p', devicePath]),
     );
@@ -288,7 +288,7 @@ class AdbService {
     final destination =
         hostPath ??
         '${Directory.systemTemp.path}${Platform.pathSeparator}'
-            'chitragupta_screen_$serial.png';
+            'karmashala_screen_$serial.png';
     final pull = await runner.run(
       _forDevice(serial, ['pull', devicePath, destination]),
     );
@@ -321,7 +321,7 @@ class AdbService {
   /// it is transient by definition, and uiautomator reports it with **exit code
   /// 0**, so the retry decision cannot be made from the exit status.
   Future<UiHierarchy> dumpUiHierarchy(String serial, {int attempts = 3}) async {
-    final devicePath = '$deviceTempDirectory/chitragupta_ui_dump.xml';
+    final devicePath = '$deviceTempDirectory/karmashala_ui_dump.xml';
     UiDumpFailure? failure;
     for (var attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0 && uiDumpRetryDelay > Duration.zero) {

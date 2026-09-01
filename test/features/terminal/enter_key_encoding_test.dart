@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/terminal/domain/enter_key_encoding.dart';
+import 'package:karmashala/src/features/terminal/domain/enter_key_encoding.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/core.dart';
 
@@ -17,7 +17,7 @@ void main() {
     bool lineFeedMode = false,
   }) {
     final terminal = Terminal(maxLines: 100)..resize(80, 24);
-    terminal.inputHandler = const ChitraguptaInputHandler();
+    terminal.inputHandler = const KarmashalaInputHandler();
     if (lineFeedMode) terminal.write('\x1b[20h');
     List<int>? written;
     terminal.onOutput = (data) => written = data.codeUnits;

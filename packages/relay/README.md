@@ -1,6 +1,6 @@
-# chitragupta_relay
+# karmashala_relay
 
-A dumb pipe between a Chitragupta desktop host and a paired phone.
+A dumb pipe between a Karmashala desktop host and a paired phone.
 
 Two ends open an outbound WebSocket to `wss://<relay>/v1/<rendezvous>`; the
 relay pairs them and forwards frames verbatim in both directions. Every frame

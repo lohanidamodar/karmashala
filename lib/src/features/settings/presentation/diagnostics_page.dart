@@ -146,7 +146,7 @@ class _LogFolderRow extends ConsumerWidget {
       messenger?.showSnackBar(
         const SnackBar(
           content: Text(
-            'This platform has no file manager Chitragupta can open.',
+            'This platform has no file manager Karmashala can open.',
           ),
         ),
       );

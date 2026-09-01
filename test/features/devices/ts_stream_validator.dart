@@ -18,7 +18,7 @@
 // shared import honest.
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/devices/data/ts_muxer.dart';
+import 'package:karmashala/src/features/devices/data/ts_muxer.dart';
 
 /// One reassembled PES packet.
 class PesPacket {

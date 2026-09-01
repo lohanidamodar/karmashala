@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// its words in the box under the transcript, where the user reads them,
 /// changes their mind about half of them, and presses Enter — or does not. A
 /// note is a deferred instruction the user wrote for themselves weeks ago;
-/// dispatching one silently would be Chitragupta deciding it was still right.
+/// dispatching one silently would be Karmashala deciding it was still right.
 ///
 /// The draft survives until the composer picks it up, so sending back to a
 /// session that is not on screen leaves the text waiting there rather than

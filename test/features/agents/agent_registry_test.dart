@@ -1,13 +1,13 @@
-import 'package:chitragupta/src/features/agents/data/antigravity_adapter.dart';
-import 'package:chitragupta/src/features/agents/data/claude_code_adapter.dart';
-import 'package:chitragupta/src/features/agents/data/codex_adapter.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_adapter.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_kind.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
-import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/features/agents/data/antigravity_adapter.dart';
+import 'package:karmashala/src/features/agents/data/claude_code_adapter.dart';
+import 'package:karmashala/src/features/agents/data/codex_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_kind.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -73,7 +73,7 @@ class _AgentGolden {
   ];
 }
 
-/// The three agents Chitragupta ships, in registry order.
+/// The three agents Karmashala ships, in registry order.
 const List<_AgentGolden> _goldens = [
   _AgentGolden(
     id: 'claudeCode',

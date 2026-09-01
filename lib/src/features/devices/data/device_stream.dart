@@ -210,7 +210,7 @@ class DeviceStreamService {
   final Duration watchdogInterval;
   final AppLogger _logger;
 
-  static const _devicePath = '/data/local/tmp/chitragupta-scrcpy-server.jar';
+  static const _devicePath = '/data/local/tmp/karmashala-scrcpy-server.jar';
 
   /// Kills scrcpy servers and removes `adb forward` entries left behind by an
   /// earlier run on [serial].
@@ -386,7 +386,7 @@ class DeviceStreamService {
     final jar = await serverBytes();
     final hostJar = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}'
-      'chitragupta-scrcpy-server-$kScrcpyVersion.jar',
+      'karmashala-scrcpy-server-$kScrcpyVersion.jar',
     );
     await hostJar.writeAsBytes(jar, flush: true);
     final push = await runner.run(

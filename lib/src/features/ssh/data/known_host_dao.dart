@@ -2,7 +2,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/ssh_host_key.dart';
 
-/// Data-access for trusted host keys — Chitragupta's `known_hosts`.
+/// Data-access for trusted host keys — Karmashala's `known_hosts`.
 ///
 /// One row per `host:port`. Storing at most one key per address is what makes a
 /// changed key detectable at all; see `SshHostKeyVerifier`.

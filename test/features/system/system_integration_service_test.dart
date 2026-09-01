@@ -1,9 +1,9 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
-import 'package:chitragupta/src/features/system/launcher_hotkey.dart';
-import 'package:chitragupta/src/features/system/native_status.dart';
-import 'package:chitragupta/src/features/system/system_integration_service.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/system/launcher_hotkey.dart';
+import 'package:karmashala/src/features/system/native_status.dart';
+import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:flutter/widgets.dart' show Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,7 +63,7 @@ void main() {
         expect(natives.window.listeners, contains(service));
         expect(natives.tray.listeners, contains(service));
         expect(natives.tray.icon, 'assets/tray_icon.ico');
-        expect(natives.tray.tooltip, 'Chitragupta');
+        expect(natives.tray.tooltip, 'Karmashala');
         expect(natives.tray.menu, isNotNull);
         expect(natives.autoStart.setupCalled, isTrue);
         // Defaults: keep-awake off, close-to-tray off, hotkey on.

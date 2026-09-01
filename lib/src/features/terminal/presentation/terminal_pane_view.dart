@@ -22,7 +22,7 @@ import '../domain/terminal_links.dart';
 ///
 /// ## Links
 ///
-/// The owner's report was "links are not clickable in chitragupta's terminal",
+/// The owner's report was "links are not clickable in karmashala's terminal",
 /// then "any link — file link, relative file link, http link". They are, on
 /// **Ctrl+click** (Cmd on macOS) — VS Code's and Windows Terminal's gesture,
 /// and the only safe one: a plain click in a terminal places a selection and,

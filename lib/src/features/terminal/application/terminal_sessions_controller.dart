@@ -930,7 +930,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// to start at all:
   ///
   ///   Error: Invalid MCP configuration:
-  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///   MCP config file not found: `…/karmashala/mcp/session-<uuid>.json`
   ///
   /// An empty answer is the ordinary one — no server, no session row, a
   /// terminal-only container — and it is the right one: a pane without its

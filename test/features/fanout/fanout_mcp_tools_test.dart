@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/fanout/data/comparison_dao.dart';
-import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
+import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

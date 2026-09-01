@@ -90,7 +90,7 @@ String? locateChromeExecutable({HostKind? host, Map<String, String>? env}) =>
       exists: (path) => File(path).existsSync(),
     );
 
-/// The command line used when Chitragupta launches its own browser.
+/// The command line used when Karmashala launches its own browser.
 ///
 /// [userDataDir] is **always** a throwaway directory of ours. Two reasons, and
 /// both matter: it keeps us out of the user's real profile, cookies and signed

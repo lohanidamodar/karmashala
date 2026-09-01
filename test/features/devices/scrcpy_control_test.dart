@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/devices/data/scrcpy_control.dart';
+import 'package:karmashala/src/features/devices/data/scrcpy_control.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The expected encoding, spelled out independently of the implementation.

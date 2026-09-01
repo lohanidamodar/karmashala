@@ -201,7 +201,7 @@ class ReviewSessionService {
   /// then read as "nothing found".
   String? _refusalFor(AgentDescriptor? descriptor, String name) {
     if (descriptor == null) {
-      return 'Chitragupta has no descriptor for this agent, so it cannot be '
+      return 'Karmashala has no descriptor for this agent, so it cannot be '
           'told what to review.';
     }
     if (!descriptor.launch.acceptsPromptArgument) {
@@ -250,7 +250,7 @@ class ReviewSessionService {
           : registry.displayNameFor(authorAgentId),
       reviewerAgentName: targetAgentName,
       subjectTitle: session.title,
-      // Chitragupta's own id, deliberately — see [ReviewBrief.subjectSessionId].
+      // Karmashala's own id, deliberately — see [ReviewBrief.subjectSessionId].
       subjectSessionId: session.id,
       claim: claim?.trim().isEmpty ?? true ? null : claim!.trim(),
       workingDirectory: directory?.path,

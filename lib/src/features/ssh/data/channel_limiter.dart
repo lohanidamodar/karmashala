@@ -5,7 +5,7 @@ import 'dart:collection';
 ///
 /// An SSH server bounds the sessions a single connection may hold open —
 /// OpenSSH's `MaxSessions` defaults to **10** — and asking for one past the
-/// limit fails with "open failed" rather than waiting. Chitragupta fans probes
+/// limit fails with "open failed" rather than waiting. Karmashala fans probes
 /// out on purpose, so without a cap a wide enough fan-out turns into spurious
 /// command failures. Waiting a few milliseconds for a slot is the right answer;
 /// a failed `git status` is not.

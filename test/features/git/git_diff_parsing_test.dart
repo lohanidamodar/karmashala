@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/git/data/git_diff_parsing.dart';
-import 'package:chitragupta/src/features/git/domain/diff_line.dart';
-import 'package:chitragupta/src/features/git/domain/diff_stat.dart';
-import 'package:chitragupta/src/features/git/domain/file_change.dart';
+import 'package:karmashala/src/features/git/data/git_diff_parsing.dart';
+import 'package:karmashala/src/features/git/domain/diff_line.dart';
+import 'package:karmashala/src/features/git/domain/diff_stat.dart';
+import 'package:karmashala/src/features/git/domain/file_change.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _us = String.fromCharCode(0x1f);

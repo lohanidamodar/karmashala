@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/browser/domain/browser_key.dart';
+import 'package:karmashala/src/features/browser/domain/browser_key.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,10 +1,10 @@
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/repositories/data/checkout_presence_probe.dart';
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/core/util/id_generator.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_discovery_service.dart';
-import 'package:chitragupta/src/features/repositories/domain/discovered_repository.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/repositories/data/checkout_presence_probe.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/core/util/id_generator.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
+import 'package:karmashala/src/features/repositories/domain/discovered_repository.dart';
 
 /// A [Clock] that always returns a fixed instant.
 class FixedClock implements Clock {

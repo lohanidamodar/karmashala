@@ -123,7 +123,7 @@ class SessionHandoffService {
   /// marker (see `SessionLauncher.sendTo`'s callers).
   String? _refusalFor(AgentDescriptor? descriptor, String name) {
     if (descriptor == null) {
-      return 'Chitragupta has no descriptor for this agent, so it cannot be '
+      return 'Karmashala has no descriptor for this agent, so it cannot be '
           'told anything at launch.';
     }
     if (!descriptor.launch.acceptsPromptArgument) {

@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/terminal/data/scrollback_codec.dart';
-import 'package:chitragupta/src/features/terminal/domain/scrollback_limits.dart';
+import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
+import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 

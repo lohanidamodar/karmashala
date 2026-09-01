@@ -3,7 +3,7 @@ library;
 
 import 'dart:async';
 
-import 'package:chitragupta/src/features/remote/transport/remote_transport.dart';
+import 'package:karmashala/src/features/remote/transport/remote_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A backoff short enough that a reconnect test finishes, long enough that it

@@ -7,14 +7,14 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/client/companion_pairing_client.dart';
-import 'package:chitragupta/src/features/remote/client/companion_store.dart';
-import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
-import 'package:chitragupta/src/features/remote/pairing/host_pairing.dart';
-import 'package:chitragupta/src/features/remote/pairing/pairing_payload.dart';
-import 'package:chitragupta/src/features/remote/pairing/pairing_wire.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/lan_transport.dart';
+import 'package:karmashala/src/features/remote/client/companion_pairing_client.dart';
+import 'package:karmashala/src/features/remote/client/companion_store.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
+import 'package:karmashala/src/features/remote/pairing/host_pairing.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_payload.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_wire.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/lan_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'transport_harness.dart';

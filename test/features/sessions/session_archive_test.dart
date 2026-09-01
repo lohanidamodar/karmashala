@@ -1,25 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/checkpoints/data/checkpoint_dao.dart';
-import 'package:chitragupta/src/features/checkpoints/domain/checkpoint.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/session_archive_service.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/data/session_event_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_event.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_event.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -39,7 +39,7 @@ void main() {
 
   const worktree = EnvironmentPath(
     environmentId: 'windows',
-    path: r'C:\src\.chitragupta-worktrees\app-s1',
+    path: r'C:\src\.karmashala-worktrees\app-s1',
   );
 
   /// `git status --porcelain=v1` output for the worktree, scripted per test.

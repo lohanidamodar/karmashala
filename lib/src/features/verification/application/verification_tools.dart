@@ -26,7 +26,7 @@ class VerificationTools {
   /// `callerSessionId` (itself `kSessionIdEnvironmentVariable`).
   ///
   /// The producer of everything recorded here. Null only when the caller runs
-  /// outside a Chitragupta session, and then the run stays honestly
+  /// outside a Karmashala session, and then the run stays honestly
   /// unattributed rather than borrowing an id from somewhere else.
   final String? callerSessionId;
 

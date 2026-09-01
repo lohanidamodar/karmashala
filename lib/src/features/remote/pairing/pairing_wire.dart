@@ -36,12 +36,12 @@ class LinkHello {
   final RendezvousId rendezvous;
 
   Uint8List encode() => Uint8List.fromList(
-    utf8.encode(jsonEncode({'chitragupta': 'link', 'r': rendezvous.value})),
+    utf8.encode(jsonEncode({'karmashala': 'link', 'r': rendezvous.value})),
   );
 
   static LinkHello? tryDecode(List<int> frame) {
     final json = _decodeMap(frame);
-    if (json == null || json['chitragupta'] != 'link') return null;
+    if (json == null || json['karmashala'] != 'link') return null;
     final r = json['r'];
     if (r is! String || !RendezvousId.pattern.hasMatch(r)) return null;
     return LinkHello(RendezvousId.parse(r));
@@ -69,7 +69,7 @@ class PairHello {
   Uint8List encode() => Uint8List.fromList(
     utf8.encode(
       jsonEncode({
-        'chitragupta': 'pair',
+        'karmashala': 'pair',
         'device': deviceId.value,
         'name': name,
         'v': kProtocolVersion,
@@ -80,7 +80,7 @@ class PairHello {
 
   static PairHello? tryDecode(List<int> frame) {
     final json = _decodeMap(frame);
-    if (json == null || json['chitragupta'] != 'pair') return null;
+    if (json == null || json['karmashala'] != 'pair') return null;
     final device = json['device'];
     final name = json['name'];
     if (device is! String || name is! String) return null;

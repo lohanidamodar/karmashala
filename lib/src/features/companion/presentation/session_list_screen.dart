@@ -136,7 +136,7 @@ class SessionListScreen extends ConsumerWidget {
         tone: NoticeTone.attention,
         body:
             'This phone cannot reach $hostName, so it has no list to show. '
-            'Sessions appear as soon as Chitragupta is running there and the '
+            'Sessions appear as soon as Karmashala is running there and the '
             'two can find each other.',
         actionLabel: 'Try again',
         onAction: () => _retry(ref),

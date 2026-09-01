@@ -3,22 +3,22 @@
 /// real code paths rather than a friendlier stand-in.
 library;
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/core/util/id_generator_provider.dart';
-import 'package:chitragupta/src/features/agents/application/agent_providers.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
-import 'package:chitragupta/src/features/settings/domain/settings.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_providers.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../support/fake_command_runner.dart';

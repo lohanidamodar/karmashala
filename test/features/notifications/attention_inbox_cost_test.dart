@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/inbox_item.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
-import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
+import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What one poll costs the attention inbox, measured against the algorithm it

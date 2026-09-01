@@ -6,25 +6,25 @@
 /// so a list that reads top-to-bottom on the desktop arrived shuffled.
 library;
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_installation.dart';
-import 'package:chitragupta/src/features/cli_detection/data/imported_session_dao.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/imported_session.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/projects/domain/project.dart';
-import 'package:chitragupta/src/features/remote/application/remote_bindings.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/repositories/domain/repository.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
+import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/projects/domain/project.dart';
+import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/repositories/domain/repository.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

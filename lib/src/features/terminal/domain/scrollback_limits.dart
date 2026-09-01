@@ -14,7 +14,7 @@
 /// live buffer bought to keep snapshots cheap. Orca separates them for that
 /// reason and keeps its durable window the *deeper* of the two.
 ///
-/// Chitragupta's defaults are currently the other way round — 10 000 live
+/// Karmashala's defaults are currently the other way round — 10 000 live
 /// against 2 000 durable — because Loop 29 sized the durable window by "what
 /// does anyone actually scroll back to *after a restart*". Which way the
 /// balance should fall is a product decision; this file only makes it one that

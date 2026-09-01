@@ -1,12 +1,12 @@
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/ssh/application/ssh_connection_providers.dart';
-import 'package:chitragupta/src/features/ssh/application/ssh_failure.dart';
-import 'package:chitragupta/src/features/ssh/data/remote_file_browser.dart';
-import 'package:chitragupta/src/features/ssh/data/ssh_connection.dart';
-import 'package:chitragupta/src/features/ssh/domain/remote_directory_entry.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_connection_state.dart';
-import 'package:chitragupta/src/features/ssh/domain/ssh_host_key.dart';
-import 'package:chitragupta/src/features/ssh/presentation/ssh_connection_status_chip.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/ssh/application/ssh_connection_providers.dart';
+import 'package:karmashala/src/features/ssh/application/ssh_failure.dart';
+import 'package:karmashala/src/features/ssh/data/remote_file_browser.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_connection.dart';
+import 'package:karmashala/src/features/ssh/domain/remote_directory_entry.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_connection_state.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala/src/features/ssh/presentation/ssh_connection_status_chip.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

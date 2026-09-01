@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:math';
 
-/// Which Chitragupta session a tool call is coming *from*.
+/// Which Karmashala session a tool call is coming *from*.
 ///
 /// ## The rule this exists to keep
 ///
 /// A caller's session identity is something the app stamped on the process,
 /// never something the model can say. The stdio bridge already works that way:
-/// Chitragupta puts `CHITRAGUPTA_SESSION_ID` on the agent process when it opens
+/// Karmashala puts `KARMASHALA_SESSION_ID` on the agent process when it opens
 /// the pane, the bridge is that agent's own child, and it forwards what it
 /// inherited. The comment in the bridge puts it exactly right — it "describes
 /// the actual process tree rather than something the model chose to say".

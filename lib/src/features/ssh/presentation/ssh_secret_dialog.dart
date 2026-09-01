@@ -91,7 +91,7 @@ class _SshSecretDialogState extends State<SshSecretDialog> {
             ),
             const SizedBox(height: Insets.sm),
             Text(
-              'Used for this connection only. Chitragupta does not store '
+              'Used for this connection only. Karmashala does not store '
               'passwords or passphrases.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

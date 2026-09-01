@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/app/theme/app_theme.dart';
-import 'package:chitragupta/src/app/theme/design_tokens.dart';
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
-import 'package:chitragupta/src/features/verification/presentation/attribution_mark.dart';
+import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/features/verification/presentation/attribution_mark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

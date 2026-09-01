@@ -29,7 +29,7 @@ const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 /// The primary content area: one tab strip across the top, the work underneath.
 ///
 /// Loop 47 moved the terminal here from a 280px bottom dock. A dock is right for
-/// an *editor*-primary app; Chitragupta decided to be terminal-primary, and none
+/// an *editor*-primary app; Karmashala decided to be terminal-primary, and none
 /// of the products it is learning from (Orca, cmux, Warp, Ghostty) put the
 /// terminal anywhere but the middle of the window.
 ///

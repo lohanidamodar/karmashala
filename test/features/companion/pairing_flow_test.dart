@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/presentation/pairing/pairing_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/pairing/scan_qr_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/pairing/short_code_screen.dart';
+import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/pairing/pairing_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/pairing/scan_qr_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/pairing/short_code_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -95,7 +95,7 @@ void main() {
 
     expect(gateway.pairing, isNull);
     expect(
-      find.textContaining('not a Chitragupta pairing code'),
+      find.textContaining('not a Karmashala pairing code'),
       findsOneWidget,
     );
 

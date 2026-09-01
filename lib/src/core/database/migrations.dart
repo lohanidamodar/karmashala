@@ -797,7 +797,7 @@ void _migrateToV14(Database db) {
   //
   // The *content* is not here. A checkpoint is a git tree and the commit that
   // anchors it, both in the repository's own object store, reachable from
-  // `refs/chitragupta/checkpoints/<session>` so `git gc` keeps them. This table
+  // `refs/karmashala/checkpoints/<session>` so `git gc` keeps them. This table
   // is the index over them: which session, in which order, against which repo,
   // and what a reader can be shown without shelling out to git.
   //

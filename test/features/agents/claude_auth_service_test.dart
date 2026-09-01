@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/data/claude_auth_service.dart';
-import 'package:chitragupta/src/features/agents/domain/claude_account.dart';
+import 'package:karmashala/src/features/agents/data/claude_auth_service.dart';
+import 'package:karmashala/src/features/agents/domain/claude_account.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
@@ -150,8 +150,8 @@ void main() {
         expect(rawConfig.contains('"G:/p": 2'), isTrue);
 
         // One-time backups exist and hold the original contents.
-        final credBak = File('${paths.credentialsFile}.chitragupta.bak');
-        final cfgBak = File('${paths.configFile}.chitragupta.bak');
+        final credBak = File('${paths.credentialsFile}.karmashala.bak');
+        final cfgBak = File('${paths.configFile}.karmashala.bak');
         expect(credBak.existsSync(), isTrue);
         expect(cfgBak.existsSync(), isTrue);
         expect(

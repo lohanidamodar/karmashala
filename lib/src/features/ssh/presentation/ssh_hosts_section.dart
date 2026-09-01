@@ -128,7 +128,7 @@ class _HostCard extends ConsumerWidget {
       builder: (dialogContext) => AlertDialog(
         title: Text('Remove ${host.name}?'),
         content: Text(
-          'Chitragupta will forget how to reach ${host.address} and close any '
+          'Karmashala will forget how to reach ${host.address} and close any '
           'open connection to it.\n\n'
           'Its trusted host key is kept, so re-adding this machine is not a '
           'silent re-trust: a key that has changed in the meantime is still '

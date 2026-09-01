@@ -251,7 +251,7 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
   {
     'name': 'inbox_open',
     'description':
-        'Bring an inbox item\'s session to the front of Chitragupta and mark '
+        'Bring an inbox item\'s session to the front of Karmashala and mark '
         'the item seen. An item for a past event leaves the inbox when you '
         'look at it; one for a question that is still open stays, because '
         'reading a question does not answer it — the result says which '
@@ -311,7 +311,7 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
   {
     'name': 'notes_list',
     'description':
-        'The notes kept in Chitragupta, newest first. Pass sessionId to see '
+        'The notes kept in Karmashala, newest first. Pass sessionId to see '
         'only the ones captured from one session.',
     'inputSchema': {
       'type': 'object',

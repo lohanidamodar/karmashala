@@ -4,7 +4,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../data/browser_launcher.dart';
 import '../data/browser_service.dart';
 
-/// The debugging port Chitragupta attaches to (or launches a browser on).
+/// The debugging port Karmashala attaches to (or launches a browser on).
 ///
 /// Chrome's own default, so a browser the user started with
 /// `--remote-debugging-port=9222` is found without configuring anything.

@@ -1,13 +1,13 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/sessions/application/session_launcher.dart';
-import 'package:chitragupta/src/features/sessions/application/session_mcp_arguments.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
-import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/launch_context.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/application/session_mcp_arguments.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Decodes what `powershell.exe -EncodedCommand` expects: base64 of UTF-16LE.
@@ -364,7 +364,7 @@ void main() {
   /// agent refused to run:
   ///
   ///   Error: Invalid MCP configuration:
-  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///   MCP config file not found: `…/karmashala/mcp/session-<uuid>.json`
   group('the volatile MCP flags are never part of the record', () {
     test('a launch that ran with them is stored without them', () {
       const launch = AgentPaneLaunch(
@@ -425,7 +425,7 @@ void main() {
         'executable': 'claude',
         'arguments': [
           r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
-              r'\chitragupta\mcp\session-95659659.json',
+              r'\karmashala\mcp\session-95659659.json',
           '--permission-mode',
           'acceptEdits',
           '--resume',
@@ -450,7 +450,7 @@ void main() {
         'executable': 'codex',
         'arguments': [
           '-c',
-          'mcp_servers.chitragupta.url=http://127.0.0.1:51234/mcp/dead-token',
+          'mcp_servers.karmashala.url=http://127.0.0.1:51234/mcp/dead-token',
           '--ask-for-approval',
           'on-request',
           'resume',
@@ -605,7 +605,7 @@ void main() {
     });
   });
 
-  /// Being told where Chitragupta's own tools are, in each agent's own words.
+  /// Being told where Karmashala's own tools are, in each agent's own words.
   ///
   /// Every claim here was read off a real `--help` or a real run; the point of
   /// the group is that an agent with no verified convention gets **nothing**,
@@ -663,7 +663,7 @@ void main() {
         ),
         [
           '-c',
-          'mcp_servers.chitragupta.url=$url',
+          'mcp_servers.karmashala.url=$url',
           '--ask-for-approval',
           'on-request',
           'resume',

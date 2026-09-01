@@ -65,7 +65,7 @@ Future<String> readLocalPrivateKey(EnvironmentPath path) async {
 ///
 /// Everything that runs on a remote host shares a single connection: opening a
 /// TCP socket and doing a key exchange per command would make the many small
-/// probes Chitragupta issues unusable over a network. [client] is therefore the
+/// probes Karmashala issues unusable over a network. [client] is therefore the
 /// only way in — it returns the existing session, waits for one that is being
 /// established, or reconnects with exponential backoff.
 ///

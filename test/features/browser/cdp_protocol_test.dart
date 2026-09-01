@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/features/browser/data/cdp_protocol.dart';
-import 'package:chitragupta/src/features/browser/domain/cdp_message.dart';
+import 'package:karmashala/src/features/browser/data/cdp_protocol.dart';
+import 'package:karmashala/src/features/browser/domain/cdp_message.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

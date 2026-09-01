@@ -9,16 +9,16 @@
 /// must say something a user can act on.
 library;
 
-import 'package:chitragupta/src/app/theme/app_icons.dart';
-import 'package:chitragupta/src/app/theme/design_tokens.dart';
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/client/fake_companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/presentation/project_sessions_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/session_list_screen.dart';
-import 'package:chitragupta/src/features/companion/presentation/session_view_screen.dart';
-import 'package:chitragupta/src/features/explorer/presentation/project_card.dart';
-import 'package:chitragupta/src/features/explorer/presentation/session_card.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
+import 'package:karmashala/src/features/companion/presentation/project_sessions_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/session_list_screen.dart';
+import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
+import 'package:karmashala/src/features/explorer/presentation/project_card.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -60,9 +60,9 @@ void main() {
           summary(
             's3',
             title: 'Port the parser',
-            project: 'chitragupta',
+            project: 'karmashala',
             projectId: 'p2',
-            projectPath: '/w/chitragupta',
+            projectPath: '/w/karmashala',
           ),
         ],
       );
@@ -75,7 +75,7 @@ void main() {
       // Two containers, named and counted…
       expect(find.byType(ProjectCard), findsNWidgets(2));
       expect(find.text('popupbits'), findsOneWidget);
-      expect(find.text('chitragupta'), findsOneWidget);
+      expect(find.text('karmashala'), findsOneWidget);
       expect(find.text('2 sessions'), findsOneWidget);
       expect(find.text('1 session'), findsOneWidget);
       expect(find.text('/w/popupbits'), findsOneWidget);
@@ -101,7 +101,7 @@ void main() {
               at: DateTime.now().toUtc(),
             ),
           ),
-          summary('s2', project: 'chitragupta', projectId: 'p2'),
+          summary('s2', project: 'karmashala', projectId: 'p2'),
         ],
       );
       await pumpPhone(

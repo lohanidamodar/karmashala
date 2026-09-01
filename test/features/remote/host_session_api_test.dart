@@ -3,10 +3,10 @@
 /// and frames out.
 library;
 
-import 'package:chitragupta/src/features/remote/application/host_bindings.dart';
-import 'package:chitragupta/src/features/remote/application/host_session_api.dart';
-import 'package:chitragupta/src/features/remote/domain/remote_payloads.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/application/host_bindings.dart';
+import 'package:karmashala/src/features/remote/application/host_session_api.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_bindings.dart';

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/transport/lan_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/remote_transport.dart';
+import 'package:karmashala/src/features/remote/transport/lan_transport.dart';
+import 'package:karmashala/src/features/remote/transport/remote_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'transport_harness.dart';

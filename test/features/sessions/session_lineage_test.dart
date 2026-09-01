@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
+import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 SessionLineageNode _node(String id, {SessionLink? link}) =>

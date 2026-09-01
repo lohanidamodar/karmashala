@@ -1,11 +1,11 @@
-import 'package:chitragupta/src/app/chitragupta_app.dart';
-import 'package:chitragupta/src/app/shell/app_shell.dart';
-import 'package:chitragupta/src/app/theme/design_tokens.dart';
-import 'package:chitragupta/src/app/theme/ui_text_scale.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/app_shell.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/theme/ui_text_scale.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,7 +60,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const ChitraguptaApp(),
+          child: const KarmashalaApp(),
         ),
       );
       await tester.pumpAndSettle();

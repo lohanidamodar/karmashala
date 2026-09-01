@@ -30,7 +30,7 @@ class WorktreeNode {
   ///
   /// This is the difference between a worktree we can only *describe* and one we
   /// can start a session in: a session needs a repository id, and a folder with
-  /// no row has none. Chitragupta's own workspace has both kinds — the sibling
+  /// no row has none. Karmashala's own workspace has both kinds — the sibling
   /// `wt-*` folders under a project root are discovered and get rows, while a
   /// worktree created outside the project folder does not.
   final Repository? repository;

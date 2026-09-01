@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/agent_command_line.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/cli_detection/domain/agent_command_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Which typed command lines mean "an agent session just started here".

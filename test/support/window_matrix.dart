@@ -1,6 +1,6 @@
 /// The minimum-window and accessibility matrix.
 ///
-/// Chitragupta supports a 720x560 window, and several dialogs ask for far more
+/// Karmashala supports a 720x560 window, and several dialogs ask for far more
 /// than that — the fan-out dialog asks for 1180x780. Flutter shrinks the outer
 /// box silently, so nothing tells you the contents no longer fit; the pane just
 /// clips, and the yellow-and-black stripes only appear if someone happens to

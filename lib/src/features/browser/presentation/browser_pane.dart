@@ -126,7 +126,7 @@ class _ConnectionBar extends StatelessWidget {
             child: Tooltip(
               message: state.isConnected
                   ? '${state.connection}\n${state.title}\n${state.url}'
-                  : 'Chitragupta attaches to a browser started with '
+                  : 'Karmashala attaches to a browser started with '
                         '--remote-debugging-port=${state.port}, and only '
                         'launches its own (on a throwaway profile) when '
                         'nothing is listening.',
@@ -354,7 +354,7 @@ class _Body extends ConsumerWidget {
         message: switch (state.status) {
           BrowserPaneStatus.disconnected =>
             'Attach to a browser to drive it from here.\n\n'
-                'Chitragupta attaches to a Chrome started with '
+                'Karmashala attaches to a Chrome started with '
                 '--remote-debugging-port=${state.port} — your window, your '
                 'logins — and only launches one of its own, on a throwaway '
                 'profile, if nothing is listening.',

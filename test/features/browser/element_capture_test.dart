@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/browser/domain/element_capture.dart';
+import 'package:karmashala/src/features/browser/domain/element_capture.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ElementCapture buildCapture({

@@ -1,6 +1,6 @@
-name: chitragupta_local_ipc
+name: karmashala_local_ipc
 description: >-
-  Owner-only local RPC over a unix domain socket, used by Chitragupta and its
+  Owner-only local RPC over a unix domain socket, used by Karmashala and its
   MCP bridge. Pure dart:io — no FFI, and no platform plugins — so the bridge
   still compiles to a small standalone executable.
 version: 0.2.0

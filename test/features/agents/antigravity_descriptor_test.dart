@@ -1,15 +1,15 @@
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/permission_carry.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/agent_command_line.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
-import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/permission_carry.dart';
+import 'package:karmashala/src/features/cli_detection/domain/agent_command_line.dart';
+import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
+import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// What Chitragupta is allowed to claim about Antigravity.
+/// What Karmashala is allowed to claim about Antigravity.
 ///
 /// Every agent fact in this repo carries the `--help` output it was read from,
 /// and Antigravity was the exception: Loop 10 shipped its adapter against a

@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'launcher_control_server.dart';
 import 'mcp_tool_catalogue.dart';
 
-/// How an agent is told where Chitragupta's own tools are.
+/// How an agent is told where Karmashala's own tools are.
 ///
 /// There are two ways to say it, and the difference is which process ends up
 /// speaking MCP:
@@ -15,7 +15,7 @@ import 'mcp_tool_catalogue.dart';
 /// * **`http`** — the agent dials `POST /mcp` on the app directly. Nothing is
 ///   spawned, the app is the server, and the URL carries the session's identity
 ///   (see [LauncherControlServer.mcpUrlFor]). This is the form to prefer.
-/// * **`command`** — the agent spawns `chitragupta_mcp.exe`, which translates
+/// * **`command`** — the agent spawns `karmashala_mcp.exe`, which translates
 ///   stdio MCP into the app's private `/rpc` envelope. Kept because it is what
 ///   exists on disk today, and because a config already written this way must
 ///   keep working; but the executable ships beside the Windows binary only, and
@@ -33,7 +33,7 @@ class LauncherMcp {
   /// tool cannot be served and un-approved at the same time.
   static List<String> get allowedTools => [
     for (final tool in LauncherControlServer.toolSchemas)
-      'mcp__chitragupta__${tool['name']}',
+      'mcp__karmashala__${tool['name']}',
   ];
 
   /// The tools that change nothing, for a caller that wants to pre-approve
@@ -44,14 +44,14 @@ class LauncherMcp {
   static List<String> get readOnlyTools => [
     for (final tool in LauncherControlServer.toolSchemas)
       if (kMcpToolAnnotations[tool['name']]?.readOnly ?? false)
-        'mcp__chitragupta__${tool['name']}',
+        'mcp__karmashala__${tool['name']}',
   ];
 
   /// Resolves the bridge executable that ships next to the app, or `null` if it
   /// isn't present (e.g. a dev run without the compiled bridge).
   File? bridgeExecutable() {
     final dir = p.dirname(Platform.resolvedExecutable);
-    final exe = File(p.join(dir, 'chitragupta_mcp.exe'));
+    final exe = File(p.join(dir, 'karmashala_mcp.exe'));
     return exe.existsSync() ? exe : null;
   }
 
@@ -72,7 +72,7 @@ class LauncherMcp {
   static Map<String, Object?> bridgeServerEntry(String executablePath) =>
       <String, Object?>{'command': executablePath, 'args': <String>[]};
 
-  /// The `[mcp_servers.chitragupta]` block Codex reads from its `config.toml`.
+  /// The `[mcp_servers.karmashala]` block Codex reads from its `config.toml`.
   ///
   /// A `url` key is what tells Codex to use Streamable HTTP; the token rides in
   /// the URL for the same reason it does above, which also avoids needing an
@@ -80,7 +80,7 @@ class LauncherMcp {
   /// process. Nothing writes this file yet — see the class doc — but the
   /// formatting is here so the follow-up is a write, not a design.
   static String codexServerToml(String url) =>
-      '[mcp_servers.chitragupta]\nurl = "$url"\n';
+      '[mcp_servers.karmashala]\nurl = "$url"\n';
 
   /// Writes an MCP config file and returns its path, or `null` when there is
   /// nothing to point an agent at.
@@ -107,7 +107,7 @@ class LauncherMcp {
     await configFile.parent.create(recursive: true);
     await configFile.writeAsString(
       jsonEncode({
-        'mcpServers': {'chitragupta': entry},
+        'mcpServers': {'karmashala': entry},
       }),
       flush: true,
     );

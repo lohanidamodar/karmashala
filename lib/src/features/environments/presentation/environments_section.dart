@@ -16,7 +16,7 @@ import '../application/environments_controller.dart';
 import '../domain/environment_kind.dart';
 import '../domain/execution_environment.dart';
 
-/// Every place Chitragupta can run an agent, and what it found there.
+/// Every place Karmashala can run an agent, and what it found there.
 ///
 /// Grouped by environment rather than listed flat, because the environment is
 /// what makes two installations different: `claude 2.1.251` on the Windows host

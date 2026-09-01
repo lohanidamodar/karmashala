@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/app/shell/side_panel.dart';
-import 'package:chitragupta/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/shell/side_panel.dart';
+import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The rail is seven unlabelled glyphs in a 34px column, so two that look alike

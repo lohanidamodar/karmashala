@@ -1,6 +1,6 @@
 /// Whether closing a pane keeps its process alive.
 ///
-/// Chitragupta detaches rather than kills, and that is the right default for
+/// Karmashala detaches rather than kills, and that is the right default for
 /// the thing it is for: closing the tab of a running agent, a build, a dev
 /// server or an ssh session must not end it. But it was applied to *every* live
 /// pane, so opening a shell, typing nothing, and closing the tab left a

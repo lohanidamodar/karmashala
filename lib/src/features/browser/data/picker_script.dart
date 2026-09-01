@@ -7,11 +7,11 @@ import 'selector_js.dart';
 /// `Runtime.addBinding` installs a function of this name on the page's global
 /// object; calling it emits a `Runtime.bindingCalled` event on our socket.
 /// That is how a click inside the page becomes a message on the wire.
-const String kPickerBindingName = '__chitraguptaPick';
+const String kPickerBindingName = '__karmashalaPick';
 
 /// Global the injected picker parks its own teardown function on, so a second
 /// pick (or an explicit cancel) can dismantle the first cleanly.
-const String kPickerNamespace = '__chitraguptaPicker';
+const String kPickerNamespace = '__karmashalaPicker';
 
 /// The script injected into the page while picking.
 ///
@@ -52,7 +52,7 @@ const String _pickerSource = r'''
   if (window[NS] && window[NS].stop) { window[NS].stop(); }
 
   var overlay = document.createElement('div');
-  overlay.setAttribute('data-chitragupta-picker', '');
+  overlay.setAttribute('data-karmashala-picker', '');
   overlay.style.cssText =
     'position:fixed;z-index:2147483647;pointer-events:none;box-sizing:border-box;' +
     'border:2px solid #4f9dff;background:rgba(79,157,255,0.16);' +

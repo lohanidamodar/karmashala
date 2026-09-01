@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/core/logging/app_logger.dart';
-import 'package:chitragupta/src/core/logging/diagnostics.dart';
-import 'package:chitragupta/src/core/logging/log_entry.dart';
-import 'package:chitragupta/src/core/logging/log_file_sink.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala/src/core/logging/log_entry.dart';
+import 'package:karmashala/src/core/logging/log_file_sink.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
@@ -25,7 +25,7 @@ void main() {
   late Diagnostics previous;
 
   setUp(() async {
-    dir = await Directory.systemTemp.createTemp('chitragupta-logs');
+    dir = await Directory.systemTemp.createTemp('karmashala-logs');
     previous = Diagnostics.instance;
   });
 
@@ -34,7 +34,7 @@ void main() {
   /// *parent* is not portable — a hardcoded `/proc/...` is a perfectly
   /// creatable `C:\proc\...` on Windows.
   void blockTheLogFile() =>
-      Directory(p.join(dir.path, 'chitragupta.log')).createSync();
+      Directory(p.join(dir.path, 'karmashala.log')).createSync();
 
   tearDown(() async {
     Diagnostics.instance = previous;
@@ -87,9 +87,9 @@ void main() {
       final names = dir.listSync().map((e) => e.uri.pathSegments.last).toList()
         ..sort();
       expect(names, [
-        'chitragupta.1.log',
-        'chitragupta.2.log',
-        'chitragupta.log',
+        'karmashala.1.log',
+        'karmashala.2.log',
+        'karmashala.log',
       ]);
       // The live file holds the newest line; the oldest have been rolled off.
       expect(await sink.file.readAsString(), contains('line 39'));
@@ -154,7 +154,7 @@ void main() {
         final diagnostics = Diagnostics(echoToConsole: false);
         Diagnostics.instance = diagnostics;
         AppLogger.initialize(level: Level.ALL);
-        AppLogger.named('bootstrap').info('Starting Chitragupta.');
+        AppLogger.named('bootstrap').info('Starting Karmashala.');
 
         final sink = LogFileSink(directory: dir);
         diagnostics.attachFile(sink);
@@ -162,7 +162,7 @@ void main() {
 
         expect(
           await sink.file.readAsString(),
-          contains('Starting Chitragupta.'),
+          contains('Starting Karmashala.'),
         );
       },
     );

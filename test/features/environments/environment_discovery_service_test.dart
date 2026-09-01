@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/environments/data/environment_discovery_service.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

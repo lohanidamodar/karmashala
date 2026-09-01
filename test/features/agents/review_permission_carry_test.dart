@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/permission_carry.dart';
-import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/permission_carry.dart';
+import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ReviewCarry _review(PermissionMode sessionMode, String agentId) =>

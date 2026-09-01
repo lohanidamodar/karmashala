@@ -1,14 +1,14 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
-import 'package:chitragupta/src/features/fanout/application/fanout_service.dart';
-import 'package:chitragupta/src/features/fanout/data/comparison_dao.dart';
-import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
+import 'package:karmashala/src/features/fanout/application/fanout_service.dart';
+import 'package:karmashala/src/features/fanout/data/comparison_dao.dart';
+import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

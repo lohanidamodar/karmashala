@@ -302,7 +302,7 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
     'name': 'terminal_open',
     'description':
         'Open a new terminal tab and return its tab and pane ids. The tab '
-        'appears in Chitragupta\'s own tab bar, so the user can see and take '
+        'appears in Karmashala\'s own tab bar, so the user can see and take '
         'over whatever runs in it. Pass profileId to choose the shell — an '
         'unknown one is refused rather than quietly substituted, because a WSL '
         'command run in PowerShell is not a smaller version of the same thing.',

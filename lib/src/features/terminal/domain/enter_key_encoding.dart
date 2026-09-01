@@ -29,7 +29,7 @@
 /// `\r\n` the package emits under line-feed mode — because this only intervenes
 /// when a modifier is actually held.
 ///
-/// Like [ChitraguptaMouseHandler], this lives here rather than in the vendored
+/// Like [KarmashalaMouseHandler], this lives here rather than in the vendored
 /// package: `Terminal.inputHandler` is injectable, so correcting the encoding
 /// costs no divergence. Everything that is not a modified `Enter` is delegated
 /// straight back to the package's own handler.
@@ -49,8 +49,8 @@ import 'package:xterm/core.dart';
 const kEscapeEnter = '\x1b\r';
 
 /// The input handler the app installs on every terminal.
-class ChitraguptaInputHandler implements TerminalInputHandler {
-  const ChitraguptaInputHandler([this.fallback = defaultInputHandler]);
+class KarmashalaInputHandler implements TerminalInputHandler {
+  const KarmashalaInputHandler([this.fallback = defaultInputHandler]);
 
   /// Consulted for everything this handler does not claim.
   final TerminalInputHandler fallback;

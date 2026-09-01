@@ -143,7 +143,7 @@ String renderVerificationReport(
     ..writeln('---')
     ..writeln()
     ..writeln(
-      'Recorded by Chitragupta. Files are in `${run.artifactDirectory}`.',
+      'Recorded by Karmashala. Files are in `${run.artifactDirectory}`.',
     );
   return out.toString();
 }

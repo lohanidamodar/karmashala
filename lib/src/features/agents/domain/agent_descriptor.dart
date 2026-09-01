@@ -119,7 +119,7 @@ class AgentForkSupport {
       : const [];
 }
 
-/// How an agent CLI is told, at launch, where Chitragupta's own tools are.
+/// How an agent CLI is told, at launch, where Karmashala's own tools are.
 enum AgentMcpStyle {
   /// A flag naming a config file the agent reads — Claude Code's
   /// `--mcp-config`.
@@ -175,7 +175,7 @@ class AgentMcpSupport {
   /// No file is written, so nothing has to be readable from the agent's
   /// filesystem — which is why this is the shape Codex gets even though it also
   /// has a config file: `~/.codex/config.toml` is the *user's*, holds one
-  /// `[mcp_servers.chitragupta]` block for the whole machine, and so could
+  /// `[mcp_servers.karmashala]` block for the whole machine, and so could
   /// never carry a **per-session** URL. Identity is the point of the URL, so a
   /// convention that cannot be per-session is not a weaker version of this one,
   /// it is a different and wrong thing.
@@ -234,7 +234,7 @@ class AgentMcpSupport {
   /// re-minted — and replaying one does not weaken the launch, it fails it:
   ///
   ///   Error: Invalid MCP configuration:
-  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///   MCP config file not found: `…/karmashala/mcp/session-<uuid>.json`
   ///
   /// So a workspace stored by the old code has to be repaired on the way in, or
   /// installing the fix leaves every pane the user already had just as broken.
@@ -430,7 +430,7 @@ class AgentLaunchSpec {
   /// history, and how. Defaults to [AgentForkStyle.unsupported].
   final AgentForkSupport fork;
 
-  /// Whether this agent can be pointed at Chitragupta's own MCP endpoint on its
+  /// Whether this agent can be pointed at Karmashala's own MCP endpoint on its
   /// command line, and how. Defaults to [AgentMcpStyle.unsupported].
   final AgentMcpSupport mcp;
 
@@ -531,7 +531,7 @@ class AgentStoreSpec {
 /// choice.
 enum AgentStatusStrategy { hooks, stateFile, terminalGrid, none }
 
-/// Everything Chitragupta needs to find, launch and observe one agent CLI.
+/// Everything Karmashala needs to find, launch and observe one agent CLI.
 ///
 /// This is data, not code: adding an agent means adding a descriptor. [id] is
 /// the agent's identity everywhere — discovery, persistence, settings, sessions
@@ -603,7 +603,7 @@ class AgentSessionIdAssignment {
   /// The arguments that pin the agent's session id to [sessionId], or nothing
   /// when the agent cannot be told.
   ///
-  /// [sessionId] must be a UUID; Chitragupta's own session ids already are (see
+  /// [sessionId] must be a UUID; Karmashala's own session ids already are (see
   /// `RandomIdGenerator`), which is what lets one string be both.
   List<String> argumentsFor(String sessionId) =>
       isSupported ? [token, sessionId] : const [];

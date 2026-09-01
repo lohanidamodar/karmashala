@@ -45,7 +45,7 @@ class AgentLaunch {
 
   /// Path to an MCP config file (`--mcp-config`) exposing extra tools to the
   /// agent, or `null` for none. Used by the launcher chat to give the agent
-  /// Chitragupta's own tools.
+  /// Karmashala's own tools.
   final String? mcpConfigPath;
 
   /// Tool names to pre-approve (`--allowedTools`) so the agent can call them

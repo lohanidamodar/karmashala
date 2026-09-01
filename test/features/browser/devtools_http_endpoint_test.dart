@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/browser/data/devtools_http_endpoint.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_failure.dart';
+import 'package:karmashala/src/features/browser/data/devtools_http_endpoint.dart';
+import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Answers like Chrome's `/json/*` endpoint, so the HTTP half of the client is

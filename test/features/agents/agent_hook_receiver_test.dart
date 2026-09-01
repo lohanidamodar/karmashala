@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';

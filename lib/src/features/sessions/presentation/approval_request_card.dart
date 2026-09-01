@@ -264,7 +264,7 @@ class _NothingToAnswer extends ConsumerWidget {
                   'so answer it $terminal.',
             _ =>
               'We cannot tell whether $agentName has a prompt open, so '
-                  'Chitragupta will not send it a key. Answer it $terminal.',
+                  'Karmashala will not send it a key. Answer it $terminal.',
           },
           style: theme.textTheme.labelSmall?.copyWith(
             color: scheme.onSurfaceVariant,
@@ -307,7 +307,7 @@ class _Answers extends ConsumerWidget {
     if (!canAnswer) {
       return Text(
         'This session has no live terminal here, so it cannot be answered from '
-        'Chitragupta.',
+        'Karmashala.',
         style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
       );
     }

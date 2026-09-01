@@ -6,8 +6,8 @@ library;
 
 import 'dart:convert';
 
-import 'package:chitragupta/src/core/database/migrations.dart';
-import 'package:chitragupta/src/features/remote/domain/paired_device.dart';
+import 'package:karmashala/src/core/database/migrations.dart';
+import 'package:karmashala/src/features/remote/domain/paired_device.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 

@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/browser/domain/found_element.dart';
+import 'package:karmashala/src/features/browser/domain/found_element.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

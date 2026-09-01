@@ -230,7 +230,7 @@ class BrowserLauncher {
   /// A fresh, throwaway profile directory under the system temp directory.
   static Future<String> _defaultUserDataDir() async {
     final directory = await Directory.systemTemp.createTemp(
-      'chitragupta-cdp-profile-',
+      'karmashala-cdp-profile-',
     );
     return directory.path;
   }

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/git/data/hunk_patch.dart';
+import 'package:karmashala/src/features/git/data/hunk_patch.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The fixtures are real `git diff` output, produced by real git against real

@@ -1,7 +1,7 @@
 # fly.toml — the PopupBits default relay. Self-hosters can copy this verbatim
 # and change the app name; the relay keeps no state, so one small machine and
 # no volumes is the whole deployment.
-app = "chitragupta-relay"
+app = "karmashala-relay"
 primary_region = "sin"
 
 [build]

@@ -32,7 +32,7 @@ class SessionAttribution {
 
   /// The exact line prepended to a relayed prompt.
   String get line =>
-      '[message from the Chitragupta session "$title" ($sessionId)]';
+      '[message from the Karmashala session "$title" ($sessionId)]';
 
   /// [line] followed by a blank line, then [message].
   String render(String message) => '$line\n\n$message';

@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/app/shell/shell_state.dart';
+import 'package:karmashala/src/app/shell/shell_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

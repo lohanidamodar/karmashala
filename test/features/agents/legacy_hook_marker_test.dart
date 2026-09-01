@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/core/util/json_object_splice.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_installer.dart';
+import 'package:karmashala/src/core/util/json_object_splice.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The strings this app wrote into *other programs'* config files under names
@@ -48,9 +48,9 @@ void main() {
 
   group('removeTopLevelJsonKey', () {
     test('removes ours and leaves every sibling byte-intact', () {
-      const raw = '{"other": {"a": 1}, "chitragupta": {"Stop": []}, "z": 2}';
+      const raw = '{"other": {"a": 1}, "karmashala": {"Stop": []}, "z": 2}';
       expect(
-        removeTopLevelJsonKey(raw, 'chitragupta'),
+        removeTopLevelJsonKey(raw, 'karmashala'),
         '{"other": {"a": 1}, "z": 2}',
       );
     });

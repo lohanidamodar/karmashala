@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_resume.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/sessions/domain/session_resume.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The decision matrix, as a table.

@@ -7,7 +7,7 @@
 ///   flutter test tool/icon/render_icons.dart
 ///   dart run flutter_launcher_icons
 ///
-/// The mark is Chitragupta's ledger read as a terminal: three closed records
+/// The mark is Karmashala's ledger read as a terminal: three closed records
 /// above, and the live line — a prompt and its cursor — in the one accent the
 /// app allows itself.
 library;

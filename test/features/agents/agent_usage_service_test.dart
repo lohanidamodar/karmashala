@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/agents/data/agent_usage_service.dart';
+import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

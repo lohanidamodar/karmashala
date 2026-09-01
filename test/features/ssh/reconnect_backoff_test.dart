@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/ssh/domain/ssh_connection_state.dart';
+import 'package:karmashala/src/features/ssh/domain/ssh_connection_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

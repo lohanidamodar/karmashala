@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/agents/application/agent_status_providers.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

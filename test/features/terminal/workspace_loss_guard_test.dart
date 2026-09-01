@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_workspace_dao.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';

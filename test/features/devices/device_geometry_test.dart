@@ -1,7 +1,7 @@
 import 'dart:ui';
 
-import 'package:chitragupta/src/features/devices/domain/device_geometry.dart';
-import 'package:chitragupta/src/features/devices/domain/device_input.dart';
+import 'package:karmashala/src/features/devices/domain/device_geometry.dart';
+import 'package:karmashala/src/features/devices/domain/device_input.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _screen = DeviceScreenSize(width: 1080, height: 2400);

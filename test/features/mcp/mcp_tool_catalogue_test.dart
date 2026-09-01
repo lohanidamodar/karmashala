@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The annotation table, held against the tools it describes.

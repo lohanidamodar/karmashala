@@ -45,7 +45,7 @@ class LinkBanner extends ConsumerWidget {
         trouble ??
         (connecting
             ? null
-            : 'Check that Chitragupta is running on your desktop.');
+            : 'Check that Karmashala is running on your desktop.');
 
     return Material(
       // The word carries the meaning and the tint only supports it, so the

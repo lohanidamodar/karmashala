@@ -129,14 +129,14 @@ class SessionAlreadyRunning implements Exception {
 
   /// The agent's display name, so the refusal says *who* is refusing. Naming it
   /// is what makes "start a new session instead" read as a property of this CLI
-  /// rather than a limitation of Chitragupta.
+  /// rather than a limitation of Karmashala.
   final String agentName;
 
   @override
   String toString() {
     final where = title == null
         ? 'That conversation is already open in another process.'
-        : '"$title" is already running in Chitragupta.';
+        : '"$title" is already running in Karmashala.';
     return '$where ${resumeBlockedMessage(agentName)}';
   }
 }
@@ -980,7 +980,7 @@ class SessionLauncher {
     );
   }
 
-  /// How this session will reach Chitragupta's own tools, or `null` when it
+  /// How this session will reach Karmashala's own tools, or `null` when it
   /// will not.
   ///
   /// Both surfaces call this and then hand the result to [agentPaneArguments],

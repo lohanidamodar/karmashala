@@ -73,20 +73,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.4"
-  chitragupta_local_ipc:
-    dependency: "direct main"
-    description:
-      path: "packages/local_ipc"
-      relative: true
-    source: path
-    version: "0.2.0"
-  chitragupta_relay:
-    dependency: "direct main"
-    description:
-      path: "packages/relay"
-      relative: true
-    source: path
-    version: "0.1.0"
   cli_config:
     dependency: transitive
     description:
@@ -603,6 +589,20 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.12.0"
+  karmashala_local_ipc:
+    dependency: "direct main"
+    description:
+      path: "packages/local_ipc"
+      relative: true
+    source: path
+    version: "0.2.0"
+  karmashala_relay:
+    dependency: "direct main"
+    description:
+      path: "packages/relay"
+      relative: true
+    source: path
+    version: "0.1.0"
   launch_at_startup:
     dependency: "direct main"
     description:

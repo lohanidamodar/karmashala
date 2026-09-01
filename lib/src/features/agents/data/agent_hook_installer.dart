@@ -10,9 +10,9 @@ import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
 import '../domain/agent_status.dart';
 
-/// Marks the hook entries Chitragupta owns, so uninstall can remove exactly
+/// Marks the hook entries Karmashala owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.
-const String agentHookMarker = 'chitragupta-agent-hook';
+const String agentHookMarker = 'karmashala-agent-hook';
 
 /// Markers this app wrote under names it no longer uses.
 ///
@@ -24,7 +24,9 @@ const String agentHookMarker = 'chitragupta-agent-hook';
 /// These strings are literals on purpose and must survive any future rename —
 /// `legacy_hook_marker_test.dart` fails if a find-and-replace rewrites them,
 /// which is exactly how they would otherwise be lost.
-const List<String> legacyAgentHookMarkers = <String>[];
+const List<String> legacyAgentHookMarkers = <String>[
+  'chitragupta-agent-hook',
+];
 
 /// Top-level config keys this app wrote under names it no longer uses.
 ///
@@ -35,9 +37,9 @@ const List<String> legacyAgentHookMarkers = <String>[];
 /// the file for ever, belonging to nothing.
 ///
 /// Literals on purpose; see [legacyAgentHookMarkers].
-const List<String> legacyAgentHookConfigKeys = <String>[];
+const List<String> legacyAgentHookConfigKeys = <String>['chitragupta'];
 
-/// Installs Chitragupta's callbacks into an agent's own hook configuration.
+/// Installs Karmashala's callbacks into an agent's own hook configuration.
 ///
 /// The config file is edited by **splicing** only its hook value back in
 /// (`replaceTopLevelJsonValue`), so every other key keeps its original bytes —
@@ -71,7 +73,7 @@ class AgentHookInstaller {
   ///
   ///   2026-09-01 11:25:53 I bootstrap: Agent hooks: 1 installed, 1 skipped.
   ///
-  /// and not one `chitragupta-agent-hook` anywhere under `~/.claude`, on either
+  /// and not one `karmashala-agent-hook` anywhere under `~/.claude`, on either
   /// side of the machine, while `notifications.status` reported `0 by hook` all
   /// day. The most likely way it got there is the one this cannot prevent and
   /// must therefore report: an agent CLI rewrites its own `settings.json` from
@@ -235,7 +237,7 @@ class AgentHookInstaller {
             'marker': agentHookMarker,
           },
         );
-    // Silent, and it always succeeds. A status callback is Chitragupta's
+    // Silent, and it always succeeds. A status callback is Karmashala's
     // business, not the agent's: the owner watched `curl: (52) Empty reply
     // from server` print into a live session and the shell exit non-zero
     // because the app happened not to be answering on the WSL interface. A
@@ -309,7 +311,7 @@ class AgentHookInstaller {
   /// touches the real file is a rename, and a failed rename leaves the config
   /// exactly as the user's editor left it.
   Future<void> _writeAtomically(File file, String contents) async {
-    final staged = File('${file.path}.chitragupta-tmp');
+    final staged = File('${file.path}.karmashala-tmp');
     await staged.writeAsString(contents, flush: true);
     try {
       await replace(staged, file);

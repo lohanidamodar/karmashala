@@ -1,7 +1,7 @@
 import '../../environments/domain/environment_path.dart';
 
 /// A coding-agent session discovered on disk from a CLI's own store (Claude
-/// Code or Codex). Ported and adapted from the reference Chitragupta CLI.
+/// Code or Codex). Ported and adapted from the reference Karmashala CLI.
 class DetectedSession {
   const DetectedSession({
     required this.cli,

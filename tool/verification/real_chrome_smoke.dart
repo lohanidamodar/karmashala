@@ -14,13 +14,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/process/process_handle.dart';
-import 'package:chitragupta/src/core/process/windows_command_runner.dart';
-import 'package:chitragupta/src/features/browser/data/browser_launcher.dart';
-import 'package:chitragupta/src/features/browser/data/browser_service.dart';
-import 'package:chitragupta/src/features/browser/data/cdp_page.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_failure.dart';
-import 'package:chitragupta/src/features/browser/domain/element_capture.dart';
+import 'package:karmashala/src/core/process/process_handle.dart';
+import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/features/browser/data/browser_launcher.dart';
+import 'package:karmashala/src/features/browser/data/browser_service.dart';
+import 'package:karmashala/src/features/browser/data/cdp_page.dart';
+import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
+import 'package:karmashala/src/features/browser/domain/element_capture.dart';
 
 import 'png_reader.dart';
 
@@ -58,7 +58,7 @@ Future<void> main() async {
     );
     check(
       'the spawned browser uses a throwaway profile, not the real one',
-      session.endpoint.userDataDir?.contains('chitragupta-cdp-profile') ??
+      session.endpoint.userDataDir?.contains('karmashala-cdp-profile') ??
           false,
       session.endpoint.userDataDir,
     );
@@ -383,9 +383,9 @@ Future<void> _dispatchClick(CdpPage page, double x, double y) async {
 
 Future<void> _checkPickerRemoved(BrowserService service) async {
   final leftovers = await service.evaluate(
-    "document.querySelectorAll('[data-chitragupta-picker]').length",
+    "document.querySelectorAll('[data-karmashala-picker]').length",
   );
-  final global = await service.evaluate('!!window.__chitraguptaPicker');
+  final global = await service.evaluate('!!window.__karmashalaPicker');
   check('the highlight overlay was removed', leftovers == 0, '$leftovers left');
   check('the picker global was removed', global == false);
 }

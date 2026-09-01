@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/git/application/diff_annotations.dart';
-import 'package:chitragupta/src/features/git/domain/diff_line.dart';
+import 'package:karmashala/src/features/git/application/diff_annotations.dart';
+import 'package:karmashala/src/features/git/domain/diff_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

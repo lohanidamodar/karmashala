@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/terminal/data/pty_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
-import 'package:chitragupta/src/features/terminal/domain/launch_context.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

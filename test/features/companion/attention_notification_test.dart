@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/companion/client/companion_gateway.dart';
-import 'package:chitragupta/src/features/companion/notifications/attention_notification.dart';
+import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
+import 'package:karmashala/src/features/companion/notifications/attention_notification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The event → notification mapping, unit-tested instead of the plugin: what

@@ -1,6 +1,6 @@
 /// Same-network discovery for the direct path.
 ///
-/// The design asks for mDNS (`_chitragupta._tcp`). `package:multicast_dns` —
+/// The design asks for mDNS (`_karmashala._tcp`). `package:multicast_dns` —
 /// the Flutter team's — is a **client only**: `MDnsClient` queries and caches,
 /// and there is no responder in it, so the desktop host has nothing to
 /// advertise with. The alternatives that can advertise (`bonsoir`, `nsd`) are
@@ -13,7 +13,7 @@
 /// anything above.
 ///
 /// The beacon carries **no identity**: a per-boot random tag, never a device id
-/// and never a key, so anyone sniffing the LAN learns that a Chitragupta host
+/// and never a key, so anyone sniffing the LAN learns that a Karmashala host
 /// is here and nothing about who is paired with it. The sealed handshake is
 /// what proves a host is the right one; discovery is only a hint about where to
 /// dial.
@@ -26,7 +26,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 /// The service name, kept from the design so a future mDNS responder matches.
-const String kLanServiceName = '_chitragupta._tcp';
+const String kLanServiceName = '_karmashala._tcp';
 
 /// The beacon's multicast group and port. Not 224.0.0.251:5353 — that is mDNS,
 /// and putting non-mDNS datagrams there would confuse every responder on the

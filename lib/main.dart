@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'src/app/chitragupta_app.dart';
+import 'src/app/karmashala_app.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'src/core/database/app_database.dart';
@@ -30,7 +30,7 @@ import 'src/features/system/system_integration_service.dart';
 /// the app, then injects the opened database into the provider graph via a
 /// `ProviderScope` override so features depend on providers, not globals.
 Future<void> main() async {
-  // A companion build (`--dart-define=CHITRAGUPTA_MODE=companion`) boots its
+  // A companion build (`--dart-define=KARMASHALA_MODE=companion`) boots its
   // own shell and nothing below this line — no PTYs, no discovery, no control
   // server, no tray, no window chrome.
   if (CompanionMode.enabled) return runCompanionApp();
@@ -38,7 +38,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // A desktop bootstrap on a phone is a build mistake, and it used to be a
   // *silent* one: `flutter build apk` without
-  // `--dart-define=CHITRAGUPTA_MODE=companion` produced an APK that installed,
+  // `--dart-define=KARMASHALA_MODE=companion` produced an APK that installed,
   // launched, failed to load libmpv — which ships only for Windows here — and
   // then sat on a black screen with nothing in the log but the media_kit
   // complaint. Nothing below this line makes sense on a phone anyway: PTYs, a
@@ -46,7 +46,7 @@ Future<void> main() async {
   if (Platform.isAndroid || Platform.isIOS) {
     throw StateError(
       'This is the desktop build running on a phone. Build the companion with '
-      '--dart-define=CHITRAGUPTA_MODE=companion.',
+      '--dart-define=KARMASHALA_MODE=companion.',
     );
   }
   // Loads libmpv, which decodes the device pane's H.264 live view.
@@ -54,7 +54,7 @@ Future<void> main() async {
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');
 
-  logger.info('Starting Chitragupta.');
+  logger.info('Starting Karmashala.');
   // Opening the file needs `path_provider`, which is hundreds of milliseconds
   // into the launch — so it backfills the buffer rather than starting blank,
   // and the launch does not wait for it.
@@ -118,7 +118,7 @@ Future<void> main() async {
         size: restoredSize,
         minimumSize: const Size(720, 560),
         center: true,
-        title: 'Chitragupta',
+        title: 'Karmashala',
       );
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();
@@ -144,7 +144,7 @@ Future<void> main() async {
   runApp(
     UncontrolledProviderScope(
       container: container,
-      child: const ChitraguptaApp(),
+      child: const KarmashalaApp(),
     ),
   );
 }

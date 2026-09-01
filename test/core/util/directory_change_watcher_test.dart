@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/util/directory_change_watcher.dart';
+import 'package:karmashala/src/core/util/directory_change_watcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

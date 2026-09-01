@@ -1,11 +1,11 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/fanout/application/comparison_providers.dart';
-import 'package:chitragupta/src/features/fanout/domain/comparison.dart';
-import 'package:chitragupta/src/features/verification/data/verification_dao.dart';
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_run.dart';
-import 'package:chitragupta/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
+import 'package:karmashala/src/features/fanout/domain/comparison.dart';
+import 'package:karmashala/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/features/verification/domain/verification_run.dart';
+import 'package:karmashala/src/features/verification/domain/verification_target.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

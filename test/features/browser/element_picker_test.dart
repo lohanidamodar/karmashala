@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/features/browser/data/cdp_connection.dart';
-import 'package:chitragupta/src/features/browser/data/cdp_page.dart';
-import 'package:chitragupta/src/features/browser/data/element_picker.dart';
-import 'package:chitragupta/src/features/browser/data/picker_script.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_failure.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_target.dart';
+import 'package:karmashala/src/features/browser/data/cdp_connection.dart';
+import 'package:karmashala/src/features/browser/data/cdp_page.dart';
+import 'package:karmashala/src/features/browser/data/element_picker.dart';
+import 'package:karmashala/src/features/browser/data/picker_script.dart';
+import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
+import 'package:karmashala/src/features/browser/domain/browser_target.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_cdp_socket.dart';

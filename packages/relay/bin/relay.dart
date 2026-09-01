@@ -11,7 +11,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 
 Future<void> main(List<String> arguments) async {
   final int port;

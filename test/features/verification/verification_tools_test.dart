@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta/src/features/verification/application/verification_service.dart';
-import 'package:chitragupta/src/features/verification/application/verification_tool_schemas.dart';
-import 'package:chitragupta/src/features/verification/application/verification_tools.dart';
-import 'package:chitragupta/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
+import 'package:karmashala/src/features/verification/application/verification_tool_schemas.dart';
+import 'package:karmashala/src/features/verification/application/verification_tools.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'verification_harness.dart';
@@ -294,7 +294,7 @@ void main() {
   });
 
   group('the caller is recorded as the producer of the verdict', () {
-    // The bridge sends `callerSessionId` from CHITRAGUPTA_SESSION_ID; the
+    // The bridge sends `callerSessionId` from KARMASHALA_SESSION_ID; the
     // control server hands it to this tool set. Without it, every verdict is
     // a self-graded exam that does not admit to being one.
     late VerificationTools called;

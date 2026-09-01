@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/devices/data/scrcpy_protocol.dart';
+import 'package:karmashala/src/features/devices/data/scrcpy_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Builds a 12-byte scrcpy frame header followed by [payload].

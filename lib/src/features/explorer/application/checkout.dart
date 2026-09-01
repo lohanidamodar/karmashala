@@ -74,7 +74,7 @@ bool isUnder(EnvironmentPath parent, EnvironmentPath child) {
 int pathDepth(EnvironmentPath path) =>
     canonicalPathKey(path.path).split('/').where((s) => s.isNotEmpty).length;
 
-/// [child] written relative to [parent] — `projects/chitragupta-app` — or null
+/// [child] written relative to [parent] — `projects/karmashala-app` — or null
 /// when they are the same place or [child] is not under [parent].
 ///
 /// Preserves the original spelling's separators as forward slashes, which is

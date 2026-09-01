@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens for Chitragupta's desktop chrome.
+/// Design tokens for Karmashala's desktop chrome.
 ///
 /// **Neutral by decision** (see `docs/superpowers/specs/`
 /// `2026-08-30-desktop-ui-direction.md`). The ink / brass / parchment identity

@@ -333,7 +333,7 @@ class BrowserPaneController extends Notifier<BrowserPaneState> {
     if (png == null) return null;
     try {
       final directory = Directory(
-        '${Directory.systemTemp.path}${Platform.pathSeparator}chitragupta'
+        '${Directory.systemTemp.path}${Platform.pathSeparator}karmashala'
         '${Platform.pathSeparator}captures',
       );
       if (!directory.existsSync()) directory.createSync(recursive: true);

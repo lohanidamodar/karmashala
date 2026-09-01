@@ -15,10 +15,10 @@
 
 import 'dart:io';
 
-import 'package:chitragupta/src/features/devices/application/device_providers.dart';
-import 'package:chitragupta/src/features/devices/domain/android_device.dart';
-import 'package:chitragupta/src/features/devices/presentation/device_pane.dart';
-import 'package:chitragupta/src/features/devices/presentation/device_stream_status.dart';
+import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala/src/features/devices/domain/android_device.dart';
+import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
+import 'package:karmashala/src/features/devices/presentation/device_stream_status.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

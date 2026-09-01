@@ -50,7 +50,7 @@ class ReviewBrief {
 
   final String subjectTitle;
 
-  /// **Chitragupta's** id for the session under review, not the CLI's.
+  /// **Karmashala's** id for the session under review, not the CLI's.
   ///
   /// This is the id the verdict is filed under: `verification_start`'s
   /// `sessionId` is compared against `sessions.id`, and a fan-out candidate

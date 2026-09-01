@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/core/process/command_runner.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/git/data/git_service.dart';
-import 'package:chitragupta/src/features/git/domain/diff_stat.dart';
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/git/data/git_service.dart';
+import 'package:karmashala/src/features/git/domain/diff_stat.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -47,7 +47,7 @@ bare
         repo(r'C:\src\app'),
         'fix-bug',
       );
-      expect(wt.path, r'C:\src\.chitragupta-worktrees\app-fix-bug');
+      expect(wt.path, r'C:\src\.karmashala-worktrees\app-fix-bug');
       expect(wt.environmentId, 'windows');
     });
 
@@ -57,7 +57,7 @@ bare
         repo('/home/me/app', 'wsl:Ubuntu'),
         'fix-bug',
       );
-      expect(wt.path, '/home/me/.chitragupta-worktrees/app-fix-bug');
+      expect(wt.path, '/home/me/.karmashala-worktrees/app-fix-bug');
     });
   });
 

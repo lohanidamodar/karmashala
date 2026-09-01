@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/app/companion/multicast_lock_channel.dart';
+import 'package:karmashala/src/app/companion/multicast_lock_channel.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

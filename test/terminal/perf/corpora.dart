@@ -56,7 +56,7 @@ String _plainLog(int columns, int rows) {
   final buffer = StringBuffer();
   for (var row = 0; row < rows; row++) {
     final line =
-        '[${(row * 137) % 100000}] compiling package:chitragupta/src/features/'
+        '[${(row * 137) % 100000}] compiling package:karmashala/src/features/'
         'terminal/data/terminal_instance.dart unit $row';
     buffer.write(_fit(line, columns));
     if (row < rows - 1) buffer.write('\r\n');
@@ -103,7 +103,7 @@ String _tuiFrame(int columns, int rows) {
   // Reverse-video title bar.
   buffer
     ..write('\x1b[7m')
-    ..write(_fit('  chitragupta \u2014 htop-like status', columns))
+    ..write(_fit('  karmashala \u2014 htop-like status', columns))
     ..write('\x1b[0m\r\n');
   // Boxed body with coloured gauges.
   for (var row = 1; row < rows - 1; row++) {

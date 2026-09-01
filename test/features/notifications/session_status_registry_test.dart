@@ -1,16 +1,16 @@
 import 'dart:math' as math;
 
-import 'package:chitragupta/src/core/logging/app_logger.dart';
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/features/agents/data/agent_hook_receiver.dart';
-import 'package:chitragupta/src/features/agents/data/agent_state_file_status_source.dart';
-import 'package:chitragupta/src/features/agents/data/agent_status_service.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
-import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/data/agent_state_file_status_source.dart';
+import 'package:karmashala/src/features/agents/data/agent_status_service.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 

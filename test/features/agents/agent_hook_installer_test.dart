@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/data/agent_hook_installer.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_hook_endpoint.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
+import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -518,7 +518,7 @@ Future<void> _refuseToReplace(File staged, File destination) =>
 /// filesystem that swallows the move over a `\\wsl.localhost` share, a rename
 /// onto a file another process holds open. The owner's machine showed the
 /// symptom — `Agent hooks: 1 installed, 1 skipped` in the log, and not one
-/// `chitragupta-agent-hook` anywhere under `~/.claude` — and a reported install
+/// `karmashala-agent-hook` anywhere under `~/.claude` — and a reported install
 /// that wrote nothing is worse than a reported skip, because the skip is the
 /// only one of the two that ever gets investigated.
 Future<void> _replaceButChangeNothing(File staged, File destination) async {}

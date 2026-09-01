@@ -16,7 +16,7 @@ import '../protocol.dart';
 /// Shared HKDF salt. Fixed and public — it separates this protocol's key
 /// material from any other use of the same secret.
 final Uint8List kKeyScheduleSalt = Uint8List.fromList(
-  'chitragupta/remote/v1'.codeUnits,
+  'karmashala/remote/v1'.codeUnits,
 );
 
 /// Shortest pairing secret the schedule accepts. The QR path uses 32 bytes.

@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/devices/data/uiautomator_parsing.dart';
-import 'package:chitragupta/src/features/devices/domain/device_input.dart';
-import 'package:chitragupta/src/features/devices/domain/ui_node.dart';
+import 'package:karmashala/src/features/devices/data/uiautomator_parsing.dart';
+import 'package:karmashala/src/features/devices/domain/device_input.dart';
+import 'package:karmashala/src/features/devices/domain/ui_node.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Real `uiautomator dump` output, captured from the devices this project is

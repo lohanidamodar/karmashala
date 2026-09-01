@@ -162,7 +162,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
         const _PairingRelayField(),
         const SizedBox(height: Insets.lg),
         Text(
-          'Chitragupta companion — a remote view of the sessions your '
+          'Karmashala companion — a remote view of the sessions your '
           'desktop holds. The desktop is the source of truth; revoking this '
           'phone there cuts it off immediately.',
           style: density.muted(theme),

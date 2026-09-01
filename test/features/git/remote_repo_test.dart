@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/git/domain/remote_repo.dart';
+import 'package:karmashala/src/features/git/domain/remote_repo.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Turning an `origin` URL into a page a browser can open.
@@ -9,11 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('parses the forms git accepts', () {
     test('scp-like ssh with a user', () {
-      final repo = RemoteRepo.parse('git@github.com:popupbits/chitragupta.git');
+      final repo = RemoteRepo.parse('git@github.com:popupbits/karmashala.git');
       expect(repo?.host, 'github.com');
-      expect(repo?.slug, 'popupbits/chitragupta');
+      expect(repo?.slug, 'popupbits/karmashala');
       expect(repo?.owner, 'popupbits');
-      expect(repo?.name, 'chitragupta');
+      expect(repo?.name, 'karmashala');
     });
 
     test('scp-like without a user, when the host looks like one', () {

@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
-import 'package:chitragupta/src/features/cli_detection/application/cli_detection_service.dart';
-import 'package:chitragupta/src/features/cli_detection/data/conversation_store_index.dart';
-import 'package:chitragupta/src/features/cli_detection/domain/conversation_presence.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
+import 'package:karmashala/src/features/cli_detection/data/conversation_store_index.dart';
+import 'package:karmashala/src/features/cli_detection/domain/conversation_presence.dart';
+import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart';

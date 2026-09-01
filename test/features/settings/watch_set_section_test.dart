@@ -1,10 +1,10 @@
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/logging/diagnostics.dart';
-import 'package:chitragupta/src/core/logging/diagnostics_providers.dart';
-import 'package:chitragupta/src/features/notifications/application/session_status_registry.dart';
-import 'package:chitragupta/src/features/settings/presentation/diagnostics_page.dart';
-import 'package:chitragupta/src/features/settings/presentation/watch_set_section.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/logging/diagnostics.dart';
+import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
+import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/settings/presentation/diagnostics_page.dart';
+import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

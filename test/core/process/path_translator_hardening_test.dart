@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/core/process/path_translator.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/core/process/path_translator.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

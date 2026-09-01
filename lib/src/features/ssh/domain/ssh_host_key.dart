@@ -1,4 +1,4 @@
-/// A host key Chitragupta has been told to trust for one `host:port`.
+/// A host key Karmashala has been told to trust for one `host:port`.
 ///
 /// The stored value is the OpenSSH-style `SHA256:<base64>` fingerprint, not the
 /// key itself: it is all that is needed to detect a substituted key and it is

@@ -1,6 +1,6 @@
-import 'package:chitragupta/src/features/terminal/domain/terminal_link_resolution.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_links.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_link_resolution.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_links.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Turning a path printed in a pane into a path on this machine.

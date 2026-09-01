@@ -9,35 +9,35 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:chitragupta/src/app/chitragupta_app.dart';
-import 'package:chitragupta/src/app/shell/quick_open/quick_open.dart';
-import 'package:chitragupta/src/app/shell/side_panel_state.dart';
-import 'package:chitragupta/src/app/shell/status_bar.dart';
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/process/command_runner_providers.dart';
-import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
-import 'package:chitragupta/src/features/notifications/application/attention_inbox.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/inbox_item.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
-import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
-import 'package:chitragupta/src/features/notifications/domain/watched_session.dart';
-import 'package:chitragupta/src/features/environments/application/local_environment_bootstrap.dart';
-import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
-import 'package:chitragupta/src/features/projects/application/projects_controller.dart';
-import 'package:chitragupta/src/features/projects/data/project_dao.dart';
-import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
-import 'package:chitragupta/src/features/sessions/application/session_status_providers.dart';
-import 'package:chitragupta/src/features/git/application/changes_providers.dart';
-import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
-import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/application/system_terminal_providers.dart';
-import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/shell/status_bar.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
+import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -135,13 +135,13 @@ void main() {
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db)
       ..insert(
-        project(id: 'p1', name: 'chitragupta', path: r'C:\src\chitragupta'),
+        project(id: 'p1', name: 'karmashala', path: r'C:\src\karmashala'),
       )
       ..insert(
         project(id: 'p2', name: 'meronepali', path: r'C:\src\meronepali'),
       );
     RepositoryDao(db)
-      ..insert(repository(id: 'r1', projectId: 'p1', name: 'chitragupta-app'))
+      ..insert(repository(id: 'r1', projectId: 'p1', name: 'karmashala-app'))
       ..insert(repository(id: 'r2', projectId: 'p1', name: 'mcp_bridge'))
       ..insert(repository(id: 'r3', projectId: 'p2', name: 'app'));
     AgentInstallationDao(db).insert(agentInstallation());
@@ -219,7 +219,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: RepaintBoundary(key: key, child: const ChitraguptaApp()),
+        child: RepaintBoundary(key: key, child: const KarmashalaApp()),
       ),
     );
     await settle(tester);
@@ -236,13 +236,13 @@ void main() {
     for (final tab in container.read(terminalSessionsControllerProvider).tabs) {
       final instance = terminals.instanceFor(tab.focusedPaneId);
       instance?.terminal.write(
-        'PS C:\\src\\chitragupta\\chitragupta-app> flutter test\r\n'
+        'PS C:\\src\\karmashala\\karmashala-app> flutter test\r\n'
         '\x1b[32m00:29 +1546 ~2: All tests passed!\x1b[0m\r\n'
-        'PS C:\\src\\chitragupta\\chitragupta-app> git status --short\r\n'
+        'PS C:\\src\\karmashala\\karmashala-app> git status --short\r\n'
         '\x1b[33m M\x1b[0m lib/src/app/shell/app_shell.dart\r\n'
         '\x1b[33m M\x1b[0m lib/src/app/theme/app_theme.dart\r\n'
         '\x1b[32m??\x1b[0m lib/src/app/shell/side_panel.dart\r\n'
-        'PS C:\\src\\chitragupta\\chitragupta-app> ',
+        'PS C:\\src\\karmashala\\karmashala-app> ',
       );
     }
     final controller = container.read(sidePanelProvider.notifier);

@@ -3,14 +3,14 @@ import '../../agents/domain/agent_registry.dart';
 import '../../settings/domain/permission_mode.dart';
 
 /// The environment variable an agent running in one of our panes is told its
-/// Chitragupta session id through.
+/// Karmashala session id through.
 ///
 /// It is how a session an agent creates finds its parent: the MCP bridge is
 /// spawned as a child of the agent CLI, inherits this, and forwards it with
 /// every tool call. That makes the parent chain a property of the process tree
 /// we built rather than of an argument the model writes, which is what the
 /// recursion cap needs to be worth anything.
-const String kSessionIdEnvironmentVariable = 'CHITRAGUPTA_SESSION_ID';
+const String kSessionIdEnvironmentVariable = 'KARMASHALA_SESSION_ID';
 
 /// A pane that runs an agent CLI interactively rather than a shell.
 ///
@@ -54,7 +54,7 @@ class AgentPaneLaunch {
   /// pane replay yesterday's, and the agent refused to start at all:
   ///
   ///   Error: Invalid MCP configuration:
-  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///   MCP config file not found: `…/karmashala/mcp/session-<uuid>.json`
   ///
   /// See `agentPaneMcpArgumentsProvider`, which is what a restart asks.
   final List<String> mcpArguments;

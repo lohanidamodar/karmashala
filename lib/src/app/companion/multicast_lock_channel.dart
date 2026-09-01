@@ -16,7 +16,7 @@ class ChannelMulticastLock implements MulticastLockHolder {
 
   /// The channel `MainActivity.kt` answers. Methods: `acquire`, `release`.
   static const MethodChannel channel = MethodChannel(
-    'chitragupta/multicast_lock',
+    'karmashala/multicast_lock',
   );
 
   final void Function(String message)? onLog;

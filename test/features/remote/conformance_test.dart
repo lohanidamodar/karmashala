@@ -8,13 +8,13 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/key_schedule.dart';
-import 'package:chitragupta/src/features/remote/transport/lan_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/remote_transport.dart';
-import 'package:chitragupta/src/features/remote/transport/sealed_channel.dart';
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/key_schedule.dart';
+import 'package:karmashala/src/features/remote/transport/lan_transport.dart';
+import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala/src/features/remote/transport/remote_transport.dart';
+import 'package:karmashala/src/features/remote/transport/sealed_channel.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 

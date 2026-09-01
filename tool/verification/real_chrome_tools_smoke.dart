@@ -21,12 +21,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/core/process/process_handle.dart';
-import 'package:chitragupta/src/core/process/windows_command_runner.dart';
-import 'package:chitragupta/src/features/browser/application/browser_tool_schemas.dart';
-import 'package:chitragupta/src/features/browser/application/browser_tools.dart';
-import 'package:chitragupta/src/features/browser/data/browser_service.dart';
-import 'package:chitragupta/src/features/browser/data/cdp_page.dart';
+import 'package:karmashala/src/core/process/process_handle.dart';
+import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/features/browser/application/browser_tool_schemas.dart';
+import 'package:karmashala/src/features/browser/application/browser_tools.dart';
+import 'package:karmashala/src/features/browser/data/browser_service.dart';
+import 'package:karmashala/src/features/browser/data/cdp_page.dart';
 
 import 'png_reader.dart';
 

@@ -26,7 +26,7 @@ List<String> agentMcpArguments(
     : descriptor?.launch.mcp.argumentsFor(url: url, configPath: configPath) ??
           const [];
 
-/// How a session will reach Chitragupta's own tools, or `null` when it will not.
+/// How a session will reach Karmashala's own tools, or `null` when it will not.
 ///
 /// `null` is the ordinary answer and never an error. The control server is not
 /// up; the agent has no verified convention; the session runs over SSH, or in

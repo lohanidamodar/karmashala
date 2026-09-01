@@ -67,30 +67,30 @@ jobs:
         run: |
           # The launcher agent's MCP bridge is a standalone dependency-free
           # package; compile it into the Release folder so the installer and the
-          # portable zip ship it next to chitragupta.exe (the app looks for it
+          # portable zip ship it next to karmashala.exe (the app looks for it
           # there). Without this, the in-app agent chat has no tools.
           Push-Location mcp_bridge
           dart pub get
           Pop-Location
-          dart compile exe mcp_bridge/bin/chitragupta_mcp.dart -o build/windows/x64/runner/Release/chitragupta_mcp.exe
+          dart compile exe mcp_bridge/bin/karmashala_mcp.dart -o build/windows/x64/runner/Release/karmashala_mcp.exe
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
           choco install innosetup --no-progress -y
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          & $iscc "/DMyAppVersion=$env:VERSION" "windows\installer\chitragupta.iss"
+          & $iscc "/DMyAppVersion=$env:VERSION" "windows\installer\karmashala.iss"
       - name: Archive portable Windows build
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path build\artifacts -Force | Out-Null
-          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "build/artifacts/Chitragupta-windows-portable.zip"
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "build/artifacts/Karmashala-windows-portable.zip"
       - name: Upload Windows artifacts to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            windows/installer/output/Chitragupta-Setup-${{ env.VERSION }}.exe
-            build/artifacts/Chitragupta-windows-portable.zip
+            windows/installer/output/Karmashala-Setup-${{ env.VERSION }}.exe
+            build/artifacts/Karmashala-windows-portable.zip
 
   build-linux:
     needs: prepare
@@ -112,9 +112,9 @@ jobs:
       - name: Archive Linux build
         run: |
           mkdir -p build/artifacts
-          tar -czf build/artifacts/Chitragupta-linux.tar.gz -C build/linux/x64/release/bundle .
+          tar -czf build/artifacts/Karmashala-linux.tar.gz -C build/linux/x64/release/bundle .
       - name: Upload Linux artifact to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          files: build/artifacts/Chitragupta-linux.tar.gz
+          files: build/artifacts/Karmashala-linux.tar.gz

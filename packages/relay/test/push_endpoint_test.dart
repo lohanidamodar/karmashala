@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:test/test.dart';
 
 const _tag = 'abcdefabcdefabcdefabcdefabcdefab';
@@ -252,11 +252,11 @@ void main() {
         const {kServiceAccountEnvVar: '/etc/fcm.json'},
         readFile: (path) {
           expect(path, '/etc/fcm.json');
-          return '{"project_id": "chitragupta-test"}';
+          return '{"project_id": "karmashala-test"}';
         },
       );
 
-      expect(sender!.projectId, 'chitragupta-test');
+      expect(sender!.projectId, 'karmashala-test');
     });
 
     test('refuses a service account that is not one', () {

@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/app/companion/companion_mode.dart';
+import 'package:karmashala/src/app/companion/companion_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The build-time mode switch. The rule itself is pinned here; that `enabled`
@@ -14,7 +14,7 @@ void main() {
     expect(CompanionMode.isCompanion('companion '), isFalse);
   });
 
-  test('an undefined CHITRAGUPTA_MODE is the desktop', () {
+  test('an undefined KARMASHALA_MODE is the desktop', () {
     // This suite is compiled without the define, so this asserts the desktop
     // path is the default — the branch the whole existing suite exercises.
     expect(CompanionMode.enabled, isFalse);

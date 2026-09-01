@@ -55,7 +55,7 @@ class CompanionPairing {
   /// pre-multi-host build read and wrote. [CompanionConnections] keeps it as a
   /// mirror of the active record, so old readers (and a downgraded app) keep
   /// seeing the pairing that is actually in use.
-  static const String storeKey = 'chitragupta.remote.pairing';
+  static const String storeKey = 'karmashala.remote.pairing';
 
   final DeviceId hostId;
   final DeviceId deviceId;
@@ -219,7 +219,7 @@ class CompanionConnections {
     : records = records ?? [];
 
   /// Where the full set lives in the [CompanionStore].
-  static const String storeKey = 'chitragupta.remote.pairings';
+  static const String storeKey = 'karmashala.remote.pairings';
 
   /// Saved pairings in the order they were added, one per host id.
   final List<CompanionPairing> records;

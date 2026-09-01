@@ -1,10 +1,10 @@
-import 'package:chitragupta/src/features/terminal/domain/terminal_links.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_links.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
 /// Link detection in terminal output.
 ///
-/// The owner's report was "links are not clickable in chitragupta's terminal",
+/// The owner's report was "links are not clickable in karmashala's terminal",
 /// then "any link — file link, relative file link, http link". Detection runs
 /// over one logical line at a time, in cell columns, so the underline lands on
 /// the link and not near it — and it never touches the filesystem, so a line

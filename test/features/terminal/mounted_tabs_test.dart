@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/terminal/domain/mounted_tabs.dart';
+import 'package:karmashala/src/features/terminal/domain/mounted_tabs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The eviction policy behind the bounded mounted set, on its own — no widget

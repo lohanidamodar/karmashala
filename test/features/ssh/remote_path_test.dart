@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/ssh/domain/remote_directory_entry.dart';
+import 'package:karmashala/src/features/ssh/domain/remote_directory_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
+import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 

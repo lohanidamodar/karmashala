@@ -9,7 +9,7 @@ import '../domain/detected_session.dart';
 
 /// Reads Codex sessions from a `.codex` store directory.
 ///
-/// Ported from the reference Chitragupta CLI. Codex has no project list: each
+/// Ported from the reference Karmashala CLI. Codex has no project list: each
 /// `<codexHome>/sessions/[YYYY/MM/DD/]rollout-*.jsonl` records its `cwd` in a
 /// leading `session_meta` line, and the session's editable label is the
 /// `thread_name` in `<codexHome>/session_index.jsonl`.

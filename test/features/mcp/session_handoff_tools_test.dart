@@ -1,4 +1,4 @@
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Map<String, dynamic> _schema(String name) =>

@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
-import 'package:chitragupta/src/features/terminal/presentation/pane_layout_view.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/presentation/pane_layout_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';

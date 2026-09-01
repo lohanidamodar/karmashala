@@ -1,5 +1,5 @@
-import 'package:chitragupta/src/features/browser/data/chrome_discovery.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_failure.dart';
+import 'package:karmashala/src/features/browser/data/chrome_discovery.dart';
+import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _windowsEnv = {
@@ -131,12 +131,12 @@ void main() {
     test('always opens the debugging port on a throwaway profile', () {
       final args = chromeLaunchArguments(
         port: 9333,
-        userDataDir: r'C:\Temp\chitragupta-cdp-profile-1',
+        userDataDir: r'C:\Temp\karmashala-cdp-profile-1',
       );
       expect(args, contains('--remote-debugging-port=9333'));
       expect(
         args,
-        contains(r'--user-data-dir=C:\Temp\chitragupta-cdp-profile-1'),
+        contains(r'--user-data-dir=C:\Temp\karmashala-cdp-profile-1'),
       );
       expect(args, contains('--no-first-run'));
       expect(args, contains('--no-default-browser-check'));

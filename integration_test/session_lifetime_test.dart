@@ -1,14 +1,14 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/terminal/application/scrollback_autosave.dart';
-import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:chitragupta/src/features/terminal/data/scrollback_codec.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
-import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';

@@ -192,7 +192,7 @@ class ShellChord {
 /// ## `Ctrl+B` belongs to tmux
 ///
 /// VS Code keeps `Ctrl+B` for its sidebar. VS Code is editor-primary and its
-/// terminal is a panel; Chitragupta is terminal-primary and its terminal is the
+/// terminal is a panel; Karmashala is terminal-primary and its terminal is the
 /// work. Taking the tmux prefix from a user who lives in tmux breaks every
 /// window, pane and copy-mode command they have — to save one keystroke on a
 /// toggle that is also a title-bar button, a `View` menu item and a quick-open
@@ -215,7 +215,7 @@ class ShellChord {
 /// ## What the skip-list costs, stated plainly
 ///
 /// Two of these are real control characters a shell can use, and claiming them
-/// means they can no longer be typed into a Chitragupta pane:
+/// means they can no longer be typed into a Karmashala pane:
 ///
 /// * `Ctrl+\` — `SIGQUIT`. Use `kill -QUIT` (VS Code skips this one too).
 /// * `Ctrl+P` — readline `previous-history`. `Up` does the same thing.

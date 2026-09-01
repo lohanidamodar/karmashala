@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:chitragupta/src/features/browser/data/browser_launcher.dart';
-import 'package:chitragupta/src/features/browser/data/browser_service.dart';
-import 'package:chitragupta/src/features/browser/data/devtools_http_endpoint.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_failure.dart';
-import 'package:chitragupta/src/features/browser/domain/browser_target.dart';
+import 'package:karmashala/src/features/browser/data/browser_launcher.dart';
+import 'package:karmashala/src/features/browser/data/browser_service.dart';
+import 'package:karmashala/src/features/browser/data/devtools_http_endpoint.dart';
+import 'package:karmashala/src/features/browser/domain/browser_failure.dart';
+import 'package:karmashala/src/features/browser/domain/browser_target.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

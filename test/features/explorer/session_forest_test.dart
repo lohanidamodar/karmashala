@@ -1,7 +1,7 @@
-import 'package:chitragupta/src/features/explorer/application/session_forest.dart';
-import 'package:chitragupta/src/features/sessions/domain/session.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
-import 'package:chitragupta/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/features/explorer/application/session_forest.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';

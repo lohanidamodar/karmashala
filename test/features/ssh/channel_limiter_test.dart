@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:chitragupta/src/features/ssh/data/channel_limiter.dart';
+import 'package:karmashala/src/features/ssh/data/channel_limiter.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

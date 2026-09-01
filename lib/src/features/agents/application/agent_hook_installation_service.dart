@@ -28,7 +28,7 @@ class AgentHookInstallation {
   final String? skippedBecause;
 }
 
-/// Writes Chitragupta's status callbacks into the agents' own hook configs at
+/// Writes Karmashala's status callbacks into the agents' own hook configs at
 /// startup, and reports exactly what it did.
 ///
 /// [AgentHookInstaller] has existed since Loop 28 with no call site, which made
@@ -85,7 +85,7 @@ class AgentHookInstallationService {
   /// The command names an **ephemeral** port and carries a bearer token, so an
   /// entry left behind outlives the app that could answer it: every tool call
   /// the user makes after quitting runs a `curl` at a port nothing owns, and
-  /// the entry survives uninstalling Chitragupta entirely. Bounded and
+  /// the entry survives uninstalling Karmashala entirely. Bounded and
   /// loopback-only, so this is hygiene rather than a hole — but it is hygiene
   /// in somebody else's config file, which is the kind worth keeping.
   ///

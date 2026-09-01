@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:chitragupta/src/app/shell/quick_open/repo_file_index.dart';
-import 'package:chitragupta/src/core/util/directory_change_watcher.dart';
-import 'package:chitragupta/src/features/checkpoints/application/checkpoint_providers.dart';
-import 'package:chitragupta/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
+import 'package:karmashala/src/core/util/directory_change_watcher.dart';
+import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

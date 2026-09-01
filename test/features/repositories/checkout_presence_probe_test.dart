@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
-import 'package:chitragupta/src/features/repositories/data/checkout_presence_probe.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/repositories/data/checkout_presence_probe.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -55,7 +55,7 @@ void main() {
       await ask(
         const EnvironmentPath(
           environmentId: 'wsl:Ubuntu',
-          path: '/mnt/c/chitragupta-no-such-folder-1f4a',
+          path: '/mnt/c/karmashala-no-such-folder-1f4a',
         ),
         environment: wsl,
       ),

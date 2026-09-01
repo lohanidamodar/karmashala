@@ -1,9 +1,9 @@
-import 'package:chitragupta/src/features/agents/domain/agent_status.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_session_key.dart';
-import 'package:chitragupta/src/features/notifications/domain/agent_status_transition.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_policy.dart';
-import 'package:chitragupta/src/features/notifications/domain/notification_settings.dart';
-import 'package:chitragupta/src/features/notifications/domain/session_attention.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_status_transition.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_settings.dart';
+import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _policy = AgentNotificationPolicy();

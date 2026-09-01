@@ -1,9 +1,9 @@
-// Chitragupta MCP bridge.
+// Karmashala MCP bridge.
 //
 // A tiny, standalone Model Context Protocol server (JSON-RPC 2.0 over stdio)
 // that a coding-agent CLI (e.g. Claude Code) spawns. It carries no database,
 // Flutter, or plugin dependencies: every tool call is forwarded to the running
-// Chitragupta app's launcher control server, whose address and bearer token it
+// Karmashala app's launcher control server, whose address and bearer token it
 // reads from `mcp_bridge.json`.
 //
 // Transport: an owner-only unix domain socket when the handshake names one
@@ -12,11 +12,11 @@
 // socket.
 //
 // Usage (configured via the agent's --mcp-config): the command is this program
-// (compiled, or `dart run bin/chitragupta_mcp.dart`). It speaks MCP on stdio.
+// (compiled, or `dart run bin/karmashala_mcp.dart`). It speaks MCP on stdio.
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta_local_ipc/chitragupta_local_ipc.dart';
+import 'package:karmashala_local_ipc/karmashala_local_ipc.dart';
 
 Future<void> main(List<String> args) async {
   final bridge = _Bridge();
@@ -47,7 +47,7 @@ class _Bridge {
         _reply(id, {
           'protocolVersion': '2024-11-05',
           'capabilities': {'tools': <String, dynamic>{}},
-          'serverInfo': {'name': 'chitragupta', 'version': '1.0.0'},
+          'serverInfo': {'name': 'karmashala', 'version': '1.0.0'},
         });
       case 'notifications/initialized':
         break; // no response
@@ -162,9 +162,9 @@ class _Bridge {
 
   /// The request body for one tool call.
   ///
-  /// `callerSessionId` says which Chitragupta session this bridge is running
-  /// inside, when it is running inside one. Chitragupta stamps
-  /// CHITRAGUPTA_SESSION_ID on the agent process when it opens an agent pane;
+  /// `callerSessionId` says which Karmashala session this bridge is running
+  /// inside, when it is running inside one. Karmashala stamps
+  /// KARMASHALA_SESSION_ID on the agent process when it opens an agent pane;
   /// this bridge is that agent's own child, so it inherits it. Forwarding it is
   /// what lets the app cap how deep agents may spawn agents — read off the real
   /// process tree rather than declared by the caller, which could simply omit
@@ -178,7 +178,7 @@ class _Bridge {
     Map<String, dynamic> arguments,
     _BridgeConfig config,
   ) {
-    final callerSessionId = Platform.environment['CHITRAGUPTA_SESSION_ID'];
+    final callerSessionId = Platform.environment['KARMASHALA_SESSION_ID'];
     return jsonEncode({
       'tool': tool,
       'arguments': arguments,
@@ -196,7 +196,7 @@ class _Bridge {
     final file = File(_handshakePath());
     if (!await file.exists()) {
       throw StateError(
-        'Chitragupta is not running (mcp_bridge.json not found). '
+        'Karmashala is not running (mcp_bridge.json not found). '
         'Open the app, then retry.',
       );
     }
@@ -208,7 +208,7 @@ class _Bridge {
       // so it published neither a transport nor a credential. Say that, rather
       // than failing on a cast.
       throw StateError(
-        'Chitragupta is running but its agent tools are switched off: the '
+        'Karmashala is running but its agent tools are switched off: the '
         'owner-only channel could not be secured. Open Settings → MCP Bridge '
         'for the reason.',
       );
@@ -255,24 +255,24 @@ class _BridgeConfig {
 /// overridable so a bridge can be pointed at a second install (or a test app)
 /// without guessing.
 String _handshakePath() {
-  final override = Platform.environment['CHITRAGUPTA_BRIDGE_HANDSHAKE'];
+  final override = Platform.environment['KARMASHALA_BRIDGE_HANDSHAKE'];
   if (override != null && override.isNotEmpty) return override;
   if (Platform.isWindows) {
     final appData = Platform.environment['APPDATA'];
     if (appData == null) {
       throw StateError('APPDATA is not set; cannot locate mcp_bridge.json.');
     }
-    return '$appData\\com.popupbits\\chitragupta\\mcp_bridge.json';
+    return '$appData\\com.popupbits\\karmashala\\mcp_bridge.json';
   }
   final home = Platform.environment['HOME'];
   if (home == null) {
     throw StateError('HOME is not set; cannot locate mcp_bridge.json.');
   }
   if (Platform.isMacOS) {
-    return '$home/Library/Application Support/com.popupbits.chitragupta/'
+    return '$home/Library/Application Support/com.popupbits.karmashala/'
         'mcp_bridge.json';
   }
   final dataHome =
       Platform.environment['XDG_DATA_HOME'] ?? '$home/.local/share';
-  return '$dataHome/com.popupbits.chitragupta/mcp_bridge.json';
+  return '$dataHome/com.popupbits.karmashala/mcp_bridge.json';
 }

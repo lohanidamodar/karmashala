@@ -408,7 +408,7 @@ class EscapeParser {
   ///
   /// https://terminalguide.namepad.de/seq/csi_sm/
   void _csiHandleSgr() {
-    // DIVERGENCE (Chitragupta, Loop 84): a *prefixed* `m` is not SGR.
+    // DIVERGENCE (Karmashala, Loop 84): a *prefixed* `m` is not SGR.
     // `CSI > 4 ; 2 m` is xterm's modifyOtherKeys and `CSI > 1 m` is
     // modifyKeyboard; upstream dispatches every `m` here regardless of prefix,
     // so a program merely asking whether modifier reporting is available had

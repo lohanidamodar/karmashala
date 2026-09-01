@@ -9,7 +9,7 @@ import '../domain/detected_session.dart';
 
 /// Reads Claude Code sessions from a `.claude` store directory.
 ///
-/// Ported from the reference Chitragupta CLI and adapted to bind sessions to an
+/// Ported from the reference Karmashala CLI and adapted to bind sessions to an
 /// execution environment. Each `<claudeHome>/projects/<dir>/<id>.jsonl` is one
 /// session; the real `cwd` is taken from inside the file (the folder name is a
 /// lossy dash-encoding). Title precedence: `custom-title` > `ai-title` > first

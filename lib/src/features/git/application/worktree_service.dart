@@ -49,7 +49,7 @@ class WorktreeService {
 
   /// Creates a worktree named [worktreeName] for [repo] on a new [branch].
   ///
-  /// The location is computed as a sibling `.chitragupta-worktrees/…` folder in
+  /// The location is computed as a sibling `.karmashala-worktrees/…` folder in
   /// the repository's environment. Returns the created worktree.
   Future<GitWorktree> createForSession({
     required EnvironmentPath repo,

@@ -4,11 +4,11 @@
 /// and is overridable without touching the dialog.
 library;
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/features/remote/application/remote_access_controller.dart';
-import 'package:chitragupta/src/features/remote/pairing/pairing_relay_endpoints.dart';
-import 'package:chitragupta/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

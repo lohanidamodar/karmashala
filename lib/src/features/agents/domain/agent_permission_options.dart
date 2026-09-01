@@ -41,7 +41,7 @@ class AgentPermissionOption {
     PermissionModeFit.approximate => 'Approximate. ${note ?? ''}'.trim(),
     PermissionModeFit.none =>
       '$agentName takes no flag for this, so its own default applies and '
-          'Chitragupta cannot enforce the choice.',
+          'Karmashala cannot enforce the choice.',
   };
 
   /// A two-or-three word badge for the same fact, for the chip and the menu row.

@@ -77,7 +77,7 @@ class ClaudeAuthLocator {
 /// Reads, captures, and switches Claude Code accounts by manipulating the
 /// credential and config files directly.
 ///
-/// Writes are atomic (temp file + rename) and take a one-time `.chitragupta.bak`
+/// Writes are atomic (temp file + rename) and take a one-time `.karmashala.bak`
 /// backup of each file before the first modification, so a botched switch can
 /// always be recovered. Token values are never logged.
 class ClaudeAuthService {
@@ -88,8 +88,8 @@ class ClaudeAuthService {
   final Clock clock;
   final AppLogger _logger;
 
-  static const _backupSuffix = '.chitragupta.bak';
-  static const _tmpSuffix = '.chitragupta.tmp';
+  static const _backupSuffix = '.karmashala.bak';
+  static const _tmpSuffix = '.karmashala.tmp';
 
   /// Reads the live logged-in account for the installation at [paths].
   Future<ClaudeAuthSnapshot> readSnapshot(ClaudeAuthPaths paths) async {

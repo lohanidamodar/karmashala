@@ -1,8 +1,8 @@
-import 'package:chitragupta/src/core/util/clock.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/file_explorer/application/file_explorer_providers.dart';
-import 'package:chitragupta/src/features/file_explorer/data/file_listing_service.dart';
-import 'package:chitragupta/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/core/util/clock.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
+import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

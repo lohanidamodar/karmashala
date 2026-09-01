@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/terminal/data/pty_output_coalescer.dart';
-import 'package:chitragupta/src/features/terminal/data/terminal_ingest_budget.dart';
-import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
-import 'package:chitragupta/src/features/terminal/domain/scrollback_limits.dart';
+import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
+import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
+import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';

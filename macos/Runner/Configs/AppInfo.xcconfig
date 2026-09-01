@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = chitragupta
+PRODUCT_NAME = karmashala
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.popupbits.chitragupta
+PRODUCT_BUNDLE_IDENTIFIER = com.popupbits.karmashala
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.popupbits. All rights reserved.

@@ -1,14 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chitragupta/src/core/database/app_database.dart';
-import 'package:chitragupta/src/core/database/database_providers.dart';
-import 'package:chitragupta/src/core/logging/app_logger.dart';
-import 'package:chitragupta/src/core/util/clock_provider.dart';
-import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
-import 'package:chitragupta/src/features/mcp/handshake_file_permissions.dart';
-import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
-import 'package:chitragupta/src/features/mcp/session_mcp.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/mcp/handshake_file_permissions.dart';
+import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
+import 'package:karmashala/src/features/mcp/session_mcp.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -65,12 +65,12 @@ void main() {
     });
   });
 
-  /// The `chitragupta` server entry out of a written config file.
+  /// The `karmashala` server entry out of a written config file.
   Map<String, Object?> entryIn(String windowsPath) {
     final config =
         jsonDecode(File(windowsPath).readAsStringSync())
             as Map<String, Object?>;
-    return (config['mcpServers']! as Map<String, Object?>)['chitragupta']!
+    return (config['mcpServers']! as Map<String, Object?>)['karmashala']!
         as Map<String, Object?>;
   }
 
@@ -275,7 +275,7 @@ void main() {
       Directory(directory).createSync(recursive: true);
       final stale = File(p.join(directory, 'session-s1.json'))
         ..writeAsStringSync(
-          '{"mcpServers":{"chitragupta":{"type":"http",'
+          '{"mcpServers":{"karmashala":{"type":"http",'
           '"url":"http://127.0.0.1:1/mcp/dead-token"}}}',
         );
 

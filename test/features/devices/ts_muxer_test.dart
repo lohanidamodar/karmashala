@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/devices/data/ts_muxer.dart';
+import 'package:karmashala/src/features/devices/data/ts_muxer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

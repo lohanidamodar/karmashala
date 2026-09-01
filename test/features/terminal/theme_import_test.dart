@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:chitragupta/src/features/terminal/data/ghostty_theme.dart';
-import 'package:chitragupta/src/features/terminal/data/warp_theme.dart';
-import 'package:chitragupta/src/features/terminal/domain/terminal_palette.dart';
+import 'package:karmashala/src/features/terminal/data/ghostty_theme.dart';
+import 'package:karmashala/src/features/terminal/data/warp_theme.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_palette.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';

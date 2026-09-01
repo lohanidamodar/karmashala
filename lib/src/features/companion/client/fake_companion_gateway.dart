@@ -242,7 +242,7 @@ class FakeCompanionGateway implements CompanionGateway {
         (decoded['secret'] as String).isEmpty) {
       throw _refuse(
         const PairingException(
-          'That is not a Chitragupta pairing code. Show the QR code from the '
+          'That is not a Karmashala pairing code. Show the QR code from the '
           "desktop's Remote access settings and scan it again.",
         ),
       );

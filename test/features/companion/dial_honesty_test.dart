@@ -14,12 +14,12 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:chitragupta/src/features/companion/client/secure_companion_store.dart';
-import 'package:chitragupta/src/features/remote/client/companion_client.dart';
-import 'package:chitragupta/src/features/remote/client/companion_store.dart';
-import 'package:chitragupta/src/features/remote/protocol.dart';
-import 'package:chitragupta/src/features/remote/transport/relay_transport.dart';
-import 'package:chitragupta_relay/chitragupta_relay.dart';
+import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
+import 'package:karmashala/src/features/remote/client/companion_client.dart';
+import 'package:karmashala/src/features/remote/client/companion_store.dart';
+import 'package:karmashala/src/features/remote/protocol.dart';
+import 'package:karmashala/src/features/remote/transport/relay_transport.dart';
+import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../remote/transport_harness.dart';
