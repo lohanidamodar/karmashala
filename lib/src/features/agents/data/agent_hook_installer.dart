@@ -34,10 +34,27 @@ class AgentHookInstaller {
   /// otherwise a claim with no test behind it.
   final Future<void> Function(File staged, File destination) replace;
 
-  /// Writes one hook entry per event the descriptor declares. Returns `false`
-  /// when the agent has no hook configuration to write into. Throws
-  /// [FormatException] if the existing config is not a JSON object, leaving it
-  /// untouched.
+  /// Writes one hook entry per event the descriptor declares. Returns whether
+  /// the config **on disk** now carries this endpoint's callback for every one
+  /// of them. Throws [FormatException] if the existing config is not a JSON
+  /// object, leaving it untouched.
+  ///
+  /// **The answer is read back, never assumed.** This used to `return true` the
+  /// moment `_rewrite` came back, which made the return value a statement about
+  /// intent rather than about the file — so every way a write can fail without
+  /// raising was reported as a success. The owner's machine showed exactly that:
+  ///
+  ///   2026-09-01 11:25:53 I bootstrap: Agent hooks: 1 installed, 1 skipped.
+  ///
+  /// and not one `chitragupta-agent-hook` anywhere under `~/.claude`, on either
+  /// side of the machine, while `notifications.status` reported `0 by hook` all
+  /// day. The most likely way it got there is the one this cannot prevent and
+  /// must therefore report: an agent CLI rewrites its own `settings.json` from
+  /// the copy it loaded at *its* start-up (`settings.json` on that machine was
+  /// written at 11:39, fourteen minutes after the install), and our entries go
+  /// with it. Nothing here can stop that. What it can do is stop claiming the
+  /// hooks are there — a reported install that wrote nothing is worse than a
+  /// reported skip, because only the skip ever gets investigated.
   ///
   /// **Idempotent to the byte.** An event whose entry already spells the exact
   /// command for this [endpoint] is left alone, so a relaunch that happens to
@@ -82,7 +99,60 @@ class AgentHookInstaller {
       }
       return changed;
     });
-    return true;
+    return installedEvents(
+          descriptor: descriptor,
+          storeHome: storeHome,
+          endpoint: endpoint,
+          environment: environment,
+        ).length ==
+        spec.eventStatus.length;
+  }
+
+  /// The declared events whose entry is on disk **right now**, spelling this
+  /// [endpoint]'s command.
+  ///
+  /// Separate from [install] because the count is worth reporting on its own: a
+  /// partial install — some events ours, one left alone because the user's
+  /// config holds a shape we do not understand there — is a real state, and
+  /// "installed: false" with no number is not enough to act on.
+  ///
+  /// Reads the file rather than any cached decode. A config that vanished, was
+  /// truncated or stopped being JSON between the write and this call answers
+  /// "none", which is the truth about what will fire.
+  Set<String> installedEvents({
+    required AgentDescriptor descriptor,
+    required String storeHome,
+    required AgentHookEndpoint endpoint,
+    required EnvironmentKind environment,
+  }) {
+    final spec = descriptor.hooks;
+    if (spec == null) return const {};
+    final file = File(p.join(storeHome, spec.configFileName));
+    Map<String, Object?> hooks;
+    try {
+      final raw = file.readAsStringSync();
+      final decoded = jsonDecode(raw.trim().isEmpty ? '{}' : raw);
+      if (decoded is! Map<String, Object?>) return const {};
+      final current = decoded[spec.configKey];
+      hooks = current is Map<String, Object?> ? current : const {};
+    } on Object {
+      return const {};
+    }
+
+    final found = <String>{};
+    for (final event in spec.eventStatus.keys) {
+      final entries = hooks[event];
+      if (entries is! List) continue;
+      final command = hookCommand(
+        descriptor: descriptor,
+        event: event,
+        endpoint: endpoint,
+        environment: environment,
+      );
+      if (command == null) continue;
+      if (_alreadyCurrent(entries, command)) found.add(event);
+    }
+    return found;
   }
 
   /// Removes the entries this app installed. Returns whether anything changed.

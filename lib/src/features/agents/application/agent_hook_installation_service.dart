@@ -181,11 +181,28 @@ class AgentHookInstallationService {
         }
         try {
           final applied = await act(installer, descriptor, home, kind);
+          if (!applied && endpoint != null) {
+            // An install that did not land. [AgentHookInstaller.install] now
+            // reads the file back, so this is a fact about disk rather than
+            // about our intent — and it has to say so, because the count it
+            // feeds ("N installed, M skipped") is the only place anyone would
+            // notice. Silence here is what let the owner's app report
+            // "1 installed" all day with nothing in any config home.
+            _log.warning(
+              'Wrote ${descriptor.id} hooks in ${store.environmentId} but the '
+              'config does not carry them; status falls back to the state '
+              'file. Another process rewriting $home is the usual cause.',
+            );
+          }
           results.add(
             AgentHookInstallation(
               agentId: descriptor.id,
               environmentId: store.environmentId,
               installed: applied,
+              skippedBecause: applied || endpoint == null
+                  ? null
+                  : 'the callbacks were written but are not in the config '
+                        'file; something else rewrote it',
             ),
           );
         } catch (error, stack) {
