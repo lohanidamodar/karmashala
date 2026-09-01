@@ -263,7 +263,6 @@ void main() {
 
     test('fills an empty region, retiring the region\'s own id', () {
       controller.openTab(TerminalProfile.powerShell);
-      final first = activeTab().layout.panes.single;
       final second = controller.openInSlot(
         controller.splitPane(SplitAxis.horizontal)!,
         TerminalProfile.commandPrompt,

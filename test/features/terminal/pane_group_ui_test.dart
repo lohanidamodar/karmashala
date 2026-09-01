@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -247,5 +248,35 @@ void main() {
       findsNothing,
       reason: 'one region holding one pane needs no header of its own',
     );
+  });
+
+  testWidgets('a chord cycles the panes stacked in the focused region', (
+    tester,
+  ) async {
+    // Alt+Arrow already walks between regions. A pane behind another in the
+    // same region has no direction to be in, so it needs a chord of its own —
+    // or a stacked tab would be reachable only by clicking its chip.
+    final container = workbenchContainer();
+    final controller = controllerOf(container);
+    final host = controller.openTab(TerminalProfile.powerShell);
+    final first = activeTab(container).layout.panes.single;
+    final guest = controller.openTab(TerminalProfile.commandPrompt);
+    final guestPane = activeTab(container).layout.panes.single;
+    controller.activateTab(host);
+    controller.moveTabIntoSlot(guest, first);
+
+    await pumpWorkbench(tester, container);
+    controller.instanceFor(guestPane)!.focusNode.requestFocus();
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(activeTab(container).layout.groups.single.activePaneId, first);
+    expect(activeTab(container).focusedPaneId, first);
   });
 }

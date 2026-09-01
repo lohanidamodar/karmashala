@@ -254,6 +254,14 @@ class TerminalActions {
         action = () => jumpCommand(forward: false);
       } else if (key == LogicalKeyboardKey.arrowDown) {
         action = () => jumpCommand(forward: true);
+      } else if (key == LogicalKeyboardKey.pageUp) {
+        // Ctrl+PageUp/Down steps *tabs*; with Shift it steps the tabs stacked
+        // in this region. Alt+Arrow walks between regions, but a pane behind
+        // another has no direction to be in — without this it would be
+        // reachable only by clicking its chip.
+        action = _sessions.previousPaneInRegion;
+      } else if (key == LogicalKeyboardKey.pageDown) {
+        action = _sessions.nextPaneInRegion;
       }
     } else if (alt && !shift) {
       if (key == LogicalKeyboardKey.arrowLeft) {

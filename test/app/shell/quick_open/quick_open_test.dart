@@ -426,6 +426,69 @@ void main() {
     expect(state.activeTab!.layout.panes, hasLength(2));
   });
 
+  testWidgets('a region that is already occupied is a destination too', (
+    tester,
+  ) async {
+    // Once a region has a header of its own it can hold more than one tab, so
+    // the keyboard has to be able to put one there — not only into an empty
+    // region, which was all a drag could reach before.
+    late ProviderContainer scope;
+    await open(tester, before: (container) {
+      scope = container;
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
+      terminals.openTab(
+        TerminalProfile.powerShell,
+        workingDirectory: r'C:\src\dev-server',
+      );
+      terminals.activateTab(
+        container.read(terminalSessionsControllerProvider).tabs.first.id,
+      );
+    });
+
+    await type(tester, 'move a tab into');
+    expect(find.text('Move a tab into the empty split…'), findsNothing);
+    await tester.tap(find.text('Move a tab into this split…'));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.enter);
+
+    final state = scope.read(terminalSessionsControllerProvider);
+    expect(state.tabs, hasLength(1), reason: 'the tab left the strip');
+    final layout = state.activeTab!.layout;
+    expect(layout.groups, hasLength(2), reason: 'it joined, not split');
+    expect(layout.panes, hasLength(3));
+  });
+
+  testWidgets('and it moves a pane from one region into another', (
+    tester,
+  ) async {
+    late ProviderContainer scope;
+    await open(tester, before: (container) {
+      scope = container;
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
+      terminals.splitPaneWith(SplitAxis.vertical, TerminalProfile.powerShell);
+    });
+
+    await type(tester, 'move this pane into');
+    await tester.tap(find.text('Move this pane into another split…'));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.enter);
+
+    final layout = scope
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .layout;
+    expect(layout.groups, hasLength(2), reason: 'the region it left collapsed');
+    expect(layout.panes, hasLength(3));
+  });
+
   testWidgets('and it offers the way back out of one', (tester) async {
     late ProviderContainer scope;
     await open(tester, before: (container) {

@@ -548,6 +548,18 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return null;
   }
 
+  /// The focused pane, when it names a region an incoming tab could join —
+  /// what the palette calls "this split".
+  ///
+  /// Only while the tab has more than one region: dropping a tab into the only
+  /// region there is would be stacking rather than splitting, and offering it
+  /// under that name would be a lie about what happens.
+  String? regionForIncomingTab() {
+    final tab = _activeTab;
+    if (tab == null || tab.layout.groups.length < 2) return null;
+    return tab.focusedPaneId;
+  }
+
   /// The focused pane, when it is one that could be pulled out of its split
   /// into a tab of its own — what the command palette offers as the way back.
   String? paneMovableToNewTab() {
