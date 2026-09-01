@@ -204,8 +204,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     }
     const continueTooltip =
         'Move this session to another agent, or fork it. '
-        'Nothing is launched until you have seen what the next '
-        'agent will be told.';
+        '$kContinueWithPromise';
     void continueWith() =>
         ContinueWithDialog.show(context, widget.sessionId);
 
