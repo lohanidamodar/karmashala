@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/util/json_object_splice.dart';
@@ -12,6 +13,29 @@ import '../domain/agent_status.dart';
 /// Marks the hook entries Chitragupta owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.
 const String agentHookMarker = 'chitragupta-agent-hook';
+
+/// Markers this app wrote under names it no longer uses.
+///
+/// An entry is identified *only* by its marker, so renaming the app without
+/// remembering the old one would strand every entry already in somebody's
+/// config: the new build would not recognise it, and the old build is
+/// uninstalled and cannot be asked. Nothing else in the system can find them.
+///
+/// These strings are literals on purpose and must survive any future rename —
+/// `legacy_hook_marker_test.dart` fails if a find-and-replace rewrites them,
+/// which is exactly how they would otherwise be lost.
+const List<String> legacyAgentHookMarkers = <String>[];
+
+/// Top-level config keys this app wrote under names it no longer uses.
+///
+/// Antigravity's `hooks.json` is a map of hook *names*, so the app's own name
+/// is the key holding its whole block. A rename therefore does not move that
+/// block — it abandons it, and `replaceTopLevelJsonValue` can only ever empty a
+/// value, never remove it. Without this the old block would sit at the root of
+/// the file for ever, belonging to nothing.
+///
+/// Literals on purpose; see [legacyAgentHookMarkers].
+const List<String> legacyAgentHookConfigKeys = <String>[];
 
 /// Installs Chitragupta's callbacks into an agent's own hook configuration.
 ///
@@ -245,7 +269,14 @@ class AgentHookInstaller {
         ? Map<String, Object?>.from(current)
         : <String, Object?>{};
 
-    if (!edit(hooks)) return false;
+    // A block we left behind under an older name of this app. Dropped whether
+    // or not [edit] changes anything, because it is ours and nothing else will
+    // ever recognise it.
+    final abandoned = legacyAgentHookConfigKeys
+        .where((key) => key != spec.configKey && decoded.containsKey(key))
+        .toList();
+
+    if (!edit(hooks) && abandoned.isEmpty) return false;
 
     // The config need not sit in the store home, so its directory can be one
     // the CLI has not created yet — `~/.gemini/config` beside
@@ -257,11 +288,14 @@ class AgentHookInstaller {
       await parent.create(recursive: true);
     }
 
-    final updated = replaceTopLevelJsonValue(
+    var updated = replaceTopLevelJsonValue(
       trimmed,
       spec.configKey,
       jsonEncode(hooks),
     );
+    for (final key in abandoned) {
+      updated = removeTopLevelJsonKey(updated, key);
+    }
     await _writeAtomically(file, updated);
     return true;
   }
@@ -336,8 +370,17 @@ class AgentHookInstaller {
     return commands.length == 1 && commands.single == command;
   }
 
-  bool _isOurs(Object? entry) =>
-      _commandsIn(entry).any((command) => command.contains(agentHookMarker));
+  /// Whether [entry] is one of ours. Exposed for the legacy-marker test, which
+  /// has to prove an entry written under an old name is still removable.
+  @visibleForTesting
+  bool debugIsOurs(Object? entry) => _isOurs(entry);
+
+  /// Ours if it carries the current marker **or** one we used to write.
+  bool _isOurs(Object? entry) => _commandsIn(entry).any(
+    (command) =>
+        command.contains(agentHookMarker) ||
+        legacyAgentHookMarkers.any(command.contains),
+  );
 
   /// Every command string an entry carries, whichever shape it is written in.
   ///

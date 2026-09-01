@@ -68,6 +68,68 @@ String replaceTopLevelJsonValue(
   }
 }
 
+/// Removes a **top-level** property from a JSON object, leaving the rest of the
+/// document byte-for-byte intact. Returns [rawJson] unchanged when [key] is
+/// absent.
+///
+/// [replaceTopLevelJsonValue] can only ever swap a value, so a block written
+/// under a name the app no longer uses could be emptied but never removed —
+/// which would have left `"chitragupta": {}` at the root of somebody's
+/// `hooks.json` for ever after the rename to Karmashala. Deleting our own key
+/// is the difference between tidying up after ourselves and leaving litter
+/// nothing can identify.
+String removeTopLevelJsonKey(String rawJson, String key) {
+  final scanner = _Scanner(rawJson);
+  final objectStart = scanner.skipWsFrom(0);
+  if (objectStart >= rawJson.length || rawJson[objectStart] != '{') {
+    throw const FormatException('Root value is not a JSON object');
+  }
+
+  var i = objectStart + 1;
+  var previousPairEnd = objectStart + 1;
+  while (true) {
+    final pairStart = scanner.skipWsFrom(i);
+    if (pairStart >= rawJson.length) {
+      throw const FormatException('Unterminated JSON object');
+    }
+    if (rawJson[pairStart] == '}') return rawJson;
+    if (rawJson[pairStart] != '"') {
+      throw FormatException('Expected property name at offset $pairStart');
+    }
+    final nameEnd = scanner.endOfString(pairStart);
+    final name = _decodeJsonString(rawJson.substring(pairStart, nameEnd));
+    final afterName = scanner.skipWsFrom(nameEnd);
+    if (afterName >= rawJson.length || rawJson[afterName] != ':') {
+      throw FormatException('Expected ":" at offset $afterName');
+    }
+    final valueStart = scanner.skipWsFrom(afterName + 1);
+    final valueEnd = scanner.endOfValue(valueStart);
+    final afterValue = scanner.skipWsFrom(valueEnd);
+    if (afterValue >= rawJson.length) {
+      throw const FormatException('Unterminated JSON object');
+    }
+
+    if (name == key) {
+      // Take the separating comma with the pair, whichever side it is on, so
+      // the object stays valid whether ours was first, last or in the middle.
+      if (rawJson[afterValue] == ',') {
+        return rawJson.substring(0, pairStart) +
+            rawJson.substring(scanner.skipWsFrom(afterValue + 1));
+      }
+      return rawJson.substring(0, previousPairEnd) +
+          rawJson.substring(afterValue);
+    }
+
+    if (rawJson[afterValue] == ',') {
+      previousPairEnd = valueEnd;
+      i = afterValue + 1;
+      continue;
+    }
+    if (rawJson[afterValue] == '}') return rawJson;
+    throw FormatException('Expected "," or "}" at offset $afterValue');
+  }
+}
+
 String _insertFirstProperty(
   String rawJson,
   int objectStart,
