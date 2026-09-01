@@ -274,10 +274,37 @@ class AgentMcpSupport {
 /// is Windows vs POSIX: a WSL distro and a remote SSH host both run `claude`,
 /// not `claude.exe`.
 class AgentBinaries {
-  const AgentBinaries({required this.windows, required this.posix});
+  const AgentBinaries({
+    required this.windows,
+    required this.posix,
+    this.windowsInstallPaths = const [],
+  });
 
   final List<String> windows;
   final List<String> posix;
+
+  /// Exact executables to try on Windows when [windows] finds nothing on PATH,
+  /// as `%VAR%`-templated absolute paths.
+  ///
+  /// **This is the Windows half of a compensation the POSIX branch already
+  /// has.** `locateRequest` deliberately runs the POSIX lookup through a login
+  /// shell so `~/.local/bin` — where these CLIs install themselves — is on
+  /// PATH. Windows gets a bare `where`, which sees only the PATH the app
+  /// process inherited when it started. Two things fall through that gap:
+  ///
+  /// * an agent whose installer never put it on PATH at all. On the machine
+  ///   this was reported from, `claude.exe` sits in `%USERPROFILE%\.local\bin`
+  ///   and that directory is in neither the user nor the machine PATH, so
+  ///   `where claude` can never succeed;
+  /// * an agent installed *after* the app process started. A process's PATH is
+  ///   a snapshot taken at creation; the broadcast that tells running programs
+  ///   the environment changed is one a Flutter app does not act on. Naming the
+  ///   installer's own directory makes detection independent of that timing.
+  ///
+  /// Each entry names **one file**, never a directory to search: discovery
+  /// probes exactly these paths and never walks the disk. An entry whose
+  /// variables are unset is skipped rather than probed literally.
+  final List<String> windowsInstallPaths;
 
   List<String> forKind(EnvironmentKind kind) =>
       kind == EnvironmentKind.windowsNative ? windows : posix;

@@ -71,6 +71,19 @@ class AgentInstallationDao {
     return rows.map(_fromRow).toList();
   }
 
+  /// Records a new [version] for an installation that is still in the same
+  /// place.
+  ///
+  /// An upgraded CLI is the same installation, so it keeps its row and its id —
+  /// which matters because the id is what settings pin as the default agent.
+  /// Deleting and re-inserting would silently unpick that choice.
+  void updateVersion(String id, String? version) {
+    _db.execute('UPDATE agent_installations SET version = ? WHERE id = ?;', [
+      version,
+      id,
+    ]);
+  }
+
   void delete(String id) {
     _db.execute('DELETE FROM agent_installations WHERE id = ?;', [id]);
   }

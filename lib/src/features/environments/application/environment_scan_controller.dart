@@ -62,6 +62,7 @@ class EnvironmentScanController extends Notifier<Map<String, EnvironmentScan>> {
         ids: ref.read(idGeneratorProvider),
         clock: ref.read(clockProvider),
         registry: ref.read(agentRegistryProvider),
+        hostEnvironment: ref.read(hostEnvironmentProvider),
       ).discover();
 
       final dao = ref.read(agentInstallationDaoProvider);
