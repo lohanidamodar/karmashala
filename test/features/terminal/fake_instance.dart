@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/detach_policy.dart';
 import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
+import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -41,11 +42,14 @@ class FakeTerminalInstance
     bool shellIntegration = false,
   }) : adopted = adoptTerminal {
     terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
+    // Wired exactly as a real pane wires it: the pane owns xterm's single OSC
+    // slot and fans it out.
+    terminal.onPrivateOSC = _osc.dispatch;
     // Attached on the same condition a real pane attaches it, so a test can
     // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —
     // by writing the markers a shell would emit.
     if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach();
+      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
     if (adoptTerminal == null && restored != null && restored!.isNotEmpty) {
       terminal.write(restored!);
@@ -62,8 +66,12 @@ class FakeTerminalInstance
   final String title;
   @override
   final String profileId;
+
+  final OscRouter _osc = OscRouter();
+
   @override
   final String? workingDirectory;
+
   @override
   final AgentPaneLaunch? agentLaunch;
 

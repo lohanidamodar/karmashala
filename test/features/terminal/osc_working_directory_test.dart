@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
 import 'package:karmashala/src/features/terminal/domain/working_directory_osc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -90,6 +91,51 @@ void main() {
         expect(read('file://[not-a-host/home/me'), isNull);
         expect(read('file:///home/%zz'), isNull, reason: 'bad % escape');
       });
+    });
+  });
+
+  group('the OSC router', () {
+    test('one dispatch reaches every listener', () {
+      final router = OscRouter();
+      final first = <String>[];
+      final second = <String>[];
+      router
+        ..add((code, args) => first.add('$code:${args.join(",")}'))
+        ..add((code, args) => second.add('$code:${args.join(",")}'));
+
+      router.dispatch('133', ['A']);
+
+      expect(first, ['133:A']);
+      expect(second, ['133:A']);
+    });
+
+    test('a removed listener stops hearing', () {
+      final router = OscRouter();
+      final seen = <String>[];
+      void listener(String code, List<String> args) => seen.add(code);
+      router
+        ..add(listener)
+        ..dispatch('7', ['file:///a'])
+        ..remove(listener)
+        ..dispatch('7', ['file:///b']);
+
+      expect(seen, ['7']);
+    });
+
+    test('a listener that removes itself mid-dispatch skips nobody', () {
+      final router = OscRouter();
+      final seen = <String>[];
+      late void Function(String, List<String>) first;
+      first = (code, args) {
+        seen.add('first');
+        router.remove(first);
+      };
+      router
+        ..add(first)
+        ..add((code, args) => seen.add('second'))
+        ..dispatch('7', ['file:///a']);
+
+      expect(seen, ['first', 'second']);
     });
   });
 

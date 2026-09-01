@@ -12,6 +12,7 @@ import '../domain/enter_key_encoding.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/launch_context.dart';
 import '../domain/mouse_wheel_reporter.dart';
+import '../domain/osc_router.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/shell_integration.dart';
@@ -202,11 +203,16 @@ class PtyTerminalInstance
       ..mouseHandler = const KarmashalaMouseHandler()
       // ...and encodes every modified Enter as a bare CR, so Shift+Enter is
       // indistinguishable from submit.
-      ..inputHandler = const KarmashalaInputHandler();
-    // Attach before the process starts so no marker can be missed. When the
-    // shell is not integrated this stays null and nothing else changes.
+      ..inputHandler = const KarmashalaInputHandler()
+      // The pane owns xterm's single OSC slot for its whole life and fans it
+      // out, because two unrelated things read it — OSC 133 command blocks,
+      // which exist only with shell integration on, and the OSC 7 working
+      // directory, which must work either way.
+      ..onPrivateOSC = _osc.dispatch;
+    // Registered before the process starts, so no marker can be missed. When
+    // the shell is not integrated this stays null and nothing else changes.
     if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach();
+      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
     // Replay the previous session's scrollback *before* the shell starts, so
     // restored history sits above the new process's first output. An adopted
@@ -282,6 +288,11 @@ class PtyTerminalInstance
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// Owns `terminal.onPrivateOSC` for this pane's whole life and fans it out —
+  /// see the constructor.
+  final OscRouter _osc = OscRouter();
+
   @override
   final AgentPaneLaunch? agentLaunch;
   @override
