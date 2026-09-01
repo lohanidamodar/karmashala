@@ -543,7 +543,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// into a tab of its own — what the command palette offers as the way back.
   String? paneMovableToNewTab() {
     final tab = _activeTab;
-    if (tab == null || tab.layout.panes.length < 2) return null;
+    if (tab == null || _occupiedPanes(tab) < 2) return null;
     return _isEmptyRegion(tab.focusedPaneId) ? null : tab.focusedPaneId;
   }
 
@@ -1434,10 +1434,31 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final tab = _tabContaining(paneId);
     if (tab == null) return false;
     return shouldCollapseOnExit(
-      isSplit: tab.layout.panes.length > 1,
+      // Regions with something in them, not regions. The rule's "last pane in
+      // a tab stays" exception is about output somebody may still be reading,
+      // and an empty region is not another pane to read it in — counting one
+      // would take the tab, and the scrollback with it, the moment a shell
+      // beside a cleared region exited.
+      isSplit: _occupiedPanes(tab) > 1,
       isAgentSession: instance.agentLaunch != null,
       exitCode: instance.exitCode,
     );
+  }
+
+  /// How many of [tab]'s regions actually hold a terminal.
+  int _occupiedPanes(TerminalTab tab) {
+    var count = 0;
+    for (final paneId in tab.layout.panes) {
+      if (!_isEmptyRegion(paneId)) count++;
+    }
+    return count;
+  }
+
+  /// Whether [paneId] shares its tab with another pane that has something in
+  /// it — what "in a split" means to the menus that offer to close or move one.
+  bool isPaneInSplit(String paneId) {
+    final tab = _tabContaining(paneId);
+    return tab != null && _occupiedPanes(tab) > 1;
   }
 
   /// Detaches [paneId] if a process is still running behind it, and releases it

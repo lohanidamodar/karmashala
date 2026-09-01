@@ -505,15 +505,6 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     return tabs.any((tab) => _sessions.canMoveTabIntoSlot(tab.id, paneId));
   }
 
-  /// Whether [paneId] shares its tab with another pane.
-  bool _isSplit(String paneId) {
-    for (final tab in ref.read(terminalSessionsControllerProvider).tabs) {
-      if (tab.layout.panes.contains(paneId)) {
-        return tab.layout.panes.length > 1;
-      }
-    }
-    return false;
-  }
 
   Future<void> _terminalMenu(
     BuildContext context,
@@ -544,7 +535,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         // Only while there is a split to collapse, and only then: with one
         // pane the tab strip's own close button is the way, and two words for
         // one act in two places is how a menu stops being read.
-        if (_isSplit(paneId)) ...[
+        if (_sessions.isPaneInSplit(paneId)) ...[
           // The way back out of a split, beside the way to close one. The
           // region this pane leaves goes with it — see [movePaneToNewTab].
           const PopupMenuItem(
