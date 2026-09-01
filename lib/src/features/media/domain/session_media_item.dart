@@ -77,6 +77,7 @@ class SessionMediaItem {
     this.at,
     this.bytes,
     this.problem,
+    this.pasteId,
   });
 
   /// Stable for the life of the transcript: it is derived from where in the
@@ -116,6 +117,15 @@ class SessionMediaItem {
   /// a list that silently omits things.
   final String? problem;
 
+  /// The number the CLI printed into the pane for this picture — the `6` in
+  /// `[Image #6]` — or null for one it never numbered.
+  ///
+  /// Read out of the transcript's own `imagePasteIds`, never inferred from
+  /// [sequence]: the two do not agree, and `session_image_reference.dart`
+  /// records the evidence for that. Only a paste ever has one; a `Read` result
+  /// or a tool's screenshot is not something the user can name on screen.
+  final int? pasteId;
+
   /// The name to show. The file name where there is one, and what the item
   /// *is* where there is not — a paste has no name and inventing one would be
   /// worse than saying "Pasted image".
@@ -151,6 +161,7 @@ class SessionMediaItem {
     if (at != null) 'at': at!.toIso8601String(),
     if (bytes != null) 'bytes': bytes,
     if (problem != null) 'problem': problem,
+    if (pasteId != null) 'pasteId': pasteId,
   };
 
   /// Rebuilds an item from the manifest, or null when the record is not one we
@@ -175,6 +186,7 @@ class SessionMediaItem {
       at: at is String ? DateTime.tryParse(at) : null,
       bytes: json['bytes'] is int ? json['bytes'] as int : null,
       problem: json['problem'] is String ? json['problem'] as String : null,
+      pasteId: json['pasteId'] is int ? json['pasteId'] as int : null,
     );
   }
 }
