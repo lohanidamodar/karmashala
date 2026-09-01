@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/browser/application/browser_pane_controller.dart';
 import 'package:karmashala/src/features/browser/application/browser_providers.dart';
 import 'package:karmashala/src/features/browser/presentation/browser_pane.dart';
@@ -194,6 +195,32 @@ void main() {
     expect(picker.value, 'PAGE-1');
     expect(picker.items!.map((item) => item.value), ['PAGE-1', 'PAGE-2']);
     expect(picker.onChanged, isNotNull);
+  });
+
+  testWidgets('the tab picker is sized like the pane around it', (
+    tester,
+  ) async {
+    // `DropdownButton` is Material 2 and ignores the app's
+    // `dropdownMenuTheme`, which only reaches Material 3's `DropdownMenu`. Left
+    // alone it drew Material's ~16px `titleMedium` with a 24px chevron, in a
+    // pane whose status line, address bar and buttons are all `bodySmall` and
+    // `Chrome.icon`. The tab title carried a literal `fontSize: 12` to
+    // compensate, which fixed the open list and left the closed button and its
+    // chevron oversized.
+    final harness = Harness(targets: const ['PAGE-1', 'PAGE-2']);
+    await harness.pump(tester);
+    await tester.tap(find.text('Attach · 9222'));
+    await tester.pumpAndSettle();
+    final finder = find.byType(DropdownButton<String>);
+    final picker = tester.widget<DropdownButton<String>>(finder);
+    final theme = Theme.of(tester.element(finder));
+    expect(picker.style, theme.textTheme.bodySmall);
+    expect(picker.iconSize, Chrome.icon);
+    expect(picker.isDense, isTrue);
+    // Nothing under it re-decides the size for itself.
+    for (final item in picker.items!) {
+      expect((item.child as Text).style, isNull);
+    }
   });
 
   testWidgets('a single tab does not get a picker', (tester) async {

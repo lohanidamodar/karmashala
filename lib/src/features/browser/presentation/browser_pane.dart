@@ -204,52 +204,64 @@ class _TabPicker extends ConsumerWidget {
   final BrowserPaneState state;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Padding(
-    padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, Insets.sm, 0),
-    child: Row(
-      children: [
-        Expanded(
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isDense: true,
-              isExpanded: true,
-              value: state.tabs.any((t) => t.id == state.currentTargetId)
-                  ? state.currentTargetId
-                  : null,
-              hint: const Text('Tab'),
-              items: [
-                for (final tab in state.tabs)
-                  DropdownMenuItem(
-                    value: tab.id,
-                    child: Text(
-                      tab.title.isEmpty ? tab.url : tab.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, Insets.sm, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              // `DropdownButton` is Material 2, and the app's
+              // `dropdownMenuTheme` reaches only Material 3's `DropdownMenu` —
+              // so, left alone, this picker took Material's own defaults: a
+              // ~16 px `titleMedium` label and a 24 px chevron, in a pane whose
+              // status line, address bar and buttons are all `bodySmall` with
+              // `Chrome.icon` glyphs. The tab title had a literal `fontSize:
+              // 12` pinned on it to compensate, which fixed the item text and
+              // left the closed button and the chevron oversized.
+              child: DropdownButton<String>(
+                isDense: true,
+                isExpanded: true,
+                style: theme.textTheme.bodySmall,
+                iconSize: Chrome.icon,
+                value: state.tabs.any((t) => t.id == state.currentTargetId)
+                    ? state.currentTargetId
+                    : null,
+                hint: Text('Tab', style: theme.textTheme.bodySmall),
+                items: [
+                  for (final tab in state.tabs)
+                    DropdownMenuItem(
+                      value: tab.id,
+                      child: Text(
+                        tab.title.isEmpty ? tab.url : tab.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-              ],
-              onChanged: state.isBusy
-                  ? null
-                  : (id) {
-                      if (id != null) {
-                        ref
-                            .read(browserPaneControllerProvider.notifier)
-                            .selectTab(id);
-                      }
-                    },
+                ],
+                onChanged: state.isBusy
+                    ? null
+                    : (id) {
+                        if (id != null) {
+                          ref
+                              .read(browserPaneControllerProvider.notifier)
+                              .selectTab(id);
+                        }
+                      },
+              ),
             ),
           ),
-        ),
-        IconButton(
-          tooltip: 'Refresh tabs',
-          icon: const Icon(AppIcons.arrowsClockwise, size: 15),
-          onPressed: () =>
-              ref.read(browserPaneControllerProvider.notifier).refreshTabs(),
-        ),
-      ],
-    ),
-  );
+          IconButton(
+            tooltip: 'Refresh tabs',
+            icon: const Icon(AppIcons.arrowsClockwise),
+            onPressed: () =>
+                ref.read(browserPaneControllerProvider.notifier).refreshTabs(),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Actions extends ConsumerWidget {
