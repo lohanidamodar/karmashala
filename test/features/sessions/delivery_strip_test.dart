@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/util/clock_provider.dart';
 import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart';
@@ -108,7 +110,11 @@ void main() {
     plan: SessionForkPlan.decide(descriptor: null, agentName: 'Test CLI'),
   );
 
-  Future<void> pump(WidgetTester tester, SessionDelivery delivery) async {
+  Future<void> pump(
+    WidgetTester tester,
+    SessionDelivery delivery, {
+    bool hostedOnTerminal = false,
+  }) async {
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -131,8 +137,42 @@ void main() {
             return true;
           }),
         ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: DeliveryStrip(
+              sessionId: 's1',
+              hostedOnTerminal: hostedOnTerminal,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  /// The state line on its own — what the session bar hosts above the actions.
+  Future<void> pumpStateLine(
+    WidgetTester tester,
+    SessionDelivery? delivery,
+  ) async {
+    tester.view.physicalSize = const Size(900, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          sessionDeliveryProvider.overrideWith(
+            // No answer yet is the same as no answer at all here: the line
+            // draws only what the probes established.
+            (ref, _) =>
+                delivery == null ? Completer<SessionDelivery>().future : Future.value(delivery),
+          ),
+        ],
         child: const MaterialApp(
-          home: Scaffold(body: DeliveryStrip(sessionId: 's1')),
+          home: Scaffold(body: DeliveryStateLine(sessionId: 's1')),
         ),
       ),
     );
@@ -166,6 +206,74 @@ void main() {
     expect(find.text('work'), findsOneWidget);
     expect(find.text('2 uncommitted'), findsOneWidget);
     expect(find.text('3 ahead of origin/main'), findsOneWidget);
+  });
+
+  group('the two hosts', () {
+    const state = SessionDelivery(
+      branch: 'work',
+      baseBranch: 'origin/main',
+      hasRemote: true,
+      dirtyFiles: 2,
+      aheadOfBase: 3,
+      hasWorktree: true,
+    );
+
+    testWidgets('above the composer the strip still carries its own facts', (
+      tester,
+    ) async {
+      // Unchanged, and asserted so: the conversation's host is a rule, a state
+      // line and a row of Material chips, and the session bar's redesign is
+      // not allowed to leak into it.
+      await pump(tester, state);
+
+      expect(find.byType(Divider), findsOneWidget);
+      expect(find.text('Working'), findsOneWidget);
+      expect(find.widgetWithText(ActionChip, 'Commit'), findsOneWidget);
+      expect(
+        tester.getCenter(find.text('Working')).dy,
+        lessThan(tester.getCenter(find.text('Commit')).dy),
+        reason: 'the state line is above the chips, as it always was',
+      );
+    });
+
+    testWidgets('under the terminal the strip is the actions and nothing else', (
+      tester,
+    ) async {
+      // The facts are drawn by the bar, above this, so drawing them here too
+      // would be the second copy that eventually disagrees with the first.
+      await pump(tester, state, hostedOnTerminal: true);
+
+      expect(find.text('Commit'), findsOneWidget);
+      expect(find.text('Working'), findsNothing);
+      expect(find.text('work'), findsNothing);
+      expect(find.text('2 uncommitted'), findsNothing);
+      expect(
+        find.byType(ActionChip),
+        findsNothing,
+        reason: 'the bar draws its own control, not a message-column chip',
+      );
+      expect(find.byType(Divider), findsNothing, reason: 'the bar draws it');
+    });
+
+    testWidgets('the state line stands on its own for the bar to place', (
+      tester,
+    ) async {
+      await pumpStateLine(tester, state);
+
+      expect(find.text('Working'), findsOneWidget);
+      expect(find.text('work'), findsOneWidget);
+      expect(find.text('3 ahead of origin/main'), findsOneWidget);
+      expect(find.text('Commit'), findsNothing, reason: 'facts only');
+    });
+
+    testWidgets('and draws nothing at all until something is known', (
+      tester,
+    ) async {
+      // Its own emptiness, so the bar reserves no room for a line that has
+      // nothing to say.
+      await pumpStateLine(tester, null);
+      expect(tester.getSize(find.byType(DeliveryStateLine)), Size.zero);
+    });
   });
 
   testWidgets('a prompt action sends its text verbatim, with no dialog', (
