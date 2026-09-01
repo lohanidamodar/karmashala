@@ -331,6 +331,8 @@ class AgentLaunchSpec {
     this.resume = const AgentResume.unsupported(),
     this.interactiveResume = const AgentResume.unsupported(),
     this.sessionIdAssignment = const AgentSessionIdAssignment.unsupported(),
+    this.sessionIdAnnouncement = const AgentSessionIdAnnouncement.none(),
+    this.continueLatest = const AgentContinueSupport.unsupported(),
     this.acceptsPromptArgument = false,
     this.allowsConcurrentResume = false,
     this.resumeConflict = const AgentResumeConflictRules(),
@@ -394,6 +396,15 @@ class AgentLaunchSpec {
   /// Whether this agent will accept a session id we choose. See
   /// [AgentSessionIdAssignment].
   final AgentSessionIdAssignment sessionIdAssignment;
+
+  /// Whether this agent says, in its own output, which session id it chose.
+  /// See [AgentSessionIdAnnouncement]. Defaults to "it says nothing".
+  final AgentSessionIdAnnouncement sessionIdAnnouncement;
+
+  /// Whether this agent can be told "continue the most recent conversation",
+  /// and what "most recent" is scoped to. See [AgentContinueSupport]. Defaults
+  /// to unsupported.
+  final AgentContinueSupport continueLatest;
 
   /// Whether a trailing positional argument is taken as the opening prompt.
   ///
@@ -539,4 +550,101 @@ class AgentSessionIdAssignment {
   /// `RandomIdGenerator`), which is what lets one string be both.
   List<String> argumentsFor(String sessionId) =>
       isSupported ? [token, sessionId] : const [];
+}
+
+/// Whether an agent states, in its own output, the session id it chose.
+///
+/// The third way a session id can become known, and the one the registry was
+/// missing. The other two are [AgentSessionIdAssignment] — we pick the id and
+/// hand it over, which is Claude Code — and a store scan, where we go looking
+/// afterwards and match on a directory and a time, which is Codex.
+///
+/// Antigravity needs a third because neither works for it. `agy` mints its own
+/// id, so it cannot be told one; and its store names every conversation without
+/// saying which of them belongs to the pane in front of us, so a scan has to
+/// guess. But the CLI *does* say it — it prints its own resume command as it
+/// exits — and a line the agent printed in our own pane is not a guess about
+/// which conversation it was. That makes this the strongest of the three
+/// signals for an agent that has it, ahead of any store heuristic.
+///
+/// [pattern] is a regular expression with **one capturing group** holding the
+/// id. [evidence] is where the format was read, so a future CLI version can be
+/// re-checked rather than trusted.
+class AgentSessionIdAnnouncement {
+  const AgentSessionIdAnnouncement.pattern({
+    required this.pattern,
+    required this.evidence,
+  });
+
+  /// This agent says nothing. The default, and the answer for an agent whose
+  /// output nobody has read.
+  const AgentSessionIdAnnouncement.none() : pattern = '', evidence = '';
+
+  final String pattern;
+  final String evidence;
+
+  bool get isSupported => pattern.isNotEmpty;
+
+  /// The id [text] announces, or `null` when it announces none.
+  ///
+  /// **The last match wins.** A pane holds a whole session's scrollback and can
+  /// carry more than one announcement — a resume prints the id it was given,
+  /// and the CLI prints it again on the way out — so the newest is the one that
+  /// describes the conversation the pane is on now.
+  String? idIn(String text) {
+    if (!isSupported || text.isEmpty) return null;
+    final matches = RegExp(pattern).allMatches(text);
+    if (matches.isEmpty) return null;
+    final id = matches.last.group(1);
+    return id == null || id.isEmpty ? null : id;
+  }
+}
+
+/// What an agent means by "the most recent conversation".
+enum AgentContinueScope {
+  /// The most recent conversation **in the directory the CLI is launched
+  /// from**. Recency alone would be a guess about which conversation the user
+  /// meant; recency within one directory is a much narrower claim, and it is
+  /// only usable at all when the app can read *which* conversation that is
+  /// before offering it.
+  workingDirectory,
+}
+
+/// Whether an agent can be told to continue its most recent conversation
+/// without being given an id, and what "most recent" is scoped to.
+///
+/// This is the honest fallback for an agent whose id we failed to learn, and it
+/// exists because the alternative is a refusal. It is deliberately **not** the
+/// same thing as Codex's `--last` picker, which `built_in_agents.dart` declines
+/// to use: that would replace an id the app already has with a recency guess.
+/// This is only ever reached when there is no id at all, and — for Antigravity,
+/// the one agent that declares it — the app can read exactly which conversation
+/// would be continued before offering to continue it. A fallback that can name
+/// its target is not a guess.
+///
+/// [evidence] is required, like [AgentForkSupport]'s and [AgentMcpSupport]'s,
+/// and for the same reason.
+class AgentContinueSupport {
+  const AgentContinueSupport.flag(
+    this.token, {
+    required this.scope,
+    required this.evidence,
+  });
+
+  /// Nothing verified. The default.
+  const AgentContinueSupport.unsupported()
+    : token = '',
+      scope = null,
+      evidence = '';
+
+  final String token;
+
+  /// `null` exactly when this is unsupported.
+  final AgentContinueScope? scope;
+
+  final String evidence;
+
+  bool get isSupported => token.isNotEmpty;
+
+  List<String> get arguments => isSupported ? [token] : const [];
 }

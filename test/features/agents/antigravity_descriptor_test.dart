@@ -133,17 +133,20 @@ void main() {
     });
   });
 
-  group('the store is located, and known to be unreadable', () {
+  group('the store is located, and its transcripts are unreadable', () {
     test('it is the CLI data dir, not the IDE extensions dir', () {
       // `.antigravity` is the IDE's VS Code-style extensions directory. The CLI
       // writes `~/.gemini/antigravity-cli`, beside the IDE's `antigravity-ide`.
       expect(descriptor.store!.homeDirectoryName, '.gemini/antigravity-cli');
     });
 
-    test('the format records that nothing here can parse it', () {
-      // Encrypted on the older build; SQLite full of opaque protobuf blobs on
-      // the current one. Knowing where the conversations are and knowing we
-      // cannot read them are two different facts.
+    test('the format records that no transcript here can be parsed', () {
+      // Narrower than it used to mean. `AntigravityStoreReader` reads the id,
+      // the working directory, the name and the step count out of this store;
+      // what it cannot read is message *content*, because `steps.step_payload`
+      // is protobuf in an unpublished schema. Every `AgentStoreFormat` value
+      // names a transcript format, so `none` is still the truthful answer —
+      // see `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6.
       expect(descriptor.store!.format, AgentStoreFormat.none);
     });
 
@@ -195,6 +198,71 @@ void main() {
       // transcript and this agent's are unreadable.
       expect(plan.kind, SessionForkKind.refused);
       expect(plan.explanation, contains('no verified way'));
+    });
+  });
+
+  group('the conversation id is learnable after all', () {
+    test('the CLI announces it, and the descriptor says how to read it', () {
+      // The 2026-08-31 note recorded that `agy` announces its id nowhere, which
+      // is why `interactiveResume` was declared with a flag nothing could ever
+      // supply a value for. It prints its own resume command as it exits.
+      final announcement = descriptor.launch.sessionIdAnnouncement;
+      expect(announcement.isSupported, isTrue);
+      expect(
+        announcement.idIn(
+          'Resume with -c (or command below):\n'
+          'agy --conversation=df3c0708-a27f-4799-b761-57a657a84274\n',
+        ),
+        'df3c0708-a27f-4799-b761-57a657a84274',
+      );
+    });
+
+    test('it still cannot be told an id we chose', () {
+      // Unlike Claude Code's `--session-id`. Learning the id afterwards is the
+      // whole reason the announcement exists.
+      expect(descriptor.launch.sessionIdAssignment.isSupported, isFalse);
+    });
+
+    test('every claim carries where it was read', () {
+      expect(descriptor.launch.sessionIdAnnouncement.evidence, isNotEmpty);
+      expect(descriptor.launch.continueLatest.evidence, isNotEmpty);
+    });
+  });
+
+  group('--continue is scoped, not a recency guess', () {
+    test('the descriptor declares the flag and what it continues', () {
+      final continueLatest = descriptor.launch.continueLatest;
+      expect(continueLatest.isSupported, isTrue);
+      expect(continueLatest.arguments, ['--continue']);
+      // Not "the most recent conversation anywhere": `--continue` resolves
+      // through `cache/last_conversations.json`, which is keyed by directory.
+      expect(continueLatest.scope, AgentContinueScope.workingDirectory);
+    });
+
+    test('the agents nobody checked are left saying nothing', () {
+      // The same rule as `fork` and `mcp`: unsupported means unverified, not
+      // "this CLI has no such flag".
+      for (final id in [AgentIds.claudeCode, AgentIds.codex]) {
+        expect(
+          registry.byId(id)!.launch.continueLatest.isSupported,
+          isFalse,
+          reason: id,
+        );
+      }
+    });
+  });
+
+  group("concurrent resume is refused on the CLI's own warning", () {
+    test('a second opener is not opted into', () {
+      // `agy` warns rather than refusing — "Sending messages from both may
+      // cause conflicts" — so this is false on evidence, not for want of a test.
+      expect(descriptor.launch.allowsConcurrentResume, isFalse);
+    });
+
+    test('and that warning is not listed as a refusal marker', () {
+      // `resumeConflict` is a post-mortem for a CLI that exited refusing.
+      // Antigravity's line appears inside a session that goes on working.
+      expect(descriptor.launch.resumeConflict.isEmpty, isTrue);
     });
   });
 

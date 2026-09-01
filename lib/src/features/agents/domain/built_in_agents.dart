@@ -453,6 +453,52 @@ const _antigravity = AgentDescriptor(
     // at all, whatever the rest of the registry said.
     resume: AgentResume.flag('--conversation'),
     interactiveResume: AgentResume.flag('--conversation'),
+    // **`agy` says which conversation it was.** The 2026-08-31 note recorded
+    // that it "announces the id nowhere", which is why resume was left with a
+    // flag nothing could supply a value for, and it is wrong: the CLI prints
+    // its own resume command as it exits.
+    //
+    //   Resume with -c (or command below):
+    //   agy --conversation=<uuid>
+    //
+    // Read out of the 1.1.22 binary as one format string, beside the
+    // `entrypoints.printResumeHint` symbol that emits it. It is matched only in
+    // the `=` form the CLI itself prints: this app passes `--conversation` and
+    // the id as two arguments, so our own echoed command line cannot be
+    // mistaken for the agent's statement about itself.
+    sessionIdAnnouncement: AgentSessionIdAnnouncement.pattern(
+      pattern:
+          r'agy\s+--conversation=([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-'
+          r'[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
+      evidence:
+          'agy 1.1.22 binary: "\\nResume with -c (or command below):\\n'
+          'agy --conversation=%s\\n", emitted by '
+          'entrypoints.printResumeHint',
+    ),
+    // `-c  Short alias for --continue` / `--continue  Continue the most recent
+    // conversation`. "Most recent" is scoped to the **working directory**, and
+    // that is read rather than assumed: `--continue` resolves through
+    // `entrypoints.resolveContinuedConversationID` →
+    // `store.Manager.GetLastConversation`, which reads
+    // `cache/last_conversations.json` — a flat `{directory: conversation id}`
+    // map. On a live store that file held one entry per directory and named the
+    // exact conversation each `agy -c` there would reopen.
+    //
+    // That readability is the whole reason this is declared, and the reason it
+    // does not contradict the `fork` note above, where Codex's `--last` picker
+    // is refused for being a recency guess. `AntigravityResumePlan` will only
+    // reach for `--continue` when it has no id at all, and only after reading
+    // which conversation the entry names — so the app can say what it is about
+    // to continue instead of hoping.
+    continueLatest: AgentContinueSupport.flag(
+      '--continue',
+      scope: AgentContinueScope.workingDirectory,
+      evidence:
+          'agy 1.1.22 --help: "--continue  Continue the most recent '
+          'conversation"; scope read from cache/last_conversations.json, the '
+          '{directory: conversation id} map store.Manager.GetLastConversation '
+          'resolves it through',
+    ),
     // Left false, and this one is a real distinction rather than caution. The
     // CLI does take an opening prompt, but as `-i` / `--prompt-interactive
     // <prompt>` — a flag with a value, not the trailing positional this field
@@ -462,12 +508,33 @@ const _antigravity = AgentDescriptor(
     // prompt-carrying *flag*; see the follow-up in
     // `docs/ANTIGRAVITY_SUPPORT_2026-08-31.md`.
     acceptsPromptArgument: false,
+    // Left false, and now with the CLI's own words behind it rather than the
+    // default. `agy` does *not* refuse a second opener — it warns, and carries
+    // on: "When you opened this conversation it was already open in another CLI
+    // instance on this machine. Sending messages from both may cause conflicts.
+    // Use /fork to continue here separately." (1.1.22 binary.)
+    //
+    // A CLI that names the conflict itself is not one to opt into, so this
+    // stays at the safe answer for the reason the field documents: being wrong
+    // permissively means two processes writing one conversation. It is recorded
+    // as *false on evidence* rather than false for want of a test.
+    //
+    // `resumeConflict` stays empty on purpose, and that is not the same
+    // decision. Those markers are a **post-mortem for a refusal** — Codex's
+    // "already has an active writer", printed as it exits. Antigravity's line
+    // is a warning inside a session that goes on working, so listing it there
+    // would report a live session as a failed resume.
+    allowsConcurrentResume: false,
     // `fork` stays unsupported, now on evidence rather than on the default:
     // `agy --help` lists every subcommand it has (agent, changelog, help,
     // install, mcp, mic-serve, models, plugin, update) and none of them forks.
     // `--continue` and `--conversation` both continue a conversation in place.
-    // The handoff route is closed too, because a packet is quoted from a
-    // transcript and this agent's are unreadable — see `store` below.
+    // The CLI does carry a `/fork` **slash command** — its own warning about a
+    // conversation being open twice recommends it — but a slash command is
+    // typed into a running TUI, which is not something a launch can reach, so
+    // it changes nothing here. The handoff route is closed too, because a
+    // packet is quoted from a transcript and this agent's messages stay
+    // unreadable — see `store` below.
     //
     // `mcp` stays unsupported for the same kind of reason, and stating it is
     // the point of this note. The CLI *has* MCP — `agy --help` lists an `mcp`
@@ -490,14 +557,23 @@ const _antigravity = AgentDescriptor(
   // `~/.gemini/antigravity-cli`, beside the IDE's own `antigravity-ide` — the
   // `app_data_dir` that tells them apart is visible in each one's own logs.
   //
-  // The format is `none`, and that pairing is the point: we know exactly where
-  // the conversations are and we know we cannot read them. `conversations/` on
-  // the older build is encrypted (a uniform byte histogram, and no printable
-  // run of ten characters in a 177 KB file); the current build stores each one
-  // as SQLite whose every payload column is an opaque protobuf blob in an
-  // unpublished schema. So this is a settled property of the product rather
-  // than a reader nobody has written yet, and `agentSupportsChatView`
-  // correctly still offers no chat view.
+  // The format is still `none`, but the reason has narrowed and the comment it
+  // used to carry was wrong. "We cannot read them" was concluded from one file
+  // — `conversations/<id>.db`, whose payload columns really are protobuf in an
+  // unpublished schema — and generalised to the directory. The directory also
+  // holds `cache/last_conversations.json` (`{directory: conversation id}`),
+  // `annotations/<id>.pbtxt` (what `/rename` wrote) and a readable
+  // `conversation_summaries.db`, and `data/antigravity_store_reader.dart` reads
+  // all three today.
+  //
+  // What remains true is the part that gates the *chat view*: message content
+  // is unreadable, so there is no transcript to show, quote into a handoff
+  // packet, or seed a resume from. `AgentStoreFormat`'s existing values each
+  // name a transcript format, and none of them describes a store that yields
+  // identity without content — so this stays `none` until the enum grows a
+  // value for it, which is a change to `CliDetectionService`'s reader switch
+  // and outside this branch's file scope. See
+  // `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6 for the exact follow-up.
   store: AgentStoreSpec(
     homeDirectoryName: '.gemini/antigravity-cli',
     format: AgentStoreFormat.none,
