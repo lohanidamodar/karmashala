@@ -17,14 +17,14 @@ Database _migratedTo(int upTo) {
 }
 
 void main() {
-  test('the head is v24 and the keys stay contiguous', () {
+  test('the migration keys stay contiguous through v23', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 24);
+    expect(db.schemaVersion, 25);
   });
 
   test('v23 gives a session an append-only decision record', () {

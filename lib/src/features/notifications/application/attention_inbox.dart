@@ -1,17 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../../follow_ups/application/follow_up_inbox.dart';
+import '../../follow_ups/application/follow_up_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../domain/inbox_item.dart';
 import 'notification_providers.dart';
 
 /// Holds the attention inbox and keeps it honest about what the user has seen.
 ///
-/// Two inputs, and neither of them is a timer of its own:
+/// Three inputs, and none of them is a timer of its own:
 ///
 /// * the **watcher**, through `AgentStatusWatcher.onInbox`, wired in
 ///   `notification_providers.dart`;
-/// * the **selection**, so an item retires when its source is looked at.
+/// * the **selection**, so an item retires when its source is looked at;
+/// * the **follow-up store**, through `openFollowUpsProvider` — what sessions
+///   left behind when they ended. Listened to rather than watched: a change in
+///   the store must fold into the list, not rebuild the notifier and throw away
+///   everything the poll has put there.
 ///
 /// "Looked at" means *selected while the window has focus* — the same reading
 /// `AgentNotificationPolicy` already uses for "the session on screen", because
@@ -23,7 +29,15 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     ref.listen(selectedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(selectedImportedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
-    return AttentionInbox.empty;
+    ref.listen(openFollowUpsProvider, (_, next) {
+      state = state.syncFollowUps(next);
+      // A follow-up for the session already on screen is not news either.
+      _syncViewed();
+    });
+    // Seeded from the same provider the listener above watches, so a workspace
+    // whose sessions ended while the app was closed opens with them listed
+    // rather than waiting for something to change first.
+    return AttentionInbox.empty.syncFollowUps(ref.read(openFollowUpsProvider));
   }
 
   /// One poll's worth of observations.
@@ -36,7 +50,17 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
 
   void markAllSeen() => state = state.markAllSeen();
 
-  void dismiss(String id) => state = state.dismiss(id);
+  /// Takes an item off the list for good.
+  ///
+  /// A follow-up is resolved in its **table** as well, and it has to be: the
+  /// session row that raised it goes on saying `failed` forever, so an item
+  /// removed only from this list would be back on the next sweep.
+  void dismiss(String id) {
+    if (followUpRowIdIn(id) case final rowId?) {
+      ref.read(followUpServiceProvider).dismissRow(rowId);
+    }
+    state = state.dismiss(id);
+  }
 
   /// Opens an item's source and, by doing so, marks it seen.
   void open(InboxItem item) {
