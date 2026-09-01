@@ -339,6 +339,226 @@ void main() {
     });
   });
 
+  group('switching tabs: the panes that are not involved are not rebuilt', () {
+    /// The owner's report against 1.1.4: "switching tab is heavy too, it might
+    /// be recomputing everything even the hidden things".
+    ///
+    /// Two mechanisms could produce that, and both are counted here. A switch
+    /// re-derives every pane's ingest tier, so it could **parse** — promotion
+    /// out of `cold` rebuilds a buffer from its parked window and its spool.
+    /// And the stack rebuilds, so it could rebuild the view of every pane the
+    /// mounted budget is holding rather than only the two tabs involved.
+    ///
+    /// Widget identity is the probe for the second: widgets are immutable, so
+    /// a pane whose `TerminalPaneView` is the *same object* after the switch is
+    /// a pane the switch did not rebuild.
+    /// The curve's own points, minus one: a switch needs somewhere to switch
+    /// to, and at N = 1 there is nowhere.
+    const switchScale = [2, 10, 100];
+
+    testWidgets('a switch parses nothing and rebuilds two panes, at every N', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final chunk =
+          '${corpusText(PerfCorpus.plainLog, columns: 80, rows: 24)}\r\n';
+      final rebuilt = <int, int>{};
+      final parsed = <int, int>{};
+
+      for (final n in switchScale) {
+        final database = AppDatabase.memory();
+        final container = fakeTerminalContainer(database: database);
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        final tabIds = <String>[];
+        for (var i = 0; i < n; i++) {
+          final tabId = controller.openTab(TerminalProfile.powerShell);
+          tabIds.add(tabId);
+          final paneId = container
+              .read(terminalSessionsControllerProvider)
+              .tabs
+              .firstWhere((tab) => tab.id == tabId)
+              .layout
+              .panes
+              .single;
+          controller.instanceFor(paneId)!.terminal.write(chunk);
+        }
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const MaterialApp(home: Scaffold(body: TerminalPaneStack())),
+          ),
+        );
+        await tester.pump();
+
+        /// Every mounted pane view, by the pane it draws. `skipOffstage: false`
+        /// because `IndexedStack` hides the ones this test is about.
+        Map<String, TerminalPaneView> mountedViews() => {
+          for (final view in tester.widgetList<TerminalPaneView>(
+            find.byType(TerminalPaneView, skipOffstage: false),
+          ))
+            view.instance.id: view,
+        };
+
+        int totalLines() {
+          var lines = 0;
+          for (final tab
+              in container.read(terminalSessionsControllerProvider).tabs) {
+            for (final paneId in tab.layout.panes) {
+              lines += controller
+                  .instanceFor(paneId)!
+                  .terminal
+                  .buffer
+                  .lines
+                  .length;
+            }
+          }
+          return lines;
+        }
+
+        final before = mountedViews();
+        final linesBefore = totalLines();
+        // Both tabs are already mounted, so this is a plain switch rather than
+        // a remount — the case the user does dozens of times an hour.
+        final target = tabIds.firstWhere(
+          (id) =>
+              id !=
+              container.read(terminalSessionsControllerProvider).activeTabId,
+        );
+        controller.activateTab(target);
+        await tester.pump();
+
+        final after = mountedViews();
+        rebuilt[n] = [
+          for (final entry in after.entries)
+            if (!identical(before[entry.key], entry.value)) entry.key,
+        ].length;
+        parsed[n] = totalLines() - linesBefore;
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        container.dispose();
+        database.close();
+      }
+
+      // ignore: avoid_print
+      print('N tabs | pane views rebuilt by one switch | lines parsed');
+      for (final n in switchScale) {
+        // ignore: avoid_print
+        print(
+          '${n.toString().padLeft(6)} | ${rebuilt[n]!.toString().padLeft(30)} | '
+          '${parsed[n]}',
+        );
+      }
+
+      for (final n in switchScale) {
+        expect(
+          parsed[n],
+          0,
+          reason:
+              'a switch between two open tabs moves panes between warm and '
+              'hot, and neither tier parses anything on the way — only '
+              'promotion out of cold rebuilds a buffer, and a pane with a tab '
+              'is never cold',
+        );
+      }
+      expect(
+        rebuilt[100],
+        rebuilt[10],
+        reason:
+            'what a switch rebuilds is bounded by the mounted set, so it must '
+            'not grow with the number of tabs behind it',
+      );
+    });
+
+    testWidgets('switching to an evicted tab rebuilds its view, not its '
+        'buffer', (tester) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final database = AppDatabase.memory();
+      final container = fakeTerminalContainer(database: database);
+      addTearDown(container.dispose);
+      addTearDown(database.close);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+
+      // Two past the budget, so the tabs opened first are certain to have been
+      // evicted by the time the last one is active.
+      final tabIds = <String>[];
+      final paneIds = <String>[];
+      for (var i = 0; i < kMountedTabBudget + 2; i++) {
+        final tabId = controller.openTab(TerminalProfile.powerShell);
+        tabIds.add(tabId);
+        final paneId = container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .firstWhere((tab) => tab.id == tabId)
+            .layout
+            .panes
+            .single;
+        paneIds.add(paneId);
+        controller
+            .instanceFor(paneId)!
+            .terminal
+            .write('tab $i output\r\n' * 40);
+      }
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: TerminalPaneStack())),
+        ),
+      );
+      await tester.pump();
+
+      Set<String> mountedPanes() => {
+        for (final view in tester.widgetList<TerminalPaneView>(
+          find.byType(TerminalPaneView, skipOffstage: false),
+        ))
+          view.instance.id,
+      };
+
+      final evicted = paneIds.firstWhere(
+        (paneId) => !mountedPanes().contains(paneId),
+      );
+      final index = paneIds.indexOf(evicted);
+      final instance = controller.instanceFor(evicted)!;
+      final terminal = instance.terminal;
+
+      controller.activateTab(tabIds[index]);
+      await tester.pump();
+
+      expect(
+        mountedPanes(),
+        contains(evicted),
+        reason: 'the tab being switched to is always mounted',
+      );
+      expect(
+        mountedPanes(),
+        hasLength(kMountedTabBudget),
+        reason: 'and the budget is still the ceiling afterwards',
+      );
+      // The design claim, tested rather than asserted in prose: eviction takes
+      // the widgets and leaves the buffer. Coming back builds a view over the
+      // pane's own `Terminal` — the same object, with the same scrollback in
+      // it — rather than replaying anything into a new one.
+      expect(controller.instanceFor(evicted), same(instance));
+      expect(instance.terminal, same(terminal));
+      expect(
+        terminal.mainBuffer.getText(),
+        contains('tab $index output'),
+        reason: 'the history was never re-parsed because it never left',
+      );
+    });
+  });
+
   group('fan-out: one pane producing output is one pane rebuilding', () {
     test('a write reaches only its own pane at every N', () {
       for (final n in scale) {

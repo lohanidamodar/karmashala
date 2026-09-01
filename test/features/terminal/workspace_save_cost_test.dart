@@ -53,6 +53,7 @@ void main() {
             restoredScrollback,
             shellIntegration = false,
             agentLaunch,
+            adoptTerminal,
           }) => _CountingInstance(
             id: id,
             title: profile.label,

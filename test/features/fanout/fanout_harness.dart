@@ -123,6 +123,7 @@ Harness harness({
                 restoredScrollback,
                 shellIntegration = false,
                 agentLaunch,
+                adoptTerminal,
               }) {
                 if (paneFailsFor.contains(agentLaunch?.agentId)) {
                   throw StateError('could not start ${agentLaunch?.agentId}');
@@ -134,6 +135,7 @@ Harness harness({
                   restoredScrollback: restoredScrollback,
                   shellIntegration: shellIntegration,
                   agentLaunch: agentLaunch,
+                  adoptTerminal: adoptTerminal,
                 );
               },
       ),

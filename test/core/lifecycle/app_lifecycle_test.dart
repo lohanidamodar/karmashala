@@ -14,6 +14,7 @@ import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart'
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 import 'package:path/path.dart' as p;
 
 import '../../features/system/fake_native_adapters.dart';
@@ -156,6 +157,7 @@ void main() {
                 String? restoredScrollback,
                 bool shellIntegration = false,
                 AgentPaneLaunch? agentLaunch,
+                Terminal? adoptTerminal,
               }) {
                 final instance = _ReapingInstance(
                   id: id,

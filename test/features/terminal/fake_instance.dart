@@ -27,7 +27,8 @@ class FakeTerminalInstance
     implements
         TerminalInstance,
         TieredTerminalInstance,
-        ParkableTerminalInstance {
+        ParkableTerminalInstance,
+        AdoptableTerminalInstance {
   FakeTerminalInstance({
     required this.id,
     required this.title,
@@ -35,10 +36,17 @@ class FakeTerminalInstance
     this.workingDirectory,
     this.restored,
     this.agentLaunch,
-  }) {
-    terminal = Terminal(maxLines: 1000)..resize(40, 10);
-    if (restored != null && restored!.isNotEmpty) terminal.write(restored!);
+    Terminal? adoptTerminal,
+  }) : adopted = adoptTerminal {
+    terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
+    if (adoptTerminal == null && restored != null && restored!.isNotEmpty) {
+      terminal.write(restored!);
+    }
   }
+
+  /// The buffer this pane was handed instead of text, if it was — asserted on
+  /// by the resume-cost gate.
+  final Terminal? adopted;
 
   @override
   final String id;
@@ -114,6 +122,13 @@ class FakeTerminalInstance
 
   @override
   String? get parkedScrollback => park.parked;
+
+  /// The same rule [PtyTerminalInstance] applies: a pane that has stopped and
+  /// still has its buffer can hand it over; a parked one cannot, because it
+  /// gave its buffer up.
+  @override
+  Terminal? get adoptableBuffer =>
+      !livenessNotifier.value.isLive && !park.isParked ? terminal : null;
 
   /// Output arriving from the process this pane does not have, through the same
   /// tiering a real pane's bytes go through.
@@ -223,6 +238,7 @@ TerminalInstance defaultFakeInstanceFactory({
   String? restoredScrollback,
   bool shellIntegration = false,
   AgentPaneLaunch? agentLaunch,
+  Terminal? adoptTerminal,
 }) => FakeTerminalInstance(
   id: id,
   title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
@@ -230,4 +246,5 @@ TerminalInstance defaultFakeInstanceFactory({
   workingDirectory: workingDirectory,
   restored: restoredScrollback,
   agentLaunch: agentLaunch,
+  adoptTerminal: adoptTerminal,
 );
