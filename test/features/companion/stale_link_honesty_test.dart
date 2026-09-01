@@ -36,6 +36,7 @@ void main() {
   late Map<String, String> phoneDisk;
   late SecureCompanionStore store;
   final gateways = <RemoteCompanionGateway>[];
+  final hostLog = <String>[];
 
   final hostId = DeviceId.parse('11111111222222223333333344444444');
 
@@ -47,6 +48,7 @@ void main() {
       ..addSession('s2');
     // Its own ephemeral port — never the machine's real relay port, which a
     // leaked listener would hold for every run after this one.
+    hostLog.clear();
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
     phoneDisk = {
@@ -80,6 +82,7 @@ void main() {
       lanPort: 0,
       advertise: false,
       transcriptPollInterval: Duration.zero,
+      onLog: hostLog.add,
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),
@@ -126,6 +129,32 @@ void main() {
   /// A desktop that keeps the socket but stops answering: every `sessions.list`
   /// and `transcript.get` now costs far longer than the phone will wait.
   void goSilent() => fake.stageCost = const Duration(seconds: 30);
+
+  /// Puts every stored copy of the pairing back one generation — the counter
+  /// bump that never reached the keystore.
+  void rewindStoredGeneration() {
+    for (final key in phoneDisk.keys.toList()) {
+      final raw = phoneDisk[key]!;
+      if (!raw.contains('"generation"')) continue;
+      phoneDisk[key] = raw.replaceAllMapped(
+        RegExp(r'"generation":(\d+)'),
+        (m) => '"generation":${int.parse(m.group(1)!) - 1}',
+      );
+    }
+  }
+
+  Future<void> eventually(
+    Future<bool> Function() check, {
+    Duration timeout = const Duration(seconds: 40),
+    String reason = 'condition',
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (true) {
+      if (await check()) return;
+      if (DateTime.now().isAfter(deadline)) fail('never happened: $reason');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
 
   test('a phone left with only a cached list does not call itself connected',
       timeout: const Timeout(Duration(minutes: 3)), () async {
@@ -198,6 +227,58 @@ void main() {
       isEmpty,
       reason: 'one call the desktop was too busy to answer is not an outage',
     );
+  });
+
+  test('the owner\'s phone, end to end: a counter bump that never landed no '
+      'longer costs the desktop', timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+    await startService();
+    final gateway = await pairedPhone();
+    expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+    await gateway.close();
+    gateways.remove(gateway);
+
+    // The counter bump the last connection made never reached the keystore —
+    // a write that timed out, or Android killing the app before it landed. So
+    // the phone comes back holding the generation it has ALREADY used, and
+    // builds a fresh channel on it: the desktop greets it (the hello never
+    // goes through a channel) and can then admit nothing it sends.
+    rewindStoredGeneration();
+
+    final reopened = makeGateway();
+    await awaitLink(reopened, CompanionLinkState.connected);
+
+    // The first call is still lost: the desktop only learns the channel is
+    // stale by being handed a frame it cannot open, and that frame is this
+    // one. What matters is what happens next.
+    await expectLater(
+      reopened.listSessions(),
+      throwsA(isA<GatewayException>()),
+    );
+    expect(
+      hostLog.where((line) => line.startsWith('retiring generation')),
+      isNotEmpty,
+      reason: 'the desktop has to notice, say so, and leave the poisoned '
+          'generation behind — before this it refused every frame in silence '
+          'and the phone waited on it for as long as the app stayed open',
+    );
+
+    // Then it heals itself: nobody re-pairs, nobody touches a setting, and
+    // everything the owner could not do works.
+    await eventually(
+      () async {
+        try {
+          await reopened.listSessions();
+          return true;
+        } on Object {
+          return false;
+        }
+      },
+      reason: 'the phone comes back on the generation the desktop moved to',
+    );
+    expect((await reopened.listSessions()).map((s) => s.id), ['s1', 's2']);
+    expect(reopened.link, CompanionLinkState.connected);
+    expect(reopened.linkTrouble, isNull);
   });
 
   test('the phone that stopped believing itself comes back on its own',
