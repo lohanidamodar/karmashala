@@ -12,6 +12,8 @@ import 'package:chitragupta/src/features/agents/data/agent_installation_dao.dart
 import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
+import 'package:chitragupta/src/features/environments/domain/environment_kind.dart';
+import 'package:chitragupta/src/features/environments/domain/execution_environment.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/remote/application/host_session_api.dart';
 import 'package:chitragupta/src/features/remote/application/remote_bindings.dart';
@@ -166,6 +168,54 @@ void main() {
       final agent = (await workspace()).single.checkouts.single.agents.single;
 
       expect(agent.defaultMode, PermissionMode.ask.name);
+    });
+
+    test('names the environment each checkout lives in', () async {
+      // The reported case: one project, the same repository checked out under
+      // Windows and inside a WSL distribution. Two rows called "app" whose
+      // only difference used to be a path the phone's owner had to decode.
+      RepositoryDao(db).insert(
+        repository(
+          id: 'r2',
+          environmentId: 'wsl:Ubuntu',
+          path: '/home/me/demo/app',
+        ),
+      );
+
+      final projects = await workspace();
+
+      expect(
+        projects.single.checkouts.map((c) => c.environmentName),
+        ['WSL · Ubuntu', 'Windows'],
+        reason: 'sorted by path, and each says where it lives',
+      );
+      expect(projects.single.environmentName, 'Windows');
+    });
+
+    test('an environment with nothing to call it is left unnamed', () async {
+      // A WSL row whose distribution was never recorded and whose name is
+      // blank: there is no honest word for it, and "WSL · " is not one.
+      ExecutionEnvironmentDao(db).upsert(
+        ExecutionEnvironment(
+          id: 'wsl:',
+          kind: EnvironmentKind.wsl,
+          name: '',
+          createdAt: testTime,
+        ),
+      );
+      RepositoryDao(db).insert(
+        repository(id: 'r2', environmentId: 'wsl:', path: '/srv/demo/web'),
+      );
+
+      final unnamed = (await workspace()).single.checkouts.firstWhere(
+        (c) => c.repositoryId == 'r2',
+      );
+
+      expect(
+        unnamed.environmentName,
+        isNull,
+        reason: 'the phone falls back to the path rather than invent a name',
+      );
     });
 
     test('a project with no checkout is absent, not an empty offer', () async {

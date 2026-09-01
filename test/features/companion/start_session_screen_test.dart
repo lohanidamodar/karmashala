@@ -55,11 +55,13 @@ RemoteAgentOption agent({
 RemoteWorkspaceProject workspaceProject({
   String projectId = 'p1',
   String name = 'popupbits',
+  String? environmentName,
   List<RemoteCheckoutOption>? checkouts,
 }) => RemoteWorkspaceProject(
   projectId: projectId,
   name: name,
   path: '/w/$name',
+  environmentName: environmentName,
   checkouts:
       checkouts ??
       [
@@ -68,9 +70,38 @@ RemoteWorkspaceProject workspaceProject({
           name: 'app',
           path: '/w/$name/app',
           branch: 'main',
+          environmentName: environmentName,
           agents: [agent()],
         ),
       ],
+);
+
+/// The reported case: one project, one repository, checked out twice — once
+/// natively and once inside a WSL distribution. Both checkouts are called
+/// "app"; only the environment tells them apart.
+RemoteWorkspaceProject checkedOutTwice() => RemoteWorkspaceProject(
+  projectId: 'p1',
+  name: 'popupbits',
+  path: r'C:\src\popupbits',
+  environmentName: 'Windows',
+  checkouts: [
+    RemoteCheckoutOption(
+      repositoryId: 'r-win',
+      name: 'app',
+      path: r'C:\src\popupbits\app',
+      branch: 'main',
+      environmentName: 'Windows',
+      agents: [agent()],
+    ),
+    RemoteCheckoutOption(
+      repositoryId: 'r-wsl',
+      name: 'app',
+      path: '/home/me/popupbits/app',
+      branch: 'main',
+      environmentName: 'WSL · Ubuntu',
+      agents: [agent(installationId: 'i2')],
+    ),
+  ],
 );
 
 FakeCompanionGateway paired({
@@ -213,6 +244,161 @@ void main() {
 
       expect(find.text('Not granted'), findsOneWidget);
       expect(find.text('Start session'), findsNothing);
+    });
+  });
+
+  group('which environment', () {
+    testWidgets('two checkouts of one project are told apart by name alone', (
+      tester,
+    ) async {
+      final gateway = paired(workspace: [checkedOutTwice()]);
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Checkout'));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(BottomSheet);
+      expect(
+        find.descendant(of: sheet, matching: find.text('app')),
+        findsNWidgets(2),
+        reason: 'both rows carry the same name — the ambiguity that was reported',
+      );
+      expect(
+        find.descendant(of: sheet, matching: find.text('Windows')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: sheet, matching: find.text('WSL · Ubuntu')),
+        findsOneWidget,
+      );
+
+      await tester.tap(
+        find.descendant(of: sheet, matching: find.text('WSL · Ubuntu')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('WSL · Ubuntu'),
+        findsOneWidget,
+        reason: 'the settled row keeps saying which environment it picked',
+      );
+      await tester.tap(find.text('Start session'));
+      await tester.pumpAndSettle();
+      expect(gateway.startedSessions.single.repositoryId, 'r-wsl');
+    });
+
+    testWidgets('two projects of one name are told apart in the picker', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: paired(
+          workspace: [
+            workspaceProject(environmentName: 'Windows'),
+            workspaceProject(
+              projectId: 'p2',
+              environmentName: 'WSL · Ubuntu',
+            ),
+          ],
+        ),
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Project'));
+      await tester.pumpAndSettle();
+
+      final sheet = find.byType(BottomSheet);
+      expect(
+        find.descendant(of: sheet, matching: find.text('Windows')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: sheet, matching: find.text('WSL · Ubuntu')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a screen reader is told which environment, not just shown', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await pumpPhone(
+        tester,
+        gateway: paired(workspace: [checkedOutTwice()]),
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel('Environment: Windows'),
+        findsOneWidget,
+        reason: 'the fact is labelled, not left as a bare word on a line',
+      );
+
+      await tester.tap(find.text('Checkout'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel('Environment: WSL, Ubuntu'),
+        findsOneWidget,
+        reason: 'the separator is spoken as a pause, not as a middle dot',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('an environment with no name falls back to the path', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      await pumpPhone(
+        tester,
+        gateway: paired(),
+        home: const StartSessionScreen(),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel(RegExp('^Environment')),
+        findsNothing,
+        reason: 'nothing useful to say, so nothing is said',
+      );
+      expect(
+        find.textContaining('/w/popupbits/app'),
+        findsOneWidget,
+        reason: 'the path still locates the checkout',
+      );
+      handle.dispose();
+    });
+
+    testWidgets('the environment survives a 200% text scale', (tester) async {
+      await pumpPhone(
+        tester,
+        gateway: paired(workspace: [checkedOutTwice()]),
+        home: const StartSessionScreen(),
+        textScale: 2.0,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Windows'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.text('Checkout'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('WSL · Ubuntu'),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 

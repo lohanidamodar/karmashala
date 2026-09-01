@@ -544,6 +544,7 @@ class RemoteCheckoutOption {
     this.path,
     this.subPath,
     this.branch,
+    this.environmentName,
     this.folderMissing = false,
     this.agents = const [],
   });
@@ -565,6 +566,19 @@ class RemoteCheckoutOption {
   /// checkout stat and starts no git.
   final String? branch;
 
+  /// The execution environment this checkout lives in, as the desktop names
+  /// it — `Windows`, `WSL · Ubuntu`, `SSH · build-box`.
+  ///
+  /// The same repository checked out twice — natively and inside a WSL
+  /// distribution — gives a project two checkouts of the same name, and the
+  /// path is the only other thing that differs. Naming the environment is
+  /// what makes that choice readable on a phone.
+  ///
+  /// Null when the desktop has nothing worth saying: an environment row it no
+  /// longer holds, or one saved with a blank name. The phone falls back to the
+  /// path rather than showing an empty line.
+  final String? environmentName;
+
   /// The desktop cannot see this folder on disk. False also means "could not
   /// tell" — the same fail-safe direction the session rows take.
   final bool folderMissing;
@@ -579,6 +593,7 @@ class RemoteCheckoutOption {
     if (path != null) 'path': path,
     if (subPath != null) 'subPath': subPath,
     if (branch != null) 'branch': branch,
+    if (environmentName != null) 'environmentName': environmentName,
     if (folderMissing) 'folderMissing': folderMissing,
     'agents': [for (final agent in agents) agent.toJson()],
   };
@@ -596,6 +611,7 @@ class RemoteCheckoutOption {
       path: str(json['path']),
       subPath: str(json['subPath']),
       branch: str(json['branch']),
+      environmentName: str(json['environmentName']),
       folderMissing: json['folderMissing'] == true,
       agents: [
         if (agents is List)
@@ -615,18 +631,26 @@ class RemoteWorkspaceProject {
     required this.projectId,
     required this.name,
     this.path,
+    this.environmentName,
     this.checkouts = const [],
   });
 
   final String projectId;
   final String name;
   final String? path;
+
+  /// The environment the project's root folder lives in, named the way
+  /// [RemoteCheckoutOption.environmentName] is. Two projects of the same name
+  /// — one per environment — are otherwise told apart only by their paths.
+  final String? environmentName;
+
   final List<RemoteCheckoutOption> checkouts;
 
   Map<String, Object?> toJson() => {
     'projectId': projectId,
     'name': name,
     if (path != null) 'path': path,
+    if (environmentName != null) 'environmentName': environmentName,
     'checkouts': [for (final checkout in checkouts) checkout.toJson()],
   };
 
@@ -640,6 +664,9 @@ class RemoteWorkspaceProject {
       projectId: projectId,
       name: json['name'] is String ? json['name']! as String : projectId,
       path: json['path'] is String ? json['path']! as String : null,
+      environmentName: json['environmentName'] is String
+          ? json['environmentName']! as String
+          : null,
       checkouts: [
         if (checkouts is List)
           for (final entry in checkouts)

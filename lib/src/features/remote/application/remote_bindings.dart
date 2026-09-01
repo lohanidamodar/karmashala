@@ -19,6 +19,7 @@ import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../../environments/domain/environment_label.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../explorer/application/checkout.dart';
@@ -414,6 +415,22 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
             agentOption(installation),
         ];
 
+    // Read once and looked up per row: a workspace is mostly two or three
+    // environments spread over many checkouts, and this runs on every
+    // `workspace.list`.
+    final environments = {
+      for (final environment
+          in ref.read(executionEnvironmentDaoProvider).getAll())
+        environment.id: environment,
+    };
+    // The desktop's own name for where a folder lives. Null for an
+    // environment row the desktop no longer holds — the phone then falls back
+    // to the path rather than inventing a name for it.
+    String? nameOf(String environmentId) {
+      final environment = environments[environmentId];
+      return environment == null ? null : environmentLabel(environment);
+    }
+
     final out = <RemoteWorkspaceProject>[];
     for (final project in ref.read(sortedProjectsProvider)) {
       final repositories =
@@ -428,6 +445,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
           projectId: project.id,
           name: project.name,
           path: project.root.path,
+          environmentName: nameOf(project.environmentId),
           checkouts: [
             for (final repository in repositories)
               RemoteCheckoutOption(
@@ -436,6 +454,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
                 path: repository.path.path,
                 subPath: relativeSubPath(project.root, repository.path),
                 branch: ref.read(remoteCheckoutBranchProvider)(repository.path),
+                environmentName: nameOf(repository.environmentId),
                 folderMissing: ref.read(remoteFolderMissingProvider)(
                   repository.path,
                 ),

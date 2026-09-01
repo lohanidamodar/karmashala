@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../environments/domain/environment_label.dart';
 import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
@@ -113,7 +114,16 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
           ListTile(
             leading: const Icon(AppIcons.folder),
             title: Text(project.name, maxLines: 1),
-            subtitle: project.path == null ? null : Text(project.path!),
+            // Two projects of the same name — the same repository set up once
+            // per environment — are told apart here and nowhere else, so the
+            // environment is named in the picker even though the settled row
+            // leaves it to the checkout beneath it.
+            subtitle: _beneath(
+              environment: project.environmentName,
+              detail: project.path,
+            ),
+            isThreeLine:
+                project.environmentName != null && project.path != null,
             selected: project.projectId == _project(projects)?.projectId,
             onTap: () => Navigator.of(context).pop(project.projectId),
           ),
@@ -143,7 +153,13 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
                   : null,
             ),
             title: Text(checkout.name, maxLines: 1),
-            subtitle: Text(_checkoutLine(checkout), maxLines: 1),
+            subtitle: _beneath(
+              environment: checkout.environmentName,
+              detail: _checkoutLine(checkout),
+            ),
+            isThreeLine:
+                checkout.environmentName != null &&
+                _checkoutLine(checkout).isNotEmpty,
             selected: checkout.repositoryId == _repositoryId,
             onTap: () => Navigator.of(context).pop(checkout.repositoryId),
           ),
@@ -380,6 +396,11 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
           icon: AppIcons.folderOpen,
           label: 'Checkout',
           value: checkout.name,
+          // Named here and not on the project row above: the environment a
+          // session runs in is the checkout's, and a project root that lives
+          // somewhere else would put two rows in disagreement about "the
+          // environment" — worse than one row that answers.
+          environment: checkout.environmentName,
           detail: _checkoutLine(checkout),
           alert: checkout.folderMissing,
           onTap: project.checkouts.length > 1
@@ -518,6 +539,62 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   }
 }
 
+/// Which execution environment something lives in, in the desktop's own words
+/// — "Windows", "WSL · Ubuntu", "SSH · build-box".
+///
+/// A line of its own rather than one more clause in a dot-joined run: this is
+/// the answer people were reading the path to work out, and a fact buried
+/// mid-sentence is a fact still being decoded. The kind prefix labels it for
+/// the eye; the [Semantics] label does the same for a reader that never sees
+/// the line break, and speaks the separator as the pause it looks like.
+class _Environment extends StatelessWidget {
+  const _Environment(this.name);
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      // A node of its own, not an annotation folded into the tile's: the point
+      // is that "which environment" is asked and answered separately from the
+      // checkout's name, for a listener as much as for a reader.
+      container: true,
+      label: 'Environment: ${spokenEnvironmentLabel(name)}',
+      excludeSemantics: true,
+      // Two lines, not one: an ellipsised distribution name is exactly the
+      // guess this row exists to remove, and a 200% text scale reaches the
+      // edge of a phone in about eight characters.
+      child: Text(
+        name,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: UiDensity.of(context).muted(theme)?.copyWith(
+          color: theme.colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// A picker row's supporting lines: where it lives, then what else is known
+/// about it. **Null when neither says anything**, so a tile with nothing to
+/// add keeps a single-line height rather than an empty subtitle slot.
+Widget? _beneath({String? environment, String? detail}) {
+  final lines = [
+    if (environment != null) _Environment(environment),
+    if (detail != null && detail.isNotEmpty)
+      Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis),
+  ];
+  if (lines.isEmpty) return null;
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: lines,
+  );
+}
+
 /// One answered question: what it is, what it says, and — when there is more
 /// than one answer to give — that tapping it opens the rest.
 class _Row extends StatelessWidget {
@@ -525,6 +602,7 @@ class _Row extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.environment,
     this.detail,
     this.alert = false,
     this.onTap,
@@ -533,6 +611,11 @@ class _Row extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+
+  /// Where this lives, in the desktop's own words. Null when the desktop had
+  /// nothing worth saying — [detail] still carries the path.
+  final String? environment;
+
   final String? detail;
 
   /// Draw it in the error colour — a folder the desktop cannot see, or a mode
@@ -563,6 +646,7 @@ class _Row extends StatelessWidget {
               color: alert ? semantic.attention : scheme.onSurface,
             ),
           ),
+          if (environment != null) _Environment(environment!),
           if (detail != null && detail!.isNotEmpty)
             Text(
               detail!,
