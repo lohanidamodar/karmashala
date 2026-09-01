@@ -223,6 +223,22 @@ void main() {
     }
   });
 
+  testWidgets('the address bar is the same box as every other text field', (
+    tester,
+  ) async {
+    // It used to declare `border: OutlineInputBorder()` for itself, which is
+    // Material's 4px radius and default stroke — a visibly different box from
+    // the `Radii.sm` / `outlineVariant` one the theme draws for the logs
+    // panel's filter field a tab away.
+    final harness = Harness();
+    await harness.pump(tester);
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.decoration!.border, isNull);
+    expect(field.decoration!.contentPadding, isNull);
+    expect(field.decoration!.isDense, isNull);
+    expect(field.style, MonoStyles.body);
+  });
+
   testWidgets('a single tab does not get a picker', (tester) async {
     final harness = Harness();
     await harness.pump(tester);

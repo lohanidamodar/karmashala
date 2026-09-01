@@ -176,20 +176,23 @@ class _AddressBar extends StatelessWidget {
             enabled: enabled,
             onChanged: onChanged,
             onSubmitted: (_) => onSubmit(),
-            style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+            style: MonoStyles.body,
+            // No `border` and no `contentPadding` of its own: overriding them
+            // with a bare `OutlineInputBorder()` took Material's 4px radius and
+            // default stroke instead of the app's `Radii.sm` and
+            // `outlineVariant`, so the one text field in this pane was a
+            // different shape and colour from the one in the logs panel beside
+            // it. The theme already says both.
             decoration: const InputDecoration(
-              isDense: true,
               hintText: 'localhost:3000',
-              prefixIcon: Icon(AppIcons.globe, size: 15),
+              prefixIcon: Icon(AppIcons.globe, size: Chrome.icon),
               prefixIconConstraints: BoxConstraints(minWidth: 30),
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(vertical: 10),
             ),
           ),
         ),
         IconButton(
           tooltip: 'Go',
-          icon: const Icon(AppIcons.caretRight, size: 16),
+          icon: const Icon(AppIcons.caretRight),
           onPressed: enabled ? onSubmit : null,
         ),
       ],
@@ -283,7 +286,7 @@ class _Actions extends ConsumerWidget {
           if (picking)
             FilledButton.tonalIcon(
               onPressed: controller.cancelPick,
-              icon: const Icon(AppIcons.x, size: 15),
+              icon: const Icon(AppIcons.x),
               label: const Text('Cancel pick'),
             )
           else
@@ -291,7 +294,7 @@ class _Actions extends ConsumerWidget {
               onPressed: state.isConnected && !state.isBusy
                   ? controller.pickElement
                   : null,
-              icon: const Icon(AppIcons.target, size: 15),
+              icon: const Icon(AppIcons.target),
               label: const Text('Pick element'),
             ),
           const Spacer(),
@@ -329,7 +332,6 @@ class _ErrorBanner extends StatelessWidget {
         children: [
           Icon(
             AppIcons.warningCircle,
-            size: 15,
             color: theme.colorScheme.onErrorContainer,
           ),
           const SizedBox(width: Insets.sm),
@@ -344,7 +346,7 @@ class _ErrorBanner extends StatelessWidget {
           IconButton(
             tooltip: 'Dismiss',
             visualDensity: VisualDensity.compact,
-            icon: const Icon(AppIcons.x, size: 13),
+            icon: const Icon(AppIcons.x, size: Chrome.iconSmall),
             onPressed: onDismiss,
           ),
         ],
@@ -418,7 +420,7 @@ class _CapturePreview extends ConsumerWidget {
         const SizedBox(height: 2),
         SelectableText(
           capture.selector,
-          style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11.5),
+          style: MonoStyles.small,
         ),
         const SizedBox(height: 2),
         Text(
@@ -436,14 +438,14 @@ class _CapturePreview extends ConsumerWidget {
                 onPressed: sessionId == null
                     ? null
                     : () => _send(context, ref, sessionId),
-                icon: const Icon(AppIcons.paperPlaneRight, size: 15),
+                icon: const Icon(AppIcons.paperPlaneRight),
                 label: const Text('Send to session'),
               ),
             ),
             const SizedBox(width: Insets.sm),
             IconButton.outlined(
               tooltip: 'Copy the bundle',
-              icon: const Icon(AppIcons.copy, size: 15),
+              icon: const Icon(AppIcons.copy),
               onPressed: () => _copy(context, ref),
             ),
           ],
@@ -476,7 +478,7 @@ class _CapturePreview extends ConsumerWidget {
         SelectableText(
           ref.read(browserPaneControllerProvider.notifier).capturePrompt() ??
               '',
-          style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11),
+          style: MonoStyles.small,
         ),
       ],
     );

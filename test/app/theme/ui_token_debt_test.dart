@@ -102,7 +102,6 @@ void main() {
     // a literal size before the rule existed, no new file may join, and one
     // that gets cleaned up must be struck off (the loop below enforces it).
     const debt = {
-      'lib/src/features/browser/presentation/browser_pane.dart',
       'lib/src/features/detail/presentation/repository_info_view.dart',
       'lib/src/features/environments/presentation/environments_section.dart',
       'lib/src/features/fanout/presentation/comparison_view.dart',
