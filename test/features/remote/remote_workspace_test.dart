@@ -85,6 +85,7 @@ void main() {
       bindings: container.read(remoteHostBindingsProvider),
       send: (type, {id, payload = const {}}) async {
         sent.add((type: type, id: id, payload: payload));
+        return true;
       },
     );
   });

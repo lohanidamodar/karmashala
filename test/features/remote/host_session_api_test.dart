@@ -24,7 +24,12 @@ class Harness {
       device: fakeDevice(capabilities: capabilities),
       bindings: fake.bindings,
       send: (type, {id, payload = const {}}) async {
+        if (!delivers) {
+          dropped.add((type: type, id: id, payload: payload));
+          return false;
+        }
         sent.add((type: type, id: id, payload: payload));
+        return true;
       },
     );
   }
@@ -32,6 +37,14 @@ class Harness {
   late final FakeRemoteBindings fake;
   late final HostSessionApi api;
   final List<SentFrame> sent = [];
+
+  /// Whether the transport takes what the api hands it. False is the state
+  /// the host really gets into: the link the phone last used is closed and
+  /// nothing else could carry the frame.
+  bool delivers = true;
+
+  /// Frames the transport refused, so a test can name what was lost.
+  final List<SentFrame> dropped = [];
 
   int _seq = 0;
 
@@ -386,5 +399,75 @@ void main() {
         expect(request.denyLabel, isNull);
       },
     );
+  });
+
+  // --- News the transport could not carry ----------------------------------
+  //
+  // `no transport could carry a frame` in the owner's log, ten times in five
+  // minutes, while the phone "showed retry time and again". A frame the
+  // transport refuses is gone: `RemoteTransport.send` only throws once it is
+  // CLOSED, which an accepted LAN link becomes for good the moment the phone
+  // hangs up — the host keeps it as the active transport until the next
+  // inbound frame reattaches, and drops everything sent in between.
+  //
+  // What made that unrecoverable rather than merely late is here: the api used
+  // to record what it had told the phone BEFORE handing the frame over, so a
+  // dropped update was never sent again. The phone reconnects and the desktop
+  // believes it is already up to date.
+  group('a frame the transport could not carry', () {
+    test('is sent again, not written off as delivered', () async {
+      final harness = Harness();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.sessions['s1'] = harness.fake.sessions['s1']!.copyWith(
+        attention: 'needs_approval',
+      );
+
+      harness.delivers = false;
+      await harness.api.pushSessionsChanged();
+      expect(harness.dropped, hasLength(1));
+
+      // The link is back and nothing about the session has changed since. The
+      // phone still has not heard, so the host must say it again.
+      harness.delivers = true;
+      final before = harness.sent.length;
+      await harness.api.pushSessionsChanged();
+
+      expect(harness.sent.length, before + 1);
+      expect(harness.last.payload['attention'], 'needs_approval');
+    });
+
+    test('does not advance the transcript cursor past the phone', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'one'),
+      ];
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.api.pollTranscripts();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'two'),
+      );
+      harness.delivers = false;
+      await harness.api.pollTranscripts();
+      expect(harness.dropped.last.type, FrameType.transcriptAppended);
+
+      // The agent says one more thing and the link comes back. Both messages
+      // are owed — the phone never saw either — so both go out.
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'three'),
+      );
+      harness.delivers = true;
+      await harness.api.pollTranscripts();
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect([for (final m in page.messages) m.text], ['two', 'three']);
+      expect(page.cursor, 3);
+    });
   });
 }
