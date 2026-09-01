@@ -6,7 +6,6 @@ import 'package:xterm/xterm.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../environments/application/environment_providers.dart';
-import '../../environments/application/environments_controller.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -35,6 +34,7 @@ import 'pane_layout_view.dart';
 import 'session_status.dart';
 import 'terminal_pane_view.dart';
 import 'terminal_search_bar.dart';
+import '../application/terminal_profiles.dart';
 
 // The chip shape moved out so a region header could share it; re-exported so
 // this file is still the one import a tab chip needs.
@@ -55,8 +55,7 @@ class TerminalActions {
   TerminalSessionsController get _sessions =>
       ref.read(terminalSessionsControllerProvider.notifier);
 
-  List<TerminalProfile> profiles() =>
-      terminalProfilesFor(ref.read(environmentsControllerProvider));
+  List<TerminalProfile> profiles() => ref.read(terminalProfilesProvider);
 
   TerminalProfile defaultProfile() {
     final id = ref.read(settingsControllerProvider).defaultTerminalProfileId;

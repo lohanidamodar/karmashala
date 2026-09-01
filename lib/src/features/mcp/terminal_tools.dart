@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../environments/application/environments_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/terminal_grid_text.dart';
 import '../terminal/domain/terminal_profile.dart';
+import '../terminal/application/terminal_profiles.dart';
 
 /// The terminal workspace, as an agent can drive it.
 ///
@@ -109,7 +109,7 @@ class TerminalControlTools {
   }
 
   List<TerminalProfile> _profiles() =>
-      terminalProfilesFor(_container.read(environmentsControllerProvider));
+      _container.read(terminalProfilesProvider);
 
   Object? _open({String? profileId, String? workingDirectory}) {
     final profiles = _profiles();

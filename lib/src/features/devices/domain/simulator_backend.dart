@@ -169,13 +169,20 @@ abstract interface class SimulatorBackend {
   /// nothing on the toolbar to undo it.
   Future<void> setLocked(String udid, {required bool locked});
 
-  /// Opens the app switcher.
-  ///
-  /// Not a button, which is why it is not in [SimulatorButton]: on a device
-  /// with a home indicator the switcher is a swipe up from the bottom edge that
-  /// **pauses** before letting go, and on one with a physical Home button it is
-  /// a double press. Neither is something a single press can express.
-  Future<void> showAppSwitcher(String udid);
+  // There is deliberately no app switcher here, and it is not an oversight.
+  //
+  // On a home-indicator device the switcher is a swipe up from the bottom edge
+  // that pauses before releasing, and WebDriverAgent cannot produce it: its
+  // synthesized touches are delivered into the foreground application, so they
+  // never reach the system gesture SpringBoard handles. Tried against a real
+  // iPhone 17 Pro on iOS 26.4 and confirmed by screenshot — three variants of
+  // the swipe (different heights, hold and travel times) left the foreground
+  // app untouched, not even returning home. A double Home press, which is the
+  // switcher on a device that has that button, just goes home.
+  //
+  // Ordinary swipes inside an app work, which is what makes this look like a
+  // bug rather than a boundary: the difference is that those are the
+  // application's gestures and this one is the system's.
 
   /// The accessibility tree of whatever is on screen, mapped onto the same
   /// [UiHierarchy] the Android side produces so queries and taps-by-label are

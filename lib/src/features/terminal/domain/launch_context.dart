@@ -110,15 +110,23 @@ class LaunchContext {
     String? posixShell,
   }) {
     if (!hostIsWindows) {
+      // The profile's own shell wins over the ambient `$SHELL`: picking zsh in
+      // settings has to actually open zsh. Off Windows every profile used to
+      // collapse to `$SHELL`, so the picker was inert.
+      final shell = profile.posixShellPath ?? posixShell;
       final distro = profile.wslDistribution;
       return distro == null || distro.isEmpty
-          ? LaunchContext.posix(shell: posixShell)
-          : LaunchContext.insideWsl(distro, shell: posixShell);
+          ? LaunchContext.posix(shell: shell)
+          : LaunchContext.insideWsl(distro, shell: shell);
     }
     return switch (profile.shell) {
       TerminalShell.powerShell => const LaunchContext.powerShell(),
       TerminalShell.commandPrompt => const LaunchContext.commandPrompt(),
       TerminalShell.wsl => LaunchContext.wsl(profile.wslDistribution ?? ''),
+      // Only reachable if a POSIX profile were somehow stored on a Windows
+      // host. Its shell path means nothing here, so the host default is the
+      // honest answer.
+      TerminalShell.posix => const LaunchContext.powerShell(),
     };
   }
 

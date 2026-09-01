@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -123,10 +125,10 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
                 Expanded(
                   child: TextField(
                     controller: _path,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
                       labelText: 'Terminal executable path',
-                      hintText: r'C:\path\to\terminal.exe',
+                      hintText: _hostPathHint('terminal'),
                     ),
                     onChanged: (v) =>
                         controller.setCustomTerminalPath(v.trim()),
@@ -238,10 +240,10 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
                 Expanded(
                   child: TextField(
                     controller: _path,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
                       labelText: 'Editor executable path',
-                      hintText: r'C:\path\to\editor.exe',
+                      hintText: _hostPathHint('editor'),
                     ),
                     onChanged: (v) => controller.setCustomEditorPath(v.trim()),
                   ),
@@ -357,4 +359,15 @@ class McpBridgeSection extends ConsumerWidget {
       ),
     );
   }
+}
+
+
+/// An example path in the shape this host actually uses.
+///
+/// The hint read `C:\path\to\editor.exe` everywhere, which on a Mac is an
+/// example of something the field will not accept.
+String _hostPathHint(String what) {
+  if (Platform.isWindows) return r'C:\path\to\' '$what.exe';
+  if (Platform.isMacOS) return '/Applications/My$what.app/Contents/MacOS/$what';
+  return '/usr/local/bin/$what';
 }

@@ -8,6 +8,8 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 
 void main() {
+  group('across hosts', _crossPlatformTests);
+
   group('resumeCommandLine', () {
     final cwd = EnvironmentPath(environmentId: 'windows', path: r'C:\ws\app');
 
@@ -69,7 +71,7 @@ void main() {
   group('SystemTerminalService.launch', () {
     test('Windows Terminal opens at -d <cwd> and runs the command', () async {
       final runner = FakeCommandRunner();
-      final service = SystemTerminalService(runner);
+      final service = SystemTerminalService(runner, windows: true, macOs: false);
 
       await service.launch(
         const SystemTerminal(
@@ -102,7 +104,7 @@ void main() {
           stderr: '',
         ),
       );
-      final service = SystemTerminalService(runner);
+      final service = SystemTerminalService(runner, windows: true, macOs: false);
 
       final found = await service.available();
       expect(found.map((t) => t.executable), contains('wt.exe'));
@@ -113,7 +115,7 @@ void main() {
       'PowerShell safely quotes executable, arguments, and working dir',
       () async {
         final runner = FakeCommandRunner();
-        final service = SystemTerminalService(runner);
+        final service = SystemTerminalService(runner, windows: true, macOs: false);
 
         await service.launch(
           const SystemTerminal(
@@ -195,5 +197,59 @@ void main() {
         '--dangerously-skip-permissions',
       ]);
     });
+  });
+}
+
+/// The host-shaped half. Every candidate used to be a `.exe` found with
+/// `where.exe`, so on a Mac the external-terminal picker was empty and the
+/// "Open in terminal" action had nothing to open.
+void _crossPlatformTests() {
+  test('a Mac is offered Mac terminals, not wt.exe', () {
+    final candidates = SystemTerminalService.candidatesFor(
+      windows: false,
+      macOs: true,
+    );
+
+    expect(candidates.map((t) => t.label), contains('Terminal'));
+    expect(candidates.map((t) => t.executable), isNot(contains('wt.exe')));
+    expect(
+      candidates.every((t) => !t.executable.endsWith('.exe')),
+      isTrue,
+      reason: 'nothing on a Mac is an .exe',
+    );
+  });
+
+  test('Terminal.app is found where it lives, not on PATH', () {
+    // It puts nothing on PATH, so a PATH-only search finds nothing on the one
+    // platform where it is guaranteed to be installed.
+    final terminal = SystemTerminalService.candidatesFor(
+      windows: false,
+      macOs: true,
+    ).firstWhere((t) => t.kind == SystemTerminalKind.macTerminal);
+
+    expect(
+      terminal.appBundlePaths,
+      contains('/System/Applications/Utilities/Terminal.app'),
+    );
+  });
+
+  test('Linux is offered its own desktop terminals', () {
+    final candidates = SystemTerminalService.candidatesFor(
+      windows: false,
+      macOs: false,
+    );
+
+    expect(candidates.map((t) => t.label), contains('GNOME Terminal'));
+    expect(candidates.map((t) => t.label), isNot(contains('Terminal')));
+  });
+
+  test('a Windows host is unchanged', () {
+    final candidates = SystemTerminalService.candidatesFor(
+      windows: true,
+      macOs: false,
+    );
+
+    expect(candidates.first.executable, 'wt.exe');
+    expect(candidates.map((t) => t.kind), contains(SystemTerminalKind.cmd));
   });
 }

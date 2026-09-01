@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
-import '../../environments/application/environments_controller.dart';
 import '../../terminal/application/terminal_theme_controller.dart';
 import '../../terminal/data/theme_discovery.dart';
 import '../../terminal/domain/terminal_profile.dart';
@@ -12,6 +11,7 @@ import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
+import '../../terminal/application/terminal_profiles.dart';
 
 /// Settings → Terminal: the default shell, the grid's own font size, imported
 /// colour themes and the contested chords.
@@ -22,9 +22,7 @@ class TerminalPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
-    final profiles = terminalProfilesFor(
-      ref.watch(environmentsControllerProvider),
-    );
+    final profiles = ref.watch(terminalProfilesProvider);
     final current = resolveTerminalProfile(
       settings.defaultTerminalProfileId,
       profiles,

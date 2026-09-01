@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
 import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
@@ -15,6 +19,20 @@ enum SystemTerminalKind {
   alacritty,
   powerShell,
   cmd,
+
+  /// macOS: Terminal.app and iTerm2. Both are opened with a script rather than
+  /// given a command, because neither takes one on its command line.
+  macTerminal,
+  iterm2,
+
+  /// Cross-platform emulators with a real CLI, on their POSIX names.
+  kitty,
+  ghostty,
+
+  /// Linux desktop terminals.
+  gnomeTerminal,
+  konsole,
+
   custom,
 }
 
@@ -30,11 +48,20 @@ class SystemTerminal {
     required this.kind,
     required this.label,
     required this.executable,
+    this.appBundlePaths = const [],
   });
 
   final SystemTerminalKind kind;
   final String label;
   final String executable;
+
+  /// Where the app lives on macOS, when it is a bundle rather than something on
+  /// `PATH`.
+  ///
+  /// Terminal.app and iTerm2 put nothing on `PATH`, so looking for them there
+  /// finds nothing and the picker comes up empty on the one platform where
+  /// Terminal.app is guaranteed to exist.
+  final List<String> appBundlePaths;
 
   String get id => kind.name;
 
@@ -52,52 +79,155 @@ class SystemTerminal {
 /// fire-and-forget `start` of the terminal executable, which opens its own
 /// window and returns immediately.
 class SystemTerminalService {
-  SystemTerminalService(this._runner);
+  SystemTerminalService(this._runner, {bool? windows, bool? macOs})
+    : _windows = windows ?? Platform.isWindows,
+      _macOs = macOs ?? Platform.isMacOS;
 
   final CommandRunner _runner;
 
-  static const _candidates = <SystemTerminal>[
-    SystemTerminal(
-      kind: SystemTerminalKind.windowsTerminal,
-      label: 'Windows Terminal',
-      executable: 'wt.exe',
-    ),
-    SystemTerminal(
-      kind: SystemTerminalKind.wezterm,
-      label: 'WezTerm',
-      executable: 'wezterm.exe',
-    ),
-    SystemTerminal(
-      kind: SystemTerminalKind.alacritty,
-      label: 'Alacritty',
-      executable: 'alacritty.exe',
-    ),
-    SystemTerminal(
-      kind: SystemTerminalKind.powerShell,
-      label: 'PowerShell',
-      executable: 'powershell.exe',
-    ),
-    SystemTerminal(
-      kind: SystemTerminalKind.cmd,
-      label: 'Command Prompt',
-      executable: 'cmd.exe',
-    ),
-  ];
+  /// Injected so the host can be chosen in a test. Everything about which
+  /// terminals exist and how they are launched turns on these two.
+  final bool _windows;
+  final bool _macOs;
 
-  /// The candidate terminals found on `PATH` (via `where.exe`), preserving the
-  /// preferred order. PowerShell/cmd are effectively always present.
+  /// The terminals worth looking for on this host.
+  ///
+  /// Host-shaped, because the answer genuinely differs: a Mac has no `wt.exe`
+  /// and a Windows box has no Terminal.app, and offering either everywhere gave
+  /// macOS a settings page whose every option was missing.
+  static List<SystemTerminal> candidatesFor({
+    required bool windows,
+    required bool macOs,
+  }) {
+    if (windows) {
+      return const [
+        SystemTerminal(
+          kind: SystemTerminalKind.windowsTerminal,
+          label: 'Windows Terminal',
+          executable: 'wt.exe',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.wezterm,
+          label: 'WezTerm',
+          executable: 'wezterm.exe',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.alacritty,
+          label: 'Alacritty',
+          executable: 'alacritty.exe',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.powerShell,
+          label: 'PowerShell',
+          executable: 'powershell.exe',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.cmd,
+          label: 'Command Prompt',
+          executable: 'cmd.exe',
+        ),
+      ];
+    }
+    if (macOs) {
+      return const [
+        SystemTerminal(
+          kind: SystemTerminalKind.macTerminal,
+          label: 'Terminal',
+          executable: 'Terminal',
+          appBundlePaths: [
+            '/System/Applications/Utilities/Terminal.app',
+            '/Applications/Utilities/Terminal.app',
+          ],
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.iterm2,
+          label: 'iTerm',
+          executable: 'iTerm',
+          appBundlePaths: ['/Applications/iTerm.app'],
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.wezterm,
+          label: 'WezTerm',
+          executable: 'wezterm',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.kitty,
+          label: 'kitty',
+          executable: 'kitty',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.ghostty,
+          label: 'Ghostty',
+          executable: 'ghostty',
+        ),
+        SystemTerminal(
+          kind: SystemTerminalKind.alacritty,
+          label: 'Alacritty',
+          executable: 'alacritty',
+        ),
+      ];
+    }
+    return const [
+      SystemTerminal(
+        kind: SystemTerminalKind.gnomeTerminal,
+        label: 'GNOME Terminal',
+        executable: 'gnome-terminal',
+      ),
+      SystemTerminal(
+        kind: SystemTerminalKind.konsole,
+        label: 'Konsole',
+        executable: 'konsole',
+      ),
+      SystemTerminal(
+        kind: SystemTerminalKind.wezterm,
+        label: 'WezTerm',
+        executable: 'wezterm',
+      ),
+      SystemTerminal(
+        kind: SystemTerminalKind.kitty,
+        label: 'kitty',
+        executable: 'kitty',
+      ),
+      SystemTerminal(
+        kind: SystemTerminalKind.ghostty,
+        label: 'Ghostty',
+        executable: 'ghostty',
+      ),
+      SystemTerminal(
+        kind: SystemTerminalKind.alacritty,
+        label: 'Alacritty',
+        executable: 'alacritty',
+      ),
+    ];
+  }
+
+  /// The candidates actually installed, in the preferred order.
   Future<List<SystemTerminal>> available() async {
     final found = <SystemTerminal>[];
-    for (final term in _candidates) {
+    for (final term in candidatesFor(windows: _windows, macOs: _macOs)) {
+      if (term.appBundlePaths.any((path) => Directory(path).existsSync())) {
+        found.add(term);
+        continue;
+      }
       if (await _onPath(term.executable)) found.add(term);
     }
     return found;
   }
 
+  /// Whether [executable] resolves on `PATH`.
+  ///
+  /// `where.exe` is Windows'. Elsewhere it is `command -v`, run through a
+  /// shell because it is a shell builtin — and it is the portable spelling,
+  /// where `which` is not guaranteed to exist.
   Future<bool> _onPath(String executable) async {
     try {
       final result = await _runner.run(
-        CommandRequest(executable: 'where.exe', arguments: [executable]),
+        _windows
+            ? CommandRequest(executable: 'where.exe', arguments: [executable])
+            : CommandRequest(
+                executable: '/bin/sh',
+                arguments: ['-c', 'command -v ${_quotePosix(executable)}'],
+              ),
       );
       return result.ok;
     } catch (_) {
@@ -112,11 +242,22 @@ class SystemTerminalService {
     required List<String> command,
     String? workingDirectory,
   }) async {
+    if (terminal.kind == SystemTerminalKind.macTerminal ||
+        terminal.kind == SystemTerminalKind.iterm2) {
+      await _launchMacApp(terminal, command, workingDirectory);
+      return;
+    }
     final args = _argsFor(terminal.kind, command, workingDirectory);
     // A custom terminal's CLI flags are unknown, so we can't embed the cwd in
     // args — set it as the process working directory instead (best-effort).
+    const cwdOnProcess = {
+      SystemTerminalKind.custom,
+      SystemTerminalKind.kitty,
+      SystemTerminalKind.ghostty,
+      SystemTerminalKind.konsole,
+    };
     final processCwd =
-        terminal.kind == SystemTerminalKind.custom && workingDirectory != null
+        cwdOnProcess.contains(terminal.kind) && workingDirectory != null
         ? EnvironmentPath(
             environmentId: localHostEnvironmentId,
             path: workingDirectory,
@@ -134,6 +275,51 @@ class SystemTerminalService {
       ),
     );
   }
+
+  /// Opens Terminal.app or iTerm by handing it a script to run.
+  ///
+  /// Neither takes a command on its command line — `open -a Terminal foo bar`
+  /// opens *files* called foo and bar — so the command is written to an
+  /// executable `.command` file and that is what gets opened. This is the same
+  /// trick the "Open in Terminal" services use, and it is why these two need a
+  /// path of their own rather than another entry in [_argsFor].
+  ///
+  /// The script deletes itself once it has run, so a directory of dead scripts
+  /// does not accumulate, and `exec` means the shell that remains is the
+  /// command's own rather than a wrapper around it.
+  Future<void> _launchMacApp(
+    SystemTerminal terminal,
+    List<String> command,
+    String? cwd,
+  ) async {
+    final script = File(
+      p.join(
+        Directory.systemTemp.path,
+        'karmashala-open-${DateTime.now().microsecondsSinceEpoch}.command',
+      ),
+    );
+    final lines = [
+      '#!/bin/sh',
+      // Removed while it is still running: on POSIX an open file keeps working
+      // after its name is gone, so the script finishes and leaves nothing.
+      'rm -f ${_quotePosix(script.path)}',
+      if (cwd != null) 'cd ${_quotePosix(cwd)} || exit 1',
+      'exec ${command.map(_quotePosix).join(' ')}',
+      '',
+    ];
+    await script.writeAsString(lines.join('\n'));
+    // 0o755 — `open` will not run a .command that is not executable.
+    await Process.run('chmod', ['+x', script.path]);
+    await _runner.start(
+      CommandRequest(
+        executable: 'open',
+        arguments: ['-a', terminal.executable, script.path],
+      ),
+    );
+  }
+
+  static String _quotePosix(String value) =>
+      "'${value.replaceAll("'", r"'\''")}'";
 
   List<String> _argsFor(
     SystemTerminalKind kind,
@@ -179,6 +365,22 @@ class SystemTerminalService {
             ? invocation
             : 'cd /d ${_quoteCmd(cwd)} && $invocation';
         return ['/K', inner];
+      case SystemTerminalKind.kitty:
+      case SystemTerminalKind.ghostty:
+      case SystemTerminalKind.konsole:
+        // All three take the command after `-e`, and none of them takes a
+        // working directory the same way, so it is set on the process.
+        return ['-e', ...command];
+      case SystemTerminalKind.gnomeTerminal:
+        return [
+          if (cwd != null) '--working-directory=$cwd',
+          '--',
+          ...command,
+        ];
+      case SystemTerminalKind.macTerminal:
+      case SystemTerminalKind.iterm2:
+        // Handled by `_launchMacApp`, which is reached before this.
+        return command;
       case SystemTerminalKind.custom:
         // Pass the command through; cwd is set as the process working dir.
         return command;

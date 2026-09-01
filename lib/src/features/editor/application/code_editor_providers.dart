@@ -81,7 +81,7 @@ class EditorActions {
     }
     await _ref
         .read(codeEditorServiceProvider)
-        .open(resolved, windowsPath: windowsPath);
+        .open(resolved, folderPath: windowsPath);
   }
 
   /// Opens the project's root folder, or [windowsSubPath] when a sub-folder was

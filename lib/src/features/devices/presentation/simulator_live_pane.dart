@@ -224,12 +224,6 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
     });
   }
 
-  Future<void> _appSwitcher() async {
-    final backend = ref.read(simulatorBackendProvider);
-    if (backend == null) return;
-    await _run('App switcher', () => backend.showAppSwitcher(widget.udid));
-  }
-
   Future<void> _appearance() async {
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
@@ -289,19 +283,13 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Long press for the app switcher, the way the hardware button
-          // behaves. A wrapper rather than an `IconButton` parameter because
-          // `IconButton` has no long press of its own.
-          GestureDetector(
-            onLongPress: canPress && !_busy ? _appSwitcher : null,
-            child: button(
-              canPress
-                  ? 'Home — press and hold for the app switcher'
-                  : 'Home needs WebDriverAgent, which this build has no copy of',
-              AppIcons.circle,
-              canPress ? () => _press(SimulatorButton.home) : null,
-              key: const Key('simulator-home'),
-            ),
+          button(
+            canPress
+                ? 'Home'
+                : 'Home needs WebDriverAgent, which this build has no copy of',
+            AppIcons.circle,
+            canPress ? () => _press(SimulatorButton.home) : null,
+            key: const Key('simulator-home'),
           ),
           button(
             _locked ? 'Unlock' : 'Lock',

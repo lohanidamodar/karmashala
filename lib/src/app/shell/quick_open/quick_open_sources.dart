@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -191,7 +193,9 @@ class QuickOpenSources {
       ),
       _command(
         'Check environment health',
-        subtitle: 'Windows, WSL, SSH, Git and coding agents',
+        subtitle: Platform.isWindows
+            ? 'Windows, WSL, SSH, Git and coding agents'
+            : 'Shells, SSH, Git and coding agents',
         icon: AppIcons.checkCircle,
         onSelect: () => EnvironmentHealthDialog.show(context),
       ),

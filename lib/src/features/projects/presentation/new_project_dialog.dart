@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -175,9 +177,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 Expanded(
                   child: TextField(
                     controller: _folderController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Folder path',
-                      hintText: r'C:\src\my-workspace',
+                      hintText: Platform.isWindows
+                          ? r'C:\src\my-workspace'
+                          : '~/src/my-workspace',
                     ),
                     onChanged: (_) => setState(() {}),
                   ),

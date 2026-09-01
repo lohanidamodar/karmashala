@@ -21,6 +21,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_profiles.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
 /// spawning a real PTY.
@@ -235,6 +237,13 @@ fakeTerminalOverrides({
     // Off unless a test says otherwise; also keeps the terminal controller
     // from pulling in settings (and therefore a database) just to open a pane.
     shellIntegrationEnabledProvider.overrideWithValue(false),
+    // Pinned, because the real list is host-shaped: a Mac offers the shells in
+    // its /etc/shells and no `cmd`, so a test naming a profile would pass or
+    // fail according to the machine it ran on.
+    terminalProfilesProvider.overrideWithValue(const [
+      TerminalProfile.powerShell,
+      TerminalProfile.commandPrompt,
+    ]),
     // The delivery strip polls `gh` on a periodic timer, which would outlive
     // the widget tree and trip the pending-timer check in every test that
     // renders a session. Same reason as the autosave above; tests that care

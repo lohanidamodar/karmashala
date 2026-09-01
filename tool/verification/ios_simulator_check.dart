@@ -155,10 +155,6 @@ void main(List<String> args) async {
       await backend.inputText(target.udid, 'hello 123');
       stdout.writeln('$_tick text accepted');
     });
-    await step('app switcher', () async {
-      await backend.showAppSwitcher(target.udid);
-      stdout.writeln('$_tick app switcher accepted');
-    });
     await step('lock', () async {
       final before = await backend.isLocked(target.udid);
       await backend.setLocked(target.udid, locked: !before);
