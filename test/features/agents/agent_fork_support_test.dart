@@ -1,6 +1,7 @@
 import 'package:chitragupta/src/features/agents/domain/agent_descriptor.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/agents/domain/agent_registry.dart';
+import 'package:chitragupta/src/features/sessions/domain/session_launch.dart';
 import 'package:chitragupta/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -71,12 +72,14 @@ void main() {
     test('Antigravity declares neither route', () {
       final descriptor = _descriptor(AgentIds.antigravity);
       expect(descriptor.launch.fork.style, AgentForkStyle.unsupported);
-      // Not merely untested: it has no readable store to build a packet from
-      // and does not take an opening prompt to deliver one with. The store is
-      // now *located* — we know where the conversations live — but its format
-      // says they cannot be read, and a handoff packet is quoted from a
-      // transcript, so locating them changes nothing about this.
-      expect(descriptor.store!.format, AgentStoreFormat.none);
+      // Not merely untested: it has no readable *transcript* to build a
+      // packet from and does not take an opening prompt to deliver one with.
+      // The store is read now — identity, directory, name — but a handoff
+      // packet is quoted from messages, and those stay protobuf, which is why
+      // `antigravityStore` exists as a value distinct from the two transcript
+      // formats.
+      expect(descriptor.store!.format, AgentStoreFormat.antigravityStore);
+      expect(agentSupportsChatView(descriptor), isFalse);
       expect(descriptor.launch.acceptsPromptArgument, isFalse);
     });
 

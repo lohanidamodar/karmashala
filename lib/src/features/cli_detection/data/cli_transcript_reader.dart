@@ -29,6 +29,14 @@ Future<List<TranscriptMessage>> readCliTranscript(
   String filePath,
   String cli,
 ) async {
+  // Antigravity's own file is a SQLite database whose message columns are
+  // protobuf in an unpublished schema, so there is nothing here to parse — see
+  // `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §8. Refused by name rather than
+  // left to fail: without this the loop below reads a binary file as UTF-8
+  // lines every two seconds behind the imported-session detail pane, and
+  // arrives at the same empty list by throwing.
+  if (cli == AgentIds.antigravity) return const [];
+
   final file = File(filePath);
   if (!await file.exists()) return const [];
 
@@ -52,8 +60,7 @@ Future<List<TranscriptMessage>> readCliTranscript(
         continue;
       }
       if (decoded is! Map<String, dynamic>) continue;
-      // Claude's shape is the default: it is what `claudeCode` and
-      // `antigravity` both use today, and it is the least-wrong guess for an
+      // Claude's shape is the default: it is the least-wrong guess for an
       // agent we have no reader for.
       if (cli == AgentIds.codex) {
         _parseCodexLine(decoded, messages, pending);

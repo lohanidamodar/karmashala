@@ -567,26 +567,27 @@ const _antigravity = AgentDescriptor(
   // `~/.gemini/antigravity-cli`, beside the IDE's own `antigravity-ide` — the
   // `app_data_dir` that tells them apart is visible in each one's own logs.
   //
-  // The format is still `none`, but the reason has narrowed and the comment it
-  // used to carry was wrong. "We cannot read them" was concluded from one file
-  // — `conversations/<id>.db`, whose payload columns really are protobuf in an
-  // unpublished schema — and generalised to the directory. The directory also
-  // holds `cache/last_conversations.json` (`{directory: conversation id}`),
-  // `annotations/<id>.pbtxt` (what `/rename` wrote) and a readable
-  // `conversation_summaries.db`, and `data/antigravity_store_reader.dart` reads
-  // all three today.
+  // The format was `none` on a finding drawn from one file. "We cannot read
+  // them" was concluded from `conversations/<id>.db`, whose payload columns
+  // really are protobuf in an unpublished schema, and generalised to the
+  // directory. The directory also holds `cache/last_conversations.json`
+  // (`{directory: conversation id}`), `annotations/<id>.pbtxt` (what `/rename`
+  // wrote) and a readable `conversation_summaries.db`, and
+  // `data/antigravity_store_reader.dart` reads all three.
+  //
+  // Leaving it at `none` after that had a cost the owner reported: detection
+  // skipped this store entirely, so no Antigravity conversation could be found
+  // by a store sweep, matched to a session row, or asked about before a resume.
+  // `antigravityStore` is the value for a store that yields *identity* without
+  // *content* — which is exactly this one.
   //
   // What remains true is the part that gates the *chat view*: message content
   // is unreadable, so there is no transcript to show, quote into a handoff
-  // packet, or seed a resume from. `AgentStoreFormat`'s existing values each
-  // name a transcript format, and none of them describes a store that yields
-  // identity without content — so this stays `none` until the enum grows a
-  // value for it, which is a change to `CliDetectionService`'s reader switch
-  // and outside this branch's file scope. See
-  // `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6 for the exact follow-up.
+  // packet, or seed a resume from. `agentSupportsChatView` is an allowlist of
+  // the two transcript formats, so declaring this one turns none of that on.
   store: AgentStoreSpec(
     homeDirectoryName: '.gemini/antigravity-cli',
-    format: AgentStoreFormat.none,
+    format: AgentStoreFormat.antigravityStore,
   ),
   // Nothing can observe what a session is doing: no hook config, no parseable
   // state file, and the TUI was never watched, so there is no screen text to
