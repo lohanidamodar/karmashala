@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../media/application/session_media_providers.dart';
 import '../../media/domain/session_image_reference.dart';
@@ -428,13 +429,15 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     );
     if (!mounted) return;
     switch (found) {
-      case SessionImageFound(:final item, :final resolveHostPath):
+      case SessionImageFound(:final item, :final matches, :final resolveHostPath):
         await showDialog<void>(
           context: context,
           builder: (_) => SessionImageDialog(
             reference: reference.label,
             item: item,
+            matches: matches,
             resolveHostPath: resolveHostPath,
+            now: ref.read(clockProvider).nowUtc(),
           ),
         );
       case SessionImageUnavailable(:final reason):

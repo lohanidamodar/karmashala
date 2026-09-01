@@ -133,6 +133,25 @@ void main() {
     final found = await look(6);
 
     expect((found as SessionImageFound).item.sequence, 1);
+    // And it is carried out that this was a choice, not a certainty: the pane
+    // cannot tell an old scrollback line from a fresh one, so the dialog has
+    // to be able to say the number was used more than once.
+    expect(found.matches, 2);
+  });
+
+  test('a number used once says so, so the dialog stays quiet', () async {
+    final transcript = writeTranscript(dir, 'a.jsonl', [
+      pastedImageLine(
+        at: '2026-09-01T10:00:00.000Z',
+        text: '[Image #6] the only one',
+        pasteIds: [6],
+      ),
+    ]);
+    register(transcript.path);
+
+    final found = await look(6);
+
+    expect((found as SessionImageFound).matches, 1);
   });
 
   test('a number the session has no picture for is refused in words', () async {

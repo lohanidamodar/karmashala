@@ -249,9 +249,21 @@ sealed class SessionImageLookup {
 
 /// The picture, ready to draw.
 class SessionImageFound extends SessionImageLookup {
-  const SessionImageFound(this.item, {this.resolveHostPath});
+  const SessionImageFound(this.item, {this.matches = 1, this.resolveHostPath});
 
   final SessionMediaItem item;
+
+  /// How many pictures in this session carry the same number — normally one.
+  ///
+  /// More than one means the CLI restarted and began counting again, which its
+  /// own transcripts do: `…/popupbits/8a817d98-….jsonl` holds three runs, with
+  /// `#1` starting each. Within a run the numbers are unique and strictly
+  /// increasing, so [item] — the newest — is the one the process now printing
+  /// into the pane means. A line further back in the scrollback, from an
+  /// earlier run, would mean an older one, and nothing in the pane's text can
+  /// tell the two apart. So the dialog says the number was reused rather than
+  /// presenting a guess as a fact.
+  final int matches;
 
   /// Translates a path the *agent* wrote into one this process can open, or
   /// null when there is nothing to translate. Carried rather than applied, so
@@ -279,11 +291,15 @@ typedef SessionImageLookupFn =
 /// which is the panel's own first-open cost and is what makes the reference
 /// clickable without the user having to open the panel first.
 ///
-/// **The newest match wins.** The number is a CLI *process*'s counter and
-/// restarts — `…/appwrite-ai-workdir/7977d17c-….jsonl` holds two different
-/// pictures both recorded as `imagePasteIds:[6]`. The text on screen was
-/// printed by the process running now, so the later picture is the only
-/// defensible answer.
+/// **The newest match wins, and says when it was not the only one.** The number
+/// is a CLI *process*'s counter: within one run it is unique and climbs, and it
+/// restarts when the process does. `…/popupbits/8a817d98-….jsonl` is three runs
+/// — `#1..#1`, `#1..#7`, `#1..#6` — thirteen pastes wearing seven numbers. The
+/// text a pane is printing now came from the process running now, so the newest
+/// match is the right answer for it; a line scrolled back from an earlier run
+/// means an older picture and the pane's text cannot tell which. [matches] is
+/// therefore carried out, and the dialog says the number was reused instead of
+/// quietly presenting a guess.
 final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
   (ref) => (sessionId, pasteId) async {
     final label = '[Image #$pasteId]';
@@ -332,8 +348,11 @@ final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
     }
 
     SessionMediaItem? match;
+    var matches = 0;
     for (final item in scan.items) {
-      if (item.pasteId == pasteId) match = item;
+      if (item.pasteId != pasteId) continue;
+      match = item;
+      matches++;
     }
     if (match == null) {
       return SessionImageUnavailable(
@@ -349,6 +368,7 @@ final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
     }
     return SessionImageFound(
       match,
+      matches: matches,
       resolveHostPath: match.fromAgentEnvironment
           ? ref.read(sessionMediaHostPathProvider(sessionId))
           : null,

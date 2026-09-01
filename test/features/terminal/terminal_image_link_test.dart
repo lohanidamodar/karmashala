@@ -273,6 +273,37 @@ void main() {
       expect(dialog.item.pasteId, 6);
       expect(dialog.item.path, picture.path);
       expect(dialog.reference, '[Image #6]');
+      expect(dialog.matches, 1);
+    });
+
+    testWidgets('a number the session used twice says so in the dialog', (
+      tester,
+    ) async {
+      // The CLI restarts its counter when it restarts, so one session can hold
+      // several pictures wearing the same number. The newest is right for the
+      // process printing into the pane now — but a line scrolled back from an
+      // earlier run means an older one, and the pane's text cannot tell. Said
+      // out loud rather than passed off as a certainty.
+      lookup.answer = SessionImageFound(
+        SessionMediaItem(
+          id: 'm9',
+          origin: SessionMediaOrigin.pasted,
+          sequence: 9,
+          path: picture.path,
+          pasteId: 6,
+        ),
+        matches: 3,
+      );
+      await pumpWithOutput(tester, 'ok [Image #6] pasted');
+      final target = centreOfCell(tester, 6, 0);
+      final mouse = await hover(tester, target);
+      await pressCtrl(tester);
+
+      await ctrlClick(tester, mouse, target);
+      await releaseCtrl(tester);
+
+      expect(find.textContaining('used that number 3 times'), findsOne);
+      expect(find.textContaining('most recent'), findsOne);
     });
 
     testWidgets('a number the store has no picture for is refused in words', (
