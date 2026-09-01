@@ -21,6 +21,10 @@ import 'fake_native_adapters.dart';
 /// for the life of the process. Everything here is about the difference between
 /// what the user asked for and what the OS did.
 void main() {
+  /// What macOS's Quit would run. Captured rather than invoked through a
+  /// platform channel, which needs a binding these tests do not have.
+  Future<void> Function()? osQuit;
+
   late AppDatabase db;
   late ProviderContainer container;
   late FakeNatives natives;
@@ -35,6 +39,7 @@ void main() {
 
   Future<void> build() async {
     service = SystemIntegrationService(
+      registerOsQuit: (quit) => osQuit = quit,
       container,
       adapters: natives.adapters,
       onQuitRequested: () async => quitCalls.add('shutdown'),
@@ -311,6 +316,23 @@ void main() {
       expect(quitCalls, isEmpty);
     });
 
+    test('the OS Quit runs the ordered shutdown, close-to-tray or not', () async {
+      // Cmd+Q is not a window close. `window_manager`'s prevent-close answers
+      // `applicationShouldTerminate` with a window *close* event, so with
+      // close-to-tray on the app used to hide instead of quitting and Cmd+Q
+      // looked like it did nothing.
+      await build();
+      settings().setCloseToTray(true);
+      await pumpEventQueue();
+
+      expect(osQuit, isNotNull, reason: 'macOS registers a quit handler');
+      await osQuit!();
+      await pumpEventQueue();
+
+      expect(quitCalls, ['shutdown']);
+      expect(natives.window.destroyed, isTrue);
+    }, skip: Platform.isMacOS ? null : 'the quit handler is registered on macOS only');
+
     test('close to tray quits when there is no tray to close to', () async {
       // Stock GNOME has no StatusNotifier host unless an AppIndicator extension
       // is installed, so `setIcon` fails and nothing appears. Hiding there is
@@ -345,6 +367,7 @@ void main() {
     test('the shutdown hook runs before the window is destroyed', () async {
       final order = <String>[];
       service = SystemIntegrationService(
+      registerOsQuit: (quit) => osQuit = quit,
         container,
         adapters: natives.adapters,
         onQuitRequested: () async => order.add('shutdown'),
@@ -361,6 +384,7 @@ void main() {
 
     test('a shutdown hook that throws still lets the app close', () async {
       service = SystemIntegrationService(
+      registerOsQuit: (quit) => osQuit = quit,
         container,
         adapters: natives.adapters,
         onQuitRequested: () async => throw StateError('teardown blew up'),

@@ -13,12 +13,19 @@ class SimulatorLiveView {
     required this.player,
     required this.controller,
     required this.feed,
+    this.screen,
   });
 
   final String udid;
   final Player player;
   final VideoController controller;
   final SimulatorVideoFeed feed;
+
+  /// The device's size **in points**, which is the space taps are sent in.
+  /// Null when the backend could not say, in which case input is unavailable
+  /// rather than guessed — a tap mapped through the wrong space lands
+  /// somewhere the user did not touch and reports success.
+  final SimulatorScreen? screen;
 }
 
 /// What the pane is showing, or why it is not.
@@ -86,6 +93,9 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
     Player? player;
     try {
       final feed = await backend.startVideo(udid);
+      // Read once, here: it costs an accessibility round trip, and it cannot
+      // change while the picture is up short of a rotation.
+      final screen = await backend.screen(udid);
       player = Player(
         configuration: const PlayerConfiguration(
           // A live view wants the newest frame, not a smooth buffer.
@@ -101,12 +111,27 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
         'demuxer-readahead-secs': '0',
         'demuxer-lavf-analyzeduration': '0',
         'untimed': 'yes',
-        'vd-lavc-threads': '1',
         'audio': 'no',
       }.entries) {
         await native.setProperty(entry.key, entry.value);
       }
-      final controller = VideoController(player);
+      // Software decoding, deliberately. With hardware acceleration on, the
+      // texture was created and then resized to **0x0** — libmpv never reported
+      // video parameters and the pane showed a black rectangle of the right
+      // shape. VideoToolbox has no MJPEG decoder to hand this to; the Android
+      // path gets away with the default because scrcpy sends H.264, which it
+      // does. MJPEG is cheap to decode on the CPU, which is the whole reason
+      // WebDriverAgent sends it.
+      //
+      // The Android path also pins `vd-lavc-threads: 1`, which is right for a
+      // 720p H.264 stream and wrong here: these frames are full-resolution
+      // (1206x2622) and decoding them one thread at a time is the bottleneck.
+      final controller = VideoController(
+        player,
+        configuration: const VideoControllerConfiguration(
+          enableHardwareAcceleration: false,
+        ),
+      );
       // No demuxer is named: the stream is `multipart/x-mixed-replace`, which
       // libmpv detects on its own. Verified with mpv against a real simulator:
       // `Video --vid=1 (mjpeg 1206x2622)`.
@@ -119,6 +144,7 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
             player: player,
             controller: controller,
             feed: feed,
+            screen: screen,
           ),
         ),
       );
@@ -151,3 +177,21 @@ final simulatorLiveViewProvider =
     NotifierProvider<SimulatorLiveViewController, SimulatorLiveViewState>(
       SimulatorLiveViewController.new,
     );
+
+
+/// The last input failure, so a refused tap is visible rather than silent.
+///
+/// A gesture is sent and forgotten — the sink cannot await it without making
+/// the finger lag the picture — so without this a tap that WebDriverAgent
+/// refused looks identical to one that landed on nothing.
+class SimulatorInputError extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void report(String message) => state = message;
+
+  void clear() => state = null;
+}
+
+final simulatorInputErrorProvider =
+    NotifierProvider<SimulatorInputError, String?>(SimulatorInputError.new);

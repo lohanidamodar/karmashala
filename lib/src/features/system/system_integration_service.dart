@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -25,6 +26,21 @@ const _kMenuKeepAwake = 'keep_awake';
 const _kMenuNotifications = 'notifications';
 const _kMenuOnlyWhenUnfocused = 'notifications_unfocused';
 const _kMenuQuit = 'quit';
+
+/// Where `applicationShouldTerminate` asks Dart to quit. See `AppDelegate`.
+const MethodChannel _lifecycleChannel = MethodChannel('karmashala/lifecycle');
+
+/// Installs [quit] as what the OS's Quit runs.
+typedef OsQuitRegistrar = void Function(Future<void> Function() quit);
+
+/// The real one: macOS's `applicationShouldTerminate` cancels its own
+/// termination and calls `quitRequested` here instead, so Cmd+Q gets the same
+/// ordered shutdown as the tray's Quit.
+void registerOsQuitOverChannel(Future<void> Function() quit) {
+  _lifecycleChannel.setMethodCallHandler((call) async {
+    if (call.method == 'quitRequested') unawaited(quit());
+  });
+}
 
 /// Prefix for the per-session "needs you" items; the suffix is the index into
 /// [SystemIntegrationService._pending].
@@ -99,9 +115,18 @@ class SystemIntegrationService with TrayListener, WindowListener {
     NativeAdapters? adapters,
     AppLogger? logger,
     Future<void> Function()? onQuitRequested,
+    OsQuitRegistrar? registerOsQuit,
   }) : _native = adapters ?? NativeAdapters.platform(),
        _logger = logger ?? AppLogger.named('system'),
-       _onQuitRequested = onQuitRequested ?? _noShutdown;
+       _onQuitRequested = onQuitRequested ?? _noShutdown,
+       _registerOsQuit = registerOsQuit ?? registerOsQuitOverChannel;
+
+  /// How the OS's own Quit reaches this service.
+  ///
+  /// A seam rather than a channel because a `MethodChannel` cannot even be
+  /// *handed a handler* without a Flutter binding, and these are unit tests
+  /// with no binding — the same reason every other native here is injected.
+  final OsQuitRegistrar _registerOsQuit;
 
   final ProviderContainer _container;
   final NativeAdapters _native;
@@ -200,6 +225,15 @@ class SystemIntegrationService with TrayListener, WindowListener {
         error,
         stack,
       );
+    }
+
+    // macOS routes Cmd+Q here rather than terminating, so the same ordered
+    // shutdown runs for it as for the tray's Quit. Without this the app menu's
+    // Quit was swallowed: `window_manager`'s prevent-close answers
+    // `applicationShouldTerminate` with a *window close*, and with
+    // close-to-tray on that hid the window instead of quitting.
+    if (Platform.isMacOS) {
+      _registerOsQuit(() => _quit());
     }
 
     _trayIconApplied = await _run(NativeSetting.trayIcon, () async {

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
+import '../data/device_gesture_sink.dart';
+import 'device_touch_surface.dart';
+
 import '../../../app/theme/design_tokens.dart';
 import '../application/ios_device_providers.dart';
 import '../application/simulator_live_view.dart';
@@ -85,6 +88,8 @@ class _Running extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final screen = view.screen;
+    final backend = ref.watch(simulatorBackendProvider);
     final name = ref
         .watch(iosSimulatorsProvider)
         .asData
@@ -117,17 +122,47 @@ class _Running extends ConsumerWidget {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(Insets.sm),
-            child: Video(
-              controller: view.controller,
-              // `contain`, not `fill`: the picture's aspect ratio is the
-              // device's, and stretching it to the pane would make every
-              // proportion on screen a lie about what the app looks like.
-              fit: BoxFit.contain,
-              controls: NoVideoControls,
-            ),
+            child: screen == null
+                ? _video(view)
+                : AspectRatio(
+                    // The touch surface treats its box **as** the picture — it
+                    // maps a widget point to a 0..1 fraction of it — so the box
+                    // has to be exactly the picture and not the letterboxed
+                    // area around it. `BoxFit.fill` inside a correctly-shaped
+                    // box is the same image as `contain` in a loose one, and it
+                    // is the only version a tap can be mapped through.
+                    aspectRatio: screen.points.width / screen.points.height,
+                    child: DeviceTouchSurface(
+                      sink: SimulatorGestureSink(
+                        backend: backend!,
+                        udid: view.udid,
+                        screen: screen.points,
+                        onError: (error) => ref
+                            .read(simulatorInputErrorProvider.notifier)
+                            .report('$error'),
+                      ),
+                      // iOS has no pinch through this transport: WebDriverAgent
+                      // takes one action sequence per gesture, and the Ctrl-drag
+                      // mirror trick is scrcpy's.
+                      pinchWithModifier: false,
+                      child: _video(view),
+                    ),
+                  ),
           ),
         ),
       ],
     );
   }
 }
+
+/// The picture itself.
+///
+/// `BoxFit.fill`, because every caller sizes the box to the device's aspect
+/// ratio first. The touch surface can only map a tap if its box *is* the
+/// picture rather than the letterboxed area around it, and `fill` inside a
+/// correctly-shaped box is the same image `contain` would draw in a loose one.
+Widget _video(SimulatorLiveView view) => Video(
+  controller: view.controller,
+  fit: BoxFit.fill,
+  controls: NoVideoControls,
+);

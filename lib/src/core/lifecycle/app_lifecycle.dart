@@ -143,11 +143,13 @@ class AppLifecycle {
   /// *before* the window is destroyed.
   Future<SystemIntegrationService> startSystemIntegration({
     NativeAdapters? adapters,
+    OsQuitRegistrar? registerOsQuit,
   }) async {
     final service = SystemIntegrationService(
       _container,
       adapters: adapters,
       onQuitRequested: shutdown,
+      registerOsQuit: registerOsQuit,
     );
     // Mounting the remote-access controller here is what makes "enabled last
     // run" mean "listening this run". Off by default, it costs one settings

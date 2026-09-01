@@ -20,6 +20,7 @@ import 'dart:math' as math;
 import '../domain/device_geometry.dart';
 import '../domain/device_input.dart';
 import 'adb_service.dart';
+import '../domain/simulator_backend.dart';
 import 'scrcpy_control.dart';
 
 /// How the live view is driving the device right now. Surfaced in the UI: the
@@ -30,7 +31,13 @@ enum DeviceGestureTransport {
   scrcpyControl('Control socket', true),
 
   /// `adb shell input` — one synthesised gesture on release, ~223 ms.
-  adbInput('adb input', false);
+  adbInput('adb input', false),
+
+  /// WebDriverAgent's HTTP API — one synthesised gesture on release, like
+  /// [adbInput]. XCTest can express a continuous drag, but only as a whole
+  /// action sequence posted at once, so there is still nothing to send while a
+  /// finger is moving.
+  webDriverAgent('WebDriverAgent', false);
 
   const DeviceGestureTransport(this.label, this.isContinuous);
 
@@ -200,6 +207,104 @@ class AdbGestureSink implements DeviceGestureSink {
       // whatever it is given, so a flick and a slow drag must not share one.
       action = adb.swipe(
         serial,
+        fromX: from.x,
+        fromY: from.y,
+        toX: to.x,
+        toY: to.y,
+        duration: swipeDurationFor(held),
+      );
+    }
+    action.catchError((Object error) => onError?.call(error));
+  }
+
+  @override
+  void pointerCancel(int pointer) {
+    if (_pointer != pointer) return;
+    _pointer = null;
+    _start = null;
+  }
+}
+
+
+/// Replays a gesture into a simulator through [SimulatorBackend] on release.
+///
+/// Not continuous, for the same reason [AdbGestureSink] is not: WebDriverAgent
+/// takes a whole action sequence in one POST, so there is nothing to send while
+/// a finger is still moving. The gesture is accumulated and played back when it
+/// ends.
+///
+/// [screen] is in **points**. That is the space WebDriverAgent reports element
+/// frames in and the space it accepts taps in; the pixel size from
+/// `simctl io enumerate` is three times larger on this hardware and every tap
+/// derived from it would land off the bottom of the screen.
+class SimulatorGestureSink implements DeviceGestureSink {
+  SimulatorGestureSink({
+    required this.backend,
+    required this.udid,
+    required this.screen,
+    this.onError,
+  });
+
+  final SimulatorBackend backend;
+  final String udid;
+  final DeviceScreenSize screen;
+  final void Function(Object error)? onError;
+
+  /// Touch slop, in fractions of the shorter screen edge. Matches the Android
+  /// sink: below this a drag is a tap that wobbled.
+  static const double _slopFraction = 0.015;
+
+  int? _pointer;
+  ({double x, double y})? _start;
+
+  @override
+  DeviceGestureTransport get transport => DeviceGestureTransport.webDriverAgent;
+
+  @override
+  void pointerDown(int pointer, double fx, double fy) {
+    if (_pointer != null) return; // A mouse is one finger.
+    _pointer = pointer;
+    _start = (x: fx, y: fy);
+  }
+
+  @override
+  void pointerMove(int pointer, double fx, double fy) {
+    // Nothing to send mid-gesture; see the class doc.
+  }
+
+  @override
+  void pointerUp(int pointer, double fx, double fy, Duration held) {
+    if (_pointer != pointer) return;
+    final start = _start;
+    _pointer = null;
+    _start = null;
+    if (start == null) return;
+
+    final from = fractionToDevice(fx: start.x, fy: start.y, screen: screen);
+    final to = fractionToDevice(fx: fx, fy: fy, screen: screen);
+    final moved = math.sqrt(
+      math.pow(fx - start.x, 2) + math.pow(fy - start.y, 2),
+    );
+
+    final Future<void> action;
+    if (moved <= _slopFraction && held < kLongPressHoldDuration) {
+      action = backend.tap(udid, from.x, from.y);
+    } else if (moved <= _slopFraction) {
+      // A press that stayed still. Sent as a swipe to nowhere, held long
+      // enough to read as a long press.
+      action = backend.swipe(
+        udid,
+        fromX: from.x,
+        fromY: from.y,
+        toX: from.x,
+        toY: from.y,
+        duration: kLongPressHoldDuration,
+      );
+    } else {
+      // The duration *is* the velocity: the drag is interpolated over whatever
+      // it is given, so a flick and a slow drag must not share one.
+      action = backend.swipe(
+        udid,
         fromX: from.x,
         fromY: from.y,
         toX: to.x,

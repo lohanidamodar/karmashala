@@ -113,6 +113,8 @@ class TransportBanner extends StatelessWidget {
         'Control socket — continuous touch. $kPinchHint.',
       DeviceGestureTransport.adbInput =>
         'adb input fallback — gestures apply on release, no pinch.',
+      DeviceGestureTransport.webDriverAgent =>
+        'WebDriverAgent — gestures apply on release, no pinch.',
     };
     final label = deviceLabel;
     final text = label == null ? transportText : '$label · $transportText';

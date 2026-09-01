@@ -23,6 +23,15 @@ class MainFlutterWindow: NSWindow {
     LaunchAtLoginChannel.register(
       messenger: flutterViewController.engine.binaryMessenger)
 
+    // Cmd+Q has to reach Dart rather than killing the process where it stands.
+    // `window_manager`'s prevent-close — which the ordered shutdown depends on,
+    // because it is what makes the window's X reach Dart at all — answers
+    // `applicationShouldTerminate` with `.terminateCancel` and reports a window
+    // *close* instead. With close-to-tray on, that hid the window: Cmd+Q looked
+    // like it did nothing.
+    LifecycleChannel.shared.attach(
+      messenger: flutterViewController.engine.binaryMessenger)
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
@@ -96,5 +105,27 @@ enum LaunchAtLoginChannel {
           message: error.localizedDescription,
           details: nil))
     }
+  }
+}
+
+
+/// The channel `applicationShouldTerminate` uses to ask Dart to quit.
+final class LifecycleChannel {
+  static let shared = LifecycleChannel()
+
+  private var channel: FlutterMethodChannel?
+
+  func attach(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "karmashala/lifecycle", binaryMessenger: messenger)
+  }
+
+  /// Asks Dart to run its ordered shutdown. Returns false when there is no
+  /// engine to ask, in which case the caller should terminate normally rather
+  /// than leave the user with a Quit that does nothing.
+  func requestQuit() -> Bool {
+    guard let channel else { return false }
+    channel.invokeMethod("quitRequested", arguments: nil)
+    return true
   }
 }
