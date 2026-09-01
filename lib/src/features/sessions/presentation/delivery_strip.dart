@@ -44,9 +44,18 @@ class DeliveryStrip extends ConsumerStatefulWidget {
   /// widget: it only changes how the strip is dressed.
   ///
   /// The bar is already chrome — it draws the rule above itself and the surface
-  /// behind it — so the strip brings neither, and the state line and the
-  /// actions become one [Wrap] instead of two rows, which is what keeps the bar
-  /// one row deep at the widths a window is usually at.
+  /// behind it — so the strip brings neither. It also brings no state line:
+  /// under the terminal this is **the actions and nothing else**, and the facts
+  /// are drawn above them by [DeliveryStateLine], which the bar hosts itself.
+  ///
+  /// That reverses a decision worth naming. The two were poured into one [Wrap]
+  /// to keep the bar one row deep at ordinary widths, and it did not work out
+  /// that way: `deliveryActionsFor` over-offers on purpose (Loop 33), so a live
+  /// agent's bar holds four or five actions plus five facts and wraps anyway —
+  /// into two *ragged* rows with `Commit` stranded up beside the branch name,
+  /// away from the three buttons it belongs with. The row was never saved; only
+  /// the grouping was lost. Two rows that mean something ("what is true" over
+  /// "what I can do") cost the same and read as structure instead of a spill.
   final bool hostedOnTerminal;
 
   @override
@@ -192,12 +201,46 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     if (actions.isEmpty && !canContinue && delivery == null) {
       return const SizedBox.shrink();
     }
-    final compact = widget.hostedOnTerminal;
+    const continueTooltip =
+        'Move this session to another agent, or fork it. '
+        'Nothing is launched until you have seen what the next '
+        'agent will be told.';
+    void continueWith() =>
+        ContinueWithDialog.show(context, widget.sessionId);
+
+    if (widget.hostedOnTerminal) {
+      // The action row, and only the action row. Every button in it is the
+      // bar's own pill at the bar's own weight, so the row reads as a row of
+      // peers with exactly one of them filled — see [_BarAction].
+      return Wrap(
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
+        children: [
+          for (final offered in actions)
+            _BarAction(
+              icon: _actionIcon(offered.action),
+              label: offered.action.label,
+              tooltip: _actionTooltip(offered),
+              primary: offered.isPrimary,
+              onPressed: _busy || !offered.isEnabled
+                  ? null
+                  : () => _press(offered.action, delivery),
+            ),
+          if (canContinue)
+            _BarAction(
+              icon: AppIcons.arrowBendDownRight,
+              label: 'Continue with…',
+              tooltip: continueTooltip,
+              onPressed: _busy ? null : continueWith,
+            ),
+        ],
+      );
+    }
+
     final buttons = [
       for (final offered in actions)
         _ActionChip(
           offered: offered,
-          compact: compact,
           onPressed: _busy || !offered.isEnabled
               ? null
               : () => _press(offered.action, delivery),
@@ -206,35 +249,10 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         ActionChip(
           avatar: const Icon(AppIcons.arrowBendDownRight, size: 14),
           label: const Text('Continue with…'),
-          tooltip:
-              'Move this session to another agent, or fork it. '
-              'Nothing is launched until you have seen what the next '
-              'agent will be told.',
-          visualDensity: compact ? VisualDensity.compact : null,
-          materialTapTargetSize: compact
-              ? MaterialTapTargetSize.shrinkWrap
-              : null,
-          labelStyle: compact ? Theme.of(context).textTheme.labelSmall : null,
-          onPressed: _busy
-              ? null
-              : () => ContinueWithDialog.show(context, widget.sessionId),
+          tooltip: continueTooltip,
+          onPressed: _busy ? null : continueWith,
         ),
     ];
-
-    if (compact) {
-      // One run: where the work stands reads as the first thing on the row and
-      // the next steps follow it, and a narrow window wraps the row rather than
-      // reserving a second one for a state line that is usually five words.
-      return Wrap(
-        spacing: Insets.sm,
-        runSpacing: Insets.xs,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          if (delivery != null) ..._deliveryFacts(context, delivery),
-          ...buttons,
-        ],
-      );
-    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -276,11 +294,49 @@ class _DeliveryState extends StatelessWidget {
   );
 }
 
+/// The same state line, for the session bar under the terminal, read from the
+/// session rather than handed a [SessionDelivery].
+///
+/// **A line of facts, above a row of controls.** Nothing here is pressable and
+/// nothing is drawn in a container: the bar says what is true in quiet muted
+/// text, and then says what you can do about it in pills. That separation is
+/// the whole redesign — set at the same weight and in the same run as the
+/// buttons, eight peers read as one undifferentiated spill.
+///
+/// It is its own widget so the bar can lay the two out itself, and it keeps its
+/// own emptiness (a session with nothing known about its delivery draws no line
+/// and reserves no room). That is not a second copy of [DeliveryStrip]'s rule:
+/// the strip decides whether there are *actions*, this decides whether there
+/// are *facts*, and with neither the bar is left with the two controls at its
+/// ends, which is what it drew before either of them had anything to say.
+class DeliveryStateLine extends ConsumerWidget {
+  const DeliveryStateLine({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // `.value` for the reason [DeliveryStrip.build] gives: a refresh must not
+    // take the line away and move everything laid out around it.
+    final delivery = ref.watch(sessionDeliveryProvider(sessionId)).value;
+    if (delivery == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: Insets.xs),
+      child: Wrap(
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: _deliveryFacts(context, delivery),
+      ),
+    );
+  }
+}
+
 /// What the state line is made of, as separate pieces.
 ///
-/// A list rather than a widget because the session bar pours them into the same
-/// [Wrap] as the actions: nested, the whole state would break to a run of its
-/// own long before it had run out of room.
+/// A list rather than a widget because both hosts wrap them in a [Wrap] of
+/// their own: nested, the whole state would break to a run of its own long
+/// before it had run out of room.
 List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
   final theme = Theme.of(context);
   final semantic = SemanticColors.of(context);
@@ -355,21 +411,13 @@ List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
   ];
 }
 
-/// One action, primary or not, enabled or not with the reason attached.
+/// One action above the conversation's composer: a Material chip, at the scale
+/// of the message column it belongs to.
 class _ActionChip extends StatelessWidget {
-  const _ActionChip({
-    required this.offered,
-    required this.onPressed,
-    this.compact = false,
-  });
+  const _ActionChip({required this.offered, required this.onPressed});
 
   final OfferedAction offered;
   final VoidCallback? onPressed;
-
-  /// Sized for chrome rather than for a message column: in the session bar a
-  /// chip sits beside the permission mode and the view toggle, and a full-size
-  /// Material chip there reads as a button that landed on the wrong surface.
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -377,37 +425,142 @@ class _ActionChip extends StatelessWidget {
     final action = offered.action;
     // The primary action keeps its weight and its container in either host —
     // which of these to press next is the one thing the strip is saying.
-    final base = compact
-        ? theme.textTheme.labelSmall
-        : theme.textTheme.labelLarge;
     final chip = ActionChip(
       avatar: Icon(_actionIcon(action), size: 14),
       label: Text(action.label),
-      visualDensity: compact ? VisualDensity.compact : null,
-      materialTapTargetSize: compact ? MaterialTapTargetSize.shrinkWrap : null,
       backgroundColor: offered.isPrimary && offered.isEnabled
           ? theme.colorScheme.primaryContainer
           : null,
       labelStyle: offered.isPrimary
-          ? base?.copyWith(
+          ? theme.textTheme.labelLarge?.copyWith(
               fontWeight: FontWeight.w600,
               color: offered.isEnabled
                   ? theme.colorScheme.onPrimaryContainer
                   : theme.colorScheme.onSurfaceVariant,
             )
-          : (compact ? base : null),
+          : null,
       onPressed: onPressed,
     );
+    return Tooltip(message: _actionTooltip(offered), child: chip);
+  }
+}
+
+/// The vertical padding every control on the session bar's action row draws
+/// with, and the reason they all sit on one line.
+///
+/// `PermissionModeChip`, [_BarAction] and the view toggle are each a single
+/// line of `labelSmall` with this above and below it inside a `Radii.sm`
+/// rectangle, so all three are exactly the same height — at 100% text and at
+/// 200% — and their centres coincide however the row is aligned. The number is
+/// the permission chip's own; that widget belongs to the composer as much as to
+/// the bar, so the bar matches it rather than the other way round.
+const double kBarControlPad = 3;
+
+/// One action as the session bar draws it: the bar's own pill.
+///
+/// **One weight, one primary.** The strip used to put a filled Material chip
+/// (`Commit`), three outlined ones and a hand-drawn dropdown in a row and leave
+/// the eye to work out which mattered — four kinds of control saying four
+/// different things about their own importance. Every action is now the same
+/// rectangle as the two controls at the ends of the row, and the *only*
+/// difference left in the group is the fill on the one action that is the next
+/// sensible step. A Material `ActionChip` could not be that shape: it is a
+/// stadium sized for a message column, which is what made the actions read as
+/// chips that had landed on the wrong surface.
+///
+/// Disabled is drawn, not hidden — `Merge` with "Checks are failing." on it
+/// says both what comes next and why it cannot happen yet — so the reason
+/// stays on the tooltip of a pill that is still there.
+class _BarAction extends StatelessWidget {
+  const _BarAction({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+    this.primary = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final enabled = onPressed != null;
+    // The fill is the emphasis, so a primary that cannot be pressed keeps its
+    // weight and loses its container rather than pretending to be ready.
+    final filled = primary && enabled;
+    final foreground = !enabled
+        ? scheme.onSurfaceVariant
+        : filled
+        ? scheme.onPrimaryContainer
+        : scheme.onSurface;
     return Tooltip(
-      message:
-          offered.disabledReason ??
-          (action.isPrompt
-              ? 'Sends “${action.prompt}”'
-              : _appActionTooltip(action)),
-      child: chip,
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: label,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(Radii.sm),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: kBarControlPad,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              color: filled ? scheme.primaryContainer : null,
+              // The same box either way, so promoting an action moves nothing
+              // beside it: the border only changes colour.
+              border: Border.all(
+                color: filled ? scheme.primaryContainer : scheme.outlineVariant,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: Chrome.iconSmall, color: foreground),
+                const SizedBox(width: Insets.xs),
+                // Flexible so a pill wider than the room left for it ellipsises
+                // instead of overflowing: at 200% text "Archive worktree" is
+                // wider than the gap between the permission control and the
+                // toggle. The glyph, the tooltip and the semantics label all
+                // survive the trim, so nothing is lost but letters.
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: foreground,
+                      fontWeight: primary ? FontWeight.w600 : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+
+/// What a delivery action says on hover: why it cannot be pressed, or what
+/// pressing it does. One answer, so the two hosts cannot describe an action
+/// differently.
+String _actionTooltip(OfferedAction offered) =>
+    offered.disabledReason ??
+    (offered.action.isPrompt
+        ? 'Sends “${offered.action.prompt}”'
+        : _appActionTooltip(offered.action));
 
 String _appActionTooltip(DeliveryAction action) => switch (action) {
   DeliveryAction.viewPullRequest => 'Opens the pull request in your browser',

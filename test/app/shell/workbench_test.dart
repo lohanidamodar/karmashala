@@ -8,6 +8,7 @@ import 'package:chitragupta/src/features/environments/application/local_environm
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
 import 'package:chitragupta/src/features/git/application/changes_providers.dart';
+import 'package:chitragupta/src/features/git/domain/diff_stat.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
 import 'package:chitragupta/src/features/sessions/application/delivery_providers.dart';
@@ -37,6 +38,16 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
+
+/// The minimum window at Windows' largest text step. Not in the shared matrix
+/// — adding it there would silently change what every existing surface
+/// asserts — so surfaces opt in, and the session bar does because its whole
+/// layout rests on one claim about how tall a line of text is.
+const minimumWindowHugestText = WindowCell(
+  '720x560 @ 2.0x text',
+  Size(720, 560),
+  textScale: 2.0,
+);
 
 void main() {
   late AppDatabase db;
@@ -120,8 +131,16 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<void> pump(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1200, 800);
+  /// Builds the workbench and settles.
+  ///
+  /// [size] is a parameter because the session bar's layout is a claim about
+  /// widths: the same bar has to hold one action row on a desktop window and
+  /// stay two recognisable groups at 720x560.
+  Future<void> pump(
+    WidgetTester tester, {
+    Size size = const Size(1200, 800),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -456,6 +475,110 @@ void main() {
     expect(surfaces(tester).index, 0);
   });
 
+  group('a paneless selection does not hold the terminal hostage', () {
+    /// Two tabs, and a **third** session selected that nothing of ours runs.
+    ///
+    /// The reported shape: "after closing a session with end session on a tab,
+    /// other tabs are not accessible cannot switch to other tabs". The
+    /// terminal's own state was healthy throughout — two live tabs, nothing
+    /// detached — so the failure was entirely in which surface the workbench
+    /// chose to draw over them.
+    String seedTwoTabsAndAPanelessSelection() {
+      final paneId = seedSessionInAPane(title: 'Refactor the parser');
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+      SessionDao(db).insert(
+        session(id: 's3', title: 'Audit and improve Chitragupta app'),
+      );
+      container.read(selectedSessionIdProvider.notifier).select('s3');
+      return paneId;
+    }
+
+    testWidgets('activating a tab through the strip shows that tab', (
+      tester,
+    ) async {
+      seedTwoTabsAndAPanelessSelection();
+      await pump(tester);
+
+      // The stuck screen: the empty state for a session that is neither tab,
+      // drawn *instead of* the pane stack, with no chip marked active.
+      expect(
+        find.textContaining('No terminal of ours is running this session'),
+        findsOneWidget,
+      );
+      expect(find.byType(TerminalPaneStack), findsNothing);
+      expect(
+        tester
+            .widgetList<TerminalTabChip>(find.byType(TerminalTabChip))
+            .any((chip) => chip.selected),
+        isFalse,
+        reason: 'no terminal tab is on screen, so none of them says it is',
+      );
+
+      // The tap the user makes — the strip's own chip, not the controller.
+      await tester.tap(find.byType(TerminalTabChip).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(TerminalPaneStack),
+        findsOneWidget,
+        reason: 'a tab tap is a request to see that tab, and it wins',
+      );
+      expect(
+        find.textContaining('No terminal of ours is running this session'),
+        findsNothing,
+      );
+      expect(
+        tester.widget<TerminalTabChip>(find.byType(TerminalTabChip).first)
+            .selected,
+        isTrue,
+        reason: 'and the tab that is on screen says so',
+      );
+    });
+
+    testWidgets('the empty state comes back when its session is picked again', (
+      tester,
+    ) async {
+      // Releasing the selection has to leave the way back open. Clearing it —
+      // rather than out-voting it with a second mode — is what makes picking
+      // the same row again a *change*, so the workbench opens it exactly as it
+      // did the first time.
+      seedTwoTabsAndAPanelessSelection();
+      await pump(tester);
+      await tester.tap(find.byType(TerminalTabChip).first);
+      await tester.pumpAndSettle();
+      expect(container.read(selectedSessionIdProvider), isNull);
+
+      container.read(selectedSessionIdProvider.notifier).select('s3');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('No terminal of ours is running this session'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a selection that has a pane is left alone', (tester) async {
+      // Only the selection that is *hijacking* the surface is released. One
+      // the user can actually see is the session they are working in, and
+      // activating a tab must not quietly drop it — the toggle to its
+      // conversation is offered off the back of it.
+      seedSessionInAPane();
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+
+      await tester.tap(find.byType(TerminalTabChip).first);
+      await tester.pumpAndSettle();
+
+      expect(container.read(selectedSessionIdProvider), 's1');
+      expect(find.byType(TerminalPaneStack), findsOneWidget);
+    });
+  });
+
   testWidgets('the strip draws no active tab while that conversation is up', (
     tester,
   ) async {
@@ -592,52 +715,183 @@ void main() {
     expect(find.text('Continue with…'), findsOneWidget);
   });
 
-  testWidgets('the delivery row is one row of chrome, not chips on the pane', (
-    tester,
-  ) async {
-    // The report: the actions were drawn straight onto the terminal's own
-    // background, under a rule of their own, at the size a chip is in a
-    // message column. They are the bar's now — and the state line shares the
-    // row with them rather than reserving one above it.
-    delivery = const SessionDelivery(
-      branch: 'work',
-      baseBranch: 'origin/main',
-      hasRemote: true,
-      dirtyFiles: 2,
-      hasWorktree: true,
-    );
-    continuation = possible;
-    seedSessionInAPane();
-    container.read(selectedSessionIdProvider.notifier).select('s1');
-    await pump(tester);
+  group('the session bar is a state line over one action row', () {
+    /// Everything the bar can hold at once: a stage, a long branch name, a
+    /// diff, a dirty tree, a base it is ahead of, four actions and both ends.
+    ///
+    /// The reports this answers, in order: "terminal bottom the buttons
+    /// doesn't sit well with the design", "when all the buttons are below why
+    /// is permission picker above with the tabs list", "bottom bar still looks
+    /// weird design wise". The last one is a layout complaint — one `Wrap`
+    /// held the facts and the buttons together, so they sorted themselves by
+    /// whatever fitted and `Commit` ended up a row above its three siblings.
+    void seedTheFullestBar() {
+      delivery = const SessionDelivery(
+        branch: 'session/fix-the-login-form-validation',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 1,
+        lines: DiffStat(added: 59, removed: 6, files: 7),
+        aheadOfBase: 2,
+        hasWorktree: true,
+      );
+      continuation = possible;
+      seedSessionInAPane();
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+    }
 
-    expect(tester.widget<DeliveryStrip>(hostedStrip).hostedOnTerminal, isTrue);
-    expectBelowTheTerminal(tester, find.text('Commit'));
-    // Where the work stands and what to do about it are on the same line —
-    // one Wrap holds both, so the bar spends a second row only when it has run
-    // out of width, never on a state line that is usually four words.
-    final line = tester.getCenter(find.text('Working')).dy;
-    expect(
-      tester.getCenter(find.text('work')).dy,
-      moreOrLessEquals(line, epsilon: 1),
+    /// The four facts and the four actions, as the user reads them.
+    const facts = [
+      'Working',
+      'session/fix-the-login-form-validation',
+      '+59 −6',
+      '1 uncommitted',
+      '2 ahead of origin/main',
+    ];
+    const actions = [
+      'Commit',
+      'Push',
+      'Open PR',
+      'Run tests',
+      'Archive worktree',
+      'Continue with…',
+    ];
+
+    Finder inTheBar(String text) => find.descendant(
+      of: find.byType(DeliveryStrip),
+      matching: find.text(text),
     );
-    expect(
-      tester.getCenter(find.text('Commit')).dy,
-      moreOrLessEquals(line, epsilon: 1),
-    );
+
+    testWidgets('the facts sit above the buttons, never among them', (
+      tester,
+    ) async {
+      seedTheFullestBar();
+      await pump(tester);
+
+      // Measured, not asserted by presence: the complaint was about where
+      // these landed, and only geometry can answer that. Every fact ends
+      // above where the first button starts, so no width can interleave them.
+      final lowestFact = facts
+          .map((text) => tester.getBottomLeft(find.text(text)).dy)
+          .reduce((a, b) => a > b ? a : b);
+      final highestAction = actions
+          .map((text) => tester.getTopLeft(inTheBar(text)).dy)
+          .reduce((a, b) => a < b ? a : b);
+      expect(
+        lowestFact,
+        lessThanOrEqualTo(highestAction),
+        reason: 'the state line is a line, not the first item in the row',
+      );
+    });
+
+    testWidgets('every control on the action row shares one centre-line', (
+      tester,
+    ) async {
+      seedTheFullestBar();
+      await pump(tester, size: desktopWindow.size);
+
+      // The primary and its peers first: `Commit` was stranded up beside the
+      // branch name, a row above the three buttons it belongs with.
+      final line = tester.getCenter(inTheBar('Commit')).dy;
+      for (final label in actions) {
+        expect(
+          tester.getCenter(inTheBar(label)).dy,
+          moreOrLessEquals(line, epsilon: 0.5),
+          reason: '$label is not on the action row',
+        );
+      }
+
+      // And the two ends, which used to be centred against a two-row block and
+      // therefore lined up with nothing. They are the same height as the
+      // actions by construction, so this is exact rather than approximate.
+      expect(
+        tester.getCenter(find.byType(PermissionModeChip)).dy,
+        moreOrLessEquals(line, epsilon: 0.5),
+        reason: 'the permission control floats above the actions',
+      );
+      expect(
+        tester.getCenter(find.byTooltip('Terminal view')).dy,
+        moreOrLessEquals(line, epsilon: 0.5),
+        reason: 'the view toggle floats above the actions',
+      );
+    });
+
+    testWidgets('exactly one action is filled, and it is the next step', (
+      tester,
+    ) async {
+      // One weight for the group, one exception. `Commit` is primary while
+      // there is something to commit; the rest are peers, and nothing else in
+      // the bar borrows the emphasis.
+      seedTheFullestBar();
+      await pump(tester);
+
+      final scheme = Theme.of(
+        tester.element(find.byType(PermissionModeChip)),
+      ).colorScheme;
+      Color? fillBehind(String label) {
+        final box = tester.widget<Container>(
+          find
+              .ancestor(of: inTheBar(label), matching: find.byType(Container))
+              .first,
+        );
+        return (box.decoration! as BoxDecoration).color;
+      }
+
+      expect(fillBehind('Commit'), scheme.primaryContainer);
+      for (final label in actions.where((label) => label != 'Commit')) {
+        expect(fillBehind(label), isNull, reason: '$label is not the primary');
+      }
+    });
+
+    testWidgets('the groups survive the narrowest window', (tester) async {
+      // At 720x560 the actions run out of room and wrap. What must not happen
+      // is the old behaviour: a second run that starts with a fact and
+      // finishes with a button.
+      seedTheFullestBar();
+      await pump(tester, size: minimumWindow.size);
+
+      final lowestFact = facts
+          .map((text) => tester.getBottomLeft(find.text(text)).dy)
+          .reduce((a, b) => a > b ? a : b);
+      final runs = actions
+          .map((text) => tester.getCenter(inTheBar(text)).dy)
+          .toList();
+      final firstRun = runs.reduce((a, b) => a < b ? a : b);
+      expect(
+        lowestFact,
+        lessThanOrEqualTo(
+          actions
+              .map((text) => tester.getTopLeft(inTheBar(text)).dy)
+              .reduce((a, b) => a < b ? a : b),
+        ),
+        reason: 'the two groups still do not interleave',
+      );
+
+      // The ends hold the first run's line rather than drifting to the middle
+      // of the block — the whole reason the row is aligned to its start.
+      expect(
+        tester.getCenter(find.byType(PermissionModeChip)).dy,
+        moreOrLessEquals(firstRun, epsilon: 0.5),
+      );
+      expect(
+        tester.getCenter(find.byTooltip('Terminal view')).dy,
+        moreOrLessEquals(firstRun, epsilon: 0.5),
+      );
+    });
   });
 
   testWidgets('the bar survives the minimum window and larger text', (
     tester,
   ) async {
-    // Everything the bar can hold at once: a permission mode, a stage, a
-    // branch, five actions and the toggle. It wraps rather than clipping, and
-    // every control in it still has a name for Narrator to read.
+    // Everything the bar can hold at once: a permission mode, a stage, a long
+    // branch, a diff, six actions and the toggle. It wraps rather than
+    // clipping, and every control in it still has a name for Narrator to read.
     delivery = const SessionDelivery(
-      branch: 'session/fix-the-login',
+      branch: 'session/fix-the-login-form-validation',
       baseBranch: 'origin/main',
       hasRemote: true,
       dirtyFiles: 2,
+      lines: DiffStat(added: 59, removed: 6, files: 7),
       aheadOfBase: 3,
       hasWorktree: true,
     );
@@ -651,6 +905,11 @@ void main() {
         container: container,
         child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
       ),
+      // The default matrix stops at 1.3x. The bar is built on every control in
+      // it being one line of `labelSmall` tall, and a fixed-height row is
+      // exactly what survives 1.3x and breaks at Windows' largest step — so
+      // this surface is asked the question the setting can actually ask.
+      matrix: const [...windowMatrix, minimumWindowHugestText],
       because: 'the bar is the busiest row of chrome in the window',
     );
   });

@@ -240,8 +240,15 @@ class HostSessionApi {
   /// the ones whose snapshot moved.
   Future<void> pushSessionsChanged() async {
     for (final sessionId in _subscribed.toList()) {
-      await _pushSnapshot(sessionId);
+      await pushSessionChanged(sessionId);
     }
+  }
+
+  /// The same, for ONE session — so the caller can chain them separately and
+  /// leave room between them for a frame the user is waiting on.
+  Future<void> pushSessionChanged(String sessionId) async {
+    if (!_subscribed.contains(sessionId)) return;
+    await _pushSnapshot(sessionId);
   }
 
   /// Folds the delivery stage into [snapshot] — the same lookup the desktop
@@ -272,29 +279,41 @@ class HostSessionApi {
   /// Sends the transcript growth of every subscribed session since the last
   /// poll. A no-op without the `read_transcript` capability.
   Future<void> pollTranscripts() async {
-    if (!device.capabilities.has(Capability.readTranscript)) return;
     for (final sessionId in _subscribed.toList()) {
-      final RemoteTranscriptPage page;
-      try {
-        page = await bindings.transcriptFor(sessionId);
-      } on Object {
-        continue;
-      }
-      final cursor = _transcriptCursors[sessionId] ?? 0;
-      if (page.cursor <= cursor || cursor > page.messages.length) {
-        _transcriptCursors[sessionId] = page.cursor;
-        continue;
-      }
-      _transcriptCursors[sessionId] = page.cursor;
-      await _send(
-        FrameType.transcriptAppended,
-        payload: RemoteTranscriptPage(
-          sessionId: sessionId,
-          messages: page.messages.sublist(cursor),
-          cursor: page.cursor,
-        ).toJson(),
-      );
+      await pollTranscript(sessionId);
     }
+  }
+
+  /// The same, for ONE session.
+  ///
+  /// Split out so the caller can put each session on the device's serial chain
+  /// by itself: a frame the user just sent then waits for a single transcript
+  /// read rather than for every subscribed session's, which on a desktop
+  /// watching a dozen of them is the difference between a link that answers
+  /// and one that times out.
+  Future<void> pollTranscript(String sessionId) async {
+    if (!device.capabilities.has(Capability.readTranscript)) return;
+    if (!_subscribed.contains(sessionId)) return;
+    final RemoteTranscriptPage page;
+    try {
+      page = await bindings.transcriptFor(sessionId);
+    } on Object {
+      return;
+    }
+    final cursor = _transcriptCursors[sessionId] ?? 0;
+    if (page.cursor <= cursor || cursor > page.messages.length) {
+      _transcriptCursors[sessionId] = page.cursor;
+      return;
+    }
+    _transcriptCursors[sessionId] = page.cursor;
+    await _send(
+      FrameType.transcriptAppended,
+      payload: RemoteTranscriptPage(
+        sessionId: sessionId,
+        messages: page.messages.sublist(cursor),
+        cursor: page.cursor,
+      ).toJson(),
+    );
   }
 
   /// Sends `approval.requested` with the Loop-49 evidence. Gated on the

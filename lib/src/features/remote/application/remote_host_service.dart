@@ -388,7 +388,7 @@ class RemoteHostService {
   Future<void> notifySessionsChanged() async {
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
-        runtime.run((api) => api.pushSessionsChanged()),
+        runtime.sweepSessionsChanged(),
     ]);
   }
 
@@ -433,11 +433,12 @@ class RemoteHostService {
   }
 
   /// One transcript poll across every device, now. The periodic timer calls
-  /// this; tests call it directly.
+  /// this; tests call it directly. A device already sweeping swallows the
+  /// tick — see [_DeviceRuntime.sweepTranscripts].
   Future<void> pollTranscriptsNow() async {
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
-        runtime.run((api) => api.pollTranscripts()),
+        runtime.sweepTranscripts(),
     ]);
   }
 
@@ -565,6 +566,73 @@ class _DeviceRuntime {
   /// rather than on the api because the retry it exists for arrives on a fresh
   /// generation, and every generation gets a new api.
   final SessionStartLedger _starts = SessionStartLedger();
+
+  /// True while a transcript sweep is running for this device.
+  bool _sweeping = false;
+
+  /// One transcript sweep for this device, and never two at once.
+  ///
+  /// The sweep reads every subscribed session, and everything for one device
+  /// runs on [_chain]. On a desktop with a dozen watched sessions a sweep
+  /// takes longer than the interval the timer fires on, so queueing each tick
+  /// behind the one still running made the chain grow faster than it could
+  /// ever drain — for ever, since `Timer.periodic` never asks whether the last
+  /// tick finished. The phone's own frames went to the back of that queue:
+  /// its `session.subscribe` timed out at fifteen seconds, and so did the
+  /// `LinkHello` that would have proved there was a link at all, which is why
+  /// a desktop sitting there holding its rendezvous read as "no host at
+  /// generation 2, 3, 4" from the other end.
+  ///
+  /// A tick arriving mid-sweep has nothing to add — the sweep in flight reads
+  /// the same sessions — so it is dropped rather than stacked. And each
+  /// session goes on the chain by itself, so a frame the user just sent waits
+  /// for one transcript read instead of all of them.
+  Future<void> sweepTranscripts() async {
+    if (_sweeping || _closed) return;
+    _sweeping = true;
+    try {
+      for (final sessionId
+          in _active?.api.subscribedSessions ?? const <String>{}) {
+        if (_closed) return;
+        await run((api) => api.pollTranscript(sessionId));
+      }
+    } finally {
+      _sweeping = false;
+    }
+  }
+
+  bool _pushing = false;
+  bool _pushAgain = false;
+
+  /// Re-evaluates every subscribed session, coalescing bursts.
+  ///
+  /// The same chain and the same hazard as [sweepTranscripts], but driven by
+  /// session activity rather than a timer — and a desktop with half a dozen
+  /// live agents produces activity in bursts. The push sends only what
+  /// actually moved, so ONE pass after a burst says everything N passes would
+  /// have; a notification arriving mid-pass is remembered and answered by a
+  /// single extra pass, never by a queue N deep that the phone's own frames
+  /// then sit behind.
+  Future<void> sweepSessionsChanged() async {
+    if (_pushing) {
+      _pushAgain = true;
+      return;
+    }
+    _pushing = true;
+    try {
+      do {
+        _pushAgain = false;
+        for (final sessionId
+            in _active?.api.subscribedSessions ?? const <String>{}) {
+          if (_closed) return;
+          await run((api) => api.pushSessionChanged(sessionId));
+        }
+      } while (_pushAgain && !_closed);
+    } finally {
+      _pushing = false;
+      _pushAgain = false;
+    }
+  }
 
   /// Runs [action] against the active api on the device's serial chain.
   Future<void> run(Future<void> Function(HostSessionApi api) action) {
