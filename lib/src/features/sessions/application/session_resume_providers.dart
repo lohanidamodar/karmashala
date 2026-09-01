@@ -83,8 +83,7 @@ final sessionWhereaboutsProvider = Provider.autoDispose
       // window is larger, so a second question costs no second read.
       final descriptor = sessionDescriptor(ref, session.agentInstallationId);
       final conflict =
-          descriptor?.launch.resumeConflict ??
-          const AgentResumeConflictRules();
+          descriptor?.launch.resumeConflict ?? const AgentResumeConflictRules();
       final missing =
           descriptor?.launch.missingConversation ??
           const AgentMissingConversationRules();

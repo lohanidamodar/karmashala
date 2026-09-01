@@ -525,6 +525,7 @@ class SessionLauncher {
   /// otherwise.
   Future<void> refuseIfConversationMissing(SessionLaunchRequest request) async {
     final externalId = request.resumeExternalSessionId;
+    if (externalId == null || externalId.isEmpty) return;
     final minted = rowThatMinted(externalId);
     if (minted == null || minted.isArchived) return;
     final descriptor = _ref
@@ -546,7 +547,7 @@ class SessionLauncher {
                   minted.worktree ??
                   request.repository.path)
               .environmentId,
-      conversationId: externalId!,
+      conversationId: externalId,
     );
     if (presence != ConversationPresence.absent) return;
     _ref.read(sessionDaoProvider).updateStatus(minted.id, SessionStatus.failed);

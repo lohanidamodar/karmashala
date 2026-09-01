@@ -350,12 +350,12 @@ void main() {
     final id = await launch(h.container);
     final paneId = SessionDao(h.db).getById(id)!.paneId!;
     writeToPane(h.container, paneId, _noSuchConversation);
-    (h.container
+    final instance =
+        h.container
                 .read(terminalSessionsControllerProvider.notifier)
                 .instanceFor(paneId)!
-            as FakeTerminalInstance)
-        .livenessNotifier
-        .value = PaneLiveness.restored;
+            as FakeTerminalInstance;
+    instance.livenessNotifier.value = PaneLiveness.restored;
     h.container.invalidate(sessionWhereaboutsProvider(id));
 
     final where = h.container.read(sessionWhereaboutsProvider(id));
