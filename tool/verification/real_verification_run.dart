@@ -23,7 +23,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/process/process_handle.dart';
-import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/data/android_sdk_discovery.dart';
 import 'package:karmashala/src/features/devices/domain/device_input.dart';
@@ -70,7 +70,7 @@ void main() {
 
     final artifacts = await Directory.systemTemp.createTemp('verify-runs-');
     final db = AppDatabase.memory();
-    final browser = BrowserService(runner: const WindowsCommandRunner());
+    final browser = BrowserService(runner: const LocalCommandRunner());
     final service = VerificationService(
       VerificationDao(db),
       VerificationArtifactStore(artifacts),
@@ -233,10 +233,10 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 4)));
 
   test('a device run, on a real device', () async {
-    final runner = const WindowsCommandRunner();
+    final runner = const LocalCommandRunner();
     final sdk = await AndroidSdkDiscoveryService(
       runner: runner,
-      environment: localWindowsEnvironment(DateTime.now().toUtc()),
+      environment: localHostEnvironment(DateTime.now().toUtc()),
     ).discover();
     expect(sdk, isNotNull, reason: 'no Android SDK on this machine');
 

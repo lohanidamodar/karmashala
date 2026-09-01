@@ -15,7 +15,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/core/process/process_handle.dart';
-import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/features/browser/data/browser_launcher.dart';
 import 'package:karmashala/src/features/browser/data/browser_service.dart';
 import 'package:karmashala/src/features/browser/data/cdp_page.dart';
@@ -39,7 +39,7 @@ void check(String label, bool ok, [String? detail]) {
 
 Future<void> main() async {
   final page = await _writeTestPage();
-  final service = BrowserService(runner: const WindowsCommandRunner());
+  final service = BrowserService(runner: const LocalCommandRunner());
   ProcessHandle? chrome;
 
   try {
@@ -213,7 +213,7 @@ Future<void> main() async {
     );
     await hang.close(force: true);
 
-    final idle = BrowserService(runner: const WindowsCommandRunner());
+    final idle = BrowserService(runner: const LocalCommandRunner());
     check(
       'nothing listening + no spawn reports notRunning',
       await _failsWith(

@@ -5,15 +5,18 @@ import 'command_runner.dart';
 import 'io_process_handle.dart';
 import 'process_handle.dart';
 
-/// Runs commands on the **Windows host** via `dart:io` `Process`.
+/// Runs commands on the **local host** — Windows, macOS or Linux — via
+/// `dart:io` `Process`.
 ///
 /// This is the only place (besides [WslCommandRunner]) that touches `Process`;
-/// features go through the [CommandRunner] interface.
-class WindowsCommandRunner implements CommandRunner {
-  const WindowsCommandRunner();
+/// features go through the [CommandRunner] interface. There is nothing
+/// OS-specific left in here: what differs between hosts is the *request* (see
+/// `locateRequest`), not how a process is started.
+class LocalCommandRunner implements CommandRunner {
+  const LocalCommandRunner();
 
   @override
-  String get environmentId => localWindowsEnvironmentId;
+  String get environmentId => localHostEnvironmentId;
 
   @override
   Future<CommandResult> run(CommandRequest request) async {
@@ -34,7 +37,7 @@ class WindowsCommandRunner implements CommandRunner {
       );
     } on ProcessException catch (e) {
       throw CommandException(
-        'Failed to run "${request.executable}" on Windows',
+        'Failed to run "${request.executable}" on ${Platform.operatingSystem}',
         cause: e,
       );
     }
@@ -52,7 +55,7 @@ class WindowsCommandRunner implements CommandRunner {
       return IoProcessHandle(process);
     } on ProcessException catch (e) {
       throw CommandException(
-        'Failed to start "${request.executable}" on Windows',
+        'Failed to start "${request.executable}" on ${Platform.operatingSystem}',
         cause: e,
       );
     }

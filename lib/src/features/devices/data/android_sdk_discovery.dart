@@ -6,8 +6,7 @@ import '../domain/android_device.dart';
 
 /// Path separator for [kind]. Windows and WSL paths are never mixed
 /// (constraints 7 & 8), so the separator is chosen per environment, not per host.
-String _sep(EnvironmentKind kind) =>
-    kind == EnvironmentKind.windowsNative ? r'\' : '/';
+String _sep(EnvironmentKind kind) => usesWindowsPaths(kind) ? r'\' : '/';
 
 String _join(EnvironmentKind kind, List<String> parts) {
   final sep = _sep(kind);
@@ -43,6 +42,17 @@ List<String> sdkCandidateRoots({
       if (localAppData != null && localAppData.isNotEmpty) {
         add(_join(kind, [localAppData, 'Android', 'Sdk']));
       }
+    case EnvironmentKind.localPosix:
+      final home = env['HOME']?.trim();
+      if (home != null && home.isNotEmpty) {
+        // Android Studio's default on macOS; on Linux it is ~/Android/Sdk.
+        // Both are offered because these are candidates, probed in order, and
+        // the kind alone does not say which of the two POSIX hosts this is.
+        add(_join(kind, [home, 'Library', 'Android', 'sdk']));
+        add(_join(kind, [home, 'Android', 'Sdk']));
+        add(_join(kind, [home, 'android-sdk']));
+      }
+      add('/usr/lib/android-sdk');
     case EnvironmentKind.wsl || EnvironmentKind.ssh:
       final home = env['HOME']?.trim();
       if (home != null && home.isNotEmpty) {
@@ -58,14 +68,14 @@ List<String> sdkCandidateRoots({
 String adbPathIn(String root, EnvironmentKind kind) => _join(kind, [
   root,
   'platform-tools',
-  kind == EnvironmentKind.windowsNative ? 'adb.exe' : 'adb',
+  usesWindowsPaths(kind) ? 'adb.exe' : 'adb',
 ]);
 
 /// The `emulator` executable inside an SDK [root].
 String emulatorPathIn(String root, EnvironmentKind kind) => _join(kind, [
   root,
   'emulator',
-  kind == EnvironmentKind.windowsNative ? 'emulator.exe' : 'emulator',
+  usesWindowsPaths(kind) ? 'emulator.exe' : 'emulator',
 ]);
 
 /// Derives the SDK root from a located `adb` path
@@ -89,7 +99,9 @@ CommandRequest envRequest(EnvironmentKind kind, String name) => switch (kind) {
     executable: 'cmd',
     arguments: ['/c', 'echo %$name%'],
   ),
-  EnvironmentKind.wsl || EnvironmentKind.ssh => CommandRequest(
+  EnvironmentKind.localPosix ||
+  EnvironmentKind.wsl ||
+  EnvironmentKind.ssh => CommandRequest(
     executable: 'bash',
     arguments: ['-lc', 'echo \$$name'],
   ),
@@ -120,7 +132,9 @@ CommandRequest adbOnPathRequest(EnvironmentKind kind) => switch (kind) {
   ),
   // A login shell so PATH additions from ~/.profile are visible, matching how
   // agent CLIs are discovered.
-  EnvironmentKind.wsl || EnvironmentKind.ssh => const CommandRequest(
+  EnvironmentKind.localPosix ||
+  EnvironmentKind.wsl ||
+  EnvironmentKind.ssh => const CommandRequest(
     executable: 'bash',
     arguments: ['-lc', 'command -v adb'],
   ),
@@ -177,6 +191,7 @@ class AndroidSdkDiscoveryService {
         'ANDROID_SDK_ROOT',
         'LOCALAPPDATA',
       ],
+      EnvironmentKind.localPosix ||
       EnvironmentKind.wsl ||
       EnvironmentKind.ssh => const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
     };

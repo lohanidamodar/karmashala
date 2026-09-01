@@ -23,6 +23,10 @@ String? environmentLabel(ExecutionEnvironment environment) =>
       // Every Windows-native environment is the one Windows, and "Windows" is
       // what its owner calls it — the row's stored name adds nothing.
       EnvironmentKind.windowsNative => 'Windows',
+      // "macOS" / "Linux", stored on the row when the host was registered. The
+      // one local host is named after its OS for the same reason Windows is:
+      // there is only ever one of it, and that is what its owner calls it.
+      EnvironmentKind.localPosix => environment.name,
       EnvironmentKind.wsl => _qualified('WSL', [
         environment.wslDistribution,
         environment.name,

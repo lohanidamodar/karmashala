@@ -105,7 +105,7 @@ String? _hostPathForPosix(
               path: p.posix.normalize(raw),
             ),
             from: wsl,
-            to: localWindowsEnvironment(_unused),
+            to: windowsHostEnvironment(_unused),
           )
           .path;
     } on PathTranslationException {

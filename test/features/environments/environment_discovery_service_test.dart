@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
-import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -50,7 +50,7 @@ void main() {
   });
 
   group('EnvironmentDiscoveryService', () {
-    test('always includes the Windows host environment', () async {
+    test('always includes the host environment', () async {
       final runner = FakeCommandRunner(
         responder: (_) =>
             const CommandResult(exitCode: 0, stdout: '', stderr: ''),
@@ -58,8 +58,32 @@ void main() {
       final envs = await EnvironmentDiscoveryService(
         host: runner,
         clock: FixedClock(testTime),
+        hostIsWindows: true,
       ).discover();
-      expect(envs.single.kind, EnvironmentKind.windowsNative);
+      // The host row describes the machine the suite is running on. Only WSL
+      // enumeration is gated by [hostIsWindows].
+      expect(envs.single.kind, localHostEnvironmentKind);
+      expect(envs.single.id, localHostEnvironmentId);
+    });
+
+    test('a POSIX host is itself, and is never asked about WSL', () async {
+      var asked = false;
+      final runner = FakeCommandRunner(
+        responder: (_) {
+          asked = true;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      final envs = await EnvironmentDiscoveryService(
+        host: runner,
+        clock: FixedClock(testTime),
+        hostIsWindows: false,
+      ).discover();
+
+      expect(envs.single.id, localHostEnvironmentId);
+      // Not merely "found nothing": nothing was spawned. A Mac used to run
+      // wsl.exe on every launch and log its absence as though it were news.
+      expect(asked, isFalse, reason: 'wsl.exe must not be run off Windows');
     });
 
     test('adds a wsl: environment per discovered distribution', () async {
@@ -77,8 +101,13 @@ void main() {
       final envs = await EnvironmentDiscoveryService(
         host: runner,
         clock: FixedClock(testTime),
+        hostIsWindows: true,
       ).discover();
-      expect(envs.map((e) => e.id), ['windows', 'wsl:Ubuntu', 'wsl:Debian']);
+      expect(envs.map((e) => e.id), [
+        localHostEnvironmentId,
+        'wsl:Ubuntu',
+        'wsl:Debian',
+      ]);
       expect(envs[1].wslDistribution, 'Ubuntu');
     });
 
@@ -89,8 +118,9 @@ void main() {
       final envs = await EnvironmentDiscoveryService(
         host: runner,
         clock: FixedClock(testTime),
+        hostIsWindows: true,
       ).discover();
-      expect(envs.map((e) => e.id), ['windows']);
+      expect(envs.map((e) => e.id), [localHostEnvironmentId]);
     });
 
     test('degrades to Windows-only on a non-zero exit', () async {
@@ -101,8 +131,9 @@ void main() {
       final envs = await EnvironmentDiscoveryService(
         host: runner,
         clock: FixedClock(testTime),
+        hostIsWindows: true,
       ).discover();
-      expect(envs.map((e) => e.id), ['windows']);
+      expect(envs.map((e) => e.id), [localHostEnvironmentId]);
     });
   });
 }

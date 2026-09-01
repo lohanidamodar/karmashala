@@ -69,7 +69,7 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
     );
     _auth = existing?.authMethod ?? SshAuthMethod.privateKey;
     _keyEnvironmentId =
-        existing?.privateKey?.environmentId ?? localWindowsEnvironmentId;
+        existing?.privateKey?.environmentId ?? localHostEnvironmentId;
   }
 
   @override
@@ -90,7 +90,7 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
       _keyPath.text = file.path;
       // The picker runs on the Windows host, so what it returns is a Windows
       // path — recording it under any other environment would be a lie.
-      _keyEnvironmentId = localWindowsEnvironmentId;
+      _keyEnvironmentId = localHostEnvironmentId;
     });
   }
 

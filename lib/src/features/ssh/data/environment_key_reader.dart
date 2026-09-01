@@ -37,9 +37,13 @@ class EnvironmentPrivateKeyReader {
     if (owner == null || owner.kind != EnvironmentKind.wsl) {
       return readLocal(path);
     }
-    final windows =
-        environments.getById(localWindowsEnvironmentId) ??
-        localWindowsEnvironment(owner.createdAt);
+    // The stored row only stands in for Windows when it really is Windows:
+    // on a POSIX host it describes this machine, which is not where the
+    // distribution's files are.
+    final stored = environments.getById(localHostEnvironmentId);
+    final windows = stored?.kind == EnvironmentKind.windowsNative
+        ? stored!
+        : windowsHostEnvironment(owner.createdAt);
     final EnvironmentPath onHost;
     try {
       onHost = translator.translate(path, from: owner, to: windows);

@@ -17,7 +17,7 @@ import '../domain/device_input.dart';
 /// device list, so switching this is a real user-facing choice rather than a
 /// detail — hence a provider rather than a constant.
 final deviceEnvironmentProvider = Provider<ExecutionEnvironment>(
-  (ref) => localWindowsEnvironment(DateTime.now().toUtc()),
+  (ref) => localHostEnvironment(DateTime.now().toUtc()),
 );
 
 /// Locates the Android SDK, or `null` when there is none.
@@ -154,6 +154,9 @@ String? deviceUnavailableReason({
       EnvironmentKind.windowsNative =>
         'No Android SDK found. Set ANDROID_HOME, or install the SDK to '
             r'%LOCALAPPDATA%\Android\Sdk.',
+      EnvironmentKind.localPosix =>
+        'No Android SDK found. Set ANDROID_HOME, or install the SDK to '
+            '~/Library/Android/sdk on macOS or ~/Android/Sdk on Linux.',
       EnvironmentKind.wsl =>
         r'No Android SDK found in this WSL distribution. Set ANDROID_HOME '
             'or install it to ~/Android/Sdk.',

@@ -20,6 +20,16 @@ ExecutionEnvironment windowsEnv({String id = 'windows'}) =>
       createdAt: testTime,
     );
 
+/// The local macOS/Linux host, for the cases that are about a POSIX desktop
+/// rather than about Windows.
+ExecutionEnvironment posixEnv({String id = 'windows', String name = 'macOS'}) =>
+    ExecutionEnvironment(
+      id: id,
+      kind: EnvironmentKind.localPosix,
+      name: name,
+      createdAt: testTime,
+    );
+
 ExecutionEnvironment wslEnv({
   String id = 'wsl:Ubuntu',
   String distro = 'Ubuntu',

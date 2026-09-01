@@ -22,7 +22,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/core/process/process_handle.dart';
-import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/features/browser/application/browser_tool_schemas.dart';
 import 'package:karmashala/src/features/browser/application/browser_tools.dart';
 import 'package:karmashala/src/features/browser/data/browser_service.dart';
@@ -44,7 +44,7 @@ void check(String label, bool ok, [String? detail]) {
 
 Future<void> main(List<String> args) async {
   final pageFile = await _writeTestPage();
-  final service = BrowserService(runner: const WindowsCommandRunner());
+  final service = BrowserService(runner: const LocalCommandRunner());
   final tools = BrowserTools(service);
   ProcessHandle? chrome;
   String? profileDir;

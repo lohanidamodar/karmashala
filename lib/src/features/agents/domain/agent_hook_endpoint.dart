@@ -44,7 +44,10 @@ class AgentHookEndpoint {
   /// `host:port` for an agent running in [environment], or `null` when no
   /// address this app binds can be reached from there.
   String? hostFor(EnvironmentKind environment) => switch (environment) {
-    EnvironmentKind.windowsNative => '127.0.0.1:$port',
+    // Both local kinds dial the loopback listener directly: the agent is a
+    // child process on this very machine, whatever OS it is.
+    EnvironmentKind.windowsNative ||
+    EnvironmentKind.localPosix => '127.0.0.1:$port',
     EnvironmentKind.wsl => wslHost == null ? null : '$wslHost:$port',
     // Another machine entirely. The only way to reach it would be to bind an
     // interface the network can see.

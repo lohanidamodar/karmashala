@@ -118,7 +118,7 @@ class SystemTerminalService {
     final processCwd =
         terminal.kind == SystemTerminalKind.custom && workingDirectory != null
         ? EnvironmentPath(
-            environmentId: localWindowsEnvironmentId,
+            environmentId: localHostEnvironmentId,
             path: workingDirectory,
           )
         : null;

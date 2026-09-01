@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/ssh_command_runner.dart';
-import 'package:karmashala/src/core/process/windows_command_runner.dart';
+import 'package:karmashala/src/core/process/local_command_runner.dart';
 import 'package:karmashala/src/core/process/wsl_command_runner.dart';
 import 'package:karmashala/src/core/util/clock.dart';
 import 'package:karmashala/src/features/agents/data/agent_discovery_service.dart';
@@ -127,7 +127,7 @@ void main() {
     // through WslCommandRunner: same shell, same binaries, only the transport
     // differs.
     final locals = await EnvironmentDiscoveryService(
-      host: const WindowsCommandRunner(),
+      host: const LocalCommandRunner(),
       clock: const SystemClock(),
     ).discover();
     final distro = locals

@@ -305,7 +305,8 @@ class LauncherControlServer implements SessionMcp {
     final server = _server;
     if (server == null || _mcpEndpoint?.token == null) return null;
     return switch (environment) {
-      EnvironmentKind.windowsNative => '127.0.0.1:${server.port}',
+      EnvironmentKind.windowsNative ||
+      EnvironmentKind.localPosix => '127.0.0.1:${server.port}',
       EnvironmentKind.wsl => _wslHost == null
           ? null
           : '${_wslHost!.address}:${server.port}',
@@ -353,6 +354,14 @@ class LauncherControlServer implements SessionMcp {
   /// the real machine's WSL switch; tests inject a stand-in so two-interface
   /// behaviour is provable on a host that has no WSL at all.
   ///
+  /// [hostCanHaveWsl] gates that second listener on the host being able to run
+  /// WSL at all. Off Windows there is no switch to wait for, so looking is not
+  /// a temporary miss to be retried but a permanent no — without this a macOS
+  /// or Linux launch logged a Windows-shaped warning and then re-ran the
+  /// interface scan every 30 seconds, for the life of the process, to
+  /// rediscover that it is not Windows. Tests that exercise the WSL path pass
+  /// `true` alongside their stand-in [wslHostAddress].
+  ///
   /// [sessionConfigDirectory] is where per-session MCP configs are written; by
   /// default `mcp` beside the handshake file, which puts it in the
   /// application-support directory in the app and in the test's temp directory
@@ -376,6 +385,7 @@ class LauncherControlServer implements SessionMcp {
     String? sessionConfigDirectory,
     Future<InternetAddress?> Function() wslHostAddress =
         resolveWslHostAddress,
+    bool? hostCanHaveWsl,
     int preferredPort = preferredControlPort,
     Duration retryWslEvery = wslRetryInterval,
   }) async {
@@ -475,7 +485,9 @@ class LauncherControlServer implements SessionMcp {
 
     server.listen(_handle, onError: (Object e) => _logger.warning('$e'));
     _logger.info('Launcher control server on 127.0.0.1:${server.port}.');
-    await _bindWslInterface(server.port, wslHostAddress);
+    if (hostCanHaveWsl ?? Platform.isWindows) {
+      await _bindWslInterface(server.port, wslHostAddress);
+    }
     // Beside the handshake file rather than resolved separately: they belong in
     // the same application-support directory, and a second
     // `getApplicationSupportDirectory()` would be a platform-channel call on a

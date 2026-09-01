@@ -87,7 +87,7 @@ class AppTerminalLinkActions implements TerminalLinkActions {
           .read(revealInFileManagerProvider)
           .reveal(
             EnvironmentPath(
-              environmentId: localWindowsEnvironmentId,
+              environmentId: localHostEnvironmentId,
               path: hostPath,
             ),
           );

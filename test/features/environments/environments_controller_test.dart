@@ -3,7 +3,9 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/environments/application/environment_discovery_provider.dart';
 import 'package:karmashala/src/features/environments/application/environments_controller.dart';
+import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,17 +19,23 @@ void main() {
 
   setUp(() {
     db = AppDatabase.memory();
+    final runner = FakeCommandRunner(
+      responder: (_) =>
+          const CommandResult(exitCode: 0, stdout: 'Ubuntu\n', stderr: ''),
+    );
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        hostCommandRunnerProvider.overrideWithValue(
-          FakeCommandRunner(
-            responder: (_) => const CommandResult(
-              exitCode: 0,
-              stdout: 'Ubuntu\n',
-              stderr: '',
-            ),
+        hostCommandRunnerProvider.overrideWithValue(runner),
+        // These cases are about WSL, which only exists on Windows. Said out
+        // loud so the suite tests the same thing wherever it runs, rather than
+        // discovering nothing on a Mac and reporting that as a failure.
+        environmentDiscoveryServiceProvider.overrideWithValue(
+          EnvironmentDiscoveryService(
+            host: runner,
+            clock: FixedClock(testTime),
+            hostIsWindows: true,
           ),
         ),
       ],
@@ -43,7 +51,7 @@ void main() {
   });
 
   test(
-    'discoverAndPersist stores the Windows host and WSL distributions',
+    'discoverAndPersist stores the host and its WSL distributions',
     () async {
       final result = await container
           .read(environmentsControllerProvider.notifier)

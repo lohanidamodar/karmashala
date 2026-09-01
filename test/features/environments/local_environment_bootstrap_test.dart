@@ -3,6 +3,8 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/local_environment.dart';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
@@ -19,11 +21,20 @@ void main() {
   });
   tearDown(() => db.close());
 
-  test('creates the local Windows environment on first run', () {
+  test('creates the local host environment on first run', () {
     final id = ensureLocalEnvironment(dao, clock);
-    expect(id, localWindowsEnvironmentId);
-    final env = dao.getById(localWindowsEnvironmentId)!;
-    expect(env.kind, EnvironmentKind.windowsNative);
+    expect(id, localHostEnvironmentId);
+    final env = dao.getById(localHostEnvironmentId)!;
+    // The host this suite is running on, not Windows unconditionally: a Mac
+    // that registered itself as `windowsNative` looked its agent CLIs up with
+    // `where` and found none of them.
+    expect(env.kind, localHostEnvironmentKind);
+    expect(
+      env.kind,
+      Platform.isWindows
+          ? EnvironmentKind.windowsNative
+          : EnvironmentKind.localPosix,
+    );
   });
 
   test('is idempotent — does not duplicate or overwrite', () {

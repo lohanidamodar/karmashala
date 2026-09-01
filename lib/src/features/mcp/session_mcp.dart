@@ -57,6 +57,10 @@ abstract class SessionMcp {
 String? agentConfigPathFor(String windowsPath, EnvironmentKind kind) {
   switch (kind) {
     case EnvironmentKind.windowsNative:
+    case EnvironmentKind.localPosix:
+      // The agent shares this filesystem, so the path it was handed is already
+      // the name it knows the file by — on a POSIX host there is no drive
+      // letter to translate in the first place.
       return windowsPath;
     case EnvironmentKind.wsl:
       try {
