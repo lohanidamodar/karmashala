@@ -499,6 +499,39 @@ Work autonomously and in loops to implement, review, test, fix, and verify until
 
 ## 17. Project specific note
 
-- Use flutter commands from powershell
+### Windows tooling is mandatory — and bare `flutter` in WSL is a trap
+
+Never invoke `flutter` or `dart` from a WSL/Linux shell, even though the repo
+lives under `/mnt/c` and the command appears to work.
+
+`which flutter` inside WSL resolves to `/mnt/c/Users/<you>/flutter/bin/flutter`
+— the **POSIX shell script** that ships inside the *Windows* Flutter install,
+reachable because `/mnt/c` is on `PATH`. Running it makes Flutter decide it
+needs a **Linux** Dart SDK: it downloads `dart-sdk-linux-x64.zip` into
+`flutter/bin/cache/` and swaps out the Windows `dart-sdk`, corrupting the one
+installation every terminal, agent and build shares. The symptom everybody
+else then sees is:
+
+```
+Flutter users should use `flutter pub` instead of `dart pub`.
+Failed to update packages.
+```
+
+Always go through `cmd.exe`, and always name `flutter.bat` rather than
+`flutter`:
+
+```bash
+cmd.exe /c "cd /d C:\path\to\repo && C:\Users\<you>\flutter\bin\flutter.bat pub get"
+
+cmd.exe /c "cd /d C:\path\to\repo && \
+  C:\Users\<you>\flutter\bin\cache\dart-sdk\bin\dart.exe --disable-dart-dev \
+  --packages=C:\Users\<you>\flutter\packages\flutter_tools\.dart_tool\package_config.json \
+  C:\Users\<you>\flutter\bin\cache\flutter_tools.snapshot <analyze|test ...>"
+```
+
+Subagent briefs must spell this out. "Use Windows tooling" is not enough: bare
+`flutter` resolves and fails silently for the agent that runs it, while
+breaking the toolchain for everyone else.
+
 - run and test on windows as primary target
 - https://github.com/Norbert515/vide_cli this project implemented in dart might already have some reference for us regarding how to work with agents and cli, orchestrate multiple agents, manage subagents and handle agent sessions. We can use it as a reference for our project.
