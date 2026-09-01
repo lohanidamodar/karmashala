@@ -1,5 +1,7 @@
 import 'package:chitragupta/src/core/database/app_database.dart';
+import 'package:chitragupta/src/features/sessions/application/session_resume_providers.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
@@ -178,6 +180,44 @@ void main() {
     expect(dormant.bufferBuilt, isTrue);
   });
 
+  test('asking where a restored agent pane is does not parse its buffer', () {
+    // `sessionWhereaboutsProvider` reads a pane's last lines to spot an agent
+    // refusing to resume a conversation another process holds — and it did
+    // that for *any* non-live pane, which for a restored one is the whole
+    // stored scrollback, parsed on every Explorer tap. It is also the wrong
+    // question there: that text is the previous run's, so a refusal in it says
+    // nothing about who holds the conversation now.
+    final database = AppDatabase.memory();
+    addTearDown(database.close);
+
+    final app = open(database: database);
+    final opened = app.controller.openAgentTab(
+      const AgentPaneLaunch(
+        agentId: 'claude',
+        executable: 'claude',
+        title: 'a session',
+      ),
+    );
+    fill(app.controller.instanceFor(opened.paneId)!, 200);
+    app.controller.persistWorkspace();
+    app.container.dispose();
+
+    final next = open(database: database);
+    final paneId = next.container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .single
+        .layout
+        .panes
+        .single;
+    final dormant =
+        next.controller.instanceFor(paneId)! as DormantTerminalInstance;
+    expect(dormant.agentLaunch, isNotNull, reason: 'restored as an agent pane');
+
+    expect(next.container.read(_conflictProbe(paneId)), isFalse);
+    expect(dormant.bufferBuilt, isFalse);
+  });
+
   test('a detached pane that says something is still heard', () {
     final app = open();
     final first = app.controller.openTab(TerminalProfile.powerShell);
@@ -265,3 +305,9 @@ void main() {
     );
   });
 }
+
+/// `paneShowsResumeConflict` takes a `Ref`, so a provider is how a test asks
+/// it the question the Explorer asks.
+final _conflictProbe = Provider.family<bool, String>(
+  (ref, paneId) => paneShowsResumeConflict(ref, paneId),
+);

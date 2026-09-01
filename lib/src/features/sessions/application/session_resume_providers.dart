@@ -5,6 +5,7 @@ import '../../agents/data/resume_conflict_source.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../terminal/domain/pane_liveness.dart';
 import '../../terminal/data/terminal_grid_text.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_resume.dart';
@@ -66,6 +67,15 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return const SessionWhereabouts(hostedLive: true);
       }
 
+      // A pane restored from disk has run nothing this launch, so its buffer
+      // holds the *previous* run's output. A resume refusal in there says
+      // another process held the conversation before the app restarted, which
+      // is not evidence about now — and reading it would build the very buffer
+      // `DormantTerminalInstance` keeps unparsed, on every Explorer tap.
+      if (instance.liveness.value == PaneLiveness.restored) {
+        return SessionWhereabouts(external: external, lastSeen: lastSeen);
+      }
+
       // The pane is dead. Its last words are still in the buffer, and for a
       // launch that was a resume they may be the agent explaining that somebody
       // else holds the conversation.
@@ -97,6 +107,9 @@ bool paneShowsResumeConflict(Ref ref, String paneId) {
   final agentId = instance?.agentLaunch?.agentId;
   if (instance == null || agentId == null) return false;
   if (instance.liveness.value.isLive) return false;
+  // Same rule as [sessionWhereaboutsProvider]: a restored pane's buffer is the
+  // last run's, and reading it would parse scrollback the restore kept whole.
+  if (instance.liveness.value == PaneLiveness.restored) return false;
   final descriptor = ref.read(agentRegistryProvider).byId(agentId);
   return showsResumeConflict(
     descriptor,
