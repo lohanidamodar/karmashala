@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/detach_policy.dart';
 import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
+import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -34,18 +35,24 @@ class FakeTerminalInstance
     required this.id,
     required this.title,
     required this.profileId,
-    this.workingDirectory,
+    String? workingDirectory,
     this.restored,
     this.agentLaunch,
     Terminal? adoptTerminal,
     bool shellIntegration = false,
-  }) : adopted = adoptTerminal {
+  }) : adopted = adoptTerminal,
+       _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
+    // Wired exactly as a real pane wires it: the pane owns xterm's single OSC
+    // slot and fans it out, so a test can write OSC 7 and OSC 133 at the same
+    // buffer and have both land.
+    terminal.onPrivateOSC = _osc.dispatch;
+    _osc.add(_cwd.handleOsc);
     // Attached on the same condition a real pane attaches it, so a test can
     // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —
     // by writing the markers a shell would emit.
     if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach();
+      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
     if (adoptTerminal == null && restored != null && restored!.isNotEmpty) {
       terminal.write(restored!);
@@ -62,8 +69,18 @@ class FakeTerminalInstance
   final String title;
   @override
   final String profileId;
+
+  /// The launch directory until a test writes an OSC 7, exactly as a real
+  /// pane's is.
+  final WorkingDirectoryTracker _cwd;
+  final OscRouter _osc = OscRouter();
+
   @override
-  final String? workingDirectory;
+  String? get workingDirectory => _cwd.value;
+
+  @override
+  ValueListenable<String?> get directory => _cwd.listenable;
+
   @override
   final AgentPaneLaunch? agentLaunch;
 
@@ -170,6 +187,7 @@ class FakeTerminalInstance
     disposed = true;
     livenessNotifier.value = PaneLiveness.exited;
     livenessNotifier.dispose();
+    _cwd.dispose();
     focusNode.dispose();
     scrollController.dispose();
   }

@@ -1,6 +1,7 @@
 import 'package:xterm/xterm.dart';
 
 import '../domain/command_blocks.dart';
+import '../domain/osc_router.dart';
 
 /// The most lines of typed input we will read back as one command.
 ///
@@ -50,7 +51,11 @@ class CommandBlockRecorder {
   CellAnchorLineRef? _inputRef;
 
   /// Starts listening. Call before the process starts, so no marker is missed.
-  void attach() => terminal.onPrivateOSC = handleOsc;
+  ///
+  /// Through the pane's [OscRouter] rather than by taking
+  /// `terminal.onPrivateOSC`: that slot is single-occupancy and the OSC 7
+  /// working directory needs the same stream, whether or not a recorder exists.
+  void attach(OscRouter router) => router.add(handleOsc);
 
   /// Handles one OSC dispatched by xterm. Anything that is not an OSC 133
   /// command boundary is ignored.

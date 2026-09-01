@@ -41,7 +41,7 @@ String encodePowerShellCommand(String script) {
   return base64Encode(bytes);
 }
 
-/// The PowerShell OSC 133 bootstrap.
+/// The PowerShell OSC 133 (and OSC 7) bootstrap.
 ///
 /// The mechanism rests on one property of PowerShell's own startup order:
 /// `-EncodedCommand` runs **after** the user's profiles have loaded, so
@@ -63,6 +63,14 @@ String encodePowerShellCommand(String script) {
 ///   `-Version Latest` globally, which would make our own lookups fatal.
 /// * `C` comes from wrapping `PSConsoleHostReadLine` rather than binding Enter,
 ///   which leaves every PSReadLine key handler — including the user's — alone.
+/// * OSC 7 rides along in the same prompt function, because the prompt is the
+///   only moment PowerShell reliably tells anyone it has moved. `$PWD` is a
+///   *PowerShell* location, so it is `ProviderPath` that is reported (the host
+///   path, not `Registry::HKLM\SOFTWARE`), guarded on the provider actually
+///   being the filesystem; `[uri]` builds the `file://` form and does the
+///   percent-encoding, so a directory with a space in it survives. Without
+///   this, only a shell that happens to emit OSC 7 by itself ever gets a live
+///   directory — and PowerShell, the default profile, does not.
 ///
 /// Exit codes are best effort. `$?` always answers *did it fail*;
 /// `$LASTEXITCODE` only carries a real code for native executables, so a failing
@@ -98,6 +106,13 @@ if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage' -and -not (Te
       }
       $Global:__CgOsc133.SeenPrompt = $true
       $out += "$e]133;A$b"
+      try {
+        if ($PWD.Provider.Name -eq 'FileSystem') {
+          $out += "$e]7;$(([uri]$PWD.ProviderPath).AbsoluteUri)$b"
+        }
+      } catch {
+        # A location that will not cast to a URI is not worth a broken prompt.
+      }
       $global:LASTEXITCODE = $__cgLast
       if (-not $__cgOk) { Write-Error 'failure' -ea ignore }
       $out += [string]($Global:__CgOsc133.OriginalPrompt.Invoke())

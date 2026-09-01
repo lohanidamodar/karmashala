@@ -464,6 +464,13 @@ class _CountingInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// Never moves: nothing runs here to report a `cd`.
+  @override
+  late final ValueListenable<String?> directory = UnchangingValue(
+    workingDirectory,
+  );
+
   @override
   final AgentPaneLaunch? agentLaunch = null;
 

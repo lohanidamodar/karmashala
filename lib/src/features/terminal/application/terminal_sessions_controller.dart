@@ -103,6 +103,7 @@ class TerminalSessionsState {
     this.activeTabId,
     this.detached = const [],
     this.liveness = const {},
+    this.workingDirectories = const {},
   });
 
   final List<TerminalTab> tabs;
@@ -115,12 +116,25 @@ class TerminalSessionsState {
   /// died while its tab was in the background still repaints as dead.
   final Map<String, PaneLiveness> liveness;
 
+  /// Per-pane working directory, republished whenever a shell reports a `cd`
+  /// (OSC 7) — so the tab label, and anything else naming a pane by where it
+  /// is, follows the shell instead of the directory it was launched in.
+  ///
+  /// Its own projection rather than a flag on the tab list, for the same reason
+  /// [liveness] is one: a `cd` in a background pane must not rebuild the tab
+  /// strip.
+  final Map<String, String?> workingDirectories;
+
   bool get isEmpty => tabs.isEmpty;
 
   /// Liveness of [paneId]. An unknown pane is treated as not running: the
   /// safe answer, since the only way to be live is to be tracked.
   PaneLiveness livenessOf(String paneId) =>
       liveness[paneId] ?? PaneLiveness.exited;
+
+  /// Where pane [paneId] is now, or null for an unknown pane and for one whose
+  /// directory was never recorded.
+  String? directoryOf(String paneId) => workingDirectories[paneId];
 
   TerminalTab? get activeTab {
     for (final tab in tabs) {
@@ -144,7 +158,8 @@ class TerminalSessionsState {
           identical(other.tabs, tabs) &&
           other.activeTabId == activeTabId &&
           identical(other.detached, detached) &&
-          identical(other.liveness, liveness);
+          identical(other.liveness, liveness) &&
+          identical(other.workingDirectories, workingDirectories);
 
   @override
   int get hashCode => Object.hash(
@@ -152,6 +167,7 @@ class TerminalSessionsState {
     activeTabId,
     identityHashCode(detached),
     identityHashCode(liveness),
+    identityHashCode(workingDirectories),
   );
 }
 
@@ -182,6 +198,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   List<TerminalTab>? _tabsView;
   List<DetachedSession>? _detachedView;
   Map<String, PaneLiveness>? _livenessView;
+  Map<String, String?>? _directoriesView;
   Map<String, int>? _tabIndexById;
   Map<String, String>? _tabIdByPane;
 
@@ -219,6 +236,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// Per-pane liveness listeners, kept for the same reason.
   final Map<String, void Function()> _livenessListeners = {};
+
+  /// Per-pane working-directory listeners, kept for the same reason.
+  final Map<String, void Function()> _directoryListeners = {};
 
   /// Titles panes have set for themselves with OSC 0/2, by pane id.
   ///
@@ -325,6 +345,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       for (final entry in _instances.entries)
         entry.key: entry.value.liveness.value,
     }),
+    workingDirectories: _directoriesView ??= Map.unmodifiable({
+      for (final entry in _instances.entries)
+        entry.key: entry.value.workingDirectory,
+    }),
   );
 
   void _publish() {
@@ -350,6 +374,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Drops the liveness projection — a pane was adopted, released, or its
   /// process changed state.
   void _livenessMutated() => _livenessView = null;
+
+  /// Drops the directory projection — a pane was adopted, released, or its
+  /// shell said it moved. Exactly as narrow as [_livenessMutated]: a `cd`
+  /// leaves the tab list, the detached list and every pane's liveness alone.
+  void _directoriesMutated() => _directoriesView = null;
 
   Map<String, int> get _tabIndex =>
       _tabIndexById ??= {for (var i = 0; i < _tabs.length; i++) _tabs[i].id: i};
@@ -410,6 +439,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _instances.clear();
     _dirtyListeners.clear();
     _livenessListeners.clear();
+    _directoryListeners.clear();
     _dirty.clear();
     _dirtySince.clear();
     _encoded.clear();
@@ -419,6 +449,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     _detachedMutated();
     _livenessMutated();
+    _directoriesMutated();
     return reaping;
   }
 
@@ -1481,6 +1512,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// A tab as a stored row.
   ///
+  /// The directory stored is where the pane **ended up**, not where it was
+  /// launched: `TerminalInstance.workingDirectory` follows the shell's OSC 7.
+  /// That is the right one on every count — the scrollback that comes back with
+  /// it was produced there, so a relative path in it resolves against the
+  /// directory it was printed in; the tab comes back with the label it had; and
+  /// the launch directory is an artefact of how the pane happened to be opened,
+  /// which the user has since moved away from on purpose. It cannot start
+  /// anything either: a restored pane is a record, and this only decides where
+  /// a shell would spawn *if* the user presses Start — never whether one does,
+  /// and never a command re-run.
+  ///
   /// An **empty region** has no instance, so it stores no pane — and restore's
   /// `withoutMissing` drops the leaf that named it. That is deliberate: a
   /// region is room the user cleared for something, and a reboot has already
@@ -1759,6 +1801,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _adopt(String paneId, TerminalInstance instance) {
     _instances[paneId] = instance;
     _livenessMutated();
+    _directoriesMutated();
     // A dormant pane is replayed history with nothing running behind it, so its
     // buffer cannot change and there is nothing to track — and reaching for
     // `terminal` here would build the very buffer the restore is avoiding.
@@ -1803,6 +1846,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
     _livenessListeners[paneId] = onLiveness;
     instance.liveness.addListener(onLiveness);
+    // Republish when the shell says it changed directory, so the tab label and
+    // the region header follow a `cd`. One rebuild per `cd` — the instance's
+    // notifier drops a report of the directory it already holds, which is what
+    // keeps a shell that emits OSC 7 on every prompt redraw free.
+    void onDirectory() {
+      _directoriesMutated();
+      _publish();
+    }
+
+    _directoryListeners[paneId] = onDirectory;
+    instance.directory.addListener(onDirectory);
     // Nothing else claims `onTitleChange`, so the controller owns it: the tab
     // label is the controller's to derive, and the pane has no idea it is one.
     //
@@ -2001,6 +2055,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final instance = _instances.remove(paneId);
     if (instance == null) return;
     _livenessMutated();
+    _directoriesMutated();
     _unlisten(paneId, instance);
     // Both halves of the debt. Dropping only the flag left the pane's
     // *unsaved age* behind for the life of the container — one entry per pane
@@ -2023,6 +2078,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (dirty != null) instance.terminal.removeListener(dirty);
     final liveness = _livenessListeners.remove(paneId);
     if (liveness != null) instance.liveness.removeListener(liveness);
+    final directory = _directoryListeners.remove(paneId);
+    if (directory != null) instance.directory.removeListener(directory);
   }
 
   TerminalTab? _tabById(String? id) {
