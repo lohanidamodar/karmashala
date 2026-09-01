@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,6 +36,19 @@ Future<void> main() async {
   if (CompanionMode.enabled) return runCompanionApp();
 
   WidgetsFlutterBinding.ensureInitialized();
+  // A desktop bootstrap on a phone is a build mistake, and it used to be a
+  // *silent* one: `flutter build apk` without
+  // `--dart-define=CHITRAGUPTA_MODE=companion` produced an APK that installed,
+  // launched, failed to load libmpv — which ships only for Windows here — and
+  // then sat on a black screen with nothing in the log but the media_kit
+  // complaint. Nothing below this line makes sense on a phone anyway: PTYs, a
+  // control server, a tray icon, window chrome.
+  if (Platform.isAndroid || Platform.isIOS) {
+    throw StateError(
+      'This is the desktop build running on a phone. Build the companion with '
+      '--dart-define=CHITRAGUPTA_MODE=companion.',
+    );
+  }
   // Loads libmpv, which decodes the device pane's H.264 live view.
   MediaKit.ensureInitialized();
   AppLogger.initialize();
