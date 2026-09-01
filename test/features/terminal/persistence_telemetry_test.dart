@@ -97,5 +97,27 @@ void main() {
     // the number that says "we are behind" permanently wrong.
     controller.saveDirtyScrollback();
     expect(controller.persistenceTelemetry.dirtyPanes, 0);
+    // Both halves, not just the count. This test originally checked only
+    // `dirtyPanes` and passed while `_releasePane` was dropping the pane from
+    // the dirty set and leaving its timestamp behind — so the panel reported an
+    // ever-growing "longest wait" beside "0 panes owing", which is precisely
+    // the falling-behind signal it exists to give. A scale gate found it; the
+    // count alone could not.
+    expect(controller.persistenceTelemetry.oldestUnsaved, isNull);
+  });
+
+  test('and a pane closed while dirty leaves no age behind it', () {
+    final second = openSecondPane();
+    controller.saveDirtyScrollback();
+    controller.instanceFor(second)!.terminal.write('output\r\n');
+    expect(controller.persistenceTelemetry.oldestUnsaved, isNotNull);
+
+    // Closed without a save in between: the pane's debt is forgiven by its
+    // disposal, not by having been written.
+    controller.closePane(second);
+
+    final telemetry = controller.persistenceTelemetry;
+    expect(telemetry.dirtyPanes, 0);
+    expect(telemetry.oldestUnsaved, isNull);
   });
 }
