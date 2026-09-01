@@ -225,7 +225,7 @@ void main() {
       // ignore: avoid_print
       print(
         'corpus       |    bytes | code points | lines | bytes/line | '
-        'KiB alloc/KiB in | decode ns/B | write ns/B | runes ns/B | '
+        'KiB alloc/KiB in | decode ns/B | write ns/B | was-runes ns/B | '
         'notify ns/B',
       );
       for (final corpus in PerfCorpus.values) {
@@ -707,9 +707,10 @@ _Attribution _attribute(PerfCorpus corpus) {
     () => const Utf8Decoder(allowMalformed: true).convert(bytes),
   );
 
-  // The parser's own first move. `EscapeParser.write` hands the string to
-  // `ByteConsumer.add`, which is literally this line — every code point of
-  // every flush materialised into a list before one of them is looked at.
+  // What `ByteConsumer.add` used to do to every flush before one code point of
+  // it was looked at, kept here as the baseline the rewrite is measured
+  // against: whenever this column stops being far larger than the gap between
+  // `write` and the rest, `String.runes` has crept back in.
   final runes = _fastest(() => text.runes.toList(growable: false));
 
   // Parse plus buffer, with nothing listening.
