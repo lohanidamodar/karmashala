@@ -184,7 +184,7 @@ void main() {
     ]);
   });
 
-  test('a launched session is stamped with the mode it ran under', () async {
+  test('a launch records a mode only when one was chosen', () async {
     final h = harness(
       settings: const Settings().withPermissions(
         'roverCli',
@@ -198,19 +198,35 @@ void main() {
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
-    final launched = await launcher.launch(
-      SessionLaunchRequest(
-        repository: repository(),
-        installation: agentInstallation(agentId: 'roverCli'),
-        title: 'Stamped',
-        purpose: SessionPurpose.newSession,
-      ),
+    SessionLaunchRequest request({PermissionMode? override}) =>
+        SessionLaunchRequest(
+          repository: repository(),
+          installation: agentInstallation(agentId: 'roverCli'),
+          title: 'Stamped',
+          purpose: SessionPurpose.newSession,
+          permissionOverride: override,
+        );
+
+    final defaulted = await launcher.launch(request());
+    // It ran under `ask` — the new-session default — but nothing *chose* that,
+    // so the row records no choice and the session goes on following the
+    // setting. Stamping the resolved default here is what froze every session
+    // at whatever Settings said the day it started.
+    expect(SessionDao(h.db).getById(defaulted.session.id)!.permissionMode, isNull);
+    expect(
+      launcher.effectivePermissionFor(defaulted.session.id)!.inherited,
+      isTrue,
     );
 
-    // The mode used to die with the local that held it, so nothing could say
-    // what a running session was running under.
-    final stored = SessionDao(h.db).getById(launched.session.id)!;
-    expect(stored.permissionMode, PermissionMode.ask);
+    final chosen = await launcher.launch(
+      request(override: PermissionMode.bypass),
+    );
+    // A caller that resolved a mode for this session *is* a choice, and it is
+    // recorded so the next resume runs under it.
+    expect(
+      SessionDao(h.db).getById(chosen.session.id)!.permissionMode,
+      PermissionMode.bypass,
+    );
   });
 
   test('a session keeps its own mode when the global default moves', () async {
@@ -234,9 +250,11 @@ void main() {
     );
     final id = launched.session.id;
 
-    // Stamped `ask` at creation. The agent's *existing-session* default is
+    // Chosen for this session. The agent's *existing-session* default is
     // `bypass`, so a resolver that re-read the setting would silently escalate
-    // this session to full autonomy on its next resume. It must not.
+    // a deliberately careful session to full autonomy on its next resume. It
+    // must not.
+    launcher.setPermissionMode(id, PermissionMode.ask);
     expect(
       launcher.permissionFor(
         'roverCli',
@@ -246,11 +264,10 @@ void main() {
       PermissionMode.ask,
     );
 
-    // The override is what changes it, and it is readable back as the
-    // session's own rather than as an inherited default.
-    launcher.setPermissionMode(id, PermissionMode.bypass);
+    // And it reads back as the session's own rather than as an inherited
+    // default, which is the difference the control has to be able to show.
     final effective = launcher.effectivePermissionFor(id)!;
-    expect(effective.mode, PermissionMode.bypass);
+    expect(effective.mode, PermissionMode.ask);
     expect(effective.inherited, isFalse);
     expect(effective.descriptor?.id, 'roverCli');
   });
