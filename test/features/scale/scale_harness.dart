@@ -246,6 +246,17 @@ class ScaleWorkspace {
     controller.persistWorkspace();
   }
 
+  /// What the store currently holds for [paneId] — read back through SQL
+  /// rather than through the dao, so a dao that skipped a write it thought it
+  /// had made cannot hide it.
+  String storedScrollback(String paneId) {
+    final rows = database.query(
+      'SELECT scrollback FROM terminal_panes WHERE id = ?;',
+      [paneId],
+    );
+    return rows.isEmpty ? '' : rows.first['scrollback']! as String;
+  }
+
   int get storedPaneRows =>
       database.query('SELECT COUNT(*) AS n FROM terminal_panes;').first['n']!
           as int;
