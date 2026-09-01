@@ -229,10 +229,12 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                 )
               else
                 _PlanNote(plan: plan),
-              if (permission != null) ...[
+              if (permission != null && focus != null) ...[
                 const SizedBox(height: Insets.sm),
                 _PermissionRow(
                   permission: permission,
+                  followsDefault: focus.followsDefault,
+                  agentName: focus.agentName,
                   onChanged: (mode) => setState(() => _chosenMode = mode),
                 ),
               ],
@@ -426,10 +428,34 @@ class _TargetPicker extends StatelessWidget {
 /// question: the modes on offer are the chosen agent's, and choosing a
 /// different agent re-answers both.
 class _PermissionRow extends StatelessWidget {
-  const _PermissionRow({required this.permission, required this.onChanged});
+  const _PermissionRow({
+    required this.permission,
+    required this.followsDefault,
+    required this.agentName,
+    required this.onChanged,
+  });
 
   final ContinuationPermission permission;
+
+  /// Whether the mode on offer is the Settings default rather than anything
+  /// this session or this user decided. See [HandoffTarget.followsDefault].
+  final bool followsDefault;
+
+  final String agentName;
+
   final ValueChanged<PermissionMode> onChanged;
+
+  /// Where this mode came from, in the one case [ContinuationPermission] cannot
+  /// know about: nobody chose it, here or upstream.
+  ///
+  /// "Carried from this session" would be the wrong sentence — it presents a
+  /// default as a decision, and hides that the new session keeps following the
+  /// setting and moves when it does.
+  String get _explanation =>
+      followsDefault && !permission.wasChosen
+      ? 'Following the $agentName default in Settings, as this session does. '
+            'It changes when that setting does. ${permission.carried.summary}'
+      : permission.explanation;
 
   @override
   Widget build(BuildContext context) {
@@ -451,7 +477,7 @@ class _PermissionRow extends StatelessWidget {
         ),
         const SizedBox(height: Insets.xs),
         Text(
-          permission.explanation,
+          _explanation,
           style: theme.textTheme.labelSmall?.copyWith(
             color: permission.carried.enforced
                 ? theme.colorScheme.onSurfaceVariant

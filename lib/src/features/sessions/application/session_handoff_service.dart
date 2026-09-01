@@ -36,6 +36,7 @@ class HandoffTarget {
     required this.agentName,
     required this.permission,
     required this.isSameAgent,
+    this.followsDefault = false,
     this.refusal,
   });
 
@@ -48,6 +49,14 @@ class HandoffTarget {
 
   /// Whether this is the agent already running the session.
   final bool isSameAgent;
+
+  /// Whether [permission] is the Settings default rather than a choice.
+  ///
+  /// True when the source session never chose a mode: this row's mode is then
+  /// **this target's** new-session default, and the continuation will go on
+  /// following it. The dialog has to say so — presenting a default as a
+  /// decision hides that it moves when the setting does.
+  final bool followsDefault;
 
   /// Why this target cannot receive a handoff, or null when it can.
   final String? refusal;
@@ -90,19 +99,21 @@ class SessionHandoffService {
     )) {
       final descriptor = registry.byId(installation.agentId);
       final name = registry.displayNameFor(installation.agentId);
+      // Per target, not once for the list: a source that chose nothing is
+      // measured against the mode *that* agent will start under.
+      final starting = _startingMode(sessionId, installation.agentId);
       targets.add(
         HandoffTarget(
           installation: installation,
           descriptor: descriptor,
           agentName: name,
           permission: carryPermission(
-            // Per target, not once for the list: a source that chose nothing
-            // is measured against the mode *that* agent will start under.
-            _startingMode(sessionId, installation.agentId).mode,
+            starting.mode,
             descriptor,
             targetName: name,
           ),
           isSameAgent: installation.agentId == sourceAgentId,
+          followsDefault: !starting.chosen,
           refusal: _refusalFor(descriptor, name),
         ),
       );
