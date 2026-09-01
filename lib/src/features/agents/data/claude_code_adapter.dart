@@ -28,10 +28,9 @@ List<String> claudeLaunchArgs(AgentLaunch launch) => [
   },
   if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
   if (launch.mcpConfigPath != null) ...['--mcp-config', launch.mcpConfigPath!],
-  if (launch.allowedTools.isNotEmpty) ...[
-    '--allowedTools',
-    launch.allowedTools.join(','),
-  ],
+  // No `--allowedTools`. It was here, always empty, and the only list that
+  // could have filled it named every tool the app serves — so wiring it would
+  // have carved a silent exception out of the `--permission-mode` above.
   if (launch.appendSystemPrompt != null) ...[
     '--append-system-prompt',
     launch.appendSystemPrompt!,

@@ -25,7 +25,6 @@ class AgentLaunch {
     this.permissionMode = PermissionMode.ask,
     this.resumeSessionId,
     this.mcpConfigPath,
-    this.allowedTools = const [],
     this.appendSystemPrompt,
   });
 
@@ -44,16 +43,22 @@ class AgentLaunch {
   final String? resumeSessionId;
 
   /// Path to an MCP config file (`--mcp-config`) exposing extra tools to the
-  /// agent, or `null` for none. Used by the launcher chat to give the agent
-  /// Karmashala's own tools.
+  /// agent, or `null` for none.
+  ///
+  /// Nothing writes it yet — the pane launcher builds its own MCP flags from
+  /// `AgentMcpSupport` and never goes through an adapter — so the engine path
+  /// currently resumes a session without Karmashala's tools. Kept because
+  /// `SessionMcpAccess.configPath` already produces exactly this value, which
+  /// makes it a wiring gap rather than an invention.
   final String? mcpConfigPath;
 
-  /// Tool names to pre-approve (`--allowedTools`) so the agent can call them
-  /// without an interactive prompt (there is no TTY in stream-json mode).
-  final List<String> allowedTools;
-
-  /// Extra text appended to the agent's system prompt (`--append-system-prompt`),
-  /// e.g. the launcher assistant's role and tool guidance. `null` for none.
+  /// Extra text appended to the agent's system prompt
+  /// (`--append-system-prompt`), or `null` for none.
+  ///
+  /// Also unwritten today. It is kept and `allowedTools` was not, because they
+  /// are different kinds of thing: text on a system prompt asks the agent for
+  /// something, while a pre-approved tool list stops the *user* being asked.
+  /// See `LauncherMcp` for why nothing here pre-approves anything.
   final String? appendSystemPrompt;
 }
 

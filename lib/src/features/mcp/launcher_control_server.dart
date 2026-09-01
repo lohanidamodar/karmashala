@@ -20,13 +20,6 @@ import '../browser/application/browser_providers.dart';
 import '../browser/application/browser_tool_schemas.dart';
 import '../browser/application/browser_tools.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
-import '../devices/application/device_providers.dart';
-import '../devices/data/adb_service.dart';
-import '../devices/domain/android_device.dart';
-import '../devices/domain/device_input.dart';
-import '../devices/domain/logcat_entry.dart';
-import '../devices/domain/ui_node.dart';
-import '../devices/domain/ui_summary.dart';
 import '../environments/application/environment_providers.dart';
 import '../fanout/application/comparison_providers.dart';
 import '../environments/domain/environment_kind.dart';
@@ -38,11 +31,7 @@ import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
 import '../sessions/application/session_handoff_service.dart';
 import '../sessions/application/session_launcher.dart';
-import '../checkpoints/application/checkpoint_providers.dart';
-import '../checkpoints/application/checkpoint_service.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
-import '../checkpoints/domain/checkpoint.dart';
-import '../git/data/hunk_patch.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session.dart';
 import '../sessions/domain/session_launch.dart';
@@ -54,8 +43,10 @@ import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
 import 'attention_tools.dart';
+import 'checkpoint_tools.dart';
 import 'decision_tools.dart';
 import 'control_server_status.dart';
+import 'device_tools.dart';
 import 'handshake_file_permissions.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
@@ -67,6 +58,7 @@ import 'session_tools.dart';
 import 'terminal_tools.dart';
 import 'tmux_orchestration.dart';
 import 'workspace_tools.dart';
+import 'worktree_tools.dart';
 import 'wsl_host_address.dart';
 
 /// The port the control server asks for before falling back to an ephemeral one.
@@ -1012,25 +1004,6 @@ class LauncherControlServer implements SessionMcp {
       // single source of truth for the tool list.
       case '__list_tools__':
         return toolSchemas;
-      case 'checkpoint_list':
-        return _checkpointList(
-          args['sessionId'] as String? ?? callerSessionId,
-          (args['limit'] as num?)?.round(),
-        );
-      case 'checkpoint_capture':
-        return _checkpointCapture(
-          args['sessionId'] as String? ?? callerSessionId,
-          args['label'] as String?,
-          callerSessionId: callerSessionId,
-        );
-      case 'checkpoint_diff':
-        return _checkpointDiff(args['id'] as String?);
-      case 'checkpoint_restore':
-        return _checkpointRestore(
-          args['id'] as String?,
-          confirm: args['confirm'] == true,
-          paths: (args['paths'] as List?)?.whereType<String>().toList(),
-        );
       case 'list_projects':
         return _listProjects();
       case 'list_sessions':
@@ -1086,54 +1059,19 @@ class LauncherControlServer implements SessionMcp {
           newWorktree: args['newWorktree'] == true,
           preview: args['preview'] == true,
         );
-      case 'list_devices':
-        return _listDevices();
-      case 'device_screenshot':
-        return _deviceScreenshot(args['serial'] as String?);
-      case 'device_tap':
-        return _deviceTap(
-          args['serial'] as String?,
-          (args['x'] as num?)?.round(),
-          (args['y'] as num?)?.round(),
-        );
-      case 'device_type':
-        return _deviceType(args['serial'] as String?, args['text'] as String?);
-      case 'device_key':
-        return _deviceKey(args['serial'] as String?, args['key'] as String?);
-      case 'device_logcat':
-        return _deviceLogcat(
-          serial: args['serial'] as String?,
-          packageName: args['package'] as String?,
-          level: args['level'] as String?,
-          lines: (args['lines'] as num?)?.round(),
-        );
-      case 'device_ui_dump':
-        return _deviceUiDump(
-          serial: args['serial'] as String?,
-          full: args['full'] == true,
-          filter: args['filter'] as String?,
-          limit: (args['limit'] as num?)?.round(),
-        );
-      case 'device_find_elements':
-        return _deviceFindElements(
-          serial: args['serial'] as String?,
-          query: _uiQuery(args),
-          limit: (args['limit'] as num?)?.round(),
-        );
-      case 'device_tap_element':
-        return _deviceTapElement(
-          serial: args['serial'] as String?,
-          query: _uiQuery(args),
-          index: (args['index'] as num?)?.round(),
-        );
-      case 'device_stop_emulator':
-        return _deviceStopEmulator(args['serial'] as String?);
       case 'open_sessions_in_tmux':
         return _openSessionsInTmux(
           (args['ids'] as List?)?.whereType<String>().toList() ??
               const <String>[],
           name: args['name'] as String?,
         );
+      // The per-turn record of a working tree. Like the session tools below,
+      // these default to the session that called them.
+      case final String name when CheckpointControlTools.handles(name):
+        return CheckpointControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // Operating a session that already exists. Split out because these are
       // the half that needs the caller's own identity: every one of them
       // defaults to the session that called it.
@@ -1161,6 +1099,15 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // Making a checkout and taking one away. Separate from the workspace
+      // tools above because those only read and select, and these are the two
+      // verbs that change what is on disk — one of them irreversibly.
+      case final String name when WorktreeControlTools.handles(name):
+        return WorktreeControlTools(_container).call(name, args);
+      // An attached phone or emulator, through the same AdbService the device
+      // pane uses — so an agent and the person beside it drive one device.
+      case final String name when DeviceControlTools.handles(name):
+        return DeviceControlTools(_container).call(name, args);
       // The terminal workspace, through the same controller the tab bar uses,
       // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
@@ -1204,83 +1151,7 @@ class LauncherControlServer implements SessionMcp {
 
   /// MCP tool definitions (name/description/inputSchema) served to the bridge.
   static const List<Map<String, dynamic>> toolSchemas = [
-    {
-      'name': 'checkpoint_list',
-      'description':
-          'List the checkpoints of a session — one per finished turn, plus the '
-          'safety checkpoints taken before a restore. Each entry says what '
-          'changed since the checkpoint before it. Defaults to the calling '
-          "session's own checkpoints.",
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'sessionId': {
-            'type': 'string',
-            'description': 'Session to list. Defaults to the caller.',
-          },
-          'limit': {'type': 'number', 'description': 'Most recent N.'},
-        },
-      },
-    },
-    {
-      'name': 'checkpoint_capture',
-      'description':
-          'Record the working tree as it is right now, so it can be restored '
-          'later. Nothing in the repository is staged, committed or moved: the '
-          'snapshot is a git tree written through a private index.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'sessionId': {'type': 'string'},
-          'label': {
-            'type': 'string',
-            'description': 'What this checkpoint is, for a human reading it.',
-          },
-        },
-      },
-    },
-    {
-      'name': 'checkpoint_diff',
-      'description':
-          'The unified diff a checkpoint represents: what changed between the '
-          'checkpoint before it and it.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'id': {'type': 'string', 'description': 'Checkpoint id.'},
-        },
-        'required': ['id'],
-      },
-    },
-    {
-      'name': 'checkpoint_restore',
-      'description':
-          'Put the working tree back to a checkpoint. DESTRUCTIVE: it discards '
-          'edits made since. A checkpoint of the current tree is always taken '
-          'first, so the restore can itself be undone. If anything has changed '
-          'since the most recent checkpoint the call is refused unless '
-          '"confirm" is true — ask the user before setting it. The index is '
-          'not touched.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'id': {'type': 'string', 'description': 'Checkpoint id to restore.'},
-          'confirm': {
-            'type': 'boolean',
-            'description':
-                'Restore even though the working tree has moved since the last '
-                'checkpoint. Requires the user to have said so.',
-          },
-          'paths': {
-            'type': 'array',
-            'items': {'type': 'string'},
-            'description':
-                'Restore only these paths. Omit to restore everything.',
-          },
-        },
-        'required': ['id'],
-      },
-    },
+    ...checkpointControlToolSchemas,
     {
       'name': 'list_projects',
       'description':
@@ -1554,239 +1425,6 @@ class LauncherControlServer implements SessionMcp {
       },
     },
     {
-      'name': 'list_devices',
-      'description':
-          'List connected Android devices and running emulators, with their '
-          'serial, model, and whether they are ready. Devices that are not '
-          'usable (unauthorized, offline) are included and marked so you can '
-          'explain the problem rather than reporting no devices.',
-      'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
-    },
-    {
-      'name': 'device_screenshot',
-      'description':
-          'Capture the current screen of an Android device as a PNG image. '
-          'Use this to see what an app is actually showing. serial is optional '
-          'when exactly one device is connected.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {
-            'type': 'string',
-            'description': 'Device serial from list_devices.',
-          },
-        },
-      },
-    },
-    {
-      'name': 'device_tap',
-      'description':
-          'Tap the device screen at (x, y) in DEVICE pixel coordinates (the '
-          'coordinate space reported by list_devices as screen size, not the '
-          'size of any screenshot you scaled). Take a screenshot first to '
-          'decide where to tap.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'x': {'type': 'number', 'description': 'X in device pixels.'},
-          'y': {'type': 'number', 'description': 'Y in device pixels.'},
-        },
-        'required': ['x', 'y'],
-      },
-    },
-    {
-      'name': 'device_type',
-      'description':
-          'Type text into whatever field currently has focus on the device. '
-          'Tap the field first. Spaces and shell characters are escaped for you.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'text': {'type': 'string'},
-        },
-        'required': ['text'],
-      },
-    },
-    {
-      'name': 'device_key',
-      'description':
-          'Press a hardware button: back, home, recents, power, volumeUp, '
-          'volumeDown, enter, tab or delete.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'key': {
-            'type': 'string',
-            'description':
-                'back | home | recents | power | volumeUp | '
-                'volumeDown | enter | tab | delete',
-          },
-        },
-        'required': ['key'],
-      },
-    },
-    {
-      'name': 'device_logcat',
-      'description':
-          'Read recent logcat output, newest last. Filter to one app with '
-          'package (strongly recommended — the unfiltered system log is huge '
-          'and mostly noise), and raise level to see only warnings or errors. '
-          'Returns nothing if the package is not running.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'package': {
-            'type': 'string',
-            'description': 'Application id, e.g. com.example.app.',
-          },
-          'level': {
-            'type': 'string',
-            'description':
-                'Minimum level: verbose, debug, info, warning, error, fatal.',
-          },
-          'lines': {
-            'type': 'number',
-            'description': 'Max lines (default 200).',
-          },
-        },
-      },
-    },
-    {
-      'name': 'device_stop_emulator',
-      'description':
-          'Shut a running Android emulator down, freeing its memory and CPU. '
-          'Emulators only — a physical device cannot be stopped this way. '
-          'Anything the emulator has not written to a snapshot is lost.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {
-            'type': 'string',
-            'description': 'Emulator serial, e.g. emulator-5554.',
-          },
-        },
-        'required': ['serial'],
-      },
-    },
-    {
-      'name': 'device_ui_dump',
-      'description':
-          'Read the accessibility (view) hierarchy of the current screen: what '
-          'is on it, what each element says, and the exact point to tap for '
-          'each one. Prefer this over device_screenshot when you intend to '
-          'touch something — a screenshot cannot tell you what is tappable, '
-          'and coordinates read off an image are guesswork. By default only '
-          'nodes that carry text or accept input are listed; pass full=true '
-          'for every node, including layout containers.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'full': {
-            'type': 'boolean',
-            'description':
-                'Include every node instead of only the useful ones. Much '
-                'larger; use it only when the default listing is missing '
-                'something.',
-          },
-          'filter': {
-            'type': 'string',
-            'description':
-                'Keep only nodes whose text, content-description, resource id '
-                'or class contains this (case-insensitive).',
-          },
-          'limit': {
-            'type': 'number',
-            'description': 'Max nodes to list (default 200).',
-          },
-        },
-      },
-    },
-    {
-      'name': 'device_find_elements',
-      'description':
-          'Find elements on the current screen by text, resource id, '
-          'content-description or class, and get the point to tap for each. '
-          'Matching is case-insensitive and by substring unless exact=true. '
-          'text matches BOTH the text and the content-description, which is '
-          'what makes it work on Flutter apps: they put their labels in '
-          'content-desc and leave text empty.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'text': {
-            'type': 'string',
-            'description': 'Visible text or content-description to look for.',
-          },
-          'resourceId': {
-            'type': 'string',
-            'description':
-                'Resource id, in full (com.app:id/ok) or short (ok).',
-          },
-          'contentDesc': {
-            'type': 'string',
-            'description': 'Content-description only, ignoring text.',
-          },
-          'className': {
-            'type': 'string',
-            'description': 'Class, in full or by last segment (Button).',
-          },
-          'exact': {
-            'type': 'boolean',
-            'description': 'Require the whole value to match, not a substring.',
-          },
-          'clickable': {
-            'type': 'boolean',
-            'description': 'Keep only elements marked clickable.',
-          },
-          'limit': {
-            'type': 'number',
-            'description': 'Max matches (default 50).',
-          },
-        },
-      },
-    },
-    {
-      'name': 'device_tap_element',
-      'description':
-          'Tap the element matching a query rather than a coordinate — '
-          'tap_element(text: "Sign in") instead of tap(357, 126). This is far '
-          'more reliable: it survives layout changes, it cannot be off by a '
-          'scale factor, and it tells you what it actually hit. It re-reads '
-          'the hierarchy first, so it acts on the screen as it is now. '
-          'Refuses rather than guessing when the query matches several '
-          'elements (pass index) or nothing, and refuses to tap an element '
-          'that is scrolled off screen.',
-      'inputSchema': {
-        'type': 'object',
-        'properties': {
-          'serial': {'type': 'string'},
-          'text': {
-            'type': 'string',
-            'description': 'Visible text or content-description to tap.',
-          },
-          'resourceId': {'type': 'string'},
-          'contentDesc': {'type': 'string'},
-          'className': {'type': 'string'},
-          'exact': {'type': 'boolean'},
-          'clickable': {
-            'type': 'boolean',
-            'description': 'Only consider elements marked clickable.',
-          },
-          'index': {
-            'type': 'number',
-            'description':
-                'Which match to tap (0-based) when the query is ambiguous.',
-          },
-        },
-      },
-    },
-    {
       'name': 'open_sessions_in_tmux',
       'description':
           'Open several sessions together as windows in a single tmux session '
@@ -1814,6 +1452,8 @@ class LauncherControlServer implements SessionMcp {
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
     ...workspaceControlToolSchemas,
+    ...worktreeControlToolSchemas,
+    ...deviceControlToolSchemas,
     ...attentionControlToolSchemas,
     ...decisionControlToolSchemas,
     ...browserToolSchemas,
@@ -2551,438 +2191,6 @@ class LauncherControlServer implements SessionMcp {
     return {'opened': windows.length, 'tmuxSession': sessionName};
   }
 
-  // ---------------------------------------------------------------------------
-  // Android devices
-  //
-  // These make the device pane usable by an agent: see the screen, touch it,
-  // read the log. Everything goes through the same AdbService the pane uses, so
-  // the agent and the human are driving exactly the same device.
-  // ---------------------------------------------------------------------------
-
-  AdbService _requireAdb() {
-    final adb = _container.read(adbServiceProvider);
-    if (adb == null) {
-      throw StateError(
-        'No Android SDK found. Set ANDROID_HOME or install the SDK to the '
-        r'default location (%LOCALAPPDATA%\Android\Sdk).',
-      );
-    }
-    return adb;
-  }
-
-  /// Resolves which device to act on. With exactly one ready device the serial
-  /// can be omitted, which is what a caller will want almost every time.
-  Future<AndroidDevice> _resolveDevice(String? serial) async {
-    final devices = await _requireAdb().listDevices();
-    if (devices.isEmpty) {
-      throw StateError('No Android devices are connected.');
-    }
-    if (serial != null) {
-      for (final device in devices) {
-        if (device.serial == serial) {
-          if (!device.isReady) {
-            throw StateError(
-              'Device $serial is ${device.state.name}, not ready. '
-              'If it is unauthorized, accept the USB debugging prompt on the '
-              'device.',
-            );
-          }
-          return device;
-        }
-      }
-      throw StateError('No device with serial $serial.');
-    }
-    final ready = devices.where((d) => d.isReady).toList();
-    if (ready.isEmpty) {
-      throw StateError(
-        'No device is ready: '
-        '${devices.map((d) => '${d.serial} (${d.state.name})').join(', ')}.',
-      );
-    }
-    if (ready.length > 1) {
-      throw StateError(
-        'Several devices are connected; pass serial. Options: '
-        '${ready.map((d) => d.serial).join(', ')}.',
-      );
-    }
-    return ready.single;
-  }
-
-  Future<Object?> _listDevices() async {
-    final adb = _requireAdb();
-    final devices = await adb.listDevices();
-    final avds = await adb.listAvds();
-    return {
-      'devices': [
-        for (final device in devices)
-          {
-            'serial': device.serial,
-            'name': device.displayName,
-            'state': device.state.name,
-            'ready': device.isReady,
-            'emulator': device.isEmulator,
-            'environmentId': device.environmentId,
-            if (device.isReady)
-              'screenSize': (await adb.screenSize(device.serial))?.toString(),
-          },
-      ],
-      'avds': [
-        for (final avd in avds) {'name': avd.name, 'running': avd.isRunning},
-      ],
-    };
-  }
-
-  Future<Object?> _deviceScreenshot(String? serial) async {
-    final device = await _resolveDevice(serial);
-    final adb = _requireAdb();
-    final bytes = await adb.screenshot(device.serial);
-    final size = await adb.screenSize(device.serial);
-    final file = File(
-      p.join(
-        Directory.systemTemp.path,
-        'karmashala_${device.serial}_${DateTime.now().millisecondsSinceEpoch}.png',
-      ),
-    );
-    await file.writeAsBytes(bytes, flush: true);
-    // Returned as MCP content blocks so the model actually sees the image
-    // instead of a wall of base64 in a JSON string.
-    return {
-      '_mcpContent': [
-        {'type': 'image', 'data': base64Encode(bytes), 'mimeType': 'image/png'},
-        {
-          'type': 'text',
-          'text':
-              'Screenshot of ${device.displayName} (${device.serial})'
-              '${size == null ? '' : ', screen $size device px'}. '
-              'Saved to ${file.path}. Tap coordinates are in device pixels.',
-        },
-      ],
-    };
-  }
-
-  Future<Object?> _deviceTap(String? serial, int? x, int? y) async {
-    if (x == null || y == null) throw ArgumentError('x and y are required.');
-    final device = await _resolveDevice(serial);
-    await _requireAdb().tap(device.serial, x, y);
-    return {'tapped': '($x, $y)', 'serial': device.serial};
-  }
-
-  Future<Object?> _deviceType(String? serial, String? text) async {
-    if (text == null) throw ArgumentError('text is required.');
-    final device = await _resolveDevice(serial);
-    await _requireAdb().inputText(device.serial, text);
-    return {'typed': text, 'serial': device.serial};
-  }
-
-  Future<Object?> _deviceKey(String? serial, String? key) async {
-    if (key == null) throw ArgumentError('key is required.');
-    final parsed = DeviceKey.parse(key);
-    if (parsed == null) {
-      throw ArgumentError(
-        'Unknown key "$key". Valid keys: '
-        '${DeviceKey.values.map((k) => k.name).join(', ')}.',
-      );
-    }
-    final device = await _resolveDevice(serial);
-    await _requireAdb().pressKey(device.serial, parsed);
-    return {'pressed': parsed.name, 'serial': device.serial};
-  }
-
-  Future<Object?> _deviceLogcat({
-    String? serial,
-    String? packageName,
-    String? level,
-    int? lines,
-  }) async {
-    final device = await _resolveDevice(serial);
-    final minLevel = _parseLogLevel(level) ?? LogLevel.verbose;
-    final entries = await _requireAdb().readLogcat(
-      device.serial,
-      packageName: packageName,
-      minLevel: minLevel,
-      maxLines: lines ?? 200,
-    );
-    if (entries.isEmpty && packageName != null) {
-      return {
-        'serial': device.serial,
-        'package': packageName,
-        'lines': <String>[],
-        'note': 'No output — $packageName does not appear to be running.',
-      };
-    }
-    return {
-      'serial': device.serial,
-      'package': ?packageName,
-      'lines': [for (final entry in entries) entry.toString()],
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // The accessibility tree
-  //
-  // `device_tap` needs coordinates, and the only way an agent could previously
-  // get them was to read them off a screenshot — which cannot say what is
-  // tappable, and is one scale factor away from tapping the wrong thing while
-  // reporting success. These three tools hand it the view hierarchy instead:
-  // what is on screen, and exactly where to hit it.
-  // ---------------------------------------------------------------------------
-
-  UiElementQuery _uiQuery(Map<String, dynamic> args) => UiElementQuery(
-    text: args['text'] as String?,
-    resourceId: args['resourceId'] as String?,
-    contentDescription: args['contentDesc'] as String?,
-    className: args['className'] as String?,
-    exact: args['exact'] == true,
-    clickableOnly: args['clickable'] == true,
-  );
-
-  /// One line naming the device, the foreground app and the coordinate space.
-  String _uiHeader(
-    AndroidDevice device,
-    UiHierarchy tree,
-    DeviceScreenSize? screen,
-  ) =>
-      '${device.serial} · ${tree.packageName ?? 'unknown package'} · '
-      'screen ${screen ?? 'unknown'} device px · rotation ${tree.rotation}';
-
-  Future<Object?> _deviceUiDump({
-    String? serial,
-    bool full = false,
-    String? filter,
-    int? limit,
-  }) async {
-    final device = await _resolveDevice(serial);
-    final adb = _requireAdb();
-    final tree = await adb.dumpUiHierarchy(device.serial);
-    final screen = await adb.screenSize(device.serial);
-
-    if (full && filter == null) {
-      final body = renderUiTree(tree, screen: screen);
-      return _uiText([
-        'Full UI hierarchy · ${_uiHeader(device, tree, screen)}',
-        '${tree.nodeCount} nodes, indented by depth.',
-        uiListingLegend,
-        '',
-        body,
-      ]);
-    }
-
-    var nodes = full ? tree.allNodes.toList() : interestingNodes(tree);
-    if (filter != null && filter.trim().isNotEmpty) {
-      final needle = filter.trim().toLowerCase();
-      bool has(String value) => value.toLowerCase().contains(needle);
-      nodes = [
-        for (final node in nodes)
-          if (has(node.text) ||
-              has(node.contentDescription) ||
-              has(node.resourceId) ||
-              has(node.className))
-            node,
-      ];
-    }
-    final rendered = renderUiElements(
-      nodes,
-      screen: screen,
-      limit: limit ?? 200,
-    );
-    return _uiText([
-      'UI hierarchy · ${_uiHeader(device, tree, screen)}',
-      '${rendered.shown} of ${tree.nodeCount} nodes'
-          '${full ? '' : ' (text-bearing or interactable)'}'
-          '${filter == null ? '' : ', filtered by "$filter"'}'
-          '${rendered.truncated == 0 ? '.' : ', ${rendered.truncated} more not '
-                    'shown — raise limit.'}',
-      uiListingLegend,
-      '',
-      rendered.listing.isEmpty ? '(nothing matched)' : rendered.listing,
-      '',
-      'Tap one with device_tap_element(text: "…"), which re-reads the screen '
-          'and hits the element itself. The coordinates above also work with '
-          'device_tap.',
-    ]);
-  }
-
-  Future<Object?> _deviceFindElements({
-    String? serial,
-    required UiElementQuery query,
-    int? limit,
-  }) async {
-    if (query.isEmpty) {
-      throw ArgumentError(
-        'Give at least one of text, resourceId, contentDesc or className. '
-        'Use device_ui_dump to see the whole screen.',
-      );
-    }
-    final device = await _resolveDevice(serial);
-    final adb = _requireAdb();
-    final tree = await adb.dumpUiHierarchy(device.serial);
-    final screen = await adb.screenSize(device.serial);
-    final matches = tree.find(query);
-    if (matches.isEmpty) {
-      return _uiText([
-        'No element matches $query on ${_uiHeader(device, tree, screen)}',
-        '',
-        'What is on screen instead:',
-        uiListingLegend,
-        renderUiElements(
-          interestingNodes(tree),
-          screen: screen,
-          limit: 60,
-        ).listing,
-      ]);
-    }
-    final rendered = renderUiElements(
-      matches,
-      screen: screen,
-      limit: limit ?? 50,
-    );
-    return _uiText([
-      '${matches.length} element${matches.length == 1 ? '' : 's'} match '
-          '$query · ${_uiHeader(device, tree, screen)}',
-      'Best match first; an exact label beats a substring.',
-      uiListingLegend,
-      '',
-      rendered.listing,
-    ]);
-  }
-
-  /// Shuts a running emulator down.
-  ///
-  /// The serial is required rather than inferred: every other device tool
-  /// defaults to "the only ready device", and silently defaulting a destructive
-  /// action is a different thing entirely.
-  Future<Object?> _deviceStopEmulator(String? serial) async {
-    if (serial == null || serial.trim().isEmpty) {
-      throw ArgumentError('serial is required for device_stop_emulator.');
-    }
-    final adb = _requireAdb();
-    final devices = await adb.listDevices();
-    final device = devices.where((d) => d.serial == serial).firstOrNull;
-    if (device == null) {
-      throw StateError('No device with serial $serial.');
-    }
-    if (!device.isEmulator) {
-      throw StateError(
-        '$serial is a physical device. Only emulators can be stopped.',
-      );
-    }
-    final stopped = await adb.stopEmulator(serial);
-    if (!stopped) {
-      throw StateError(
-        '$serial did not exit. It may be busy; try again, or close its window.',
-      );
-    }
-    return {'serial': serial, 'stopped': true};
-  }
-
-  Future<Object?> _deviceTapElement({
-    String? serial,
-    required UiElementQuery query,
-    int? index,
-  }) async {
-    if (query.isEmpty) {
-      throw ArgumentError(
-        'Give at least one of text, resourceId, contentDesc or className.',
-      );
-    }
-    final device = await _resolveDevice(serial);
-    final adb = _requireAdb();
-    final tree = await adb.dumpUiHierarchy(device.serial);
-    final screen = await adb.screenSize(device.serial);
-    final matches = tree.find(query);
-
-    if (matches.isEmpty) {
-      throw StateError(
-        'Nothing matches $query on ${device.serial}. On screen now:\n'
-        '${renderUiElements(interestingNodes(tree), screen: screen, limit: 60).listing}',
-      );
-    }
-
-    final UiNode target;
-    if (index != null) {
-      if (index < 0 || index >= matches.length) {
-        throw ArgumentError(
-          'index $index is out of range: there are ${matches.length} matches.',
-        );
-      }
-      target = matches[index];
-    } else if (matches.length == 1) {
-      target = matches.first;
-    } else {
-      // Several matches. One unambiguous exact label is still a decision we can
-      // make; anything else is a guess, and a wrong tap is worse than an error
-      // because the agent cannot tell it happened.
-      final exact = [
-        for (final node in matches)
-          if (query.rank(node) == 0) node,
-      ];
-      if (exact.length == 1) {
-        target = exact.single;
-      } else {
-        throw StateError(
-          '$query matches ${matches.length} elements on ${device.serial}. '
-          'Pass index to choose, or narrow the query:\n'
-          '${_indexed(matches, screen)}',
-        );
-      }
-    }
-
-    final bounds = target.tapBounds;
-    if (bounds == null) {
-      throw StateError(
-        'The matched element reports no bounds, so there is nowhere to tap: '
-        '${describeUiNode(target, screen: screen)}',
-      );
-    }
-    if (screen != null && !bounds.centerIsOnScreen(screen)) {
-      throw StateError(
-        'The matched element is off screen at ${bounds.raw} on a $screen '
-        'display — it is scrolled out of view. Scroll it into view first; '
-        'tapping its centre would hit whatever is really at that point.',
-      );
-    }
-
-    final point = bounds.center;
-    await adb.tap(device.serial, point.x, point.y);
-    return _uiText([
-      'Tapped (${point.x}, ${point.y}) on '
-          '${describeUiNode(target, screen: screen)}',
-      'Device ${device.serial}, ${tree.packageName ?? 'unknown package'}'
-          '${matches.length == 1 ? '' : ', chosen from ${matches.length} matches'}.'
-          '${target.enabled ? '' : ' NOTE: this element is disabled.'}',
-      'Take a screenshot or dump again to confirm what changed.',
-    ]);
-  }
-
-  /// The matches numbered, so the caller can pass `index`.
-  String _indexed(List<UiNode> matches, DeviceScreenSize? screen) => [
-    for (var i = 0; i < matches.length && i < 20; i++)
-      '[$i] ${describeUiNode(matches[i], screen: screen)}',
-  ].join('\n');
-
-  /// Wraps a listing as an MCP text block.
-  ///
-  /// Deliberately not returned as a JSON map: the bridge pretty-prints every
-  /// map result, and one JSON object per node costs several times what one line
-  /// per node does. The whole point of this surface is that a screen fits in a
-  /// few hundred tokens.
-  Object _uiText(List<String> sections) => {
-    '_mcpContent': [
-      {'type': 'text', 'text': sections.join('\n')},
-    ],
-  };
-
-  LogLevel? _parseLogLevel(String? level) {
-    if (level == null) return null;
-    final needle = level.trim().toLowerCase();
-    for (final value in LogLevel.values) {
-      if (value.name == needle || value.code.toLowerCase() == needle) {
-        return value;
-      }
-    }
-    return null;
-  }
-
   AgentInstallation? _installFor(String agentId, String? environmentId) {
     for (final install
         in _container.read(agentInstallationDaoProvider).getAll()) {
@@ -3009,116 +2217,6 @@ class LauncherControlServer implements SessionMcp {
   PermissionMode _permissionFor(String agentId) => _container
       .read(sessionLauncherProvider)
       .permissionFor(agentId, SessionPurpose.existingSession);
-
-  // --- checkpoints -----------------------------------------------------------
-
-  Object? _checkpointList(String? sessionId, int? limit) {
-    final service = _container.read(checkpointServiceProvider);
-    final checkpoints = sessionId == null
-        ? service.recent(limit: limit ?? 50)
-        : service.forSession(sessionId).reversed.take(limit ?? 50).toList();
-    return [for (final checkpoint in checkpoints) _checkpointJson(checkpoint)];
-  }
-
-  Future<Object?> _checkpointCapture(
-    String? sessionId,
-    String? label, {
-    String? callerSessionId,
-  }) async {
-    if (sessionId == null) {
-      throw ArgumentError(
-        'sessionId is required for checkpoint_capture when the caller is not '
-        'itself a Karmashala session.',
-      );
-    }
-    final checkpoint = await _container
-        .read(sessionCheckpointRecorderProvider.notifier)
-        .captureNow(
-          sessionId,
-          label: label,
-          // A labelled capture lands in the decision record, and the record
-          // attributes every row. Null when the bridge has no session of its
-          // own, which reads as "not recorded" rather than as the user.
-          decidedBy: callerSessionId == null
-              ? null
-              : 'an agent in session $callerSessionId',
-          decidedBySessionId: callerSessionId,
-        );
-    if (checkpoint == null) {
-      return {
-        'captured': false,
-        'reason':
-            'Nothing has changed since the last checkpoint, or the session has '
-            'no repository to checkpoint.',
-      };
-    }
-    return {'captured': true, 'checkpoint': _checkpointJson(checkpoint)};
-  }
-
-  Future<Object?> _checkpointDiff(String? id) async {
-    final service = _container.read(checkpointServiceProvider);
-    final checkpoint = _requireCheckpoint(service, id);
-    return {'id': checkpoint.id, 'diff': await service.diffOf(checkpoint)};
-  }
-
-  Future<Object?> _checkpointRestore(
-    String? id, {
-    required bool confirm,
-    List<String>? paths,
-  }) async {
-    final service = _container.read(checkpointServiceProvider);
-    final checkpoint = _requireCheckpoint(service, id);
-    try {
-      final outcome = await service.restore(
-        checkpoint,
-        confirm: confirm,
-        selection: [
-          for (final path in paths ?? const <String>[]) HunkSelection(path),
-        ],
-      );
-      _container.read(checkpointsRevisionProvider.notifier).bump();
-      return {
-        'restored': !outcome.alreadyThere,
-        'alreadyThere': outcome.alreadyThere,
-        'checkpoint': _checkpointJson(outcome.restored),
-        'safetyCheckpointId': outcome.safetyCheckpoint?.id,
-        'files': [
-          for (final file in outcome.files)
-            {'path': file.path, 'status': file.type.name},
-        ],
-      };
-    } on CheckpointConflict catch (conflict) {
-      throw StateError(
-        '${conflict.message} Nothing was changed. The current working tree is '
-        'saved as checkpoint ${conflict.safetyCheckpoint?.id}.',
-      );
-    }
-  }
-
-  Checkpoint _requireCheckpoint(CheckpointService service, String? id) {
-    if (id == null || id.trim().isEmpty) {
-      throw ArgumentError('id is required.');
-    }
-    final checkpoint = service.byId(id);
-    if (checkpoint == null) throw StateError('No checkpoint with id $id.');
-    return checkpoint;
-  }
-
-  Map<String, dynamic> _checkpointJson(Checkpoint checkpoint) => {
-    'id': checkpoint.id,
-    'sessionId': checkpoint.sessionId,
-    'sequence': checkpoint.sequence,
-    'reason': checkpoint.reason.name,
-    'label': checkpoint.label,
-    'createdAt': checkpoint.createdAt.toIso8601String(),
-    'repository': checkpoint.repository.path,
-    'environmentId': checkpoint.repository.environmentId,
-    'commit': checkpoint.commitSha,
-    'files': [
-      for (final file in checkpoint.files)
-        {'path': file.path, 'status': file.type.name},
-    ],
-  };
 }
 
 /// A hardening step that did not apply, thrown out of the privileged-transport

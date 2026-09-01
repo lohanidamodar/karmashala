@@ -349,6 +349,41 @@ class GitService {
     }
   }
 
+  /// The remote-tracking branches that contain [rev], or `null` when git could
+  /// not answer.
+  ///
+  /// This is how "pushed" is asked, and it is deliberately not
+  /// `aheadOfUpstream`. A branch merged into `main` and then pushed with `main`
+  /// never had an upstream of its own, so the divergence question has no answer
+  /// for it — while this one does: its tip is an ancestor of `origin/main`, so
+  /// something other than this machine holds those commits.
+  ///
+  /// Empty is a real answer and means **not pushed**. It reads remote-tracking
+  /// refs, which are only as fresh as the last fetch, so a stale clone answers
+  /// empty for a branch that really was pushed. That is the safe direction for
+  /// the one caller: it refuses, and says to fetch.
+  Future<List<String>?> remoteBranchesContaining(
+    EnvironmentPath repo,
+    String rev,
+  ) async {
+    try {
+      final result = await _git(repo, [
+        'branch',
+        '--remotes',
+        '--contains',
+        rev,
+        '--format=%(refname:short)',
+      ]);
+      if (!result.ok) return null;
+      return [
+        for (final line in result.stdout.split(RegExp(r'[\r\n]')))
+          if (line.trim().isNotEmpty) line.trim(),
+      ];
+    } on CommandException {
+      return null;
+    }
+  }
+
   /// Lists the worktrees of [repo].
   Future<List<GitWorktree>> listWorktrees(EnvironmentPath repo) async {
     final result = await _git(repo, ['worktree', 'list', '--porcelain']);
