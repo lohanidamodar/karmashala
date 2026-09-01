@@ -144,6 +144,10 @@ void main() {
       interval: const Duration(milliseconds: 100),
       group: _lanGroup,
       beaconPort: _lanPort,
+      // Loopback, so the suite never advertises onto the real network — and
+      // so it still works on macOS 15+, where multicast off-machine is denied
+      // until a human grants Local Network access. See lan_beacon_test.dart.
+      bindAddress: InternetAddress.loopbackIPv4,
     );
     addTearDown(beacon.stop);
     return beacon;

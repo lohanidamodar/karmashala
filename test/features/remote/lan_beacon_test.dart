@@ -10,6 +10,19 @@ import 'package:flutter_test/flutter_test.dart';
 final _group = InternetAddress('239.255.42.201');
 const _port = 47699;
 
+/// The beacon advertises out of the loopback interface here, not out of every
+/// interface as it does in the app.
+///
+/// Two reasons, and the second is why these cases failed on macOS at all.
+/// A suite has no business putting datagrams on the machine's real network —
+/// and since macOS 15 it cannot: Local Network access is denied to a process
+/// until a human grants it, and a headless `flutter test` is never asked.
+/// Measured on this Mac, an unentitled process received **0** datagrams in six
+/// seconds on a network with live mDNS traffic. Loopback multicast is not
+/// gated that way, so it works everywhere and still exercises the real
+/// encode → send → join → receive path.
+final _bindAddress = InternetAddress.loopbackIPv4;
+
 void main() {
   group('the advert', () {
     test('round-trips', () {
@@ -103,6 +116,7 @@ void main() {
         interval: const Duration(milliseconds: 100),
         group: _group,
         beaconPort: _port,
+        bindAddress: _bindAddress,
       );
       addTearDown(beacon.stop);
 
@@ -128,6 +142,7 @@ void main() {
         interval: const Duration(milliseconds: 50),
         group: _group,
         beaconPort: _port,
+        bindAddress: _bindAddress,
       );
 
       await discovery.adverts.first.timeout(const Duration(seconds: 10));

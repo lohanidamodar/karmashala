@@ -52,7 +52,18 @@ void main() {
       const RemoteTranscriptMessage(role: 'user', text: 'hello'),
     ];
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
-    relayUri = Uri.parse('http://127.0.0.1:${relay.port}');
+    // `localhost`, not `127.0.0.1`, and the difference is load-bearing.
+    // `_onLanSighting` declines to upgrade a relay link when the beacon
+    // arrives from the very address the relay is served on — that is the
+    // *embedded local* relay, where a "direct" socket would reach the same
+    // machine over the same network for nothing, and re-dialling it on every
+    // beacon is what used to drop the owner's local-relay link on a schedule.
+    // This suite's beacon does arrive from 127.0.0.1 (it advertises over
+    // loopback so the tests never touch the real network), so spelling the
+    // relay the same way would make this look like that case. A relay the
+    // phone reaches by name is what the scenario actually means: somewhere
+    // else, with the desktop reachable directly beside it.
+    relayUri = Uri.parse('http://localhost:${relay.port}');
     // The phone's "keystore": the secure store over a plain map backend, so
     // the record's whole journey through SecureCompanionStore is real.
     phoneDisk = {
@@ -577,6 +588,10 @@ void main() {
       interval: const Duration(milliseconds: 100),
       group: _lanGroup,
       beaconPort: _lanPort,
+      // Loopback, so the suite never advertises onto the real network — and
+      // so it still works on macOS 15+, where multicast off-machine is denied
+      // until a human grants Local Network access. See lan_beacon_test.dart.
+      bindAddress: InternetAddress.loopbackIPv4,
     );
     addTearDown(beacon.stop);
 
@@ -630,6 +645,10 @@ void main() {
       interval: const Duration(milliseconds: 100),
       group: _lanGroup,
       beaconPort: _lanPort,
+      // Loopback, so the suite never advertises onto the real network — and
+      // so it still works on macOS 15+, where multicast off-machine is denied
+      // until a human grants Local Network access. See lan_beacon_test.dart.
+      bindAddress: InternetAddress.loopbackIPv4,
     );
     addTearDown(beacon.stop);
 

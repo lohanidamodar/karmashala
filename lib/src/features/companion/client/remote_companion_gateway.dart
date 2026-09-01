@@ -1252,8 +1252,17 @@ class RemoteCompanionGateway implements CompanionGateway {
   Future<List<Uri>> _relayOrder() async {
     final record = _record;
     if (record == null) return const [];
+    // The saved candidates, plus anything the host has announced since that
+    // has not been written down yet. An announcement is only persisted once a
+    // link reaches `connected` — the opening greeting has to wait for the
+    // client to write its own record, or that write would clobber it — so an
+    // announcement heard during a connect that then failed is real knowledge
+    // sitting in memory with nothing to dial it.
+    final announced = _lastHostStatus?.relays ?? const <Uri>[];
     return orderRelayCandidates(
-      record.candidates,
+      announced.isEmpty
+          ? record.candidates
+          : mergeRelayCandidates(record.candidates, announced),
       fallback: await pairingRelay(),
       now: _now(),
     );
@@ -1607,7 +1616,15 @@ class RemoteCompanionGateway implements CompanionGateway {
     _dialled = null;
     _linkPath.value = null;
     _activeRelay = null;
-    _lastHostStatus = null;
+    // [_lastHostStatus] deliberately survives. It is what the host said about
+    // *itself* — where it can be met — not anything about the connection that
+    // just ended, and the announcement that matters most is the one that
+    // arrives seconds before a link dies: a local relay whose address moved
+    // announces the new one and then re-points its listeners, which takes the
+    // old socket down with it. Clearing it here meant a phone that heard "I
+    // have moved to :52918" while still coming up forgot it the instant that
+    // half-open connect failed, and then spent forever redialling the address
+    // it had already been told was dead. See [_relayOrder].
     _subscribed.clear();
     for (final state in _transcripts.values) {
       if (state.loaded) state.stale = true;
