@@ -340,11 +340,14 @@ class SessionMediaStore {
     final blocks = <_Block>[];
     final message = json['message'];
     if (message is Map && message['content'] is List) {
+      final before = blocks.length;
       _claudeContent(message['content']! as List, pending, blocks);
+      _numberPastes(blocks, before, json['imagePasteIds']);
     }
     // A queued prompt is not a `user` line at all — see above.
     final attachment = json['attachment'];
     if (attachment is Map) {
+      final before = blocks.length;
       for (final key in const ['prompt', 'content']) {
         final list = attachment[key];
         if (list is! List) continue;
@@ -354,8 +357,38 @@ class SessionMediaStore {
           }
         }
       }
+      // The ids hang off the attachment on this shape, not off the record.
+      _numberPastes(blocks, before, attachment['imagePasteIds']);
     }
     return blocks;
+  }
+
+  /// Gives the pastes found since [from] the numbers the CLI printed for them.
+  ///
+  /// `imagePasteIds` is Claude Code's own record of what it wrote into the pane
+  /// as `[Image #N]` — the only exact key there is, because the counter is the
+  /// CLI process's and agrees with no ordinal we could compute. See
+  /// `session_image_reference.dart` for the transcripts that establish that.
+  ///
+  /// Paired **positionally**, and only when the two lists are the same length.
+  /// A record that does not line up is left unnumbered rather than guessed at:
+  /// an id on the wrong picture is a Ctrl+click that opens the wrong picture,
+  /// which is the one outcome worse than a reference that will not resolve.
+  static void _numberPastes(List<_Block> blocks, int from, Object? raw) {
+    if (raw is! List) return;
+    final ids = [
+      for (final id in raw)
+        if (id is int) id,
+    ];
+    if (ids.length != raw.length) return;
+    final pasted = [
+      for (var i = from; i < blocks.length; i++)
+        if (blocks[i].origin == SessionMediaOrigin.pasted) blocks[i],
+    ];
+    if (pasted.length != ids.length) return;
+    for (var i = 0; i < ids.length; i++) {
+      pasted[i].pasteId = ids[i];
+    }
   }
 
   static void _claudeContent(
@@ -506,6 +539,7 @@ class SessionMediaStore {
           toolName: block.tool,
           at: at,
           problem: 'That image was not stored in the transcript.',
+          pasteId: block.pasteId,
         ),
         0,
       );
@@ -527,6 +561,7 @@ class SessionMediaStore {
           problem:
               'That image is too large to preview here '
               '(${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB).',
+          pasteId: block.pasteId,
         ),
         0,
       );
@@ -562,6 +597,7 @@ class SessionMediaStore {
           at: at,
           bytes: bytes,
           problem: 'That image could not be read.',
+          pasteId: block.pasteId,
         ),
         0,
       );
@@ -575,6 +611,7 @@ class SessionMediaStore {
         toolName: block.tool,
         at: at,
         bytes: bytes,
+        pasteId: block.pasteId,
       ),
       written,
     );
@@ -604,7 +641,11 @@ class SessionMediaStore {
   // Housekeeping
   // ---------------------------------------------------------------------------
 
-  static const _manifestVersion = 1;
+  /// Bumped to 2 when [SessionMediaItem.pasteId] arrived: a manifest written
+  /// before it has no ids in it, and an item with no id is one a `[Image #N]`
+  /// cannot resolve to. A version change forces one rescan, which is the whole
+  /// cost of making every existing session's references clickable.
+  static const _manifestVersion = 2;
 
   /// How many outstanding tool calls to carry between passes. A `tool_use` and
   /// the `tool_result` that answers it can straddle the boundary of an append,
@@ -779,7 +820,7 @@ class _PendingCalls {
 
 /// A picture found in one line, before it is resolved to something drawable.
 class _Block {
-  const _Block._({
+  _Block._({
     required this.origin,
     this.path,
     this.data,
@@ -830,6 +871,14 @@ class _Block {
   final String? data;
   final String? mediaType;
   final String? tool;
+
+  /// The `[Image #N]` number, filled in by [SessionMediaStore._numberPastes].
+  ///
+  /// Not final and not a constructor argument, because the id is a property of
+  /// the **line** rather than of the block: it is only knowable once every
+  /// picture on that line has been found and can be counted off against
+  /// `imagePasteIds`.
+  int? pasteId;
 }
 
 /// An item, and how many bytes producing it wrote out.

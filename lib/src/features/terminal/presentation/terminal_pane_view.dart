@@ -2,10 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../media/application/session_media_providers.dart';
+import '../../media/domain/session_image_reference.dart';
+import '../../media/presentation/session_image_dialog.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
 import '../data/terminal_instance.dart';
@@ -49,6 +54,28 @@ import '../domain/terminal_links.dart';
 /// asks what is at the resolved path once, for the one candidate under the
 /// pointer, and stays silent when the answer is "nothing".
 ///
+/// ## `[Image #6]`
+///
+/// A fifth kind, on the same gesture. The owner's report: *"image link inside
+/// terminal still not wired, i should be able to ctrl click on the image
+/// `[Image #6]` and preview the image in dialog"*. When a picture is pasted
+/// into an agent CLI running in a pane, the CLI prints that reference as plain
+/// text — there is no `OSC 8` around it — so recognising it is a text scan like
+/// every other target here, and it opens [SessionImageDialog].
+///
+/// Two rules it does not share with a path:
+///
+/// * **Only a pane with a session offers one.** Media is per-session; a plain
+///   shell tab has nothing to resolve a number against and must not pretend the
+///   text is clickable.
+/// * **It underlines without resolving first, and refuses in words.** A path
+///   that is not there underlines nothing, because a path-shaped *word* is not
+///   evidence of anything. `[Image #6]` is evidence: the CLI wrote it. So it is
+///   offered on sight — hovering costs no transcript read at all — and if the
+///   number names a picture the session does not have, the click says so in a
+///   sentence. Opening nothing would look broken, and opening the nearest
+///   picture instead would be worse than either.
+///
 /// ## What this costs at 100 panes
 ///
 /// Nothing, in every pane, until Ctrl goes down. With the modifier up
@@ -62,7 +89,12 @@ import '../domain/terminal_links.dart';
 /// different cell — one flatten of the hovered row (plus its wrapped
 /// continuation rows, at most [kMaxWrappedRows] either side), two regex passes
 /// over that text, and at most one `FileSystemEntity.type` per distinct
-/// candidate, memoised until the pointer leaves the pane.
+/// candidate, memoised until the pointer leaves the pane. The `[Image #6]` scan
+/// adds a third pass over the *same* flattened text, and only on the cells the
+/// first two found nothing on — so a line of paths costs exactly what it did
+/// before — behind a `contains('[Image #')` that rejects an ordinary line
+/// without running a regex at all. Reading the transcript is a *click's* cost;
+/// no hover ever pays it.
 ///
 /// The underline itself is xterm's own [TerminalController.highlight], the same
 /// mechanism find-in-scrollback uses: it is anchored to the buffer, so it stays
@@ -77,7 +109,7 @@ import '../domain/terminal_links.dart';
 /// painter and its pixel goldens). Out of proportion to the gain here: an agent
 /// that emits `OSC 8` almost always uses the URL itself as the label, and that
 /// is detected by the text scan below.
-class TerminalPaneView extends StatefulWidget {
+class TerminalPaneView extends ConsumerStatefulWidget {
   const TerminalPaneView({
     required this.instance,
     required this.focused,
@@ -103,13 +135,59 @@ class TerminalPaneView extends StatefulWidget {
   /// starting any of them on the machine running it.
   final TerminalLinkActions linkActions;
 
+  /// A `ConsumerStatefulWidget` rather than one more injected callback: the
+  /// image lookup is the pane's own business and reaching it through `ref`
+  /// leaves `TerminalPaneStack`'s call site — and every other caller — exactly
+  /// as it was.
   @override
-  State<TerminalPaneView> createState() => _TerminalPaneViewState();
+  ConsumerState<TerminalPaneView> createState() => _TerminalPaneViewState();
 }
 
 /// How far the pointer may move between press and release and still be a click
 /// rather than the start of a selection drag.
 const double _clickSlop = 4;
+
+/// A `[Image #6]` and where it sits on the buffer.
+///
+/// In **buffer rows and cell columns**, for the same reason [TerminalLink] is:
+/// `BufferLine.getText()` skips empty cells and the trailing half of a
+/// double-width glyph, so character indices and cells do not agree and an
+/// underline computed from the former lands beside its text.
+class _ImageRefSpan {
+  const _ImageRefSpan({
+    required this.reference,
+    required this.startRow,
+    required this.startColumn,
+    required this.endRow,
+    required this.endColumn,
+  });
+
+  final SessionImageReference reference;
+  final int startRow;
+  final int startColumn;
+  final int endRow;
+  final int endColumn;
+
+  bool contains(int row, int column) {
+    if (row < startRow || row > endRow) return false;
+    if (row == startRow && column < startColumn) return false;
+    if (row == endRow && column >= endColumn) return false;
+    return true;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is _ImageRefSpan &&
+      other.reference == reference &&
+      other.startRow == startRow &&
+      other.startColumn == startColumn &&
+      other.endRow == endRow &&
+      other.endColumn == endColumn;
+
+  @override
+  int get hashCode =>
+      Object.hash(reference, startRow, startColumn, endRow, endColumn);
+}
 
 /// A path candidate that turned out to be something.
 class _Resolved {
@@ -123,7 +201,7 @@ class _Resolved {
 /// Dropped on exit, so a file created after a miss is found on the next visit.
 const int _maxProbeCache = 64;
 
-class _TerminalPaneViewState extends State<TerminalPaneView> {
+class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   /// Reaches `TerminalViewState.renderTerminal`, which is the only thing that
   /// can turn a pointer position into a buffer cell — it owns the cell metrics
   /// and the scroll offset.
@@ -131,6 +209,15 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 
   TerminalLink? _link;
   _Resolved? _resolved;
+
+  /// The `[Image #6]` under the pointer, when that is what is under it. Kept
+  /// beside [_link] rather than folded into it because `TerminalTarget` is a
+  /// sealed type in `terminal_links.dart` and a fifth case cannot be added
+  /// from here — and because the two resolve on opposite terms: a path
+  /// underlines only once the filesystem has confirmed it, a reference
+  /// underlines on sight.
+  _ImageRefSpan? _imageRef;
+
   CellOffset? _lastCell;
   TerminalHighlight? _highlight;
 
@@ -152,6 +239,11 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 
   /// Discards the answer to a probe that is no longer the one being asked for.
   int _epoch = 0;
+
+  /// The session this pane belongs to, or null for a plain shell. Media is
+  /// per-session, so this is what decides whether a `[Image #6]` printed here
+  /// is resolvable at all.
+  String? get _sessionId => widget.instance.agentLaunch?.sessionId;
 
   @override
   void dispose() {
@@ -249,8 +341,18 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 
     final buffer = widget.instance.terminal.buffer;
     if (cell.y >= buffer.lines.length) return _clearLink();
-    final link = linkAt(linkLineAt(buffer, cell.y), cell.y, cell.x);
-    if (link == null) return _clearLink();
+    final line = linkLineAt(buffer, cell.y);
+    final link = linkAt(line, cell.y, cell.x);
+    if (link == null) {
+      // Not a path and not a URL — but it may be the `[Image #6]` an agent CLI
+      // printed, which is the owner's request. Looked for only here, so a cell
+      // that already resolved to a path costs nothing new.
+      final reference = _imageRefAt(line, cell.y, cell.x);
+      if (reference == null) return _clearLink();
+      // Still the same reference, one cell along: already underlined.
+      if (reference == _imageRef) return;
+      return _showImageRef(reference);
+    }
     // Still the same link, one cell along: it is already underlined.
     if (link == _link) return;
 
@@ -274,6 +376,79 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     _show(link, _Resolved(hostPath, kind));
   }
 
+  /// The `[Image #6]` covering cell ([row], [column]) of [line], or null.
+  ///
+  /// Returns null outright for a pane with no session: a reference it could
+  /// never resolve must not underline, and checking first also means the scan
+  /// never runs in a plain shell tab.
+  _ImageRefSpan? _imageRefAt(TerminalLinkLine line, int row, int column) {
+    if (_sessionId == null) return null;
+    for (final reference in imageReferencesIn(line.text)) {
+      // Character indices back onto buffer cells, the same mapping `linksIn`
+      // makes: `getText()` skips empty cells and double-width tails, so the two
+      // do not agree and the underline would land beside the text.
+      final last = reference.end - 1;
+      final span = _ImageRefSpan(
+        reference: reference,
+        startRow: line.rowOfChar[reference.start],
+        startColumn: line.cellOfChar[reference.start],
+        endRow: line.rowOfChar[last],
+        endColumn: line.cellOfChar[last] + line.widthOfChar[last],
+      );
+      if (span.contains(row, column)) return span;
+    }
+    return null;
+  }
+
+  /// Underlines a reference. No probe first: unlike a path candidate this is
+  /// not a guess about what a word might be — the CLI wrote it.
+  void _showImageRef(_ImageRefSpan span) {
+    _highlightSpan(
+      span.startRow,
+      span.startColumn,
+      span.endRow,
+      span.endColumn,
+    );
+    setState(() {
+      _link = null;
+      _resolved = null;
+      _imageRef = span;
+    });
+  }
+
+  /// Opens the picture a reference names, or says why it cannot.
+  ///
+  /// The lookup reads the session's transcript, so it happens here — on a
+  /// deliberate click — and never on the hover path.
+  Future<void> _openImageRef(SessionImageReference reference) async {
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    final found = await ref.read(sessionImageLookupProvider)(
+      sessionId,
+      reference.pasteId,
+    );
+    if (!mounted) return;
+    switch (found) {
+      case SessionImageFound(:final item, :final matches, :final resolveHostPath):
+        await showDialog<void>(
+          context: context,
+          builder: (_) => SessionImageDialog(
+            reference: reference.label,
+            item: item,
+            matches: matches,
+            resolveHostPath: resolveHostPath,
+            now: ref.read(clockProvider).nowUtc(),
+          ),
+        );
+      case SessionImageUnavailable(:final reason):
+        // In words. A click that did nothing would be indistinguishable from a
+        // broken link, and the nearest picture would be the wrong one.
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(SnackBar(content: Text(reason)));
+    }
+  }
+
   Future<TerminalPathKind?> _kindOf(String hostPath) async {
     if (_probed.containsKey(hostPath)) return _probed[hostPath];
     final kind = await widget.linkActions.kindOf(hostPath);
@@ -284,30 +459,42 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
 
   /// Underlines [link], across every row it covers.
   void _show(TerminalLink link, _Resolved? resolved) {
+    _highlightSpan(
+      link.startRow,
+      link.startColumn,
+      link.endRow,
+      link.endColumn,
+    );
+    setState(() {
+      _link = link;
+      _resolved = resolved;
+      _imageRef = null;
+    });
+  }
+
+  /// The underline itself, shared by both kinds of target.
+  void _highlightSpan(int startRow, int startColumn, int endRow, int endColumn) {
     _highlight?.dispose();
     final buffer = widget.instance.terminal.buffer;
     _highlight = widget.instance.controller.highlight(
-      p1: buffer.createAnchor(link.startColumn, link.startRow),
-      p2: buffer.createAnchor(link.endColumn, link.endRow),
+      p1: buffer.createAnchor(startColumn, startRow),
+      p2: buffer.createAnchor(endColumn, endRow),
       // A rule under the text, not a wash over it: the link has to stay as
       // readable as the output around it.
       color: Theme.of(context).colorScheme.primary,
       underline: true,
     );
-    setState(() {
-      _link = link;
-      _resolved = resolved;
-    });
   }
 
   /// Drops the underline, keeping the "this cell has been answered" memory.
   void _clearLink() {
     _highlight?.dispose();
     _highlight = null;
-    if (_link == null) return;
+    if (_link == null && _imageRef == null) return;
     setState(() {
       _link = null;
       _resolved = null;
+      _imageRef = null;
     });
   }
 
@@ -371,13 +558,21 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     final pressedAt = _pressedAt;
     _pressedAt = null;
     final link = _link;
-    if (pressedAt == null || link == null) return;
+    final reference = _imageRef;
+    if (pressedAt == null || (link == null && reference == null)) return;
     // A drag that ended over a link is a selection, not a click on it.
     if ((event.position - pressedAt).distance > _clickSlop) return;
     final keyboard = HardwareKeyboard.instance;
     if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return;
     final cell = _cellAt(event.position);
-    if (cell == null || !link.contains(cell.y, cell.x)) return;
+    if (cell == null) return;
+    if (reference != null) {
+      if (reference.contains(cell.y, cell.x)) {
+        _openImageRef(reference.reference);
+      }
+      return;
+    }
+    if (!link!.contains(cell.y, cell.x)) return;
     _open(link);
   }
 
@@ -398,11 +593,21 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
     )?.showSnackBar(SnackBar(content: Text(error)));
   }
 
-  /// What the hint says the click will do, and to what.
+  /// What the hint says the click will do, and to what, or null when there is
+  /// nothing under the pointer.
   ///
   /// The *resolved* path, not the printed one: `Ctrl+click to open
   /// C:\src\app\lib\main.dart` is the useful sentence when the output said
-  /// `lib/main.dart`.
+  /// `lib/main.dart`. A reference has nothing to resolve until it is clicked,
+  /// so it names itself — which is also what tells the user the app read the
+  /// number the same way they did.
+  (String, String)? get _hint {
+    final reference = _imageRef;
+    if (reference != null) return ('preview', reference.reference.label);
+    final link = _link;
+    return link == null ? null : _hintFor(link);
+  }
+
   (String, String) _hintFor(TerminalLink link) {
     final resolved = _resolved;
     if (resolved == null) return ('open', link.target.label);
@@ -460,7 +665,7 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
       // switchable in Settings, which is what the overrides are doing here.
       shortcuts: terminalPaneShortcutsFor(widget.chordOverrides),
       // Over a link the pointer says so; everywhere else the grid is text.
-      mouseCursor: _link == null
+      mouseCursor: _link == null && _imageRef == null
           ? SystemMouseCursors.text
           : SystemMouseCursors.click,
       // Right-click → copy selection / paste / end the session.
@@ -469,6 +674,7 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
       ),
     );
 
+    final hint = _hint;
     return MouseRegion(
       // No cursor of its own: `TerminalView`'s own `MouseRegion` is nearer the
       // pointer and wins, so the cursor is set through `mouseCursor` above.
@@ -489,11 +695,7 @@ class _TerminalPaneViewState extends State<TerminalPaneView> {
           fit: StackFit.expand,
           children: [
             view,
-            if (_link != null)
-              _LinkHint(
-                verb: _hintFor(_link!).$1,
-                target: _hintFor(_link!).$2,
-              ),
+            if (hint != null) _LinkHint(verb: hint.$1, target: hint.$2),
           ],
         ),
       ),
