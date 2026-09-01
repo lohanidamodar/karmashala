@@ -28,12 +28,13 @@ import 'package:flutter_test/flutter_test.dart';
 import '../remote/fake_bindings.dart';
 import '../remote/transport_harness.dart';
 
-/// A beacon group and port of this suite's own, so a real host on the LAN
-/// cannot leak into it (the lan_beacon_test convention).
+/// A beacon group of this suite's own, so a real host on the LAN cannot leak
+/// into it (the lan_beacon_test convention). The PORT is per test, from
+/// [freeBeaconPort] — see there for why sharing one across a file is a flake.
 final _lanGroup = InternetAddress('239.255.42.202');
-const _lanPort = 47698;
 
 void main() {
+  late int lanPort;
   late AppDatabase db;
   late PairedDeviceDao dao;
   late FakeRemoteBindings fake;
@@ -45,6 +46,7 @@ void main() {
   final gateways = <RemoteCompanionGateway>[];
 
   setUp(() async {
+    lanPort = await freeBeaconPort();
     db = AppDatabase.memory();
     dao = PairedDeviceDao(db);
     fake = FakeRemoteBindings()..addSession('s1');
@@ -113,12 +115,14 @@ void main() {
   RemoteCompanionGateway makeGateway({
     LanPathScout? lan,
     Future<({String token, String platform})?> Function()? pushTokenSource,
+    void Function(String message)? onLog,
   }) {
     final gateway = RemoteCompanionGateway(
       store: store,
       deviceName: 'Test phone',
       lan: lan,
       pushTokenSource: pushTokenSource,
+      onLog: onLog,
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),
@@ -134,7 +138,7 @@ void main() {
 
   LanPathScout makeScout() => LanPathScout(
     group: _lanGroup,
-    beaconPort: _lanPort,
+    beaconPort: lanPort,
     attemptTimeout: const Duration(milliseconds: 800),
     retryCooldown: const Duration(seconds: 30),
     // The beacon's source address is whatever interface multicast rode in
@@ -587,7 +591,7 @@ void main() {
       tag: 'realhost00000001',
       interval: const Duration(milliseconds: 100),
       group: _lanGroup,
-      beaconPort: _lanPort,
+      beaconPort: lanPort,
       // Loopback, so the suite never advertises onto the real network — and
       // so it still works on macOS 15+, where multicast off-machine is denied
       // until a human grants Local Network access. See lan_beacon_test.dart.
@@ -630,7 +634,8 @@ void main() {
   });
 
   test('a beacon is only a hint: a host that cannot seal is a stranger, '
-      'and the relay carries the link', () async {
+      'and the relay carries the link',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     await startService();
     // A stranger advertising a socket that accepts and answers nothing. It
     // holds no paired key, so it can never produce the sealed host.status.
@@ -644,7 +649,7 @@ void main() {
       tag: 'rogue00000000001',
       interval: const Duration(milliseconds: 100),
       group: _lanGroup,
-      beaconPort: _lanPort,
+      beaconPort: lanPort,
       // Loopback, so the suite never advertises onto the real network — and
       // so it still works on macOS 15+, where multicast off-machine is denied
       // until a human grants Local Network access. See lan_beacon_test.dart.
@@ -652,8 +657,39 @@ void main() {
     );
     addTearDown(beacon.stop);
 
-    final gateway = makeGateway(lan: makeScout());
+    final log = <String>[];
+    final gateway = makeGateway(lan: makeScout(), onLog: log.add);
     await pairPhone(gateway);
+
+    // Wait for the stranger to be sighted, dialled and refused — the event
+    // this test is about — rather than for a fixed two seconds to elapse.
+    //
+    // The old shape read the link after `sleep(2s)` and it flaked: the scout
+    // is started lazily inside the connect loop, so the first sighting can
+    // land at any point after `connected`. `eventually` below would then pass
+    // on the link as it stood before any beacon had been heard, the sleep
+    // would expire while the 800ms stranger dial was still in flight, and the
+    // sample read `connecting`. That is the loop working exactly as designed,
+    // reported as a regression — one of the reds that broke roughly six
+    // full-suite runs, and one of those was misread as a real break.
+    int strangerDials() =>
+        log.where((line) => line.startsWith('lan attempt failed')).length;
+    await eventually(
+      () async => strangerDials() > 0,
+      // Not bounded by anything this test controls; the test's own timeout is
+      // the budget.
+      timeout: const Duration(seconds: 60),
+      reason: 'the stranger is dialled and refused',
+    );
+
+    // The stranger keeps beaconing every 100ms throughout this window. One
+    // dial, and only one, is the whole claim: cooldown, not a dial loop.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(
+      strangerDials(),
+      1,
+      reason: 'the stranger is in cooldown, not in a dial loop',
+    );
 
     await eventually(
       () async =>
@@ -661,10 +697,6 @@ void main() {
           gateway.linkPath == CompanionLinkPath.relay,
       reason: 'the relay carries the link past the stranger',
     );
-    // And it stays there: the stranger is in cooldown, not in a dial loop.
-    await Future<void>.delayed(const Duration(seconds: 2));
-    expect(gateway.link, CompanionLinkState.connected);
-    expect(gateway.linkPath, CompanionLinkPath.relay);
     expect((await gateway.listSessions()).single.id, 's1');
   });
 

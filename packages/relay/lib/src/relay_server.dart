@@ -13,6 +13,15 @@ import 'push_delivery.dart';
 const int kDefaultRelayPort = 8787;
 
 /// How long a socket waits alone at a rendezvous before it is dropped.
+///
+/// Zero or less means never. That is not a degenerate case: the relay
+/// embedded in the Karmashala desktop serves only that desktop, so every
+/// socket waiting alone on it is one of that desktop's own rendezvous
+/// listeners, waiting for a phone that may be away for hours. Hanging up on
+/// those is the relay evicting its own operator — measured at three
+/// evictions every 120 seconds, indefinitely — and each eviction is a window
+/// in which the desktop is absent from its own rendezvous. A shared relay
+/// keeps a real timeout, because there a lone socket may be a stranger.
 const Duration kDefaultLoneTimeout = Duration(minutes: 2);
 
 /// Largest frame the relay will forward. The app's own envelope cap is 1 MiB;
@@ -70,6 +79,8 @@ class RelayOptions {
     this.onLog,
   });
 
+  /// Zero or less turns the lone-socket eviction off — see
+  /// [kDefaultLoneTimeout] for when that is the right answer.
   final Duration loneTimeout;
   final int maxFrameBytes;
 
@@ -313,10 +324,12 @@ class RelayServer {
 class _Rendezvous {
   _Rendezvous(this._first, {required this.options, required this.onEmpty}) {
     _subscriptions.add(_attach(_first));
-    _loneTimer = Timer(
-      options.loneTimeout,
-      () => dispose(kCloseNoPeer, 'no peer'),
-    );
+    if (options.loneTimeout > Duration.zero) {
+      _loneTimer = Timer(
+        options.loneTimeout,
+        () => dispose(kCloseNoPeer, 'no peer'),
+      );
+    }
   }
 
   final WebSocketChannel _first;

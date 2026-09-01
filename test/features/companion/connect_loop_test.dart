@@ -157,19 +157,29 @@ void main() {
     return gateway;
   }
 
+  /// How long a wait for a link state may take before it is a hang.
+  ///
+  /// Deliberately close to these tests' own three-minute budget rather than
+  /// the twenty seconds two of the waits below used to allow. Neither test
+  /// measures how FAST the phone reconnects — they measure that it reconnects
+  /// at all, with a client behind the link — so a deadline tighter than the
+  /// test's own was an extra way to fail that protected nothing, and under
+  /// `--concurrency=4` it fired: `TimeoutException after 0:00:20`.
   Future<void> awaitLink(
     RemoteCompanionGateway gateway,
     CompanionLinkState wanted, {
-    Duration timeout = const Duration(seconds: 30),
+    Duration timeout = const Duration(seconds: 150),
   }) => gateway.linkStates
       .firstWhere((state) => state == wanted)
       .timeout(timeout);
 
   /// Polls until [check] holds, so a test can wait on a fact rather than on a
   /// stream that seeds its current value and would answer instantly.
+  /// Same reasoning as [awaitLink]: a wait for a fact is machinery, not the
+  /// measurement, so its deadline sits near the test's own budget.
   Future<void> until(
     bool Function() check, {
-    Duration timeout = const Duration(seconds: 20),
+    Duration timeout = const Duration(seconds: 60),
     required String reason,
   }) async {
     final deadline = DateTime.now().add(timeout);
@@ -202,6 +212,10 @@ void main() {
 
     var arming = false;
     var killed = false;
+    // Completes when the desktop is really gone, not merely on its way out:
+    // the restart below must not overwrite `service` from under the stop that
+    // is still running.
+    final killDone = Completer<void>();
     final watch = gateway.linkStates.listen((state) {
       if (state != CompanionLinkState.connected || !arming || killed) return;
       killed = true;
@@ -212,6 +226,7 @@ void main() {
         await service?.stop();
         service = null;
         await phoneTransports.last.abort();
+        killDone.complete();
       }());
     });
     addTearDown(watch.cancel);
@@ -228,17 +243,22 @@ void main() {
     while (!killed) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
-    await Future<void>.delayed(const Duration(seconds: 3));
+    // Wait for the two facts the three-second sleep here used to stand in
+    // for: the desktop is down, and the phone has noticed. Three seconds is
+    // enough for both on an idle machine and a guess on a loaded one, which
+    // is part of why this file fails under `--concurrency=4` and passes
+    // alone.
+    await killDone.future;
+    await until(
+      () => gateway.link != CompanionLinkState.connected,
+      reason: 'the phone acts on the death it was handed mid-dial',
+    );
     store.writeCost = Duration.zero;
 
     // The desktop comes back. Nobody touches the phone: it must re-dial on
     // its own, exactly as it does after any other outage.
     await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:2'));
-    await awaitLink(
-      gateway,
-      CompanionLinkState.connected,
-      timeout: const Duration(seconds: 20),
-    );
+    await awaitLink(gateway, CompanionLinkState.connected);
     expect((await gateway.listSessions()).single.id, 's1');
   });
 
@@ -282,11 +302,7 @@ void main() {
     // phone can actually ask for something. Adopting the orphaned client
     // parks the loop on a completer nothing can fire, with `connected` on
     // screen and no client behind it.
-    await awaitLink(
-      gateway,
-      CompanionLinkState.connected,
-      timeout: const Duration(seconds: 20),
-    );
+    await awaitLink(gateway, CompanionLinkState.connected);
     expect(
       (await gateway.listSessions()).single.id,
       's1',

@@ -16,8 +16,30 @@ import '../../../core/process/command_runner.dart';
 /// relay package's own default, pinned equal by a test.
 const int kDefaultLocalRelayPort = kDefaultRelayPort;
 
+/// How long the embedded relay lets a socket wait alone at a rendezvous
+/// before hanging up on it. Zero means never, and that is deliberate.
+///
+/// The relay package's two-minute default is right for a SHARED relay, where
+/// a lone socket may be a stranger pinning a rendezvous nobody will ever come
+/// to. This relay runs inside the desktop and serves only it: every socket
+/// waiting alone here is one of this desktop's own rendezvous listeners,
+/// waiting — correctly — for a phone that may be away for hours.
+///
+/// Measured on the owner's machine while the phone would not connect: three
+/// listeners, each evicted and re-dialled every 120.3 seconds, 58 times in a
+/// single run of the app, and the whole `remote:` log for forty minutes was
+/// `a socket is waiting (3 held)` repeating. Each eviction is a window in
+/// which the desktop is absent from its own rendezvous, and a phone arriving
+/// in one finds nobody there.
+const Duration kLocalRelayLoneTimeout = Duration.zero;
+
 /// The scoped inbound firewall rule the service tries to add on Windows.
 const String kFirewallRuleName = 'Karmashala local relay';
+
+/// The inbound rule the INSTALLER writes, which the app cannot write for
+/// itself without elevation. Program-scoped and `LocalPort: Any`, so it
+/// already covers this relay on whatever port it binds.
+const String kInstallerFirewallRuleName = 'Karmashala';
 
 /// One interface address the machine could be dialled on.
 typedef LanInterfaceAddress = ({String name, String ip});
@@ -162,7 +184,10 @@ class LocalRelayService {
       server = await RelayServer.bind(
         address: _bindAddress,
         port: port,
-        options: RelayOptions(onLog: onLog),
+        options: RelayOptions(
+          loneTimeout: kLocalRelayLoneTimeout,
+          onLog: onLog,
+        ),
       );
     } on Object catch (error) {
       _log('bind failed on port $port: $error');
@@ -381,10 +406,48 @@ class LocalRelayService {
           ],
         ),
       );
-      if (!added.ok) _log('netsh refused the firewall rule (no admin?)');
-      return added.ok;
+      if (added.ok) return true;
+      // A refused add is not the same as a closed firewall, and saying so
+      // sent the owner after a firewall that was never shut. Measured on
+      // their machine: the app could not write its own rule, logged
+      // "netsh refused the firewall rule (no admin?)", and put "If the phone
+      // can't connect, allow Karmashala in Windows Defender Firewall" on
+      // screen — while the phone was reaching the relay on this very port
+      // and the installer's own rule was allowing it.
+      if (await _programIsAlreadyAllowed(runner)) return true;
+      _log('netsh refused the firewall rule (no admin?)');
+      return false;
     } on Object catch (error) {
       _log('netsh unavailable: $error');
+      return false;
+    }
+  }
+
+  /// Whether an existing inbound rule already names this executable.
+  ///
+  /// Matched on the program path alone: rule names and every label netsh
+  /// prints are localised on a non-English Windows, and the path is not.
+  Future<bool> _programIsAlreadyAllowed(CommandRunner runner) async {
+    final exe = _executablePath ?? Platform.resolvedExecutable;
+    try {
+      final shown = await runner.run(
+        const CommandRequest(
+          executable: 'netsh',
+          arguments: [
+            'advfirewall',
+            'firewall',
+            'show',
+            'rule',
+            'name=$kInstallerFirewallRuleName',
+          ],
+        ),
+      );
+      if (!shown.ok) return false;
+      final covered = shown.stdout.toLowerCase().contains(exe.toLowerCase());
+      if (covered) _log('already allowed inbound by the installer rule');
+      return covered;
+    } on Object catch (error) {
+      _log('firewall rule lookup failed: $error');
       return false;
     }
   }
