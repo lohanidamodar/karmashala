@@ -6,6 +6,7 @@ import '../../../app/shell/tab_picker.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_sessions_controller.dart';
+import '../domain/terminal_drag.dart';
 
 /// A region of a split with nothing in it yet.
 ///
@@ -48,15 +49,25 @@ class EmptyPaneRegion extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return DragTarget<String>(
-      // A tab cannot be dropped into a region of itself: the tab would have to
-      // contain the very region it is being put inside.
-      onWillAcceptWithDetails: (details) => ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .canMoveTabIntoSlot(details.data, paneId),
-      onAcceptWithDetails: (details) => ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .moveTabIntoSlot(details.data, paneId),
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    return DragTarget<TerminalDrag>(
+      // A whole tab, or one pane out of a region's header. A tab cannot be
+      // dropped into a region of itself: the tab would have to contain the very
+      // region it is being put inside.
+      onWillAcceptWithDetails: (details) => switch (details.data) {
+        TabDrag(:final tabId) => sessions.canMoveTabIntoSlot(tabId, paneId),
+        PaneDrag(paneId: final moved) => sessions.canMovePaneIntoRegion(
+          moved,
+          paneId,
+        ),
+      },
+      onAcceptWithDetails: (details) => switch (details.data) {
+        TabDrag(:final tabId) => sessions.moveTabIntoSlot(tabId, paneId),
+        PaneDrag(paneId: final moved) => sessions.movePaneIntoRegion(
+          moved,
+          paneId,
+        ),
+      },
       builder: (context, candidate, _) {
         final hovering = candidate.isNotEmpty;
         return Semantics(

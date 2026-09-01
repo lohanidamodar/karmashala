@@ -432,6 +432,15 @@ class Chrome {
   static const iconSmall = 13.0;
   static const iconTitle = 18.0;
 
+  /// The label on a tab chip — the workbench strip's, and a region header's.
+  ///
+  /// Fixed rather than scaled, and named here for exactly that reason: a chip
+  /// sits in a [tabStrip] row that does not grow, so a label that followed the
+  /// text scaler would be clipped rather than read. A size still belongs in the
+  /// theme layer when it is deliberately fixed — a widget must not be the place
+  /// that decides one.
+  static const TextStyle tabLabel = TextStyle(fontSize: 12);
+
   /// [titleBar] grown with the ambient text scale, and never shrunk below the
   /// design height: a 150% menu label does not fit a 30px row, and clipping
   /// the menu bar was exactly the "menus ignore text sizing" bug.

@@ -12,21 +12,25 @@ typedef PaneResizeCallback =
 
 /// Renders a [PaneLayout] as nested [Row]s and [Column]s.
 ///
-/// Takes a [paneBuilder] rather than building terminals itself so the layout can
-/// be tested with cheap, instrumented children — which is how
-/// `pane_layout_view_test.dart` proves that a pane inside a hidden `IndexedStack`
-/// child records zero paints. That property is what keeps Loop 26's win: hidden
-/// tabs must cost VT parsing but no painting.
+/// Takes a [regionBuilder] rather than building terminals itself so the layout
+/// can be tested with cheap, instrumented children — which is how
+/// `pane_layout_view_test.dart` proves that a region inside a hidden
+/// `IndexedStack` child records zero paints. That property is what keeps Loop
+/// 26's win: hidden tabs must cost VT parsing but no painting.
+///
+/// The builder is handed the whole [PaneGroup] rather than a pane id because a
+/// region draws a header for everything stacked in it — that header is the only
+/// handle a pane in a split has.
 class PaneLayoutView extends StatelessWidget {
   const PaneLayoutView({
     super.key,
     required this.layout,
-    required this.paneBuilder,
+    required this.regionBuilder,
     this.onResize,
   });
 
   final PaneLayout layout;
-  final Widget Function(String paneId) paneBuilder;
+  final Widget Function(PaneGroup group) regionBuilder;
   final PaneResizeCallback? onResize;
 
   @override
@@ -34,8 +38,8 @@ class PaneLayoutView extends StatelessWidget {
 
   Widget _build(PaneNode node) {
     switch (node) {
-      case PaneLeaf():
-        return paneBuilder(node.id);
+      case PaneGroup():
+        return regionBuilder(node);
       case PaneSplit():
         final children = <Widget>[];
         for (var i = 0; i < node.children.length; i++) {

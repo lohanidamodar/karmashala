@@ -38,7 +38,12 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
   (ref) => createPtyTerminalInstance,
 );
 
-/// One tab: a tree of panes and which of them has focus.
+/// One tab: a tree of regions and which pane has focus.
+///
+/// [focusedPaneId] is always the front pane of its own region — a pane stacked
+/// behind another is not somewhere the keyboard can be. Bringing a pane forward
+/// and focusing it are therefore the same act; see
+/// [TerminalSessionsController.focusPane].
 class TerminalTab {
   const TerminalTab({
     required this.id,
@@ -334,23 +339,27 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// reattach re-derives it from one place — there is no second path that could
   /// leave a pane at the wrong tier.
   ///
-  /// * **hot** — every pane of the active tab, focused or not: they are all on
-  ///   screen.
-  /// * **warm** — panes of every other open tab. Correct, but not watched.
+  /// * **hot** — every pane the active tab is actually *showing*: the front
+  ///   pane of each of its regions, focused or not. A pane stacked behind
+  ///   another in a region is not on screen, however close to the front it is.
+  /// * **warm** — panes of every other open tab, and the ones stacked out of
+  ///   sight in this one. Correct, but not watched.
   /// * **cold** — anything still tracked with no tab at all, which is a
   ///   detached session. Not parsed; its output spools.
   ///
-  /// Cost is O(panes) per publish and every pane whose tier did not change
-  /// returns immediately, which is nearly all of them nearly always.
+  /// Cost is O(panes) per publish plus one set of the regions on screen, and
+  /// every pane whose tier did not change returns immediately, which is nearly
+  /// all of them nearly always.
   void _applyIngestTiers() {
     final owner = _paneOwner;
+    final onScreen = _activeTab?.layout.visiblePanes.toSet() ?? const <String>{};
     for (final entry in _instances.entries) {
       if (entry.value case final TieredTerminalInstance tiered) {
         final tabId = owner[entry.key];
         tiered.setIngestTier(
           tabId == null
               ? IngestTier.cold
-              : tabId == _activeTabId
+              : tabId == _activeTabId && onScreen.contains(entry.key)
               ? IngestTier.hot
               : IngestTier.warm,
         );
@@ -539,6 +548,18 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return null;
   }
 
+  /// The focused pane, when it names a region an incoming tab could join —
+  /// what the palette calls "this split".
+  ///
+  /// Only while the tab has more than one region: dropping a tab into the only
+  /// region there is would be stacking rather than splitting, and offering it
+  /// under that name would be a lie about what happens.
+  String? regionForIncomingTab() {
+    final tab = _activeTab;
+    if (tab == null || tab.layout.groups.length < 2) return null;
+    return tab.focusedPaneId;
+  }
+
   /// The focused pane, when it is one that could be pulled out of its split
   /// into a tab of its own — what the command palette offers as the way back.
   String? paneMovableToNewTab() {
@@ -564,7 +585,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final paneId = _createPane(profile, workingDirectory: workingDirectory);
     _replaceTab(
       tab.copyWith(
-        layout: tab.layout.replaceLeaf(slotPaneId, PaneLeaf(paneId)),
+        layout: tab.layout.replaceRegion(slotPaneId, PaneGroup.of(paneId)),
         focusedPaneId: paneId,
       ),
     );
@@ -573,28 +594,36 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return paneId;
   }
 
-  /// Whether tab [tabId] could be moved into the empty region [slotPaneId].
+  /// Whether tab [tabId] could be moved into the region holding [slotPaneId].
   ///
   /// Asked by the drop target before it lights up, so a drag that cannot land
-  /// says so instead of silently doing nothing — a tab cannot be dropped into a
-  /// region of itself, and only an empty region takes one at all.
+  /// says so instead of silently doing nothing. The only refusal left is a tab
+  /// dropped into a region of *itself*: it would have to contain the region it
+  /// was being put inside. An occupied region takes a tab as readily as an
+  /// empty one now — that is what a region having a header of its own is for.
   bool canMoveTabIntoSlot(String tabId, String slotPaneId) {
     final target = _tabContaining(slotPaneId);
-    return target != null &&
-        target.id != tabId &&
-        _tabById(tabId) != null &&
-        _isEmptyRegion(slotPaneId);
+    return target != null && target.id != tabId && _tabById(tabId) != null;
   }
 
-  /// Moves everything in tab [tabId] into the empty region [slotPaneId], taking
-  /// that tab out of the strip. Returns whether it moved.
+  /// Moves everything in tab [tabId] into the region holding [slotPaneId],
+  /// taking that tab out of the strip. Returns whether it moved.
   ///
   /// This is the drop half of "drag a tab into a split", and deliberately *not*
   /// a close followed by an open: nothing is detached, disposed or relaunched,
   /// so the session the user dragged is the same object, mid-command and all,
-  /// on the other side of the move. A tab that is itself split moves in whole —
-  /// [PaneLayout.replaceLeaf] takes the sub-tree, and normalization flattens it
-  /// into the parent when the axes agree.
+  /// on the other side of the move.
+  ///
+  /// **An empty region takes the tab whole.** [PaneLayout.replaceRegion] puts
+  /// the source's sub-tree where the region was and normalization flattens it
+  /// into the parent when the axes agree, so a tab that is itself split keeps
+  /// its own rows.
+  ///
+  /// **An occupied region takes its panes as tabs.** A stack has no room for
+  /// the source's splits, and "put these in here" is the honest reading of the
+  /// gesture: every session survives, side by side becomes one behind the
+  /// other, and any of them can be dragged straight back out of the header it
+  /// now has.
   bool moveTabIntoSlot(String tabId, String slotPaneId) {
     if (!canMoveTabIntoSlot(tabId, slotPaneId)) return false;
     final target = _tabContaining(slotPaneId)!;
@@ -604,11 +633,26 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     final index = _tabIndex[target.id];
     if (index == null) return false;
+    final merged = _isEmptyRegion(slotPaneId)
+        ? target.layout.replaceRegion(slotPaneId, source.layout.root)
+        // Its sessions, not its rooms. An empty region of the moved tab is
+        // space somebody cleared *there*; stacked into a header it would be a
+        // tab with nothing behind it, and the room it stood for is gone anyway
+        // now that the tab it divided has been folded into another.
+        : target.layout.addPanes(slotPaneId, [
+            for (final paneId in source.layout.panes)
+              if (!_isEmptyRegion(paneId)) paneId,
+          ]);
+    // The pane the moved tab was showing keeps the keyboard and the front of
+    // its region: it is the thing the user was just looking at, and it has only
+    // changed address. Unless it was an empty region that did not come — then
+    // the front of the region it landed in is what is actually on screen.
+    final focused = merged.contains(source.focusedPaneId)
+        ? source.focusedPaneId
+        : merged.groupOf(slotPaneId)?.activePaneId ?? merged.visiblePanes.first;
     _tabs[index] = target.copyWith(
-      layout: target.layout.replaceLeaf(slotPaneId, source.layout.root),
-      // The pane the moved tab was showing keeps the keyboard: it is the thing
-      // the user was just looking at, and it has only changed address.
-      focusedPaneId: source.focusedPaneId,
+      layout: merged.activate(focused),
+      focusedPaneId: focused,
     );
     _tabsMutated();
     _activeTabId = target.id;
@@ -616,6 +660,148 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     persistWorkspace();
     _focusActivePane();
     return true;
+  }
+
+  /// Whether [paneId] could be moved into the region holding [targetPaneId].
+  ///
+  /// The pane-sized counterpart of [canMoveTabIntoSlot], asked by a region
+  /// header before it lights up. A pane cannot be moved into the region it is
+  /// already in, and an empty region is room rather than a pane, so it is
+  /// nothing to pick up.
+  bool canMovePaneIntoRegion(String paneId, String targetPaneId) {
+    if (_isEmptyRegion(paneId)) return false;
+    final source = _tabContaining(paneId);
+    final target = _tabContaining(targetPaneId);
+    if (source == null || target == null) return false;
+    final from = source.layout.groupOf(paneId);
+    final to = target.layout.groupOf(targetPaneId);
+    if (from == null || to == null) return false;
+    return !identical(from, to);
+  }
+
+  /// Moves one pane out of its region and into the one holding [targetPaneId],
+  /// bringing it to the front there. Returns whether it moved.
+  ///
+  /// The region it leaves collapses when it was the last pane in it — the same
+  /// rule [closePane] applies, and the reason a region can be emptied by a drag
+  /// without leaving a hole behind. Nothing is detached or relaunched: the
+  /// session is the same object at a new address.
+  bool movePaneIntoRegion(String paneId, String targetPaneId) {
+    if (!canMovePaneIntoRegion(paneId, targetPaneId)) return false;
+    final source = _tabContaining(paneId)!;
+    final target = _tabContaining(targetPaneId)!;
+
+    if (source.id == target.id) {
+      // Non-null: the pane and the target are in different regions, so the
+      // target's region survives the close.
+      final without = source.layout.close(paneId)!;
+      _tabs[_tabIndex[source.id]!] = source.copyWith(
+        layout: _placedInto(without, targetPaneId, paneId),
+        focusedPaneId: paneId,
+      );
+      _tabsMutated();
+    } else {
+      _takePaneOutOfTab(source, paneId);
+      // Re-read: removing the pane may have taken the source tab out of the
+      // list, which moves every index after it.
+      final host = _tabById(target.id);
+      if (host == null) return false;
+      _tabs[_tabIndex[host.id]!] = host.copyWith(
+        layout: _placedInto(host.layout, targetPaneId, paneId),
+        focusedPaneId: paneId,
+      );
+      _tabsMutated();
+    }
+    _activeTabId = target.id;
+    _publish();
+    persistWorkspace();
+    _focusActivePane();
+    return true;
+  }
+
+  /// [layout] with [paneId] put into the region holding [targetPaneId].
+  ///
+  /// An **empty** region is replaced rather than added to, which retires the id
+  /// it was standing in for — the same swap [openInSlot] makes, and for the
+  /// same reason: a region is not the terminal that comes to occupy it.
+  PaneLayout _placedInto(
+    PaneLayout layout,
+    String targetPaneId,
+    String paneId,
+  ) => _isEmptyRegion(targetPaneId)
+      ? layout.replaceRegion(targetPaneId, PaneGroup.of(paneId))
+      : layout.addPane(targetPaneId, paneId);
+
+  /// Removes [paneId] from [tab] without touching the pane itself, dropping the
+  /// tab when nothing worth coming back to is left in it.
+  ///
+  /// Shared by [movePaneIntoRegion] and [movePaneToNewTab]: both take a pane
+  /// out of a tab and put it somewhere else, and the question of what the tab
+  /// it left should look like has one answer.
+  void _takePaneOutOfTab(TerminalTab tab, String paneId) {
+    final layout = tab.layout.close(paneId);
+    if (layout == null || layout.panes.every(_isEmptyRegion)) {
+      // A tab holding nothing but empty regions is not a tab — there is
+      // nothing in it and nothing to come back to. Removed directly rather
+      // than through [closeTab]: there is no session in it to detach.
+      _tabs.removeWhere((t) => t.id == tab.id);
+    } else {
+      _tabs[_tabIndex[tab.id]!] = tab.copyWith(
+        layout: layout,
+        focusedPaneId: _refocused(tab, layout),
+      );
+    }
+    _tabsMutated();
+  }
+
+  /// Which pane should hold the keyboard in [tab] once its layout became
+  /// [next].
+  ///
+  /// The focused pane usually survives. When it does not, the keyboard stays in
+  /// the *region* it was in if that region is still there — closing one tab of
+  /// a stack must not throw focus across the window — and otherwise falls to
+  /// the first pane actually on screen.
+  String _refocused(TerminalTab tab, PaneLayout next) {
+    final focused = tab.focusedPaneId;
+    if (next.contains(focused)) return focused;
+    final region = tab.layout.groupOf(focused);
+    if (region != null) {
+      for (final group in next.groups) {
+        if (group.id == region.id) return group.activePaneId;
+      }
+    }
+    return next.visiblePanes.first;
+  }
+
+  /// One pane id per region of the active tab other than the one [paneId] is
+  /// in — what the palette offers as somewhere to move a pane to.
+  ///
+  /// Named by a pane rather than by a region id because that is how every move
+  /// verb is addressed; the caller has a pane in hand, not a tree node.
+  List<String> regionAnchorsBesides(String paneId) {
+    final tab = _tabContaining(paneId);
+    if (tab == null) return const [];
+    final own = tab.layout.groupOf(paneId);
+    return [
+      for (final group in tab.layout.groups)
+        if (!identical(group, own)) group.activePaneId,
+    ];
+  }
+
+  /// Brings the next pane stacked in the focused region to the front. Does
+  /// nothing in a region holding one pane.
+  void nextPaneInRegion() => _stepPaneInRegion(1);
+
+  void previousPaneInRegion() => _stepPaneInRegion(-1);
+
+  void _stepPaneInRegion(int by) {
+    final tab = _activeTab;
+    if (tab == null) return;
+    final group = tab.layout.groupOf(tab.focusedPaneId);
+    if (group == null || group.panes.length < 2) return;
+    final panes = group.panes;
+    final index = panes.indexOf(tab.focusedPaneId);
+    focusPane(panes[(index + by + panes.length) % panes.length]);
   }
 
   /// Pulls [paneId] out of the split it is in and gives it a tab of its own —
@@ -631,22 +817,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (tab == null || tab.layout.panes.length < 2) return null;
     if (_isEmptyRegion(paneId)) return null;
 
-    // Non-null: the tab had at least two panes, so one is left.
-    final layout = tab.layout.close(paneId)!;
-    if (layout.panes.every(_isEmptyRegion)) {
-      // A tab holding nothing but empty regions is not a tab — there is
-      // nothing in it and nothing to come back to. Removed directly rather
-      // than through [closeTab]: there is no session in it to detach.
-      _tabs.removeWhere((t) => t.id == tab.id);
-    } else {
-      _tabs[_tabIndex[tab.id]!] = tab.copyWith(
-        layout: layout,
-        focusedPaneId: layout.contains(tab.focusedPaneId)
-            ? tab.focusedPaneId
-            : layout.panes.first,
-      );
-    }
-    _tabsMutated();
+    _takePaneOutOfTab(tab, paneId);
     final tabId = _newTabFor(paneId);
     _publish();
     persistWorkspace();
@@ -680,12 +851,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _releasePane(paneId);
     }
     _replaceTab(
-      tab.copyWith(
-        layout: layout,
-        focusedPaneId: layout.contains(tab.focusedPaneId)
-            ? tab.focusedPaneId
-            : layout.panes.first,
-      ),
+      tab.copyWith(layout: layout, focusedPaneId: _refocused(tab, layout)),
     );
     _focusActivePane();
     persistWorkspace();
@@ -699,12 +865,22 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _replaceTab(tab.copyWith(layout: tab.layout.resize(splitId, index, delta)));
   }
 
-  /// Focuses [paneId], activating the tab that holds it.
+  /// Focuses [paneId], activating the tab that holds it and bringing it to the
+  /// front of its region.
+  ///
+  /// Selecting a tab in a region header and focusing a pane are the same act:
+  /// a pane behind another is not on screen, so there is nowhere for focus to
+  /// sit there. Not persisted — the front pane of each region rides along on
+  /// the next structural save and on quit, and writing the workspace every time
+  /// somebody clicks a pane is exactly the per-interaction database work this
+  /// controller is careful not to do.
   void focusPane(String paneId) {
     final tab = _tabContaining(paneId);
     if (tab == null) return;
     _activeTabId = tab.id;
-    _replaceTab(tab.copyWith(focusedPaneId: paneId));
+    _replaceTab(
+      tab.copyWith(layout: tab.layout.activate(paneId), focusedPaneId: paneId),
+    );
     _focusActivePane();
   }
 
@@ -741,6 +917,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final count = tab.layout.panes.length;
     return count > 1 ? '$title ($count)' : title;
   }
+
+  /// What one pane is called — the label a region's header puts on its tab.
+  ///
+  /// Goes through the same per-publish cache [titleForTab] uses, because the
+  /// answer can cost a database read (an agent pane resolves its session's
+  /// current name) and a region header asks for one per pane per build.
+  String titleForPane(String paneId) =>
+      _titles.putIfAbsent(paneId, () => _titleForPane(paneId));
 
   /// What one pane is called, in precedence order.
   ///
@@ -1232,13 +1416,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         final layout = storedTab.layout.withoutMissing(rebuilt);
         if (layout == null) continue;
         final stayed = storedTab.focusedPaneId;
+        final kept = stayed != null && layout.contains(stayed);
         _tabs.add(
           TerminalTab(
             id: storedTab.id,
-            layout: layout,
-            focusedPaneId: (stayed != null && layout.contains(stayed))
-                ? stayed
-                : layout.panes.first,
+            // `activate` restates the invariant rather than trusting it: the
+            // stored front pane of a region may be one of the panes that could
+            // not be rebuilt, and the focused pane has to be the one on screen.
+            layout: kept ? layout.activate(stayed) : layout,
+            focusedPaneId: kept ? stayed : layout.visiblePanes.first,
           ),
         );
         _tabsMutated();
@@ -1434,11 +1620,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final tab = _tabContaining(paneId);
     if (tab == null) return false;
     return shouldCollapseOnExit(
-      // Regions with something in them, not regions. The rule's "last pane in
-      // a tab stays" exception is about output somebody may still be reading,
-      // and an empty region is not another pane to read it in — counting one
-      // would take the tab, and the scrollback with it, the moment a shell
-      // beside a cleared region exited.
+      // Panes with something in them, not regions. The rule's "last pane in a
+      // tab stays" exception is about output somebody may still be reading, and
+      // an empty region is not another pane to read it in — counting one would
+      // take the tab, and the scrollback with it, the moment a shell beside a
+      // cleared region exited.
+      //
+      // A pane stacked behind another in the same region counts, and should:
+      // the exception is "there is nowhere else in this tab to look", and a
+      // second tab in the header is somewhere else to look. It is also what
+      // every other terminal does — typing `exit` closes the tab you typed it
+      // in and shows the one behind it.
       isSplit: _occupiedPanes(tab) > 1,
       isAgentSession: instance.agentLaunch != null,
       exitCode: instance.exitCode,
