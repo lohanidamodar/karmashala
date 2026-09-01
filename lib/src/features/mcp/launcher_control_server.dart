@@ -68,6 +68,24 @@ import 'tmux_orchestration.dart';
 import 'workspace_tools.dart';
 import 'wsl_host_address.dart';
 
+/// The port the control server asks for before falling back to an ephemeral one.
+///
+/// WSL2 reaches the host over a Hyper-V virtual switch, and that traffic is
+/// governed by a **separate** firewall from the ordinary one — on this machine
+/// `Get-NetFirewallHyperVVMSetting` reports `DefaultInboundAction: Block`. An
+/// agent in a distribution therefore cannot reach this server at all unless a
+/// Hyper-V rule names it, which is why hooks failed on every prompt with
+/// `curl: (52) Empty reply from server` while the very same request from
+/// Windows got a clean `401`: nothing was wrong with the server, and no
+/// ordinary firewall rule could have helped.
+///
+/// Those rules are scoped to **ports, never to programs**, so an ephemeral
+/// port cannot be allowed: it moves every launch and the installer has no way
+/// to name it in advance. Hence one stable port, chosen below Windows'
+/// ephemeral range (49152+) so it is unlikely to be taken, and written into
+/// the installer's rule.
+const int preferredControlPort = 47821;
+
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
 /// launcher agent's MCP bridge (see `--mcp-serve`).
 ///
@@ -339,9 +357,10 @@ class LauncherControlServer implements SessionMcp {
     String? sessionConfigDirectory,
     Future<InternetAddress?> Function() wslHostAddress =
         resolveWslHostAddress,
+    int preferredPort = preferredControlPort,
   }) async {
     if (_server != null) return;
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final server = await _bindControlPort(preferredPort);
     _server = server;
     // A *separate* token for /agent-hook. It is pasted verbatim into a curl
     // command in the agent's own config file, so it also shows up in process
@@ -478,6 +497,24 @@ class LauncherControlServer implements SessionMcp {
   ///   went away between the lookup and the bind, a future Windows renames the
   ///   adapter — each of those costs WSL sessions their tools and costs nothing
   ///   else. The app starts exactly as it did before.
+  /// Binds the control port, preferring [preferredControlPort].
+  ///
+  /// Falling back is not a failure: everything on Windows works on any port.
+  /// What is lost is WSL, and that loss is logged rather than left silent.
+  Future<HttpServer> _bindControlPort(int preferred) async {
+    try {
+      return await HttpServer.bind(InternetAddress.loopbackIPv4, preferred);
+    } on SocketException catch (error) {
+      _logger.info(
+        'Port $preferred is taken, so this run uses an ephemeral '
+        'one. Agents inside WSL will not be able to reach this server: the '
+        'Hyper-V firewall rule the installer wrote names that one port. '
+        '($error)',
+      );
+      return HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    }
+  }
+
   Future<void> _bindWslInterface(
     int port,
     Future<InternetAddress?> Function() lookup,

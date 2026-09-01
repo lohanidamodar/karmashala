@@ -38,6 +38,12 @@ void main() {
     await server.start(
       bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
       useLocalSocket: false,
+      // A port of this file's own. The production default is one fixed port,
+      // because the Hyper-V rule that lets WSL agents in has to name it — but
+      // that makes it a port every test file in the run would share, and
+      // "stop() closes the port" then observed somebody else's server still
+      // listening on it.
+      preferredPort: await _freePort(),
     );
     endpoint = server.hookEndpoint!;
   });
@@ -183,4 +189,12 @@ void main() {
       throwsA(isA<SocketException>()),
     );
   });
+}
+
+/// A port nothing is listening on: bound to learn its number, then released.
+Future<int> _freePort() async {
+  final probe = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = probe.port;
+  await probe.close();
+  return port;
 }
