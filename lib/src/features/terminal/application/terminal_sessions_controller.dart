@@ -635,13 +635,24 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (index == null) return false;
     final merged = _isEmptyRegion(slotPaneId)
         ? target.layout.replaceRegion(slotPaneId, source.layout.root)
-        : target.layout.addPanes(slotPaneId, source.layout.panes);
+        // Its sessions, not its rooms. An empty region of the moved tab is
+        // space somebody cleared *there*; stacked into a header it would be a
+        // tab with nothing behind it, and the room it stood for is gone anyway
+        // now that the tab it divided has been folded into another.
+        : target.layout.addPanes(slotPaneId, [
+            for (final paneId in source.layout.panes)
+              if (!_isEmptyRegion(paneId)) paneId,
+          ]);
+    // The pane the moved tab was showing keeps the keyboard and the front of
+    // its region: it is the thing the user was just looking at, and it has only
+    // changed address. Unless it was an empty region that did not come — then
+    // the front of the region it landed in is what is actually on screen.
+    final focused = merged.contains(source.focusedPaneId)
+        ? source.focusedPaneId
+        : merged.groupOf(slotPaneId)?.activePaneId ?? merged.visiblePanes.first;
     _tabs[index] = target.copyWith(
-      // The pane the moved tab was showing keeps the keyboard and the front of
-      // its region: it is the thing the user was just looking at, and it has
-      // only changed address.
-      layout: merged.activate(source.focusedPaneId),
-      focusedPaneId: source.focusedPaneId,
+      layout: merged.activate(focused),
+      focusedPaneId: focused,
     );
     _tabsMutated();
     _activeTabId = target.id;

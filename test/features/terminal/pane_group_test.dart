@@ -202,6 +202,26 @@ void main() {
       expect(instance.liveness.value, PaneLiveness.live);
     });
 
+    test('an empty region of the moved tab is not carried in as a tab', () {
+      // A region is room, not a session. Stacking one would put a chip in the
+      // header for a pane that has nothing behind it — and, if the moved tab's
+      // focus was sitting in that region, would hand the keyboard to it.
+      final host = controller.openTab(TerminalProfile.powerShell);
+      final kept = activeTab().layout.panes.single;
+      final guest = controller.openTab(TerminalProfile.commandPrompt);
+      final guestPane = activeTab().layout.panes.single;
+      final slot = controller.splitPane(SplitAxis.horizontal)!;
+      expect(activeTab().focusedPaneId, slot, reason: 'focus is in the room');
+      controller.activateTab(host);
+
+      expect(controller.moveTabIntoSlot(guest, kept), isTrue);
+
+      final tab = activeTab();
+      expect(tab.layout.groups.single.panes, [kept, guestPane]);
+      expect(tab.layout.contains(slot), isFalse);
+      expect(tab.focusedPaneId, guestPane);
+    });
+
     test('a region of the tab being moved is not a place to move it', () {
       controller.openTab(TerminalProfile.powerShell);
       final own = activeTab().layout.panes.single;
