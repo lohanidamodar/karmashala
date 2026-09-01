@@ -228,7 +228,17 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
                     index: onTerminal ? 0 : 1,
                     children: [
                       _TerminalSurface(session: session),
-                      const WorkbenchSessionView(),
+                      // [WorkbenchSessionView] renders whatever the Explorer
+                      // has selected, which is right until nothing is: a
+                      // session the workbench reached by following the pane
+                      // would find that view's "open a session" placeholder
+                      // behind the toggle. It is named outright in that case.
+                      // Only a native session is ever reached that way — an
+                      // imported one has no pane of ours to follow.
+                      if (session.selected)
+                        const WorkbenchSessionView()
+                      else
+                        SessionTranscriptView(sessionId: session.id),
                     ],
                   ),
           ),
@@ -247,9 +257,21 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     );
   }
 
-  /// The session the Explorer has selected, if any, as the workbench needs it:
-  /// a title, whether it has a pane of ours, and whether it is one of ours at
-  /// all (imported CLI sessions have no pane and no live status).
+  /// The session the workbench is about, if any, as it needs it: a title,
+  /// whether it has a pane of ours, and whether it is one of ours at all
+  /// (imported CLI sessions have no pane and no live status).
+  ///
+  /// **The Explorer's selection, and failing that the pane on screen.** The
+  /// rest of the bar already follows the pane — the permission chip, the
+  /// delivery strip, the approval — so an agent reached by activating its
+  /// terminal tab had every session control except the one thing only this
+  /// answers: the toggle, and therefore the way to its transcript.
+  ///
+  /// The fallback is deliberately a **read**, not a selection. Writing
+  /// `selectedSessionIdProvider` to make the toggle appear would fire the
+  /// listener in [build] that opens the session's terminal, so the way to the
+  /// conversation would fight the surface the user is already on. Nothing here
+  /// writes anything.
   _WorkbenchSession? _selectedSession() {
     ref.watch(sessionsRevisionProvider);
     // A pane appearing or ending changes whether this session has a terminal at
@@ -269,7 +291,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         native: false,
       );
     }
-    final sessionId = ref.watch(selectedSessionIdProvider);
+    final selected = ref.watch(selectedSessionIdProvider);
+    final sessionId = selected ?? ref.watch(activePaneSessionIdProvider);
     if (sessionId == null) return null;
     final Session? record = ref.read(sessionDaoProvider).getById(sessionId);
     return _WorkbenchSession(
@@ -277,6 +300,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       title: record?.title ?? 'Session',
       paneId: sessionTerminalPane(ref, sessionId),
       native: true,
+      selected: selected != null,
     );
   }
 }
@@ -287,10 +311,16 @@ class _WorkbenchSession {
     required this.title,
     required this.paneId,
     required this.native,
+    this.selected = true,
   });
 
   final String id;
   final String title;
+
+  /// Whether the Explorer picked this session, rather than the workbench
+  /// having followed the pane on screen to it. What decides which widget draws
+  /// the conversation — see the [IndexedStack] in `build`.
+  final bool selected;
 
   /// The pane this session can be *shown* in — it runs in one of ours and that
   /// pane is still there. Null for an imported CLI session, one opened in an
@@ -727,8 +757,13 @@ bool _showingPanes(WidgetRef ref) {
   ref.watch(terminalTabsProvider);
   ref.watch(sessionsRevisionProvider);
   final imported = ref.watch(selectedImportedSessionIdProvider);
-  final selected = ref.watch(selectedSessionIdProvider);
-  // With nothing selected the workbench is the terminal, whatever the flag
+  // The same fallback the workbench itself makes: with nothing selected it
+  // still follows the pane on screen to its session, and that session has a
+  // conversation the strip has to account for. See [_selectedSession].
+  final selected =
+      ref.watch(selectedSessionIdProvider) ??
+      ref.watch(activePaneSessionIdProvider);
+  // With no session at all the workbench is the terminal, whatever the flag
   // says — there is no second surface to be on.
   if (imported == null && selected == null) return true;
   if (!ref.watch(terminalVisibleProvider)) return false;
