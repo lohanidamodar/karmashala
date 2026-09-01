@@ -82,6 +82,10 @@ class SessionMediaStore {
             if (entry.key is String && entry.value is String)
               entry.key as String: entry.value as String,
         },
+        pathedTools: {
+          for (final id in (decoded['pathed'] as List? ?? const []))
+            if (id is String) id,
+        },
       );
     } catch (_) {
       // A manifest we cannot read is the same answer as one that is not there:
@@ -155,7 +159,10 @@ class SessionMediaStore {
     required SessionMediaScan? from,
   }) async {
     final items = <SessionMediaItem>[...?from?.items];
-    final pending = <String, String>{...?from?.pendingTools};
+    final pending = _PendingCalls(
+      names: from?.pendingTools,
+      pathed: from?.pathedTools,
+    );
     var sequence = from?.nextSequence ?? 0;
     var scanned = from?.scannedBytes ?? 0;
     var bytesRead = 0;
@@ -204,7 +211,8 @@ class SessionMediaStore {
       items: items,
       scannedBytes: scanned,
       nextSequence: sequence,
-      pendingTools: _boundedPending(pending),
+      pendingTools: _bounded(pending.names),
+      pathedTools: _boundedSet(pending.pathed),
       bytesRead: bytesRead,
       linesDecoded: linesDecoded,
       bytesExtracted: bytesExtracted,
@@ -274,13 +282,20 @@ class SessionMediaStore {
   ///   That last clause is what lets a screenshot be labelled with the tool
   ///   that took it instead of just "Screenshot".
   static bool _mightHoldMedia(String line) =>
-      line.contains('image') ||
-      line.contains('"tool_use"') ||
-      _imageExtension.hasMatch(line);
+      _mediaBlock.hasMatch(line) || _toolCall.hasMatch(line);
 
-  static final _imageExtension = RegExp(
-    r'\.(png|jpe?g|gif|webp|bmp)',
-    caseSensitive: false,
+  /// A picture's own block `type`, never the bare word: a transcript about a
+  /// Godot art project says "image" in prose on half its lines, and a file
+  /// listing prints `.png` on hundreds more. Matching either of those parsed
+  /// 5388 lines of one transcript where 36 held a picture.
+  static final _mediaBlock = RegExp(r'"type"\s*:\s*"(input_)?image"');
+
+  /// A **call**, never its answer. `"tool_use"` cannot match a result's
+  /// `"tool_use_id"` (the next character is `_`), and neither can
+  /// `"function_call"` match `"function_call_output"` — which matters, because
+  /// results are the megabyte lines and calls are not.
+  static final _toolCall = RegExp(
+    r'"(tool_use|function_call|custom_tool_call)"',
   );
 
   /// When the line says it happened, normalised to UTC — the panel measures
@@ -297,46 +312,80 @@ class SessionMediaStore {
 
   /// The pictures in one Claude Code line.
   ///
-  /// Three shapes, which are the three ways a session acquires one:
+  /// Three shapes, which are the three ways a session acquires one — all three
+  /// read off real transcripts in `~/.claude/projects`, not off the docs:
   ///
   /// * `tool_use` whose input names an image file — an agent **read** a
   ///   picture. Recognised by [toolActivityFor], so the panel and the
   ///   transcript agree on what counts as an image path.
-  /// * an `image` block directly in a user turn's content — a **paste**. The
-  ///   owner's case: bytes and no path.
+  /// * an `image` block a person put into the conversation — a **paste**. Two
+  ///   shapes, and the second is the common one: `message.content` on a `user`
+  ///   line, *and* `attachment.prompt` on a line whose top-level `type` is
+  ///   `attachment`. Eight of the nine pastes in one real 11 600-line
+  ///   transcript are the latter, so reading only `message.content` finds
+  ///   almost none of them — which would be the owner's complaint over again.
   /// * an `image` block inside a `tool_result` — a tool **answered** with a
   ///   picture. `device_screenshot`, `browser_screenshot` and `browser_capture`
   ///   all do this; only the first also leaves a copy in the temp directory, so
   ///   the block is the one source that covers all three.
   static List<_Block> _claudeBlocks(
     Map<Object?, Object?> json,
-    Map<String, String> pending,
+    _PendingCalls pending,
   ) {
-    final type = json['type'];
-    if (type != 'user' && type != 'assistant') return const [];
-    final message = json['message'];
-    if (message is! Map) return const [];
-    final content = message['content'];
-    if (content is! List) return const [];
-
     final blocks = <_Block>[];
+    final message = json['message'];
+    if (message is Map && message['content'] is List) {
+      _claudeContent(message['content']! as List, pending, blocks);
+    }
+    // A queued prompt is not a `user` line at all — see above.
+    final attachment = json['attachment'];
+    if (attachment is Map) {
+      for (final key in const ['prompt', 'content']) {
+        final list = attachment[key];
+        if (list is! List) continue;
+        for (final part in list) {
+          if (part is Map && part['type'] == 'image') {
+            blocks.add(_Block.bytes(part, SessionMediaOrigin.pasted));
+          }
+        }
+      }
+    }
+    return blocks;
+  }
+
+  static void _claudeContent(
+    List<Object?> content,
+    _PendingCalls pending,
+    List<_Block> blocks,
+  ) {
     for (final part in content) {
       if (part is! Map) continue;
       switch (part['type']) {
         case 'tool_use':
           final name = part['name'];
           if (name is! String) continue;
-          final id = part['id'];
-          if (id is String) pending[id] = name;
           final path = toolActivityFor(name, part['input']).imagePath;
-          if (path != null) {
-            blocks.add(_Block.path(path, tool: name));
+          final id = part['id'];
+          if (id is String) {
+            pending.names[id] = name;
+            if (path != null) pending.pathed.add(id);
           }
+          if (path != null) blocks.add(_Block.path(path, tool: name));
         case 'image':
           blocks.add(_Block.bytes(part, SessionMediaOrigin.pasted));
         case 'tool_result':
           final id = part['tool_use_id'];
-          final tool = id is String ? pending.remove(id) : null;
+          final tool = id is String ? pending.names.remove(id) : null;
+          // Claude Code answers `Read(shot.png)` with the file's bytes as an
+          // `image` block, so the same picture is in the transcript twice: once
+          // as a path in the call, once as ~300 KB of base64 in the answer.
+          // Every one of the 20 tool_result images in one real transcript is a
+          // `Read` like this. The **file wins**: it is already on disk under a
+          // name that means something, listing both would double the panel, and
+          // extracting the copies would have written 6 MB of cache for one
+          // session. This is the same call `cli_transcript_reader.dart` makes,
+          // for the same reason.
+          if (id is String && pending.pathed.remove(id)) continue;
           final result = part['content'];
           if (result is! List) continue;
           for (final inner in result) {
@@ -348,7 +397,6 @@ class SessionMediaStore {
           }
       }
     }
-    return blocks;
   }
 
   /// The pictures in one Codex line. **Best effort.**
@@ -559,13 +607,19 @@ class SessionMediaStore {
   /// out instead of accumulating for the life of the session.
   static const _maxPendingTools = 64;
 
-  static Map<String, String> _boundedPending(Map<String, String> pending) {
+  static Map<String, String> _bounded(Map<String, String> pending) {
     if (pending.length <= _maxPendingTools) return pending;
     final keys = pending.keys.toList();
     return {
       for (final key in keys.sublist(keys.length - _maxPendingTools))
         key: pending[key]!,
     };
+  }
+
+  static Set<String> _boundedSet(Set<String> ids) {
+    if (ids.length <= _maxPendingTools) return ids;
+    final all = ids.toList();
+    return all.sublist(all.length - _maxPendingTools).toSet();
   }
 
   /// Drops the oldest items past [cap], and the files they were pointing at.
@@ -613,6 +667,7 @@ class SessionMediaStore {
           'scannedBytes': scan.scannedBytes,
           'nextSequence': scan.nextSequence,
           'pending': scan.pendingTools,
+          'pathed': scan.pathedTools.toList(),
           'items': [for (final item in scan.items) item.toJson()],
         }),
         flush: true,
@@ -654,6 +709,7 @@ class SessionMediaScan {
     required this.scannedBytes,
     this.nextSequence = 0,
     this.pendingTools = const {},
+    this.pathedTools = const {},
     this.bytesRead = 0,
     this.linesDecoded = 0,
     this.bytesExtracted = 0,
@@ -676,6 +732,11 @@ class SessionMediaScan {
   /// in the next append can still be attributed.
   final Map<String, String> pendingTools;
 
+  /// Outstanding `tool_use` ids whose call already named an image **file**, so
+  /// the base64 copy in the answer is skipped even when a poll catches the file
+  /// between the two lines.
+  final Set<String> pathedTools;
+
   final int bytesRead;
   final int linesDecoded;
   final int bytesExtracted;
@@ -692,7 +753,23 @@ class SessionMediaScan {
     scannedBytes: scannedBytes,
     nextSequence: nextSequence,
     pendingTools: pendingTools,
+    pathedTools: pathedTools,
   );
+}
+
+/// The `tool_use` calls this pass has seen but not yet seen answered.
+///
+/// Carried between passes through the manifest, because a poll can catch the
+/// transcript between a call and its answer and both facts are needed when the
+/// answer finally lands: which tool to name a screenshot after, and whether the
+/// call already gave us the file so the copy in the answer can be skipped.
+class _PendingCalls {
+  _PendingCalls({Map<String, String>? names, Set<String>? pathed})
+    : names = {...?names},
+      pathed = {...?pathed};
+
+  final Map<String, String> names;
+  final Set<String> pathed;
 }
 
 /// A picture found in one line, before it is resolved to something drawable.

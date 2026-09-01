@@ -91,6 +91,25 @@ void main() {
       expect(file.path, startsWith(cache.path));
     });
 
+    test('a paste queued as a prompt is found too', () async {
+      // The shape that matters most, and the one a `message.content` reader
+      // misses entirely: eight of the nine pastes in the real
+      // `sampada-trails` transcript are `type:"attachment"` lines whose blocks
+      // hang off `attachment.prompt`, not off a `user` message at all.
+      final transcript = writeTranscript(dir, 'a.jsonl', [
+        queuedPasteLine(
+          at: '2026-09-01T10:00:00.000Z',
+          text: 'the layout image proposed layut',
+        ),
+      ]);
+
+      final items = await scan(transcript);
+
+      expect(items, hasLength(1));
+      expect(items.single.origin, SessionMediaOrigin.pasted);
+      expect(File(items.single.path!).existsSync(), isTrue);
+    });
+
     test('a screenshot a tool answered with is listed as captured', () async {
       // `device_screenshot`, `browser_screenshot` and `browser_capture` all
       // answer with an MCP image block; only `device_screenshot` also leaves a
@@ -143,6 +162,145 @@ void main() {
 
       expect(items.single.origin, SessionMediaOrigin.captured);
       expect(items.single.label, 'browser_screenshot');
+    });
+  });
+
+  group('Codex, best effort', () {
+    // Codex wraps its rollout items in `payload` and sends a picture as an
+    // `input_image` data URI. Unlike the Claude shapes above, this one has not
+    // been checked against a real store — these tests pin the guess so that
+    // changing the line filter cannot quietly stop it finding anything, and so
+    // the shape is written down where the next person can correct it.
+    test('a data-URI paste is extracted', () async {
+      final transcript = writeTranscript(dir, 'a.jsonl', [
+        jsonEncode({
+          'timestamp': '2026-09-01T10:00:00.000Z',
+          'type': 'response_item',
+          'payload': {
+            'type': 'message',
+            'role': 'user',
+            'content': [
+              {
+                'type': 'input_image',
+                'image_url': 'data:image/png;base64,$tinyPngBase64',
+              },
+            ],
+          },
+        }),
+      ]);
+
+      final result = await store.refresh(transcript.path, AgentIds.codex);
+
+      expect(result.items, hasLength(1));
+      expect(result.items.single.origin, SessionMediaOrigin.pasted);
+      expect(File(result.items.single.path!).existsSync(), isTrue);
+    });
+
+    test('a shell call that names an image file is listed by path', () async {
+      final transcript = writeTranscript(dir, 'a.jsonl', [
+        jsonEncode({
+          'timestamp': '2026-09-01T10:00:00.000Z',
+          'type': 'response_item',
+          'payload': {
+            'type': 'function_call',
+            'name': 'view_image',
+            'call_id': 'c1',
+            'arguments': '{"path":"/home/me/shot.png"}',
+          },
+        }),
+      ]);
+
+      final result = await store.refresh(transcript.path, AgentIds.codex);
+
+      expect(result.items, hasLength(1));
+      expect(result.items.single.origin, SessionMediaOrigin.read);
+      expect(result.items.single.path, '/home/me/shot.png');
+      expect(result.items.single.fromAgentEnvironment, isTrue);
+    });
+  });
+
+  group('an image the agent read is one picture, not two', () {
+    // Claude Code answers `Read(shot.png)` with the file's bytes as a base64
+    // `image` block, so the same picture is in the transcript twice: once as a
+    // path in the call, once as ~300 KB of base64 in the result. Every one of
+    // the 20 tool_result images in the real `sampada-trails` transcript is a
+    // `Read` like this. Listing both would double the panel *and* write 6 MB of
+    // cache for pictures that are already on disk under their own names.
+    Future<List<SessionMediaItem>> readAndAnswer(String data) async {
+      final transcript = writeTranscript(dir, 'a.jsonl', [
+        toolUseLine(
+          at: '2026-09-01T10:00:00.000Z',
+          id: 't1',
+          name: 'Read',
+          input: {'file_path': r'C:\work\thumbs\temple.png'},
+        ),
+        toolResultLine(
+          at: '2026-09-01T10:00:01.000Z',
+          id: 't1',
+          imageData: data,
+        ),
+      ]);
+      return scan(transcript);
+    }
+
+    test('the file wins and the copy in the answer is skipped', () async {
+      final items = await readAndAnswer(tinyPngBase64);
+
+      expect(items, hasLength(1));
+      expect(items.single.origin, SessionMediaOrigin.read);
+      expect(items.single.path, r'C:\work\thumbs\temple.png');
+      expect(items.single.fromAgentEnvironment, isTrue);
+    });
+
+    test('and nothing at all is extracted for it', () async {
+      final result = await store.refresh(
+        writeTranscript(dir, 'b.jsonl', [
+          toolUseLine(
+            at: '2026-09-01T10:00:00.000Z',
+            id: 't1',
+            name: 'Read',
+            input: {'file_path': r'C:\work\thumbs\temple.png'},
+          ),
+          toolResultLine(
+            at: '2026-09-01T10:00:01.000Z',
+            id: 't1',
+            imageData: bulkyBase64(300),
+          ),
+        ]).path,
+        AgentIds.claudeCode,
+      );
+
+      expect(result.bytesExtracted, 0);
+    });
+
+    test('the skip survives the call and its answer being scanned apart', () async {
+      // A poll can catch the file between the two lines, so the fact that the
+      // call already gave us a path has to outlive the pass that saw it.
+      final transcript = writeTranscript(dir, 'c.jsonl', [
+        toolUseLine(
+          at: '2026-09-01T10:00:00.000Z',
+          id: 't1',
+          name: 'Read',
+          input: {'file_path': r'C:\work\thumbs\temple.png'},
+        ),
+      ]);
+      final first = await store.refresh(transcript.path, AgentIds.claudeCode);
+      appendTranscript(transcript, [
+        toolResultLine(
+          at: '2026-09-01T10:00:01.000Z',
+          id: 't1',
+          imageData: bulkyBase64(300),
+        ),
+      ]);
+
+      final second = await store.refresh(
+        transcript.path,
+        AgentIds.claudeCode,
+        previous: first,
+      );
+
+      expect(second.items, hasLength(1));
+      expect(second.bytesExtracted, 0);
     });
   });
 

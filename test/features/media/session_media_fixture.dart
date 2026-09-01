@@ -52,6 +52,35 @@ String pastedImageLine({
   },
 });
 
+/// The *other* shape a paste arrives in, copied from
+/// `G--dev-godot-sampada-trails/e90749e9-…jsonl` line 383.
+///
+/// A picture put into a queued prompt is not a `user` line at all: its
+/// top-level `type` is `attachment` and the blocks hang off
+/// `attachment.prompt`. Eight of the nine pastes in that real transcript are
+/// this shape, so a scanner that only reads `message.content` finds almost none
+/// of them — which is the owner's complaint over again.
+String queuedPasteLine({
+  required String at,
+  String? text,
+  String data = tinyPngBase64,
+  String mediaType = 'image/png',
+}) => jsonEncode({
+  'type': 'attachment',
+  'timestamp': at,
+  'attachment': {
+    'type': 'queued_command',
+    'prompt': [
+      {
+        'type': 'image',
+        'source': {'type': 'base64', 'media_type': mediaType, 'data': data},
+      },
+      if (text != null) {'type': 'text', 'text': text},
+    ],
+    'commandMode': 'prompt',
+  },
+});
+
 /// An assistant turn that called a tool.
 String toolUseLine({
   required String at,
