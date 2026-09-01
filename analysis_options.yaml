@@ -1,11 +1,6 @@
 analyzer:
   exclude:
     - build/**
-    # protoc output. It is regenerated from tool/vendor/proto/idb.proto, so a
-    # lint finding here is not something anyone can fix in this repo — and its
-    # doc comments carry proto type names in angle brackets, which the analyzer
-    # reads as unclosed HTML.
-    - lib/src/features/devices/data/idb_proto/**
     - android/**
     - ios/**
     - web/**

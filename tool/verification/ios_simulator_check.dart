@@ -13,8 +13,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala/src/core/process/local_command_runner.dart';
-import 'package:karmashala/src/features/devices/data/idb_companion_backend.dart';
-import 'package:karmashala/src/features/devices/data/idb_companion_locator.dart';
+import 'package:karmashala/src/features/devices/data/wda_backend.dart';
+import 'package:karmashala/src/features/devices/data/wda_locator.dart';
 import 'package:karmashala/src/features/devices/data/simctl_service.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 import 'package:karmashala/src/features/devices/domain/simulator_backend.dart';
@@ -35,15 +35,12 @@ void main(List<String> args) async {
 
   stdout.writeln('Host: ${env.name} (${env.kind.name})');
 
-  final companion = IdbCompanionLocator().locate();
-  if (companion == null) {
-    stdout.writeln(
-      '$_cross No idb_companion. Run tool/vendor/fetch_idb_companion.sh',
-    );
+  final wda = WdaLocator().locate();
+  if (wda == null) {
+    stdout.writeln('$_cross No WebDriverAgent. Run tool/vendor/fetch_wda.sh');
     exit(1);
   }
-  stdout.writeln('$_tick companion ${companion.source.name}: '
-      '${companion.executable}');
+  stdout.writeln('$_tick WebDriverAgent ${wda.source.name}: ${wda.appPath}');
 
   final simulators = await simctl.listSimulators();
   stdout.writeln('$_tick ${simulators.length} simulators, '
@@ -75,9 +72,10 @@ void main(List<String> args) async {
     stdout.writeln('$_tick already booted');
   }
 
-  final backend = IdbCompanionBackend(
+  final backend = WdaBackend(
     runner: runner,
-    locator: IdbCompanionLocator(),
+    simctl: simctl,
+    locator: WdaLocator(),
   );
 
   var failures = 0;
@@ -95,7 +93,7 @@ void main(List<String> args) async {
       final started = DateTime.now();
       await backend.attach(target.udid);
       stdout.writeln(
-        '$_tick companion attached in '
+        '$_tick WebDriverAgent ready in '
         '${DateTime.now().difference(started).inMilliseconds}ms',
       );
     });
@@ -110,7 +108,14 @@ void main(List<String> args) async {
       final tree = await backend.describeUi(target.udid);
       final took = DateTime.now().difference(started).inMilliseconds;
       stdout.writeln('$_tick ui tree ${tree.nodeCount} nodes in ${took}ms');
-      for (final node in tree.allNodes.where((n) => n.label.isNotEmpty).take(6)) {
+      // Only the ones with a real rectangle: WDA reports every element in the
+      // tree, and the icons on other home-screen pages come back with a zero
+      // frame because they genuinely are not on screen.
+      final visible = tree.allNodes.where(
+        (n) => n.label.isNotEmpty && !(n.bounds?.isEmpty ?? true),
+      );
+      stdout.writeln('       (${visible.length} with a real rectangle)');
+      for (final node in visible.take(6)) {
         stdout.writeln('       ${node.className.padRight(14)} '
             '${node.label}  ${node.bounds ?? ''}');
       }
@@ -152,45 +157,46 @@ void main(List<String> args) async {
     await step('video', () async {
       final started = DateTime.now();
       final feed = await backend.startVideo(target.udid, fps: 30);
-      var units = 0;
+      stdout.writeln('$_tick video url ${feed.url}');
+
+      // Pull the stream the way the player would, and count what arrives.
+      final client = HttpClient();
       var bytes = 0;
-      var keyframes = 0;
-      var config = 0;
-      final first = Completer<Duration>();
-      Object? streamError;
-      final subscription = feed.frames.listen((unit) {
-        units++;
-        bytes += unit.bytes.length;
-        if (unit.isKeyFrame) keyframes++;
-        if (unit.isCodecConfig) config++;
-        if (!first.isCompleted) {
-          first.complete(DateTime.now().difference(started));
-        }
-      }, onError: (Object error) {
-        streamError ??= error;
-        if (!first.isCompleted) first.complete(Duration.zero);
-      });
-      final firstFrame = await first.future.timeout(
-        const Duration(seconds: 20),
-        onTimeout: () => Duration.zero,
-      );
-      await Future<void>.delayed(const Duration(seconds: 5));
-      await subscription.cancel();
-      await feed.stop();
-      stdout.writeln(
-        '$_tick video: first frame in ${firstFrame.inMilliseconds}ms, '
-        'then $units access units / $keyframes keyframes / $config config '
-        'in 5s (${(bytes / 1024).round()} KiB)',
-      );
-      if (streamError != null) throw StateError('$streamError');
-      if (units == 0) {
-        throw StateError('no access units arrived');
+      try {
+        final response = await client.getUrl(feed.url).then((r) => r.close());
+        final done = Completer<void>();
+        final subscription = response.listen(
+          (chunk) {
+            bytes += chunk.length;
+            if (bytes > 200000 && !done.isCompleted) done.complete();
+          },
+          onError: (Object _) {
+            if (!done.isCompleted) done.complete();
+          },
+          onDone: () {
+            if (!done.isCompleted) done.complete();
+          },
+        );
+        await done.future.timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {},
+        );
+        await subscription.cancel();
+      } finally {
+        client.close(force: true);
+        await feed.stop();
       }
+
+      stdout.writeln(
+        '$_tick video: ${(bytes / 1024).round()} KiB in '
+        '${DateTime.now().difference(started).inSeconds}s',
+      );
+      if (bytes == 0) throw StateError('nothing came down the stream');
     });
 
   } finally {
     await backend.detach(target.udid);
-    stdout.writeln('$_tick companion stopped');
+    stdout.writeln('$_tick WebDriverAgent stopped');
     if (weBooted) {
       await simctl.shutdown(target.udid);
       stdout.writeln('$_tick simulator shut down');

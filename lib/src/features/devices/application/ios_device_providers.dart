@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
-import '../../agents/data/agent_discovery_service.dart' show localLoginShell;
 import '../../environments/domain/local_environment.dart';
-import '../data/idb_service.dart';
 import '../data/simctl_service.dart';
+import '../data/wda_backend.dart';
+import '../data/wda_locator.dart';
 import '../domain/ios_simulator.dart';
 
 /// Whether this machine can have iOS Simulators at all.
@@ -68,29 +68,31 @@ final selectedSimulatorProvider = Provider<IosSimulator?>((ref) {
   return booted.length == 1 ? booted.single : null;
 });
 
-/// Where `idb` is on this machine, or `null` when it is not.
+/// The live-view backend, or `null` when this build has no WebDriverAgent.
 ///
-/// Cached for the session rather than re-probed: locating it costs a login
-/// shell, and a tool does not appear and disappear while the app is open.
-/// A user who has just installed it refreshes the pane, which invalidates this.
-final idbInstallationProvider = FutureProvider<IdbInstallation?>((ref) async {
+/// One instance for the session: it owns the runner installed in the simulator
+/// and the session opened against it, and a fresh one per read would reinstall
+/// and re-handshake on every tap.
+final simulatorBackendProvider = Provider<WdaBackend?>((ref) {
   if (!ref.watch(hostCanRunSimulatorsProvider)) return null;
+  final simctl = ref.watch(simctlServiceProvider);
+  if (simctl == null) return null;
+  final locator = WdaLocator();
+  if (locator.locate() == null) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
-  return IdbService.discover(
+  final backend = WdaBackend(
     runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
-    loginShell: localLoginShell(),
+    simctl: simctl,
+    locator: locator,
   );
-});
-
-/// idb access, or `null` when this machine has no idb.
-final idbServiceProvider = Provider<IdbService?>((ref) {
-  final installation = ref.watch(idbInstallationProvider).asData?.value;
-  if (installation == null) return null;
-  final environment = localHostEnvironment(DateTime.now().toUtc());
-  return IdbService(
-    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
-    installation: installation,
-  );
+  // The runner keeps running inside the simulator otherwise, holding :8100 and
+  // :9100 against the next simulator someone opens.
+  ref.onDispose(() async {
+    for (final udid in [ref.read(selectedSimulatorUdidProvider)]) {
+      if (udid != null) await backend.detach(udid);
+    }
+  });
+  return backend;
 });
 
 /// What a simulator pane can offer right now.
@@ -127,17 +129,19 @@ final simulatorSupportProvider = Provider<SimulatorSupport>((ref) {
       missingReason: 'iOS Simulators need macOS and Xcode.',
     );
   }
-  if (ref.watch(idbServiceProvider) == null) {
+  if (ref.watch(simulatorBackendProvider) == null) {
     return const SimulatorSupport(
       capabilities: {SimulatorCapability.manage},
       // Named, and with the reason, because "unsupported" would send someone
       // looking for a bug in the app. simctl genuinely has no touch injection
       // and no way to read the screen — this is not something to be fixed here.
+      // Not something the user installs: WebDriverAgent ships with this app.
+      // Missing it means this build was assembled without
+      // `tool/vendor/fetch_wda.sh`, which is a build problem, not a setup step
+      // to hand to somebody.
       missingReason:
-          'Install idb for the live view and touch control — Xcode alone '
-          'cannot mirror a simulator or tap one.\n'
-          'brew tap facebook/fb && brew install idb-companion && '
-          'pip install fb-idb',
+          'This build has no WebDriverAgent, so a simulator can be listed, '
+          'booted and screenshotted but not mirrored or tapped.',
     );
   }
   return const SimulatorSupport(

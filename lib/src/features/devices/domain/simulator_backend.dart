@@ -33,14 +33,21 @@ class VideoAccessUnit {
 }
 
 /// A running video feed from one simulator.
+///
+/// A **URL**, not a frame stream, because that is what the player needs and
+/// because the two backends reach it by different routes: one produces H.264
+/// access units that have to be muxed into a container first, the other already
+/// serves multipart JPEG over HTTP. Muxing is the backend's business, and
+/// exposing frames here would push it into the pane.
 class SimulatorVideoFeed {
   const SimulatorVideoFeed({
-    required this.frames,
+    required this.url,
     required this.stop,
     this.size,
   });
 
-  final Stream<VideoAccessUnit> frames;
+  /// What the video player opens. Loopback, always.
+  final Uri url;
 
   /// The encoded picture's size, when the backend knows it up front. It is not
   /// necessarily the device's screen size — a backend may scale — and it is

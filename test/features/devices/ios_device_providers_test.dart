@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
-import 'package:karmashala/src/features/devices/data/idb_service.dart';
+import 'package:karmashala/src/features/devices/data/wda_backend.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -19,7 +19,7 @@ IosSimulator _sim(String udid, String name, SimulatorState state) =>
 
 ProviderContainer _container({
   bool macOS = true,
-  IdbInstallation? idb,
+  bool backend = false,
   List<IosSimulator> simulators = const [],
 }) {
   final container = ProviderContainer(
@@ -28,12 +28,20 @@ ProviderContainer _container({
         FakeCommandRunnerFactory(),
       ),
       hostCanRunSimulatorsProvider.overrideWithValue(macOS),
-      idbInstallationProvider.overrideWith((ref) async => idb),
+      simulatorBackendProvider.overrideWithValue(
+        backend ? _StubBackend() : null,
+      ),
       iosSimulatorsProvider.overrideWith((ref) async => simulators),
     ],
   );
   addTearDown(container.dispose);
   return container;
+}
+
+class _StubBackend implements WdaBackend {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('the capability tests never call the backend');
 }
 
 void main() {
@@ -54,7 +62,7 @@ void main() {
 
       expect(container.read(simctlServiceProvider), isNull);
       expect(await container.read(iosSimulatorsProvider.future), isEmpty);
-      expect(await container.read(idbInstallationProvider.future), isNull);
+      expect(container.read(simulatorBackendProvider), isNull);
 
       final support = container.read(simulatorSupportProvider);
       expect(support.capabilities, isEmpty);
@@ -64,9 +72,8 @@ void main() {
   });
 
   group('capabilities', () {
-    test('simctl alone manages but cannot interact, and names the fix', () async {
+    test('simctl alone manages but cannot interact, and says so', () async {
       final container = _container();
-      await container.read(idbInstallationProvider.future);
 
       final support = container.read(simulatorSupportProvider);
 
@@ -74,15 +81,13 @@ void main() {
       expect(support.has(SimulatorCapability.interact), isFalse);
       // "Unsupported" would send someone looking for a bug in the app. simctl
       // genuinely has no touch injection and no way to read the screen.
-      expect(support.missingReason, contains('idb'));
-      expect(support.missingReason, contains('brew'));
+      // Not an install instruction: WebDriverAgent ships with this app, so
+      // its absence is a build problem rather than a setup step for a user.
+      expect(support.missingReason, contains('WebDriverAgent'));
     });
 
-    test('with idb, everything is available and nothing is missing', () async {
-      final container = _container(
-        idb: const IdbInstallation(executable: '/opt/homebrew/bin/idb'),
-      );
-      await container.read(idbInstallationProvider.future);
+    test('with a backend, everything is available', () async {
+      final container = _container(backend: true);
 
       final support = container.read(simulatorSupportProvider);
 

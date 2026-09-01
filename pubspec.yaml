@@ -65,14 +65,6 @@ dependencies:
   xterm:
     path: packages/xterm
   yaml: ^3.1.4
-  grpc: ^5.1.0
-  protobuf: ^6.0.0
-  fixnum: ^1.1.1
-
-# Dart-only stand-ins for the two Windows plugin implementations, whose C++
-# needs ATL and /await — both gone from the VS 2026 toolchain (MSVC 14.51).
-# Desktop never invokes either plugin (companion mode is Android, where the
-# real implementations load); see the stub packages' pubspecs for details.
 dependency_overrides:
   flutter_local_notifications_windows:
     path: packages/flutter_local_notifications_windows_stub
@@ -116,12 +108,11 @@ flutter:
     # The same two for macOS and Linux, whose trays cannot decode an .ico.
     - assets/tray_icon.png
     - assets/tray_icon_attention.png
-    # NOTE: the vendored idb_companion is deliberately NOT listed here.
+    # NOTE: the vendored WebDriverAgent runner is deliberately NOT listed here.
     # A Flutter asset is copied into every platform's bundle, so declaring it
-    # would ship a 43 MB macOS-only arm64 binary inside the Windows and Linux
+    # would ship an 18 MB macOS-only app bundle inside the Windows and Linux
     # builds. It lives under macos/Vendor (git-ignored, fetched by
-    # tool/vendor/fetch_idb_companion.sh) and is resolved at runtime by
-    # IdbCompanionLocator.
+    # tool/vendor/fetch_wda.sh) and is resolved at runtime by WdaLocator.
     #
     # scrcpy-server (Apache-2.0) is deployed to the device to produce H.264 for
     # the device pane's live view. Its version must match kScrcpyVersion.
