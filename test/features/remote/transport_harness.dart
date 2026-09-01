@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:karmashala/src/features/remote/transport/remote_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,4 +74,24 @@ class StateLog {
   }
 
   Future<void> cancel() => _subscription.cancel();
+}
+
+/// A beacon port nothing else is listening on, for one test.
+///
+/// Beacon suites used to share one hard-coded port for the whole file. A
+/// beacon is stopped at teardown, but a datagram already in flight does not
+/// know that, and the next test's scout — joined to the same group on the same
+/// port — hears a host that no longer exists. Dialling that corpse costs the
+/// full `attemptTimeout * 4` the pairing race allows a LAN candidate, which is
+/// how "Could not find your desktop" reached a run whose desktop was right
+/// there, and how a stranger-cooldown assertion saw a second dial it had not
+/// asked for. Both are timing, so both come and go under `--concurrency=4`.
+///
+/// A port per test makes the stale datagram undeliverable rather than merely
+/// unlikely: it is addressed to a port no socket in this run has joined.
+Future<int> freeBeaconPort() async {
+  final probe = await RawDatagramSocket.bind(InternetAddress.loopbackIPv4, 0);
+  final port = probe.port;
+  probe.close();
+  return port;
 }
