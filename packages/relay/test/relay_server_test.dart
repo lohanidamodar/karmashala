@@ -227,6 +227,31 @@ void main() {
 
       expect(await phone.stream.first, [1]);
     });
+
+    test('is off entirely when the operator asks for no timeout', () async {
+      // The relay embedded in the desktop is the desktop's own. Every socket
+      // waiting alone on it is one of the desktop's own rendezvous listeners,
+      // waiting — correctly — for a phone that may be away for hours, so
+      // hanging up on it is the relay evicting its own operator.
+      //
+      // Measured on the owner's machine: three listeners, each evicted and
+      // re-dialled every 120.3 seconds, 58 times and counting in one run of
+      // the app. Every eviction is a window in which the desktop is absent
+      // from its own rendezvous.
+      await _start(options: const RelayOptions(loneTimeout: Duration.zero));
+      final lonely = await _connect();
+      final closed = lonely.stream.drain<void>().then((_) => true);
+
+      // Long past any timeout the shared relay would have applied.
+      final hungUpOn = await closed.timeout(
+        const Duration(milliseconds: 600),
+        onTimeout: () => false,
+      );
+
+      expect(hungUpOn, isFalse, reason: 'a waiting listener is left alone');
+      expect(relay.rendezvousCount, 1);
+      await lonely.sink.close();
+    });
   });
 
   group('limits', () {

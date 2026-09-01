@@ -16,6 +16,23 @@ import '../../../core/process/command_runner.dart';
 /// relay package's own default, pinned equal by a test.
 const int kDefaultLocalRelayPort = kDefaultRelayPort;
 
+/// How long the embedded relay lets a socket wait alone at a rendezvous
+/// before hanging up on it. Zero means never, and that is deliberate.
+///
+/// The relay package's two-minute default is right for a SHARED relay, where
+/// a lone socket may be a stranger pinning a rendezvous nobody will ever come
+/// to. This relay runs inside the desktop and serves only it: every socket
+/// waiting alone here is one of this desktop's own rendezvous listeners,
+/// waiting — correctly — for a phone that may be away for hours.
+///
+/// Measured on the owner's machine while the phone would not connect: three
+/// listeners, each evicted and re-dialled every 120.3 seconds, 58 times in a
+/// single run of the app, and the whole `remote:` log for forty minutes was
+/// `a socket is waiting (3 held)` repeating. Each eviction is a window in
+/// which the desktop is absent from its own rendezvous, and a phone arriving
+/// in one finds nobody there.
+const Duration kLocalRelayLoneTimeout = Duration.zero;
+
 /// The scoped inbound firewall rule the service tries to add on Windows.
 const String kFirewallRuleName = 'Karmashala local relay';
 
@@ -162,7 +179,10 @@ class LocalRelayService {
       server = await RelayServer.bind(
         address: _bindAddress,
         port: port,
-        options: RelayOptions(onLog: onLog),
+        options: RelayOptions(
+          loneTimeout: kLocalRelayLoneTimeout,
+          onLog: onLog,
+        ),
       );
     } on Object catch (error) {
       _log('bind failed on port $port: $error');
