@@ -904,13 +904,15 @@ class _DeviceRuntime {
     return active;
   }
 
-  Future<void> _sealAndSend(
+  /// Seals [payload] and puts it on the wire. Answers whether a transport
+  /// took it — see [RemoteSend], and the bookkeeping that depends on it.
+  Future<bool> _sealAndSend(
     _ActiveLink active,
     FrameType type,
     String? id,
     Map<String, Object?> payload,
   ) async {
-    if (_closed || _active != active) return;
+    if (_closed || _active != active) return false;
     // No awaits between reading the sequence and sealing: the two must agree,
     // and every caller is already serialised on the device chain.
     final envelope = Envelope.of(
@@ -922,22 +924,43 @@ class _DeviceRuntime {
     final sealed = await active.channel.seal(envelope.toBytes());
     try {
       active.transport.send(sealed);
+      return true;
     } on TransportException {
-      // The link the phone last used is gone; the relay listeners for this
-      // generation still queue for the next reconnect. Any of them may be the
-      // one the phone comes back on, so try each until one takes the frame.
+      // A transport only refuses once it is CLOSED — while it is merely
+      // reconnecting it queues — and an accepted LAN link closes for good the
+      // moment the phone hangs up, because it never redials (the peer does).
+      // So this end can be holding a dead link as the active one for as long
+      // as it takes the phone to send anything, and everything in that window
+      // lands here.
+      //
+      // The relay listeners for this generation are still up and still queue
+      // for the next reconnect. Any of them may be the one the phone comes
+      // back on, so try each until one takes the frame.
       for (final fallback
           in _listeners[active.generation]?.values.toList() ??
               const <RemoteTransport>[]) {
         if (identical(fallback, active.transport)) continue;
         try {
           fallback.send(sealed);
-          return;
+          // Adopt it. The old one is closed for ever, so leaving it in place
+          // means paying this exception — and this search — for every frame
+          // until the phone happens to send one.
+          active.transport = fallback;
+          _watchLiveness(fallback);
+          return true;
         } on TransportException {
           continue;
         }
       }
-      service.onLog?.call('no transport could carry a frame');
+      // Name what was lost. Ten anonymous copies of this line in the owner's
+      // log said only that something had gone; which frame it was is the
+      // difference between a stale card and an unanswered request.
+      service.onLog?.call('no transport could carry a ${type.wire} frame');
+      // And stop claiming the phone is here. `peerLive` is what decides
+      // whether a notification is pushed instead of shown on a link, and a
+      // link that cannot carry a frame is not one.
+      peerLive = false;
+      return false;
     }
   }
 

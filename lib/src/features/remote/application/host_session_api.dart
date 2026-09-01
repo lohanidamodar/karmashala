@@ -17,8 +17,15 @@ import 'session_start_ledger.dart';
 
 /// Seals and transmits one frame for the device this api serves. Supplied by
 /// the service, which owns the channel and the transport.
+///
+/// Answers whether a transport actually took the frame. **False means the
+/// frame is gone** — not delayed: a transport queues while it is merely
+/// reconnecting, so a refusal is a link that is closed with nothing else able
+/// to carry it. Everything this api remembers having told the phone is
+/// therefore recorded only after a `true`; the alternative is what the owner
+/// hit, a desktop convinced the phone had news it never received.
 typedef RemoteSend =
-    Future<void> Function(
+    Future<bool> Function(
       FrameType type, {
       String? id,
       Map<String, Object?> payload,
@@ -272,8 +279,13 @@ class HostSessionApi {
     final snapshot = await _withStage(base);
     final encoded = jsonEncode(snapshot.toJson());
     if (_lastSnapshots[sessionId] == encoded) return;
-    _lastSnapshots[sessionId] = encoded;
-    await _send(FrameType.sessionChanged, payload: snapshot.toJson());
+    // Written down only once it went out. Recorded before the send, a dropped
+    // `session.changed` was never repeated: the next sweep found the snapshot
+    // unchanged and stayed quiet, so a phone that missed one update kept the
+    // stale card until it re-listed.
+    if (await _send(FrameType.sessionChanged, payload: snapshot.toJson())) {
+      _lastSnapshots[sessionId] = encoded;
+    }
   }
 
   /// Sends the transcript growth of every subscribed session since the last
@@ -305,8 +317,10 @@ class HostSessionApi {
       _transcriptCursors[sessionId] = page.cursor;
       return;
     }
-    _transcriptCursors[sessionId] = page.cursor;
-    await _send(
+    // The cursor is what the phone has been *told*, so it moves only when the
+    // delta was carried. Advancing first lost the messages outright — the next
+    // poll started after them and nothing ever went back for them.
+    final delivered = await _send(
       FrameType.transcriptAppended,
       payload: RemoteTranscriptPage(
         sessionId: sessionId,
@@ -314,6 +328,7 @@ class HostSessionApi {
         cursor: page.cursor,
       ).toJson(),
     );
+    if (delivered) _transcriptCursors[sessionId] = page.cursor;
   }
 
   /// Sends `approval.requested` with the Loop-49 evidence. Gated on the

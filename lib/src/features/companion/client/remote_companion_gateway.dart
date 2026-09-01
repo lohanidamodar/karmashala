@@ -1284,36 +1284,77 @@ class RemoteCompanionGateway implements CompanionGateway {
     return scout.inCooldown(candidate) ? null : candidate;
   }
 
+  /// One LAN candidate, walked across the generation window.
+  ///
+  /// The counters drift — that is what the window is for, and the relay path
+  /// has always probed forward through it. The direct path named exactly one
+  /// generation, and a host that has moved on closes the link the moment the
+  /// hello names a rendezvous it is no longer holding ("lan hello for an
+  /// unknown rendezvous", in the desktop's own log). With a two-minute cooldown
+  /// stamped on each refusal that is not a blip: the direct path stays dead
+  /// until some relay connection happens to resynchronise the counters.
+  ///
+  /// The walk costs nothing in the ordinary failure, because it is taken only
+  /// on the host's own answer to a rendezvous it is not holding: it accepts the
+  /// socket, reads the hello, and **hangs up**. Nobody home is one dial, and so
+  /// is a stranger — which accepts the socket and then says nothing at all,
+  /// holding it open until the attempt times out. Only "took the socket and
+  /// then dropped it" is worth asking again at the next generation.
   Future<CompanionClient?> _dialLan(
     LanPathScout scout,
     DiscoveredHost host,
   ) async {
-    final client = _newClient();
-    final transport = scout.dial(host);
-    _dialled = transport;
-    _ownedTransport = transport;
-    try {
-      await client.connect(
-        transport: transport,
-        helloTimeout: scout.attemptTimeout,
-      );
-      // The sealed hello round-tripped: this host holds the paired key. The
-      // beacon's cleartext was never trusted beyond "try dialling here".
-      scout.noteSuccess(host);
-      _lanUpgradeRefused.clear();
-      _lastPathWasLocal = true;
-      _linkPath.value = CompanionLinkPath.lan;
-      onLog?.call('connected over the LAN');
-      return client;
-    } on Object catch (error) {
-      // No sealed answer inside the timeout: a stranger, another pairing's
-      // host, or a stale advert. Cool it down and let the relay carry on.
-      onLog?.call('lan attempt failed: $error');
-      scout.noteFailure(host);
-      _lanUpgradeRefused[scout.keyOf(host)] = _now();
-      await _teardownClient();
-      return null;
+    for (var probe = 0; probe < kCompanionProbeWindow; probe++) {
+      if (_abandonDial) return null;
+      final client = _newClient();
+      final transport = scout.dial(host);
+      _dialled = transport;
+      _ownedTransport = transport;
+      // Whether the far end took the socket and then dropped it — the shape
+      // of `lan hello for an unknown rendezvous`, and the only shape worth a
+      // second dial.
+      var socketOpened = false;
+      var hungUp = false;
+      final watching = transport.states.listen((state) {
+        if (state == TransportState.connected) socketOpened = true;
+        // `disconnected` is the far end letting go. Deliberately NOT `closed`:
+        // that is this method's own teardown below, and counting it would
+        // probe forward against a stranger too.
+        if (state == TransportState.disconnected && socketOpened) {
+          hungUp = true;
+        }
+      });
+      try {
+        await client.connect(
+          transport: transport,
+          generation: client.pairing.generation + probe,
+          helloTimeout: scout.attemptTimeout,
+        );
+        // The sealed hello round-tripped: this host holds the paired key. The
+        // beacon's cleartext was never trusted beyond "try dialling here".
+        scout.noteSuccess(host);
+        _lanUpgradeRefused.clear();
+        _lastPathWasLocal = true;
+        _linkPath.value = CompanionLinkPath.lan;
+        onLog?.call('connected over the LAN');
+        return client;
+      } on Object catch (error) {
+        // No sealed answer inside the timeout: a stranger, another pairing's
+        // host, a stale advert — or a host one rendezvous ahead.
+        onLog?.call('lan attempt failed: $error');
+        await _teardownClient();
+        if (!hungUp) break;
+        if (probe + 1 < kCompanionProbeWindow) {
+          onLog?.call('no host at that generation on the LAN; probing forward');
+        }
+      } finally {
+        await watching.cancel();
+      }
     }
+    // Cool it down and let the relay carry on.
+    scout.noteFailure(host);
+    _lanUpgradeRefused[scout.keyOf(host)] = _now();
+    return null;
   }
 
   /// One relay attempt. A failure stamps the candidate so the next reconnect

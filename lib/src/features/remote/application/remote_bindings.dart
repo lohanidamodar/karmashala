@@ -261,8 +261,8 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     );
   }
 
-  ImportedSession? importedById(String sessionId) =>
-      ref.read(importedSessionDaoProvider).getById(sessionId);
+  ResolvedRemoteSession resolve(String sessionId) =>
+      resolveRemoteSession(ref, sessionId);
 
   /// The sessions of one Explorer row, in the order the Explorer draws them:
   /// pinned first, then most recently active, with a lineage's children
@@ -353,6 +353,11 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     for (final session in ref.read(sessionDaoProvider).getAll()) {
       if (placed.add(session.id)) out.add(snapshotOf(session));
     }
+    // One entry per conversation, like the Explorer: `getAll` — and the
+    // `getByRepository` the ordered walk above reads — both exclude a record a
+    // native row already represents. That filter lives in `ImportedSessionDao`
+    // and must stay the only copy of the rule; a raw read here would put the
+    // same conversation on the phone twice.
     for (final session in ref.read(importedSessionDaoProvider).getAll()) {
       if (placed.add(session.id)) out.add(importedSnapshotOf(session));
     }
@@ -471,9 +476,10 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     hostName: Platform.localHostname,
     listSessions: listSessionsInExplorerOrder,
     sessionById: (sessionId) {
-      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      final resolved = resolve(sessionId);
+      final session = resolved.native;
       if (session != null) return snapshotOf(session);
-      final imported = importedById(sessionId);
+      final imported = resolved.imported;
       return imported == null ? null : importedSnapshotOf(imported);
     },
     deliveryStageFor: (sessionId) =>
@@ -484,24 +490,30 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     // Async so an imported-session refusal is a failed future, never a
     // synchronous escape past a caller's error handling.
     sendPrompt: (sessionId, text) async {
-      if (importedById(sessionId) != null) {
+      final resolved = resolve(sessionId);
+      if (resolved.imported != null) {
         throw const RemoteApiRefusal(
           ErrorCode.badRequest,
           'this session was imported from the CLI — read-only here; '
           'continue it in its own terminal',
         );
       }
-      return ref.read(sessionActionsProvider).continueSession(sessionId, text);
+      // The LIVE id, never the one the phone asked with: a stale imported id
+      // names a record that cannot be typed into.
+      return ref
+          .read(sessionActionsProvider)
+          .continueSession(resolved.native?.id ?? sessionId, text);
     },
     answerApproval: (sessionId, decision) async {
-      if (importedById(sessionId) != null) {
+      final resolved = resolve(sessionId);
+      if (resolved.imported != null) {
         throw const RemoteApiRefusal(
           ErrorCode.badRequest,
           'this session was imported from the CLI — answer it in its own '
           'terminal',
         );
       }
-      return _answerApproval(ref, sessionId, decision);
+      return _answerApproval(ref, resolved.native?.id ?? sessionId, decision);
     },
     approvalEvidenceFor: (sessionId) => _approvalEvidenceFor(ref, sessionId),
     registerPush: (deviceId, token, platform) async {
@@ -527,21 +539,63 @@ String? _attentionFor(Ref ref, String sessionId, {bool imported = false}) {
   return null;
 }
 
+/// Which record represents [sessionId] **right now**: the live session row, or
+/// read-only CLI history, or neither.
+///
+/// One conversation can have a record in both tables, and `ImportedSessionDao`
+/// resolves the tie: a conversation with a native row is *superseded*, and
+/// every list read there hides the imported record. Hiding a row from a list
+/// does not stop anyone asking for it by id, though, and a phone holds ids: it
+/// lists once and opens later. A Codex conversation id is *discovered* rather
+/// than assigned — `LaunchedSessionAttributionService` writes it on a store
+/// sweep — so there is a real window after launch in which the imported record
+/// is still listed, and a phone that fetched its list inside that window is
+/// holding an id that has since been superseded.
+///
+/// Opening it gave the owner "a session that's not running": the CLI's own
+/// history for a conversation live in a pane on the desktop, with a composer
+/// that refused every prompt as read-only. So the rule is applied on the way
+/// *in* as well: an imported id a native row has taken over resolves to that
+/// row, and the phone reaches the running session with the id it happens to
+/// hold. The supersede test itself is not repeated here — it is asked of
+/// [ImportedSessionDao.supersedingSessionId], the same place the list filter
+/// is written.
+ResolvedRemoteSession resolveRemoteSession(Ref ref, String sessionId) {
+  final sessions = ref.read(sessionDaoProvider);
+  final native = sessions.getById(sessionId);
+  if (native != null) return (native: native, imported: null);
+  final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+  if (imported == null) return (native: null, imported: null);
+  final liveId = ref
+      .read(importedSessionDaoProvider)
+      .supersedingSessionId(imported.externalId);
+  final live = liveId == null ? null : sessions.getById(liveId);
+  // Nothing took it over — genuine history, opened read-only as before.
+  if (live == null) return (native: null, imported: imported);
+  return (native: live, imported: null);
+}
+
+/// What [resolveRemoteSession] answers with. Exactly one field is ever set.
+typedef ResolvedRemoteSession = ({Session? native, ImportedSession? imported});
+
 /// The same source selection as `SessionTranscriptView`: a PTY-hosted
 /// session renders from the agent's own record; anything else renders from
 /// the engine's event log. Attribution is REBUILT from the parent session's
 /// typed fields and stripped on a whole-string match — never parsed out of
 /// the text (the dray constraint).
 Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
-  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  final resolved = resolveRemoteSession(ref, sessionId);
+  final session = resolved.native;
   if (session == null) {
-    final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
+    final imported = resolved.imported;
     if (imported != null) return _importedTranscript(imported);
     throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
   }
   var messages = session.surface == SessionSurface.pane
       ? await _agentRecordMessages(ref, session)
-      : _eventLogMessages(ref, sessionId);
+      // `session.id`, not the id asked with: a superseded imported id has no
+      // event log of its own.
+      : _eventLogMessages(ref, session.id);
 
   final attribution = _attributionOf(ref, session);
   if (attribution != null) {
@@ -556,7 +610,10 @@ Future<RemoteTranscriptPage> _transcriptFor(Ref ref, String sessionId) async {
     ];
   }
   return RemoteTranscriptPage(
-    sessionId: sessionId,
+    // The row this actually came from. A phone that asked with a superseded
+    // imported id learns the live one here rather than being told its stale id
+    // is fine.
+    sessionId: session.id,
     messages: messages,
     cursor: messages.length,
   );
