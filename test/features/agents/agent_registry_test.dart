@@ -348,16 +348,16 @@ void main() {
         registry.byId('codex')!.store!.format,
         AgentStoreFormat.codexRollout,
       );
-      // Antigravity's store is located but deliberately not readable: the
-      // conversations are encrypted, so the descriptor records where they are
-      // *and* that nothing here can parse them.
+      // Antigravity's store yields identity without content: conversation id,
+      // directory, title and size are readable, message payloads are protobuf
+      // in an unpublished schema. `antigravityStore` is that shape.
       expect(
         registry.byId('antigravity')!.store!.homeDirectoryName,
         '.gemini/antigravity-cli',
       );
       expect(
         registry.byId('antigravity')!.store!.format,
-        AgentStoreFormat.none,
+        AgentStoreFormat.antigravityStore,
       );
     },
   );

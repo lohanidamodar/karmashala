@@ -140,14 +140,14 @@ void main() {
       expect(descriptor.store!.homeDirectoryName, '.gemini/antigravity-cli');
     });
 
-    test('the format records that no transcript here can be parsed', () {
-      // Narrower than it used to mean. `AntigravityStoreReader` reads the id,
-      // the working directory, the name and the step count out of this store;
-      // what it cannot read is message *content*, because `steps.step_payload`
-      // is protobuf in an unpublished schema. Every `AgentStoreFormat` value
-      // names a transcript format, so `none` is still the truthful answer —
-      // see `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6.
-      expect(descriptor.store!.format, AgentStoreFormat.none);
+    test('the format is the one that reads identity without content', () {
+      // `AntigravityStoreReader` reads the id, the working directory, the name
+      // and the step count out of this store; what it cannot read is message
+      // *content*, because `steps.step_payload` is protobuf in an unpublished
+      // schema. `none` described the first half and cost the second: with it,
+      // `CliDetectionService` skipped the store outright and every Antigravity
+      // conversation was invisible to the app.
+      expect(descriptor.store!.format, AgentStoreFormat.antigravityStore);
     });
 
     test('locating the store does not conjure a chat view', () {

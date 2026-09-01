@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/antigravity_resume_providers.dart';
+import '../../agents/data/antigravity_session_resume.dart';
+import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/detected_project_merger.dart';
@@ -479,6 +482,7 @@ class SessionActions {
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
     );
+    _refuseCommandThatCannotResume(command, session.externalId, session.cli);
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host shells
     // take a start directory.
     final cwd = env.wslDistribution == null ? repo.path.path : null;
@@ -529,7 +533,8 @@ class SessionActions {
     }
     final externalId =
         session.externalSessionId ??
-        await _recoverExternalSessionId(session, repo, installation);
+        await _recoverExternalSessionId(session, repo, installation) ??
+        await _continuableConversationFor(session);
     if (externalId == null || externalId.isEmpty) {
       throw StateError(
         'No resumable CLI session id could be found. For an older session, '
@@ -567,12 +572,82 @@ class SessionActions {
             sessionMode: session.permissionMode,
           ),
     );
+    _refuseCommandThatCannotResume(command, externalId, installation.agentId);
     // For WSL the cwd is handled inside the wrapped `wsl --cd`; only host
     // shells take a start directory.
     final cwd = env.wslDistribution == null ? directory.path : null;
     await _ref
         .read(systemTerminalServiceProvider)
         .launch(terminal, command: command, workingDirectory: cwd);
+  }
+
+  /// Refuses a command line that would start a *new* conversation while
+  /// claiming to continue [externalId].
+  ///
+  /// `resumeCommandLine` builds its resume arguments from a hard-coded switch on
+  /// `claudeCode`/`codex` rather than from the descriptor's own
+  /// `interactiveResume`, so for anything else it produces the bare executable
+  /// — which, run in a terminal, opens a fresh conversation wearing an old
+  /// session's name. That is a wider gap than this guard, and it belongs to the
+  /// terminal feature that owns the builder; what is caught here is the part
+  /// this branch made reachable.
+  ///
+  /// **Scoped to the agent whose store this branch learned an id from.** Before
+  /// attribution and `_continuableConversationFor`, an Antigravity session had
+  /// no CLI id at all, so this method threw the "no resumable id" error long
+  /// before building a command. Now it has one, and without this the user would
+  /// be handed a terminal quietly running a *different* conversation.
+  ///
+  /// The test itself is against the **built command**, not against an agent
+  /// name, so the day `resumeCommandLine` reads the registry this stops
+  /// refusing by itself.
+  void _refuseCommandThatCannotResume(
+    List<String> command,
+    String externalId,
+    String agentId,
+  ) {
+    if (externalId.isEmpty) return;
+    final descriptor = _ref.read(agentRegistryProvider).byId(agentId);
+    if (descriptor?.store?.format != AgentStoreFormat.antigravityStore) return;
+    if (command.any((argument) => argument.contains(externalId))) return;
+    throw StateError(
+      'Opening this in an external terminal would start a new '
+      '${descriptor!.displayName} conversation instead of continuing '
+      '$externalId: Chitragupta only builds external-terminal resume commands '
+      'for Claude Code and Codex. Open the session in Chitragupta instead, '
+      'where the agent is launched from its own registry entry.',
+    );
+  }
+
+  /// The conversation an agent's own store says this session's directory last
+  /// used, recorded on the row so the rest of the resume is ordinary.
+  ///
+  /// The last of three ways to answer "which conversation is this?", after the
+  /// row's own id and [_recoverExternalSessionId]'s transcript match. It exists
+  /// because `agy` gives neither: it mints its own id, tells us nothing, and
+  /// writes a transcript we cannot read — so before this, every stopped
+  /// Antigravity session hit "No resumable CLI session id could be found" while
+  /// its store held the answer (`docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §4).
+  ///
+  /// A **refusal is thrown in the store's own words** rather than returned as
+  /// null: "the store names no conversation here" and "another session already
+  /// holds the one it names" are different problems, and collapsing them into
+  /// the generic sentence is the bug being fixed. `null` means only that this
+  /// agent has no such notion, and the caller's own message stands.
+  Future<String?> _continuableConversationFor(Session session) async {
+    final plan = await _ref.read(antigravityResumePlannerProvider)(session);
+    if (plan == null) return null;
+    if (plan is AntigravityResumeRefused) throw StateError(plan.reason);
+    final conversationId = conversationIn(plan);
+    if (conversationId == null) return null;
+    // Recorded, exactly as `_recoverExternalSessionId` records what it finds:
+    // the session is about to be continued as that conversation, so the row
+    // should say so before anything else asks.
+    _ref.read(sessionDaoProvider).updateExternalSessionId(
+      session.id,
+      conversationId,
+    );
+    return conversationId;
   }
 
   /// Recovers the CLI id for sessions created before schema v5. Matching is

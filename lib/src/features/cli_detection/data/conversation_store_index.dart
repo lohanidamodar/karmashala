@@ -38,6 +38,10 @@ class ConversationStoreIndex {
           storeHome,
           conversationId,
         ),
+        AgentStoreFormat.antigravityStore => await _antigravity(
+          storeHome,
+          conversationId,
+        ),
         AgentStoreFormat.none => ConversationPresence.unknown,
       };
     } on Object {
@@ -63,6 +67,20 @@ class ConversationStoreIndex {
       }
     }
     return ConversationPresence.absent;
+  }
+
+  /// `<home>/conversations/<id>.db`.
+  ///
+  /// The cheapest of the three: Antigravity's conversation id **is** the file
+  /// name, so this is one `stat` and no listing at all. Nothing is opened —
+  /// presence is a question about a name, and the file's contents are protobuf
+  /// anyway.
+  Future<ConversationPresence> _antigravity(String home, String id) async {
+    final conversations = Directory(p.join(home, 'conversations'));
+    if (!await conversations.exists()) return ConversationPresence.unknown;
+    return await File(p.join(conversations.path, '$id.db')).exists()
+        ? ConversationPresence.present
+        : ConversationPresence.absent;
   }
 
   /// `<home>/sessions/[YYYY/MM/DD/]rollout-<timestamp>-<id>.jsonl`.

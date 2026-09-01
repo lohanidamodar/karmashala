@@ -10,6 +10,7 @@ import '../../agents/domain/agent_registry.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
+import '../data/antigravity_store_sessions.dart';
 import '../data/claude_store_reader.dart';
 import '../data/codex_store_reader.dart';
 import '../domain/detected_project.dart';
@@ -118,12 +119,14 @@ class CliDetectionService {
   const CliDetectionService({
     this.claudeReader = const ClaudeStoreReader(),
     this.codexReader = const CodexStoreReader(),
+    this.antigravityReader = const AntigravityStoreSessions(),
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
   });
 
   final ClaudeStoreReader claudeReader;
   final CodexStoreReader codexReader;
+  final AntigravityStoreSessions antigravityReader;
   final PathTranslator translator;
   final AgentRegistry registry;
 
@@ -144,6 +147,10 @@ class CliDetectionService {
             all.addAll(await claudeReader.read(home, store.environmentId));
           case AgentStoreFormat.codexRollout:
             all.addAll(await codexReader.read(home, store.environmentId));
+          case AgentStoreFormat.antigravityStore:
+            all.addAll(
+              await antigravityReader.read(home, store.environmentId),
+            );
           case AgentStoreFormat.none:
             break; // Store located but not readable yet.
         }
