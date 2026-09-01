@@ -10,6 +10,7 @@ import '../application/diff_annotations.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
+import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import '../domain/diff_line.dart';
 import '../domain/file_change.dart';
@@ -412,26 +413,6 @@ class _DiffLineTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final semantic = SemanticColors.of(context);
-    final (Color? bg, Color? fg, Color? accent) = switch (line.kind) {
-      DiffLineKind.added => (
-        semantic.diffAdded.withValues(alpha: 0.14),
-        null,
-        semantic.diffAdded,
-      ),
-      DiffLineKind.removed => (
-        semantic.diffRemoved.withValues(alpha: 0.14),
-        null,
-        semantic.diffRemoved,
-      ),
-      DiffLineKind.hunk => (
-        scheme.primary.withValues(alpha: 0.10),
-        scheme.primary,
-        scheme.primary,
-      ),
-      DiffLineKind.meta => (null, scheme.onSurfaceVariant, null),
-      DiffLineKind.context => (null, null, null),
-    };
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
     final annotation = ref
         .watch(diffAnnotationsProvider)
@@ -442,32 +423,18 @@ class _DiffLineTile extends ConsumerWidget {
               item.diffIndex == diffIndex,
         )
         .firstOrNull;
-    return Container(
-      color: bg,
-      width: double.infinity,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(width: 3, height: 18, color: accent ?? Colors.transparent),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              line.text.isEmpty ? ' ' : line.text,
-              softWrap: wrap,
-              overflow: wrap ? TextOverflow.clip : TextOverflow.visible,
-              maxLines: wrap ? null : 1,
-              style: TextStyle(
-                fontFamily: kMonoFamily,
-                fontSize: 12,
-                height: 1.4,
-                color: fg,
-              ),
-            ),
-          ),
-          if (line.kind == DiffLineKind.added ||
-              line.kind == DiffLineKind.removed ||
-              line.kind == DiffLineKind.context)
-            IconButton(
+    // The drawing lives in `DiffLineTile`, shared with the agent-edit diff in
+    // the transcript; what stays here is the one thing only this panel has, the
+    // review comment hung off the end of the row.
+    final commentable =
+        line.kind == DiffLineKind.added ||
+        line.kind == DiffLineKind.removed ||
+        line.kind == DiffLineKind.context;
+    return DiffLineTile(
+      line: line,
+      wrap: wrap,
+      trailing: commentable
+          ? IconButton(
               tooltip: annotation == null
                   ? 'Add review comment'
                   : annotation.comment,
@@ -478,16 +445,15 @@ class _DiffLineTile extends ConsumerWidget {
                 annotation == null
                     ? AppIcons.chatCircle
                     : AppIcons.chatCircleDots,
-                size: 13,
+                size: Chrome.iconSmall,
                 color: annotation == null ? null : scheme.tertiary,
               ),
               onPressed: repositoryId == null
                   ? null
                   : () =>
                         _editAnnotation(context, ref, repositoryId, annotation),
-            ),
-        ],
-      ),
+            )
+          : null,
     );
   }
 
