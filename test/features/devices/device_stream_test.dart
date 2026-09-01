@@ -111,6 +111,98 @@ void main() {
     });
   });
 
+  group('scrcpy-server deployment', () {
+    // The bug this group exists for, seen on F6IZLV6LMFT4U4ZT: every start
+    // pushed the jar to ONE fixed path, and scrcpy-server 4.1 deletes its own
+    // jar as it starts (`unlinkSelf`). The `control=true` attempt therefore
+    // removed the jar that the `control=false` retry needed, and that retry's
+    // `app_process` died with
+    // `ClassNotFoundException: com.genymobile.scrcpy.Server` — SIGABRT, adb
+    // reporting "Aborted". Confirmed on the device from the crash log.
+    test('every session gets its own jar, under one reapable prefix', () {
+      final first = scrcpyJarPathFor('3f3c4fef');
+      final second = scrcpyJarPathFor('12a9795f');
+      expect(first, isNot(second));
+      expect(first, startsWith(kScrcpyJarPathPrefix));
+      expect(second, startsWith(kScrcpyJarPathPrefix));
+      // Never the plain name a developer's own scrcpy uses: reaping matches on
+      // the prefix, and must not be able to kill someone else's session.
+      expect(kScrcpyJarPathPrefix, isNot('/data/local/tmp/scrcpy-server'));
+    });
+
+    test('each tunnel attempt re-pushes, so the retry finds a jar', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          if (request.arguments.contains('forward') &&
+              request.arguments.contains('tcp:0')) {
+            // A port nothing is listening on: every connect fails, so both
+            // attempts run to exhaustion and `start` gives up.
+            return const CommandResult(exitCode: 0, stdout: '1\n', stderr: '');
+          }
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      final service = DeviceStreamService(
+        adb: AdbService(runner: runner, sdk: _sdk()),
+        runner: runner,
+        serverBytes: () async => Uint8List(4),
+        socketAttempts: 1,
+      );
+
+      await expectLater(
+        service.start('emulator-5554'),
+        throwsA(isA<StateError>()),
+      );
+
+      final pushedTo = [
+        for (final request in runner.requests)
+          if (request.arguments.contains('push')) request.arguments.last,
+      ];
+      expect(
+        pushedTo.length,
+        2,
+        reason: 'once for the control=true attempt, once for control=false',
+      );
+      expect(pushedTo.toSet().length, 2, reason: 'and never the same path');
+      for (final path in pushedTo) {
+        expect(path, startsWith(kScrcpyJarPathPrefix));
+      }
+    });
+
+    test('a failed attempt takes its own jar off the device', () async {
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          if (request.arguments.contains('forward') &&
+              request.arguments.contains('tcp:0')) {
+            return const CommandResult(exitCode: 0, stdout: '1\n', stderr: '');
+          }
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      final service = DeviceStreamService(
+        adb: AdbService(runner: runner, sdk: _sdk()),
+        runner: runner,
+        serverBytes: () async => Uint8List(4),
+        socketAttempts: 1,
+      );
+      await expectLater(
+        service.start('emulator-5554'),
+        throwsA(isA<StateError>()),
+      );
+
+      // A server that never started never unlinked itself, and 700 KB per
+      // failed attempt in /data/local/tmp adds up.
+      final removed = [
+        for (final request in runner.requests)
+          if (request.arguments.contains('rm')) request.arguments.last,
+      ];
+      expect(removed.length, 2);
+      for (final path in removed) {
+        expect(path, startsWith(kScrcpyJarPathPrefix));
+      }
+    });
+  });
+
   group('DeviceStreamHealth', () {
     test('separates a dead stream from one nothing is decoding', () {
       // The two look identical on screen — a frozen picture — and have

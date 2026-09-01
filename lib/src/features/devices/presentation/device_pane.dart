@@ -6,11 +6,14 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../application/device_providers.dart';
 import '../data/device_gesture_sink.dart';
+import '../data/device_keyboard_sink.dart';
 import '../data/device_stream.dart';
 import '../domain/android_device.dart';
 import '../domain/device_input.dart';
+import 'device_keyboard_surface.dart';
 import 'device_stream_status.dart';
 import 'device_touch_surface.dart';
 
@@ -108,6 +111,20 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// control socket is unavailable or dies mid-session.
   DeviceGestureSink? _sink;
 
+  /// Where keystrokes go while [_keyboardForwarding] is on. Same story as
+  /// [_sink]: the control socket when there is one, `adb shell input` when
+  /// there is not.
+  DeviceKeyboardSink? _keyboardSink;
+
+  /// Whether the desktop keyboard is driving the device.
+  ///
+  /// **Off by default, and reset to off whenever the session goes away.** While
+  /// it is on the pane swallows Karmashala's own shortcuts, so leaving it armed
+  /// across a stop or a device switch would be exactly the "silently drives a
+  /// device the user thinks is disconnected" failure the hardware-key row was
+  /// already careful about — with a keyboard instead of three buttons.
+  bool _keyboardForwarding = false;
+
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
 
@@ -139,6 +156,8 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     _player = null;
     _video = null;
     _sink = null;
+    _keyboardSink = null;
+    _keyboardForwarding = false;
     _health = null;
     await health?.cancel();
     await session?.stop();
@@ -289,6 +308,11 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         _starting = false;
         _health = null;
         _sink = sink;
+        // The keyboard needs no screen size, so it is available immediately in
+        // either transport — a gesture has to wait for `wm size`, a keystroke
+        // does not.
+        _keyboardSink = _keyboardSinkFor(session);
+        _keyboardForwarding = false;
       });
       // No control socket: the adb fallback needs the device's screen size,
       // which is a round trip. Fetched off the start path so a slow `wm size`
@@ -320,6 +344,25 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     );
   }
 
+  /// Where keystrokes for [session] go.
+  ///
+  /// Unlike gestures this never returns `null` for want of a screen size: the
+  /// control socket if there is one, `adb shell input` if there is not, and
+  /// `null` only when there is no adb either — which the pane states rather
+  /// than swallowing keys.
+  DeviceKeyboardSink? _keyboardSinkFor(DeviceStreamSession session) {
+    final control = session.control;
+    if (control != null) {
+      return ScrcpyKeyboardSink(
+        connection: control,
+        onDropped: _onControlDropped,
+      );
+    }
+    final adb = ref.read(adbServiceProvider);
+    if (adb == null) return null;
+    return AdbKeyboardSink(adb: adb, serial: session.serial);
+  }
+
   /// Installs the `adb shell input` gesture sink for [serial].
   ///
   /// The screen size comes from **the device being streamed**, by serial. It
@@ -347,7 +390,16 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// The control socket went away mid-session. Fall back rather than going mute.
   void _onControlDropped() {
     final serial = _liveSerial;
-    if (!mounted || serial == null || _sink is AdbGestureSink) return;
+    if (!mounted || serial == null) return;
+    final adb = ref.read(adbServiceProvider);
+    if (adb != null && _keyboardSink is! AdbKeyboardSink) {
+      // The keyboard falls back on its own: it does not need the screen size
+      // the gesture sink is about to go and fetch.
+      setState(
+        () => _keyboardSink = AdbKeyboardSink(adb: adb, serial: serial),
+      );
+    }
+    if (_sink is AdbGestureSink) return;
     unawaited(_useAdbSink(serial));
   }
 
@@ -524,6 +576,10 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                   device: live,
                   starting: _starting,
                   sink: _sink,
+                  keyboard: _keyboardSink,
+                  forwardingKeyboard: _keyboardForwarding,
+                  onForwardingChanged: (value) =>
+                      setState(() => _keyboardForwarding = value),
                   health: _health,
                   exhausted:
                       _reconnectAttempt >= kStreamReconnectBackoff.length &&
@@ -576,16 +632,33 @@ class _DeviceToolbar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
           Expanded(
             child: DropdownButtonHideUnderline(
+              // `DropdownButton` is Material 2, and the app's
+              // `dropdownMenuTheme` reaches only Material 3's `DropdownMenu` —
+              // so this control quietly fell back to Material's own defaults
+              // and came out at ~16 px with a 24 px chevron, against chrome
+              // that is `bodySmall` with a `Chrome.icon` glyph. That size is
+              // what made "CPH1989 (F6IZLV6LMFT4U4ZT)" wrap onto two lines,
+              // not the serial: at `bodySmall` the whole label fits, and the
+              // serial earns its place here because it is what tells two
+              // identical handsets apart in the picker itself. The ellipsis is
+              // the backstop for a pane narrow enough that it still cannot.
               child: DropdownButton<String>(
                 isExpanded: true,
+                isDense: true,
+                style: theme.textTheme.bodySmall,
+                iconSize: Chrome.icon,
                 value: selected?.serial,
-                hint: const Text('No device selected'),
+                hint: Text(
+                  'No device selected',
+                  style: theme.textTheme.bodySmall,
+                ),
                 items: [
                   for (final device in devices)
                     DropdownMenuItem(
@@ -595,6 +668,8 @@ class _DeviceToolbar extends ConsumerWidget {
                         device.isReady
                             ? '${device.displayName} (${device.serial})'
                             : '${device.displayName} — ${device.state.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],
@@ -675,6 +750,9 @@ class _LiveView extends ConsumerWidget {
     required this.device,
     required this.starting,
     required this.sink,
+    required this.keyboard,
+    required this.forwardingKeyboard,
+    required this.onForwardingChanged,
     required this.health,
     required this.exhausted,
     required this.onRestart,
@@ -691,6 +769,13 @@ class _LiveView extends ConsumerWidget {
   final AndroidDevice? device;
   final bool starting;
   final DeviceGestureSink? sink;
+
+  /// Where keystrokes go, and whether they are going. `null` when neither the
+  /// control socket nor adb can carry them.
+  final DeviceKeyboardSink? keyboard;
+  final bool forwardingKeyboard;
+  final ValueChanged<bool> onForwardingChanged;
+
   final DeviceStreamHealth? health;
 
   /// Whether automatic reconnection has given up.
@@ -734,30 +819,39 @@ class _LiveView extends ConsumerWidget {
     return Column(
       children: [
         Expanded(
-          child: Center(
-            child: AspectRatio(
-              aspectRatio: aspect,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  DeviceTouchSurface(
-                    sink: sink,
-                    child: Video(
-                      controller: controller,
-                      fit: BoxFit.fill,
-                      controls: NoVideoControls,
+          // Keyboard forwarding wraps the picture rather than sitting beside
+          // it: it is only ever on while *this* is what has focus, and the bar
+          // it draws underneath has to say so where the user is looking.
+          child: DeviceKeyboardSurface(
+            sink: keyboard,
+            forwarding: forwardingKeyboard,
+            onForwardingChanged: onForwardingChanged,
+            deviceLabel: currentDevice.displayName,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: aspect,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    DeviceTouchSurface(
+                      sink: sink,
+                      child: Video(
+                        controller: controller,
+                        fit: BoxFit.fill,
+                        controls: NoVideoControls,
+                      ),
                     ),
-                  ),
-                  // A stale picture must not pass for a live one. The frame
-                  // underneath is left visible — it is still the last thing the
-                  // device showed — but it is dimmed and labelled.
-                  if (unwell)
-                    StreamStalledOverlay(
-                      health: report,
-                      exhausted: exhausted,
-                      onRestart: onRestart,
-                    ),
-                ],
+                    // A stale picture must not pass for a live one. The frame
+                    // underneath is left visible — it is still the last thing
+                    // the device showed — but it is dimmed and labelled.
+                    if (unwell)
+                      StreamStalledOverlay(
+                        health: report,
+                        exhausted: exhausted,
+                        onRestart: onRestart,
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

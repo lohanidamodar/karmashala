@@ -16,6 +16,7 @@
 // and returns `null` — dropping the event without a word — when they differ.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -128,6 +129,129 @@ class ScrcpyTouchEvent {
     view.setInt32(28, buttons);
     return bytes;
   }
+}
+
+/// Wire length of an `INJECT_KEYCODE` message, including its type byte.
+const int kScrcpyKeycodeMessageLength = 14;
+
+/// The most UTF-8 bytes one `INJECT_TEXT` may carry.
+///
+/// `ControlMessageReader.INJECT_TEXT_MAX_LENGTH`, read out of the same jar.
+/// The server allocates the declared length and `readFully`s it, so a longer
+/// message is not truncated — it is refused, and the socket then desynchronises
+/// on the *next* message. Longer text is split by [splitForInjectText].
+const int kScrcpyInjectTextMaxBytes = 300;
+
+/// One `INJECT_KEYCODE` message: a real Android `KeyEvent` for the device.
+///
+/// `ControlMessageReader.parseInjectKeycode` reads an unsigned byte then three
+/// big-endian ints and hands them to `Controller.injectKeycode`, which builds
+/// the `KeyEvent` and injects it from `SOURCE_KEYBOARD`.
+///
+/// ```
+/// u8  type = 0        u8  action          i32 keyCode
+/// i32 repeat          i32 metaState
+/// ```
+class ScrcpyKeycodeEvent {
+  const ScrcpyKeycodeEvent({
+    required this.action,
+    required this.keyCode,
+    this.repeat = 0,
+    this.metaState = 0,
+  });
+
+  /// `KeyEvent.ACTION_DOWN` (0) or `ACTION_UP` (1).
+  final int action;
+
+  /// An Android `KEYCODE_*` value.
+  final int keyCode;
+
+  /// Android's auto-repeat counter. A held key must raise this rather than
+  /// resend zero: a view that distinguishes a repeat from a fresh press —
+  /// a long-press handler, say — reads exactly this field.
+  final int repeat;
+
+  /// `KeyEvent.META_*` bits. This is what makes Ctrl+A a select-all rather
+  /// than the letter A.
+  final int metaState;
+
+  Uint8List encode() {
+    final bytes = Uint8List(kScrcpyKeycodeMessageLength);
+    final view = ByteData.sublistView(bytes);
+    view.setUint8(0, ScrcpyControlType.injectKeycode);
+    view.setUint8(1, action);
+    view.setInt32(2, keyCode);
+    view.setInt32(6, repeat);
+    view.setInt32(10, metaState);
+    return bytes;
+  }
+}
+
+/// One `INJECT_TEXT` message: characters for the device to type.
+///
+/// ```
+/// u8  type = 1        u32 utf8 length     u8[length] utf-8
+/// ```
+///
+/// The length is four bytes: `parseInjectText` calls `parseString()`, which
+/// passes 4 to `parseBufferLength`.
+///
+/// On the device this is **not** an IME commit. `Controller.injectText` walks
+/// the string a character at a time through `KeyCharacterMap.getEvents`, so
+/// what arrives is ordinary hardware-keyboard `KeyEvent`s — which is precisely
+/// why it is the right transport for printable characters: the *device's* char
+/// map decides which key and which modifier produce `@`, rather than this side
+/// assuming the two keyboards share a layout.
+class ScrcpyTextEvent {
+  const ScrcpyTextEvent(this.text);
+
+  final String text;
+
+  Uint8List encode() {
+    final utf8Bytes = utf8.encode(text);
+    if (utf8Bytes.isEmpty) {
+      throw ArgumentError.value(text, 'text', 'must not be empty');
+    }
+    if (utf8Bytes.length > kScrcpyInjectTextMaxBytes) {
+      throw ArgumentError.value(
+        text,
+        'text',
+        'longer than $kScrcpyInjectTextMaxBytes bytes; '
+            'use splitForInjectText',
+      );
+    }
+    final bytes = Uint8List(5 + utf8Bytes.length);
+    final view = ByteData.sublistView(bytes);
+    view.setUint8(0, ScrcpyControlType.injectText);
+    view.setUint32(1, utf8Bytes.length);
+    bytes.setRange(5, bytes.length, utf8Bytes);
+    return bytes;
+  }
+}
+
+/// [text] cut into pieces each of which fits one `INJECT_TEXT`.
+///
+/// Cut on **character** boundaries, not byte ones: half a UTF-8 sequence
+/// decodes to a replacement character on the device, and the damage shows up as
+/// mojibake in the middle of a paste rather than as an error.
+List<String> splitForInjectText(String text) {
+  if (text.isEmpty) return const [];
+  final chunks = <String>[];
+  final buffer = StringBuffer();
+  var bytes = 0;
+  for (final rune in text.runes) {
+    final character = String.fromCharCode(rune);
+    final size = utf8.encode(character).length;
+    if (bytes + size > kScrcpyInjectTextMaxBytes) {
+      chunks.add(buffer.toString());
+      buffer.clear();
+      bytes = 0;
+    }
+    buffer.write(character);
+    bytes += size;
+  }
+  if (buffer.isNotEmpty) chunks.add(buffer.toString());
+  return chunks;
 }
 
 /// The scrcpy control socket, opened alongside the video socket on the same

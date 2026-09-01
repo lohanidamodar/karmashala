@@ -1,4 +1,5 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
@@ -242,6 +243,49 @@ void main() {
   });
 
   group('DevicePane toolbar', () {
+    testWidgets('the device picker is sized like the chrome around it', (
+      tester,
+    ) async {
+      // `DropdownButton` is Material 2 and ignores the app's
+      // `dropdownMenuTheme`, which only reaches Material 3's `DropdownMenu`.
+      // Left alone it renders at Material's ~16 px with a 24 px chevron beside
+      // a pane built from `bodySmall` and `Chrome.icon` — which is what made a
+      // device name wrap onto two lines.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device(serial: _phoneSerial, model: 'CPH1989')],
+      );
+      final picker = tester.widget<DropdownButton<String>>(
+        find.byType(DropdownButton<String>),
+      );
+      final theme = Theme.of(
+        tester.element(find.byType(DropdownButton<String>)),
+      );
+      expect(picker.style, theme.textTheme.bodySmall);
+      expect(picker.iconSize, Chrome.icon);
+      expect(picker.isDense, isTrue);
+    });
+
+    testWidgets('a long device name ellipsizes rather than wrapping', (
+      tester,
+    ) async {
+      // "CPH1989 (F6IZLV6LMFT4U4ZT)" is a name plus a serial, and the serial
+      // stays: it is what tells two identical handsets apart in the picker
+      // itself. One line is the contract; the pane can be narrow.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device(serial: _phoneSerial, model: 'CPH1989')],
+        size: _phone,
+      );
+      final label = tester.widget<Text>(
+        find.text('CPH1989 ($_phoneSerial)').first,
+      );
+      expect(label.maxLines, 1);
+      expect(label.overflow, TextOverflow.ellipsis);
+    });
+
     testWidgets('the refresh button says what it actually refreshes', (
       tester,
     ) async {
