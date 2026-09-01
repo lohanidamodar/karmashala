@@ -14,6 +14,7 @@ import 'package:chitragupta/src/features/terminal/data/terminal_instance.dart';
 import 'package:chitragupta/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:chitragupta/src/features/terminal/domain/detach_policy.dart';
 import 'package:chitragupta/src/features/terminal/domain/ingest_tier.dart';
+import 'package:chitragupta/src/features/terminal/domain/pane_layout.dart';
 import 'package:chitragupta/src/features/terminal/domain/pane_liveness.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/foundation.dart';
@@ -169,6 +170,25 @@ class FakeTerminalInstance
     livenessNotifier.dispose();
     focusNode.dispose();
     scrollController.dispose();
+  }
+}
+
+/// Divides the active tab and starts a terminal in the new region — the old
+/// one-call `splitPane`.
+///
+/// Splitting itself no longer launches anything (see
+/// [TerminalSessionsController.splitPane]): it clears room, and something else
+/// fills it. A test that wants two *live* panes therefore has to ask for both
+/// halves, and this says so once rather than in thirty places.
+extension SplitWithTerminal on TerminalSessionsController {
+  String? splitPaneWith(
+    SplitAxis axis,
+    TerminalProfile profile, {
+    String? workingDirectory,
+  }) {
+    final slot = splitPane(axis);
+    if (slot == null) return null;
+    return openInSlot(slot, profile, workingDirectory: workingDirectory);
   }
 }
 

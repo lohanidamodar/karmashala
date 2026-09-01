@@ -256,7 +256,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;

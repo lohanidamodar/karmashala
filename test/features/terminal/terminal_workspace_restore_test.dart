@@ -41,7 +41,7 @@ void main() {
         TerminalProfile.powerShell,
         workingDirectory: r'C:\ws',
       );
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;
@@ -105,7 +105,7 @@ void main() {
           terminalSessionsControllerProvider.notifier,
         );
         controller.openTab(TerminalProfile.powerShell);
-        controller.splitPane(
+        controller.splitPaneWith(
           SplitAxis.horizontal,
           TerminalProfile.commandPrompt,
         );
@@ -199,7 +199,7 @@ void main() {
           .layout
           .panes
           .single;
-      final busy = controller.splitPane(
+      final busy = controller.splitPaneWith(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;

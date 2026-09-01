@@ -138,7 +138,7 @@ void main() {
       ..insert(session(repositoryId: 'nested'))
       ..updatePaneId('s1', paneId);
 
-    terminals.splitPane(SplitAxis.vertical, TerminalProfile.commandPrompt);
+    terminals.splitPaneWith(SplitAxis.vertical, TerminalProfile.commandPrompt);
 
     expect(container.read(activePaneSessionIdProvider), 's1');
   });

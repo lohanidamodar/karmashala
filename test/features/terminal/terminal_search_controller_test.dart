@@ -127,7 +127,7 @@ void main() {
       ..setQuery('alpha');
     expect(highlightCount(), 2);
 
-    final second = sessions.splitPane(
+    final second = sessions.splitPaneWith(
       SplitAxis.horizontal,
       TerminalProfile.commandPrompt,
     )!;

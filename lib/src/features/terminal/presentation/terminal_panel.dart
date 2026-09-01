@@ -26,7 +26,9 @@ import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/terminal_profile.dart';
 import '../../../app/shell/shell_shortcuts.dart';
+import '../../../app/shell/tab_picker.dart';
 import 'command_history_sheet.dart';
+import 'empty_pane_region.dart';
 import 'pane_layout_view.dart';
 import 'session_status.dart';
 import 'terminal_pane_view.dart';
@@ -74,9 +76,18 @@ class TerminalActions {
     _sessions.openTab(profile, workingDirectory: workingDirFor(profile));
   }
 
-  void split(SplitAxis axis, [TerminalProfile? profile]) {
+  /// Divides the focused pane, leaving the new region empty for the user to
+  /// fill — see [TerminalSessionsController.splitPane].
+  void split(SplitAxis axis) => _sessions.splitPane(axis);
+
+  /// Starts a terminal in the empty region [slotPaneId].
+  void openInSlot(String slotPaneId, [TerminalProfile? profile]) {
     final chosen = profile ?? defaultProfile();
-    _sessions.splitPane(axis, chosen, workingDirectory: workingDirFor(chosen));
+    _sessions.openInSlot(
+      slotPaneId,
+      chosen,
+      workingDirectory: workingDirFor(chosen),
+    );
   }
 
   void closeFocusedPane() {
@@ -87,6 +98,9 @@ class TerminalActions {
   void openSearch() {
     final tab = ref.read(terminalSessionsControllerProvider).activeTab;
     if (tab == null) return;
+    // An empty region has no scrollback to search, and a search bar bound to
+    // one would answer every query with nothing.
+    if (_sessions.instanceFor(tab.focusedPaneId) == null) return;
     ref.read(terminalSearchControllerProvider.notifier).open(tab.focusedPaneId);
   }
 
@@ -406,7 +420,23 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   }) {
     final theme = Theme.of(context);
     final instance = _sessions.instanceFor(paneId);
-    if (instance == null) return const SizedBox.shrink();
+    // A pane a layout holds and the controller has no instance for is an empty
+    // region of a split — the invariant `isEmptySlot` states. It is the only
+    // way this can be null, so it is the empty state rather than nothing.
+    if (instance == null) {
+      return EmptyPaneRegion(
+        paneId: paneId,
+        focused: focused,
+        onNewTerminal: () => _actions.openInSlot(paneId),
+        onClose: () => _sessions.closePane(paneId),
+        onMoveTabHere: _canMoveATabHere(paneId)
+            ? () => TabPicker.show(
+                context,
+                (ref) => tabsMovableInto(ref, paneId),
+              )
+            : null,
+      );
+    }
     final fontSize = ref.watch(
       settingsControllerProvider.select((s) => s.terminalFontSize),
     );
@@ -466,6 +496,13 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         ),
       ),
     );
+  }
+
+  /// Whether any tab could be moved into the empty region [paneId] — false
+  /// while it is the only tab there is, when the offer would lead nowhere.
+  bool _canMoveATabHere(String paneId) {
+    final tabs = ref.read(terminalSessionsControllerProvider).tabs;
+    return tabs.any((tab) => _sessions.canMoveTabIntoSlot(tab.id, paneId));
   }
 
   /// Whether [paneId] shares its tab with another pane.

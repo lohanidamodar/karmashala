@@ -80,7 +80,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;
@@ -106,7 +106,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;
@@ -141,7 +141,7 @@ void main() {
           .layout
           .panes
           .single;
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;

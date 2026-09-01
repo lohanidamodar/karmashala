@@ -124,7 +124,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final newPane = controller.splitPane(
+      final newPane = controller.splitPaneWith(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;
@@ -142,7 +142,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       expect(
-        controller.splitPane(SplitAxis.horizontal, TerminalProfile.powerShell),
+        controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell),
         isNull,
       );
     });
@@ -154,7 +154,7 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       controller.openTab(TerminalProfile.powerShell);
-      final second = controller.splitPane(
+      final second = controller.splitPaneWith(
         SplitAxis.vertical,
         TerminalProfile.commandPrompt,
       )!;
@@ -203,7 +203,7 @@ void main() {
           .layout
           .panes
           .single;
-      final right = controller.splitPane(
+      final right = controller.splitPaneWith(
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;
@@ -265,7 +265,7 @@ void main() {
       final tabId = controller.openTab(TerminalProfile.powerShell);
       expect(controller.titleForTab(tabId), 'PowerShell');
 
-      controller.splitPane(SplitAxis.horizontal, TerminalProfile.commandPrompt);
+      controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.commandPrompt);
       expect(controller.titleForTab(tabId), 'Command Prompt (2)');
     });
   });

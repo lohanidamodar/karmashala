@@ -59,7 +59,7 @@ void main() {
 
   test('both panes of a split active tab are hot — both are on screen', () {
     controller.openTab(TerminalProfile.powerShell);
-    final split = controller.splitPane(
+    final split = controller.splitPaneWith(
       SplitAxis.horizontal,
       TerminalProfile.powerShell,
     )!;

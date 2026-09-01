@@ -94,11 +94,11 @@ void main() {
 
   test('the pane index survives splitting and closing', () {
     final tab = controller.openTab(TerminalProfile.powerShell);
-    final split = controller.splitPane(
+    final split = controller.splitPaneWith(
       SplitAxis.horizontal,
       TerminalProfile.powerShell,
     )!;
-    final third = controller.splitPane(
+    final third = controller.splitPaneWith(
       SplitAxis.vertical,
       TerminalProfile.powerShell,
     )!;

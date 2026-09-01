@@ -306,7 +306,7 @@ void main() {
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\chitragupta',
       );
-      controller.splitPane(SplitAxis.horizontal, TerminalProfile.powerShell);
+      controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
 
       expect(controller.titleForTab(tabId), endsWith(' (2)'));
     });

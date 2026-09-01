@@ -121,7 +121,7 @@ void main() {
     controller.openTab(TerminalProfile.powerShell);
     await pumpPanel(tester, container);
 
-    final pane = controller.splitPane(
+    final pane = controller.splitPaneWith(
       SplitAxis.horizontal,
       TerminalProfile.commandPrompt,
     )!;
@@ -137,7 +137,7 @@ void main() {
     final controller = controllerOf(container);
     final tabId = controller.openTab(TerminalProfile.powerShell);
     final left = soleePaneOf(container, tabId);
-    final right = controller.splitPane(
+    final right = controller.splitPaneWith(
       SplitAxis.horizontal,
       TerminalProfile.commandPrompt,
     )!;
