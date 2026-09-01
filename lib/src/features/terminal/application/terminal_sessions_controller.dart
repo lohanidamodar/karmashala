@@ -1751,36 +1751,51 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (instance is! DormantTerminalInstance) {
       // Resolved once per pane and captured, not per title: a TUI that repaints
       // its title every frame must not rebuild a launch every frame.
-      final launcher = _launcherExecutable(instance);
+      final launchers = _launcherNames(instance);
       instance.terminal.onTitleChange = (title) =>
-          _onPaneTitle(paneId, title, launcher);
+          _onPaneTitle(paneId, title, launchers);
     }
   }
 
-  /// The executable this pane's process was started *through*, or `null` when
-  /// nothing was put in front of it.
+  /// Every executable this pane's process was started *through*, lowercased and
+  /// without its directory. Empty when nothing was put in front of it.
   ///
   /// Asked of `ptyLaunchFor` — the same builder that produced the launch — so
-  /// the name refused as a title cannot drift from the name actually spawned.
+  /// the names refused as titles cannot drift from the names actually spawned.
   /// Taken in the Windows reading of the profile on purpose: an image path
   /// arriving as a window title is a ConPTY behaviour, and on a POSIX host
   /// there is no wrapper for a pane to be named after.
-  String? _launcherExecutable(TerminalInstance instance) {
+  ///
+  /// **Every name, not just the first.** A WSL pane is now spawned as
+  /// `cmd.exe /c wsl.exe -d <distro> …`, so the image that announces itself is
+  /// no longer the executable — and a filter that knew only the first name let
+  /// `C:\Windows\System32\wsl.exe` through as a tab label. The arguments are
+  /// searched rather than compared, because `throughCommandPrompt` joins the
+  /// whole line into one `/c` argument: the `.exe` is a token inside it, not
+  /// the end of it.
+  Set<String> _launcherNames(TerminalInstance instance) {
     // An agent pane never consults OSC at all — see [_titleForPane].
-    if (instance.agentLaunch != null) return null;
+    if (instance.agentLaunch != null) return const {};
     final profile = terminalProfileFromId(instance.profileId);
-    return profile == null ? null : ptyLaunchFor(profile).executable;
+    if (profile == null) return const {};
+    final launch = ptyLaunchFor(profile);
+    return {
+      _basename(launch.executable).toLowerCase(),
+      for (final argument in launch.arguments)
+        for (final match in _executableToken.allMatches(argument))
+          _basename(match.group(0)!).toLowerCase(),
+    };
   }
 
   /// A pane named its own window (OSC 0 or 2).
-  void _onPaneTitle(String paneId, String title, String? launcher) {
+  void _onPaneTitle(String paneId, String title, Set<String> launchers) {
     final trimmed = title.trim();
     final current = _oscTitles[paneId];
     if (trimmed.isEmpty ? current == null : current == trimmed) return;
     // Dropped on the way in rather than filtered on the way out: a title that
     // says nothing leaves the pane called whatever it was called before, and
     // costs no publish at all.
-    if (_namesLauncher(trimmed, launcher)) return;
+    if (_namesLauncher(trimmed, launchers)) return;
     if (trimmed.isEmpty) {
       _oscTitles.remove(paneId);
     } else {
@@ -2076,9 +2091,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 /// it names has to be [launcher] itself, so a pane naming some other path is
 /// still believed. Compared case-insensitively, because the path comes from
 /// Windows and its casing is not ours to predict.
-bool _namesLauncher(String title, String? launcher) {
-  if (launcher == null || !_isAbsolutePath(title)) return false;
-  return _basename(title).toLowerCase() == _basename(launcher).toLowerCase();
+/// An image name inside a command line — `wsl.exe`, `C:\\…\\powershell.exe`.
+/// Quotes and whitespace end a token, which is what keeps a quoted path with a
+/// space in it from swallowing the flag after it.
+final RegExp _executableToken = RegExp(r'[^\s"]+\.exe', caseSensitive: false);
+
+bool _namesLauncher(String title, Set<String> launchers) {
+  if (launchers.isEmpty || !_isAbsolutePath(title)) return false;
+  return launchers.contains(_basename(title).toLowerCase());
 }
 
 /// Whether [path] is rooted — a drive (`C:\…`), a UNC share (`\\…`) or POSIX

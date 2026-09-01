@@ -204,15 +204,12 @@ void main() {
       expect(controller.titleForTab(tabId), 'src/karmashala');
     });
 
-    test('KNOWN GAP: a WSL pane no longer refuses wsl.exe naming itself', () {
-      // The filter refuses one name — `ptyLaunchFor(profile).executable` — and
-      // since the WSL launch went through `cmd.exe /c` that name is `cmd.exe`.
-      // `wsl.exe` is still in front of the shell, one level further down, so if
-      // ConPTY still surfaces its image path the pane wears it.
-      //
-      // Pinned rather than fixed because the fix is in `_launcherExecutable`,
-      // which has to refuse every name in the launch, not just the first. Also
-      // unmeasured: whether a *grandchild's* image path reaches OSC at all.
+    test('and a WSL pane refuses wsl.exe too, not only its wrapper', () {
+      // Routing the WSL launch through `cmd.exe /c` moved the interesting name
+      // out of `executable` and into the arguments, and a filter that knew only
+      // the first name let this through as a tab label. The filter now refuses
+      // every `.exe` in the launch, which is what the shape of that launch
+      // requires: `wsl.exe` is still the image directly in front of the shell.
       final tabId = controller.openTab(
         archLinux,
         workingDirectory: '/home/me/src/karmashala',
@@ -220,7 +217,18 @@ void main() {
 
       writeTitle(controller, container, r'C:\Windows\System32\wsl.exe');
 
-      expect(controller.titleForTab(tabId), r'C:\Windows\System32\wsl.exe');
+      expect(controller.titleForTab(tabId), 'src/karmashala');
+    });
+
+    test('and its wrapper as well, which is what it is spawned as', () {
+      final tabId = controller.openTab(
+        archLinux,
+        workingDirectory: '/home/me/src/karmashala',
+      );
+
+      writeTitle(controller, container, r'C:\Windows\System32\cmd.exe');
+
+      expect(controller.titleForTab(tabId), 'src/karmashala');
     });
 
     test('the Windows shells are rejected by the same rule', () {
