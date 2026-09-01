@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
+import '../../agents/application/antigravity_resume_providers.dart';
+import '../../agents/data/antigravity_session_resume.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/domain/environment_path.dart';
@@ -12,6 +14,7 @@ import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_working_directory.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/session_resume.dart';
@@ -102,23 +105,48 @@ class ExplorerActions {
       );
     }
 
-    final externalId = session.externalSessionId;
+    var externalId = session.externalSessionId;
+    String? continueNotice;
     if (externalId == null || externalId.isEmpty) {
-      // Nothing to resume: the CLI never told us its id, so starting the agent
-      // here would be a *new* conversation wearing this row's title. The menu's
-      // "Copy resume command" is the honest way out, and the row is selected so
-      // its transcript is on screen.
-      //
-      // With a *reason*, because silence is indistinguishable from a dead
-      // click — and for an agent whose CLI assigns no id at all (Antigravity
-      // today) every stopped row lands here, so every click did nothing and
-      // said nothing. The words are the ones `resumeSession` already uses.
-      return const ExplorerResult(
-        ExplorerOutcome.selected,
-        message:
-            'No resumable CLI session id was recorded for this one. For an '
-            'older session, open its imported CLI history entry instead; new '
-            'sessions capture their id automatically.',
+      // The CLI never told us its id — but for an agent whose store records
+      // which conversation each directory last used, that is not the end of it.
+      // `planAntigravityResume` reads the entry and either names what it would
+      // continue or refuses for a reason of its own; `null` means the question
+      // does not apply to this agent.
+      final plan = await _ref.read(antigravityResumePlannerProvider)(session);
+      final resolved = plan == null ? null : conversationIn(plan);
+      if (plan is AntigravityResumeRefused) {
+        // The row is still selected so its detail is on screen; what changes is
+        // that the message now says *which* of several situations this is.
+        return ExplorerResult(
+          ExplorerOutcome.selected,
+          message: plan.reason,
+        );
+      }
+      if (resolved == null) {
+        // Nothing to resume: starting the agent here would be a *new*
+        // conversation wearing this row's title. The menu's "Copy resume
+        // command" is the honest way out, and the row is selected so its
+        // transcript is on screen.
+        //
+        // With a *reason*, because silence is indistinguishable from a dead
+        // click. The words are the ones `resumeSession` already uses.
+        return const ExplorerResult(
+          ExplorerOutcome.selected,
+          message:
+              'No resumable CLI session id was recorded for this one. For an '
+              'older session, open its imported CLI history entry instead; new '
+              'sessions capture their id automatically.',
+        );
+      }
+      // Written before the launch, not after: `SessionLauncher` reuses the row
+      // that already holds the conversation, so without this the click would
+      // mint a *second* row and leave this one a phantom for ever.
+      _ref.read(sessionDaoProvider).updateExternalSessionId(sessionId, resolved);
+      externalId = resolved;
+      continueNotice = antigravityContinueNotice(
+        resolved,
+        sessionWorkingDirectoryOf(_ref, session)?.path ?? '',
       );
     }
 
@@ -183,9 +211,13 @@ class ExplorerActions {
       // stopped distro — is resumed at the repository root instead. That is a
       // different conversation to the agent, whose store is keyed by
       // directory, so the one thing this must not do is happen quietly.
+      // Both notices matter and neither replaces the other: one says which
+      // conversation is being continued, the other that it is being continued
+      // somewhere other than where it ran.
+      final notices = [?continueNotice, ?launched.workingDirectoryNotice];
       return ExplorerResult(
         ExplorerOutcome.resumed,
-        message: launched.workingDirectoryNotice,
+        message: notices.isEmpty ? null : notices.join(' '),
       );
     } catch (error) {
       return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
