@@ -124,6 +124,12 @@ class VerificationService {
           await _openBrowser(recorder, target);
         case VerificationTargetKind.device:
           await _openDevice(recorder, target, launch: launch);
+        case VerificationTargetKind.change:
+          // Nothing to attach to and nothing to bring to the front. A change
+          // run must not touch the browser or adb even to ask them a question:
+          // a review recorded on a machine with no Chrome and no Android SDK
+          // is the ordinary case, not a degraded one.
+          break;
       }
     } on Object catch (error) {
       // The run itself survives a target that could not be reached: an agent
@@ -260,6 +266,10 @@ class VerificationService {
     VerificationRecorder recorder,
     VerificationRun run,
   ) async {
+    // A change run collected nothing without being asked and has nothing to
+    // collect now: its evidence is the notes the reviewer wrote and the reason
+    // on its verdict.
+    if (run.target.isChange) return;
     if (run.target.isBrowser) {
       final browser = browserOf();
       final observer = browser.observer;
@@ -327,6 +337,9 @@ class VerificationService {
   /// evidence threw: a run that leaves its sink installed would record the next
   /// person's clicks.
   Future<void> _detach(VerificationRun run) async {
+    // No sink was installed, so removing one would only be an excuse to
+    // construct a browser this run never wanted.
+    if (run.target.isChange) return;
     final adb = adbOf();
     if (adb != null) adb.actionSink = null;
     final browser = browserOf();
@@ -462,6 +475,7 @@ class VerificationService {
         VerificationTargetKind.browser => 'Verify ${target.url ?? 'the page'}',
         VerificationTargetKind.device =>
           'Verify ${target.packageName ?? target.serial ?? 'the device'}',
+        VerificationTargetKind.change => 'Review of the change',
       };
 
   /// Sortable, unique, and legible in a folder listing.

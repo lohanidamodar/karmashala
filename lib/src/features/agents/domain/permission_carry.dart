@@ -213,3 +213,92 @@ ContinuationPermission resolveContinuationPermission({
         : PermissionChoiceOrigin.chosen,
   );
 }
+
+/// The most a session started to **review** someone else's work may be
+/// trusted with.
+///
+/// [PermissionMode.ask] is not a conservative preference here, it is the only
+/// mode left once "a reviewer must not write" is taken seriously:
+/// [PermissionMode.acceptEdits] auto-approves file edits and
+/// [PermissionMode.bypass] auto-approves everything, so both hand the reviewer
+/// the ability to quietly repair what it was asked to judge — and a review that
+/// fixed the thing it graded is not evidence of anything.
+///
+/// The gap this leaves is real and is stated rather than hidden: no mode in
+/// [PermissionMode] separates *running* a command from *writing* a file, so a
+/// reviewer that wants to run the tests asks first. That is the wrong friction
+/// in the right direction, and closing it needs a new mode rather than a
+/// looser cap here.
+const PermissionMode reviewPermissionCeiling = PermissionMode.ask;
+
+/// What a review session will actually launch under, and whether the session it
+/// reviews was more autonomous than that.
+///
+/// A wrapper around [CarriedPermission] rather than a replacement for it,
+/// because the two answer different questions and the user needs both: the
+/// carry says how faithfully a mode reaches *this agent*, and this says why
+/// that mode is the one being carried at all.
+class ReviewCarry {
+  const ReviewCarry({required this.carried, required this.sessionMode});
+
+  /// The ordinary carry, run against the ceiling rather than against the
+  /// reviewed session's own mode.
+  final CarriedPermission carried;
+
+  /// The mode the session under review runs under. Recorded so the cap can say
+  /// what it reduced, which is the only part of this a user cannot see
+  /// elsewhere.
+  final PermissionMode sessionMode;
+
+  /// The mode the review will be launched with.
+  PermissionMode get mode => carried.mode;
+
+  /// Whether the reviewed session runs under something the ceiling refused to
+  /// carry across.
+  bool get wasCapped =>
+      PermissionMode.values.indexOf(sessionMode) >
+      PermissionMode.values.indexOf(reviewPermissionCeiling);
+
+  /// One sentence for the control that starts the review.
+  ///
+  /// Unlike a handoff, this never needs to be read *before* the launch to keep
+  /// the user safe — a cap can only ever reduce what the next agent may do —
+  /// so it is written to sit in a tooltip rather than a confirmation step.
+  String get summary {
+    final cap = wasCapped
+        ? 'That session runs under ${sessionMode.label}; a review is capped at '
+              '${reviewPermissionCeiling.label.toLowerCase()}, because an '
+              'agent that may write is not reviewing the change, it is '
+              'changing it. '
+        : 'A review may read and run, never write. ';
+    return '$cap${carried.summary}';
+  }
+}
+
+/// The permission a review of a session running under [sessionMode] gets in
+/// [target].
+///
+/// Two rules compose here and the order matters. The ceiling is applied
+/// **first**, to the request, so what reaches [carryPermission] is already no
+/// more than a reviewer may have; [carryPermission] then applies its own
+/// downwards-only rule to fit that onto the agent. Capping afterwards would be
+/// the same answer today and the wrong shape: it would let an agent's mapping
+/// be consulted for a mode no reviewer is allowed to ask for.
+ReviewCarry carryReviewPermission({
+  required PermissionMode sessionMode,
+  required AgentDescriptor? target,
+  String? targetName,
+}) {
+  // min(), spelled as an index comparison for the same reason
+  // [carryPermission] spells "no more permissive" that way: the enum's order is
+  // the safety order, and nothing else defines it.
+  final requested =
+      PermissionMode.values.indexOf(sessionMode) <
+          PermissionMode.values.indexOf(reviewPermissionCeiling)
+      ? sessionMode
+      : reviewPermissionCeiling;
+  return ReviewCarry(
+    carried: carryPermission(requested, target, targetName: targetName),
+    sessionMode: sessionMode,
+  );
+}

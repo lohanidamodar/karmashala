@@ -11,14 +11,18 @@ const List<Map<String, dynamic>> verificationToolSchemas = [
     'description':
         'Begin recording a verification run — a durable, inspectable record '
         'that a change actually works, which you can hand to the human. Give '
-        'EITHER url (a browser run: attaches to the browser, goes there, and '
-        'starts watching the console and network) OR serial (+ optional '
-        'package: a device run, which brings that app to the front). While a '
-        'run is recording, every browser_* and device_* call you make is '
-        'captured as a step with its screenshots; console errors, failed '
-        'requests and the log slice are collected for you at the end. Drive '
-        'the change the way a user would, then call verification_finish with a '
-        'verdict. One run at a time.',
+        'EXACTLY ONE of: url (a browser run: attaches to the browser, goes '
+        'there, and starts watching the console and network), serial (+ '
+        'optional package: a device run, which brings that app to the front), '
+        'or change:true (a review run: nothing is driven, and the record is '
+        'what you read in the diff). While a browser or device run is '
+        'recording, every browser_* and device_* call you make is captured as '
+        'a step with its screenshots; console errors, failed requests and the '
+        'log slice are collected for you at the end. Drive the change the way '
+        'a user would, then call verification_finish with a verdict. One run '
+        'at a time. Pass sessionId when you are checking someone else\'s '
+        'work: it is what makes the verdict count as an independent one '
+        'rather than a self-graded pass.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -32,6 +36,15 @@ const List<Map<String, dynamic>> verificationToolSchemas = [
           'type': 'string',
           'description':
               'Device serial from list_devices. Makes this a device run.',
+        },
+        'change': {
+          'type': 'boolean',
+          'description':
+              'Makes this a review run: the subject is a code change rather '
+              'than a page or a device, so nothing is attached to and nothing '
+              'is collected for you. Write what you find with '
+              'verification_note, and finish with a verdict — a review that '
+              'found nothing is a pass with a reason, never silence.',
         },
         'package': {
           'type': 'string',
@@ -50,8 +63,11 @@ const List<Map<String, dynamic>> verificationToolSchemas = [
         'sessionId': {
           'type': 'string',
           'description':
-              'Session this run belongs to, from list_sessions. Attaching it '
-              'is what lets the human find the evidence from the conversation.',
+              'The session whose WORK is being verified, from list_sessions — '
+              'not yours. Defaults to yours, which is the self-graded case. '
+              'Attaching it is what lets the human find the evidence from the '
+              'conversation, and naming someone else\'s session is what makes '
+              'the verdict independent.',
         },
         'launch': {
           'type': 'boolean',

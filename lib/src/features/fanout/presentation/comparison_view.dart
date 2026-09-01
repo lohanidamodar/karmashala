@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../sessions/application/session_launcher.dart';
+import '../../verification/presentation/review_action.dart';
 import '../application/comparison_providers.dart';
 import '../application/fanout_service.dart';
 import '../domain/comparison.dart';
@@ -517,6 +518,17 @@ class _CandidateColumn extends ConsumerWidget {
           icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
           label: const Text('Open'),
         ),
+        // The upgrade G3 names: N agents answer, and one of them checks
+        // another. The comparison's own prompt is the claim being checked —
+        // it is what every candidate was asked to do, in the words it was
+        // asked in — and the verdict comes back onto this column's chip
+        // because it is filed against this candidate's session.
+        if (candidate.sessionId case final sessionId?)
+          ReviewAction(
+            sessionId: sessionId,
+            claim: comparison.prompt,
+            compact: true,
+          ),
         OutlinedButton.icon(
           onPressed: live && !busy ? onMarkWinner : null,
           icon: const Icon(AppIcons.star, size: Chrome.iconSmall),

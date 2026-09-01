@@ -56,18 +56,24 @@ class VerificationTools {
     final url = _string(args['url']);
     final serial = _string(args['serial']);
     final package = _string(args['package']);
-    if (url == null && serial == null) {
+    final isChange = args['change'] == true;
+    if (url == null && serial == null && !isChange) {
       throw const VerificationException(
-        'Give url (to verify a page) or serial (to verify a device). '
-        'list_devices has the serials.',
+        'Give url (to verify a page), serial (to verify a device), or '
+        'change:true (to record a review of the code itself). list_devices '
+        'has the serials.',
       );
     }
-    if (url != null && serial != null) {
+    // Counted rather than compared pairwise: three kinds have three ways to be
+    // asked for two of them, and a run verifies one thing.
+    if ([url != null, serial != null, isChange].where((set) => set).length > 1) {
       throw const VerificationException(
-        'A run verifies one thing: pass url or serial, not both.',
+        'A run verifies one thing: pass url, serial or change, not several.',
       );
     }
-    final target = url != null
+    final target = isChange
+        ? const VerificationTarget.change()
+        : url != null
         ? VerificationTarget.browser(url)
         : VerificationTarget.device(serial: serial!, packageName: package);
 
@@ -90,13 +96,24 @@ class VerificationTools {
       'Verifier: ${run.producedBySessionId ?? 'not recorded'} '
           '(${run.attribution.shortLabel})',
       '',
-      target.isBrowser
-          ? 'Every browser_* call is now a step, with its screenshots. Console '
-                'errors and failed requests are being collected without being '
-                'asked for.'
-          : 'Every device_* call is now a step, with its screenshots. The '
-                'closing logcat slice and UI tree are collected for you.',
-      'Drive the change, then verification_finish with a verdict and a reason.',
+      switch (target.kind) {
+        VerificationTargetKind.browser =>
+          'Every browser_* call is now a step, with its screenshots. Console '
+              'errors and failed requests are being collected without being '
+              'asked for.',
+        VerificationTargetKind.device =>
+          'Every device_* call is now a step, with its screenshots. The '
+              'closing logcat slice and UI tree are collected for you.',
+        VerificationTargetKind.change =>
+          'Nothing is being driven and nothing is collected for you: this run '
+              'records what you read. Write each finding as a '
+              'verification_note as you reach it.',
+      },
+      target.isChange
+          ? 'Then verification_finish with a verdict and a reason — including '
+                'when you find nothing, which is a pass and not silence.'
+          : 'Drive the change, then verification_finish with a verdict and a '
+                'reason.',
     ]);
   }
 

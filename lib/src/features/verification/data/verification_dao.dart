@@ -221,12 +221,18 @@ class VerificationDao {
     return VerificationRun(
       id: row['id']! as String,
       title: row['title']! as String,
-      target: kind == VerificationTargetKind.device
-          ? VerificationTarget.device(
-              serial: (row['target_serial'] as String?) ?? '',
-              packageName: row['target_package'] as String?,
-            )
-          : VerificationTarget.browser((row['target_url'] as String?) ?? ''),
+      target: switch (kind) {
+        VerificationTargetKind.device => VerificationTarget.device(
+          serial: (row['target_serial'] as String?) ?? '',
+          packageName: row['target_package'] as String?,
+        ),
+        // A change stores no address, so there is no column to read back —
+        // see `VerificationTarget.change`.
+        VerificationTargetKind.change => const VerificationTarget.change(),
+        VerificationTargetKind.browser => VerificationTarget.browser(
+          (row['target_url'] as String?) ?? '',
+        ),
+      },
       sessionId: row['session_id'] as String?,
       producedBySessionId: row['produced_by_session_id'] as String?,
       startedAt: dateFromIso(row['started_at']),
