@@ -79,11 +79,20 @@ final Map<int, MigrationStep> schemaMigrations = {
 
 /// What a session left behind when it ended.
 ///
-/// **Deliberately backfills nothing.** Every session already in the database
-/// has ended in one way or another, and minting a follow-up for each would open
-/// the app on a wall of notices about work the user finished with weeks ago —
-/// the fastest possible way to teach someone to ignore the list. Follow-ups
-/// begin from the first ending this build observes.
+/// **Raises nothing for what is already there, and has to say so out loud.**
+/// The observer's durable signal is the session's own row, which goes on saying
+/// `failed` forever — so without the second statement below, the first sweep
+/// after an upgrade would present a workspace's whole history as things that
+/// just happened. That is a wall of notices about work the user finished with
+/// weeks ago, and the fastest possible way to teach somebody to ignore the
+/// list.
+///
+/// The baseline is written as **already-closed** rows: never raised, never
+/// shown, and marked [FollowUpReason.predatesTheFeature] so anyone reading the
+/// table can see exactly what they are. A closed row with no resolution is
+/// "not recorded", which is what this is — nobody decided anything about these,
+/// they simply predate the question. Follow-ups begin from the first ending
+/// this build actually observes.
 ///
 /// No foreign key on `session_id`, matching `verification_runs`: a notice about
 /// a session must not be able to take that session's row with it, and a session
@@ -110,6 +119,17 @@ void _migrateToV25(Database db) {
   db.execute(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_follow_ups_open '
     'ON session_follow_ups (session_id) WHERE resolved_at IS NULL;',
+  );
+
+  // The status names are the ending names — `endingOfStatus` maps them one to
+  // one — so the mark this writes is exactly the one the service looks for.
+  final now = DateTime.now().toUtc().toIso8601String();
+  db.execute(
+    'INSERT INTO session_follow_ups '
+    '(session_id, reason, ending, raised_at, resolved_at) '
+    "SELECT id, 'predatesTheFeature', status, ?, ? FROM sessions "
+    "WHERE status IN ('completed', 'failed', 'cancelled');",
+    [now, now],
   );
 }
 

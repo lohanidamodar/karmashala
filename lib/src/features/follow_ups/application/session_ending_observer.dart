@@ -37,6 +37,15 @@ import 'follow_up_providers.dart';
 /// watches it, and the attention inbox watches that, so the chain is live for
 /// as long as the window's status bar is.
 class SessionEndingObserver extends Notifier<int> {
+  /// How many times this has seen the follow-up list change.
+  ///
+  /// The provider's value, and it lives on the notifier rather than in [state]
+  /// because [build] re-runs on every workspace change and has to carry the
+  /// count across. Readers use it as a revision: it stands still through a
+  /// sweep that found nothing, which is nearly all of them, and a reader
+  /// watching it therefore re-reads the table only when there is something new.
+  int _revision = 0;
+
   @override
   int build() {
     // Re-read whenever the workspace changes, so a session started after this
@@ -45,7 +54,7 @@ class SessionEndingObserver extends Notifier<int> {
 
     final sessions = ref.read(sessionDaoProvider).getAll();
     final service = ref.read(followUpServiceProvider);
-    service.sweep(sessions);
+    if (service.sweep(sessions)) _revision++;
 
     for (final session in sessions) {
       // Only sessions the row still believes are live. An ended one has already
@@ -59,9 +68,11 @@ class SessionEndingObserver extends Notifier<int> {
           to: to,
         );
         if (ending == null) return;
-        service.notice(sessionId: session.id, ending: ending);
+        if (service.notice(sessionId: session.id, ending: ending) != null) {
+          state = ++_revision;
+        }
       });
     }
-    return sessions.length;
+    return _revision;
   }
 }

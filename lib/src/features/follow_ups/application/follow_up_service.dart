@@ -63,21 +63,26 @@ class FollowUpService {
   /// ending and one update per follow-up that has moved on. Whether a session
   /// was handed on is answered from the list itself, in one pass, rather than
   /// with a `childrenOf` query per session.
-  void sweep(List<Session> sessions) {
+  ///
+  /// Returns whether anything actually changed, so a caller can leave the list
+  /// alone when a pass said the same thing again — which is nearly every pass.
+  bool sweep(List<Session> sessions) {
     final carriedForward = _carriedForward(sessions);
+    var changed = false;
 
     for (final session in sessions) {
       final ending = endingOfStatus(session.status);
       if (ending == null) continue;
-      notice(
+      final raised = notice(
         sessionId: session.id,
         ending: ending,
         carriedForward: carriedForward.contains(session.id),
         session: session,
       );
+      changed = changed || raised != null;
     }
 
-    _retireWhatMovedOn(sessions, carriedForward);
+    return _retireWhatMovedOn(sessions, carriedForward) || changed;
   }
 
   /// A session ended. Raise a follow-up if the rule says one is owed.
@@ -150,6 +155,17 @@ class FollowUpService {
     FollowUpResolution.dismissed,
   );
 
+  /// The user dismissed the follow-up stored at [rowId].
+  ///
+  /// The inbox knows an id, not a record. Resolving straight from the id keeps
+  /// the read off the dismissal path, which runs while the list is being
+  /// rebuilt under the user's cursor.
+  void dismissRow(int rowId) => _dao.resolve(
+    rowId,
+    resolution: FollowUpResolution.dismissed,
+    at: _ref.read(clockProvider).nowUtc(),
+  );
+
   /// Sessions whose work has moved to another session.
   ///
   /// Derived from the list in one pass — no query per session. Only
@@ -169,20 +185,24 @@ class FollowUpService {
   /// The second half of "never nag about something already handled": a session
   /// can acquire a handoff minutes after its follow-up was raised, and the
   /// notice has to leave when the work does.
-  void _retireWhatMovedOn(
+  bool _retireWhatMovedOn(
     List<Session> sessions,
     Set<String> carriedForward,
   ) {
     final open = _dao.open();
-    if (open.isEmpty) return;
+    if (open.isEmpty) return false;
     final present = {for (final session in sessions) session.id};
+    var retired = false;
     for (final followUp in open) {
       if (!present.contains(followUp.sessionId)) {
         _resolve(followUp, FollowUpResolution.sessionGone);
+        retired = true;
       } else if (carriedForward.contains(followUp.sessionId)) {
         _resolve(followUp, FollowUpResolution.carriedForward);
+        retired = true;
       }
     }
+    return retired;
   }
 
   void _resolve(FollowUp followUp, FollowUpResolution resolution) {
@@ -221,6 +241,11 @@ class FollowUpService {
           sessionId,
           wanted: (run) => run.isOpen,
         ),
+        // Neither is ever raised: one is a mark the v25 migration wrote for a
+        // session that had already ended, and the other is a row from a build
+        // that knew more than this one. Both are read-only, and inventing words
+        // for either would be inventing words.
+        FollowUpReason.predatesTheFeature ||
         FollowUpReason.unrecognised => null,
       };
 

@@ -107,14 +107,67 @@ void main() {
 
     schemaMigrations[25]!(db);
 
-    // Nothing that was there moved, and — the half that matters — the
-    // migration invents no follow-ups for the sessions already ended. A
-    // backfill would open the app on a wall of notices about work the user
-    // finished with weeks ago.
     expect(db.select('SELECT * FROM sessions;').length, 1);
+  });
+
+  test('sessions that ended before the feature are marked, never raised', () {
+    // The observer's durable signal is the session's own row, and a row that
+    // says `failed` says it forever. Without this the first sweep after an
+    // upgrade would present a workspace's whole history as things that just
+    // happened.
+    final db = _migratedTo(24);
+    addTearDown(db.close);
+    db.execute('PRAGMA foreign_keys = OFF;');
+    void insert(String id, String status) => db.execute(
+      'INSERT INTO sessions (id, repository_id, agent_installation_id, title, '
+      'use_worktree, status, created_at) '
+      "VALUES (?, 'r-1', 'i-1', ?, 0, ?, '2026-08-01T00:00:00.000Z');",
+      [id, 'Session $id', status],
+    );
+    insert('s-failed', 'failed');
+    insert('s-done', 'completed');
+    insert('s-stopped', 'cancelled');
+    insert('s-live', 'running');
+    insert('s-idle', 'idle');
+
+    schemaMigrations[25]!(db);
+
+    // Nothing is open, so nothing is shown.
     expect(
-      db.select('SELECT COUNT(*) AS n FROM session_follow_ups;').first['n'],
+      db
+          .select(
+            'SELECT COUNT(*) AS n FROM session_follow_ups '
+            'WHERE resolved_at IS NULL;',
+          )
+          .first['n'],
       0,
     );
+    // One closed mark per session that had already ended, and none for the two
+    // still live — those have not ended yet, and when they do the app will
+    // notice properly.
+    final marks = db.select(
+      'SELECT * FROM session_follow_ups '
+      'ORDER BY session_id;',
+    );
+    expect(marks.map((row) => row['session_id']), [
+      's-done',
+      's-failed',
+      's-stopped',
+    ]);
+    // The ending is the row's own status word, which is exactly what
+    // `endingOfStatus` produces — so the mark matches what the service looks
+    // for.
+    expect(marks.map((row) => row['ending']), [
+      'completed',
+      'failed',
+      'cancelled',
+    ]);
+    for (final row in marks) {
+      expect(row['reason'], 'predatesTheFeature');
+      // Closed, with no resolution recorded: nobody decided anything about
+      // these, they simply predate the question.
+      expect(row['resolved_at'], isNotNull);
+      expect(row['resolution'], isNull);
+    }
   });
 }

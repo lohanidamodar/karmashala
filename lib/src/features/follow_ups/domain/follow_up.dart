@@ -47,6 +47,15 @@ enum FollowUpReason {
   /// reading is left.
   verificationAbandoned('Left a check unfinished'),
 
+  /// This session had already ended when follow-ups arrived.
+  ///
+  /// Written **only** by the v25 migration, and written already closed, so it
+  /// is never raised and never shown. It exists to stop the first sweep after
+  /// an upgrade presenting a workspace's whole history as things that just
+  /// happened — a wall of notices about work the user finished with weeks ago
+  /// is the fastest possible way to teach somebody to ignore the list.
+  predatesTheFeature('Ended before follow-ups existed'),
+
   /// A reason this build does not know. Never written, only read.
   unrecognised('Left something this build cannot describe');
 

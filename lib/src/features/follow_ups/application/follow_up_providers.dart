@@ -15,7 +15,11 @@ final followUpServiceProvider = Provider<FollowUpService>(
   FollowUpService.new,
 );
 
-/// Watches sessions end. Nothing reads its value; it is mounted for its effect,
-/// the way `sessionCheckpointRecorderProvider` is.
+/// Watches sessions end.
+///
+/// Its value is a **revision**: it moves when a follow-up was raised or
+/// retired, and stays put when a pass changed nothing, so `openFollowUps` —
+/// which watches it, and by watching it keeps it running — re-reads the table
+/// only when there is something new in it.
 final sessionEndingObserverProvider =
     NotifierProvider<SessionEndingObserver, int>(SessionEndingObserver.new);

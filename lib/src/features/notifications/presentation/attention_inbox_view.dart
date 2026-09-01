@@ -145,6 +145,10 @@ class _InboxRow extends StatelessWidget {
         semantic.attention,
       ),
       InboxItemKind.readyToMerge => (AppIcons.gitMerge, semantic.idle),
+      InboxItemKind.followUp => (
+        AppIcons.clockCounterClockwise,
+        semantic.attention,
+      ),
     };
     // Seen items stay in the list but stop shouting — an approval you have
     // read is still an approval you have not answered.
@@ -189,6 +193,21 @@ class _InboxRow extends StatelessWidget {
                       letterSpacing: 0,
                     ),
                   ),
+                  // The source's own words, when it gave any. Two lines: enough
+                  // to decide whether to open the session without opening it,
+                  // and not so much that the list stops being a list.
+                  if (item.detail case final detail?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        detail,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
