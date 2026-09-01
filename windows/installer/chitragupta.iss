@@ -72,7 +72,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 ; reinstalling leaves one rule rather than a pile. Wrapped so that a Windows
 ; without this cmdlet (pre-22H2) still installs cleanly — WSL sessions simply
 ; keep the degraded behaviour they already had.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""try { Remove-NetFirewallHyperVRule -Name 'Chitragupta-WSL' -ErrorAction SilentlyContinue } catch { }; try { New-NetFirewallHyperVRule -Name 'Chitragupta-WSL' -DisplayName 'Chitragupta (agents in WSL)' -Direction Inbound -Action Allow -VMCreatorId '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol TCP -LocalPorts 47821 -ErrorAction Stop } catch { }"""; Flags: runhidden waituntilterminated; StatusMsg: "Allowing agents in WSL to reach Chitragupta..."
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""try {{ Remove-NetFirewallHyperVRule -Name 'Chitragupta-WSL' -ErrorAction SilentlyContinue } catch {{ }; try {{ New-NetFirewallHyperVRule -Name 'Chitragupta-WSL' -DisplayName 'Chitragupta (agents in WSL)' -Direction Inbound -Action Allow -VMCreatorId '{{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Protocol TCP -LocalPorts 47821 -ErrorAction Stop } catch {{ }"""; Flags: runhidden waituntilterminated; StatusMsg: "Allowing agents in WSL to reach Chitragupta..."
 
 ; --- The phone ---------------------------------------------------------------
 ; The companion relay listens for a phone on the LAN, and the app logged
@@ -87,5 +87,5 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 [UninstallRun]
 ; Ours to remove: rules naming an executable and a port that no longer exist
 ; are exactly the litter an uninstall is for.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""try { Remove-NetFirewallHyperVRule -Name 'Chitragupta-WSL' -ErrorAction SilentlyContinue } catch { }"""; Flags: runhidden
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""try {{ Remove-NetFirewallHyperVRule -Name 'Chitragupta-WSL' -ErrorAction SilentlyContinue } catch {{ }"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Chitragupta"""; Flags: runhidden

@@ -270,6 +270,29 @@ class AppTheme {
           side: BorderSide(color: scheme.outlineVariant),
         ),
       ),
+      // The panel a `SubmenuButton` opens. Without this it fell back to
+      // Material's defaults while every other menu in the app came from
+      // `popupMenuTheme` — a different surface, a heavier elevation, no
+      // border and different padding, all in a menu sitting inches from the
+      // ones it disagreed with. Deliberately the same values as
+      // `popupMenuTheme` above rather than similar ones: two menus that are
+      // meant to look identical should read from one set of numbers.
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          elevation: const WidgetStatePropertyAll(8),
+          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 4),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Radii.sm),
+              side: BorderSide(color: scheme.outlineVariant),
+            ),
+          ),
+        ),
+      ),
       menuBarTheme: MenuBarThemeData(
         style: MenuStyle(
           elevation: const WidgetStatePropertyAll(0),
@@ -286,6 +309,12 @@ class AppTheme {
             EdgeInsets.symmetric(horizontal: Insets.sm),
           ),
           textStyle: WidgetStatePropertyAll(text.bodySmall),
+          // A `MenuItemButton`'s leading icon is sized by the button style,
+          // not by the ambient `iconTheme`, so these came out at Material's
+          // 24pt default beside body-small labels while the same icon in a
+          // toolbar or a popup menu was `Chrome.icon`.
+          iconSize: const WidgetStatePropertyAll(Chrome.icon),
+          iconColor: WidgetStatePropertyAll(scheme.onSurfaceVariant),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(Radii.sm),
