@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../application/device_providers.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_keyboard_sink.dart';
@@ -631,16 +632,33 @@ class _DeviceToolbar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
           Expanded(
             child: DropdownButtonHideUnderline(
+              // `DropdownButton` is Material 2, and the app's
+              // `dropdownMenuTheme` reaches only Material 3's `DropdownMenu` —
+              // so this control quietly fell back to Material's own defaults
+              // and came out at ~16 px with a 24 px chevron, against chrome
+              // that is `bodySmall` with a `Chrome.icon` glyph. That size is
+              // what made "CPH1989 (F6IZLV6LMFT4U4ZT)" wrap onto two lines,
+              // not the serial: at `bodySmall` the whole label fits, and the
+              // serial earns its place here because it is what tells two
+              // identical handsets apart in the picker itself. The ellipsis is
+              // the backstop for a pane narrow enough that it still cannot.
               child: DropdownButton<String>(
                 isExpanded: true,
+                isDense: true,
+                style: theme.textTheme.bodySmall,
+                iconSize: Chrome.icon,
                 value: selected?.serial,
-                hint: const Text('No device selected'),
+                hint: Text(
+                  'No device selected',
+                  style: theme.textTheme.bodySmall,
+                ),
                 items: [
                   for (final device in devices)
                     DropdownMenuItem(
@@ -650,6 +668,8 @@ class _DeviceToolbar extends ConsumerWidget {
                         device.isReady
                             ? '${device.displayName} (${device.serial})'
                             : '${device.displayName} — ${device.state.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                 ],
