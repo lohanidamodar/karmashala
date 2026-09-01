@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
@@ -74,6 +75,17 @@ class SessionHandoffService {
   SessionHandoffService(this._ref);
 
   final Ref _ref;
+
+  /// Every continuation says what it handed over, and how big it was.
+  ///
+  /// A handoff is the one action here that produces a *second* session out of a
+  /// first, so when it goes wrong there are two rows and no record of which
+  /// decision joined them. The packet's length is on the line for a specific
+  /// reason: it is rendered into `firstMessage` and typed into the pane, and
+  /// Claude Code collapses any paste over 800 characters into
+  /// `[Pasted text #N]` — so a packet's size is the difference between the next
+  /// agent reading the brief and reading a placeholder.
+  static final _log = AppLogger.named('sessions.handoff');
 
   // --- what can be offered ---------------------------------------------------
 
@@ -502,6 +514,15 @@ class SessionHandoffService {
       chosen: permissionMode,
     );
 
+    final rendered = packet.render();
+    _log.info(
+      '${isFork ? 'Fork' : 'Handoff'} from $sessionId to '
+      '${context.installation.agentId} ($targetName): '
+      'packet=${rendered.length} chars '
+      'worktree=${intoNewWorktree ? 'new' : 'shared'} '
+      'mode=${carried.override?.name ?? 'default'}',
+    );
+
     return _ref
         .read(sessionLauncherProvider)
         .launch(
@@ -512,7 +533,7 @@ class SessionHandoffService {
                 ? _forkTitle(sessionId, session.title)
                 : '${session.title} · $targetName',
             purpose: SessionPurpose.newSession,
-            firstMessage: packet.render(),
+            firstMessage: rendered,
             parentSessionId: sessionId,
             parentLink: link,
             useWorktree: intoNewWorktree,
