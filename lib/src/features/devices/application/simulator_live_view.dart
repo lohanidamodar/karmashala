@@ -1,24 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../core/logging/app_logger.dart';
+import '../data/mjpeg_stream.dart';
 import '../domain/simulator_backend.dart';
 import 'ios_device_providers.dart';
+import 'simulator_frames.dart';
 
 /// A live view of one simulator, and everything that has to be torn down.
 class SimulatorLiveView {
   const SimulatorLiveView({
     required this.udid,
-    required this.player,
-    required this.controller,
+    required this.frames,
     required this.feed,
     this.screen,
   });
 
   final String udid;
-  final Player player;
-  final VideoController controller;
+
+  /// The newest frame of the simulator's screen, repainted as they arrive.
+  final SimulatorFrames frames;
   final SimulatorVideoFeed feed;
 
   /// The device's size **in points**, which is the space taps are sent in.
@@ -90,59 +90,24 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
     await stop();
     _set(SimulatorLiveViewStarting(udid));
 
-    Player? player;
+    SimulatorFrames? frames;
     try {
       final feed = await backend.startVideo(udid);
       // Read once, here: it costs an accessibility round trip, and it cannot
       // change while the picture is up short of a rotation.
       final screen = await backend.screen(udid);
-      player = Player(
-        configuration: const PlayerConfiguration(
-          // A live view wants the newest frame, not a smooth buffer.
-          bufferSize: 256 * 1024,
-          logLevel: MPVLogLevel.error,
-          protocolWhitelist: ['file', 'tcp', 'http'],
-        ),
-      );
-      final native = player.platform as NativePlayer;
-      for (final entry in const {
-        'profile': 'low-latency',
-        'cache': 'no',
-        'demuxer-readahead-secs': '0',
-        'demuxer-lavf-analyzeduration': '0',
-        'untimed': 'yes',
-        'audio': 'no',
-      }.entries) {
-        await native.setProperty(entry.key, entry.value);
-      }
-      // Software decoding, deliberately. With hardware acceleration on, the
-      // texture was created and then resized to **0x0** — libmpv never reported
-      // video parameters and the pane showed a black rectangle of the right
-      // shape. VideoToolbox has no MJPEG decoder to hand this to; the Android
-      // path gets away with the default because scrcpy sends H.264, which it
-      // does. MJPEG is cheap to decode on the CPU, which is the whole reason
-      // WebDriverAgent sends it.
-      //
-      // The Android path also pins `vd-lavc-threads: 1`, which is right for a
-      // 720p H.264 stream and wrong here: these frames are full-resolution
-      // (1206x2622) and decoding them one thread at a time is the bottleneck.
-      final controller = VideoController(
-        player,
-        configuration: const VideoControllerConfiguration(
-          enableHardwareAcceleration: false,
-        ),
-      );
-      // No demuxer is named: the stream is `multipart/x-mixed-replace`, which
-      // libmpv detects on its own. Verified with mpv against a real simulator:
-      // `Video --vid=1 (mjpeg 1206x2622)`.
-      await player.open(Media(feed.url.toString()));
+      frames = SimulatorFrames(MjpegStream.connect(feed.url));
+      frames.errors.listen((message) {
+        if (_current is SimulatorLiveViewRunning) {
+          _set(SimulatorLiveViewFailed(udid, message));
+        }
+      });
 
       _set(
         SimulatorLiveViewRunning(
           SimulatorLiveView(
             udid: udid,
-            player: player,
-            controller: controller,
+            frames: frames,
             feed: feed,
             screen: screen,
           ),
@@ -150,7 +115,7 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
       );
     } on Object catch (error, stack) {
       _logger.warning('The simulator live view would not start', error, stack);
-      await player?.dispose();
+      await frames?.dispose();
       _set(SimulatorLiveViewFailed(udid, '$error'));
     }
   }
@@ -169,7 +134,7 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
     } on Object {
       // The picture is going away either way.
     }
-    await view.player.dispose();
+    await view.frames.dispose();
   }
 }
 

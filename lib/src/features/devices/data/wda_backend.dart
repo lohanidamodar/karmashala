@@ -174,6 +174,15 @@ class WdaBackend implements SimulatorBackend {
     }
   }
 
+  /// Detaches from whatever is attached, if anything.
+  ///
+  /// For teardown paths that cannot ask another provider which simulator was
+  /// in use — see `simulatorBackendProvider`'s `onDispose`.
+  Future<void> detachAll() async {
+    final attached = _attached;
+    if (attached != null) await detach(attached);
+  }
+
   @override
   Future<SimulatorScreen?> screen(String udid) async {
     await attach(udid);

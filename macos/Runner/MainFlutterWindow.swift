@@ -36,6 +36,29 @@ class MainFlutterWindow: NSWindow {
 
     super.awakeFromNib()
   }
+
+  /// Cmd+Q, caught before the Flutter view can eat it.
+  ///
+  /// AppKit offers a key equivalent to the key window's view hierarchy *before*
+  /// the main menu. The terminal keeps a hidden text field focused for its
+  /// keyboard input, and Flutter's macOS text-input plugin answers
+  /// `performKeyEquivalent:` for the whole window while a field is active — so
+  /// with a terminal open, Cmd+Q was consumed there and the menu's Quit never
+  /// ran. Handling it here, ahead of `super`, is the only place that is
+  /// reliably in front of the engine.
+  ///
+  /// `applicationShouldTerminate` still handles the menu item being clicked;
+  /// this is only about the keystroke.
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let onlyCommand =
+      event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+    if onlyCommand, event.charactersIgnoringModifiers?.lowercased() == "q" {
+      if LifecycleChannel.shared.requestQuit() {
+        return true
+      }
+    }
+    return super.performKeyEquivalent(with: event)
+  }
 }
 
 /// The `launch_at_startup` platform channel, backed by `SMAppService`.

@@ -112,6 +112,7 @@ void main() {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       final service = await lifecycle.startSystemIntegration(
+        endProcess: () {},
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );
@@ -136,7 +137,9 @@ void main() {
     test('a step that throws does not stop the ones after it', () async {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(registerOsQuit: (_) {}, adapters: natives.adapters);
+      await lifecycle.startSystemIntegration(
+endProcess: () {},
+registerOsQuit: (_) {}, adapters: natives.adapters);
       lifecycle.adopt(
         hookInstallation: Future<void>.error(StateError('hook write failed')),
       );
@@ -293,7 +296,9 @@ void main() {
         stopwatch: _FrozenStopwatch(const Duration(seconds: 5)),
       );
       final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(registerOsQuit: (_) {}, adapters: natives.adapters);
+      await lifecycle.startSystemIntegration(
+endProcess: () {},
+registerOsQuit: (_) {}, adapters: natives.adapters);
       lifecycle.adopt(hookInstallation: Completer<void>().future);
 
       await lifecycle.shutdown();
@@ -318,7 +323,9 @@ void main() {
       // exact failure this owner exists to prevent, so it gets its own test.
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(registerOsQuit: (_) {}, adapters: natives.adapters);
+      await lifecycle.startSystemIntegration(
+endProcess: () {},
+registerOsQuit: (_) {}, adapters: natives.adapters);
       final server = LauncherControlServer(container);
       final bridge = p.join(tmp.path, 'mcp_bridge.json');
       await server.start(
@@ -355,7 +362,9 @@ void main() {
         shutdownBudget: const Duration(milliseconds: 60),
       );
       final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(registerOsQuit: (_) {}, adapters: natives.adapters);
+      await lifecycle.startSystemIntegration(
+endProcess: () {},
+registerOsQuit: (_) {}, adapters: natives.adapters);
       lifecycle.adopt(hookInstallation: Completer<void>().future);
       natives.tray.destroyDelay = const Duration(seconds: 30);
 
@@ -371,7 +380,9 @@ void main() {
     test('a clean shutdown is far inside Loop 55\'s envelope', () async {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(registerOsQuit: (_) {}, adapters: natives.adapters);
+      await lifecycle.startSystemIntegration(
+endProcess: () {},
+registerOsQuit: (_) {}, adapters: natives.adapters);
       final server = LauncherControlServer(container);
       await server.start(
         bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
@@ -395,7 +406,9 @@ void main() {
     test('a second shutdown is the same shutdown', () async {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(registerOsQuit: (_) {}, adapters: natives.adapters);
+      await lifecycle.startSystemIntegration(
+endProcess: () {},
+registerOsQuit: (_) {}, adapters: natives.adapters);
 
       await Future.wait([lifecycle.shutdown(), lifecycle.shutdown()]);
       await lifecycle.shutdown();
@@ -414,6 +427,7 @@ void main() {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       final service = await lifecycle.startSystemIntegration(
+        endProcess: () {},
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );
@@ -441,6 +455,7 @@ void main() {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       final service = await lifecycle.startSystemIntegration(
+        endProcess: () {},
         registerOsQuit: (_) {},
         adapters: natives.adapters,
       );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:media_kit_video/media_kit_video.dart';
+import 'dart:ui' as ui;
+
 
 import '../data/device_gesture_sink.dart';
 import 'device_touch_surface.dart';
@@ -156,13 +157,33 @@ class _Running extends ConsumerWidget {
 }
 
 /// The picture itself.
+/// Paints the newest decoded frame.
+///
+/// A plain [RawImage] rather than a video widget: the picture is a stream of
+/// JPEGs decoded in [SimulatorFrames], because media_kit's libmpv has no
+/// `mpjpeg` demuxer and cannot read WebDriverAgent's stream at all. Rebuilds
+/// are scoped to the notifier, so a new frame repaints the image and nothing
+/// else in the pane.
 ///
 /// `BoxFit.fill`, because every caller sizes the box to the device's aspect
 /// ratio first. The touch surface can only map a tap if its box *is* the
 /// picture rather than the letterboxed area around it, and `fill` inside a
 /// correctly-shaped box is the same image `contain` would draw in a loose one.
-Widget _video(SimulatorLiveView view) => Video(
-  controller: view.controller,
-  fit: BoxFit.fill,
-  controls: NoVideoControls,
+Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
+  valueListenable: view.frames.image,
+  builder: (context, image, _) {
+    if (image == null) {
+      // Until the first frame decodes, which is a fraction of a second after
+      // the stream opens.
+      return const ColoredBox(color: Colors.black);
+    }
+    return RawImage(
+      image: image,
+      fit: BoxFit.fill,
+      // The frames are already device pixels. Leaving this at the window's
+      // ratio would ask Flutter to shrink them again on a Retina display.
+      scale: 1,
+      filterQuality: FilterQuality.medium,
+    );
+  },
 );

@@ -87,11 +87,14 @@ final simulatorBackendProvider = Provider<WdaBackend?>((ref) {
   );
   // The runner keeps running inside the simulator otherwise, holding :8100 and
   // :9100 against the next simulator someone opens.
-  ref.onDispose(() async {
-    for (final udid in [ref.read(selectedSimulatorUdidProvider)]) {
-      if (udid != null) await backend.detach(udid);
-    }
-  });
+  //
+  // The backend is asked what it attached to, rather than this reading
+  // `selectedSimulatorUdidProvider`: touching another provider inside a dispose
+  // callback is forbidden — Riverpod asserts `Cannot use Ref or modify other
+  // providers inside life-cycles` — and it threw *during container disposal*,
+  // which is the last step of the ordered shutdown. The visible symptom was
+  // Cmd+Q doing nothing at all.
+  ref.onDispose(backend.detachAll);
   return backend;
 });
 

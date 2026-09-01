@@ -40,6 +40,7 @@ void main() {
   Future<void> build() async {
     service = SystemIntegrationService(
       registerOsQuit: (quit) => osQuit = quit,
+      endProcess: () {},
       container,
       adapters: natives.adapters,
       onQuitRequested: () async => quitCalls.add('shutdown'),
@@ -368,6 +369,7 @@ void main() {
       final order = <String>[];
       service = SystemIntegrationService(
       registerOsQuit: (quit) => osQuit = quit,
+      endProcess: () {},
         container,
         adapters: natives.adapters,
         onQuitRequested: () async => order.add('shutdown'),
@@ -376,15 +378,48 @@ void main() {
 
       await service.quit();
 
-      // `destroy()` ends the process; anything sequenced after it never runs.
+      // The shutdown has to finish before the window goes: destroying it is
+      // what the user sees, and a step that ran after would be invisible.
       expect(order, ['shutdown']);
       expect(natives.window.destroyed, isTrue);
       expect(natives.window.calls.indexOf('destroy'), greaterThan(-1));
     });
 
+    test('quitting twice quits once', () async {
+      // The macOS quit loop. `applicationShouldTerminate` cancels AppKit's own
+      // termination so the ordered shutdown can run, then Dart destroys the
+      // window — and destroying the last window makes AppKit ask again. The two
+      // bounced off each other ~1400 times a second, running the shutdown over
+      // a container the first pass had already disposed, and the app stayed up
+      // with a dead container behind a live window: Cmd+Q looked like it did
+      // nothing, and closing to the tray stopped working afterwards.
+      final order = <String>[];
+      var ended = 0;
+      service = SystemIntegrationService(
+        registerOsQuit: (quit) => osQuit = quit,
+        endProcess: () => ended++,
+        container,
+        adapters: natives.adapters,
+        onQuitRequested: () async => order.add('shutdown'),
+      );
+      await service.init();
+
+      await service.quit();
+      await service.quit();
+      await service.quit();
+
+      expect(order, ['shutdown'], reason: 'the shutdown runs once');
+      expect(ended, 1, reason: 'and the process is ended once');
+      expect(
+        natives.window.calls.where((c) => c == 'destroy'),
+        hasLength(1),
+      );
+    });
+
     test('a shutdown hook that throws still lets the app close', () async {
       service = SystemIntegrationService(
       registerOsQuit: (quit) => osQuit = quit,
+      endProcess: () {},
         container,
         adapters: natives.adapters,
         onQuitRequested: () async => throw StateError('teardown blew up'),

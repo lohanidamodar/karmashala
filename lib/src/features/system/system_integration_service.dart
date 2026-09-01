@@ -116,10 +116,19 @@ class SystemIntegrationService with TrayListener, WindowListener {
     AppLogger? logger,
     Future<void> Function()? onQuitRequested,
     OsQuitRegistrar? registerOsQuit,
+    void Function()? endProcess,
   }) : _native = adapters ?? NativeAdapters.platform(),
        _logger = logger ?? AppLogger.named('system'),
        _onQuitRequested = onQuitRequested ?? _noShutdown,
-       _registerOsQuit = registerOsQuit ?? registerOsQuitOverChannel;
+       _registerOsQuit = registerOsQuit ?? registerOsQuitOverChannel,
+       _endProcess = endProcess ?? _exitProcess;
+
+  static void _exitProcess() => exit(0);
+
+  /// Ends the process, once the ordered shutdown has run and the window is
+  /// gone. A seam so tests can exercise quitting without taking the test
+  /// runner down with it.
+  final void Function() _endProcess;
 
   /// How the OS's own Quit reaches this service.
   ///
@@ -152,6 +161,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// an ordered quit when this is false.
   bool _trayIconApplied = false;
   bool _disposed = false;
+
+  /// Set the moment quitting begins, and never cleared.
+  ///
+  /// Quitting is re-entrant on macOS: destroying the last window makes
+  /// AppKit ask `applicationShouldTerminate` again, which asks Dart to quit
+  /// again. Without this the two bounce off each other forever — the
+  /// container is disposed on the first pass, so every later pass throws its
+  /// way through the same steps, ~1400 times a second, and the app stays up
+  /// with a dead container behind a live window. Quitting happens once.
+  bool _quitting = false;
 
   /// What the user asked for, kept separately from what the OS confirmed.
   bool? _desiredKeepAwake;
@@ -606,12 +625,14 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Quits the application.
   ///
   /// The workspace snapshot goes first and synchronously, then the lifecycle
-  /// owner gets its ordered shutdown, and only then is the window destroyed —
-  /// `destroy()` ends the process, so anything after it does not happen.
-  /// The one graceful exit, shared by the tray's Quit and the menu bar's.
+  /// owner gets its ordered shutdown, then the window is destroyed, and the
+  /// process ends. The one graceful exit, shared by the tray's Quit, the menu
+  /// bar's, and Cmd+Q. Runs at most once per launch.
   Future<void> quit() => _quit();
 
   Future<void> _quit() async {
+    if (_quitting) return;
+    _quitting = true;
     _saveTerminalWorkspace();
     try {
       await _onQuitRequested();
@@ -624,8 +645,12 @@ class SystemIntegrationService with TrayListener, WindowListener {
       await _native.window.setPreventCloseAndDestroy();
     } on Object catch (error) {
       _logger.warning('system: window destroy failed reason=$error');
-      exit(0);
     }
+    // Destroying the window does not end the process: `applicationShouldTerminate`
+    // cancels AppKit's own termination so this ordered shutdown can run at all,
+    // and that cancellation applies just as much to the close that `destroy()`
+    // causes. Ending it here is the only thing that actually does.
+    _endProcess();
   }
 
   /// Snapshots the terminal workspace on the way out.
