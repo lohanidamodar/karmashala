@@ -112,26 +112,27 @@ class FakeTerminalInstance
   final tierHistory = <IngestTier>[];
 
   /// Storage, though, is real: the fake parks, spools and refreshes its screen
-  /// through the same [ScrollbackPark], [ScrollbackSpool] and [ColdScreen] a
-  /// PTY pane does, so the tiering is exercised by every controller test and by
-  /// the scale benchmark rather than only by a pane nothing can construct
-  /// without spawning a shell.
-  late final ScrollbackPark park = ScrollbackPark(terminal);
-  final ScrollbackSpool spool = ScrollbackSpool();
-
+  /// through the same [ColdIngest] a PTY pane does — the same detach, the same
+  /// reattach — so the tiering is exercised by every controller test and by the
+  /// scale benchmark rather than only by a pane nothing can construct without
+  /// spawning a shell.
+  ///
   /// Its own budget, and no throttle: a fake pane's output arrives one `receive`
   /// at a time because a test said so, so rationing it would only make tests
   /// wait. What the interval and the shared pool actually do is pinned by
   /// `cold_screen_test.dart`.
-  late final ColdScreen coldScreen = ColdScreen(
+  late final ColdIngest cold = ColdIngest(
     terminal: terminal,
-    park: park,
     budget: TerminalIngestBudget(),
     refreshInterval: Duration.zero,
   );
 
+  ScrollbackPark get park => cold.park;
+  ScrollbackSpool get spool => cold.spool;
+  ColdScreen get coldScreen => cold.screen;
+
   @override
-  String? get parkedScrollback => park.parked;
+  String? get parkedScrollback => cold.parkedScrollback;
 
   /// The same rule [PtyTerminalInstance] applies: a pane that has stopped and
   /// still has its buffer can hand it over; a parked one cannot, because it
@@ -144,9 +145,7 @@ class FakeTerminalInstance
   /// tiering a real pane's bytes go through.
   void receive(String text) {
     if (ingestTier == IngestTier.cold) {
-      final bytes = const Utf8Encoder().convert(text);
-      spool.add(bytes);
-      coldScreen.add(bytes);
+      cold.add(const Utf8Encoder().convert(text));
       return;
     }
     terminal.write(text);
@@ -159,15 +158,9 @@ class FakeTerminalInstance
     ingestTier = tier;
     tierHistory.add(tier);
     if (tier == IngestTier.cold) {
-      park.park();
+      cold.detach(Uint8List(0));
     } else if (wasCold) {
-      coldScreen.reset();
-      park.unpark();
-      final replay = spool.drain();
-      spool.reset();
-      if (replay.isNotEmpty) {
-        terminal.write(const Utf8Decoder(allowMalformed: true).convert(replay));
-      }
+      cold.reattach();
     }
   }
 
