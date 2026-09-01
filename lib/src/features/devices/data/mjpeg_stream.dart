@@ -99,6 +99,22 @@ class _MultipartJpegParser {
     final frames = <Uint8List>[];
 
     while (true) {
+      // WebDriverAgent writes CRLF CRLF *after* each frame as well as after the
+      // part headers, so what follows a frame is `\r\n\r\n--Boundary...`.
+      // Searching straight for the header terminator found that trailing pair
+      // instead, at offset zero: the headers came out empty, there was no
+      // Content-Length to read, and the fallback scan then returned everything
+      // from the boundary line to the next end marker. Every frame after the
+      // first began with `--BoundaryString` rather than a JPEG header — which
+      // decodes to nothing, and showed up as a picture that never advanced past
+      // its first frame.
+      var lead = 0;
+      while (lead < bytes.length &&
+          (bytes[lead] == 13 || bytes[lead] == 10)) {
+        lead++;
+      }
+      if (lead > 0) bytes = Uint8List.sublistView(bytes, lead);
+
       final headerEnd = _indexOf(bytes, _headerEnd);
       if (headerEnd < 0) {
         if (bytes.length > _maxHeaderBytes && _indexOfSoi(bytes) < 0) {

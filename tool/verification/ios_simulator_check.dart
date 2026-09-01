@@ -13,6 +13,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala/src/core/process/local_command_runner.dart';
+import 'package:karmashala/src/features/devices/data/mjpeg_stream.dart';
 import 'package:karmashala/src/features/devices/data/wda_backend.dart';
 import 'package:karmashala/src/features/devices/data/wda_locator.dart';
 import 'package:karmashala/src/features/devices/data/simctl_service.dart';
@@ -159,39 +160,57 @@ void main(List<String> args) async {
       final feed = await backend.startVideo(target.udid, fps: 30);
       stdout.writeln('$_tick video url ${feed.url}');
 
-      // Pull the stream the way the player would, and count what arrives.
-      final client = HttpClient();
+      // Pull the stream the way the pane does, through the same parser, and
+      // check that whole JPEGs come out of it.
+      //
+      // This used to count bytes only, and so reported a healthy stream the
+      // whole time the pane was black: bytes were arriving and nothing could
+      // read them. Frames are the thing that matters.
+      var frames = 0;
       var bytes = 0;
+      var shortest = 1 << 30;
+      final malformed = <String>[];
+      final done = Completer<void>();
+      final subscription = MjpegStream.connect(feed.url).listen(
+        (frame) {
+          frames++;
+          bytes += frame.length;
+          if (frame.length < shortest) shortest = frame.length;
+          final soi = frame.length > 1 && frame[0] == 0xFF && frame[1] == 0xD8;
+          final eoi = frame.length > 1 &&
+              frame[frame.length - 2] == 0xFF &&
+              frame[frame.length - 1] == 0xD9;
+          if (!soi || !eoi) {
+            malformed.add('frame $frames: soi=$soi eoi=$eoi len=${frame.length}');
+          }
+          if (frames >= 30 && !done.isCompleted) done.complete();
+        },
+        onError: (Object error) {
+          if (!done.isCompleted) done.completeError(error);
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+      );
       try {
-        final response = await client.getUrl(feed.url).then((r) => r.close());
-        final done = Completer<void>();
-        final subscription = response.listen(
-          (chunk) {
-            bytes += chunk.length;
-            if (bytes > 200000 && !done.isCompleted) done.complete();
-          },
-          onError: (Object _) {
-            if (!done.isCompleted) done.complete();
-          },
-          onDone: () {
-            if (!done.isCompleted) done.complete();
-          },
-        );
-        await done.future.timeout(
-          const Duration(seconds: 15),
-          onTimeout: () {},
-        );
-        await subscription.cancel();
+        await done.future.timeout(const Duration(seconds: 15), onTimeout: () {});
       } finally {
-        client.close(force: true);
+        await subscription.cancel();
         await feed.stop();
       }
 
+      final seconds = DateTime.now().difference(started).inSeconds;
       stdout.writeln(
-        '$_tick video: ${(bytes / 1024).round()} KiB in '
-        '${DateTime.now().difference(started).inSeconds}s',
+        '$_tick video: $frames frames, ${(bytes / 1024).round()} KiB in '
+        '${seconds}s (~${seconds == 0 ? frames : frames ~/ seconds} fps), '
+        'smallest ${shortest ~/ 1024} KiB',
       );
-      if (bytes == 0) throw StateError('nothing came down the stream');
+      if (frames == 0) {
+        throw StateError('no frames came out of the stream');
+      }
+      if (malformed.isNotEmpty) {
+        throw StateError('frames were not whole JPEGs: ${malformed.take(3)}');
+      }
     });
 
   } finally {

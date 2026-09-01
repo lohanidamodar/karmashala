@@ -26,7 +26,9 @@ List<int> part(Uint8List body, {bool contentLength = true}) => [
   if (contentLength) ...'Content-Length: ${body.length}\r\n'.codeUnits,
   ...'\r\n'.codeUnits,
   ...body,
-  ...'\r\n'.codeUnits,
+  // Two, as WebDriverAgent writes them. One is what a reading of the multipart
+  // grammar suggests, and the difference is the whole bug this guards.
+  ...'\r\n\r\n'.codeUnits,
 ];
 
 /// Serves [chunks] as one `multipart/x-mixed-replace` response, writing them in
