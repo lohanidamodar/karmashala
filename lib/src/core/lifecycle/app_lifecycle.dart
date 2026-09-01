@@ -185,6 +185,20 @@ class AppLifecycle {
   /// Installs the agents' status hooks in the background and retains the
   /// future, so shutdown can wait for a config rewrite rather than cut it off.
   void installAgentHooks(LauncherControlServer server) {
+    // The WSL switch usually does not exist yet when an app that launches with
+    // Windows starts, so the first sweep skips every WSL store — and until now
+    // nothing ever revisited that decision: the owner's WSL sessions ran all
+    // morning with no hooks while the adapter sat there. The server tells us
+    // when it finally binds, and the sweep is idempotent to the byte, so
+    // running it again costs a config rewrite only where something changed.
+    server.onWslInterfaceBound = () {
+      _logger.info('The WSL switch is up; installing hooks for it now.');
+      _installAgentHooksNow(server);
+    };
+    _installAgentHooksNow(server);
+  }
+
+  void _installAgentHooksNow(LauncherControlServer server) {
     final endpoint = server.hookEndpoint;
     if (endpoint == null) return;
     // Off the startup path: rewriting hooks reads and writes the agents' own

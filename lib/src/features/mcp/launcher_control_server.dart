@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -85,6 +86,10 @@ import 'wsl_host_address.dart';
 /// ephemeral range (49152+) so it is unlikely to be taken, and written into
 /// the installer's rule.
 const int preferredControlPort = 47821;
+
+/// How often to look again for the WSL switch while it is missing.
+/// Cheap — one interface enumeration — and it stops at the first success.
+const Duration wslRetryInterval = Duration(seconds: 30);
 
 /// A loopback HTTP server that exposes chitragupta's data and actions to the
 /// launcher agent's MCP bridge (see `--mcp-serve`).
@@ -194,6 +199,20 @@ class LauncherControlServer implements SessionMcp {
   /// every run where no MCP credential was minted. See [_bindWslInterface].
   HttpServer? _wslServer;
   InternetAddress? _wslHost;
+
+  /// Pending re-attempt at binding the WSL switch, or null when there is none
+  /// outstanding — which is also how the log line above stays a one-off rather
+  /// than a message every retry.
+  Timer? _wslRetry;
+
+  /// How long to wait before looking for the switch again. A field rather than
+  /// the constant directly so a test can prove the retry without sleeping.
+  Duration _wslRetryEvery = wslRetryInterval;
+
+  /// Called the first time the switch is bound *after* the initial attempt
+  /// failed, so hooks skipped at startup can be installed now that a WSL agent
+  /// has an address to post to.
+  void Function()? onWslInterfaceBound;
   LocalRpcServer? _socketServer;
   bool _httpRpcEnabled = false;
   String? _token;
@@ -358,8 +377,10 @@ class LauncherControlServer implements SessionMcp {
     Future<InternetAddress?> Function() wslHostAddress =
         resolveWslHostAddress,
     int preferredPort = preferredControlPort,
+    Duration retryWslEvery = wslRetryInterval,
   }) async {
     if (_server != null) return;
+    _wslRetryEvery = retryWslEvery;
     final server = await _bindControlPort(preferredPort);
     _server = server;
     // A *separate* token for /agent-hook. It is pasted verbatim into a curl
@@ -521,7 +542,25 @@ class LauncherControlServer implements SessionMcp {
   ) async {
     try {
       final host = await lookup();
-      if (host == null) return;
+      if (host == null) {
+        // Silently giving up here disabled WSL tools and WSL hooks for the
+        // whole run. The owner hit exactly that: the app started at 11:25, the
+        // switch was not enumerable at that instant, nothing was logged, and
+        // every WSL session that day launched without its tools while the
+        // adapter sat there the rest of the morning. The app looked once, at
+        // the one moment it was least likely to be true — an app that starts
+        // with Windows starts before WSL does.
+        if (_wslRetry == null) {
+          _logger.info(
+            'No WSL switch adapter yet (looking for one named '
+            '"vEthernet (WSL...)"), so WSL sessions have no tools and no '
+            'hooks for now. Retrying every '
+            '${_wslRetryEvery.inSeconds}s.',
+          );
+        }
+        _scheduleWslRetry(port, lookup);
+        return;
+      }
       final server = await HttpServer.bind(host, port);
       _wslServer = server;
       _wslHost = host;
@@ -538,6 +577,11 @@ class LauncherControlServer implements SessionMcp {
         onError: (Object e) => _logger.warning('$e'),
       );
       _logger.info('MCP also on ${host.address}:$port, for WSL sessions.');
+      final wasRetrying = _wslRetry != null;
+      _cancelWslRetry();
+      // Hooks were installed at startup, when this address did not exist, so
+      // every WSL store was skipped. Nothing else would ever revisit that.
+      if (wasRetrying) onWslInterfaceBound?.call();
     } on Object catch (error, stack) {
       _logger.warning(
         'MCP could not listen on the WSL interface; '
@@ -545,7 +589,24 @@ class LauncherControlServer implements SessionMcp {
         error,
         stack,
       );
+      _scheduleWslRetry(port, lookup);
     }
+  }
+
+  /// Looks for the switch again later. The adapter appears when WSL first
+  /// starts, which is routinely long after an app that launches with Windows.
+  void _scheduleWslRetry(int port, Future<InternetAddress?> Function() lookup) {
+    _wslRetry?.cancel();
+    _wslRetry = Timer(_wslRetryEvery, () {
+      // The server was stopped while we waited; nothing to bind to any more.
+      if (_server == null) return;
+      unawaited(_bindWslInterface(port, lookup));
+    });
+  }
+
+  void _cancelWslRetry() {
+    _wslRetry?.cancel();
+    _wslRetry = null;
   }
 
   /// Creates the owner-only directory per-session MCP configs go in, empty.
@@ -652,6 +713,7 @@ class LauncherControlServer implements SessionMcp {
   }
 
   Future<void> stop() async {
+    _cancelWslRetry();
     _tokenReaper.stop();
     await _server?.close(force: true);
     await _wslServer?.close(force: true);
