@@ -57,8 +57,9 @@ class EditorActions {
     final dao = _ref.read(executionEnvironmentDaoProvider);
     final env = dao.getById(path.environmentId);
     if (env == null) return null;
-    if (env.kind == EnvironmentKind.windowsNative) return path.path;
-    final windows = dao.getById(localWindowsEnvironmentId);
+    // Already a path this process can open, on whichever OS it is running.
+    if (isLocalHost(env.kind)) return path.path;
+    final windows = dao.getById(localHostEnvironmentId);
     if (windows == null) return null;
     try {
       return _translator.translate(path, from: env, to: windows).path;

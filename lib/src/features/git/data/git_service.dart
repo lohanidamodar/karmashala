@@ -80,7 +80,7 @@ EnvironmentPath worktreePathFor(
   EnvironmentPath repo,
   String worktreeName,
 ) {
-  final ctx = kind == EnvironmentKind.windowsNative ? p.windows : p.posix;
+  final ctx = usesWindowsPaths(kind) ? p.windows : p.posix;
   final parent = ctx.dirname(repo.path);
   final base = ctx.basename(repo.path);
   final dir = ctx.join(parent, '.karmashala-worktrees', '$base-$worktreeName');

@@ -51,7 +51,12 @@ final sessionDirectoryPresentProvider =
           final env = environments.getById(directory.environmentId);
           if (env == null) return true;
           var resolved = directory.path;
-          if (env.kind != EnvironmentKind.windowsNative) {
+          // A path on this machine is already the name this process opens it
+          // by. Asking only about `windowsNative` meant a Mac fell into the
+          // translation branch, found no Windows environment to translate to,
+          // and answered "could not tell" for every session it owns — so a
+          // checkout deleted under the app was never flagged.
+          if (!isLocalHost(env.kind)) {
             ExecutionEnvironment? windows;
             for (final candidate in environments.getAll()) {
               if (candidate.kind == EnvironmentKind.windowsNative) {
