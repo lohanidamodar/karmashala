@@ -11,6 +11,7 @@ import 'adb_output_parsing.dart';
 import 'adb_service.dart';
 import 'scrcpy_control.dart';
 import 'scrcpy_protocol.dart';
+import 'loopback_media_server.dart';
 import 'ts_muxer.dart';
 
 /// scrcpy release this app deploys. The jar and the version string handed to
@@ -564,26 +565,23 @@ class DeviceStreamService {
     });
 
     // 6. Serve MPEG-TS over loopback.
-    final http = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    http.listen((request) async {
-      // A fresh muxer per consumer: continuity counters and the timestamp base
-      // belong to one output stream, and replaying packets to a second consumer
+    //
+    // The muxing lives here because it is scrcpy-shaped — SPS/PPS republished
+    // ahead of every keyframe, a cached keyframe replayed so a viewer does not
+    // wait for the next one — while the door itself is [LoopbackMediaServer],
+    // which knows nothing about H.264 and is what a second live-view backend
+    // uses too.
+    Uint8List accessUnitFor(ScrcpyFrame frame, Uint8List? config) =>
+        (frame.isKeyFrame && config != null)
+        ? Uint8List.fromList([...config, ...frame.data])
+        : frame.data;
+
+    Stream<List<int>> muxedForOneViewer() async* {
+      // A fresh muxer per viewer: continuity counters and the timestamp base
+      // belong to one output stream, and replaying packets to a second viewer
       // would duplicate them.
       final muxer = TsMuxer();
-      request.response
-        ..bufferOutput = false
-        ..headers.contentType = ContentType('video', 'mp2t');
-      request.response.add(muxer.tables());
-      await request.response.flush();
-
-      Uint8List accessUnitFor(ScrcpyFrame frame) {
-        final config = codecConfig;
-        // SPS/PPS is republished ahead of every keyframe so the decoder can
-        // start from any of them.
-        return (frame.isKeyFrame && config != null)
-            ? Uint8List.fromList([...config, ...frame.data])
-            : frame.data;
-      }
+      yield muxer.tables();
 
       // Start from the cached keyframe when there is one, so a viewer does not
       // wait for the next one.
@@ -591,36 +589,34 @@ class DeviceStreamService {
       final cached = lastKeyFrame;
       if (cached != null) {
         mark.basePtsUs ??= cached.ptsUs;
-        request.response.add(
-          muxer.frame(accessUnitFor(cached), cached.ptsUs, keyframe: true),
+        yield muxer.frame(
+          accessUnitFor(cached, codecConfig),
+          cached.ptsUs,
+          keyframe: true,
         );
-        await request.response.flush();
         started = true;
       }
 
-      final subscription = frames.stream.listen((frame) {
+      await for (final frame in frames.stream) {
+        // A decoder handed a mid-GOP frame first has nothing to predict from.
         if (!started) {
-          if (!frame.isKeyFrame) return;
+          if (!frame.isKeyFrame) continue;
           started = true;
         }
         mark.basePtsUs ??= frame.ptsUs;
-        try {
-          request.response.add(
-            muxer.frame(
-              accessUnitFor(frame),
-              frame.ptsUs,
-              keyframe: frame.isKeyFrame,
-            ),
-          );
-          mark.writtenUs = DateTime.now().microsecondsSinceEpoch;
-          request.response.flush();
-        } catch (_) {
-          // Consumer went away mid-write.
-        }
-      });
-      await request.response.done.catchError((Object _) {});
-      await subscription.cancel();
-    });
+        yield muxer.frame(
+          accessUnitFor(frame, codecConfig),
+          frame.ptsUs,
+          keyframe: frame.isKeyFrame,
+        );
+      }
+    }
+
+    final http = await LoopbackMediaServer.serve(
+      openStream: muxedForOneViewer,
+      onChunkWritten: () =>
+          mark.writtenUs = DateTime.now().microsecondsSinceEpoch,
+    );
 
     var stopped = false;
     Future<void> stop() async {
@@ -633,7 +629,7 @@ class DeviceStreamService {
       if (!frames.isClosed) await frames.close();
       if (!sizes.isClosed) await sizes.close();
       if (!healthController.isClosed) await healthController.close();
-      await http.close(force: true);
+      await http.close();
       // Three separate things have to die, and the first does not imply the
       // others: killing the host-side `adb shell` leaves the `app_process` it
       // started running on the device, and the forward outlives both.
@@ -645,7 +641,7 @@ class DeviceStreamService {
 
     final session = DeviceStreamSession._(
       serial: serial,
-      url: Uri.parse('http://127.0.0.1:${http.port}/live.ts'),
+      url: http.url,
       onStop: stop,
       videoSizeChanges: sizes.stream,
       health: healthController.stream,
