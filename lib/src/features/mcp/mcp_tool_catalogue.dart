@@ -136,6 +136,11 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // of the two, because the caller cannot know which it has.
       'inbox_dismiss': McpToolAnnotations(destructive: true, idempotent: true),
 
+      // The decision record. Appends a row nothing can edit or remove, which
+      // is not idempotent — a second identical call is a second decision, and
+      // the record's job is to say that it was made twice.
+      'decision_record': McpToolAnnotations(),
+
       // Fan-out.
       'fanout_list': McpToolAnnotations.read,
       'fanout_get': McpToolAnnotations.read,

@@ -1,0 +1,219 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../sessions/application/decision_recorder.dart';
+import '../sessions/domain/decision_record.dart';
+import '../verification/domain/verification_run.dart';
+
+/// `decision_record`: an agent writing down a decision, deliberately.
+///
+/// The fourth of the four explicit acts that can put a row in a session's
+/// decision record — the other three are answering an approval prompt,
+/// finishing a verification run, and labelling a checkpoint, and each of those
+/// is recorded where it happens. This one exists because the decision the
+/// handoff packet loses first has no other act attached to it: "the isolate
+/// pool deadlocked on Windows" is something an agent *concluded*, forty turns
+/// before anybody hands the work over, and nothing else in the app will ever
+/// see it again.
+///
+/// ## Why an agent must call this rather than have it inferred
+///
+/// Because the alternative is reading the conversation and deciding what it
+/// must have meant, and there is no model in the packet path to do that with.
+/// `handoff_packet.dart` makes the argument at length: a paraphrase is either
+/// right or wrong and the reader cannot tell which, and the reader here is a
+/// second agent with no memory of the work. An explicit call is a claim
+/// somebody made on the record; an inference is a claim nobody made.
+///
+/// ## Why an agent cannot write every kind
+///
+/// [DecisionKind.approvalGranted] would let an agent record that the user
+/// allowed something the user never allowed, and the next agent reads that as
+/// settled permission. [DecisionKind.verificationVerdict] and
+/// [DecisionKind.checkpointMarked] would be a verdict with no run behind it and
+/// a marked state with no checkpoint — both of which point at a record that
+/// does not exist. The two kinds left are the two an agent is entitled to
+/// assert about its own reasoning, and they are the two the gap analysis says
+/// go missing.
+class DecisionControlTools {
+  DecisionControlTools(this._container, {this.callerSessionId});
+
+  final ProviderContainer _container;
+
+  /// Which session is calling, when one is. The default subject, and the
+  /// recorded author.
+  final String? callerSessionId;
+
+  static const Set<String> _names = <String>{'decision_record'};
+
+  static bool handles(String name) => _names.contains(name);
+
+  /// What an agent may write, and what it is called in the record.
+  static const Map<String, DecisionKind> writableKinds = <String, DecisionKind>{
+    'constraint': DecisionKind.constraintAccepted,
+    'rejected': DecisionKind.approachRejected,
+  };
+
+  Future<Object?> call(String name, Map<String, dynamic> args) async =>
+      switch (name) {
+        'decision_record' => _record(args),
+        _ => throw ArgumentError('Unknown tool: $name'),
+      };
+
+  Object? _record(Map<String, dynamic> args) {
+    final kind = writableKinds[(args['kind'] as String?)?.trim()];
+    if (kind == null) {
+      throw ArgumentError(
+        'kind must be one of: ${writableKinds.keys.join(', ')}. An approval, a '
+        'verification verdict and a marked checkpoint are recorded by the acts '
+        'that produce them — answering the prompt, verification_finish, and '
+        'checkpoint_capture with a label — so that a row always has something '
+        'real behind it.',
+      );
+    }
+    final summary = (args['summary'] as String?)?.trim() ?? '';
+    if (summary.isEmpty) {
+      throw ArgumentError(
+        'summary is required: say what was decided, in the words it should be '
+        'read in later.',
+      );
+    }
+
+    final sessionId = (args['sessionId'] as String?)?.trim().isNotEmpty == true
+        ? (args['sessionId'] as String).trim()
+        : callerSessionId;
+    if (sessionId == null) {
+      throw ArgumentError(
+        'No sessionId, and this caller is not running inside a session, so '
+        'there is no record to write to. Pass sessionId — list_sessions has '
+        'the ids.',
+      );
+    }
+
+    final decision = _container
+        .read(decisionRecorderProvider)
+        .recordFromAgent(
+          sessionId: sessionId,
+          kind: kind,
+          summary: summary,
+          detail: (args['detail'] as String?)?.trim(),
+          decidedBySessionId: callerSessionId,
+        );
+    if (decision == null) {
+      throw StateError(
+        'The decision could not be written to $sessionId\'s record.',
+      );
+    }
+    return <String, Object?>{
+      'sessionId': decision.sessionId,
+      'sequence': decision.sequence,
+      'kind': decision.kind.name,
+      'summary': decision.summary,
+      // Emitted even when null, like `fanout_get`'s producer key: an omitted
+      // field reads as a gap in the tool rather than a gap in the record.
+      'decidedBy': decision.decidedBy,
+      'recordedAt': decision.recordedAt.toIso8601String(),
+    };
+  }
+}
+
+/// The `decision_record` schema, served alongside the rest.
+const List<Map<String, dynamic>> decisionControlToolSchemas =
+    <Map<String, dynamic>>[
+      {
+        'name': 'decision_record',
+        'description':
+            'Write down a decision so it survives this conversation. A '
+            "session's decision record is carried into the handoff packet "
+            'AHEAD of the quoted transcript, so what you record here reaches '
+            'the next agent even when the turn you decided it in has been '
+            'trimmed away — which is what happens to decisions made early in a '
+            'long session. Record a constraint the work is now bound by, or an '
+            'approach you tried and abandoned and why. The summary is stored '
+            'EXACTLY as given and is never summarised; write the words that '
+            'should be read later, not a gist of them. Approvals, verification '
+            'verdicts and marked checkpoints are NOT written here — the acts '
+            'that produce them record them, so that every row has something '
+            'real behind it. Append-only: nothing you write can be edited or '
+            'removed, and recording a reversal later leaves the original '
+            'standing so a reader can see it was reversed.',
+        'inputSchema': {
+          'type': 'object',
+          'properties': {
+            'kind': {
+              'type': 'string',
+              'enum': ['constraint', 'rejected'],
+              'description':
+                  'constraint: a rule the work is now bound by. rejected: an '
+                  'approach that was tried and abandoned.',
+            },
+            'summary': {
+              'type': 'string',
+              'description':
+                  'What was decided, verbatim. Include the reason — "the '
+                  'isolate pool deadlocked on Windows" is worth ten times "no '
+                  'isolates".',
+            },
+            'detail': {
+              'type': 'string',
+              'description': 'Optional. More of the same words.',
+            },
+            'sessionId': {
+              'type': 'string',
+              'description':
+                  'Whose record to write to. Defaults to the calling session.',
+            },
+          },
+          'required': ['kind', 'summary'],
+        },
+        'outputSchema': {
+          'type': 'object',
+          'properties': {
+            'sessionId': {'type': 'string'},
+            'sequence': {
+              'type': 'number',
+              'description': "Position in this session's record, 1-based.",
+            },
+            'kind': {'type': 'string'},
+            'summary': {'type': 'string'},
+            'decidedBy': {'type': ['string', 'null']},
+            'recordedAt': {'type': 'string'},
+          },
+          'required': ['sessionId', 'sequence', 'kind', 'summary'],
+        },
+      },
+    ];
+
+/// Writes a finished run's verdict to the decision record of the session whose
+/// work it was about.
+///
+/// The second of the four explicit acts, and the one that belongs to a feature
+/// this file is only allowed to read. Called from the control server's dispatch
+/// the moment `verification_finish` returns, so the verification feature does
+/// not have to know the decision record exists.
+///
+/// Attached to the **subject** session, not the verifier's. The handoff being
+/// protected is the subject's: whoever takes that work over is the one who
+/// would otherwise re-run a check that passed, or skip one that did not. The
+/// row carries G3's derived attribution phrase with it, in the same words the
+/// verification pane says them, so a pass the author gave itself can be told
+/// from one somebody else gave it.
+///
+/// An unfinished or unattached run writes nothing — there is no verdict to
+/// record, or nobody's record to put it in.
+void recordFinishedVerdict(ProviderContainer container, VerificationRun? run) {
+  if (run == null) return;
+  final subject = run.sessionId;
+  final verdict = run.verdict;
+  if (subject == null || verdict == null) return;
+  container
+      .read(decisionRecorderProvider)
+      .recordVerificationVerdict(
+        sessionId: subject,
+        runId: run.id,
+        verdict: verdict.label,
+        title: run.title,
+        reason: run.reason,
+        attribution: 'Verdict ${run.attribution.phrase}.',
+        producedBySessionId: run.producedBySessionId,
+      );
+}

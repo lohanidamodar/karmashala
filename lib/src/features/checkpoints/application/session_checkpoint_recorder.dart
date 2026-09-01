@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../agents/domain/agent_status.dart';
+import '../../sessions/application/decision_recorder.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -61,10 +62,15 @@ class SessionCheckpointRecorder extends Notifier<int> {
   ///
   /// Public so the MCP tool and the UI can ask for one; the turn hook above is
   /// the same call with a different reason.
+  /// [decidedBy] and [decidedBySessionId] say who asked, for the decision
+  /// record — see [_recordIfChosen]. Null is "not recorded", which is what a
+  /// caller that genuinely does not know should pass.
   Future<Checkpoint?> captureNow(
     String sessionId, {
     CheckpointReason reason = CheckpointReason.manual,
     String? label,
+    String? decidedBy,
+    String? decidedBySessionId,
   }) async {
     final repo = checkpointTargetFor(ref, sessionId);
     if (repo == null) return null;
@@ -75,6 +81,11 @@ class SessionCheckpointRecorder extends Notifier<int> {
           .capture(repo, sessionId: sessionId, reason: reason, label: label);
       if (checkpoint != null) {
         ref.read(checkpointsRevisionProvider.notifier).bump();
+        _recordIfChosen(
+          checkpoint,
+          decidedBy: decidedBy,
+          decidedBySessionId: decidedBySessionId,
+        );
       }
       return checkpoint;
     } catch (error, stack) {
@@ -89,6 +100,38 @@ class SessionCheckpointRecorder extends Notifier<int> {
 
   void _capture(String sessionId) {
     captureNow(sessionId, reason: CheckpointReason.turn);
+  }
+
+  /// Writes a *deliberately marked* checkpoint to the session's decision
+  /// record.
+  ///
+  /// Two conditions, and both are the point. The reason must be
+  /// [CheckpointReason.manual] — somebody asked for this one, as opposed to the
+  /// turn hook above, which fires on every idle transition and would fill the
+  /// record with the fact that time passed. And the label must say something —
+  /// "a checkpoint taken with a reason" is the act; a nameless one records that
+  /// a snapshot exists, which the checkpoint chain already says perfectly well.
+  ///
+  /// This is the gap analysis's fourth item: the chain records that a turn
+  /// happened, never that a state was *chosen*. A labelled manual capture is
+  /// the only signal in the app that says which is which.
+  void _recordIfChosen(
+    Checkpoint checkpoint, {
+    required String? decidedBy,
+    required String? decidedBySessionId,
+  }) {
+    if (checkpoint.reason != CheckpointReason.manual) return;
+    final label = checkpoint.label;
+    if (label == null || label.trim().isEmpty) return;
+    ref
+        .read(decisionRecorderProvider)
+        .recordCheckpoint(
+          sessionId: checkpoint.sessionId,
+          checkpointId: checkpoint.id,
+          label: label,
+          decidedBy: decidedBy,
+          decidedBySessionId: decidedBySessionId,
+        );
   }
 }
 
