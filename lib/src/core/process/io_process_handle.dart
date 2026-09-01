@@ -16,6 +16,9 @@ class IoProcessHandle implements ProcessHandle {
       _process.stdout.transform(utf8.decoder).transform(const LineSplitter());
 
   @override
+  Stream<List<int>> get stdoutBytes => _process.stdout;
+
+  @override
   Stream<String> get stderrLines =>
       _process.stderr.transform(utf8.decoder).transform(const LineSplitter());
 

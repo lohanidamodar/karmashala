@@ -104,13 +104,41 @@ void main() {
   });
 
   group('screenSize', () {
-    test('enumerates the displays and returns the first size', () async {
+    test('enumerates the displays and returns the phone, not the first', () async {
+      // Real output from a booted iPhone 17 Pro on Xcode 26.6. The first
+      // width/height pair belongs to a 720x480 display with `Display class: 1`;
+      // the phone is the `Display class: 0` block. This fixture used to be one
+      // I made up, which is how the parser shipped matching nothing at all.
       final runner = FakeCommandRunner(
         responder: (_) => _ok('''
-Screen: com.apple.CoreSimulator.SimDeviceIOPort
-  Display: 0
-    width: 1206
-    height: 2622
+Port:
+    UUID: 08246516-F8D9-42CB-A4E5-CF060FFC65D7
+    Class: Unknown
+    Port Identifier: com.apple.display.captureservice
+    Power state: On
+
+Port:
+    UUID: 847B14E3-B8EC-4BE0-9565-E8B8E956CCFD
+    Class: Display
+    Port Identifier: com.apple.framebuffer.display
+    Power state: On
+    Display class: 1
+    Default width: 720
+    Default height: 480
+    Default pixel format: 'BGRA'
+
+Port:
+    UUID: D6162B93-A4C8-4613-AB8B-AD6959364223
+    Class: Display
+    Port Identifier: com.apple.framebuffer.display
+    Power state: On
+    Display class: 0
+    Default width: 1206
+    Default height: 2622
+    Default pixel format: 'BGRA'
+    IOSurface port:
+        width              = 1206
+        height             = 2622
 '''),
       );
       final size = await _service(runner).screenSize(_udid);

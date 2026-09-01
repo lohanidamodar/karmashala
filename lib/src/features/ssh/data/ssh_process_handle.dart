@@ -29,6 +29,9 @@ class SshProcessHandle implements ProcessHandle {
       .transform(const LineSplitter());
 
   @override
+  Stream<List<int>> get stdoutBytes => _session.stdout.cast<List<int>>();
+
+  @override
   Stream<String> get stderrLines => _session.stderr
       .cast<List<int>>()
       .transform(const Utf8Decoder(allowMalformed: true))

@@ -66,8 +66,16 @@ class FakeProcessHandle implements ProcessHandle {
   final List<String> written = [];
   bool killed = false;
 
+  final StreamController<List<int>> _stdoutBytes =
+      StreamController<List<int>>();
+
   void emitStdout(String line) {
     if (!_stdout.isClosed) _stdout.add(line);
+  }
+
+  /// Raw stdout, for the callers that read something other than text.
+  void emitStdoutBytes(List<int> bytes) {
+    if (!_stdoutBytes.isClosed) _stdoutBytes.add(bytes);
   }
 
   void emitStderr(String line) {
@@ -78,11 +86,15 @@ class FakeProcessHandle implements ProcessHandle {
   void complete([int code = 0]) {
     if (!_exit.isCompleted) _exit.complete(code);
     if (!_stdout.isClosed) _stdout.close();
+    if (!_stdoutBytes.isClosed) _stdoutBytes.close();
     if (!_stderr.isClosed) _stderr.close();
   }
 
   @override
   Stream<String> get stdoutLines => _stdout.stream;
+
+  @override
+  Stream<List<int>> get stdoutBytes => _stdoutBytes.stream;
 
   @override
   Stream<String> get stderrLines => _stderr.stream;
