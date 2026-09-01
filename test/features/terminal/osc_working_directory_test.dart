@@ -1,9 +1,11 @@
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
+import 'package:karmashala/src/features/terminal/domain/shell_integration.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/domain/working_directory_osc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'fake_instance.dart';
 
 /// OSC 7 — the shell telling the pane which directory it is in *now*.
@@ -319,4 +321,59 @@ void main() {
     });
   });
 
+  group('the PowerShell prompt emits OSC 7', () {
+    final script = powerShellIntegrationScript();
+
+    test('from the current filesystem location', () {
+      expect(script, contains(r']7;'));
+      expect(script, contains('ProviderPath'));
+    });
+
+    test('only for the filesystem provider', () {
+      // `Set-Location HKLM:\` is a location with no host path to report.
+      expect(script, contains("Provider.Name -eq 'FileSystem'"));
+    });
+
+    test('it cannot break the prompt', () {
+      // The prompt function is not inside the try that wraps the definition,
+      // so the emission carries its own.
+      final body = script.split('function Global:prompt {')[1];
+      final emit = body.indexOf(']7;');
+      final tryAt = body.indexOf('try {');
+      final catchAt = body.indexOf('} catch {');
+      expect(tryAt, greaterThan(-1));
+      expect(tryAt, lessThan(emit));
+      expect(catchAt, greaterThan(emit));
+    });
+
+    test('after the OSC 133 A, before the user prompt is invoked', () {
+      // Everything after the exit-code restore has to stay after it, or a user
+      // prompt rendering `$LASTEXITCODE` sees ours.
+      final body = script.split('function Global:prompt {')[1];
+      expect(body.indexOf('133;A'), lessThan(body.indexOf(']7;')));
+      expect(
+        body.indexOf(']7;'),
+        lessThan(body.indexOf(r'$global:LASTEXITCODE = $__cgLast')),
+      );
+    });
+
+    test('and the OSC 133 markers are byte-identical', () {
+      // There are tests asserting these; this says so at the byte level.
+      expect(script, contains(r'$out += "$e]133;D;$code$b"'));
+      expect(script, contains(r'$out += "$e]133;A$b"'));
+      expect(script, contains(r'$out += "$e]133;B$b"'));
+      expect(
+        script,
+        contains(
+          r'[Console]::Write("$($Global:__CgOsc133.Esc)]133;C'
+          r'$($Global:__CgOsc133.Bel)")',
+        ),
+      );
+      expect(
+        script.split('133;').length - 1,
+        4,
+        reason: 'four OSC 133 emissions, no more and no fewer',
+      );
+    });
+  });
 }
