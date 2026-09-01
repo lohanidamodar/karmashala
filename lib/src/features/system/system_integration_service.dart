@@ -30,8 +30,18 @@ const _kMenuQuit = 'quit';
 /// [SystemIntegrationService._pending].
 const _kMenuAttentionPrefix = 'attention:';
 
-const _kIdleTrayIcon = 'assets/tray_icon.ico';
-const _kAttentionTrayIcon = 'assets/tray_icon_attention.ico';
+/// The tray icons, in the format the host platform's tray can actually decode.
+///
+/// Windows wants a multi-size `.ico`; macOS hands the path to `NSImage` and
+/// Linux to the icon theme, and neither reads ICO — an `.ico` there is not an
+/// error, just a status item that draws nothing. Both are produced from the
+/// same source by `dart run tool/icon/write_ico.dart`.
+final String _kIdleTrayIcon = Platform.isWindows
+    ? 'assets/tray_icon.ico'
+    : 'assets/tray_icon.png';
+final String _kAttentionTrayIcon = Platform.isWindows
+    ? 'assets/tray_icon_attention.ico'
+    : 'assets/tray_icon_attention.png';
 
 /// How many waiting sessions the tray menu names before it summarises the rest.
 /// A tray menu is a glance, not a list view.

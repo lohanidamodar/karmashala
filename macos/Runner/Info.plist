@@ -24,6 +24,15 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<!-- macOS 15+ gates multicast and any LAN peer traffic behind Local
+	     Network privacy. Without this string the system denies the
+	     permission outright rather than prompting, and the companion's
+	     direct path silently never finds the desktop: LanBeacon sends into
+	     nothing and LanDiscovery receives nothing, with no error anywhere.
+	     Measured on this machine: 0 datagrams in 6s on a network with live
+	     mDNS traffic. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Karmashala looks for your desktop on this network so your phone can connect to it directly instead of going through the relay.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

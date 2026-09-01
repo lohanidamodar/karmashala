@@ -34,7 +34,12 @@ dependencies:
   local_notifier: ^0.1.6
   logging: ^1.3.0
   media_kit: ^1.2.6
+  # libmpv, one package per host platform. Without the macOS one,
+  # `MediaKit.ensureInitialized()` in main.dart throws
+  # "Cannot find Mpv.framework/Mpv" and the app dies before its first
+  # frame — the whole macOS port was blocked on this line.
   media_kit_libs_windows_video: ^1.0.11
+  media_kit_libs_macos_video: ^1.1.4
   # Companion mode only: the pairing screen's QR scanner.
   mobile_scanner: ^7.0.0
   media_kit_video: ^2.0.1
@@ -101,6 +106,9 @@ flutter:
     - assets/tray_icon.ico
     # Same icon with a red badge, shown while sessions are waiting on the user.
     - assets/tray_icon_attention.ico
+    # The same two for macOS and Linux, whose trays cannot decode an .ico.
+    - assets/tray_icon.png
+    - assets/tray_icon_attention.png
     # scrcpy-server (Apache-2.0) is deployed to the device to produce H.264 for
     # the device pane's live view. Its version must match kScrcpyVersion.
     - assets/scrcpy/
