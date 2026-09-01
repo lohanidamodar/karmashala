@@ -20,6 +20,24 @@ const String kScrcpyVersion = '4.1';
 /// Where the server jar is bundled in the Flutter asset bundle.
 const String kScrcpyServerAsset = 'assets/scrcpy/scrcpy-server';
 
+/// Everything this app pushes to a device starts with this, and nothing else
+/// does. `reapOrphans` matches on it, so it must stay distinct from the
+/// `/data/local/tmp/scrcpy-server.jar` a developer's own scrcpy uses.
+const String kScrcpyJarPathPrefix = '/data/local/tmp/karmashala-scrcpy-server';
+
+/// The jar path for one session.
+///
+/// One path **per session**, not one for the app, and that is a fix rather than
+/// tidiness. scrcpy-server 4.1 deletes its own jar as it starts (`unlinkSelf`),
+/// so a shared path is gone the moment any server has run: the very next
+/// `app_process` finds no class and aborts with
+/// `ClassNotFoundException: com.genymobile.scrcpy.Server`. That is not a corner
+/// case — [DeviceStreamService.start] makes two attempts in a row
+/// (`control=true`, then `control=false`), and with one path the second could
+/// never work. Reproduced on F6IZLV6LMFT4U4ZT: SIGABRT, adb printing
+/// "Aborted", exit 134.
+String scrcpyJarPathFor(String scid) => '$kScrcpyJarPathPrefix-$scid.jar';
+
 /// Supplies the scrcpy server jar bytes (the Flutter asset in the app, a
 /// fixture in tests).
 typedef ScrcpyServerBytes = Future<Uint8List> Function();
@@ -193,6 +211,7 @@ class DeviceStreamService {
     required this.serverBytes,
     this.stallTimeout = const Duration(seconds: 6),
     this.watchdogInterval = const Duration(seconds: 1),
+    this.socketAttempts = 20,
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('device-stream');
 
@@ -208,9 +227,13 @@ class DeviceStreamService {
   final Duration stallTimeout;
 
   final Duration watchdogInterval;
-  final AppLogger _logger;
 
-  static const _devicePath = '/data/local/tmp/karmashala-scrcpy-server.jar';
+  /// How many times one tunnel attempt probes for a streaming socket, at 300 ms
+  /// apiece. Injectable so a test does not spend six seconds per attempt
+  /// waiting for a port nothing will ever answer on.
+  final int socketAttempts;
+
+  final AppLogger _logger;
 
   /// Kills scrcpy servers and removes `adb forward` entries left behind by an
   /// earlier run on [serial].
@@ -227,9 +250,11 @@ class DeviceStreamService {
   /// that always gets to run.
   Future<int> reapOrphans(String serial) async {
     var reaped = 0;
+    // The **prefix**, because every session now deploys its own jar: matching
+    // one exact path would leave every other session's orphan alive.
     final pids = parseOwnedScrcpyPids(
       await adb.processList(serial),
-      jarPath: _devicePath,
+      jarPath: kScrcpyJarPathPrefix,
     );
     if (pids.isNotEmpty) {
       _logger.warning(
@@ -268,12 +293,9 @@ class DeviceStreamService {
   /// So: open both sockets, *then* wait for bytes. Video arriving proves the
   /// whole handshake, control socket included.
   Future<({_ServingConnection video, ScrcpyControlConnection? control})?>
-  _connectSockets(
-    int port, {
-    required bool withControl,
-    int attempts = 20,
-  }) async {
-    for (var attempt = 0; attempt < attempts; attempt++) {
+  _connectSockets(int port, {required bool withControl, int? attempts}) async {
+    final limit = attempts ?? socketAttempts;
+    for (var attempt = 0; attempt < limit; attempt++) {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       Socket candidate;
       try {
@@ -380,24 +402,14 @@ class DeviceStreamService {
     // 0. Clear anything a previous run left running or registered.
     await reapOrphans(serial);
 
-    // 1. Put the server on the device — every time, not only when it is
-    //    missing: scrcpy-server deletes its own jar at startup (`unlinkSelf`),
-    //    so the file is never there on the second run.
+    // 1. Stage the jar on the host once. Putting it on the *device* is
+    //    [_openTunnel]'s job, per attempt — see [scrcpyJarPathFor].
     final jar = await serverBytes();
     final hostJar = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}'
       'karmashala-scrcpy-server-$kScrcpyVersion.jar',
     );
     await hostJar.writeAsBytes(jar, flush: true);
-    final push = await runner.run(
-      CommandRequest(
-        executable: adb.sdk.adb.path,
-        arguments: ['-s', serial, 'push', hostJar.path, _devicePath],
-      ),
-    );
-    if (!push.ok) {
-      throw StateError('Could not deploy scrcpy-server: ${push.stderr.trim()}');
-    }
 
     // 2–4. Tunnel, server, sockets. Attempted with the control socket first and
     // then without it, because enabling control changes the *video* handshake:
@@ -412,6 +424,7 @@ class DeviceStreamService {
         in useControlSocket ? const [true, false] : const [false]) {
       tunnel = await _openTunnel(
         serial: serial,
+        hostJarPath: hostJar.path,
         captureSize: captureSize,
         captureFps: captureFps,
         withControl: wantControl,
@@ -456,6 +469,13 @@ class DeviceStreamService {
     final healthController = StreamController<DeviceStreamHealth>.broadcast();
     var lastState = DeviceStreamState.live;
     var lastDetail = '';
+
+    // Set by [stop] before it kills anything, and read by the exit watcher
+    // below. Dart's `Process.kill` reports exit code -1 on Windows, so our own
+    // teardown used to log and *show the user*
+    // "scrcpy-server exited (code -1)" on every stop, restart and device
+    // switch — the exact line that read as the failure in the owner's log.
+    var stopped = false;
 
     void report(DeviceStreamState state, String detail) {
       // The state machine only ever moves forwards. A stream that has ended
@@ -533,6 +553,7 @@ class DeviceStreamService {
     unawaited(
       server.exitCode
           .then((code) {
+            if (stopped) return;
             _logger.warning('Device $serial scrcpy-server exited with $code.');
             report(
               DeviceStreamState.ended,
@@ -622,7 +643,6 @@ class DeviceStreamService {
       await subscription.cancel();
     });
 
-    var stopped = false;
     Future<void> stop() async {
       if (stopped) return;
       stopped = true;
@@ -663,6 +683,7 @@ class DeviceStreamService {
   /// step fails so a retry does not leak a server or a forward.
   Future<_Tunnel?> _openTunnel({
     required String serial,
+    required String hostJarPath,
     required int captureSize,
     required int captureFps,
     required bool withControl,
@@ -674,6 +695,20 @@ class DeviceStreamService {
     // `Integer.parseInt`, and anything larger aborts the server with a
     // `NumberFormatException` before it prints anything else.
     final scid = Random().nextInt(0x7FFFFFFF).toRadixString(16).padLeft(8, '0');
+
+    // The jar goes on the device **here**, once per attempt, because the server
+    // this attempt starts will delete it. See [scrcpyJarPathFor].
+    final devicePath = scrcpyJarPathFor(scid);
+    final push = await runner.run(
+      CommandRequest(
+        executable: adb.sdk.adb.path,
+        arguments: ['-s', serial, 'push', hostJarPath, devicePath],
+      ),
+    );
+    if (!push.ok) {
+      throw StateError('Could not deploy scrcpy-server: ${push.stderr.trim()}');
+    }
+
     final forward = await runner.run(
       CommandRequest(
         executable: adb.sdk.adb.path,
@@ -702,7 +737,7 @@ class DeviceStreamService {
           '-s',
           serial,
           'shell',
-          'CLASSPATH=$_devicePath',
+          'CLASSPATH=$devicePath',
           'app_process',
           '/',
           'com.genymobile.scrcpy.Server',
@@ -758,7 +793,25 @@ class DeviceStreamService {
     await server.kill();
     await _killDeviceServers(serial, scid);
     await adb.removeForward(serial, port);
+    // A server that never started never unlinked itself, so this attempt's jar
+    // is still there — 700 KB of /data/local/tmp per failed attempt otherwise.
+    await _removeDeviceJar(serial, devicePath);
     return null;
+  }
+
+  /// Best-effort removal of one attempt's jar. Failure is not worth reporting:
+  /// the usual reason is that scrcpy-server already deleted it itself.
+  Future<void> _removeDeviceJar(String serial, String devicePath) async {
+    try {
+      await runner.run(
+        CommandRequest(
+          executable: adb.sdk.adb.path,
+          arguments: ['-s', serial, 'shell', 'rm', '-f', devicePath],
+        ),
+      );
+    } catch (error) {
+      _logger.info('Could not remove $devicePath on $serial: $error');
+    }
   }
 
   /// Kills the device-side server for one session.
