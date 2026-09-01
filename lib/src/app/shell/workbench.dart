@@ -773,10 +773,47 @@ bool _showingPanes(WidgetRef ref) {
 
 /// Brings [tabId] to the front and makes sure the terminal is what the
 /// workbench is showing: picking a tab from a strip or a list is a request to
-/// *see* it, and it may well have been picked from the conversation.
+/// *see* it, and it may well have been picked from the conversation — or from
+/// the empty state of a session that is not in any tab at all
+/// ([_releaseHijackedSelection]).
 void activateTerminalTab(WidgetRef ref, String tabId) {
   ref.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
   ref.read(terminalVisibleProvider.notifier).set(true);
+  _releaseHijackedSelection(ref);
+}
+
+/// Lets go of a selection that has no pane of ours, because the user has just
+/// asked to see one that has.
+///
+/// [_NoPaneForSession] replaces the **whole** pane stack, which is right while
+/// the selection is the only thing anyone has asked for and wrong the moment it
+/// is not: a selected session nothing of ours runs held the middle of the
+/// window against every live tab in the strip. Activating one moved the tab and
+/// changed nothing on screen, and `_showingPanes` — false, because no tab was
+/// showing — left every chip drawn inactive. That is the reported "after
+/// closing a session with end session on a tab, other tabs are not accessible".
+/// The terminal was healthy throughout; only the choice of surface was wrong.
+///
+/// **Cleared, not out-voted by a second mode.** `null` is the one value the
+/// selection listeners in [WorkbenchView] ignore (`if (next != null)`), so this
+/// cannot restart the fight where a tap opens a session's terminal and
+/// something else undoes it. It is also what keeps the way back open: picking
+/// the same row again is now a *change*, so the workbench opens it exactly as
+/// it did the first time, empty state and all.
+///
+/// **Only the selection that is in the way.** One that has a pane is the
+/// session the user is looking at, and the toggle to its conversation is
+/// offered off the back of it; activating a tab must not quietly drop it.
+void _releaseHijackedSelection(WidgetRef ref) {
+  // An imported CLI session has no pane of ours by definition, so it is always
+  // the paneless kind.
+  if (ref.read(selectedImportedSessionIdProvider) != null) {
+    ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+  }
+  final selected = ref.read(selectedSessionIdProvider);
+  if (selected != null && sessionTerminalPane(ref, selected) == null) {
+    ref.read(selectedSessionIdProvider.notifier).select(null);
+  }
 }
 
 /// Every terminal tab, as [TabPicker] lists them.

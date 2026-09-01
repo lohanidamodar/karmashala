@@ -456,6 +456,110 @@ void main() {
     expect(surfaces(tester).index, 0);
   });
 
+  group('a paneless selection does not hold the terminal hostage', () {
+    /// Two tabs, and a **third** session selected that nothing of ours runs.
+    ///
+    /// The reported shape: "after closing a session with end session on a tab,
+    /// other tabs are not accessible cannot switch to other tabs". The
+    /// terminal's own state was healthy throughout — two live tabs, nothing
+    /// detached — so the failure was entirely in which surface the workbench
+    /// chose to draw over them.
+    String seedTwoTabsAndAPanelessSelection() {
+      final paneId = seedSessionInAPane(title: 'Refactor the parser');
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+      SessionDao(db).insert(
+        session(id: 's3', title: 'Audit and improve Chitragupta app'),
+      );
+      container.read(selectedSessionIdProvider.notifier).select('s3');
+      return paneId;
+    }
+
+    testWidgets('activating a tab through the strip shows that tab', (
+      tester,
+    ) async {
+      seedTwoTabsAndAPanelessSelection();
+      await pump(tester);
+
+      // The stuck screen: the empty state for a session that is neither tab,
+      // drawn *instead of* the pane stack, with no chip marked active.
+      expect(
+        find.textContaining('No terminal of ours is running this session'),
+        findsOneWidget,
+      );
+      expect(find.byType(TerminalPaneStack), findsNothing);
+      expect(
+        tester
+            .widgetList<TerminalTabChip>(find.byType(TerminalTabChip))
+            .any((chip) => chip.selected),
+        isFalse,
+        reason: 'no terminal tab is on screen, so none of them says it is',
+      );
+
+      // The tap the user makes — the strip's own chip, not the controller.
+      await tester.tap(find.byType(TerminalTabChip).first);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(TerminalPaneStack),
+        findsOneWidget,
+        reason: 'a tab tap is a request to see that tab, and it wins',
+      );
+      expect(
+        find.textContaining('No terminal of ours is running this session'),
+        findsNothing,
+      );
+      expect(
+        tester.widget<TerminalTabChip>(find.byType(TerminalTabChip).first)
+            .selected,
+        isTrue,
+        reason: 'and the tab that is on screen says so',
+      );
+    });
+
+    testWidgets('the empty state comes back when its session is picked again', (
+      tester,
+    ) async {
+      // Releasing the selection has to leave the way back open. Clearing it —
+      // rather than out-voting it with a second mode — is what makes picking
+      // the same row again a *change*, so the workbench opens it exactly as it
+      // did the first time.
+      seedTwoTabsAndAPanelessSelection();
+      await pump(tester);
+      await tester.tap(find.byType(TerminalTabChip).first);
+      await tester.pumpAndSettle();
+      expect(container.read(selectedSessionIdProvider), isNull);
+
+      container.read(selectedSessionIdProvider.notifier).select('s3');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('No terminal of ours is running this session'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a selection that has a pane is left alone', (tester) async {
+      // Only the selection that is *hijacking* the surface is released. One
+      // the user can actually see is the session they are working in, and
+      // activating a tab must not quietly drop it — the toggle to its
+      // conversation is offered off the back of it.
+      seedSessionInAPane();
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(TerminalProfile.powerShell);
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+
+      await tester.tap(find.byType(TerminalTabChip).first);
+      await tester.pumpAndSettle();
+
+      expect(container.read(selectedSessionIdProvider), 's1');
+      expect(find.byType(TerminalPaneStack), findsOneWidget);
+    });
+  });
+
   testWidgets('the strip draws no active tab while that conversation is up', (
     tester,
   ) async {
