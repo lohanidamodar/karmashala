@@ -7,6 +7,7 @@ import 'package:xterm/xterm.dart';
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -714,8 +715,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return;
     // An agent pane is restarted from its recorded command, not from a shell
-    // profile: `agent:<id>` deliberately does not resolve as one.
-    final agentLaunch = existing.agentLaunch;
+    // profile: `agent:<id>` deliberately does not resolve as one. What it is
+    // *not* restarted with is the MCP flags of the run that recorded it — see
+    // [_liveMcpArgumentsFor].
+    final recorded = existing.agentLaunch;
+    final agentLaunch = recorded?.withMcpArguments(
+      _liveMcpArgumentsFor(recorded),
+    );
     final profile = agentLaunch != null
         ? TerminalProfile.powerShell
         : terminalProfileFromId(existing.profileId);
@@ -748,6 +754,30 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _publish();
     persistWorkspace();
     _focusActivePane();
+  }
+
+  /// The MCP flags a pane started **now** should carry, which are never the
+  /// ones it was started with before.
+  ///
+  /// Every value in those flags belongs to one run of the app: the config
+  /// directory is deleted on the way in, the control server binds whatever port
+  /// it can get, and the URL's last segment is a credential minted for this
+  /// process. A restored pane used to replay all three, and the agent refused
+  /// to start at all:
+  ///
+  ///   Error: Invalid MCP configuration:
+  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///
+  /// An empty answer is the ordinary one — no server, no session row, a
+  /// terminal-only container — and it is the right one: a pane without its
+  /// tools is a smaller loss than a pane that will not open, which is the trade
+  /// `SessionLauncher` already makes at the original launch.
+  List<String> _liveMcpArgumentsFor(AgentPaneLaunch launch) {
+    try {
+      return ref.read(agentPaneMcpArgumentsProvider)(launch);
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Runs [launch] in the pane [paneId] already has, keeping everything in its

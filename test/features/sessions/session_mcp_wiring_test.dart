@@ -43,8 +43,7 @@ void main() {
     executable: 'wt.exe',
   );
 
-  ({ProviderContainer container, AppDatabase db, FakeCommandRunner runner})
-  harness({SessionMcp? mcp}) {
+  AppDatabase seededDatabase() {
     final db = AppDatabase.memory();
     ExecutionEnvironmentDao(db)
       ..upsert(windowsEnv())
@@ -54,20 +53,62 @@ void main() {
     AgentInstallationDao(db)
       ..insert(agentInstallation(agentId: AgentIds.claudeCode))
       ..insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
-    final runner = FakeCommandRunner();
-    final container = ProviderContainer(
-      overrides: [
-        ...fakeTerminalOverrides(database: db),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-        agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
-        hostCommandRunnerProvider.overrideWithValue(runner),
-        if (mcp != null)
-          sessionMcpProvider.overrideWith(() => _StaticSessionMcp(mcp)),
-      ],
-    );
-    return (container: container, db: db, runner: runner);
+    return db;
   }
+
+  /// A container over [db]. The id prefix is a parameter because a second
+  /// container over one database is what a restart *is*, and two generators
+  /// counting from zero would hand out ids the first run already used.
+  ProviderContainer containerOver(
+    AppDatabase db, {
+    SessionMcp? mcp,
+    String idPrefix = 's-',
+    FakeCommandRunner? runner,
+  }) => ProviderContainer(
+    overrides: [
+      ...fakeTerminalOverrides(database: db),
+      clockProvider.overrideWithValue(FixedClock(testTime)),
+      idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
+      agentRegistryProvider.overrideWithValue(AgentRegistry.builtIn),
+      hostCommandRunnerProvider.overrideWithValue(
+        runner ?? FakeCommandRunner(),
+      ),
+      if (mcp != null)
+        sessionMcpProvider.overrideWith(() => _StaticSessionMcp(mcp)),
+    ],
+  );
+
+  ({ProviderContainer container, AppDatabase db, FakeCommandRunner runner})
+  harness({SessionMcp? mcp}) {
+    final db = seededDatabase();
+    final runner = FakeCommandRunner();
+    return (
+      container: containerOver(db, mcp: mcp, runner: runner),
+      db: db,
+      runner: runner,
+    );
+  }
+
+  Future<SessionLaunchResult> launchIn(
+    ProviderContainer container, {
+    String agentId = AgentIds.claudeCode,
+    String installationId = 'a1',
+  }) => container.read(sessionLauncherProvider).launch(
+    SessionLaunchRequest(
+      repository: repository(),
+      installation: agentInstallation(id: installationId, agentId: agentId),
+      title: 'Work',
+      purpose: SessionPurpose.newSession,
+    ),
+  );
+
+  /// What the pane would actually run, which is the two halves put together.
+  List<String> paneCommand(ProviderContainer container, String paneId) =>
+      container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId)!
+          .agentLaunch!
+          .commandArguments;
 
   Future<List<String>> paneArguments(
     ProviderContainer container, {
@@ -85,11 +126,7 @@ void main() {
         purpose: SessionPurpose.newSession,
       ),
     );
-    return container
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(launched.paneId!)!
-        .agentLaunch!
-        .arguments;
+    return paneCommand(container, launched.paneId!);
   }
 
   group('a pane launch carries it', () {
@@ -166,6 +203,180 @@ void main() {
         h.runner.startRequests.single.arguments.join(' '),
         contains(r'--mcp-config=C:\x\session.json'),
       );
+    });
+  });
+
+  /// The bug this group exists for. The owner restarted the app, started a
+  /// restored pane, and the agent refused:
+  ///
+  ///   Error: Invalid MCP configuration:
+  ///   MCP config file not found: `…/chitragupta/mcp/session-<uuid>.json`
+  ///
+  /// `SessionMcpConfigs.prepare` empties that directory on every start, the
+  /// control server binds a new port and mints a new credential — so all three
+  /// values in a stored MCP flag are dead by the time the pane is restarted.
+  group('a restarted pane is re-armed, not replayed', () {
+    test('it is given the endpoint that exists now', () async {
+      final db = seededDatabase();
+      addTearDown(db.close);
+
+      final first = containerOver(
+        db,
+        mcp: _FixedMcp(
+          url: 'http://127.0.0.1:1111/mcp/yesterday',
+          configPath: '/gone/session-abc.json',
+        ),
+      );
+      final paneId = (await launchIn(first)).paneId!;
+      expect(
+        paneCommand(first, paneId),
+        contains('--mcp-config=/gone/session-abc.json'),
+      );
+      first
+          .read(terminalSessionsControllerProvider.notifier)
+          .persistWorkspace();
+      first.dispose();
+
+      // The restart: a different port, a different credential, a config
+      // directory that was emptied on the way in.
+      final next = containerOver(
+        db,
+        idPrefix: 't-',
+        mcp: _FixedMcp(
+          url: 'http://127.0.0.1:2222/mcp/today',
+          configPath: '/live/session-abc.json',
+        ),
+      );
+      addTearDown(next.dispose);
+      next.read(terminalSessionsControllerProvider.notifier).startPane(paneId);
+
+      final args = paneCommand(next, paneId);
+      expect(args, contains('--mcp-config=/live/session-abc.json'));
+      expect(args, isNot(contains('--mcp-config=/gone/session-abc.json')));
+      // The durable half is untouched: the pane still runs under the mode and
+      // the id it was launched with.
+      expect(
+        args,
+        containsAllInOrder([
+          '--permission-mode',
+          'manual',
+          '--session-id',
+          's-0',
+        ]),
+      );
+    });
+
+    test('Codex is given the port and credential of now', () async {
+      // Codex carries the URL itself, so both halves of the staleness — the
+      // port and the token — are visible in one argument.
+      final db = seededDatabase();
+      addTearDown(db.close);
+
+      final first = containerOver(
+        db,
+        mcp: _FixedMcp(url: 'http://127.0.0.1:1111/mcp/yesterday'),
+      );
+      final paneId =
+          (await launchIn(first, agentId: AgentIds.codex, installationId: 'a2'))
+              .paneId!;
+      first
+          .read(terminalSessionsControllerProvider.notifier)
+          .persistWorkspace();
+      first.dispose();
+
+      final next = containerOver(
+        db,
+        idPrefix: 't-',
+        mcp: _FixedMcp(url: 'http://127.0.0.1:2222/mcp/today'),
+      );
+      addTearDown(next.dispose);
+      next.read(terminalSessionsControllerProvider.notifier).startPane(paneId);
+
+      expect(
+        paneCommand(next, paneId),
+        containsAllInOrder([
+          '-c',
+          'mcp_servers.chitragupta.url=http://127.0.0.1:2222/mcp/today',
+        ]),
+      );
+      expect(paneCommand(next, paneId).join(' '), isNot(contains('yesterday')));
+    });
+
+    test('with the control server down it starts with no MCP flags at all',
+        () async {
+      // The ordinary case, and the one the whole mechanism fails soft into: a
+      // pane without its tools is a smaller loss than a pane that will not
+      // open. Never a stale flag instead.
+      final db = seededDatabase();
+      addTearDown(db.close);
+
+      final first = containerOver(
+        db,
+        mcp: _FixedMcp(configPath: '/gone/session-abc.json'),
+      );
+      final paneId = (await launchIn(first)).paneId!;
+      first
+          .read(terminalSessionsControllerProvider.notifier)
+          .persistWorkspace();
+      first.dispose();
+
+      final next = containerOver(db, idPrefix: 't-');
+      addTearDown(next.dispose);
+      next.read(terminalSessionsControllerProvider.notifier).startPane(paneId);
+
+      expect(paneCommand(next, paneId), [
+        '--permission-mode',
+        'manual',
+        '--session-id',
+        's-0',
+      ]);
+    });
+
+    test('a workspace saved before the fix loses the flag it baked in',
+        () async {
+      // The owner will restore an existing workspace, whose rows still carry
+      // the MCP flag inside `arguments`. Installing the fix has to repair
+      // those, not merely stop writing new ones.
+      final db = seededDatabase();
+      addTearDown(db.close);
+
+      final first = containerOver(db);
+      final paneId = (await launchIn(first)).paneId!;
+      first
+          .read(terminalSessionsControllerProvider.notifier)
+          .persistWorkspace();
+      first.dispose();
+
+      db.execute(
+        'UPDATE terminal_panes SET launch_command = ? WHERE id = ?;',
+        [
+          jsonEncode({
+            'agentId': AgentIds.claudeCode,
+            'executable': 'claude',
+            'arguments': [
+              r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
+                  r'\chitragupta\mcp\session-95659659.json',
+              '--permission-mode',
+              'manual',
+              '--session-id',
+              's-0',
+            ],
+            'sessionId': 's-0',
+          }),
+          paneId,
+        ],
+      );
+
+      final next = containerOver(db, idPrefix: 't-');
+      addTearDown(next.dispose);
+      next.read(terminalSessionsControllerProvider.notifier).startPane(paneId);
+
+      expect(paneCommand(next, paneId), [
+        '--permission-mode',
+        'manual',
+        '--session-id',
+        's-0',
+      ]);
     });
   });
 
@@ -248,11 +459,7 @@ void main() {
     );
 
     // 1. The launch put a config flag on the agent's command line.
-    final args = h.container
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(launched.paneId!)!
-        .agentLaunch!
-        .arguments;
+    final args = paneCommand(h.container, launched.paneId!);
     final flag = args.firstWhere((a) => a.startsWith('--mcp-config='));
 
     // 2. The file it names is really there, and names one URL.
@@ -318,12 +525,16 @@ const _url = 'http://127.0.0.1:51234/mcp/session-token';
 /// A [SessionMcp] that answers the same thing every time and records what it
 /// was asked.
 class _FixedMcp implements SessionMcp {
-  _FixedMcp({this.configPath, this.access = _unset});
+  _FixedMcp({this.configPath, this.access = _unset, this.url = _url});
 
   static const Object _unset = Object();
 
   /// What a file-taking agent is told to open, when one is asked for.
   final String? configPath;
+
+  /// The endpoint. A parameter because a restart mints a new one — a new port
+  /// and a new credential — and a restored pane has to be given *that*.
+  final String url;
 
   /// Pass `null` explicitly for a provisioner that has nothing to offer.
   final Object? access;
@@ -341,7 +552,7 @@ class _FixedMcp implements SessionMcp {
     askedForAFile |= withConfigFile;
     if (!identical(access, _unset)) return null;
     return SessionMcpAccess(
-      url: _url,
+      url: url,
       configPath: withConfigFile ? configPath : null,
     );
   }
