@@ -32,6 +32,15 @@ import '../../support/fixtures.dart';
 /// has, its working tree is asked about **once**. A tree that ran `git status`
 /// per row would be unusable on a project with thirty sessions, and nothing in
 /// a widget test would notice — the answers would all be right.
+///
+/// The header's change count is **read from the cache, never asked for**. It
+/// used to `ref.watch` a per-checkout provider for every repository in the
+/// project, and `ref.watch` on an `autoDispose` family *creates* rather than
+/// reads — so a project the owner had rescanned into 69 checkouts ran 345 git
+/// processes to draw a header nobody had expanded. So the number now appears
+/// only once something that legitimately measures a checkout has measured it,
+/// which is what these tests assert: absent while collapsed, present once the
+/// cards beneath are drawn.
 void main() {
   late AppDatabase db;
   late FakeCommandRunner git;
@@ -121,15 +130,23 @@ void main() {
     addSession('s2', 'Second');
     await pump(tester);
 
-    // Collapsed: the header still summarises what is inside, which is the
-    // point of putting it there rather than on the rows.
-    expect(find.text('2 sessions · 3 changed'), findsOneWidget);
+    // Collapsed, nothing has measured this checkout, so the header says only
+    // what it can count for free — and, crucially, it does not go and find
+    // out. `ProjectSummary.label` composing the `· N changed` clause once a
+    // count *is* known is `project_card_test.dart`'s to assert; what belongs
+    // here is that a header nobody expanded starts no work.
+    expect(find.text('2 sessions'), findsOneWidget);
+    expect(
+      git.requests,
+      isEmpty,
+      reason: 'a collapsed project header asked git for its change count',
+    );
   });
 
   testWidgets('one session reads in the singular', (tester) async {
     addSession('s1', 'Only');
     await pump(tester);
-    expect(find.text('1 session · 3 changed'), findsOneWidget);
+    expect(find.text('1 session'), findsOneWidget);
   });
 
   testWidgets('every card in a repository shares one git status', (
@@ -160,12 +177,11 @@ void main() {
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
-    // Twice, and that is the assertion: since Loop 58 the repository row states
-    // the branch and change count of the checkout, and the card under it states
-    // the same ones. They share `checkoutStatProvider`, so they cannot disagree
-    // — one of them differing would mean the family key had come apart again.
-    expect(find.textContaining('feature/cards'), findsNWidgets(2));
-    expect(find.text('3 changed'), findsNWidgets(2));
+    // Once, now that the Explorer lists sessions rather than checkouts: the
+    // card is the only row describing this working tree. It states the branch
+    // and change count the checkout's one measurement produced.
+    expect(find.textContaining('feature/cards'), findsOneWidget);
+    expect(find.text('3 changed'), findsOneWidget);
   });
 
   testWidgets('the card draws +N −M, from one numstat for the checkout', (
@@ -199,10 +215,10 @@ void main() {
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
-    // The repository row and the card under it, from one answer — and the
-    // line counts replace the file count, which is what the design asks for.
-    expect(find.text('+949'), findsNWidgets(2));
-    expect(find.text('−10'), findsNWidgets(2));
+    // The line counts replace the file count, which is what the design asks
+    // for.
+    expect(find.text('+949'), findsOneWidget);
+    expect(find.text('−10'), findsOneWidget);
     expect(find.text('1 changed'), findsNothing);
     // The cost rule Loop 50 set, restated for the probe that replaced it:
     // however many rows describe this working tree, it is measured once.
@@ -235,7 +251,7 @@ void main() {
     await tester.tap(find.text('Demo'));
     await tester.pumpAndSettle();
 
-    expect(find.text('1 changed'), findsNWidgets(2));
+    expect(find.text('1 changed'), findsOneWidget);
     expect(find.textContaining('+0'), findsNothing);
   });
 

@@ -233,6 +233,21 @@ class ProjectSummary {
 /// The counts are synchronous (DAO reads and one already-computed inbox); the
 /// change count is whatever the per-checkout providers have already answered, so
 /// a header never waits on git and never starts a second wave of it.
+///
+/// **That last clause used to be false, and it was the app's worst cost.**
+/// `ref.watch` on an `autoDispose` family does not read a provider, it *creates*
+/// one — so this loop was starting [checkoutDeliveryProvider] for every
+/// repository in the project, at five git subprocesses each. A project the
+/// owner had rescanned into 69 checkouts therefore ran **345 git processes to
+/// draw a project header the user had not even expanded**, on WSL paths over
+/// 9p. `ref.exists` is the read the comment always described, and it is the
+/// same rule `_changeRank` in `checkout_default.dart` already holds itself to:
+/// read the cache somebody else filled, never fill it.
+///
+/// The consequence is that a header shows a change count only once something
+/// that legitimately measures a checkout — the delivery strip, the Changes
+/// panel — has measured it. That is the honest version: a number nobody has
+/// asked for is not a number worth 345 subprocesses.
 final projectSummaryProvider = Provider.autoDispose
     .family<ProjectSummary, String>((ref, projectId) {
       ref.watch(sessionsRevisionProvider);
@@ -263,11 +278,13 @@ final projectSummaryProvider = Provider.autoDispose
           sessions++;
           if (waiting.contains(session.id)) needsAttention++;
         }
-        final stat = ref
-            .watch(checkoutStatProvider(Checkout(repository.path)))
-            .asData
-            ?.value;
-        final files = stat?.changedFiles;
+        // The shared producer rather than this file's projection of it: a
+        // session card, the delivery strip and the Changes panel all funnel
+        // into `checkoutDeliveryProvider`, so that is the one most likely to be
+        // warm by the time a header asks.
+        final provider = checkoutDeliveryProvider(Checkout(repository.path));
+        if (!ref.exists(provider)) continue;
+        final files = ref.watch(provider).asData?.value.dirtyFiles;
         if (files != null) changed = (changed ?? 0) + files;
       }
       return ProjectSummary(

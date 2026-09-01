@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/domain/environment_path.dart';
-import '../../git/application/git_providers.dart';
 import '../../git/domain/git_worktree.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
@@ -117,85 +116,6 @@ class ProjectTree {
     }
     return null;
   }
-}
-
-/// Builds [ProjectTree] for one project. Lazy by construction: nothing here runs
-/// until a project header is expanded and something watches it.
-final projectTreeProvider = FutureProvider.autoDispose
-    .family<ProjectTree, String>((ref, projectId) async {
-      ref.watch(sessionsRevisionProvider);
-      final repositories = ref
-          .read(repositoryDaoProvider)
-          .getByProject(projectId);
-      if (repositories.isEmpty) return ProjectTree.empty;
-
-      final service = ref.read(worktreeServiceProvider);
-      // Each failure is local: one unreadable repository — no git, a folder
-      // that is not a checkout, a `.git` file another environment's git wrote —
-      // must not cost the project its whole tree.
-      Future<List<GitWorktree>?> listOrNull(Repository repo) async {
-        try {
-          return await service.list(repo.path);
-        } catch (_) {
-          return null;
-        }
-      }
-
-      final lists = await Future.wait(repositories.map(listOrNull));
-      return buildProjectTree(repositories, lists);
-    });
-
-/// The pure half of [projectTreeProvider]: given each repository's
-/// `git worktree list` (or null where git could not answer), decide which rows
-/// are top-level and which are worktrees of another.
-///
-/// `git worktree list --porcelain` reports the **main** worktree first, so a
-/// repository whose own path is not the first entry of its own list is a linked
-/// worktree. Its owner is whichever workspace row sits at that first entry; a
-/// worktree whose main checkout is not in the workspace stays a top-level row,
-/// because hiding a folder the user can see is worse than listing it twice.
-ProjectTree buildProjectTree(
-  List<Repository> repositories,
-  List<List<GitWorktree>?> lists,
-) {
-  final byPath = <String, Repository>{
-    for (final repo in repositories) canonicalPathKey(repo.path.path): repo,
-  };
-
-  // repository id -> the row it is a linked worktree of.
-  final ownerOf = <String, Repository>{};
-  for (var i = 0; i < repositories.length; i++) {
-    final repo = repositories[i];
-    final list = lists[i];
-    if (list == null || list.isEmpty) continue;
-    final main = list.first;
-    if (samePath(main.path.path, repo.path.path)) continue;
-    final owner = byPath[canonicalPathKey(main.path.path)];
-    if (owner != null && owner.id != repo.id) ownerOf[repo.id] = owner;
-  }
-
-  final nodes = <RepoNode>[];
-  for (var i = 0; i < repositories.length; i++) {
-    final repo = repositories[i];
-    if (ownerOf.containsKey(repo.id)) continue;
-    final list = lists[i];
-    nodes.add(
-      RepoNode(
-        repository: repo,
-        worktreesKnown: list != null,
-        worktrees: [
-          for (final worktree in (list ?? const <GitWorktree>[]).skip(1))
-            if (!worktree.isBare)
-              WorktreeNode(
-                worktree: worktree,
-                owner: repo,
-                repository: byPath[canonicalPathKey(worktree.path.path)],
-              ),
-        ],
-      ),
-    );
-  }
-  return ProjectTree(repositories: nodes);
 }
 
 /// The sessions that live in one place — a repository's main checkout, one of
@@ -399,27 +319,31 @@ final projectSessionLocationsProvider = Provider.autoDispose
       return locations;
     });
 
-/// The tree and the sessions on it, which is everything a project's rows need.
+/// Every session in a project, which is all the Explorer draws under a project
+/// header.
 ///
-/// The tree half is asynchronous (it asks git about worktrees); the placement
-/// half is not. While git is still answering, the repositories are drawn as
-/// peers with no worktrees and the sessions are placed on them — so expanding a
-/// project shows its contents immediately and the worktrees fold in when the
-/// answer lands, rather than the whole subtree appearing late.
-final projectTreeViewProvider = Provider.autoDispose
-    .family<({ProjectTree tree, SessionPlacement placement}), String>((
-      ref,
-      projectId,
-    ) {
-      final tree =
-          ref.watch(projectTreeProvider(projectId)).asData?.value ??
-          ProjectTree(
-            repositories: [
-              for (final repo
-                  in ref.read(repositoryDaoProvider).getByProject(projectId))
-                RepoNode(repository: repo, worktreesKnown: false),
-            ],
-          );
+/// **The Explorer lists sessions, not checkouts.** Until this provider it drew
+/// a row per recorded `repositories` row and a row per linked worktree beneath
+/// it, and each of those rows watched a per-checkout git provider. That was
+/// affordable while a project had one or two checkouts and became the app's
+/// worst cost the moment one had sixty-nine: a `project_rescan` of the owner's
+/// hub recorded 69 checkouts — a dozen sibling clones and ~25 `wt-*` worktrees
+/// — and the panel then charged **six git subprocesses per recorded checkout**,
+/// 414 of them to draw thirteen visible rows, again on every workspace
+/// mutation, every one of them on a WSL path reached over 9p. See
+/// `test/features/explorer/checkout_scale_cost_test.dart` for the measurement.
+///
+/// The owner's own framing is the fix: *"explorer should list only sessions;
+/// the right sidebar should list the worktrees the currently active session is
+/// working on"*. So checkouts moved to the scoped surfaces
+/// ([projectCheckoutsProvider]) and this provider is what is left — two indexed
+/// DAO reads, no git, and a cost proportional to the sessions a user actually
+/// has rather than to whatever a scan happened to find on disk.
+final projectSessionsProvider = Provider.autoDispose
+    .family<CheckoutSessions, String>((ref, projectId) {
       final locations = ref.watch(projectSessionLocationsProvider(projectId));
-      return (tree: tree, placement: placeSessions(tree, locations));
+      return CheckoutSessions(
+        native: [for (final location in locations) ?location.native],
+        imported: [for (final location in locations) ?location.imported],
+      );
     });
