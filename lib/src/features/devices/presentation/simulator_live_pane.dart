@@ -1,14 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/device_gesture_sink.dart';
-import 'device_touch_surface.dart';
-
+import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/ios_device_providers.dart';
 import '../application/simulator_live_view.dart';
+import '../data/device_gesture_sink.dart';
+import '../domain/simulator_backend.dart';
+import 'device_touch_surface.dart';
 
 /// The simulator's picture, when there is one.
 ///
@@ -151,7 +153,181 @@ class _Running extends ConsumerWidget {
                   ),
           ),
         ),
+        _SimulatorControls(udid: view.udid),
       ],
+    );
+  }
+}
+
+/// The controls the Simulator's own Device and Features menus offer, for a
+/// simulator with no window of its own.
+///
+/// Home and Lock go through WebDriverAgent, which is the only thing here that
+/// can press a physical button. Everything else is `simctl`, which is why the
+/// row can offer appearance and deep links that a real device's buttons cannot.
+///
+/// Rotation is deliberately absent. WebDriverAgent can ask for an orientation,
+/// but the picture's aspect ratio is read once when the view starts and the tap
+/// mapping is derived from it — so rotating would leave every tap landing in
+/// the wrong place until the view was restarted. It needs the view to follow a
+/// size change, which is more than a button.
+class _SimulatorControls extends ConsumerStatefulWidget {
+  const _SimulatorControls({required this.udid});
+
+  final String udid;
+
+  @override
+  ConsumerState<_SimulatorControls> createState() => _SimulatorControlsState();
+}
+
+class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
+  /// What this pane last *set*, not what the device reports.
+  ///
+  /// `simctl ui appearance` can be read back, but only by spawning a process,
+  /// and the answer is only ever wrong if something outside this app changed it.
+  bool _dark = false;
+  bool _busy = false;
+
+  Future<void> _run(String what, Future<void> Function() action) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await action();
+    } on Object catch (error) {
+      if (mounted) _say('$what failed: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _say(String message) => ScaffoldMessenger.maybeOf(
+    context,
+  )?.showSnackBar(SnackBar(content: Text(message)));
+
+  Future<void> _press(SimulatorButton button) async {
+    final backend = ref.read(simulatorBackendProvider);
+    if (backend == null) return;
+    await _run(button.name, () => backend.pressButton(widget.udid, button));
+  }
+
+  Future<void> _appearance() async {
+    final simctl = ref.read(simctlServiceProvider);
+    if (simctl == null) return;
+    final wanted = !_dark;
+    await _run('Appearance', () async {
+      await simctl.setAppearance(widget.udid, wanted ? 'dark' : 'light');
+      if (mounted) setState(() => _dark = wanted);
+    });
+  }
+
+  Future<void> _screenshot() async {
+    final simctl = ref.read(simctlServiceProvider);
+    if (simctl == null) return;
+    // The Desktop, because that is where the Simulator's own Cmd+S puts them
+    // and it is the one place a person will think to look.
+    final home = Platform.environment['HOME'];
+    final stamp = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .split('.')
+        .first;
+    final path = home == null
+        ? null
+        : '$home/Desktop/Simulator Screen Shot $stamp.png';
+    await _run('Screenshot', () async {
+      await simctl.screenshot(widget.udid, hostPath: path);
+      if (mounted) _say(path == null ? 'Screenshot saved.' : 'Saved to $path');
+    });
+  }
+
+  Future<void> _openUrl() async {
+    final controller = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Open a URL'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'myapp://path, or https://example.com',
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Open'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (url == null || url.trim().isEmpty) return;
+    final simctl = ref.read(simctlServiceProvider);
+    if (simctl == null) return;
+    await _run('Open URL', () => simctl.openUrl(widget.udid, url.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canPress = ref.watch(simulatorBackendProvider) != null;
+
+    Widget button(
+      String tooltip,
+      IconData icon,
+      VoidCallback? onPressed, {
+      Key? key,
+    }) => IconButton(
+      key: key,
+      tooltip: tooltip,
+      icon: Icon(icon),
+      onPressed: _busy ? null : onPressed,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          button(
+            canPress
+                ? 'Home'
+                : 'Home needs WebDriverAgent, which this build has no copy of',
+            AppIcons.circle,
+            canPress ? () => _press(SimulatorButton.home) : null,
+            key: const Key('simulator-home'),
+          ),
+          button(
+            'Lock',
+            AppIcons.power,
+            canPress ? () => _press(SimulatorButton.lock) : null,
+            key: const Key('simulator-lock'),
+          ),
+          button(
+            _dark ? 'Switch to light appearance' : 'Switch to dark appearance',
+            AppIcons.circleHalf,
+            _appearance,
+            key: const Key('simulator-appearance'),
+          ),
+          button(
+            'Save a screenshot to the Desktop',
+            AppIcons.image,
+            _screenshot,
+            key: const Key('simulator-screenshot'),
+          ),
+          button(
+            'Open a URL or deep link',
+            AppIcons.globe,
+            _openUrl,
+            key: const Key('simulator-open-url'),
+          ),
+        ],
+      ),
     );
   }
 }

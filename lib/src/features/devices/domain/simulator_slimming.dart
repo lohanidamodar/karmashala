@@ -275,6 +275,22 @@ enum SlimmingCategory {
   }
 }
 
+/// The categories left running by default, as ids.
+///
+/// The three a Flutter app is most likely to actually need, and the three whose
+/// absence is hardest to diagnose from inside the app:
+///
+/// * `store` — `com.apple.apsd` *is* APNs, so without it remote notifications
+///   never arrive and `firebase_messaging` looks broken rather than disabled.
+/// * `photos` — `assetsd` backs `image_picker`; the picker opens empty.
+/// * `web` — `swcd` resolves associated domains, so a universal link opens
+///   Safari instead of the app under test.
+///
+/// Everything else is off by default. This is a starting point, not a policy:
+/// each category can be switched either way, and an app that never touches
+/// push, the photo library or universal links should turn these off too.
+const List<String> kDefaultSlimmingKept = ['store', 'photos', 'web'];
+
 /// Every label this build will ever write, in either direction.
 ///
 /// **This set is the safety mechanism.** Slimming is an allowlist, never a

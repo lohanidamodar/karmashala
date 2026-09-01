@@ -153,6 +153,43 @@ void main() {
       );
     });
 
+    testWidgets('a booted simulator is listed under Connected', (
+      tester,
+    ) async {
+      // It was listed in its own section *below* the idle emulators, which put
+      // the one device actually running underneath the ones that are not.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        simulators: [
+          _bootedSimulator('booted', 'iPhone 17 Pro'),
+        ],
+        simulatorBackend: true,
+      );
+
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('iPhone 17 Pro'), findsWidgets);
+      expect(find.byKey(const Key('stop-simulator-booted')), findsOneWidget);
+      expect(find.byKey(const Key('live-view-booted')), findsOneWidget);
+    });
+
+    testWidgets('a simulator row offers no live view without a backend', (
+      tester,
+    ) async {
+      // Without WebDriverAgent it can still be stopped; a Live view button that
+      // always failed would be worse than none.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        simulators: [_bootedSimulator('booted', 'iPhone 17 Pro')],
+      );
+
+      expect(find.byKey(const Key('stop-simulator-booted')), findsOneWidget);
+      expect(find.byKey(const Key('live-view-booted')), findsNothing);
+    });
+
     testWidgets('without a backend the live view is not offered', (
       tester,
     ) async {

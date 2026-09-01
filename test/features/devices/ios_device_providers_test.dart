@@ -2,7 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala/src/features/devices/data/simctl_service.dart';
+import 'package:karmashala/src/features/devices/data/simulator_slimming_service.dart';
 import 'package:karmashala/src/features/devices/data/wda_backend.dart';
+import 'package:karmashala/src/features/devices/domain/simulator_slimming.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -45,6 +48,8 @@ class _StubBackend implements WdaBackend {
 }
 
 void main() {
+  group('slimming on start', _slimmingTests);
+
   group('a host that cannot have simulators', () {
     test('offers nothing, and says why, without spawning anything', () async {
       // The same mistake `wsl.exe` was making on a Mac: a fact about the OS is
@@ -155,5 +160,132 @@ void main() {
 
       expect(container.read(selectedSimulatorProvider)?.udid, 'b');
     });
+  });
+}
+
+/// Records what it was asked to slim, and can be told to fail.
+class _RecordingSlimming implements SimulatorSlimmingService {
+  _RecordingSlimming({this.throws = false});
+
+  final bool throws;
+  final List<({String udid, Set<SlimmingCategory> except, bool boot})> calls =
+      [];
+
+  @override
+  Future<void> slim(
+    String udid, {
+    Set<SlimmingCategory> except = const {},
+    Set<String> keep = const {},
+    bool boot = true,
+  }) async {
+    calls.add((udid: udid, except: except, boot: boot));
+    if (throws) throw StateError('the plist would not open');
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('only slim() is used on the boot path');
+}
+
+/// Records the boots, so a test can tell "slimmed then booted" from "booted".
+class _RecordingSimctl implements SimctlService {
+  final List<String> booted = [];
+
+  @override
+  Future<void> bootAndWait(String udid, {Duration? timeout}) async =>
+      booted.add(udid);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('only bootAndWait is used on this path');
+}
+
+void _slimmingTests() {
+  ProviderContainer containerWith({
+    required _RecordingSlimming slimming,
+    required _RecordingSimctl simctl,
+    bool enabled = true,
+    List<String> kept = kDefaultSlimmingKept,
+  }) {
+    final container = ProviderContainer(
+      overrides: [
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(),
+        ),
+        hostCanRunSimulatorsProvider.overrideWithValue(true),
+        iosSimulatorsProvider.overrideWith((ref) async => const []),
+        simctlServiceProvider.overrideWithValue(simctl),
+        simulatorSlimmingServiceProvider.overrideWithValue(slimming),
+        slimmingOnStartProvider.overrideWithValue(enabled),
+        slimmingKeptCategoriesProvider.overrideWithValue({
+          for (final id in kept) ?SlimmingCategory.byId(id),
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  test('starting a simulator slims it first, then boots it', () async {
+    final slimming = _RecordingSlimming();
+    final simctl = _RecordingSimctl();
+    final container = containerWith(slimming: slimming, simctl: simctl);
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(slimming.calls, hasLength(1));
+    expect(slimming.calls.single.udid, 'UDID');
+    expect(
+      slimming.calls.single.except,
+      {SlimmingCategory.store, SlimmingCategory.photos, SlimmingCategory.web},
+      reason: 'the categories a Flutter app is most likely to need',
+    );
+    expect(
+      slimming.calls.single.boot,
+      isFalse,
+      reason: 'booting is bootAndWait\'s job — a starting device cannot answer',
+    );
+    expect(simctl.booted, ['UDID']);
+  });
+
+  test('slimming switched off leaves the device alone', () async {
+    final slimming = _RecordingSlimming();
+    final simctl = _RecordingSimctl();
+    final container = containerWith(
+      slimming: slimming,
+      simctl: simctl,
+      enabled: false,
+    );
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(slimming.calls, isEmpty);
+    expect(simctl.booted, ['UDID']);
+  });
+
+  test('a simulator still starts when it cannot be slimmed', () async {
+    // Slimming is an optimisation. Refusing to start the simulator because its
+    // services could not be trimmed would turn a saving into an outage.
+    final slimming = _RecordingSlimming(throws: true);
+    final simctl = _RecordingSimctl();
+    final container = containerWith(slimming: slimming, simctl: simctl);
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(simctl.booted, ['UDID']);
+  });
+
+  test('keeping nothing slims every category', () async {
+    final slimming = _RecordingSlimming();
+    final simctl = _RecordingSimctl();
+    final container = containerWith(
+      slimming: slimming,
+      simctl: simctl,
+      kept: const [],
+    );
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(slimming.calls.single.except, isEmpty);
   });
 }

@@ -2,12 +2,16 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/domain/local_environment.dart';
+import '../../settings/application/settings_controller.dart';
 import '../data/simctl_service.dart';
+import '../data/simulator_slimming_service.dart';
 import '../data/wda_backend.dart';
 import '../data/wda_locator.dart';
 import '../domain/ios_simulator.dart';
+import '../domain/simulator_slimming.dart';
 
 /// Whether this machine can have iOS Simulators at all.
 ///
@@ -157,6 +161,42 @@ final simulatorSupportProvider = Provider<SimulatorSupport>((ref) {
 /// Held here rather than in the pane because a boot outlives the widget: it
 /// takes ten seconds or more, and a user who switches away and back must not
 /// come back to a Start button that looks untouched.
+/// Writes the `disabled.plist`, or `null` on a host with no simulators.
+final simulatorSlimmingServiceProvider = Provider<SimulatorSlimmingService?>((
+  ref,
+) {
+  if (!ref.watch(hostCanRunSimulatorsProvider)) return null;
+  final environment = localHostEnvironment(DateTime.now().toUtc());
+  return SimulatorSlimmingService(
+    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+  );
+});
+
+/// The categories the user has chosen to leave running.
+///
+/// Ids that no longer name a category are dropped rather than erroring: a
+/// category removed in a later release must not make a saved preference
+/// unreadable.
+final slimmingKeptCategoriesProvider = Provider<Set<SlimmingCategory>>((ref) {
+  final ids = ref.watch(
+    settingsControllerProvider.select((s) => s.simulatorSlimmingKept),
+  );
+  return {for (final id in ids) ?SlimmingCategory.byId(id)};
+});
+
+/// Whether starting a simulator will slim it.
+///
+/// Slimming is applied **on start only**. The plist is read by launchd when the
+/// device boots, so switching it on cannot affect a simulator that is already
+/// running — it has to be stopped and started again, and the UI says so rather
+/// than appearing to do nothing.
+final slimmingOnStartProvider = Provider<bool>((ref) {
+  if (!ref.watch(hostCanRunSimulatorsProvider)) return false;
+  return ref.watch(
+    settingsControllerProvider.select((s) => s.simulatorSlimming),
+  );
+});
+
 class SimulatorTransitions extends Notifier<Set<String>> {
   @override
   Set<String> build() => const {};
@@ -171,7 +211,35 @@ class SimulatorTransitions extends Notifier<Set<String>> {
   /// `bootAndWait`, not `boot`: `simctl boot` returns as soon as the device is
   /// *starting*, and a row that flipped to "booted" at that moment would offer
   /// a live view of a simulator that cannot answer yet.
-  Future<void> boot(String udid) => _run(udid, (simctl) => simctl.bootAndWait(udid));
+  Future<void> boot(String udid) => _run(udid, (simctl) async {
+    await _slim(udid);
+    await simctl.bootAndWait(udid);
+  });
+
+  /// Writes the device's `disabled.plist` before it is booted.
+  ///
+  /// `boot: false`, because booting is the caller's job and it wants
+  /// `bootAndWait` — a device that is merely *starting* cannot answer yet.
+  ///
+  /// A failure here is logged and swallowed on purpose. Slimming is an
+  /// optimisation; refusing to start the simulator because its services could
+  /// not be trimmed would turn a saving into an outage.
+  Future<void> _slim(String udid) async {
+    if (!ref.read(slimmingOnStartProvider)) return;
+    final slimming = ref.read(simulatorSlimmingServiceProvider);
+    if (slimming == null) return;
+    try {
+      await slimming.slim(
+        udid,
+        except: ref.read(slimmingKeptCategoriesProvider),
+        boot: false,
+      );
+    } on Object catch (error) {
+      AppLogger.named(
+        'simulator',
+      ).warning('Starting $udid without slimming it reason=$error');
+    }
+  }
 
   Future<void> shutdown(String udid) =>
       _run(udid, (simctl) => simctl.shutdown(udid));

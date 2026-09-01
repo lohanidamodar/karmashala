@@ -35,6 +35,11 @@ Future<void> _pump(
         simulatorBackendProvider.overrideWithValue(
           backend ? _StubBackend() : null,
         ),
+        // The slimming controls read the settings, which live in the database.
+        // Overriding the two derived providers keeps these cases about the
+        // list rather than about how a preference is stored.
+        slimmingOnStartProvider.overrideWithValue(true),
+        slimmingKeptCategoriesProvider.overrideWithValue(const {}),
       ],
       child: const MaterialApp(
         home: Scaffold(body: SingleChildScrollView(child: SimulatorList())),
@@ -51,6 +56,36 @@ class _StubBackend implements WdaBackend {
 }
 
 void main() {
+  testWidgets('slimming is on by default and says what it does', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      simulators: [_sim('u', 'iPhone 17', SimulatorState.shutdown)],
+    );
+
+    final tile = tester.widget<CheckboxListTile>(
+      find.byKey(const Key('slim-on-start')),
+    );
+    expect(tile.value, isTrue);
+  });
+
+  testWidgets('a running simulator is told it has to be restarted', (
+    tester,
+  ) async {
+    // launchd reads the file at boot, so this can never affect a device that is
+    // already up. A switch that silently does nothing is worse than no switch.
+    await _pump(
+      tester,
+      simulators: [
+        _sim('booted', 'iPhone 17 Pro', SimulatorState.booted),
+        _sim('idle', 'iPhone 16', SimulatorState.shutdown),
+      ],
+    );
+
+    expect(find.textContaining('Stop and start it to slim it'), findsOneWidget);
+  });
+
   testWidgets('offers a picker and a Start, not 170 rows', (tester) async {
     // Xcode accumulates simulators; this developer's machine holds 170. A flat
     // list would bury the Android devices above it and leave the user reading
@@ -65,44 +100,11 @@ void main() {
 
     expect(find.byKey(const Key('simulator-picker')), findsOneWidget);
     expect(find.byKey(const Key('start-simulator')), findsOneWidget);
-    expect(find.byType(ListTile), findsNothing, reason: 'nothing is running');
-  });
-
-  testWidgets('a booted simulator is a row with a Stop', (tester) async {
-    // There are rarely more than one or two, and each is something you might
-    // want to act on — so these are listed rather than hidden in the picker.
-    await _pump(
-      tester,
-      simulators: [
-        _sim('booted', 'iPhone 17 Pro', SimulatorState.booted),
-        _sim('idle', 'iPhone 16', SimulatorState.shutdown),
-      ],
+    expect(
+      find.byKey(const Key('stop-simulator-u0')),
+      findsNothing,
+      reason: 'nothing is running, so nothing is a row',
     );
-
-    expect(find.text('iPhone 17 Pro'), findsOneWidget);
-    expect(find.text('running · iOS 26.4'), findsOneWidget);
-    expect(find.byKey(const Key('stop-simulator-booted')), findsOneWidget);
-    // The idle one belongs in the picker, not as a row.
-    expect(find.byKey(const Key('stop-simulator-idle')), findsNothing);
-  });
-
-  testWidgets('Live view is offered only when there is something to mirror with',
-      (tester) async {
-    // Without WebDriverAgent a simulator can still be started and stopped; a
-    // Live view button that always failed would be worse than none.
-    await _pump(
-      tester,
-      simulators: [_sim('b', 'iPhone 17 Pro', SimulatorState.booted)],
-    );
-    expect(find.byKey(const Key('live-view-b')), findsNothing);
-    expect(find.byKey(const Key('stop-simulator-b')), findsOneWidget);
-
-    await _pump(
-      tester,
-      backend: true,
-      simulators: [_sim('b', 'iPhone 17 Pro', SimulatorState.booted)],
-    );
-    expect(find.byKey(const Key('live-view-b')), findsOneWidget);
   });
 
   testWidgets('a simulator with no runtime installed cannot be started',

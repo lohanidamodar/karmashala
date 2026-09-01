@@ -11,6 +11,7 @@ import '../data/device_gesture_sink.dart';
 import '../data/device_stream.dart';
 import '../application/ios_device_providers.dart';
 import '../domain/android_device.dart';
+import '../domain/ios_simulator.dart';
 import '../domain/device_input.dart';
 import 'device_stream_status.dart';
 import '../application/simulator_live_view.dart';
@@ -982,6 +983,12 @@ class _DeviceList extends ConsumerWidget {
     final theme = Theme.of(context);
     final devices =
         ref.watch(devicesProvider).asData?.value ?? const <AndroidDevice>[];
+    // A booted simulator is a connected device. It was listed in its own
+    // section under the *idle* emulators, which put the one thing running
+    // below the things that are not.
+    final simulators = ref.watch(bootedSimulatorsProvider);
+    final busySimulators = ref.watch(simulatorTransitionsProvider);
+    final canMirror = ref.watch(simulatorBackendProvider) != null;
     final avds = ref.watch(avdsProvider).asData?.value ?? const <Avd>[];
     final runningAvdNames = {
       for (final avd in avds)
@@ -993,15 +1000,47 @@ class _DeviceList extends ConsumerWidget {
       for (final avd in avds)
         if (!avd.isRunning) avd,
     ];
-    if (devices.isEmpty && idle.isEmpty) return const SizedBox.shrink();
+    if (devices.isEmpty && idle.isEmpty && simulators.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (devices.isNotEmpty) ...[
+        if (devices.isNotEmpty || simulators.isNotEmpty) ...[
           const SizedBox(height: 16),
           Text('Connected', style: theme.textTheme.labelLarge),
           const SizedBox(height: 4),
+          for (final simulator in simulators)
+            _DeviceRow(
+              key: Key('simulator-${simulator.udid}'),
+              title: simulator.name,
+              subtitle: switch (simulator.state) {
+                SimulatorState.booting => 'starting…',
+                SimulatorState.shuttingDown => 'shutting down…',
+                _ => 'running · ${simulator.runtimeName}',
+              },
+              actions: [
+                if (canMirror && simulator.state.isReady)
+                  _RowAction(
+                    key: Key('live-view-${simulator.udid}'),
+                    label: 'Live view',
+                    busy: busySimulators.contains(simulator.udid),
+                    onPressed: () async => ref
+                        .read(simulatorLiveViewProvider.notifier)
+                        .start(simulator.udid),
+                  ),
+                if (simulator.state.isReady)
+                  _RowAction(
+                    key: Key('stop-simulator-${simulator.udid}'),
+                    label: 'Stop',
+                    busy: busySimulators.contains(simulator.udid),
+                    onPressed: () async => ref
+                        .read(simulatorTransitionsProvider.notifier)
+                        .shutdown(simulator.udid),
+                  ),
+              ],
+            ),
           for (final device in devices)
             _DeviceRow(
               title: runningAvdNames[device.serial] ?? device.displayName,
@@ -1100,6 +1139,7 @@ class _DeviceRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.actions,
+    super.key,
   });
 
   final String title;

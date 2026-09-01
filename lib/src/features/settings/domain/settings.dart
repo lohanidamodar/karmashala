@@ -1,4 +1,5 @@
 import '../../../core/logging/log_buffer.dart';
+import '../../devices/domain/simulator_slimming.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
 import 'permission_mode.dart';
@@ -61,6 +62,8 @@ class Settings {
     this.keepAwake = false,
     this.closeToTray = false,
     this.autoStart = false,
+    this.simulatorSlimming = true,
+    this.simulatorSlimmingKept = kDefaultSlimmingKept,
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
@@ -130,6 +133,21 @@ class Settings {
 
   /// Launch the app automatically when the user logs in.
   final bool autoStart;
+
+  /// Switch off the iOS Simulator's unused background services when starting
+  /// one. macOS only; inert everywhere else.
+  ///
+  /// On by default. A stock iOS 26 simulator boots ~358 launchd services to
+  /// serve a user who is not there, and a developer pays for all of them in
+  /// memory and boot time.
+  final bool simulatorSlimming;
+
+  /// The [SlimmingCategory] ids to leave running, by id.
+  ///
+  /// Stored as the *exceptions* rather than the selection, so a category added
+  /// in a later release is slimmed by default rather than silently spared by
+  /// everyone's saved preference.
+  final List<String> simulatorSlimmingKept;
 
   /// Persisted width of the Explorer pane and the detail sidebar.
   final double explorerPaneWidth;
@@ -270,6 +288,8 @@ class Settings {
     bool? keepAwake,
     bool? closeToTray,
     bool? autoStart,
+    bool? simulatorSlimming,
+    List<String>? simulatorSlimmingKept,
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
@@ -313,6 +333,8 @@ class Settings {
     keepAwake: keepAwake ?? this.keepAwake,
     closeToTray: closeToTray ?? this.closeToTray,
     autoStart: autoStart ?? this.autoStart,
+    simulatorSlimming: simulatorSlimming ?? this.simulatorSlimming,
+    simulatorSlimmingKept: simulatorSlimmingKept ?? this.simulatorSlimmingKept,
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
@@ -362,6 +384,8 @@ class Settings {
     'keepAwake': keepAwake,
     'closeToTray': closeToTray,
     'autoStart': autoStart,
+    'simulatorSlimming': simulatorSlimming,
+    'simulatorSlimmingKept': simulatorSlimmingKept,
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
@@ -431,6 +455,15 @@ class Settings {
       keepAwake: json['keepAwake'] == true,
       closeToTray: json['closeToTray'] == true,
       autoStart: json['autoStart'] == true,
+      // Absent means a settings file written before this existed, and the
+      // default is on — so `== true` would silently turn slimming off for
+      // every existing install.
+      simulatorSlimming: json['simulatorSlimming'] != false,
+      simulatorSlimmingKept: json['simulatorSlimmingKept'] is List
+          ? (json['simulatorSlimmingKept'] as List)
+                .whereType<String>()
+                .toList()
+          : kDefaultSlimmingKept,
       explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
       compactDensity: json['compactDensity'] is bool
@@ -522,6 +555,8 @@ class Settings {
       other.keepAwake == keepAwake &&
       other.closeToTray == closeToTray &&
       other.autoStart == autoStart &&
+      other.simulatorSlimming == simulatorSlimming &&
+      _listEquals(other.simulatorSlimmingKept, simulatorSlimmingKept) &&
       other.explorerPaneWidth == explorerPaneWidth &&
       other.detailSidebarWidth == detailSidebarWidth &&
       other.compactDensity == compactDensity &&
@@ -559,6 +594,8 @@ class Settings {
     keepAwake,
     closeToTray,
     autoStart,
+    simulatorSlimming,
+    Object.hashAll(simulatorSlimmingKept),
     explorerPaneWidth,
     detailSidebarWidth,
     compactDensity,

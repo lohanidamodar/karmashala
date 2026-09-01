@@ -82,6 +82,18 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setSimulatorSlimming(bool value) {
+    state = state.copyWith(simulatorSlimming: value);
+    _save();
+  }
+
+  /// Records which categories to leave running. Takes the full set each time
+  /// rather than a toggle, so the caller cannot get the two out of step.
+  void setSimulatorSlimmingKept(List<String> ids) {
+    state = state.copyWith(simulatorSlimmingKept: ids);
+    _save();
+  }
+
   void setAutoStart(bool value) {
     state = state.copyWith(autoStart: value);
     _save();

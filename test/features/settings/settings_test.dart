@@ -1,3 +1,4 @@
+import 'package:karmashala/src/features/devices/domain/simulator_slimming.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
@@ -9,6 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('simulator slimming', _simulatorSlimmingTests);
+
   group('shell integration setting', () {
     test('is off by default', () {
       // A shell that fails to start is much worse than a missing feature, so
@@ -310,5 +313,45 @@ void main() {
         PermissionMode.acceptEdits,
       );
     });
+  });
+}
+
+void _simulatorSlimmingTests() {
+  test('slimming is on by default, keeping the three a Flutter app needs', () {
+    const settings = Settings();
+
+    expect(settings.simulatorSlimming, isTrue);
+    expect(settings.simulatorSlimmingKept, ['store', 'photos', 'web']);
+  });
+
+  test('a settings file written before slimming existed still slims', () {
+    // The default is *on*, so reading the absent key as `== true` would have
+    // silently turned it off for every existing install.
+    final settings = Settings.fromJson(const {'keepAwake': true});
+
+    expect(settings.simulatorSlimming, isTrue);
+    expect(settings.simulatorSlimmingKept, kDefaultSlimmingKept);
+  });
+
+  test('keeping nothing survives a round trip', () {
+    // Distinct from "absent": an empty list is a choice, and falling back to
+    // the default here would re-spare three categories the user switched off.
+    const settings = Settings(simulatorSlimmingKept: []);
+
+    final restored = Settings.fromJson(settings.toJson());
+
+    expect(restored.simulatorSlimmingKept, isEmpty);
+  });
+
+  test('a category that no longer exists is dropped, not fatal', () {
+    final settings = Settings.fromJson(const {
+      'simulatorSlimmingKept': ['store', 'a-category-from-the-future'],
+    });
+
+    expect(settings.simulatorSlimmingKept, hasLength(2));
+    expect(
+      {for (final id in settings.simulatorSlimmingKept) ?SlimmingCategory.byId(id)},
+      {SlimmingCategory.store},
+    );
   });
 }
