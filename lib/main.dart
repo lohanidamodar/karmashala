@@ -159,14 +159,18 @@ Future<void> _discoverAgentsOnFirstRun(
   AppLogger logger,
 ) async {
   try {
-    final found = await container
+    final report = await container
         .read(agentInstallationsControllerProvider.notifier)
         .discoverAll();
     database.writeMetadata(
       MetadataKeys.agentsDiscoveredAt,
       clock.nowUtc().toIso8601String(),
     );
-    logger.info('First-run agent discovery found ${found.length} agent(s).');
+    // The whole sentence, not just the hit count. A first run that found three
+    // agents in WSL and none on Windows used to log "found 3 agent(s)", which
+    // reads as a clean result and hid the fact that the Windows probe had come
+    // back empty and would never be repeated.
+    logger.info('First-run agent discovery: ${report.summary}');
   } catch (error, stack) {
     logger.warning(
       'First-run agent discovery failed; will retry next launch.',

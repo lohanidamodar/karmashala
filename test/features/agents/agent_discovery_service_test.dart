@@ -70,6 +70,9 @@ void main() {
           environment: windowsEnv(),
           ids: SequentialIdGenerator(),
           clock: FixedClock(testTime),
+          // This test is about the PATH lookup; with no variables set, no
+          // descriptor's declared install path expands into a probe.
+          hostEnvironment: const {},
         ).discover();
 
         expect(found.map((i) => i.agentId), [
@@ -93,6 +96,7 @@ void main() {
         environment: wslEnv(),
         ids: SequentialIdGenerator(),
         clock: FixedClock(testTime),
+        hostEnvironment: const {},
       ).discover();
       expect(found, isEmpty);
     });

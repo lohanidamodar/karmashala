@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
@@ -12,4 +14,14 @@ final agentInstallationDaoProvider = Provider<AgentInstallationDao>(
 /// The agents the app knows about. Overridable in tests to probe a custom set.
 final agentRegistryProvider = Provider<AgentRegistry>(
   (ref) => AgentRegistry.builtIn,
+);
+
+/// The host process's environment variables.
+///
+/// Behind a provider so tests can be hermetic: discovery expands the
+/// descriptors' declared Windows install paths against this, and a test that
+/// silently inherited the developer's real `%LOCALAPPDATA%` would probe
+/// different files on different machines.
+final hostEnvironmentProvider = Provider<Map<String, String>>(
+  (ref) => Platform.environment,
 );
