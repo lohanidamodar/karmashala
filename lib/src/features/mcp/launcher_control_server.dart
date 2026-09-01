@@ -67,6 +67,7 @@ import 'session_tools.dart';
 import 'terminal_tools.dart';
 import 'tmux_orchestration.dart';
 import 'workspace_tools.dart';
+import 'worktree_tools.dart';
 import 'wsl_host_address.dart';
 
 /// The port the control server asks for before falling back to an ephemeral one.
@@ -1161,6 +1162,11 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // Making a checkout and taking one away. Separate from the workspace
+      // tools above because those only read and select, and these are the two
+      // verbs that change what is on disk — one of them irreversibly.
+      case final String name when WorktreeControlTools.handles(name):
+        return WorktreeControlTools(_container).call(name, args);
       // The terminal workspace, through the same controller the tab bar uses,
       // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
@@ -1814,6 +1820,7 @@ class LauncherControlServer implements SessionMcp {
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
     ...workspaceControlToolSchemas,
+    ...worktreeControlToolSchemas,
     ...attentionControlToolSchemas,
     ...decisionControlToolSchemas,
     ...browserToolSchemas,

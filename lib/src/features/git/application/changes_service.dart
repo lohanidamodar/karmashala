@@ -84,6 +84,18 @@ class ChangesService {
     required String base,
   }) => _gitFor(repo).aheadBehind(repo, base: base);
 
+  /// Resolves [rev] in [repo], or `null` when it names nothing. Asking for
+  /// `refs/heads/<name>` is how "does this branch exist" is asked.
+  Future<String?> revParse(EnvironmentPath repo, String rev) =>
+      _gitFor(repo).revParse(repo, rev);
+
+  /// The remote-tracking branches holding [rev]; `null` when git could not
+  /// answer, empty when nothing outside this machine has those commits.
+  Future<List<String>?> remoteBranchesContaining(
+    EnvironmentPath repo,
+    String rev,
+  ) => _gitFor(repo).remoteBranchesContaining(repo, rev);
+
   /// The upstream of [branch] in [repo] (`origin/work`), or `null`.
   Future<String?> upstreamOf(EnvironmentPath repo, String branch) =>
       _gitFor(repo).upstreamOf(repo, branch);
