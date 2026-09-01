@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/ios_device_providers.dart';
+import '../application/simulator_live_view.dart';
 import '../domain/ios_simulator.dart';
 
 /// The iOS Simulators section of the device sidebar.
@@ -62,6 +63,14 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
             key: Key('simulator-${simulator.udid}'),
             simulator: simulator,
             busy: busy.contains(simulator.udid),
+            // Only offered when there is a backend to mirror with. Without
+            // WebDriverAgent a simulator can still be started and stopped, and
+            // a Live view button that always failed would be worse than none.
+            onLiveView: ref.watch(simulatorBackendProvider) == null
+                ? null
+                : () => ref
+                      .read(simulatorLiveViewProvider.notifier)
+                      .start(simulator.udid),
             onStop: () => transitions.shutdown(simulator.udid),
           ),
         if (startable.isNotEmpty)
@@ -116,11 +125,13 @@ class _SimulatorRow extends StatelessWidget {
     required this.simulator,
     required this.busy,
     required this.onStop,
+    this.onLiveView,
   });
 
   final IosSimulator simulator;
   final bool busy;
   final VoidCallback onStop;
+  final VoidCallback? onLiveView;
 
   @override
   Widget build(BuildContext context) {
@@ -137,16 +148,27 @@ class _SimulatorRow extends StatelessWidget {
         },
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: TextButton(
-        key: Key('stop-simulator-${simulator.udid}'),
-        onPressed: busy || !simulator.state.isReady ? null : onStop,
-        child: busy
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Text('Stop'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onLiveView != null && simulator.state.isReady)
+            TextButton(
+              key: Key('live-view-${simulator.udid}'),
+              onPressed: busy ? null : onLiveView,
+              child: const Text('Live view'),
+            ),
+          TextButton(
+            key: Key('stop-simulator-${simulator.udid}'),
+            onPressed: busy || !simulator.state.isReady ? null : onStop,
+            child: busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Stop'),
+          ),
+        ],
       ),
     );
   }

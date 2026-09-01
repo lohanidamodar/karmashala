@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala/src/features/devices/data/wda_backend.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 import 'package:karmashala/src/features/devices/presentation/simulator_list.dart';
 
@@ -24,12 +25,16 @@ Future<void> _pump(
   WidgetTester tester, {
   required List<IosSimulator> simulators,
   bool macOS = true,
+  bool backend = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         hostCanRunSimulatorsProvider.overrideWithValue(macOS),
         iosSimulatorsProvider.overrideWith((ref) async => simulators),
+        simulatorBackendProvider.overrideWithValue(
+          backend ? _StubBackend() : null,
+        ),
       ],
       child: const MaterialApp(
         home: Scaffold(body: SingleChildScrollView(child: SimulatorList())),
@@ -37,6 +42,12 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+class _StubBackend implements WdaBackend {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('these cases never start a live view');
 }
 
 void main() {
@@ -73,6 +84,25 @@ void main() {
     expect(find.byKey(const Key('stop-simulator-booted')), findsOneWidget);
     // The idle one belongs in the picker, not as a row.
     expect(find.byKey(const Key('stop-simulator-idle')), findsNothing);
+  });
+
+  testWidgets('Live view is offered only when there is something to mirror with',
+      (tester) async {
+    // Without WebDriverAgent a simulator can still be started and stopped; a
+    // Live view button that always failed would be worse than none.
+    await _pump(
+      tester,
+      simulators: [_sim('b', 'iPhone 17 Pro', SimulatorState.booted)],
+    );
+    expect(find.byKey(const Key('live-view-b')), findsNothing);
+    expect(find.byKey(const Key('stop-simulator-b')), findsOneWidget);
+
+    await _pump(
+      tester,
+      backend: true,
+      simulators: [_sim('b', 'iPhone 17 Pro', SimulatorState.booted)],
+    );
+    expect(find.byKey(const Key('live-view-b')), findsOneWidget);
   });
 
   testWidgets('a simulator with no runtime installed cannot be started',

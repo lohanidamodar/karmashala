@@ -12,6 +12,8 @@ import '../data/device_stream.dart';
 import '../domain/android_device.dart';
 import '../domain/device_input.dart';
 import 'device_stream_status.dart';
+import '../application/simulator_live_view.dart';
+import 'simulator_live_pane.dart';
 import 'simulator_list.dart';
 import 'device_touch_surface.dart';
 
@@ -500,7 +502,13 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: reason != null
+          // The simulator's picture wins while it is up. It is the only thing
+          // on screen the user asked for by name, and the Android branches
+          // below are all about a device they did not pick.
+          child: ref.watch(simulatorLiveViewProvider)
+                  is! SimulatorLiveViewIdle
+              ? const SimulatorLivePane()
+              : reason != null
               ? _DeviceEmptyState(
                   message: reason,
                   stopping: _stopping,
