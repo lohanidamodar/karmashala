@@ -402,6 +402,24 @@ void main() {
       );
     });
   });
+
+  test('a hook that cannot deliver costs the agent nothing', () {
+    // The owner watched `curl: (52) Empty reply from server` print into a live
+    // Claude session, and the shell exit non-zero, because the app happened
+    // not to be answering on the WSL interface. A status callback is this
+    // app's business: it may lose an update, but it may not put a message in
+    // someone else's terminal or fail their command.
+    final command = AgentHookInstaller().hookCommand(
+      descriptor: claude,
+      event: 'Stop',
+      endpoint: const AgentHookEndpoint(port: 4321, token: 'tok'),
+      environment: EnvironmentKind.windowsNative,
+    )!;
+
+    expect(command, contains('curl -s '), reason: 'no error output');
+    expect(command, isNot(contains('-sS')));
+    expect(command, endsWith('|| true'), reason: 'no failing exit status');
+  });
 }
 
 /// A replace step that never happens, standing in for the process dying between

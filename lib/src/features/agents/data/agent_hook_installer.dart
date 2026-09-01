@@ -144,9 +144,17 @@ class AgentHookInstaller {
             'marker': agentHookMarker,
           },
         );
-    return 'curl -sS -m 2 -X POST '
+    // Silent, and it always succeeds. A status callback is Chitragupta's
+    // business, not the agent's: the owner watched `curl: (52) Empty reply
+    // from server` print into a live session and the shell exit non-zero
+    // because the app happened not to be answering on the WSL interface. A
+    // hook that cannot deliver must cost the agent nothing — no message, no
+    // exit code — so `-s` swallows the diagnostic and `|| true` swallows the
+    // status. What the app loses is a status update it was never guaranteed;
+    // what the user loses otherwise is confidence in their own terminal.
+    return 'curl -s -m 2 -X POST '
         '-H "Authorization: Bearer ${endpoint.token}" '
-        '--data-binary @- "$uri"';
+        '--data-binary @- "$uri" || true';
   }
 
   /// Reads the config, hands its hook map to [edit], and splices the result

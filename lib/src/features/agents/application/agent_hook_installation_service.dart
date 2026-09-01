@@ -142,14 +142,39 @@ class AgentHookInstallationService {
         final home = store.homesByAgentId[descriptor.id];
         if (home == null) continue;
         if (skipUnreachable && !reachable) {
+          // Not just skipped — *cleaned*. Skipping only decided what not to
+          // write, and left whatever was already in the file: an entry an
+          // earlier build wrote while the address was still reachable, or one
+          // spelling a noisier command than this version writes. That entry
+          // keeps firing on every prompt, and the owner watched it print
+          // `curl: (52) Empty reply from server` into a live session and fail
+          // the hook. A callback we cannot deliver has no business staying in
+          // somebody's config, so removing ours is the only honest state here.
+          var removed = false;
+          try {
+            removed = await installer.uninstall(
+              descriptor: descriptor,
+              storeHome: home,
+            );
+          } catch (error, stack) {
+            _log.warning(
+              'Could not remove unreachable ${descriptor.id} hooks in '
+              '${store.environmentId}; leaving the config untouched.',
+              error,
+              stack,
+            );
+          }
           results.add(
             AgentHookInstallation(
               agentId: descriptor.id,
               environmentId: store.environmentId,
               installed: false,
-              skippedBecause:
-                  'no callback address this app binds is reachable from '
-                  'this environment; status falls back to the state file',
+              skippedBecause: removed
+                  ? 'no callback address this app binds is reachable from '
+                        'this environment; the hook left here by an earlier '
+                        'run was removed'
+                  : 'no callback address this app binds is reachable from '
+                        'this environment; status falls back to the state file',
             ),
           );
           continue;

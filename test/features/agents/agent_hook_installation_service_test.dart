@@ -140,9 +140,15 @@ void main() {
     expect(settings().readAsStringSync(), raw);
   });
 
-  test('uninstall sweeps environments install skipped', () async {
-    // WSL is skipped on install (loopback is not reachable from a distro), but
-    // an entry an older build wrote there is still ours to remove.
+  test('install clears what it cannot deliver to, without adding one', () async {
+    // WSL is unreachable over loopback, so nothing of ours may be written
+    // here. This used to assert the file came back *byte-identical*, which
+    // sounded like restraint and was actually the bug: an entry an older
+    // build left behind survived every launch, and only an explicit
+    // uninstall could clear it. Meanwhile it fired on every prompt.
+    //
+    // The guarantee that mattered is intact — install adds no hook to a
+    // config it cannot deliver to — and the stale one no longer outlives it.
     settings().writeAsStringSync(
       jsonEncode({
         'hooks': {
@@ -168,16 +174,22 @@ void main() {
       locator,
     ).read(agentHookInstallationServiceProvider);
 
-    final before = settings().readAsStringSync();
     await service.installAll(endpoint);
+
+    final after = settings().readAsStringSync();
     expect(
-      settings().readAsStringSync(),
-      before,
-      reason: 'install must not write into a WSL config at all',
+      after,
+      isNot(contains(agentHookMarker)),
+      reason: 'the entry that was failing on every prompt is gone',
+    );
+    expect(
+      after,
+      isNot(contains('127.0.0.1')),
+      reason: 'and install still wrote no hook of its own here',
     );
 
+    // Still a no-op afterwards: the sweep has nothing left to find.
     await service.uninstallAll();
-
     expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
   });
 
@@ -226,6 +238,78 @@ void main() {
       expect(claude.installed, isFalse);
       expect(claude.skippedBecause, contains('no callback address this app binds is reachable'));
       expect(claude.skippedBecause, contains('state file'));
+      expect(settings().existsSync(), isFalse);
+    });
+
+    test('a hook left by an earlier run is removed, not left to fail', () async {
+      // The owner upgraded, and every prompt in their WSL session printed
+      // `curl: (52) Empty reply from server` followed by a failed hook. The
+      // entry was written by an older build — a noisier command, and an
+      // address that no longer answers — and skipping only ever decided what
+      // *not* to write, so nothing in the app could reach in and clear it.
+      // An unreachable environment must end this sweep with none of our hooks
+      // in it, not with a stale one nobody can remove.
+      final (locator, wsl) = wslStore();
+      settings().writeAsStringSync(
+        jsonEncode({
+          'hooks': {
+            'SessionEnd': [
+              {
+                'hooks': [
+                  {
+                    'type': 'command',
+                    'command':
+                        'curl -sS -m 2 -X POST --data-binary @- '
+                        '"http://172.18.240.1:9999/agent-hook'
+                        '?marker=$agentHookMarker"',
+                  },
+                ],
+              },
+            ],
+            'UserPromptSubmit': [
+              {
+                'hooks': [
+                  {'type': 'command', 'command': 'echo mine'},
+                ],
+              },
+            ],
+          },
+        }),
+      );
+
+      final results = await containerWith(
+        locator,
+      ).read(agentHookInstallationServiceProvider).installAll(endpoint);
+
+      final claude = results.singleWhere((r) => r.environmentId == wsl.id);
+      expect(claude.installed, isFalse);
+      expect(
+        claude.skippedBecause,
+        contains('left here by an earlier run was removed'),
+      );
+      final raw = settings().readAsStringSync();
+      expect(
+        raw,
+        isNot(contains(agentHookMarker)),
+        reason: 'the entry that was failing on every prompt is gone',
+      );
+      expect(
+        raw,
+        contains('echo mine'),
+        reason: "the user's own hook is not ours to remove",
+      );
+    });
+
+    test('an unreachable store with nothing of ours is left alone', () async {
+      // The common case, and the one that must not start writing files: no
+      // entry of ours means nothing to clean, and a config we never touched
+      // stays untouched.
+      final (locator, _) = wslStore();
+
+      await containerWith(
+        locator,
+      ).read(agentHookInstallationServiceProvider).installAll(endpoint);
+
       expect(settings().existsSync(), isFalse);
     });
 
