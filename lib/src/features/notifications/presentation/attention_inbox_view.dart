@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../sessions/application/session_handoff_service.dart';
 import '../../sessions/domain/session_resume.dart';
+import '../../sessions/presentation/continue_with_dialog.dart';
 import '../application/attention_inbox.dart';
 import '../domain/inbox_item.dart';
 
@@ -117,6 +119,47 @@ class _Empty extends StatelessWidget {
   }
 }
 
+/// Somewhere for a follow-up to go, without leaving the list.
+///
+/// **It starts nothing.** The standing rule in this app is that no agent runs
+/// without the user's say-so, and a row that relaunched a session on one click
+/// would break it — which is exactly why the first version of the follow-up
+/// inbox only opened the session and left the rest to be done by hand. What
+/// this adds is a shorter path to [ContinueWithDialog], which is where the
+/// agent, the mode and the packet are chosen and where the user presses the
+/// button that launches. The confirmation is not skipped; only the hunt for it
+/// is.
+///
+/// Its own widget so that only follow-up rows read
+/// [sessionContinuationProvider] — the answer costs three row lookups, and the
+/// inbox draws two hundred rows of other kinds that would learn nothing from
+/// it.
+class _ContinueAction extends ConsumerWidget {
+  const _ContinueAction({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Hidden rather than disabled when there is nowhere to go, matching the
+    // delivery strip: a dead control on every row of a list reads as a broken
+    // feature, and the dialog behind it would have nothing to offer.
+    if (!ref.watch(sessionContinuationProvider(sessionId)).isPossible) {
+      return const SizedBox.shrink();
+    }
+    return IconButton(
+      // The accessible name, so Narrator reads the promise and not just
+      // "button" — the tooltip is the only place this control can make it.
+      tooltip: 'Continue with… — hand this session to another agent, or fork '
+          'it. $kContinueWithPromise',
+      iconSize: 14,
+      visualDensity: VisualDensity.compact,
+      icon: const Icon(AppIcons.arrowBendDownRight),
+      onPressed: () => ContinueWithDialog.show(context, sessionId),
+    );
+  }
+}
+
 class _InboxRow extends StatelessWidget {
   const _InboxRow({
     required this.item,
@@ -211,6 +254,13 @@ class _InboxRow extends StatelessWidget {
                 ],
               ),
             ),
+            // Only a follow-up, and deliberately: a follow-up is a session that
+            // *ended* and left something behind, which is the question
+            // "Continue with…" answers. Every other kind belongs to a session
+            // that is still there to be talked to, and opening the row is the
+            // whole of dealing with it.
+            if (item.kind == InboxItemKind.followUp)
+              _ContinueAction(sessionId: item.session.openId),
             IconButton(
               tooltip: 'Dismiss',
               iconSize: 14,
