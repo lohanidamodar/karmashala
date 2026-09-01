@@ -338,6 +338,15 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   /// would put a rebuild of every consumer behind every tab switch.
   final MountedTabs _mounted = MountedTabs();
 
+  /// Whether the one automatic open below has had its turn.
+  ///
+  /// It runs once, when the panel mounts. Before it, "no tabs" really does mean
+  /// a terminal is on its way and saying so is honest; after it, "no tabs" can
+  /// only be the user having closed the last one, and the same words became a
+  /// message that never changed — the panel sat on "Opening terminal…" with
+  /// nothing opening.
+  bool _autoOpenDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -347,6 +356,10 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
       if (ref.read(terminalSessionsControllerProvider).isEmpty) {
         _actions.open(_actions.defaultProfile());
       }
+      // Deliberately not conditional on having opened anything: what this
+      // records is that the automatic attempt is over, so a workspace that
+      // stays empty offers the user the button instead of a false promise.
+      setState(() => _autoOpenDone = true);
     });
   }
 
@@ -386,12 +399,17 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           if (search.visible) const TerminalSearchBar(),
           Expanded(
             child: openTabs.isEmpty
-                ? Center(
-                    child: Text(
-                      'Opening terminal…',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  )
+                ? _autoOpenDone
+                      ? _NoTerminalOpen(
+                          onNewTerminal: () =>
+                              _actions.open(_actions.defaultProfile()),
+                        )
+                      : Center(
+                          child: Text(
+                            'Opening terminal…',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        )
                 : IndexedStack(
                     index: activeIndex < 0 ? 0 : activeIndex,
                     children: [
@@ -710,6 +728,40 @@ class TerminalToolbar extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// What the panel shows once the user has closed the last terminal.
+///
+/// A way back, rather than a status. The panel used to say "Opening terminal…"
+/// here, which is true for the one frame before the automatic open and a lie
+/// for as long as the workspace stays closed — and it left the only route back
+/// to a terminal in the toolbar, which reads as chrome rather than as the
+/// answer to an empty workspace.
+class _NoTerminalOpen extends StatelessWidget {
+  const _NoTerminalOpen({required this.onNewTerminal});
+
+  final VoidCallback onNewTerminal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('No terminal open', style: theme.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: onNewTerminal,
+            icon: const Icon(AppIcons.plus, size: Chrome.icon),
+            label: Text(
+              'New terminal${_chord(shellChordLabel<NewTerminalTabIntent>())}',
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

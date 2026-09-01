@@ -25,6 +25,11 @@ class LocalCommandRunner implements CommandRunner {
         request.executable,
         request.arguments,
         workingDirectory: request.workingDirectory?.path,
+        // Honoured here as well as in [start]: dropping it meant an executable
+        // only the shell can resolve — an app-execution alias, or a `.cmd`
+        // shim such as an npm-global `claude.cmd` — could be started but never
+        // probed, and the probe's failure looked like "not installed".
+        runInShell: request.runInShell,
         // wsl.exe and several Windows tools emit UTF-16; decode leniently and
         // let callers strip control characters as needed (see Loop 3 parser).
         stdoutEncoding: const SystemEncoding(),
