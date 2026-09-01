@@ -40,6 +40,8 @@ class TerminalSearchState {
     this.matchCount = 0,
     this.currentIndex = 0,
     this.truncated = false,
+    this.onAlternateScreen = false,
+    this.hiddenScrollbackMatches = 0,
   });
 
   final bool visible;
@@ -62,6 +64,18 @@ class TerminalSearchState {
   /// True when there were more matches than [kMaxSearchHighlights] to paint.
   final bool truncated;
 
+  /// Whether a full-screen program — `vim`, `htop`, an agent CLI's own UI —
+  /// owns the searched pane's screen.
+  final bool onAlternateScreen;
+
+  /// Hits in the pane's scrollback that are *behind* that program.
+  ///
+  /// Counted rather than navigable: they live in the normal buffer, which is
+  /// not on screen and cannot be scrolled to without taking the screen away
+  /// from the program that owns it. Always 0 when [onAlternateScreen] is false,
+  /// because then the scrollback **is** what is being searched.
+  final int hiddenScrollbackMatches;
+
   bool get hasMatches => matchCount > 0;
 
   /// Distinguishes "keep what is there" from "clear it" for the one nullable
@@ -78,6 +92,8 @@ class TerminalSearchState {
     int? matchCount,
     int? currentIndex,
     bool? truncated,
+    bool? onAlternateScreen,
+    int? hiddenScrollbackMatches,
   }) {
     return TerminalSearchState(
       visible: visible ?? this.visible,
@@ -91,6 +107,9 @@ class TerminalSearchState {
       matchCount: matchCount ?? this.matchCount,
       currentIndex: currentIndex ?? this.currentIndex,
       truncated: truncated ?? this.truncated,
+      onAlternateScreen: onAlternateScreen ?? this.onAlternateScreen,
+      hiddenScrollbackMatches:
+          hiddenScrollbackMatches ?? this.hiddenScrollbackMatches,
     );
   }
 }
@@ -106,9 +125,17 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   final List<TerminalHighlight> _highlights = [];
   List<ScrollbackMatch> _matches = const [];
 
+  /// The terminal whose buffer switches are being watched, and what it was on
+  /// last time we looked. See [_onPaneWrote].
+  Terminal? _watched;
+  bool _watchedAlternate = false;
+
   @override
   TerminalSearchState build() {
-    ref.onDispose(_clearHighlights);
+    ref.onDispose(() {
+      _clearHighlights();
+      _watch(null);
+    });
     return const TerminalSearchState();
   }
 
@@ -117,11 +144,13 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _clearHighlights();
     _matches = const [];
     state = TerminalSearchState(visible: true, paneId: paneId);
+    _watch(_target()?.terminal);
   }
 
   void close() {
     _clearHighlights();
     _matches = const [];
+    _watch(null);
     state = state.copyWith(
       visible: false,
       query: '',
@@ -129,6 +158,8 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
       matchCount: 0,
       currentIndex: 0,
       truncated: false,
+      onAlternateScreen: false,
+      hiddenScrollbackMatches: 0,
     );
   }
 
@@ -196,11 +227,20 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
         matchCount: 0,
         currentIndex: 0,
         truncated: false,
+        onAlternateScreen: target?.terminal.isUsingAltBuffer ?? false,
+        hiddenScrollbackMatches: 0,
       );
       return;
     }
 
-    final lines = target.terminal.buffer.lines;
+    // The **active** buffer, which is the whole point: when a full-screen
+    // program owns the screen this is its screen, and when nothing does it is
+    // the scrollback. The other one is never searched — the alternate buffer
+    // keeps its last screen after `\e[?1049l`, so matching it once vim has
+    // gone would report hits for text that is on no screen at all.
+    final terminal = target.terminal;
+    _watchedAlternate = terminal.isUsingAltBuffer;
+    final lines = terminal.buffer.lines;
     final found = <ScrollbackMatch>[];
     scanLines(
       query: query,
@@ -215,6 +255,10 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
       matchCount: _matches.length,
       currentIndex: 0,
       truncated: _matches.length > kMaxSearchHighlights,
+      onAlternateScreen: _watchedAlternate,
+      hiddenScrollbackMatches: _watchedAlternate
+          ? _countHidden(terminal, query)
+          : 0,
     );
     _applyHighlights();
     _scrollToCurrent();
@@ -248,6 +292,52 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
         ),
       );
     }
+  }
+
+  /// How many hits are in the scrollback behind a full-screen program.
+  ///
+  /// One extra pass over the normal buffer, and only while something owns the
+  /// screen — the same scan the search does every keystroke when nothing does,
+  /// so the worst case is twice today's cost for the one pane being searched.
+  /// It counts into an `int` rather than collecting, so it allocates nothing.
+  ///
+  /// The alternative was to say "No results" and be confidently wrong: the text
+  /// the user is looking for really is in this pane, it is just behind vim.
+  int _countHidden(Terminal terminal, TerminalSearchQuery query) {
+    final lines = terminal.mainBuffer.lines;
+    var hidden = 0;
+    scanLines(
+      query: query,
+      lineCount: lines.length,
+      lineAt: (index) => lineTextOf(lines[index]),
+      onMatch: (_) => hidden++,
+    );
+    return hidden;
+  }
+
+  /// Watches [terminal] for the moment a program takes or gives back the
+  /// screen, and stops watching whatever was watched before.
+  void _watch(Terminal? terminal) {
+    if (identical(_watched, terminal)) return;
+    _watched?.removeListener(_onPaneWrote);
+    _watched = terminal;
+    _watchedAlternate = terminal?.isUsingAltBuffer ?? false;
+    terminal?.addListener(_onPaneWrote);
+  }
+
+  /// Runs on every coalesced write to the searched pane while the bar is open.
+  ///
+  /// Deliberately one bool comparison in the common case. It exists because a
+  /// highlight's row is resolved against **its own** buffer: anchors taken from
+  /// the scrollback would paint on unrelated rows of a program's UI the moment
+  /// that program takes the screen, so the search is re-run — which drops them
+  /// — rather than left pointing at a buffer nobody is looking at.
+  void _onPaneWrote() {
+    final terminal = _watched;
+    if (terminal == null || terminal.isUsingAltBuffer == _watchedAlternate) {
+      return;
+    }
+    _runSearch();
   }
 
   void _clearHighlights() {

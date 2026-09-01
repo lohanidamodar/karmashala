@@ -75,6 +75,8 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
                     border: InputBorder.none,
                     hintText: state.regex
                         ? 'Find by pattern'
+                        : state.onAlternateScreen
+                        ? 'Find on screen'
                         : 'Find in scrollback',
                   ),
                   onChanged: _search.setQuery,
@@ -151,19 +153,39 @@ class _CountLabel extends StatelessWidget {
       );
     }
 
+    final hidden = state.hiddenScrollbackMatches;
     final label = state.hasMatches
         ? '${state.currentIndex + 1} / ${state.matchCount}'
+        : hidden > 0
+        ? 'None on screen'
         : 'No results';
     return Row(
       children: [
         Text(
           label,
           style: theme.textTheme.bodySmall?.copyWith(
-            color: state.hasMatches
+            color: state.hasMatches || hidden > 0
                 ? theme.colorScheme.onSurfaceVariant
                 : theme.colorScheme.error,
           ),
         ),
+        // Says where the rest of the hits went. Without it a full-screen
+        // program turns a pane's whole history into "No results".
+        if (hidden > 0) ...[
+          const SizedBox(width: Insets.xs),
+          Tooltip(
+            message:
+                'The scrollback is behind the full-screen program using this '
+                'pane. Quit it to search and scroll to those matches.',
+            child: Text(
+              '+$hidden behind',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
         if (state.truncated) ...[
           const SizedBox(width: Insets.xs),
           Tooltip(
