@@ -158,13 +158,19 @@ class TerminalWorkspaceDao {
     bool userClosed = false,
   }) {
     final now = isoFromDate(DateTime.now());
-    _db.transaction(() {
+    final written = _db.transaction(() {
       final stored = storedTabCount();
       if (tabs.isEmpty || (!userClosed && tabs.length < stored)) {
         _backupWorkspace(now, stored);
       }
-      _writeChangedRows(tabs, activeTabId, now);
+      return _writeChangedRows(tabs, activeTabId, now);
     });
+    // Adopted only once the transaction has committed. A save that threw
+    // half-way is rolled back in full, and a record claiming rows that were
+    // rolled back is the one way this dao could skip a write it owed.
+    _writtenScrollback
+      ..clear()
+      ..addAll(written);
   }
 
   /// The body of [saveWorkspace]: upsert what moved, delete what vanished.
@@ -189,7 +195,10 @@ class TerminalWorkspaceDao {
   /// the conflicting row before reinserting it, and with `PRAGMA foreign_keys =
   /// ON` that fires `terminal_panes`' `ON DELETE CASCADE` — updating a tab
   /// would silently throw away its panes.
-  void _writeChangedRows(
+  ///
+  /// Returns what [_writtenScrollback] should become, for the caller to adopt
+  /// once the transaction has committed.
+  Map<String, String> _writeChangedRows(
     List<StoredTerminalTab> tabs,
     String? activeTabId,
     String now,
@@ -211,6 +220,7 @@ class TerminalWorkspaceDao {
 
     final liveTabs = <String>{};
     final livePanes = <String>{};
+    final written = <String, String>{};
 
     for (var i = 0; i < tabs.length; i++) {
       final tab = tabs[i];
@@ -275,14 +285,16 @@ class TerminalWorkspaceDao {
               now,
             ],
           );
-          _writtenScrollback[pane.id] = pane.scrollback;
+          written[pane.id] = pane.scrollback;
+        } else {
+          // Skipped because the record already matches, so it carries over.
+          written[pane.id] = _writtenScrollback[pane.id]!;
         }
       }
     }
 
     for (final entry in storedPanes.entries) {
       if (livePanes.contains(entry.key)) continue;
-      _writtenScrollback.remove(entry.key);
       final tabId = entry.value['tab_id'] as String?;
       // A pane whose tab is going too needs no statement of its own — the
       // foreign key cascades — which is what keeps closing a tab one write
@@ -298,6 +310,7 @@ class TerminalWorkspaceDao {
       if (liveTabs.contains(id)) continue;
       _db.execute('DELETE FROM terminal_tabs WHERE id = ?;', [id]);
     }
+    return written;
   }
 
   /// Whether [pane]'s scrollback differs from what this dao last wrote for it.
