@@ -2020,7 +2020,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // host has left — alone at the rendezvous, still reported "connected" —
       // and never dials again.
       _declareDead();
-      throw const GatewayException(_kUnreachable);
+      throw GatewayException(_unusableLink);
     }
     return client;
   }
@@ -2046,7 +2046,9 @@ class RemoteCompanionGateway implements CompanionGateway {
       _declareDead();
       throw const GatewayException(_kUnreachable);
     } on StateError {
-      throw const GatewayException(_kUnreachable);
+      // "Not connected" — the link went away under the request. Which sentence
+      // that deserves depends on why it went away.
+      throw GatewayException(_unusableLink);
     }
   }
 
@@ -2094,6 +2096,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// like. Never "connected", and never "check your connection": the socket is
   /// up, the relay is fine, and the list on screen is real — it is simply the
   /// last thing the desktop sent rather than anything it is saying now.
+  /// The sentence for a link that cannot be used right now.
+  ///
+  /// "Unreachable" is only true when the phone cannot get to the desktop at
+  /// all. When the link was torn down *because* the desktop stopped answering,
+  /// that word contradicts the banner directly above it — which says the
+  /// desktop is holding the connection open and not answering — and the owner
+  /// saw both sentences on one screen at once.
+  String get _unusableLink =>
+      _trouble.value == _kHostSilentTrouble ? _kUnanswered : _kUnreachable;
+
   static const String _kHostSilentTrouble =
       'Your desktop is keeping this connection open but not answering it. '
       'What you can see here is what it last sent.';

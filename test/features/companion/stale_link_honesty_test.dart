@@ -398,4 +398,45 @@ void main() {
       );
     },
   );
+
+  test(
+    'and the screen does not contradict its own banner',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
+
+      goSilent();
+
+      // Two unanswered requests tear the link down, and every request after
+      // that fails on "not connected" rather than on a timeout. That is the
+      // state the owner photographed: a banner saying the desktop is holding
+      // the connection open and not answering, over a body saying the host is
+      // unreachable and nothing was sent. Both cannot be true.
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(isA<GatewayException>()),
+      );
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(isA<GatewayException>()),
+      );
+      expect(gateway.linkTrouble, contains('not answering'));
+
+      await expectLater(
+        gateway.listSessions(),
+        throwsA(
+          isA<GatewayException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+              contains('did not answer'),
+              isNot(contains('unreachable')),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
