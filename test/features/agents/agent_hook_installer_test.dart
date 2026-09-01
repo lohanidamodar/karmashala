@@ -12,7 +12,7 @@ void main() {
   const installer = AgentHookInstaller();
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
   final claude = AgentRegistry.builtIn.byId('claudeCode')!;
-  final antigravity = AgentRegistry.builtIn.byId('antigravity')!;
+  final codex = AgentRegistry.builtIn.byId('codex')!;
 
   late Directory home;
   setUp(() {
@@ -224,7 +224,7 @@ void main() {
 
   test('an agent with no hook spec installs nothing', () async {
     final installed = await installer.install(
-      descriptor: antigravity,
+      descriptor: codex,
       storeHome: home.path,
       endpoint: endpoint,
       environment: EnvironmentKind.windowsNative,

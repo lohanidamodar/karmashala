@@ -157,13 +157,15 @@ void main() {
   });
 
   group('what is still unverified stays unoffered', () {
-    test('no status can be reported, because none was ever observed', () {
-      // No hook config, no parseable state file, and the TUI was never watched,
-      // so there is no screen text to match on. `unknown` is the honest answer.
-      expect(descriptor.statusStrategy, AgentStatusStrategy.none);
+    test('status comes from hooks, and only from hooks', () {
+      // There is still no parseable state file and no watched TUI. What
+      // changed is that the CLI turned out to have a hook system after all —
+      // documented in a skill it ships rather than in `--help`, and proven by
+      // a live `agy` 1.1.23 run whose callbacks reached a local server.
+      expect(descriptor.statusStrategy, AgentStatusStrategy.hooks);
       expect(descriptor.grid.isEmpty, isTrue);
       expect(descriptor.stateFile, isNull);
-      expect(descriptor.hooks, isNull);
+      expect(descriptor.hooks, isNotNull);
     });
 
     test('no approval keys, because the file that named them is gone', () {

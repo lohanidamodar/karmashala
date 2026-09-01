@@ -588,16 +588,73 @@ const _antigravity = AgentDescriptor(
     homeDirectoryName: '.gemini/antigravity-cli',
     format: AgentStoreFormat.none,
   ),
-  // Nothing can observe what a session is doing: no hook config, no parseable
-  // state file, and the TUI was never watched, so there is no screen text to
-  // write `grid` matchers against. `unknown` is the honest answer, and the grid
-  // source returns null rather than guessing.
+  // **Antigravity has hooks.** "Nothing can observe what a session is doing"
+  // stood here until a live run disproved it, and the reason it survived so
+  // long is that the CLI's `--help` says nothing about them: they are
+  // documented in a skill the CLI itself ships, at
+  // `~/.gemini/antigravity-cli/builtin/skills/agy-customizations/docs/hooks.md`,
+  // and configured in a file no option ever names.
   //
-  // `approval` is likewise left empty on purpose. The 1.0.13 build wrote a
+  // Run against a throwaway `HOME` with `agy` 1.1.23, every event below fired,
+  // and the payload landed on stdin as protojson:
+  //
+  //   {"conversationId":"594f1ab1-f352-4ce1-b92a-85dce890fcdd",
+  //    "terminationReason":"NO_TOOL_CALL","fullyIdle":true,
+  //    "transcriptPath":"…","workspacePaths":[]}
+  //
+  // The very command this app already generates for Claude Code works here
+  // unaltered — it was run verbatim in that session, the payload arrived at a
+  // local server, and the `{"ok":true,…}` it printed back on stdout disturbed
+  // nothing. A dead port cost the agent nothing either, which is the property
+  // `-s … || true` exists for.
+  hooks: AgentHookSpec(
+    // Not in the store home. `~/.gemini/antigravity-cli` is where the CLI keeps
+    // its data; `~/.gemini/config` is the machine-local **customization root**
+    // it reads hooks, MCP servers and skills from. A `hooks.json` written into
+    // the store would be a file the CLI never opens.
+    configFileName: '../config/hooks.json',
+    // This file's top level is a map of hook *names*, not of events, so our
+    // name is the key — which leaves every other tool's hooks in sibling keys
+    // the splice never touches, without needing the per-event merge Claude's
+    // shared `hooks` block does.
+    configKey: 'chitragupta',
+    // `PreInvocation`, `PostInvocation` and `Stop` take the handler object
+    // itself. The `{matcher, hooks}` wrapper is for the tool events, which have
+    // something to match on; using it here installs a hook that never fires.
+    entryStyle: AgentHookEntryStyle.flat,
+    // protojson, so camelCase — nothing like Claude Code's `session_id`, and
+    // this is the id `--conversation` resumes.
+    sessionIdPath: ['conversationId'],
+    // `workspacePaths` arrives as `[]` from the CLI, so there is nothing to
+    // read. Adoption falls back to the oldest unclaimed pane, which costs
+    // precision and never correctness.
+    cwdPath: [],
+    // **No `PreToolUse`, and that is measured rather than cautious.** A status
+    // callback has no permission decision to make, so the only honest thing it
+    // can answer is `{}` — and with `{}` a live run refused the tool outright:
+    //
+    //   Encountered error in tool execution: tool call denied by pre-tool hook
+    //
+    // The same session with only these three events installed called the same
+    // tool and got its result back. `PreToolUse` and `PostToolUse` would be the
+    // finest-grained signal available and they are left undeclared anyway: a
+    // hook that changes what the agent is allowed to do is not a status hook.
+    //
+    // What is lost with them is `awaitingApproval`. Antigravity announces a
+    // pending permission nowhere this app can hear, so that state stays
+    // unreachable for this agent — see `grid`, which is empty for the same
+    // reason.
+    eventStatus: {
+      'PreInvocation': AgentActivityStatus.working,
+      'PostInvocation': AgentActivityStatus.working,
+      'Stop': AgentActivityStatus.idle,
+    },
+  ),
+  statusStrategy: AgentStatusStrategy.hooks,
+  // `approval` is left empty on purpose. The 1.0.13 build wrote a
   // `keybindings.json` binding `confirm.yes` to `y` and `confirm.no` to `n`,
-  // which looked like the best-sourced approval keys in this file — but 1.1.22
+  // which looked like the best-sourced approval keys in this file — but 1.1.23
   // ships no such file, so those keys describe a version nobody is running.
   // Pressing a guessed key into a TUI is the one failure worse than sending the
   // user to the terminal, so nothing is declared.
-  statusStrategy: AgentStatusStrategy.none,
 );

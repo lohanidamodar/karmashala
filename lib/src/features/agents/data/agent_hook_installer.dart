@@ -7,6 +7,7 @@ import '../../../core/util/json_object_splice.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
+import '../domain/agent_status.dart';
 
 /// Marks the hook entries Chitragupta owns, so uninstall can remove exactly
 /// those and leave the user's own hooks alone.
@@ -89,11 +90,7 @@ class AgentHookInstaller {
         if (_alreadyCurrent(entries, command)) continue;
         hooks[event] = [
           ..._withoutOurs(entries),
-          {
-            'hooks': [
-              {'type': 'command', 'command': command},
-            ],
-          },
+          _entry(spec.entryStyle, command),
         ];
         changed = true;
       }
@@ -127,7 +124,7 @@ class AgentHookInstaller {
   }) {
     final spec = descriptor.hooks;
     if (spec == null) return const {};
-    final file = File(p.join(storeHome, spec.configFileName));
+    final file = configFileFor(descriptor, storeHome)!;
     Map<String, Object?> hooks;
     try {
       final raw = file.readAsStringSync();
@@ -235,7 +232,7 @@ class AgentHookInstaller {
     bool Function(Map<String, Object?> hooks) edit,
   ) async {
     final spec = descriptor.hooks!;
-    final file = File(p.join(storeHome, spec.configFileName));
+    final file = configFileFor(descriptor, storeHome)!;
     final raw = await file.exists() ? await file.readAsString() : '{}';
     final trimmed = raw.trim().isEmpty ? '{}' : raw;
 
@@ -249,6 +246,16 @@ class AgentHookInstaller {
         : <String, Object?>{};
 
     if (!edit(hooks)) return false;
+
+    // The config need not sit in the store home, so its directory can be one
+    // the CLI has not created yet — `~/.gemini/config` beside
+    // `~/.gemini/antigravity-cli`. Created only when the **store** is really
+    // there, so a machine without this agent installed never gets an empty
+    // config directory in its home from us.
+    final parent = file.parent;
+    if (!parent.existsSync() && Directory(storeHome).existsSync()) {
+      await parent.create(recursive: true);
+    }
 
     final updated = replaceTopLevelJsonValue(
       trimmed,
@@ -285,6 +292,32 @@ class AgentHookInstaller {
     }
   }
 
+  /// The file [descriptor]'s hooks are configured in, or `null` when it has no
+  /// hook spec.
+  ///
+  /// [AgentHookSpec.configFileName] is a path *relative to the store home*, so
+  /// it can walk out of it: Antigravity keeps its data in
+  /// `~/.gemini/antigravity-cli` and reads `~/.gemini/config/hooks.json`, its
+  /// sibling. Normalized rather than joined blindly, so the `..` is resolved
+  /// here instead of being handed to the filesystem — a `\\wsl.localhost` UNC
+  /// store home is one of the paths this has to survive.
+  File? configFileFor(AgentDescriptor descriptor, String storeHome) {
+    final spec = descriptor.hooks;
+    if (spec == null) return null;
+    return File(p.normalize(p.join(storeHome, spec.configFileName)));
+  }
+
+  /// One installed handler, in the shape this agent reads.
+  Map<String, Object?> _entry(AgentHookEntryStyle style, String command) =>
+      switch (style) {
+        AgentHookEntryStyle.grouped => {
+          'hooks': [
+            {'type': 'command', 'command': command},
+          ],
+        },
+        AgentHookEntryStyle.flat => {'type': 'command', 'command': command},
+      };
+
   /// [entries] with our own entries removed. Everything else is carried over
   /// untouched — the list belongs to the user, and only the entries carrying
   /// [agentHookMarker] are ours to drop.
@@ -299,22 +332,30 @@ class AgentHookInstaller {
   bool _alreadyCurrent(List<Object?> entries, String command) {
     final ours = entries.where(_isOurs).toList();
     if (ours.length != 1) return false;
-    final hooks = (ours.single as Map)['hooks'];
-    if (hooks is! List || hooks.length != 1) return false;
-    final hook = hooks.single;
-    return hook is Map && hook['command'] == command;
+    final commands = _commandsIn(ours.single).toList();
+    return commands.length == 1 && commands.single == command;
   }
 
-  bool _isOurs(Object? entry) {
-    if (entry is! Map) return false;
-    final hooks = entry['hooks'];
-    if (hooks is! List) return false;
-    return hooks.any(
-      (hook) =>
-          hook is Map &&
-          hook['command'] is String &&
-          (hook['command'] as String).contains(agentHookMarker),
-    );
+  bool _isOurs(Object? entry) =>
+      _commandsIn(entry).any((command) => command.contains(agentHookMarker));
+
+  /// Every command string an entry carries, whichever shape it is written in.
+  ///
+  /// Both styles are read regardless of what this agent's spec declares: a
+  /// config written by an earlier build, or hand-edited, is still ours to
+  /// recognise and take back out on uninstall.
+  Iterable<String> _commandsIn(Object? entry) sync* {
+    if (entry is! Map) return;
+    final grouped = entry['hooks'];
+    if (grouped is List) {
+      for (final hook in grouped) {
+        if (hook is Map && hook['command'] is String) {
+          yield hook['command']! as String;
+        }
+      }
+      return;
+    }
+    if (entry['command'] is String) yield entry['command']! as String;
   }
 }
 
