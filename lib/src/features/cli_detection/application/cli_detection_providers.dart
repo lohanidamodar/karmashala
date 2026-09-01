@@ -126,10 +126,33 @@ final antigravityAttributionServiceProvider =
           if (instance.liveness.value == PaneLiveness.restored) return const [];
           return terminalTailLines(instance.terminal, lines: lines);
         },
-        onAttributed: (_, _) =>
-            ref.read(sessionsRevisionProvider.notifier).bump(),
+        onAttributed: (session, conversationId) {
+          followSupersededHistory(ref, session.id, conversationId);
+          ref.read(sessionsRevisionProvider.notifier).bump();
+        },
       );
     });
+
+/// Moves the selection off the read-only history a native row has just
+/// superseded, and onto the row itself.
+///
+/// A row learning its conversation id hides the imported record for that
+/// conversation from every list (`ImportedSessionDao`) — but not from the
+/// detail pane, which resolves a selection by id and would go on showing the
+/// transcript. That is the state the owner's inbox notification left them in:
+/// reading history for a session running in a pane behind it, with nothing on
+/// screen saying so. Both records name the same repository, so the project and
+/// repository selections are already right and only the leaf moves.
+void followSupersededHistory(Ref ref, String sessionId, String conversationId) {
+  final selected = ref.read(selectedImportedSessionIdProvider);
+  if (selected == null) return;
+  final record = ref.read(importedSessionDaoProvider).getById(selected);
+  // Only the record this row just took over. Another conversation's history is
+  // what the user asked to look at.
+  if (record == null || record.externalId != conversationId) return;
+  ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+  ref.read(selectedSessionIdProvider.notifier).select(sessionId);
+}
 
 /// Copies a CLI's own name for a conversation into the session row running it.
 ///
@@ -165,8 +188,13 @@ final launchedSessionAttributionServiceProvider =
         scanStores: () => ref.read(cliStoreScanPassProvider).read(),
         // A row that has just learned which conversation it is on changes what
         // the strip, the tree and the inbox each say about it.
-        onAttributed: (_, _) =>
-            ref.read(sessionsRevisionProvider.notifier).bump(),
+        // Same tidy-up as the launched attributor's: a row that has just taken
+        // over a conversation supersedes its history everywhere except a
+        // selection already pointing at it.
+        onAttributed: (session, conversationId) {
+          followSupersededHistory(ref, session.id, conversationId);
+          ref.read(sessionsRevisionProvider.notifier).bump();
+        },
       );
     });
 

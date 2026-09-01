@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
@@ -271,6 +272,53 @@ void main() {
           .hostedLive(sessionId: 's1', externalSessionId: conversation),
       isTrue,
     );
+  });
+
+  test('a selection sitting on the superseded history follows the row', () async {
+    // The other half of the inbox symptom. Opening the notification put the
+    // read-only transcript on screen, because that was the only record of the
+    // conversation at the time; the id landing a slot later hides that record
+    // from the tree but would leave the user looking at it, with no sign that
+    // the session they are reading is running in a pane behind them.
+    writeRollout();
+    importRecord();
+    SessionDao(db).insert(launchedRow());
+    final ref = container();
+    addTearDown(ref.dispose);
+    ref.read(selectedImportedSessionIdProvider.notifier).select('i1');
+
+    await ref.read(cliStoreSyncRunnerProvider)();
+
+    expect(ref.read(selectedImportedSessionIdProvider), isNull);
+    expect(ref.read(selectedSessionIdProvider), 's1');
+  });
+
+  test('a selection on some other history is left where it is', () async {
+    writeRollout();
+    importRecord();
+    ImportedSessionDao(db).insertIfAbsent(
+      ImportedSession(
+        id: 'i2',
+        repositoryId: 'r1',
+        cli: AgentIds.codex,
+        externalId: '019a0c34-2cc6-7002-bc5b-3184f3b7332f',
+        environmentId: 'windows',
+        preview: 'something else entirely',
+        filePath: p.join(storeHome, 'sessions', 'other.jsonl'),
+        storeHome: storeHome,
+        isSubagent: false,
+        createdAt: testTime,
+      ),
+    );
+    SessionDao(db).insert(launchedRow());
+    final ref = container();
+    addTearDown(ref.dispose);
+    ref.read(selectedImportedSessionIdProvider.notifier).select('i2');
+
+    await ref.read(cliStoreSyncRunnerProvider)();
+
+    expect(ref.read(selectedImportedSessionIdProvider), 'i2');
+    expect(ref.read(selectedSessionIdProvider), isNull);
   });
 
   test('a conversation nobody named leaves the row its placeholder', () async {
