@@ -134,6 +134,28 @@ abstract interface class ParkableTerminalInstance {
   String? get parkedScrollback;
 }
 
+/// A [TerminalInstance] whose parsed buffer can be handed to the pane that
+/// replaces it.
+///
+/// Starting a process in a pane that already has one's worth of history means
+/// building a new instance, because a dormant pane and a running one are
+/// different things. What it does *not* have to mean is rebuilding the history:
+/// the old pane's buffer already holds it, parsed, and the round trip through
+/// the codec — encode 256 KiB out, parse 256 KiB back in — is 10-25 ms of
+/// main-isolate work to arrive at the buffer we started with. Handing the
+/// buffer over instead costs nothing at all.
+///
+/// A fourth narrow interface for the same reason as the three above: `null` is
+/// the answer for every pane whose history is *text* rather than a buffer — a
+/// parked one gave its buffer up on purpose, and a dormant one that has never
+/// been looked at has not built its buffer yet, so adopting it would perform
+/// exactly the parse this exists to avoid.
+abstract interface class AdoptableTerminalInstance {
+  /// The buffer holding this pane's history, or `null` when there is none to
+  /// hand over.
+  Terminal? get adoptableBuffer;
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -144,6 +166,7 @@ typedef TerminalInstanceFactory =
       String? restoredScrollback,
       bool shellIntegration,
       AgentPaneLaunch? agentLaunch,
+      Terminal? adoptTerminal,
     });
 
 /// A [TerminalInstance] backed by a real host ConPTY ([Pty]) wired to an xterm
@@ -158,7 +181,8 @@ class PtyTerminalInstance
         TerminalInstance,
         ReapableTerminalInstance,
         TieredTerminalInstance,
-        ParkableTerminalInstance {
+        ParkableTerminalInstance,
+        AdoptableTerminalInstance {
   PtyTerminalInstance({
     required this.id,
     required this.title,
@@ -169,8 +193,12 @@ class PtyTerminalInstance
     String? restoredScrollback,
     bool shellIntegration = false,
     TerminalIngestBudget? ingestBudget,
+    Terminal? adoptTerminal,
   }) {
-    terminal = Terminal(maxLines: kLiveScrollbackMaxLines)
+    // The buffer the pane this one replaces was already holding, when there is
+    // one. Handlers are set either way rather than only on the fresh path: the
+    // two are the same values, and a branch here is a branch that can drift.
+    terminal = (adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines))
       // xterm 4.0.0 reports the wheel with the wrong button ids, which stops
       // tmux (and anything else reading the modifier bits) from scrolling.
       ..mouseHandler = const ChitraguptaMouseHandler()
@@ -183,8 +211,14 @@ class PtyTerminalInstance
       commandBlocks = CommandBlockRecorder(terminal)..attach();
     }
     // Replay the previous session's scrollback *before* the shell starts, so
-    // restored history sits above the new process's first output.
-    writeRestoredScrollback(terminal, restoredScrollback);
+    // restored history sits above the new process's first output. An adopted
+    // buffer is that history already, so it needs only the marker that says
+    // where it ends.
+    if (adoptTerminal == null) {
+      writeRestoredScrollback(terminal, restoredScrollback);
+    } else {
+      writeRestoreMarker(terminal);
+    }
     // flutter_pty only forwards a tiny allowlist of env vars to the child; pass
     // the host environment so Windows shells get SystemRoot/WINDIR/etc. (without
     // them powershell.exe/cmd.exe and wsl.exe fail to start) — sanitized so a
@@ -301,6 +335,21 @@ class PtyTerminalInstance
 
   @override
   String? get parkedScrollback => _park.parked;
+
+  /// This pane's buffer, once its process has gone and while the buffer really
+  /// is the history.
+  ///
+  /// Three conditions, and it takes all three. The process has to have
+  /// **exited**, because a running pane's buffer is not anybody else's to take.
+  /// The pane must not be **parked**, because a parked one gave its buffer up
+  /// and holds its history in [parkedScrollback] instead. And it must not be on
+  /// the **alternate buffer**, because that is a full-screen program's scratch
+  /// space rather than scrollback — the codec has always encoded only the main
+  /// buffer, and handing the alternate one over would restart the pane showing
+  /// a stale TUI frame.
+  @override
+  Terminal? get adoptableBuffer =>
+      _exited && !_park.isParked && !terminal.isUsingAltBuffer ? terminal : null;
 
   /// Bytes the spool discarded while this pane was cold. Diagnostics, and what
   /// the replay reads to decide whether to admit to a gap.
@@ -426,16 +475,25 @@ class PtyTerminalInstance
 /// Does nothing when there is nothing to restore.
 void writeRestoredScrollback(Terminal terminal, String? scrollback) {
   if (scrollback == null || scrollback.isEmpty) return;
+  terminal.write(scrollback);
+  writeRestoreMarker(terminal);
+}
+
+/// Writes the dim marker that says where replayed history ends and the live
+/// process begins.
+///
+/// Its own function because a pane that **adopted** the previous one's buffer
+/// has the history already and needs only this — see
+/// [AdoptableTerminalInstance].
+void writeRestoreMarker(Terminal terminal) {
   final at = DateTime.now();
   final stamp =
       '${at.year}-${_two(at.month)}-${_two(at.day)} '
       '${_two(at.hour)}:${_two(at.minute)}';
-  terminal
-    ..write(scrollback)
-    ..write(
-      '\r\n\x1b[90m\u2500\u2500 restored \u2500 $stamp '
-      '\u2500\u2500\x1b[0m\r\n',
-    );
+  terminal.write(
+    '\r\n\x1b[90m\u2500\u2500 restored \u2500 $stamp '
+    '\u2500\u2500\x1b[0m\r\n',
+  );
 }
 
 String _two(int value) => value.toString().padLeft(2, '0');
@@ -490,9 +548,16 @@ class ErrorTerminalInstance implements TerminalInstance {
     this.workingDirectory,
     this.agentLaunch,
     String? restoredScrollback,
+    Terminal? adoptTerminal,
   }) {
-    terminal = Terminal(maxLines: kErrorPaneScrollbackMaxLines);
-    writeRestoredScrollback(terminal, restoredScrollback);
+    // A failed *restart* still has the history the pane it replaced was
+    // holding, and that history is the reason anyone would retry. Adopting the
+    // buffer here is what stops a spawn failure throwing it away — the pane
+    // that could not start is the one whose scrollback matters most.
+    terminal = adoptTerminal ?? Terminal(maxLines: kErrorPaneScrollbackMaxLines);
+    if (adoptTerminal == null) {
+      writeRestoredScrollback(terminal, restoredScrollback);
+    }
     terminal.write('\x1b[91m$message\x1b[0m\r\n');
   }
 
@@ -564,7 +629,8 @@ class _Constant<T> implements ValueListenable<T> {
 /// terminal, and — once a pane records a launch command rather than just a
 /// profile — would re-execute it. A dormant pane re-executes nothing; the user
 /// starts it, or does not.
-class DormantTerminalInstance implements TerminalInstance {
+class DormantTerminalInstance
+    implements TerminalInstance, AdoptableTerminalInstance {
   DormantTerminalInstance({
     required this.id,
     required this.title,
@@ -611,6 +677,17 @@ class DormantTerminalInstance implements TerminalInstance {
   @visibleForTesting
   bool get bufferBuilt => _bufferBuilt;
   bool _bufferBuilt = false;
+
+  /// The buffer, but only once something has already built it.
+  ///
+  /// A pane the workbench has shown has parsed its stored scrollback once, and
+  /// starting a process in it must not parse the same text a second time. A
+  /// pane nobody has looked at has no buffer to hand over, and building one to
+  /// hand over would *be* the parse — so it declines, and the pane replacing it
+  /// replays the text as before.
+  @override
+  Terminal? get adoptableBuffer =>
+      _bufferBuilt && restoredScrollback.isNotEmpty ? terminal : null;
 
   Terminal _buildTerminal() {
     _bufferBuilt = true;
@@ -687,6 +764,7 @@ TerminalInstance createPtyTerminalInstance({
   String? restoredScrollback,
   bool shellIntegration = false,
   AgentPaneLaunch? agentLaunch,
+  Terminal? adoptTerminal,
 }) {
   // An agent pane runs the agent CLI itself, so the shell profile is not
   // consulted at all — the launch is built from the agent's registry descriptor
@@ -737,6 +815,7 @@ TerminalInstance createPtyTerminalInstance({
       agentLaunch: agentLaunch,
       restoredScrollback: restoredScrollback,
       shellIntegration: integrate && Platform.isWindows,
+      adoptTerminal: adoptTerminal,
     );
   } catch (e) {
     final args = launch.arguments.join(' ');
@@ -747,6 +826,7 @@ TerminalInstance createPtyTerminalInstance({
       workingDirectory: workingDirectory,
       agentLaunch: agentLaunch,
       restoredScrollback: restoredScrollback,
+      adoptTerminal: adoptTerminal,
       message:
           'Failed to start "${launch.executable} $args"'
           '${launch.workingDirectory == null ? '' : ' in ${launch.workingDirectory}'}: $e',

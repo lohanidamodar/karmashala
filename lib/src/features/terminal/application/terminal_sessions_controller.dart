@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:xterm/xterm.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
@@ -720,11 +721,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         : terminalProfileFromId(existing.profileId);
     if (profile == null) return;
 
-    // A dormant pane hands back exactly what was restored and a parked one the
-    // window it kept; a pane whose process exited with a live buffer has to be
-    // re-encoded, because that buffer has moved on since.
-    final scrollback =
-        _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
+    // The buffer this pane is already holding, when it has one worth taking:
+    // the history is then handed over rather than encoded out and parsed back
+    // in. Otherwise a dormant pane hands back exactly what was restored and a
+    // parked one the window it kept; a pane whose buffer we can neither adopt
+    // nor read as text has to be re-encoded.
+    final adopt = _adoptableBufferOf(existing);
+    final scrollback = adopt != null
+        ? null
+        : _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
     final workingDirectory = existing.workingDirectory;
 
     _releasePane(paneId);
@@ -737,6 +742,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         restoredScrollback: scrollback,
         shellIntegration: _shellIntegrationEnabled,
         agentLaunch: agentLaunch,
+        adoptTerminal: adopt,
       ),
     );
     _publish();
@@ -766,11 +772,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return null;
 
-    // Asked for before the pane is released, and through the same helper
-    // [startPane] uses: a dormant pane hands back exactly what was restored
-    // without ever building the buffer the restore did not build.
-    final scrollback =
-        _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
+    // Asked for before the pane is released, and through the same helpers
+    // [startPane] uses: the buffer is handed over when the pane has one, and a
+    // dormant pane that has never been looked at hands back exactly what was
+    // restored without ever building the buffer the restore did not build.
+    final adopt = _adoptableBufferOf(existing);
+    final scrollback = adopt != null
+        ? null
+        : _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
     _releasePane(paneId);
     _adopt(
       paneId,
@@ -781,6 +790,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         workingDirectory: launch.workingDirectory,
         restoredScrollback: scrollback,
         agentLaunch: launch,
+        adoptTerminal: adopt,
       ),
     );
     final tabId = _showPane(paneId);
@@ -918,6 +928,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _dirty.remove(paneId);
     return encoded;
   }
+
+  /// The parsed buffer [instance] can hand to the pane that replaces it, if it
+  /// has one.
+  ///
+  /// Asked **before** [_heldScrollbackOf], because a buffer that already exists
+  /// is strictly cheaper than any text: taking it costs nothing, where the text
+  /// costs a parse — and, for a pane whose process merely exited, an encode
+  /// first. See [AdoptableTerminalInstance] for what declines.
+  static Terminal? _adoptableBufferOf(TerminalInstance instance) =>
+      switch (instance) {
+        AdoptableTerminalInstance(:final adoptableBuffer) => adoptableBuffer,
+        _ => null,
+      };
 
   /// The scrollback [instance] is already holding as text, if it is.
   static String? _heldScrollbackOf(TerminalInstance instance) =>

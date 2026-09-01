@@ -269,7 +269,7 @@ void main() {
       expect(controller.instanceFor(pane), same(instance));
     });
 
-    test('a pane whose process exited restarts with its buffer replayed', () {
+    test('a pane whose process exited restarts with its buffer kept', () {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);
       final controller = container.read(
@@ -291,7 +291,14 @@ void main() {
       final restarted = controller.instanceFor(pane)! as FakeTerminalInstance;
       expect(restarted, isNot(same(dead)));
       expect(dead.disposed, isTrue);
-      expect(restarted.restored, contains('output before it died'));
+      // The buffer is handed over rather than encoded out and parsed back in —
+      // see `resume_cost_test.dart` for the count that makes that the point.
+      // What the user is owed is the history, and it is the same history.
+      expect(restarted.adopted, same(dead.terminal));
+      expect(
+        restarted.terminal.mainBuffer.getText(),
+        contains('output before it died'),
+      );
     });
   });
 
