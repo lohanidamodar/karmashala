@@ -428,6 +428,20 @@ class Chrome {
   /// A dense list row (explorer tree, palette results).
   static const row = 26.0;
 
+  /// One level of a file tree's indentation.
+  ///
+  /// Narrower than [Insets.lg] on purpose: a repository nests deeply and a
+  /// 16px step runs a `lib/src/features/…/presentation` path off the side of
+  /// a side panel long before the name it is indenting becomes readable.
+  static const treeIndent = 14.0;
+
+  /// How far a tree line with no row of its own — "Empty", "Loading…" — clears
+  /// the disclosure column, on top of its [treeIndent].
+  ///
+  /// It sits under its level's names rather than under their carets, so it
+  /// reads as that folder's content and not as a sibling of it.
+  static const treeGutter = 22.0;
+
   /// Icon sizes: [icon] in toolbars, [iconSmall] inline with text,
   /// [iconTitle] in a dialog's title row, where it sits against `titleMedium`
   /// rather than body text and a toolbar glyph reads as an afterthought.
