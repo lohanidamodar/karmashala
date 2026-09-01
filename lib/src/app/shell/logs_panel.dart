@@ -291,6 +291,12 @@ class _Filters extends StatelessWidget {
               isDense: true,
               underline: const SizedBox.shrink(),
               style: style,
+              // `DropdownButton` is Material 2 and the app's
+              // `dropdownMenuTheme` reaches only Material 3's `DropdownMenu`,
+              // so its chevron ignored the theme and came out at Material's
+              // 24 px beside a `Chrome.icon` toolbar one row above it. The
+              // text style was already the panel's; the glyph was not.
+              iconSize: Chrome.icon,
               items: [
                 for (final (label, level) in _levelFilters)
                   DropdownMenuItem(value: level, child: Text(label)),
@@ -306,6 +312,7 @@ class _Filters extends StatelessWidget {
               isDense: true,
               underline: const SizedBox.shrink(),
               style: style,
+              iconSize: Chrome.icon,
               items: [
                 const DropdownMenuItem(
                   value: null,
@@ -393,7 +400,9 @@ class _StatusLine extends StatelessWidget {
       if (!following) 'paused',
     ];
     return Container(
-      height: 22,
+      // The panel's own footer is a status bar, and the window already has a
+      // token for how tall one of those is; 22 was that number, unnamed.
+      height: Chrome.statusBar,
       padding: const EdgeInsets.symmetric(horizontal: Insets.md),
       color: theme.colorScheme.surfaceContainerLowest,
       alignment: Alignment.centerLeft,

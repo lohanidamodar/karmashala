@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/design_tokens.dart';
+
 /// Compact, icon-led menu item sized for mouse-driven desktop menus.
 class DesktopMenuItem<T> extends PopupMenuItem<T> {
   DesktopMenuItem({
@@ -21,7 +23,7 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
                  : theme.colorScheme.onSurface;
              return Row(
                children: [
-                 Icon(icon, size: 16, color: color),
+                 Icon(icon, size: Chrome.icon, color: color),
                  const SizedBox(width: 10),
                  Expanded(
                    child: Text(
@@ -30,7 +32,7 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
                    ),
                  ),
                  if (shortcut != null) ...[
-                   const SizedBox(width: 24),
+                   const SizedBox(width: Insets.xl),
                    Text(
                      shortcut,
                      style: theme.textTheme.labelSmall?.copyWith(

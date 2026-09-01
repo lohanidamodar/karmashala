@@ -1,5 +1,6 @@
 import 'package:karmashala/src/app/shell/logs_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/core/logging/diagnostics.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
@@ -179,6 +180,48 @@ void main() {
 
     expect(find.textContaining('something'), findsNothing);
     expect(find.text('Nothing has been logged yet.'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  testWidgets('the filter pickers are sized like the panel around them', (
+    tester,
+  ) async {
+    // `DropdownButton` is Material 2 and ignores the app's
+    // `dropdownMenuTheme`, which only reaches Material 3's `DropdownMenu`. The
+    // text style was already the panel's; the chevron was not, and drew at
+    // Material's 24 beside a toolbar of `Chrome.icon` glyphs one row above.
+    await pumpPanel(tester);
+    final level = tester.widget<DropdownButton<Level>>(
+      find.byType(DropdownButton<Level>),
+    );
+    final channel = tester.widget<DropdownButton<String?>>(
+      find.byType(DropdownButton<String?>),
+    );
+    final theme = Theme.of(
+      tester.element(find.byType(DropdownButton<Level>)),
+    );
+    expect(level.iconSize, Chrome.icon);
+    expect(channel.iconSize, Chrome.icon);
+    expect(level.style, theme.textTheme.labelSmall);
+    expect(channel.style, theme.textTheme.labelSmall);
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
+  testWidgets('the panel footer is a status bar of the window\'s height', (
+    tester,
+  ) async {
+    // It was a bare 22 — the same number `Chrome.statusBar` names, but a
+    // widget deciding a chrome height for itself.
+    await pumpPanel(tester);
+    final footer = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.textContaining('shown'),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    expect(footer.constraints?.maxHeight, Chrome.statusBar);
     await tester.pump(const Duration(milliseconds: 200));
   });
 
