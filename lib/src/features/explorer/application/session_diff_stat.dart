@@ -297,10 +297,13 @@ final projectSummaryProvider = Provider.autoDispose
     .family<ProjectSummary, String>((ref, projectId) {
       // A header counts sessions and running sessions; it never names one. So
       // a rename leaves every project header asleep — the same rule the
-      // attention count above already holds.
+      // attention count above already holds. Placement is on the list because
+      // the count is per repository: a row moving between checkouts moves it
+      // from one header to another.
       ref.watchSessionKinds(const {
         SessionChangeKind.membership,
         SessionChangeKind.status,
+        SessionChangeKind.placement,
         SessionChangeKind.workspace,
       });
       final repositories = ref
