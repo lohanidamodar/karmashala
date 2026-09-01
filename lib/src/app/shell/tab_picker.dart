@@ -134,8 +134,8 @@ class _TabPickerState extends ConsumerState<TabPicker> {
     if (!_scroll.hasClients || _rows.isEmpty) return;
     final target = revealOffset(
       position: _scroll.position,
-      leading: _selected * quickOpenRowHeight,
-      extent: quickOpenRowHeight,
+      leading: _selected * quickOpenRowHeightOf(context),
+      extent: quickOpenRowHeightOf(context),
     );
     if (target != null) _scroll.jumpTo(target);
   }
@@ -233,7 +233,7 @@ class _TabPickerState extends ConsumerState<TabPicker> {
                     : ListView.builder(
                         controller: _scroll,
                         padding: EdgeInsets.zero,
-                        itemExtent: quickOpenRowHeight,
+                        itemExtent: quickOpenRowHeightOf(context),
                         itemCount: _rows.length,
                         itemBuilder: (context, index) => _row(index),
                       ),

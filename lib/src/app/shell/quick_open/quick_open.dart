@@ -216,7 +216,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
       offset += _headerHeight;
       for (var i = 0; i < section.results.length; i++) {
         if (seen == index) return offset;
-        offset += quickOpenRowHeight;
+        offset += quickOpenRowHeightOf(context);
         seen++;
       }
     }
@@ -240,7 +240,7 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     final target = revealOffset(
       position: _scroll.position,
       leading: _offsetOf(_selected),
-      extent: quickOpenRowHeight,
+      extent: quickOpenRowHeightOf(context),
     );
     if (target != null) _scroll.jumpTo(target);
   }
@@ -300,9 +300,17 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // 72 is a desktop-sized gap, and this palette opens in a window that can be
+    // 560 tall — where it is an eighth of the height held empty above a list
+    // that is the whole point. At 720x560 with text at 1.3x the fixed rows
+    // (field, two dividers, footer) then no longer fit and the column
+    // overflowed by 5px. Scaled to the window it keeps the same look on a
+    // desktop and gives the list back the room on a small one.
+    final height = MediaQuery.sizeOf(context).height;
+    final topInset = (height * 0.09).clamp(16.0, 72.0);
     return Dialog(
       alignment: Alignment.topCenter,
-      insetPadding: const EdgeInsets.only(top: 72, left: 24, right: 24),
+      insetPadding: EdgeInsets.only(top: topInset, left: 24, right: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 720, maxHeight: 520),
         child: Focus(
