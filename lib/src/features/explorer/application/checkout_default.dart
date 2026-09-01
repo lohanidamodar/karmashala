@@ -32,7 +32,7 @@ import 'checkout.dart';
 ///    strongest thing here;
 /// 2. **the worktree the app cut for this session** — where a worktree session
 ///    must be;
-/// 3. **where this session's subagents work** — see [_subagentCheckout]. The
+/// 3. **where this session's subagents work** — see [_subagentCheckouts]. The
 ///    signal that actually explains the report: the owner's own shell
 ///    legitimately stays in the hub, and it is the agents it spawns that move;
 /// 4. **the session's own repository**, which is the launch-time guess and the
@@ -45,26 +45,55 @@ import 'checkout.dart';
 ///
 /// **Cost.** This runs every time the active session changes, which at a
 /// hundred panes is constant, so nothing in it touches the filesystem or starts
-/// a process: two indexed queries and a read of a cache somebody else filled.
+/// a process: three indexed queries and a read of a cache somebody else filled.
 ///
 /// Deliberately not `sessionWorkingDirectoryOf`, whose third step is the
 /// repository root — that is the guess this function exists to improve on, and
 /// folding it in would hide steps 1 and 2 behind it.
 Repository? inferredCheckoutFor(Ref ref, Session session) {
+  final checkouts = sessionCheckouts(ref, session);
+  return checkouts.isEmpty ? null : checkouts.first;
+}
+
+/// Every checkout [session] is working in, **strongest record first**.
+///
+/// The same question [inferredCheckoutFor] asks, answered without throwing the
+/// runners-up away — because "which worktrees is this session working on" is
+/// what the right-hand panel's picker wants to lead with, and a rule that
+/// disagreed with the default it also computes would be two rules.
+///
+/// The order *is* the ranking, and it reads down the certainty ladder above:
+///
+/// 1. **the location the session has a record of** — its working directory or
+///    the worktree the app cut it, resolved to the deepest registered checkout
+///    containing it. Absent when it has neither;
+/// 2. **where its subagents work**, ranked between themselves by
+///    [_subagentCheckouts];
+/// 3. **the repository it was launched against**, last and always. That is a
+///    guess rather than a record — which is exactly why it may not outrank a
+///    subagent that actually said where it is — but it is still where the
+///    session sits, so it belongs in the group rather than out of it.
+///
+/// Distinct checkouts only: a session whose own directory is also the one all
+/// of its subagents named is one entry, not three.
+List<Repository> sessionCheckouts(Ref ref, Session session) {
   final repositories = ref.read(repositoryDaoProvider);
   final own = repositories.getById(session.repositoryId);
 
-  final recorded = session.workingDirectory ?? session.worktree;
-  if (recorded != null) {
-    return _deepestContaining(repositories, recorded) ?? own;
+  final ordered = <Repository>[];
+  final seen = <String>{};
+  void add(Repository? repository) {
+    if (repository != null && seen.add(repository.id)) ordered.add(repository);
   }
 
-  final subagents = _subagentCheckout(ref, session, own);
-  if (subagents != null) return subagents;
-
+  final recorded = session.workingDirectory ?? session.worktree;
+  if (recorded != null) add(_deepestContaining(repositories, recorded) ?? own);
+  _subagentCheckouts(ref, session, own).forEach(add);
   final directory = own?.path;
-  if (directory == null) return own;
-  return _deepestContaining(repositories, directory) ?? own;
+  add(
+    directory == null ? own : _deepestContaining(repositories, directory) ?? own,
+  );
+  return ordered;
 }
 
 /// The registered checkout that contains [directory] and is deepest — a session
@@ -85,7 +114,8 @@ Repository? _deepestContaining(
   return best;
 }
 
-/// Where [parent]'s subagents are working, or null when they say nothing.
+/// Where [parent]'s subagents are working, best first, or empty when they say
+/// nothing.
 ///
 /// A subagent the app started is a session row of its own — `open_new_session`
 /// goes through the same launcher as the New-session dialog — so since schema
@@ -105,10 +135,10 @@ Repository? _deepestContaining(
 /// 2. **how many subagents named it**;
 /// 3. **the path itself**, so the answer never depends on the order the table
 ///    happened to return the rows in.
-Repository? _subagentCheckout(Ref ref, Session parent, Repository? own) {
-  if (own == null) return null;
+List<Repository> _subagentCheckouts(Ref ref, Session parent, Repository? own) {
+  if (own == null) return const [];
   final children = ref.read(sessionDaoProvider).childrenOf(parent.id);
-  if (children.isEmpty) return null;
+  if (children.isEmpty) return const [];
   final repositories = ref.read(repositoryDaoProvider);
 
   final found = <String, Repository>{};
@@ -121,7 +151,7 @@ Repository? _subagentCheckout(Ref ref, Session parent, Repository? own) {
     found[repository.id] = repository;
     votes[repository.id] = (votes[repository.id] ?? 0) + 1;
   }
-  if (found.isEmpty) return null;
+  if (found.isEmpty) return const [];
 
   // Ranked once rather than inside the comparator: a read per comparison would
   // ask Riverpod the same question O(n log n) times for one answer.
@@ -129,7 +159,7 @@ Repository? _subagentCheckout(Ref ref, Session parent, Repository? own) {
     for (final entry in found.entries)
       entry.key: _changeRank(ref, entry.value.path),
   };
-  final ranked = found.values.toList()
+  return found.values.toList()
     ..sort((a, b) {
       final byChanges = changes[b.id]!.compareTo(changes[a.id]!);
       if (byChanges != 0) return byChanges;
@@ -139,7 +169,6 @@ Repository? _subagentCheckout(Ref ref, Session parent, Repository? own) {
         a.path.path,
       ).compareTo(canonicalPathKey(b.path.path));
     });
-  return ranked.first;
 }
 
 /// How a checkout ranks on "is there work in progress here": 2 for changes git
