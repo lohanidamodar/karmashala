@@ -7,7 +7,7 @@ import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import 'checkout.dart';
+import 'checkout_default.dart';
 import 'picked_checkouts.dart';
 
 /// The session running in the pane the terminal is showing, or null.
@@ -51,34 +51,17 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   return fallback;
 });
 
-/// The repository whose checkout contains [sessionId]'s work.
+/// The repository whose checkout contains [sessionId]'s work, in the absence of
+/// a pick.
 ///
-/// **The deepest registered repository that contains the session's working
-/// directory**, which is the rule `placeSessions` already uses to decide which
-/// Explorer row a session is drawn on — a session in `hub/projects/app` belongs
-/// to `app`, not to the `hub` that contains it, even though both are ancestors.
-/// The directory is the one the tree reads too (`Session.worktree` when it has a
-/// worktree, otherwise its repository's checkout), so the row a session is drawn
-/// on and the repository the side panel describes cannot disagree.
-///
-/// Falls back to the session's own `repositoryId` when nothing contains it — a
-/// different environment, or a directory outside every registered checkout.
+/// The rule itself is [inferredCheckoutFor] — which location of a session the
+/// app has the strongest record of, resolved to the deepest registered checkout
+/// containing it. It lives next door because it is a statement about *sessions
+/// and checkouts* that the picker and the tree both want, not about following.
 Repository? repositoryForSession(Ref ref, String sessionId) {
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return null;
-  final repositories = ref.read(repositoryDaoProvider);
-  final own = repositories.getById(session.repositoryId);
-  final directory = session.worktree ?? own?.path;
-  if (directory == null) return own;
-
-  Repository? best;
-  for (final repository in repositories.getAll()) {
-    if (!isUnder(repository.path, directory)) continue;
-    if (best == null || pathDepth(repository.path) > pathDepth(best.path)) {
-      best = repository;
-    }
-  }
-  return best ?? own;
+  return inferredCheckoutFor(ref, session);
 }
 
 /// Moves the workspace's context to the session the user is working in.
