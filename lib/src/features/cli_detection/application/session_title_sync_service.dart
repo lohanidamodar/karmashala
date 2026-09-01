@@ -19,7 +19,7 @@ const Set<String> kAppGeneratedSessionTitles = {'New session', 'Session'};
 /// **This is the rename bug, and it was never Antigravity-specific.** The owner
 /// ran `/rename test me now` inside `agy`; the CLI recorded it and the sidebar
 /// went on saying "New session"
-/// (`docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §7). The app's own rename works —
+///. The app's own rename works —
 /// it was never asked. What the app had never had, for *any* agent, is a path by
 /// which a CLI-side title reaches an already-launched native session row:
 /// app-launched rows are titled at creation and only

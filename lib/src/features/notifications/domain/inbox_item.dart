@@ -150,7 +150,7 @@ class InboxUpdate {
 /// user views, dismisses or reads it, so an eight-hour day across a hundred
 /// sessions accumulates thousands of records of things that already happened.
 /// Two hundred is one per session in the audit's *live/quiet* tier
-/// (`ARCHITECTURE.md` §"Scale target — 100 live terminals") — past that the
+/// — past that the
 /// list has stopped being a work queue and become a log.
 ///
 /// **Conditions are exempt, deliberately.** An agent waiting on you is not a

@@ -38,7 +38,7 @@ class _Ranked {
 /// Every open tab, in one filterable list.
 ///
 /// **Why a list and not just better scrolling.** The app is built for a hundred
-/// live terminals (`docs/ARCHITECTURE.md`), and a horizontal strip is hopeless
+/// live terminals, and a horizontal strip is hopeless
 /// at a hundred tabs however well it scrolls — the answer has to be a way to
 /// *find* a tab by name, not a way to travel past ninety-nine of them. So this
 /// is the affordance that scales, and the strip's chevrons are the one for

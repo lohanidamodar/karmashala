@@ -627,7 +627,7 @@ class SessionActions {
   /// because `agy` gives neither: it mints its own id, tells us nothing, and
   /// writes a transcript we cannot read — so before this, every stopped
   /// Antigravity session hit "No resumable CLI session id could be found" while
-  /// its store held the answer (`docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §4).
+  /// its store held the answer.
   ///
   /// A **refusal is thrown in the store's own words** rather than returned as
   /// null: "the store names no conversation here" and "another session already

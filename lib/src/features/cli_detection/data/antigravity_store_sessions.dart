@@ -34,7 +34,7 @@ class AntigravityStoreSessions {
         // workspace at all (`AntigravityConversation.workspace`). Every reader
         // of a `DetectedSession` groups it by its `cwd`, so inventing one would
         // file the conversation under a repository it never ran in — the exact
-        // failure `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §3.2 refuses for
+        // failure the design note refuses for
         // attribution, for the same reason.
         if (conversation.workspace case final workspace?)
           DetectedSession(

@@ -8,7 +8,7 @@ import 'paint_harness.dart';
 /// The floor for any painter is one draw call per *style run*, which is a
 /// property of the content, not of the painter — so the budget is per corpus
 /// rather than one global number. See
-/// `docs/superpowers/specs/2026-08-29-terminal-performance-design.md` §3.
+/// the design note §3.
 const _budgets = <PerfCorpus, int>{
   // One background run and one text run per line is the floor; the budget is
   // the design's <800.

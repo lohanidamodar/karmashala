@@ -17,7 +17,7 @@ import 'terminal_profile.dart';
 /// * `cmd.exe` is skipped permanently — it has no prompt hook capable of
 ///   emitting an escape sequence per command.
 /// * WSL bash is deferred: the rcfile itself is written and verified (see
-///   `docs/superpowers/specs/2026-08-30-shell-integration-design.md` §1.4), but
+///   the design note §1.4), but
 ///   delivering it into a distribution safely needs a probe that confirms both
 ///   that the file is readable from inside the distribution and that the login
 ///   shell really is bash. `bash --rcfile` pointed at an unreadable file starts

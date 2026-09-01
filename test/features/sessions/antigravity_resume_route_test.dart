@@ -41,7 +41,7 @@ import '../terminal/fake_instance.dart';
 /// conversation each directory last used, in the same file it resolves
 /// `--continue` through. `planAntigravityResume` turns that one refusal into
 /// four answers, and this is the wiring that lets the two surfaces reach it —
-/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6.3.
+/// the design note
 ///
 /// The plan's own rules are tested in `antigravity_session_resume_test.dart`.
 /// What is tested here is that clicking a stopped Antigravity card, and opening

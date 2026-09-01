@@ -14,7 +14,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 /// Detection for the Antigravity store.
 ///
-/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6.1: the reader landed, the enum
+/// the design note: the reader landed, the enum
 /// value did not, and `CliDetectionService.readStores` switches exhaustively on
 /// [AgentStoreFormat] — so the descriptor was pinned at
 /// [AgentStoreFormat.none] and every Antigravity conversation was invisible to

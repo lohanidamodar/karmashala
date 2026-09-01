@@ -25,7 +25,7 @@ import 'fake_instance.dart';
 
 /// The scale target as a **gate**: N = 1 / 10 / 100 panes, asserted as a curve.
 ///
-/// `docs/ARCHITECTURE.md` §"Scale target — 100 live terminals" says what must
+/// the design note"Scale target — 100 live terminals" says what must
 /// not happen — work proportional to all panes, unbounded per-pane memory, a
 /// listener storm — and `tool/benchmark/terminal_scale_bench.dart` reports the
 /// wall-clock version of it. But a benchmark nobody runs cannot catch a

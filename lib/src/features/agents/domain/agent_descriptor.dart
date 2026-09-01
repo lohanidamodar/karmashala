@@ -531,7 +531,7 @@ enum AgentStoreFormat {
   /// opens holds the messages. This one names a store that yields *identity*
   /// without content — conversation id, working directory, title, step count,
   /// mtime — because `steps.step_payload` is protobuf in an unpublished schema
-  /// (`docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §2.5).
+  ///.
   ///
   /// So detection, adoption and the presence probe all work for this store,
   /// and `agentSupportsChatView` still says no. That split is the whole point

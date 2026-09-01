@@ -12,7 +12,7 @@ const Duration kScrollbackAutosaveInterval = Duration(seconds: 20);
 
 /// How soon the next batch runs when the last tick left panes unsaved.
 ///
-/// The app's scale target is 100 live terminals (`docs/ARCHITECTURE.md`), and a
+/// The app's scale target is 100 live terminals, and a
 /// tick is deliberately capped at [kScrollbackAutosaveBudget] rather than
 /// allowed to walk every dirty pane — so with a hundred busy panes one tick
 /// cannot get through them all. Coming back in a second drains the backlog at a

@@ -16,7 +16,7 @@
    upstream to and nothing to rebase onto, so the usual cost of a fork (drift) is
    close to zero here.
 
-See `docs/superpowers/specs/2026-08-29-terminal-performance-design.md` for the
+The measurements behind this fork are recorded in the commits that made it.
 full analysis.
 
 ## What was NOT vendored

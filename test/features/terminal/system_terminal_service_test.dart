@@ -137,7 +137,8 @@ void main() {
   group('permissionArgsFor', () {
     test('an unrecognised agent never gets a guessed bypass flag', () {
       // Guessing any bypass flag for a binary we know nothing about may be
-      // wrong or may mean something else entirely; PRODUCT.md principle 5
+      // wrong or may mean something else entirely; an agent the registry has never heard of
+      // gets no arguments at all rather than another agent's flags
       // puts that on the wrong side of "safety by default".
       for (final mode in PermissionMode.values) {
         expect(

@@ -181,7 +181,7 @@ void main() {
 
   test('a tick is capped, so its cost does not grow with the number of panes', () {
     // The scale target forbids work proportional to all panes on a timer
-    // (docs/ARCHITECTURE.md). A zero budget is the extreme of the same rule:
+    //. A zero budget is the extreme of the same rule:
     // one pane always gets written — progress is guaranteed — and no more.
     controller.openTab(TerminalProfile.powerShell);
     for (var i = 0; i < 5; i++) {

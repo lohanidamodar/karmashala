@@ -1237,7 +1237,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// main-isolate time**, returning the pane ids written.
   ///
   /// This is the autosave tick, and the budget is the whole point of it. The
-  /// app's scale target is 100 live terminals (`docs/ARCHITECTURE.md`), and
+  /// app's scale target is 100 live terminals, and
   /// saving every dirty pane on one tick is work proportional to *all* panes on
   /// a timer — measured at 9 ms for one pane, 57 ms for ten and **645 ms for a
   /// hundred** (`tool/benchmark/terminal_scale_bench.dart`), landing in a single

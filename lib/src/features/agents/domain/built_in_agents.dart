@@ -528,7 +528,7 @@ const _antigravity = AgentDescriptor(
     // which is not how this CLI reads it. Delivering a first message to an
     // Antigravity pane needs the descriptor to be able to express a
     // prompt-carrying *flag*; see the follow-up in
-    // `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md`.
+    // the design note
     acceptsPromptArgument: false,
     // Left false, and now with the CLI's own words behind it rather than the
     // default. `agy` does *not* refuse a second opener — it warns, and carries

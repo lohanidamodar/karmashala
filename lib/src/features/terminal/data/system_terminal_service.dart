@@ -195,8 +195,7 @@ class SystemTerminalService {
 /// An agent the registry does not know gets **no** permission flag, letting the
 /// agent apply its own default. Guessing one would mean passing a flag invented
 /// for a different CLI to a binary we know nothing about — it may not exist
-/// there, or may mean something else — which is the wrong side of `PRODUCT.md`
-/// principle 5, "dangerous permission-bypass options are never the default".
+/// there, or may mean something else — which is the wrong side of the design note/// principle 5, "dangerous permission-bypass options are never the default".
 List<String> permissionArgsFor(String cli, PermissionMode permissionMode) {
   final descriptor = AgentRegistry.builtIn.byId(cli);
   return descriptor?.launch.permissionArgumentsFor(permissionMode) ??

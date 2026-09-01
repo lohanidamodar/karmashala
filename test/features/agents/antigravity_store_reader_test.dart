@@ -7,7 +7,7 @@ import 'package:sqlite3/sqlite3.dart';
 
 /// What the Antigravity CLI store actually gives up.
 ///
-/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` recorded the store as "permanently
+/// the design noterecorded the store as "permanently
 /// unreadable" after reading one file in it. These fixtures are built from the
 /// real schemas on a live 1.1.22 installation, and they are the standard of
 /// evidence the descriptor's other claims are held to: every table, column and
