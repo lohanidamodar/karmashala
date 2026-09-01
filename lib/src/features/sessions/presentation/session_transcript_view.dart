@@ -20,6 +20,7 @@ import '../application/session_engine_provider.dart';
 import '../application/session_providers.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
+import '../domain/tool_activity.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
 import 'agent_status_badge.dart';
@@ -295,11 +296,35 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           messages.add(
             const ChatMessage(role: 'error', text: 'Session failed.'),
           );
+        case SessionEventTypes.toolCall:
+          _addToolCall(messages, event.payload);
         case SessionEventTypes.sessionCancelled:
           messages.add(const ChatMessage(role: 'tool', text: 'Session ended.'));
       }
     }
     return messages;
+  }
+
+  /// A tool call from the engine's own event log.
+  ///
+  /// The adapter records `name` and `input` (`parseClaudeMessage`), so a native
+  /// session can show what ran for the same reason a PTY one can. It cannot yet
+  /// show what came back: `SessionEventTypes.toolResult` is named but nothing
+  /// emits it, and inventing an answer would be worse than admitting there
+  /// isn't one.
+  void _addToolCall(List<ChatMessage> out, String payload) {
+    try {
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map<String, dynamic>) return;
+      final name = decoded['name'];
+      if (name is! String || name.isEmpty) return;
+      final activity = toolActivityFor(name, decoded['input']);
+      out.add(
+        ChatMessage(role: 'tool', text: activity.summary, tool: activity),
+      );
+    } on FormatException {
+      // not JSON
+    }
   }
 
   void _addText(List<ChatMessage> out, String role, String payload) {

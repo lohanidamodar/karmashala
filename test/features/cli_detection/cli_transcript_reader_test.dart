@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
 import 'package:chitragupta/src/features/cli_detection/data/cli_transcript_reader.dart';
+import 'package:chitragupta/src/features/sessions/domain/tool_activity.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -89,6 +90,91 @@ void main() {
       'user:do the thing',
       'agent:done',
     ]);
+  });
+
+  // The third report: "show the output of terminal commands". Claude Code
+  // answers every `tool_use` with a `tool_result` in the next `user` entry —
+  // the output was always on disk and was simply dropped here.
+  test('a tool result is attached to the call it answers', () async {
+    final file = write('claude.jsonl', [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+          '"id":"t1","name":"Bash","input":{"command":"git status"}}]}}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result",'
+          '"tool_use_id":"t1","content":"nothing to commit","is_error":false}]}}',
+    ]);
+
+    final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+    // One row, not a tool row followed by a stray "user" turn holding the
+    // command's output.
+    expect(messages, hasLength(1));
+    expect(messages.single.tool?.output, 'nothing to commit');
+    expect(messages.single.tool?.isError, isFalse);
+  });
+
+  test('a failed call is recorded as failed', () async {
+    final file = write('claude.jsonl', [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+          '"id":"t1","name":"Bash","input":{"command":"exit 1"}}]}}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result",'
+          '"tool_use_id":"t1","content":[{"type":"text","text":"boom"}],'
+          '"is_error":true}]}}',
+    ]);
+
+    final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+    expect(messages.single.tool?.output, 'boom');
+    expect(messages.single.tool?.isError, isTrue);
+  });
+
+  test('an image result never drags its bytes in with it', () async {
+    // A real transcript carried 96 base64 images; this file is re-parsed on a
+    // two-second poll, so the bytes stay on disk and the path is what is kept.
+    final file = write('claude.jsonl', [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+          '"id":"t1","name":"Read","input":{"file_path":"/repo/shot.png"}}]}}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result",'
+          '"tool_use_id":"t1","content":[{"type":"text","text":"[Image: 2x2]"},'
+          '{"type":"image","source":{"type":"base64","media_type":"image/png",'
+          '"data":"SUPERLONGBASE64PAYLOAD"}}]}]}}',
+    ]);
+
+    final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+    expect(messages.single.tool?.imagePath, '/repo/shot.png');
+    expect(messages.single.tool?.output, isNot(contains('SUPERLONG')));
+  });
+
+  test('a result too big to hold is kept as a bounded head', () async {
+    final huge = 'x' * (kMaxToolOutputChars + 500);
+    final file = write('claude.jsonl', [
+      '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+          '"id":"t1","name":"Read","input":{"file_path":"/repo/huge.log"}}]}}',
+      '{"type":"user","message":{"role":"user","content":[{"type":"tool_result",'
+          '"tool_use_id":"t1","content":"$huge"}]}}',
+    ]);
+
+    final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+    expect(messages.single.tool?.output, hasLength(kMaxToolOutputChars));
+    expect(messages.single.tool?.outputTruncated, isTrue);
+  });
+
+  test('a Codex shell call carries its command and its output', () async {
+    final file = write('rollout.jsonl', [
+      '{"type":"response_item","payload":{"type":"function_call",'
+          '"name":"shell","call_id":"c1",'
+          '"arguments":"{\\"command\\":[\\"bash\\",\\"-lc\\",\\"ls -la\\"]}"}}',
+      '{"type":"response_item","payload":{"type":"function_call_output",'
+          '"call_id":"c1","output":[{"type":"input_text","text":"total 0"}]}}',
+    ]);
+
+    final messages = await readCliTranscript(file.path, AgentIds.codex);
+
+    expect(messages.single.role, 'tool');
+    expect(messages.single.tool?.name, 'shell');
+    expect(messages.single.tool?.subject, 'bash -lc ls -la');
+    expect(messages.single.tool?.output, 'total 0');
   });
 
   test('returns empty for a missing file', () async {

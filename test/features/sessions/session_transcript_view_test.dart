@@ -78,6 +78,43 @@ void main() {
     expect(find.text('Type to continue this session…'), findsOneWidget);
   });
 
+  testWidgets('a native session shows the command a tool call ran', (
+    tester,
+  ) async {
+    // The engine records `tool.call` with the adapter's `name`/`input`
+    // (`parseClaudeMessage`), and the view used to drop it — so a session's
+    // commands were invisible in the one place the owner reads them.
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+
+    final events = [
+      SessionEvent(
+        id: 1,
+        sessionId: 's1',
+        seq: 0,
+        type: SessionEventTypes.toolCall,
+        payload: '{"name":"Bash","input":{"command":"git status --short"}}',
+        createdAt: testTime,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          sessionTranscriptProvider.overrideWith((ref) => Stream.value(events)),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('BASH'), findsOneWidget);
+    expect(find.text('git status --short'), findsOneWidget);
+  });
+
   /// A session run by an agent whose conversation we cannot read (Antigravity
   /// has an adapter and no readable store), optionally in a pane of ours.
   ///

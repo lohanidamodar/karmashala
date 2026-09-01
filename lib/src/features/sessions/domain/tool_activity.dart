@@ -51,6 +51,7 @@ class ToolActivity {
     return s == null || s.isEmpty ? name : '$name($s)';
   }
 
+  /// This call with the answer it eventually got.
   ToolActivity withResult({
     String? output,
     bool outputTruncated = false,
@@ -64,6 +65,14 @@ class ToolActivity {
     isError: isError,
   );
 }
+
+/// The most of one tool result the transcript keeps.
+///
+/// Results are unbounded — a `Read` of a large file is megabytes — and the
+/// transcript file is re-parsed on a two-second poll, so holding every result
+/// whole would grow without limit for as long as a session is on screen. The
+/// head is what a reader wants; the rest is one click away in the terminal.
+const int kMaxToolOutputChars = 20000;
 
 /// The extensions Flutter's decoder can open, and the ones the composer already
 /// offers to attach. A path outside this set is never handed to `Image.file`.
@@ -135,3 +144,9 @@ ToolActivity toolActivityFor(String name, Object? input) {
     imagePath: isFile && looksLikeImagePath(subject!) ? subject : null,
   );
 }
+
+/// [text] cut to [kMaxToolOutputChars], and whether cutting was needed.
+(String, bool) boundedToolOutput(String text) =>
+    text.length <= kMaxToolOutputChars
+    ? (text, false)
+    : (text.substring(0, kMaxToolOutputChars), true);

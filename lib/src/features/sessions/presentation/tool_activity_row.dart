@@ -40,8 +40,18 @@ class ToolActivityBody extends StatefulWidget {
   State<ToolActivityBody> createState() => _ToolActivityBodyState();
 }
 
+/// How much of a result is shown before the reader has to ask for the rest.
+///
+/// Three lines is what a `git status` or a failing assertion needs; anything
+/// longer is a log, and a log unrolled into a conversation buries it.
+const int kInlineOutputLines = 3;
+
+/// The tallest an expanded result draws before it scrolls inside itself.
+const double kExpandedOutputMaxHeight = 260;
+
 class _ToolActivityBodyState extends State<ToolActivityBody> {
   bool _commandExpanded = false;
+  bool _outputExpanded = false;
 
   @override
   void didUpdateWidget(ToolActivityBody old) {
@@ -50,6 +60,7 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
     // command changed is a different call and starts collapsed again.
     if (old.activity.subject != widget.activity.subject) {
       _commandExpanded = false;
+      _outputExpanded = false;
     }
   }
 
@@ -88,11 +99,13 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
                       ),
               ),
               if (hidden > 0)
-                _CommandExpander(
+                _MoreToggle(
                   expanded: _commandExpanded,
                   hiddenLines: hidden,
                   onPressed: () =>
                       setState(() => _commandExpanded = !_commandExpanded),
+                  expandTooltip: 'Show the whole command',
+                  collapseTooltip: 'Collapse the command',
                 ),
             ],
           ),
@@ -103,34 +116,160 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
             resolveHostPath: widget.resolveHostPath,
           ),
         ],
+        if (widget.activity.output != null || widget.activity.isError) ...[
+          const SizedBox(height: Insets.xs),
+          _OutputPanel(
+            activity: widget.activity,
+            expanded: _outputExpanded,
+            onToggle: () => setState(() => _outputExpanded = !_outputExpanded),
+          ),
+        ],
       ],
     );
   }
 }
 
-/// The one control that turns the head of a command into the whole of it.
+/// What the tool answered.
+///
+/// The owner's third report was that command results were not visible at all —
+/// Claude Code writes every one of them into the next `user` entry and the
+/// reader dropped them. They are shown here in the same recessed panel
+/// `MarkdownMessage` gives a fenced code block, so a result reads as part of
+/// the conversation rather than as a panel bolted onto it.
+class _OutputPanel extends StatelessWidget {
+  const _OutputPanel({
+    required this.activity,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final ToolActivity activity;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final failure = SemanticColors.of(context).failure;
+    final output = activity.output ?? '';
+    final lines = output.isEmpty ? const <String>[] : output.split('\n');
+    final hidden = lines.length - kInlineOutputLines;
+    final mono = MonoStyles.small.copyWith(color: scheme.onSurface);
+
+    return Container(
+      padding: const EdgeInsets.all(Insets.sm),
+      decoration: BoxDecoration(
+        // One step behind the message it belongs to — the same recess
+        // `MarkdownMessage` uses for code, so the two cannot drift apart.
+        color: dark ? scheme.surfaceContainerLowest : scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(Radii.sm),
+        border: Border.all(
+          color: activity.isError ? failure : scheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (activity.isError) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  AppIcons.warningCircle,
+                  size: Chrome.iconSmall,
+                  color: failure,
+                ),
+                const SizedBox(width: Insets.xs),
+                Text(
+                  'Failed',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: failure,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            if (output.isNotEmpty) const SizedBox(height: Insets.xs),
+          ],
+          if (output.isNotEmpty)
+            if (expanded)
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxHeight: kExpandedOutputMaxHeight,
+                ),
+                child: SingleChildScrollView(
+                  child: SingleChildScrollView(
+                    // Rendered terminal output: re-flowing it would break the
+                    // columns it was drawn with, so it scrolls sideways
+                    // instead — the same choice `ApprovalRequestCard` makes.
+                    scrollDirection: Axis.horizontal,
+                    child: SelectableText(output, style: mono),
+                  ),
+                ),
+              )
+            else
+              Text(
+                lines.take(kInlineOutputLines).join('\n'),
+                style: mono,
+                maxLines: kInlineOutputLines,
+                overflow: TextOverflow.ellipsis,
+              ),
+          if (activity.outputTruncated)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.xs),
+              child: Text(
+                'This output was truncated on the way in — the terminal has '
+                'the whole of it.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          if (hidden > 0)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _MoreToggle(
+                expanded: expanded,
+                hiddenLines: hidden,
+                onPressed: onToggle,
+                expandTooltip: 'Show the whole output',
+                collapseTooltip: 'Collapse the output',
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The one control that turns the head of something into the whole of it.
 ///
 /// A labelled button rather than a bare caret: the reader has to be able to
 /// tell that there *is* more, and how much, without hovering. Named for the
-/// semantics tree too — a tooltip is a mouse's affordance and Narrator reads
-/// neither it nor a glyph.
-class _CommandExpander extends StatelessWidget {
-  const _CommandExpander({
+/// semantics tree too — a tooltip is a mouse's affordance, and
+/// `test/support/window_matrix.dart` requires every control to carry a name.
+class _MoreToggle extends StatelessWidget {
+  const _MoreToggle({
     required this.expanded,
     required this.hiddenLines,
     required this.onPressed,
+    required this.expandTooltip,
+    required this.collapseTooltip,
   });
 
   final bool expanded;
   final int hiddenLines;
   final VoidCallback onPressed;
+  final String expandTooltip;
+  final String collapseTooltip;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = expanded
-        ? 'Collapse the command'
-        : 'Show the whole command';
+    final label = expanded ? collapseTooltip : expandTooltip;
     return Padding(
       padding: const EdgeInsets.only(left: Insets.xs),
       child: Tooltip(
