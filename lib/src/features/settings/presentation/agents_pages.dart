@@ -16,6 +16,7 @@ import '../../agents/domain/claude_account.dart';
 import '../../agents/domain/claude_auth_snapshot.dart';
 import '../../environments/application/environment_providers.dart';
 import '../application/settings_controller.dart';
+import 'agent_detection_section.dart';
 import '../domain/permission_mode.dart';
 import '../domain/settings.dart';
 import 'settings_row.dart';
@@ -49,8 +50,8 @@ class AgentsPage extends ConsumerWidget {
           title: 'DEFAULT AGENT',
           child: installations.isEmpty
               ? Text(
-                  'No agents found. Press Discover under Environments to '
-                  'scan your environments.',
+                  'No agents found. Press "Detect agents" below to search '
+                  'your environments again.',
                   style: theme.textTheme.bodySmall,
                 )
               : SettingsRow(
@@ -82,6 +83,7 @@ class AgentsPage extends ConsumerWidget {
                   ),
                 ),
         ),
+        const AgentDetectionSection(),
         ClaudeAccountsSection(
           installations: installations
               .where((i) => i.agentId == AgentIds.claudeCode)
