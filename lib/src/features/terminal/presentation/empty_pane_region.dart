@@ -51,10 +51,9 @@ class EmptyPaneRegion extends ConsumerWidget {
     return DragTarget<String>(
       // A tab cannot be dropped into a region of itself: the tab would have to
       // contain the very region it is being put inside.
-      onWillAcceptWithDetails: (details) =>
-          ref
-              .read(terminalSessionsControllerProvider.notifier)
-              .canMoveTabIntoSlot(details.data, paneId),
+      onWillAcceptWithDetails: (details) => ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .canMoveTabIntoSlot(details.data, paneId),
       onAcceptWithDetails: (details) => ref
           .read(terminalSessionsControllerProvider.notifier)
           .moveTabIntoSlot(details.data, paneId),
@@ -75,65 +74,78 @@ class EmptyPaneRegion extends ConsumerWidget {
               ),
             ),
             child: Center(
-              // The region can be a sliver of a window, so the whole invitation
-              // scrolls rather than overflowing when there is no room for it.
+              // A divider can be dragged until a region is a sliver of the
+              // window (`kMinPaneWeight` is 5%), and buttons have a width they
+              // cannot go below. So the invitation is laid out at its natural
+              // width — capped, so it wraps on a wide region rather than
+              // stretching — and *scrolls* on a region too small to hold it,
+              // in both directions. It can then never overflow at any size.
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(Insets.md),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      AppIcons.squareSplitHorizontal,
-                      size: 28,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: Insets.sm),
-                    Text(
-                      'Empty split',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: Insets.xs),
-                    Text(
-                      'Drag a tab here, or start something new.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: Insets.md),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: Insets.sm,
-                      runSpacing: Insets.xs,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.all(Insets.md),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        FilledButton.icon(
-                          // The keyboard follows the split, so a region made
-                          // with Ctrl+Shift+D can be filled with Enter.
-                          autofocus: focused,
-                          onPressed: onNewTerminal,
-                          icon: const Icon(AppIcons.plus, size: Chrome.icon),
-                          label: const Text('New terminal'),
+                        Icon(
+                          AppIcons.squareSplitHorizontal,
+                          size: 28,
+                          color: scheme.onSurfaceVariant,
                         ),
-                        // The keyboard-reachable half of the drag. A feature
-                        // you can only reach by dragging is one some people
-                        // cannot reach at all.
-                        TextButton.icon(
-                          onPressed: onMoveTabHere,
-                          icon: const Icon(
-                            AppIcons.listMagnifyingGlass,
-                            size: Chrome.icon,
+                        const SizedBox(height: Insets.sm),
+                        Text(
+                          'Empty split',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurface,
                           ),
-                          label: const Text('Move a tab here…'),
                         ),
-                        TextButton(
-                          onPressed: onClose,
-                          child: const Text('Close split'),
+                        const SizedBox(height: Insets.xs),
+                        Text(
+                          'Drag a tab here, or start something new.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: Insets.md),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: Insets.sm,
+                          runSpacing: Insets.xs,
+                          children: [
+                            FilledButton.icon(
+                              // The keyboard follows the split, so a region made
+                              // with Ctrl+Shift+D can be filled with Enter.
+                              autofocus: focused,
+                              onPressed: onNewTerminal,
+                              icon: const Icon(
+                                AppIcons.plus,
+                                size: Chrome.icon,
+                              ),
+                              label: const Text('New terminal'),
+                            ),
+                            // The keyboard-reachable half of the drag. A feature
+                            // you can only reach by dragging is one some people
+                            // cannot reach at all.
+                            TextButton.icon(
+                              onPressed: onMoveTabHere,
+                              icon: const Icon(
+                                AppIcons.listMagnifyingGlass,
+                                size: Chrome.icon,
+                              ),
+                              label: const Text('Move a tab here…'),
+                            ),
+                            TextButton(
+                              onPressed: onClose,
+                              child: const Text('Close split'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

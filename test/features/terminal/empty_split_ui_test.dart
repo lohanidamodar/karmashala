@@ -101,6 +101,55 @@ void main() {
     );
   });
 
+  testWidgets('squeezed to a sliver, it scrolls instead of spilling', (
+    tester,
+  ) async {
+    // A divider can be dragged until a region is 5% of the window
+    // (`kMinPaneWeight`), which is narrower than a single button. `Wrap` does
+    // not report an overflow the way `Flex` does, so it would quietly paint
+    // its buttons outside the region and out of reach — the assertion is that
+    // the content becomes scrollable, not merely that nothing threw.
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final container = workbenchContainer();
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    controller.openTab(TerminalProfile.powerShell);
+
+    await pumpWorkbench(tester, container);
+    controller.splitPane(SplitAxis.horizontal);
+    await tester.pump();
+
+    final sideways = find.descendant(
+      of: find.byType(EmptyPaneRegion),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable &&
+            widget.axisDirection == AxisDirection.right,
+      ),
+    );
+    expect(
+      tester.state<ScrollableState>(sideways).position.maxScrollExtent,
+      0,
+      reason: 'half a desktop window fits it, so there is nothing to scroll',
+    );
+
+    final tab = container.read(terminalSessionsControllerProvider).activeTab!;
+    // Past the clamp on purpose: the region ends up at kMinPaneWeight.
+    controller.resizePane(tab.id, (tab.layout.root as PaneSplit).id, 0, 1);
+    await tester.pump();
+
+    expect(tester.getSize(find.byType(EmptyPaneRegion)).width, lessThan(80));
+    expect(
+      tester.state<ScrollableState>(sideways).position.maxScrollExtent,
+      greaterThan(0),
+      reason: 'the buttons stay reachable rather than painting outside',
+    );
+  });
+
   testWidgets('a tab chip dragged onto the region moves that tab in', (
     tester,
   ) async {
