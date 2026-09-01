@@ -144,3 +144,80 @@ final simulatorSupportProvider = Provider<SimulatorSupport>((ref) {
     capabilities: {SimulatorCapability.manage, SimulatorCapability.interact},
   );
 });
+
+/// Simulators this app is currently starting or stopping.
+///
+/// Held here rather than in the pane because a boot outlives the widget: it
+/// takes ten seconds or more, and a user who switches away and back must not
+/// come back to a Start button that looks untouched.
+class SimulatorTransitions extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  bool isBusy(String udid) => state.contains(udid);
+
+  void _begin(String udid) => state = {...state, udid};
+  void _end(String udid) => state = {...state}..remove(udid);
+
+  /// Boots [udid] and waits for its services, then refreshes the list.
+  ///
+  /// `bootAndWait`, not `boot`: `simctl boot` returns as soon as the device is
+  /// *starting*, and a row that flipped to "booted" at that moment would offer
+  /// a live view of a simulator that cannot answer yet.
+  Future<void> boot(String udid) => _run(udid, (simctl) => simctl.bootAndWait(udid));
+
+  Future<void> shutdown(String udid) =>
+      _run(udid, (simctl) => simctl.shutdown(udid));
+
+  Future<void> _run(
+    String udid,
+    Future<void> Function(SimctlService simctl) action,
+  ) async {
+    final simctl = ref.read(simctlServiceProvider);
+    if (simctl == null || isBusy(udid)) return;
+    _begin(udid);
+    try {
+      await action(simctl);
+    } finally {
+      _end(udid);
+      // Whether it worked or not, the truth is now on the device set, not in
+      // whatever this thought was going to happen.
+      ref.invalidate(iosSimulatorsProvider);
+    }
+  }
+}
+
+final simulatorTransitionsProvider =
+    NotifierProvider<SimulatorTransitions, Set<String>>(
+      SimulatorTransitions.new,
+    );
+
+/// Simulators worth offering in a Start picker: available, and not running.
+///
+/// A machine can hold a great many of these — this developer's has 170, of
+/// which 124 have no installed runtime — so the picker shows only what could
+/// actually be started, newest runtime first. Sorting by runtime rather than by
+/// name puts the simulators someone is likely to want at the top, instead of
+/// alphabetising an iPad next to the iPhone they meant.
+final startableSimulatorsProvider = Provider<List<IosSimulator>>((ref) {
+  final simulators = ref.watch(iosSimulatorsProvider).asData?.value ?? const [];
+  final startable = [
+    for (final simulator in simulators)
+      if (simulator.isAvailable && simulator.state == SimulatorState.shutdown)
+        simulator,
+  ]..sort((a, b) {
+    final runtime = b.runtime.compareTo(a.runtime);
+    return runtime != 0 ? runtime : a.name.compareTo(b.name);
+  });
+  return List.unmodifiable(startable);
+});
+
+/// Simulators that are running now.
+final bootedSimulatorsProvider = Provider<List<IosSimulator>>((ref) {
+  final simulators = ref.watch(iosSimulatorsProvider).asData?.value ?? const [];
+  return List.unmodifiable([
+    for (final simulator in simulators)
+      if (simulator.state.isReady || simulator.state == SimulatorState.booting)
+        simulator,
+  ]);
+});

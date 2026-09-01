@@ -12,6 +12,7 @@ import '../data/device_stream.dart';
 import '../domain/android_device.dart';
 import '../domain/device_input.dart';
 import 'device_stream_status.dart';
+import 'simulator_list.dart';
 import 'device_touch_surface.dart';
 
 /// How long to wait before each automatic reconnection attempt.
@@ -860,6 +861,11 @@ class _DeviceEmptyState extends ConsumerWidget {
                 onStopEmulator: onStopEmulator,
                 onBootAvd: onBootAvd,
               ),
+              // Below the Android sections, and independent of them: a Mac with
+              // Xcode and no Android SDK still has simulators to start, and the
+              // message above — which is about the missing SDK — must not be
+              // the end of the pane there.
+              const SimulatorList(),
             ],
           ),
         ),
