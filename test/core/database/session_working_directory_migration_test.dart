@@ -24,7 +24,7 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 23);
+    expect(db.schemaVersion, 24);
   });
 
   test('v22 gives sessions a working directory bound to an environment', () {
@@ -32,18 +32,16 @@ void main() {
     addTearDown(db.close);
     final columns = db
         .query('PRAGMA table_info(sessions);')
-        .where(
-          (r) => (r['name']! as String).startsWith('working_directory_'),
-        )
+        .where((r) => (r['name']! as String).startsWith('working_directory_'))
         .toList();
 
     // Two columns, exactly like `worktree_*`: a path is never stored divorced
     // from the environment that gives it meaning, so a WSL session's cwd reads
     // back as a WSL path in the WSL environment.
-    expect(
-      columns.map((r) => r['name']).toList(),
-      ['working_directory_environment_id', 'working_directory_path'],
-    );
+    expect(columns.map((r) => r['name']).toList(), [
+      'working_directory_environment_id',
+      'working_directory_path',
+    ]);
 
     // Nullable and undefaulted, like `permission_mode`: a row written before
     // v22 never recorded where it ran, and null says exactly that. Defaulting

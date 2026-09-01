@@ -24,7 +24,7 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 23);
+    expect(db.schemaVersion, 24);
   });
 
   test('v21 adds notes to an existing database without touching it', () {
@@ -38,9 +38,7 @@ void main() {
       "'2026-08-01T00:00:00.000Z');",
     );
     expect(
-      db
-          .select("SELECT name FROM sqlite_master WHERE name = 'notes';")
-          .isEmpty,
+      db.select("SELECT name FROM sqlite_master WHERE name = 'notes';").isEmpty,
       isTrue,
       reason: 'notes must not exist before its own migration',
     );

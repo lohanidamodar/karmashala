@@ -170,6 +170,22 @@ class SessionDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
+  /// Sessions hosted by any of [paneIds], oldest first.
+  ///
+  /// The pane index keeps the active-tab lookup proportional to the handful of
+  /// panes in that tab, rather than to every session the user has ever opened.
+  List<Session> getByPaneIds(Iterable<String> paneIds) {
+    final ids = paneIds.toSet().toList();
+    if (ids.isEmpty) return const [];
+    final placeholders = List.filled(ids.length, '?').join(', ');
+    final rows = _db.query(
+      'SELECT * FROM sessions WHERE pane_id IN ($placeholders) '
+      'ORDER BY created_at, id;',
+      ids,
+    );
+    return rows.map(_fromRow).toList();
+  }
+
   /// Every row recording the CLI conversation [externalSessionId], **newest
   /// first**.
   ///

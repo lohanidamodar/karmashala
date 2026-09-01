@@ -38,11 +38,10 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   ref.watch(sessionsRevisionProvider);
   if (tab == null) return null;
   final siblings = tab.layout.panes.toSet();
-  // One pass over the rows, which is the same cost the focused-pane lookup
-  // already paid: the focused pane wins outright, anything else in the tab is
-  // remembered as the fallback.
+  // The indexed query returns only sessions belonging to this tab. The focused
+  // pane still wins; the oldest sibling is the deterministic fallback.
   String? fallback;
-  for (final record in ref.read(sessionDaoProvider).getAll()) {
+  for (final record in ref.read(sessionDaoProvider).getByPaneIds(siblings)) {
     final paneId = record.paneId;
     if (paneId == null) continue;
     if (paneId == tab.focusedPaneId) return record.id;
@@ -94,9 +93,9 @@ class SessionContext {
     // launch directory computes to: the user has already said where the work
     // is, and recomputing it on every tab switch is how a pick stopped meaning
     // anything. See [PickedCheckouts].
-    final picked = _ref.read(pickedCheckoutsProvider.notifier).forSession(
-      sessionId,
-    );
+    final picked = _ref
+        .read(pickedCheckoutsProvider.notifier)
+        .forSession(sessionId);
     final remembered = picked == null
         ? null
         : _ref.read(repositoryDaoProvider).getById(picked);
@@ -116,8 +115,7 @@ class SessionContext {
   /// GitHub panels then described an unrelated checkout every time that session
   /// came back on screen, for the rest of the run. A pick made with nothing
   /// followed belongs to nothing.
-  void stopFollowing() =>
-      _ref.read(followedSessionProvider.notifier).set(null);
+  void stopFollowing() => _ref.read(followedSessionProvider.notifier).set(null);
 }
 
 final sessionContextProvider = Provider(SessionContext.new);

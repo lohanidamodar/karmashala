@@ -44,6 +44,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v23** — G1: a session's append-only decision record — the constraints,
 ///   rejected approaches, approvals, verdicts and marked checkpoints that a
 ///   handoff packet was carrying a transcript instead of.
+/// * **v24** — Index the pane hosting a session so switching terminal tabs does
+///   not scan every historical session row.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -68,7 +70,14 @@ final Map<int, MigrationStep> schemaMigrations = {
   21: _migrateToV21,
   22: _migrateToV22,
   23: _migrateToV23,
+  24: _migrateToV24,
 };
+
+void _migrateToV24(Database db) {
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_pane ON sessions (pane_id);',
+  );
+}
 
 void _migrateToV23(Database db) {
   // The decision record (G1): what a session decided, as opposed to what it
