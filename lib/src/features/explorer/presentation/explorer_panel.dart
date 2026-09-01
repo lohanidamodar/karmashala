@@ -33,6 +33,7 @@ import 'explorer_row.dart';
 import 'project_card.dart';
 import 'session_card.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../sessions/presentation/continue_with_dialog.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/presentation/agent_status_badge.dart';
 import '../../sessions/application/session_resume_providers.dart';
@@ -829,13 +830,26 @@ class _NativeSessionRow extends ConsumerWidget {
       lineageBroken: lineageBroken,
       onTap: open,
       menuItems: [
-        for (final terminal in terminals)
+        // Moving a session to another agent, or branching it, belongs on the
+        // session — not only on the delivery strip, which is the one place it
+        // used to live and is only reachable while a session is on screen.
+        DesktopMenuItem(
+          value: 'continue-with',
+          label: 'Continue with…',
+          icon: AppIcons.gitBranch,
+        ),
+        // One entry, not one per installed terminal. Three of the eight items
+        // in this menu used to be external-terminal openers, which is a lot of
+        // room for something the owner does not reach for; the default
+        // terminal is the answer in almost every case, and the rest is a
+        // setting rather than a menu.
+        if (terminals.isNotEmpty)
           DesktopMenuItem(
-            value: 'terminal:${terminal.id}',
-            label: 'Open in ${terminal.label}',
+            value: 'terminal:${terminals.first.id}',
+            label: 'Open in system terminal',
             icon: AppIcons.terminal,
           ),
-        if (terminals.isNotEmpty) const DesktopMenuDivider(),
+        const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'pin',
           label: pinned ? 'Unpin' : 'Pin to top',
@@ -870,6 +884,12 @@ class _NativeSessionRow extends ConsumerWidget {
           return;
         }
         switch (action) {
+          case 'continue-with':
+            // The dialog owns every decision here — which agent, handoff or
+            // fork, and what permission mode the session lands in — and it
+            // launches nothing until the user has seen the packet. So this is
+            // a route to it, not a second place that reasons about any of it.
+            await ContinueWithDialog.show(context, session.id);
           case 'pin':
             ref
                 .read(settingsControllerProvider.notifier)
@@ -990,13 +1010,16 @@ class _ImportedSessionRow extends ConsumerWidget {
       menuItems: [
         DesktopMenuItem(
           value: 'resume',
-          label: 'Resume in app',
+          // "in app" was distinguishing it from the three external-terminal
+          // openers below it. With those collapsed to one, the qualifier is
+          // noise: resuming is what this app does.
+          label: 'Resume',
           icon: AppIcons.play,
         ),
-        for (final terminal in terminals)
+        if (terminals.isNotEmpty)
           DesktopMenuItem(
-            value: 'terminal:${terminal.id}',
-            label: 'Open in ${terminal.label}',
+            value: 'terminal:${terminals.first.id}',
+            label: 'Open in system terminal',
             icon: AppIcons.terminal,
           ),
         const DesktopMenuDivider(),
