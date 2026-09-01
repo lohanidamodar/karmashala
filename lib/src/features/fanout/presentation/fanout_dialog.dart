@@ -11,6 +11,7 @@ import '../../repositories/domain/repository.dart';
 import '../application/fanout_service.dart';
 import 'comparison_list.dart';
 import 'comparison_view.dart';
+import 'fanout_usage_strip.dart';
 
 /// The fan-out surface: past comparisons, a new one, and one open.
 ///
@@ -175,7 +176,10 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
       const Divider(height: Insets.lg),
       TextField(
         controller: _prompt,
-        minLines: 5,
+        // On a 560px-tall window every block competes for the same height, and
+        // the agent list is the one that must not lose: an agent you cannot
+        // reach is an agent you cannot pick. The field still grows to ten lines.
+        minLines: MediaQuery.sizeOf(context).height < 700 ? 3 : 5,
         maxLines: 10,
         decoration: const InputDecoration(
           labelText: 'Prompt sent to every agent',
@@ -207,6 +211,11 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
               ),
           ],
         ),
+      ),
+      // Beside the button, not above the list: the cost of a fan-out is only a
+      // decision once you know how many sessions it is and on whose quota.
+      FanOutUsageStrip(
+        installations: installs.where((i) => _selected.contains(i.id)).toList(),
       ),
       if (_error != null)
         Text(
