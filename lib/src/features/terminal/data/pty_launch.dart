@@ -68,9 +68,10 @@ class PtyLaunch {
 /// into.
 ///
 /// Windows-host shells receive [workingDirectory] directly. A WSL profile is
-/// launched via `wsl.exe -d <distro>`; the working directory is handed to WSL
-/// with `--cd` (it accepts a Windows path and translates it) rather than set on
-/// the host process. A POSIX [context] — the app itself running on Linux/macOS,
+/// launched via `cmd.exe /c wsl.exe -d <distro>` ([throughCommandPrompt] says
+/// why the wrapper is there); the working directory is handed to WSL with
+/// `--cd` (it accepts a Windows path and translates it) rather than set on the
+/// host process. A POSIX [context] — the app itself running on Linux/macOS,
 /// where none of those executables exist — opens the login shell instead.
 ///
 /// [context] defaults to the Windows-host reading of [profile], which is what
@@ -98,6 +99,16 @@ PtyLaunch ptyLaunchFor(
         workingDirectory: workingDirectory,
       );
     case ShellContextKind.powerShell:
+      // Still spawned directly, and still *nested* because of it: PowerShell's
+      // first positional parameter is `-Command`, so the duplicate token
+      // [throughCommandPrompt] describes binds to it and the whole rest of the
+      // line becomes a command string — measured as two `powershell.exe`
+      // processes, with `-NoLogo`/`-NoExit` applying only to the inner one. It
+      // works (the inner shell is the one the user types into, and it loads the
+      // profile before the bootstrap, which is what shell integration needs),
+      // so it is left exactly as it shipped: the fix is to route it through
+      // [throughCommandPrompt] as the WSL branch now does, but this is the
+      // default profile and no unit test can see a real pane.
       return PtyLaunch(
         executable: 'powershell.exe',
         arguments: [
@@ -116,56 +127,73 @@ PtyLaunch ptyLaunchFor(
     // is `cmd.exe`, so both spellings land here.
     case ShellContextKind.windowsNative:
     case ShellContextKind.commandPrompt:
+      // Needs no wrapper: the duplication makes this `cmd.exe cmd.exe`, and
+      // `cmd` discards the stray token — measured as one shell, one banner, one
+      // prompt, identical to a bare `cmd.exe`.
       return PtyLaunch(
         executable: 'cmd.exe',
         workingDirectory: workingDirectory,
       );
     case ShellContextKind.wsl:
-      // KNOWN FRAGILITY, not fixed here: this launch reaches the distro
-      // **through its own login shell**, and only works because WSL interop is
-      // on.
+      // Through `cmd.exe /c` for the reason [throughCommandPrompt] documents:
+      // spawned directly, the duplicated leading token made the ConPTY command
+      // line `wsl.exe wsl.exe -d <distro> --cd <dir>`, and `wsl.exe` reads that
+      // second token as *the command to run inside the distro* — so the pane
+      // reached its shell by having the distro's login shell exec a PE back out
+      // through interop.
       //
-      // `flutter_pty` 0.4.2's `build_command` emits `<executable> <argv…>`
-      // while the Dart side has already put the executable at `argv[0]`
-      // (`flutter_pty.dart`, `argv[0] = executable`), so the real ConPTY
-      // command line is `wsl.exe wsl.exe -d <distro> --cd <dir>` — the same
-      // duplication `wrapForPty`'s windowsNative branch goes through `cmd.exe
-      // /c` to survive. `wsl.exe` has no such tolerance: the second token is
-      // not an option, so it is taken as *the command to run inside the
-      // distro*, and a command is run through the default login shell.
-      // Verified: `wsl.exe -d archlinux nonexistentcmd123` answers
-      // `zsh:1: command not found`, and `wsl.exe wsl.exe -d archlinux --cd
-      // <dir> -- pwd` prints <dir> — the nesting works.
-      //
-      // It works because that shell can exec a PE via `binfmt_misc`. With
-      // interop off it cannot, falls back to reading the file as a script, and
-      // the pane dies with exactly what the owner screenshotted:
+      // Measured on the owner's machine (Windows 10.0.26200, archlinux):
+      // `wsl.exe -d archlinux nonexistentcmd123` answers `zsh:1: command not
+      // found`, which is the login shell; one live agent pane showed three
+      // `wsl.exe` processes where one would do; and an *unquoted* Windows
+      // `--cd` path fails outright with `Wsl/E_INVALIDARG`, because zsh eats
+      // the backslashes before the re-exec'd `wsl.exe` ever sees them. With
+      // interop off the login shell cannot exec the PE at all, reads it as a
+      // script, and the pane dies as the owner screenshotted:
       //
       //   /mnt/c/Users/.../WindowsApps/wsl.exe: line 1: MZ: command not found
       //   [process exited with code 127]
       //
-      // The Linux path is the distro shell's own PATH lookup, not something
-      // this file ever wrote: `ShellContextKind.posix` is unreachable on a
-      // Windows host. Fixing it means routing this through `cmd.exe /c` as the
-      // agent path does, which changes how every WSL pane spawns (process
-      // tree, the OSC launcher-title filter, the shell-integration bootstrap)
-      // and cannot be verified by the unit suite — so it is its own change.
-      // The same duplication makes a PowerShell and a cmd pane open a nested
-      // shell, which is Loop 38's `powershell.exe powershell.exe`.
+      // `cmd.exe /c wsl.exe -d <distro> --cd <dir>` reaches the distro's login
+      // shell directly, with no Linux round-trip and nothing for interop to be
+      // needed for.
       final distro = target.wslDistribution ?? '';
-      return PtyLaunch(
-        executable: 'wsl.exe',
-        // Quoted for the same reason: a repository under a path containing a
-        // space used to split into two arguments, and the pane opened somewhere
-        // else or not at all. A path without a space is unchanged.
-        arguments: [
-          '-d',
-          distro,
-          if (workingDirectory != null) ...['--cd', workingDirectory],
-        ].map(quoteWindowsCommandArgument).toList(),
-      );
+      // No host working directory: `wsl.exe` sets the child's own with `--cd`,
+      // so `cmd.exe` is left wherever the app is rather than pointed at a Linux
+      // path Windows cannot resolve.
+      return throughCommandPrompt([
+        'wsl.exe',
+        '-d',
+        distro,
+        if (workingDirectory != null) ...['--cd', workingDirectory],
+      ]);
   }
 }
+
+/// One Windows command line, handed to `cmd.exe /c` so that `cmd` re-parses it.
+///
+/// **Every** ConPTY child is spawned as `<exe> <exe> <args…>`: `flutter_pty`
+/// 0.4.2's `build_command` writes the executable and then every entry of
+/// `argv`, and `flutter_pty.dart` has already put the executable at `argv[0]`.
+/// `cmd.exe` is the only wrapper that survives that — measured on Windows
+/// 10.0.26200, `cmd.exe cmd.exe` starts exactly one shell and
+/// `cmd.exe cmd.exe /c <line>` runs `<line>` — because it discards the stray
+/// leading token and re-parses the rest. That re-parse is also what restores
+/// the quoting `build_command` throws away by concatenating with single spaces.
+///
+/// The price is `cmd.exe`'s own expansion: a `%NAME%` in [parts] arrives
+/// substituted, as [quoteWindowsCommandArgument] already documents for the
+/// agent path.
+PtyLaunch throughCommandPrompt(
+  List<String> parts, {
+  String? workingDirectory,
+  Map<String, String> environment = const {},
+}) => PtyLaunch(
+  executable: 'cmd.exe',
+  arguments: ['/c', parts.map(quoteWindowsCommandArgument).join(' ')],
+  workingDirectory: workingDirectory,
+  environment: environment,
+);
 
 /// Builds the ConPTY launch that runs an agent CLI in a pane, for the context
 /// the command is actually going into.
@@ -256,16 +284,18 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
       // PowerShell cannot be used for this: its first positional parameter is
       // `-Command`, which the duplicate would bind to — which is why the
       // PowerShell branch above goes through `-EncodedCommand` instead.
-      return PtyLaunch(
-        executable: 'cmd.exe',
-        arguments: [
-          '/c',
-          command.parts.map(quoteWindowsCommandArgument).join(' '),
-        ],
+      return throughCommandPrompt(
+        command.parts,
         workingDirectory: command.workingDirectory,
         environment: command.environment,
       );
     case ShellContextKind.wsl:
+      // Deliberately still direct, unlike the shell pane: an agent command
+      // carries a user prompt, and routing it through `cmd.exe` would start
+      // expanding `%NAME%` inside it — the one thing
+      // [quoteWindowsCommandArgument] promises this path does not do. So the
+      // agent pane keeps the PE round-trip (and its interop dependency) that
+      // `ptyLaunchFor`'s WSL branch no longer has.
       return PtyLaunch(
         executable: 'wsl.exe',
         arguments: [
