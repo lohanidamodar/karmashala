@@ -66,6 +66,10 @@ class ScrollbackAutosave {
   Object? _handle;
   bool _running = false;
 
+  /// Whether the armed tick is already the catch-up one, so [catchUpSoon] can
+  /// be a no-op rather than pushing a near tick further out.
+  bool _catchingUp = false;
+
   bool get isRunning => _running;
 
   void start() {
@@ -82,7 +86,28 @@ class ScrollbackAutosave {
     _cancel(handle);
   }
 
+  /// Brings the next tick forward to [catchUpInterval].
+  ///
+  /// For work that arrives **between** ticks: a structural workspace save
+  /// writes the tabs and their layout immediately but deliberately leaves the
+  /// scrollback text to this timer, and without this that text would wait for
+  /// whichever idle tick was already armed — up to a full [interval] away, when
+  /// the backlog is known about right now.
+  ///
+  /// A no-op while a catch-up tick is already armed, so calling it repeatedly
+  /// (a user splitting panes in a row) can never keep pushing the tick out.
+  void catchUpSoon() {
+    if (!_running || _catchingUp) return;
+    final handle = _handle;
+    // No handle means a tick is running; it re-arms itself from what it finds.
+    if (handle == null) return;
+    _handle = null;
+    _cancel(handle);
+    _arm(catchUpInterval);
+  }
+
   void _arm(Duration delay) {
+    _catchingUp = delay == catchUpInterval;
     _handle = _schedule(delay, _fire);
   }
 

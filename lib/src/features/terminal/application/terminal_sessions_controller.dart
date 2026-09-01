@@ -216,10 +216,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// An empty workspace has two causes that the store cannot tell apart, and
   /// only one of them is a fact worth writing down. *The user closed everything*
   /// is a decision, and clearing the store is the correct outcome — Loop 29's
-  /// behaviour, and tested. *We momentarily have nothing* is a bug, and since
-  /// [persistWorkspace] is a destructive full replace, writing it destroys the
-  /// user's workspace outright; Loop 48 watched that happen once in ten real
-  /// runs and never found the trigger.
+  /// behaviour, and tested. *We momentarily have nothing* is a bug, and a save
+  /// deletes every tab the workspace no longer holds, so writing it destroys
+  /// the user's workspace outright; Loop 48 watched that happen once in ten
+  /// real runs and never found the trigger. (A save writes only the rows that
+  /// changed now, but "every tab vanished" changes every row — incremental
+  /// writing narrows the cost of this failure, not its reach.)
   ///
   /// So the controller keeps the one piece of information the database cannot
   /// reconstruct: whether anything the *user* did could account for the
@@ -409,7 +411,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     _activeTabId = tabId;
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
     return tabId;
   }
@@ -444,7 +446,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     _activeTabId = tabId;
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
     return (tabId: tabId, paneId: paneId);
   }
@@ -480,7 +482,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _activeTabId = _tabs.isEmpty ? null : _tabs.last.id;
     }
     _publish();
-    persistWorkspace();
+    persistStructure();
     // Closing the active tab hands the keyboard to whichever tab took its
     // place, rather than leaving it nowhere.
     _focusActivePane();
@@ -517,7 +519,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       ),
     );
     _focusActivePane();
-    persistWorkspace();
+    persistStructure();
     return slotId;
   }
 
@@ -590,7 +592,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       ),
     );
     _focusActivePane();
-    persistWorkspace();
+    persistStructure();
     return paneId;
   }
 
@@ -657,7 +659,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     _activeTabId = target.id;
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
     return true;
   }
@@ -714,7 +716,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
     _activeTabId = target.id;
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
     return true;
   }
@@ -820,7 +822,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _takePaneOutOfTab(tab, paneId);
     final tabId = _newTabFor(paneId);
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
     return tabId;
   }
@@ -854,7 +856,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       tab.copyWith(layout: layout, focusedPaneId: _refocused(tab, layout)),
     );
     _focusActivePane();
-    persistWorkspace();
+    persistStructure();
   }
 
   /// Moves [delta] (a fraction of the split's extent) from child `index + 1` to
@@ -1032,7 +1034,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
     final tabId = _newTabFor(paneId);
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
     return tabId;
   }
@@ -1053,7 +1055,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _detachedMutated();
     _releasePane(paneId);
     _publish();
-    persistWorkspace();
+    persistStructure();
   }
 
   /// Ends every detached session at once — the "I am done with all of these"
@@ -1067,7 +1069,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _detached.clear();
     _detachedMutated();
     _publish();
-    persistWorkspace();
+    persistStructure();
   }
 
   /// Starts a process in [paneId], replaying whatever is already in its buffer
@@ -1120,7 +1122,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       ),
     );
     _publish();
-    persistWorkspace();
+    persistStructure();
     _focusActivePane();
   }
 
@@ -1193,21 +1195,25 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     );
     final tabId = _showPane(paneId);
     _publish();
-    persistWorkspace();
+    persistStructure();
     return tabId;
   }
 
   // --- persistence -----------------------------------------------------------
 
   /// Writes the whole workspace — tabs, layouts, detached sessions and every
-  /// pane's scrollback.
+  /// pane's scrollback, re-encoding whatever has moved since it was last
+  /// written.
   ///
-  /// Runs on every structural change (open, split, close, detach, end, start)
-  /// and on teardown. The container *is* disposed on quit now (Loop 61's
-  /// lifecycle owner), but that happens inside a bounded budget several steps
-  /// in, and `windowManager.destroy()` ends the process the moment the sequence
-  /// returns — so anything not already written when the user quits is still
-  /// simply gone. The 20 s autosave covers scrollback between those points.
+  /// This is the **teardown** save: the controller's own `onDispose`,
+  /// [shutdownProcesses], and the quit sequence's explicit snapshot. The
+  /// container *is* disposed on quit now (Loop 61's lifecycle owner), but that
+  /// happens inside a bounded budget several steps in, and
+  /// `windowManager.destroy()` ends the process the moment the sequence returns
+  /// — so anything not already written when the user quits is simply gone, and
+  /// this is the last chance to write it.
+  ///
+  /// Structural changes use [persistStructure] instead.
   ///
   /// Does nothing when no database is wired up (tests, and any bootstrap that
   /// has not opened one).
@@ -1217,13 +1223,47 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// [_userClosedSinceRestore]. That case is a bug by construction, and the
   /// difference between a bug and a data loss is whether the bug is allowed to
   /// write.
-  void persistWorkspace() {
+  void persistWorkspace() => _persist(refreshScrollback: true);
+
+  /// Writes the workspace's **shape** — which tabs exist, in what order, split
+  /// how, with which panes — without re-encoding a buffer to get text the
+  /// autosave already owes a write for.
+  ///
+  /// Runs on every structural change (open, split, close, detach, end, start).
+  /// The shape is written synchronously and in full, because losing a tab
+  /// layout to a crash is far worse than a slow save and a layout is small. The
+  /// scrollback *text* is a different question: re-encoding is the expensive
+  /// half of a save — the codec walks every line and emits an SGR run per style
+  /// change, ~5 ms for a pane holding a full durable window — and on a busy
+  /// workspace every live pane is dirty, so a structural save was paying for
+  /// all of them. At the hundred-pane scale target that is the bulk of the
+  /// 645 ms `tool/benchmark/terminal_scale_bench.dart` measured, and it is what
+  /// the owner sees as "resuming session still makes ui laggy".
+  ///
+  /// So a structural save writes the encoding each pane *already* has and
+  /// leaves the pane dirty. [saveDirtyScrollback] then refreshes it on the next
+  /// tick, inside the 8 ms budget that exists for exactly this, and
+  /// [persistWorkspace] flushes the rest on the way out. A pane the store has
+  /// never seen has no encoding to reuse, so it is encoded here and its text is
+  /// never merely assumed.
+  ///
+  /// The exposure this buys is bounded, and smaller than the one the app
+  /// already accepts. `kScrollbackAutosaveInterval` documents the worst case as
+  /// 20 s of output lost to a close-to-tray kill; a save that leaves text
+  /// behind here asks the autosave for its catch-up cadence
+  /// ([ScrollbackAutosave.catchUpSoon]), so the text lands about a second
+  /// later. And nothing here can lose a *tab*: the shape is written now,
+  /// synchronously, every time.
+  void persistStructure() => _persist(refreshScrollback: false);
+
+  void _persist({required bool refreshScrollback}) {
     final dao = _dao();
     if (dao == null) return;
     try {
       final rows = [
-        for (final tab in _tabs) _storedTab(tab),
-        for (final session in _detached) ?_storedDetached(session),
+        for (final tab in _tabs) _storedTab(tab, refresh: refreshScrollback),
+        for (final session in _detached)
+          ?_storedDetached(session, refresh: refreshScrollback),
       ];
       if (rows.isEmpty && !_userClosedSinceRestore) {
         final stored = dao.storedTabCount();
@@ -1242,6 +1282,13 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         activeTabId: _activeTabId,
         userClosed: _userClosedSinceRestore,
       );
+      // A structural save that reused an encoding has left text unwritten that
+      // this controller already knows about, so the autosave is asked for its
+      // catch-up cadence rather than whatever idle tick happens to be armed.
+      // That makes the exposure ~1 s instead of the 20 s the idle interval
+      // bounds it at — better than the window a full re-encode was closing,
+      // rather than merely no worse.
+      if (!refreshScrollback && hasDirtyScrollback) _autosave.catchUpSoon();
     } catch (error, stack) {
       _log.warning('Could not persist the terminal workspace.', error, stack);
     }
@@ -1300,7 +1347,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Encoding is the expensive half of a save (the codec walks every line and
   /// emits an SGR run per style change), so the cache is what keeps a save
   /// proportional to what changed rather than to how much is open.
-  String _scrollbackOf(String paneId, TerminalInstance instance) {
+  ///
+  /// With [refresh] false the cache is used **even for a dirty pane**, and the
+  /// pane stays dirty: the caller is a structural save, which wants the shape
+  /// written now and is content for the text to arrive on the autosave's next
+  /// budgeted tick. See [persistStructure]. A pane with nothing cached is still
+  /// encoded — a save never invents text it does not have.
+  String _scrollbackOf(
+    String paneId,
+    TerminalInstance instance, {
+    bool refresh = true,
+  }) {
     // Two panes already hold their scrollback as text, and re-encoding a buffer
     // to get it back would be both slower and wrong. A **parked** pane gave its
     // buffer up when it went cold, so the window it kept is its scrollback and
@@ -1314,7 +1371,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _dirty.remove(paneId);
       return held;
     }
-    if (!_dirty.contains(paneId)) {
+    if (!refresh || !_dirty.contains(paneId)) {
       final cached = _encoded[paneId];
       if (cached != null) return cached;
     }
@@ -1356,7 +1413,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// region is room the user cleared for something, and a reboot has already
   /// taken away everything that could have gone in it. The layout comes back
   /// holding what actually exists.
-  StoredTerminalTab _storedTab(TerminalTab tab) {
+  StoredTerminalTab _storedTab(TerminalTab tab, {required bool refresh}) {
     return StoredTerminalTab(
       id: tab.id,
       layout: tab.layout,
@@ -1370,7 +1427,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               profileId: instance.profileId,
               title: instance.title,
               workingDirectory: instance.workingDirectory,
-              scrollback: _scrollbackOf(paneId, instance),
+              scrollback: _scrollbackOf(paneId, instance, refresh: refresh),
               agentLaunch: instance.agentLaunch,
             ),
       ],
@@ -1381,7 +1438,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///
   /// Its id is derived from the pane so repeated saves overwrite rather than
   /// accumulate. Returns null if the instance has gone since it was detached.
-  StoredTerminalTab? _storedDetached(DetachedSession session) {
+  StoredTerminalTab? _storedDetached(
+    DetachedSession session, {
+    required bool refresh,
+  }) {
     final instance = _instances[session.paneId];
     if (instance == null) return null;
     return StoredTerminalTab(
@@ -1396,7 +1456,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           profileId: instance.profileId,
           title: instance.title,
           workingDirectory: instance.workingDirectory,
-          scrollback: _scrollbackOf(session.paneId, instance),
+          scrollback: _scrollbackOf(session.paneId, instance, refresh: refresh),
           agentLaunch: instance.agentLaunch,
         ),
       ],

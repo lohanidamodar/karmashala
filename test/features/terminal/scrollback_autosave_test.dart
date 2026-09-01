@@ -66,6 +66,74 @@ void main() {
     autosave.stop();
   });
 
+  group('catchUpSoon', () {
+    /// Drives an autosave whose armed delays and cancels are recorded.
+    ({
+      ScrollbackAutosave autosave,
+      List<Duration> delays,
+      List<Object> cancels,
+      void Function() Function() pending,
+    })
+    harness({required bool backlog}) {
+      final delays = <Duration>[];
+      final cancels = <Object>[];
+      void Function()? pending;
+      var handles = 0;
+      final autosave = ScrollbackAutosave(
+        onTick: () => backlog,
+        schedule: (delay, callback) {
+          delays.add(delay);
+          pending = callback;
+          return 'handle-${handles++}';
+        },
+        cancel: cancels.add,
+      );
+      return (
+        autosave: autosave,
+        delays: delays,
+        cancels: cancels,
+        pending: () => pending!,
+      );
+    }
+
+    test('pulls an idle tick forward, cancelling the one it replaces', () {
+      // Work that arrived between ticks: a structural workspace save writes the
+      // tabs now and leaves the scrollback for the autosave, so waiting out a
+      // full idle interval would sit on text already known to be owed.
+      final h = harness(backlog: false);
+      h.autosave.start();
+      expect(h.delays, [kScrollbackAutosaveInterval]);
+
+      h.autosave.catchUpSoon();
+
+      expect(h.delays.last, kScrollbackAutosaveCatchUp);
+      expect(h.cancels, ['handle-0'], reason: 'no timer is left running');
+    });
+
+    test('is a no-op while a catch-up tick is already armed', () {
+      // Otherwise a user splitting panes in a row would keep pushing the tick
+      // a second further out and the backlog would never drain.
+      final h = harness(backlog: true);
+      h.autosave.start();
+      h.pending()();
+      expect(h.delays.last, kScrollbackAutosaveCatchUp);
+
+      h.autosave
+        ..catchUpSoon()
+        ..catchUpSoon();
+
+      expect(h.delays, hasLength(2));
+      expect(h.cancels, isEmpty);
+    });
+
+    test('does nothing when the autosave is not running', () {
+      final h = harness(backlog: false);
+      h.autosave.catchUpSoon();
+      expect(h.delays, isEmpty);
+      expect(h.cancels, isEmpty);
+    });
+  });
+
   test('a tick never overlaps itself', () {
     // Re-arming happens after onTick returns, so a batch that runs long cannot
     // have a second one scheduled on top of it.
