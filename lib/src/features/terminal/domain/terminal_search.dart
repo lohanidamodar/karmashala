@@ -1,5 +1,7 @@
 import 'package:xterm/xterm.dart';
 
+import 'terminal_search_query.dart';
+
 /// Most matches highlighted at once.
 ///
 /// `RenderTerminal._paintHighlights` walks every highlight on every frame, so
@@ -88,37 +90,65 @@ class ScrollbackMatch {
   String toString() => 'ScrollbackMatch($line, $startColumn..$endColumn)';
 }
 
+/// Reads lines from [firstLine] through [lineAt], reporting every hit.
+///
+/// **This is the loop the terminal's find cost is measured in**, so it takes a
+/// line *accessor* rather than a list: a caller with 100 panes must not have to
+/// materialise 100 line lists to ask a question about one of them, and a cost
+/// test counts the reads by counting calls to [lineAt].
+///
+/// Returns the number of lines actually read — the unit
+/// `terminal_search_cost_test.dart` asserts on. [matchBudget] stops the scan as
+/// soon as that many hits have been reported, so a query like `.` over a full
+/// scrollback costs the budget rather than the buffer.
+int scanLines({
+  required TerminalSearchQuery query,
+  required int lineCount,
+  required TerminalLineText Function(int index) lineAt,
+  required void Function(ScrollbackMatch match) onMatch,
+  int firstLine = 0,
+  int? matchBudget,
+}) {
+  if (!query.isUsable) return 0;
+
+  var read = 0;
+  var found = 0;
+  for (var index = firstLine < 0 ? 0 : firstLine; index < lineCount; index++) {
+    if (matchBudget != null && found >= matchBudget) break;
+    read++;
+    final line = lineAt(index);
+    if (line.text.isEmpty) continue;
+    query.forEachMatch(line.text, (start, end) {
+      if (matchBudget != null && found >= matchBudget) return;
+      final last = end - 1;
+      found++;
+      onMatch(
+        ScrollbackMatch(
+          line: index,
+          startColumn: line.cellOfChar[start],
+          endColumn: line.cellOfChar[last] + line.widthOfChar[last],
+        ),
+      );
+    });
+  }
+  return read;
+}
+
 /// Every occurrence of [query] in [lines], in reading order.
 ///
-/// Plain substring matching; matches never span a line break.
+/// The list-shaped convenience over [scanLines], for a caller that already has
+/// its lines flattened and does not care what the scan cost.
 List<ScrollbackMatch> searchLines(
   List<TerminalLineText> lines,
   String query, {
   bool caseSensitive = false,
 }) {
-  if (query.isEmpty) return const [];
-  final needle = caseSensitive ? query : query.toLowerCase();
-
   final matches = <ScrollbackMatch>[];
-  for (var index = 0; index < lines.length; index++) {
-    final line = lines[index];
-    if (line.text.isEmpty) continue;
-    final haystack = caseSensitive ? line.text : line.text.toLowerCase();
-
-    var from = 0;
-    while (true) {
-      final at = haystack.indexOf(needle, from);
-      if (at < 0) break;
-      final last = at + needle.length - 1;
-      matches.add(
-        ScrollbackMatch(
-          line: index,
-          startColumn: line.cellOfChar[at],
-          endColumn: line.cellOfChar[last] + line.widthOfChar[last],
-        ),
-      );
-      from = at + needle.length;
-    }
-  }
+  scanLines(
+    query: TerminalSearchQuery.parse(query, caseSensitive: caseSensitive),
+    lineCount: lines.length,
+    lineAt: (index) => lines[index],
+    onMatch: matches.add,
+  );
   return matches;
 }

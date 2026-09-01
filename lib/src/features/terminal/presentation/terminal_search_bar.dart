@@ -7,12 +7,16 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/terminal_search_controller.dart';
 import '../domain/terminal_search.dart';
 
-/// Find-in-scrollback bar: query field, case toggle, match count and next/
-/// previous navigation.
+/// Find-in-scrollback bar: query field, case and regex toggles, match count and
+/// next/previous navigation.
 ///
 /// Enter and Shift+Enter step through matches and Escape closes, all bound here
 /// rather than in the terminal's own key handling — while this field has focus
 /// the terminal does not, so these never reach the shell.
+///
+/// Nothing here names a size: the theme's `iconButtonTheme`, `iconTheme` and
+/// text styles carry them, so the bar follows the app's text-size setting
+/// instead of pinning its own.
 class TerminalSearchBar extends ConsumerStatefulWidget {
   const TerminalSearchBar({super.key});
 
@@ -50,7 +54,6 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
           children: [
             Icon(
               AppIcons.magnifyingGlass,
-              size: 16,
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: Insets.sm),
@@ -67,11 +70,12 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
                   controller: _controller,
                   focusNode: _focusNode,
                   autofocus: true,
-                  style: const TextStyle(fontSize: 13),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     isDense: true,
                     border: InputBorder.none,
-                    hintText: 'Find in scrollback',
+                    hintText: state.regex
+                        ? 'Find by pattern'
+                        : 'Find in scrollback',
                   ),
                   onChanged: _search.setQuery,
                 ),
@@ -82,28 +86,34 @@ class _TerminalSearchBarState extends ConsumerState<TerminalSearchBar> {
             IconButton(
               tooltip: 'Match case',
               isSelected: state.caseSensitive,
-              iconSize: 16,
               visualDensity: VisualDensity.compact,
-              icon: const Text('Aa', style: TextStyle(fontSize: 12)),
+              icon: Text('Aa', style: theme.textTheme.labelSmall),
               onPressed: _search.toggleCaseSensitive,
             ),
             IconButton(
+              // Named for what it does rather than for the syntax: the tooltip
+              // is also where "the case toggle still applies" gets said, since
+              // Dart's RegExp has no inline `(?i)` to say it in the pattern.
+              tooltip: 'Use regular expression (Match case still applies)',
+              isSelected: state.regex,
+              visualDensity: VisualDensity.compact,
+              icon: Text('.*', style: theme.textTheme.labelSmall),
+              onPressed: _search.toggleRegex,
+            ),
+            IconButton(
               tooltip: 'Previous match (Shift+Enter)',
-              iconSize: 16,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.caretUp),
               onPressed: state.hasMatches ? _search.previous : null,
             ),
             IconButton(
               tooltip: 'Next match (Enter)',
-              iconSize: 16,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.caretDown),
               onPressed: state.hasMatches ? _search.next : null,
             ),
             IconButton(
               tooltip: 'Close find (Esc)',
-              iconSize: 16,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.x),
               onPressed: _search.close,
@@ -124,6 +134,22 @@ class _CountLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (state.query.isEmpty) return const SizedBox.shrink();
+
+    // A pattern that does not compile says so instead of reporting "No
+    // results", which would read as "your pattern is fine, the text is not
+    // there" — the one wrong answer this feature must never give.
+    final error = state.patternError;
+    if (error != null) {
+      return Tooltip(
+        message: error,
+        child: Text(
+          'Invalid pattern',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.error,
+          ),
+        ),
+      );
+    }
 
     final label = state.hasMatches
         ? '${state.currentIndex + 1} / ${state.matchCount}'

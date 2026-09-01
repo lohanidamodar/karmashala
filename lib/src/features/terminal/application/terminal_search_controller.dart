@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
 import '../domain/terminal_search.dart';
+import '../domain/terminal_search_query.dart';
 import 'terminal_scroll.dart';
 import 'terminal_sessions_controller.dart';
 
@@ -34,6 +35,8 @@ class TerminalSearchState {
     this.paneId,
     this.query = '',
     this.caseSensitive = false,
+    this.regex = false,
+    this.patternError,
     this.matchCount = 0,
     this.currentIndex = 0,
     this.truncated = false,
@@ -43,6 +46,14 @@ class TerminalSearchState {
   final String? paneId;
   final String query;
   final bool caseSensitive;
+
+  /// Whether [query] is a regular expression rather than literal text.
+  final bool regex;
+
+  /// Why the pattern would not compile, or null. Set only while [regex] is on;
+  /// while it is set nothing matches, deliberately — see [TerminalSearchQuery].
+  final String? patternError;
+
   final int matchCount;
 
   /// Zero-based index of the highlighted match.
@@ -53,11 +64,17 @@ class TerminalSearchState {
 
   bool get hasMatches => matchCount > 0;
 
+  /// Distinguishes "keep what is there" from "clear it" for the one nullable
+  /// field, which `??` cannot express.
+  static const _keep = Object();
+
   TerminalSearchState copyWith({
     bool? visible,
     String? paneId,
     String? query,
     bool? caseSensitive,
+    bool? regex,
+    Object? patternError = _keep,
     int? matchCount,
     int? currentIndex,
     bool? truncated,
@@ -67,6 +84,10 @@ class TerminalSearchState {
       paneId: paneId ?? this.paneId,
       query: query ?? this.query,
       caseSensitive: caseSensitive ?? this.caseSensitive,
+      regex: regex ?? this.regex,
+      patternError: identical(patternError, _keep)
+          ? this.patternError
+          : patternError as String?,
       matchCount: matchCount ?? this.matchCount,
       currentIndex: currentIndex ?? this.currentIndex,
       truncated: truncated ?? this.truncated,
@@ -104,6 +125,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     state = state.copyWith(
       visible: false,
       query: '',
+      patternError: null,
       matchCount: 0,
       currentIndex: 0,
       truncated: false,
@@ -117,6 +139,15 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
 
   void toggleCaseSensitive() {
     state = state.copyWith(caseSensitive: !state.caseSensitive);
+    _runSearch();
+  }
+
+  /// Switches between literal text and a regular expression, keeping the query.
+  ///
+  /// The case toggle keeps working either way — see [TerminalSearchQuery] for
+  /// why the two compose rather than one disabling the other.
+  void toggleRegex() {
+    state = state.copyWith(regex: !state.regex);
     _runSearch();
   }
 
@@ -150,21 +181,37 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
 
   void _runSearch() {
     _clearHighlights();
+    // Compiled once for the whole scan, and the only place a broken pattern is
+    // turned into something the bar can say out loud.
+    final query = TerminalSearchQuery.parse(
+      state.query,
+      caseSensitive: state.caseSensitive,
+      regex: state.regex,
+    );
     final target = _target();
-    if (target == null || state.query.isEmpty) {
+    if (target == null || !query.isUsable) {
       _matches = const [];
-      state = state.copyWith(matchCount: 0, currentIndex: 0, truncated: false);
+      state = state.copyWith(
+        patternError: query.error,
+        matchCount: 0,
+        currentIndex: 0,
+        truncated: false,
+      );
       return;
     }
 
     final lines = target.terminal.buffer.lines;
-    _matches = searchLines(
-      [for (var i = 0; i < lines.length; i++) lineTextOf(lines[i])],
-      state.query,
-      caseSensitive: state.caseSensitive,
+    final found = <ScrollbackMatch>[];
+    scanLines(
+      query: query,
+      lineCount: lines.length,
+      lineAt: (index) => lineTextOf(lines[index]),
+      onMatch: found.add,
     );
+    _matches = found;
 
     state = state.copyWith(
+      patternError: null,
       matchCount: _matches.length,
       currentIndex: 0,
       truncated: _matches.length > kMaxSearchHighlights,
