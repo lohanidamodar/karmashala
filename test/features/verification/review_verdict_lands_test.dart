@@ -44,57 +44,59 @@ void main() {
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
 
-  test('a review session\'s verdict lands on the candidate as independent',
-      () async {
-    final launch = await h.container
-        .read(fanOutServiceProvider)
-        .launch(
-          repository: repository(),
-          installations: [roverInstall, flakyInstall],
-          prompt: 'Make the parser accept trailing commas.',
-        );
-    final subject = launch.started.first;
+  test(
+    'a review session\'s verdict lands on the candidate as independent',
+    () async {
+      final launch = await h.container
+          .read(fanOutServiceProvider)
+          .launch(
+            repository: repository(),
+            installations: [roverInstall, flakyInstall],
+            prompt: 'Make the parser accept trailing commas.',
+          );
+      final subject = launch.started.first;
 
-    // One click: the other installed agent is asked to check this candidate.
-    final review = await h.container
-        .read(reviewSessionServiceProvider)
-        .startReview(
-          sessionId: subject.session.id,
-          targetInstallationId: secondRoverInstall.id,
-          claim: launch.comparison.prompt,
-        );
+      // One click: the other installed agent is asked to check this candidate.
+      final review = await h.container
+          .read(reviewSessionServiceProvider)
+          .startReview(
+            sessionId: subject.session.id,
+            targetInstallationId: secondRoverInstall.id,
+            claim: launch.comparison.prompt,
+          );
 
-    // What the reviewer does with the brief it was handed.
-    final tools = VerificationTools(
-      verification,
-      callerSessionId: review.session.id,
-    );
-    await tools.call('verification_start', {
-      'change': true,
-      'sessionId': subject.session.id,
-      'title': 'Review of the trailing-comma fix',
-    });
-    await tools.call('verification_note', {
-      'text': 'The lexer change is covered by two tests.',
-    });
-    await tools.call('verification_finish', {
-      'verdict': 'pass',
-      'reason': 'Nothing wrong found; the two new tests cover the case.',
-    });
+      // What the reviewer does with the brief it was handed.
+      final tools = VerificationTools(
+        verification,
+        callerSessionId: review.session.id,
+      );
+      await tools.call('verification_start', {
+        'change': true,
+        'sessionId': subject.session.id,
+        'title': 'Review of the trailing-comma fix',
+      });
+      await tools.call('verification_note', {
+        'text': 'The lexer change is covered by two tests.',
+      });
+      await tools.call('verification_finish', {
+        'verdict': 'pass',
+        'reason': 'Nothing wrong found; the two new tests cover the case.',
+      });
 
-    final candidate = launch.comparison.candidates.firstWhere(
-      (c) => c.sessionId == subject.session.id,
-    );
-    final lookup = h.container.read(candidateEvidenceProvider);
-    final evidence = evidenceShownFor(candidate, lookup)!;
+      final candidate = launch.comparison.candidates.firstWhere(
+        (c) => c.sessionId == subject.session.id,
+      );
+      final lookup = h.container.read(candidateEvidenceProvider);
+      final evidence = evidenceShownFor(candidate, lookup)!;
 
-    expect(evidence.verdict, EvidenceVerdict.passed);
-    expect(evidence.producerSessionId, review.session.id);
-    expect(
-      attributionShownFor(candidate, lookup),
-      VerdictAttribution.independent,
-    );
-  });
+      expect(evidence.verdict, EvidenceVerdict.passed);
+      expect(evidence.producerSessionId, review.session.id);
+      expect(
+        attributionShownFor(candidate, lookup),
+        VerdictAttribution.independent,
+      );
+    },
+  );
 
   test('a review that finds nothing is still a recorded verdict', () async {
     final launch = await h.container

@@ -50,9 +50,9 @@ void main() {
     await tester.tap(find.byType(OutlinedButton));
     await tester.pumpAndSettle();
 
-    final review = SessionDao(h.db).getAll().firstWhere(
-      (s) => s.id != 's-work',
-    );
+    final review = SessionDao(
+      h.db,
+    ).getAll().firstWhere((s) => s.id != 's-work');
     expect(review.parentSessionId, 's-work');
     expect(review.parentLink, SessionLink.spawn);
     expect(review.agentInstallationId, flakyInstall.id);

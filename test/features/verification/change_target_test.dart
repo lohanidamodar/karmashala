@@ -16,10 +16,14 @@ void main() {
 
   group('a change is a third kind of target', () {
     test('it parses by name and unknown values still fall back', () {
-      expect(VerificationTargetKind.parse('change'),
-          VerificationTargetKind.change);
-      expect(VerificationTargetKind.parse('teleport'),
-          VerificationTargetKind.browser);
+      expect(
+        VerificationTargetKind.parse('change'),
+        VerificationTargetKind.change,
+      );
+      expect(
+        VerificationTargetKind.parse('teleport'),
+        VerificationTargetKind.browser,
+      );
     });
 
     test('it is neither a browser nor a device, and says so', () {
