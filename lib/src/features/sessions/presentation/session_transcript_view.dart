@@ -7,6 +7,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
+import '../../cli_detection/data/subagent_transcript.dart';
+import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../notes/application/composer_draft.dart';
@@ -47,6 +49,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// Owned here rather than inside the composer, because something outside the
   /// composer writes to it: a note sent back lands in this box.
   final _composer = TextEditingController();
+
+  /// Which delegated agent hangs under which row, by the row's index in the
+  /// whole transcript.
+  ///
+  /// Rebuilt from the messages every time they are — the ordinals are theirs —
+  /// and read back by [ChatTranscriptView.detailBuilder] later in the same
+  /// frame. Nothing here reads a subagent's transcript; a [SubagentRef] is a
+  /// path and a description.
+  final _subagents = <int, SubagentRef>{};
 
   @override
   void dispose() {
@@ -141,6 +152,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               .watch(sessionChatTranscriptProvider(widget.sessionId))
               .whenData(_fromTranscript)
         : ref.watch(sessionTranscriptProvider).whenData(_toMessages);
+    final resolveHostPath = _hostPathResolver();
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
     // Whether a chat rendering is possible at all for this agent — a registry
@@ -187,7 +199,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (messages) => ChatTranscriptView(
               messages: messages,
-              resolveHostPath: _hostPathResolver(),
+              resolveHostPath: resolveHostPath,
+              // The one thing the parent's `Task(…)` row never showed: what
+              // the agent it spawned actually did. Collapsed, and unread until
+              // it is opened — a fan-out of ten must not bury this
+              // conversation, and the turns behind one real session here come
+              // to 1,485 MiB.
+              detailBuilder: (message, ordinal) {
+                final reference = _subagents[ordinal];
+                if (reference == null) return null;
+                return SubagentTurnsTile(
+                  reference: reference,
+                  resolveHostPath: resolveHostPath,
+                );
+              },
               // Null when Notes is off: the transcript never learns the
               // feature exists, so there is nothing left behind to hide.
               onSaveNote: notesEnabled ? _saveNote : null,
@@ -271,14 +296,25 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// conversation is where they read what the agent did, and a session whose
   /// commands and screenshots are invisible is a session they have to go and
   /// watch in a second window.
-  List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) => [
-    for (final message in messages)
-      ChatMessage(
-        role: message.role,
-        text: message.text,
-        tool: message.tool,
-      ),
-  ];
+  /// The subagent a row spawned travels beside the messages rather than inside
+  /// [ChatMessage], which the remote and companion payloads also carry and
+  /// which has no place for a widget's state.
+  List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) {
+    _subagents.clear();
+    final out = <ChatMessage>[];
+    for (final message in messages) {
+      final reference = message.subagent;
+      if (reference != null) _subagents[out.length] = reference;
+      out.add(
+        ChatMessage(
+          role: message.role,
+          text: message.text,
+          tool: message.tool,
+        ),
+      );
+    }
+    return out;
+  }
 
   /// Maps the persisted event log to displayable chat messages, dropping
   /// lifecycle/status noise (verbose logs are not shown in the chat).
