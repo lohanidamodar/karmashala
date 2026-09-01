@@ -1624,18 +1624,18 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// and this runs inside the restore: a workspace must not be lost because one
   /// pane could not be started.
   bool _adoptRestarted(StoredTerminalPane pane, TerminalProfile profile) {
+    final TerminalInstance instance;
+    // Only the build is guarded, so a refusal is always a pane that was never
+    // adopted — there is no half-adopted state for the dormant fallback to be
+    // laid over.
     try {
-      _adopt(
-        pane.id,
-        ref.read(terminalInstanceFactoryProvider)(
-          id: pane.id,
-          profile: profile,
-          workingDirectory: pane.workingDirectory,
-          restoredScrollback: pane.scrollback,
-          shellIntegration: _shellIntegrationEnabled,
-        ),
+      instance = ref.read(terminalInstanceFactoryProvider)(
+        id: pane.id,
+        profile: profile,
+        workingDirectory: pane.workingDirectory,
+        restoredScrollback: pane.scrollback,
+        shellIntegration: _shellIntegrationEnabled,
       );
-      return true;
     } catch (error, stack) {
       _log.warning(
         'Could not restart pane ${pane.id} on launch; it comes back as '
@@ -1645,6 +1645,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       );
       return false;
     }
+    _adopt(pane.id, instance);
+    return true;
   }
 
   /// The workspace DAO, or `null` when no database is wired up.
@@ -1667,8 +1669,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   bool get _shellIntegrationEnabled =>
       ref.read(shellIntegrationEnabledProvider);
 
-  /// Read once per restore, for the same reason: this decides what a *launch*
-  /// does, and toggling it must never reach into panes that are already open.
+  /// Read at restore time rather than watched, for the same reason: this
+  /// decides what a *launch* does, and toggling it must never reach into panes
+  /// that are already open.
   bool get _restoreLivePanes => ref.read(restoreLivePanesProvider);
 
   String _createPane(
