@@ -18,6 +18,7 @@ class StoredTerminalPane {
     required this.workingDirectory,
     required this.scrollback,
     this.agentLaunch,
+    this.wasLive = false,
   });
 
   final String id;
@@ -29,6 +30,22 @@ class StoredTerminalPane {
 
   /// The agent CLI this pane ran, when it ran one. A shell pane stores `null`.
   final AgentPaneLaunch? agentLaunch;
+
+  /// Whether a process was running behind this pane when the row was written.
+  ///
+  /// The one thing a stored pane could not say, and the thing a restart has to
+  /// know: the owner asked for *"active panes on last close"* to come back, and
+  /// a record of the pane's shape cannot tell a live shell from a buffer full
+  /// of last week. See `shouldRestartOnLaunch` for what is then done with it.
+  ///
+  /// Refreshed by every structural save and by the save on quit, so the stored
+  /// answer is the one that was true at the last thing the app did. A hard kill
+  /// can leave it one save stale — a pane that had exited coming back running,
+  /// which is what pressing Restart would have done anyway.
+  ///
+  /// Defaults to false, so a row written before the column existed reads as
+  /// "not recorded as running" rather than as a claim nobody made.
+  final bool wasLive;
 }
 
 /// One persisted tab: its pane tree plus the panes the tree references.
@@ -213,7 +230,7 @@ class TerminalWorkspaceDao {
     final storedPanes = {
       for (final row in _db.query(
         'SELECT id, tab_id, ordinal, profile_id, title, working_directory, '
-        'launch_command FROM terminal_panes;',
+        'launch_command, was_live FROM terminal_panes;',
       ))
         row['id']! as String: row,
     };
@@ -253,6 +270,7 @@ class TerminalWorkspaceDao {
         final launch = pane.agentLaunch == null
             ? null
             : jsonEncode(pane.agentLaunch!.toJson());
+        final wasLive = intFromBool(pane.wasLive);
         final storedPane = storedPanes[pane.id];
         if (storedPane == null ||
             storedPane['tab_id'] != tab.id ||
@@ -261,17 +279,20 @@ class TerminalWorkspaceDao {
             storedPane['title'] != pane.title ||
             storedPane['working_directory'] != pane.workingDirectory ||
             storedPane['launch_command'] != launch ||
+            storedPane['was_live'] != wasLive ||
             _scrollbackChanged(pane)) {
           _db.execute(
             'INSERT INTO terminal_panes (id, tab_id, ordinal, profile_id, '
-            'title, working_directory, scrollback, launch_command, updated_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
+            'title, working_directory, scrollback, launch_command, was_live, '
+            'updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
             'ON CONFLICT (id) DO UPDATE SET tab_id = excluded.tab_id, '
             'ordinal = excluded.ordinal, profile_id = excluded.profile_id, '
             'title = excluded.title, '
             'working_directory = excluded.working_directory, '
             'scrollback = excluded.scrollback, '
             'launch_command = excluded.launch_command, '
+            'was_live = excluded.was_live, '
             'updated_at = excluded.updated_at;',
             [
               pane.id,
@@ -282,6 +303,7 @@ class TerminalWorkspaceDao {
               pane.workingDirectory,
               pane.scrollback,
               launch,
+              wasLive,
               now,
             ],
           );
@@ -361,9 +383,10 @@ class TerminalWorkspaceDao {
     );
     _db.execute(
       'INSERT INTO terminal_panes_backup (id, tab_id, ordinal, profile_id, '
-      'title, working_directory, scrollback, launch_command, updated_at) '
+      'title, working_directory, scrollback, launch_command, was_live, '
+      'updated_at) '
       'SELECT id, tab_id, ordinal, profile_id, title, working_directory, '
-      'scrollback, launch_command, updated_at FROM terminal_panes;',
+      'scrollback, launch_command, was_live, updated_at FROM terminal_panes;',
     );
     _db.writeMetadata(kTerminalWorkspaceBackupAtKey, now);
   }
@@ -407,7 +430,8 @@ class TerminalWorkspaceDao {
 
       final paneRows = _db.query(
         'SELECT id, profile_id, title, working_directory, scrollback, '
-        'launch_command FROM $paneTable WHERE tab_id = ? ORDER BY ordinal;',
+        'launch_command, was_live FROM $paneTable WHERE tab_id = ? '
+        'ORDER BY ordinal;',
         [id],
       );
       (isDetached ? detached : tabs).add(
@@ -428,6 +452,7 @@ class TerminalWorkspaceDao {
                 agentLaunch: _agentLaunchFrom(
                   pane['launch_command'] as String?,
                 ),
+                wasLive: boolFromInt(pane['was_live']),
               ),
           ],
         ),

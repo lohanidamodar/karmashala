@@ -121,6 +121,37 @@ PtyLaunch ptyLaunchFor(
         workingDirectory: workingDirectory,
       );
     case ShellContextKind.wsl:
+      // KNOWN FRAGILITY, not fixed here: this launch reaches the distro
+      // **through its own login shell**, and only works because WSL interop is
+      // on.
+      //
+      // `flutter_pty` 0.4.2's `build_command` emits `<executable> <argv…>`
+      // while the Dart side has already put the executable at `argv[0]`
+      // (`flutter_pty.dart`, `argv[0] = executable`), so the real ConPTY
+      // command line is `wsl.exe wsl.exe -d <distro> --cd <dir>` — the same
+      // duplication `wrapForPty`'s windowsNative branch goes through `cmd.exe
+      // /c` to survive. `wsl.exe` has no such tolerance: the second token is
+      // not an option, so it is taken as *the command to run inside the
+      // distro*, and a command is run through the default login shell.
+      // Verified: `wsl.exe -d archlinux nonexistentcmd123` answers
+      // `zsh:1: command not found`, and `wsl.exe wsl.exe -d archlinux --cd
+      // <dir> -- pwd` prints <dir> — the nesting works.
+      //
+      // It works because that shell can exec a PE via `binfmt_misc`. With
+      // interop off it cannot, falls back to reading the file as a script, and
+      // the pane dies with exactly what the owner screenshotted:
+      //
+      //   /mnt/c/Users/.../WindowsApps/wsl.exe: line 1: MZ: command not found
+      //   [process exited with code 127]
+      //
+      // The Linux path is the distro shell's own PATH lookup, not something
+      // this file ever wrote: `ShellContextKind.posix` is unreachable on a
+      // Windows host. Fixing it means routing this through `cmd.exe /c` as the
+      // agent path does, which changes how every WSL pane spawns (process
+      // tree, the OSC launcher-title filter, the shell-integration bootstrap)
+      // and cannot be verified by the unit suite — so it is its own change.
+      // The same duplication makes a PowerShell and a cmd pane open a nested
+      // shell, which is Loop 38's `powershell.exe powershell.exe`.
       final distro = target.wslDistribution ?? '';
       return PtyLaunch(
         executable: 'wsl.exe',

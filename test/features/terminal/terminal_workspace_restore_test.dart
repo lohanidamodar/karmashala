@@ -49,7 +49,10 @@ void main() {
       controller.persistWorkspace();
       first.dispose();
 
-      final next = fakeTerminalContainer(database: db);
+      // With the launch restart off, which is the shape this test is about:
+      // what the *store* round-trips, uncoloured by what is then done with it.
+      // That a live pane comes back live is `pane_restart_on_launch_test.dart`.
+      final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
       final restoredController = next.read(
@@ -68,8 +71,8 @@ void main() {
       ];
       expect(replayed.join(), contains('hello from the past'));
 
-      // Nothing was started: a restored pane is a record, and re-running what
-      // was in it is the user's call, not the app's.
+      // Nothing was started: a pane the launch does not restart is a record,
+      // and re-running what was in it is the user's call, not the app's.
       for (final pane in panes) {
         expect(restored.livenessOf(pane), PaneLiveness.restored);
       }
