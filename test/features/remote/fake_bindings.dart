@@ -22,6 +22,21 @@ class FakeRemoteBindings {
   /// When set, every prompt send throws it.
   Object? promptError;
 
+  /// What one transcript read costs. A real one reads a session's scrollback,
+  /// and the desktop this matters on has a dozen sessions being watched — so
+  /// the sweep that reads them all is the slowest thing the host does, and how
+  /// it is scheduled decides whether the phone is ever answered.
+  Duration transcriptCost = Duration.zero;
+
+  /// How many transcript reads the fake has served, so a test can watch the
+  /// poll sweep run rather than infer it.
+  int transcriptReads = 0;
+
+  /// The same for the delivery-stage lookup, which is what a snapshot push
+  /// pays per session.
+  Duration stageCost = Duration.zero;
+  int stageReads = 0;
+
   /// When set, every prompt send waits on it — a desktop too busy to answer,
   /// which is a different thing from a desktop that is gone.
   Completer<void>? promptGate;
@@ -46,8 +61,16 @@ class FakeRemoteBindings {
     hostName: 'TestHost',
     listSessions: () => sessions.values.toList(),
     sessionById: (id) => sessions[id],
-    deliveryStageFor: (id) async => stages[id],
+    deliveryStageFor: (id) async {
+      stageReads++;
+      if (stageCost > Duration.zero) await Future<void>.delayed(stageCost);
+      return stages[id];
+    },
     transcriptFor: (id) async {
+      transcriptReads++;
+      if (transcriptCost > Duration.zero) {
+        await Future<void>.delayed(transcriptCost);
+      }
       final messages = transcripts[id] ?? const <RemoteTranscriptMessage>[];
       return RemoteTranscriptPage(
         sessionId: id,
