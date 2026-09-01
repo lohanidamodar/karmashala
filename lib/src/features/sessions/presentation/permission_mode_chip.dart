@@ -20,10 +20,39 @@ import '../application/session_ui_providers.dart';
 /// * **Only modes the descriptor can express are selectable** (Loop 31 §4,
 ///   option C). The rest are listed, disabled, and say why. The user cannot ask
 ///   for something that would be silently dropped.
+/// * **A session following the default says so, and can go back to it.** The
+///   resolved mode drawn bare would read as this session's own decision, when
+///   in fact it tracks the Settings default and moves when that moves — two
+///   states that must not look alike. The menu's first row is the way back,
+///   without which the first pick would be irreversible.
 /// * **Changing it does not touch the running process.** Every agent here reads
 ///   its permission policy off the command line at startup, so the chip says the
 ///   change applies on the next launch instead of implying the live agent has
 ///   been re-governed.
+/// One row of the permission menu: a mode to set for this session, or the
+/// Settings default to hand it back to.
+///
+/// A type of its own rather than a nullable [PermissionMode] because
+/// `PopupMenuButton` reads a null selection as a *dismissal* and never calls
+/// `onSelected` for it — so "follow the default" written as a null value would
+/// have looked right and done nothing.
+@immutable
+class PermissionChoice {
+  const PermissionChoice(this.mode);
+
+  /// Follow the per-agent default in Settings, live.
+  static const followDefault = PermissionChoice(null);
+
+  final PermissionMode? mode;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PermissionChoice && other.mode == mode;
+
+  @override
+  int get hashCode => mode.hashCode;
+}
+
 class PermissionModeChip extends ConsumerWidget {
   const PermissionModeChip({required this.sessionId, super.key});
 
@@ -50,18 +79,27 @@ class PermissionModeChip extends ConsumerWidget {
         current.fit == PermissionModeFit.none || current.mode.isDangerous;
     final foreground = alarming ? scheme.error : scheme.onSurfaceVariant;
 
-    return PopupMenuButton<PermissionMode>(
+    return PopupMenuButton<PermissionChoice>(
       tooltip: '',
       position: PopupMenuPosition.over,
-      onSelected: (mode) => _apply(context, ref, launcher, mode),
+      onSelected: (choice) =>
+          _apply(context, ref, launcher, choice.mode, current),
       itemBuilder: (context) => [
+        // First, and its own row: handing the session back to the Settings
+        // default is where every session starts and the only state that follows
+        // a later change to that setting.
+        PopupMenuItem<PermissionChoice>(
+          value: PermissionChoice.followDefault,
+          child: _DefaultRow(resolved: current, selected: effective.inherited),
+        ),
+        const PopupMenuDivider(),
         for (final option in options)
-          PopupMenuItem<PermissionMode>(
-            value: option.mode,
+          PopupMenuItem<PermissionChoice>(
+            value: PermissionChoice(option.mode),
             enabled: option.isSelectable,
             child: _MenuRow(
               option: option,
-              selected: option.mode == current.mode,
+              selected: !effective.inherited && option.mode == current.mode,
             ),
           ),
       ],
@@ -71,6 +109,14 @@ class PermissionModeChip extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(
             horizontal: Insets.sm,
             vertical: 3,
+          ),
+          // The composer bar has exactly one flexible cell — the delivery strip
+          // — and this is not it, so an unbounded chip pushes the whole row
+          // into overflow at the minimum window with Windows' largest text
+          // step. A third of the window is the most this control may take;
+          // past that it gives up the tail of a qualifier rather than the row.
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width / 3,
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(Radii.sm),
@@ -85,19 +131,30 @@ class PermissionModeChip extends ConsumerWidget {
                 color: foreground,
               ),
               const SizedBox(width: Insets.xs),
+              // The mode's own name is the last thing to be given up, so it is
+              // rigid and the qualifiers below are not.
               Text(
                 current.mode.shortLabel,
                 style: theme.textTheme.labelSmall?.copyWith(color: foreground),
               ),
-              // The fit is on the chip, not only in the tooltip: "Accept edits"
-              // that is really Codex's sandbox has to look different from one
-              // that is really accept-edits, without a hover.
-              if (current.fit != PermissionModeFit.exact) ...[
+              // Both qualifiers are on the chip, not only in the tooltip.
+              // "Accept edits" that is really Codex's sandbox has to look
+              // different from one that really is accept-edits, and a mode this
+              // session is merely *following* has to look different from one it
+              // chose — neither is discoverable by hovering.
+              for (final qualifier in [
+                if (effective.inherited) 'default',
+                if (current.fit != PermissionModeFit.exact) current.fitLabel,
+              ]) ...[
                 const SizedBox(width: Insets.xs),
-                Text(
-                  '· ${current.fitLabel}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: foreground,
+                Flexible(
+                  child: Text(
+                    '· $qualifier',
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: foreground,
+                    ),
                   ),
                 ),
               ],
@@ -118,9 +175,14 @@ class PermissionModeChip extends ConsumerWidget {
       };
 
   String _tooltip(AgentPermissionOption current, {required bool inherited}) {
+    // "Following" rather than "inherited": inheriting sounds like something
+    // that happened once, and the whole point of this state is that it is live
+    // — change the setting and this session changes with it.
     final origin = inherited
-        ? 'Inherited from the ${current.agentName} default in Settings.'
-        : 'Set for this session.';
+        ? 'Following the ${current.agentName} default in Settings, so it '
+              'changes when that setting does.'
+        : 'Set for this session, and it stays set when the Settings default '
+              'changes.';
     return '${current.mode.label}\n$origin\n${current.summary}';
   }
 
@@ -128,7 +190,8 @@ class PermissionModeChip extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     SessionLauncher launcher,
-    PermissionMode mode,
+    PermissionMode? mode,
+    AgentPermissionOption current,
   ) {
     final messenger = ScaffoldMessenger.of(context);
     final running = launcher.livePaneFor(sessionId) != null;
@@ -136,15 +199,67 @@ class PermissionModeChip extends ConsumerWidget {
     // Only claim what happened. A live agent was started with the old flags and
     // there is no documented way to re-govern any of these CLIs mid-session, so
     // saying anything else here would be the lie this control exists to remove.
+    final what = mode == null
+        ? 'Following the ${current.agentName} default in Settings'
+        : mode.label;
     messenger.showSnackBar(
       SnackBar(
         content: Text(
           running
-              ? '${mode.label} — applies the next time this session is '
+              ? '$what — applies the next time this session is '
                     'launched or resumed, not to the agent running now.'
-              : '${mode.label} — applies when this session next runs.',
+              : '$what — applies when this session next runs.',
         ),
       ),
+    );
+  }
+}
+
+/// The menu's first row: hand this session back to the Settings default.
+///
+/// It names what the default resolves to *today* rather than only offering the
+/// idea, because "follow the default" is not an answer to "what will this run
+/// under" — and that is the question the user opened this menu with.
+class _DefaultRow extends StatelessWidget {
+  const _DefaultRow({required this.resolved, required this.selected});
+
+  final AgentPermissionOption resolved;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 18,
+          child: selected
+              ? Icon(AppIcons.check, size: 13, color: scheme.primary)
+              : null,
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Follow the Settings default',
+                style: theme.textTheme.bodySmall,
+              ),
+              Text(
+                'Currently ${resolved.mode.label.toLowerCase()} for '
+                '${resolved.agentName}. Changing that setting changes this '
+                'session too.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

@@ -163,11 +163,11 @@ void main() {
     for (final mode in PermissionMode.values) {
       expect(find.text(mode.label), findsOneWidget, reason: mode.name);
     }
-    PopupMenuItem<PermissionMode> item(PermissionMode mode) => tester
-        .widgetList<PopupMenuItem<PermissionMode>>(
-          find.byType(PopupMenuItem<PermissionMode>),
+    PopupMenuItem<PermissionChoice> item(PermissionMode mode) => tester
+        .widgetList<PopupMenuItem<PermissionChoice>>(
+          find.byType(PopupMenuItem<PermissionChoice>),
         )
-        .firstWhere((w) => w.value == mode);
+        .firstWhere((w) => w.value?.mode == mode);
 
     expect(item(PermissionMode.ask).enabled, isFalse);
     expect(item(PermissionMode.acceptEdits).enabled, isFalse);
@@ -217,7 +217,69 @@ void main() {
     final tooltip = tester
         .widgetList<Tooltip>(find.byType(Tooltip))
         .firstWhere((t) => (t.message ?? '').isNotEmpty);
-    expect(tooltip.message, contains('Inherited'));
+    expect(tooltip.message, contains('Following'));
     expect(tooltip.message, contains('Settings'));
+  });
+
+  testWidgets('a session following the default says so on the chip', (
+    tester,
+  ) async {
+    final h = harness(
+      agentId: AgentIds.claudeCode,
+      settings: const Settings().withPermissions(
+        AgentIds.claudeCode,
+        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+      ),
+    );
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    // Honest on the face of the control, not only on hover: this session never
+    // chose acceptEdits, it is tracking a setting that can move under it, and
+    // drawing the resolved value bare would read as a decision it made.
+    expect(find.text('Accept edits'), findsOneWidget);
+    expect(find.text('· default'), findsOneWidget);
+  });
+
+  testWidgets('a chosen mode is not labelled as the default', (tester) async {
+    final h = harness(
+      agentId: AgentIds.claudeCode,
+      mode: PermissionMode.acceptEdits,
+      settings: const Settings().withPermissions(
+        AgentIds.claudeCode,
+        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+      ),
+    );
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    // Same resolved mode as the test above, different state, and the two must
+    // not look alike — this one stays put when the setting moves.
+    expect(find.text('· default'), findsNothing);
+  });
+
+  testWidgets('the menu offers the way back to the default', (tester) async {
+    final h = harness(
+      agentId: AgentIds.claudeCode,
+      mode: PermissionMode.bypass,
+      settings: const Settings().withPermissions(
+        AgentIds.claudeCode,
+        const AgentPermissions(existingSessions: PermissionMode.ask),
+      ),
+    );
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    await tester.tap(find.byType(PermissionModeChip));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Follow the Settings default'));
+    await tester.pumpAndSettle();
+
+    // Clearing the row is the only way back: without it the first pick would
+    // be irreversible, and "follow the default" would be a state the user
+    // could leave but never re-enter.
+    expect(SessionDao(h.db).getById('s1')!.permissionMode, isNull);
+    expect(find.text('Ask'), findsOneWidget);
+    expect(find.text('· default'), findsOneWidget);
   });
 }

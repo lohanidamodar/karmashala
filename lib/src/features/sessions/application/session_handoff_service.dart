@@ -36,6 +36,7 @@ class HandoffTarget {
     required this.agentName,
     required this.permission,
     required this.isSameAgent,
+    this.followsDefault = false,
     this.refusal,
   });
 
@@ -48,6 +49,14 @@ class HandoffTarget {
 
   /// Whether this is the agent already running the session.
   final bool isSameAgent;
+
+  /// Whether [permission] is the Settings default rather than a choice.
+  ///
+  /// True when the source session never chose a mode: this row's mode is then
+  /// **this target's** new-session default, and the continuation will go on
+  /// following it. The dialog has to say so — presenting a default as a
+  /// decision hides that it moves when the setting does.
+  final bool followsDefault;
 
   /// Why this target cannot receive a handoff, or null when it can.
   final String? refusal;
@@ -83,10 +92,6 @@ class SessionHandoffService {
         .getById(session.agentInstallationId)
         ?.agentId;
     final registry = _ref.read(agentRegistryProvider);
-    final mode = _ref
-        .read(sessionLauncherProvider)
-        .effectivePermissionFor(sessionId)
-        ?.mode;
 
     final targets = <HandoffTarget>[];
     for (final installation in installations.getByEnvironment(
@@ -94,17 +99,21 @@ class SessionHandoffService {
     )) {
       final descriptor = registry.byId(installation.agentId);
       final name = registry.displayNameFor(installation.agentId);
+      // Per target, not once for the list: a source that chose nothing is
+      // measured against the mode *that* agent will start under.
+      final starting = _startingMode(sessionId, installation.agentId);
       targets.add(
         HandoffTarget(
           installation: installation,
           descriptor: descriptor,
           agentName: name,
           permission: carryPermission(
-            mode ?? PermissionMode.ask,
+            starting.mode,
             descriptor,
             targetName: name,
           ),
           isSameAgent: installation.agentId == sourceAgentId,
+          followsDefault: !starting.chosen,
           refusal: _refusalFor(descriptor, name),
         ),
       );
@@ -444,9 +453,10 @@ class SessionHandoffService {
             permissionOverride: _resolvePermission(
               sessionId: sessionId,
               descriptor: context.descriptor,
+              targetAgentId: context.installation.agentId,
               targetName: context.agentName,
               chosen: permissionMode,
-            ).mode,
+            ).override,
           ),
         );
   }
@@ -487,6 +497,7 @@ class SessionHandoffService {
     final carried = _resolvePermission(
       sessionId: sessionId,
       descriptor: descriptor,
+      targetAgentId: context.installation.agentId,
       targetName: targetName,
       chosen: permissionMode,
     );
@@ -511,12 +522,37 @@ class SessionHandoffService {
             // `existingWorktree` cannot say so without also claiming a
             // worktree the session does not have.
             workingDirectory: intoNewWorktree ? null : session.workingDirectory,
-            permissionOverride: carried.mode,
+            permissionOverride: carried.override,
           ),
         );
   }
 
-  /// The mode a continuation of [sessionId] into [descriptor] will run under.
+  /// What a continuation of [sessionId] into [targetAgentId] starts from, and
+  /// whether that was the source session's own decision.
+  ///
+  /// A source that chose a mode hands that mode down. One that never chose is
+  /// following the Settings default, and the honest starting point is then the
+  /// **target's** new-session default — what the continuation will actually run
+  /// under if it is left following the default too. Reading the source agent's
+  /// existing-session default here instead would put a mode in the handoff
+  /// dialog that the launch would never use.
+  ({PermissionMode mode, bool chosen}) _startingMode(
+    String sessionId,
+    String targetAgentId,
+  ) {
+    final launcher = _ref.read(sessionLauncherProvider);
+    final source = launcher.effectivePermissionFor(sessionId);
+    if (source != null && !source.inherited) {
+      return (mode: source.mode, chosen: true);
+    }
+    return (
+      mode: launcher.permissionFor(targetAgentId, SessionPurpose.newSession),
+      chosen: false,
+    );
+  }
+
+  /// The mode a continuation of [sessionId] into [descriptor] will run under,
+  /// and what to record for it on the new session's row.
   ///
   /// Resolved *here*, once, and passed as an override, so the command line and
   /// the sentence the user read before launching come from the same call —
@@ -524,22 +560,40 @@ class SessionHandoffService {
   /// renders. Reading the target's own default instead would silently ignore
   /// both the session's mode and the user's pick, which is what Loop 49 exists
   /// to have stopped.
-  ContinuationPermission _resolvePermission({
+  ///
+  /// [override] is null when there is nothing to record: a continuation
+  /// inherits the source's **state**, not a snapshot of it, so a branch of a
+  /// session that never chose goes on following the Settings default and moves
+  /// with it exactly as its parent does. Three things make it a decision worth
+  /// stamping — the source had chosen, the user picked one for this target, or
+  /// the carry rule had to change it to fit this agent. The last matters most:
+  /// a reduction left unrecorded would climb back to the unexpressible mode on
+  /// the branch's next resume.
+  ({ContinuationPermission permission, PermissionMode? override})
+  _resolvePermission({
     required String sessionId,
     required AgentDescriptor? descriptor,
+    required String targetAgentId,
     required String targetName,
     required PermissionMode? chosen,
-  }) => resolveContinuationPermission(
-    sessionMode:
-        _ref
-            .read(sessionLauncherProvider)
-            .effectivePermissionFor(sessionId)
-            ?.mode ??
-        PermissionMode.ask,
-    target: descriptor,
-    chosen: chosen,
-    targetName: targetName,
-  );
+  }) {
+    final starting = _startingMode(sessionId, targetAgentId);
+    final permission = resolveContinuationPermission(
+      sessionMode: starting.mode,
+      target: descriptor,
+      chosen: chosen,
+      targetName: targetName,
+    );
+    return (
+      permission: permission,
+      override:
+          starting.chosen ||
+              permission.wasChosen ||
+              permission.carried.changed
+          ? permission.mode
+          : null,
+    );
+  }
 
   ({
     Repository repository,

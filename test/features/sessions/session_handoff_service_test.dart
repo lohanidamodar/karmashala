@@ -102,6 +102,7 @@ class _StaticSettings extends SettingsController {
 typedef Harness = ({ProviderContainer container, AppDatabase db});
 
 Harness harness({
+  Settings settings = const Settings(),
   String? transcriptPath,
   SessionDelivery? repoState = const SessionDelivery(
     branch: 'feature/x',
@@ -137,9 +138,7 @@ Harness harness({
       agentRegistryProvider.overrideWithValue(
         const AgentRegistry([_forker, _mute]),
       ),
-      settingsControllerProvider.overrideWith(
-        () => _StaticSettings(const Settings()),
-      ),
+      settingsControllerProvider.overrideWith(() => _StaticSettings(settings)),
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: git),
       ),
@@ -185,22 +184,22 @@ String writeTranscript(List<(String, String)> turns) {
   return file.path;
 }
 
+/// [mode] null is a session that never chose one and follows the Settings
+/// default — the state a continuation has to be able to hand down.
 void seedSession(
   AppDatabase db, {
   String id = 'src',
   String installationId = 'a1',
   String? externalSessionId = 'cli-1',
   EnvironmentPath? workingDirectory,
+  PermissionMode? mode = PermissionMode.ask,
 }) {
   SessionDao(db).insert(
     session(
       id: id,
       agentInstallationId: installationId,
       workingDirectory: workingDirectory,
-    ).copyWith(
-      externalSessionId: externalSessionId,
-      permissionMode: PermissionMode.ask,
-    ),
+    ).copyWith(externalSessionId: externalSessionId, permissionMode: mode),
   );
 }
 
@@ -252,6 +251,38 @@ void main() {
       // Mute's only expressible mode is bypass, and the session is on `ask`.
       expect(mute.permission.mode, PermissionMode.ask);
       expect(mute.permission.enforced, isFalse);
+    });
+
+    test('a session that never chose is measured against each target', () {
+      final h = harness(
+        settings: const Settings()
+            .withPermissions(
+              'forker',
+              const AgentPermissions(
+                newSessions: PermissionMode.ask,
+                existingSessions: PermissionMode.bypass,
+              ),
+            )
+            .withPermissions(
+              'mute',
+              const AgentPermissions(newSessions: PermissionMode.bypass),
+            ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, mode: null);
+
+      final targets = h.container
+          .read(sessionHandoffServiceProvider)
+          .targetsFor('src');
+
+      // The source chose nothing, so what each row is measured against is the
+      // mode that target will actually start under if the new session is left
+      // following the default — the **target's** new-session default, not the
+      // source agent's existing-session one, which the launch would never use.
+      expect(targets.first.permission.requested, PermissionMode.ask);
+      expect(targets.last.permission.mode, PermissionMode.bypass);
+      expect(targets.last.permission.enforced, isTrue);
     });
 
     test(
@@ -534,6 +565,38 @@ void main() {
       );
     });
 
+    test('a handoff of a session that never chose keeps following the default', () async {
+      final path = writeTranscript([('user', 'hello')]);
+      final h = harness(
+        transcriptPath: path,
+        settings: const Settings().withPermissions(
+          'forker',
+          const AgentPermissions(newSessions: PermissionMode.bypass),
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, mode: null);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .handoffTo(
+            sessionId: 'src',
+            targetInstallationId: 'a1',
+            instruction: 'Take it from here.',
+          );
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, contains('--trust-me'));
+      expect(
+        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        isNull,
+      );
+    });
+
     test('a picked mode the target cannot express is not escalated', () async {
       final path = writeTranscript([('user', 'hello')]);
       final h = harness(transcriptPath: path);
@@ -670,6 +733,65 @@ void main() {
       // left on its own.
       expect(
         SessionDao(h.db).getById('src')!.permissionMode,
+        PermissionMode.ask,
+      );
+    });
+
+    test('a fork of a session that never chose keeps following the default', () async {
+      final h = harness(
+        settings: const Settings().withPermissions(
+          'forker',
+          const AgentPermissions(newSessions: PermissionMode.bypass),
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, mode: null);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .forkSession(sessionId: 'src');
+
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, contains('--trust-me'));
+      // A branch inherits its parent's *state*, not a snapshot of it: the
+      // parent follows the setting, so the branch does too. Stamping what the
+      // default said today would freeze the branch the moment it was made.
+      expect(
+        SessionDao(h.db).getById(result.session.id)!.permissionMode,
+        isNull,
+      );
+    });
+
+    test('a fork stamps a mode the carry rule had to change', () async {
+      final h = harness(
+        settings: const Settings().withPermissions(
+          'forker',
+          const AgentPermissions(newSessions: PermissionMode.acceptEdits),
+        ),
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db, mode: null);
+
+      final result = await h.container
+          .read(sessionHandoffServiceProvider)
+          .forkSession(sessionId: 'src');
+
+      // Forker has no accept-edits, so the carry falls to the safest mode it
+      // does express. That reduction is a decision this branch must keep — left
+      // following the default it would silently climb back to accept-edits on
+      // its next resume.
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(result.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, contains('--careful'));
+      expect(
+        SessionDao(h.db).getById(result.session.id)!.permissionMode,
         PermissionMode.ask,
       );
     });

@@ -63,12 +63,14 @@ HandoffTarget _target(
   AgentDescriptor descriptor, {
   required String id,
   bool isSameAgent = false,
+  bool followsDefault = false,
 }) => HandoffTarget(
   installation: _install(id, descriptor.id),
   descriptor: descriptor,
   agentName: descriptor.displayName,
   permission: carryPermission(PermissionMode.ask, descriptor),
   isSameAgent: isSameAgent,
+  followsDefault: followsDefault,
   refusal: descriptor.launch.acceptsPromptArgument
       ? null
       : '${descriptor.displayName} takes no opening prompt, so the handoff '
@@ -214,6 +216,34 @@ void main() {
       findsNWidgets(2),
     );
     expect(find.textContaining('Carried from this session.'), findsOneWidget);
+  });
+
+  testWidgets('says when the mode is the Settings default, not a choice', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      continuation: continuation(
+        targets: [
+          _target(
+            _prompting,
+            id: 'a1',
+            isSameAgent: true,
+            followsDefault: true,
+          ),
+        ],
+      ),
+    );
+
+    // The source session never chose a mode, so this one is the Settings
+    // default and the new session will go on following it. Reading "carried
+    // from this session" would present a default as a decision, and hide that
+    // it moves when the setting does.
+    expect(find.textContaining('Carried from this session.'), findsNothing);
+    expect(
+      find.textContaining('Following the Prompting CLI default in Settings'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('offers the chosen agent\'s modes, and nothing it lacks', (
