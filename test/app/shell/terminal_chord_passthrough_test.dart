@@ -403,11 +403,19 @@ void main() {
     // from the Explorer, the chat view, or anywhere else.
     expect(shellChordLabel<NewTerminalTabIntent>(), 'Ctrl+Shift+T');
     expect(shellChordLabel<CloseTerminalTabIntent>(), 'Ctrl+Shift+W');
-    expect(shellChordLabel<StepTerminalTabIntent>(), 'Ctrl+PageDown');
+    // Ctrl+Tab is listed first because it is what people try — every other
+    // tabbed application uses it, and a terminal cannot tell it from `Tab`.
+    expect(shellChordLabel<StepTerminalTabIntent>(), 'Ctrl+Tab');
     // Both spellings of each verb are installed, so the bare keys work too
     // wherever a shell is not listening.
     final labels = [for (final c in shellChords) c.label];
-    for (final label in ['Ctrl+T', 'Ctrl+W', 'Ctrl+PageUp']) {
+    for (final label in [
+      'Ctrl+T',
+      'Ctrl+W',
+      'Ctrl+PageUp',
+      'Ctrl+PageDown',
+      'Ctrl+Shift+Tab',
+    ]) {
       expect(labels, contains(label));
     }
   });
