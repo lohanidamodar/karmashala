@@ -250,7 +250,10 @@ class LauncherControlServer implements SessionMcp {
     final url = mcpUrlFor(sessionId, environment: environment.kind);
     if (url == null) return null;
     if (!withConfigFile) return SessionMcpAccess(url: url);
-    final windowsPath = _sessionConfigs?.write(sessionId: sessionId, url: url);
+    final windowsPath = _sessionConfigs?.write(
+      sessionId: sessionId,
+      url: url,
+    );
     if (windowsPath == null) return null;
     final agentPath = agentConfigPathFor(windowsPath, environment.kind);
     // A file the agent cannot name is a flag pointing at nothing, which is a
@@ -265,8 +268,9 @@ class LauncherControlServer implements SessionMcp {
     if (server == null || _mcpEndpoint?.token == null) return null;
     return switch (environment) {
       EnvironmentKind.windowsNative => '127.0.0.1:${server.port}',
-      EnvironmentKind.wsl =>
-        _wslHost == null ? null : '${_wslHost!.address}:${server.port}',
+      EnvironmentKind.wsl => _wslHost == null
+          ? null
+          : '${_wslHost!.address}:${server.port}',
       EnvironmentKind.ssh => null,
     };
   }
@@ -332,7 +336,8 @@ class LauncherControlServer implements SessionMcp {
     bool useLocalSocket = true,
     String? socketDirectory,
     String? sessionConfigDirectory,
-    Future<InternetAddress?> Function() wslHostAddress = resolveWslHostAddress,
+    Future<InternetAddress?> Function() wslHostAddress =
+        resolveWslHostAddress,
   }) async {
     if (_server != null) return;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -854,9 +859,7 @@ class LauncherControlServer implements SessionMcp {
           sessionId: report.sessionId,
         );
       } on Object catch (error) {
-        _logger.warning(
-          'Applying a hook report to the registry failed: $error',
-        );
+        _logger.warning('Applying a hook report to the registry failed: $error');
       }
       // Always 200 on an authenticated callback, even for an event we do not
       // recognise: a hook must never block the agent that fired it.
@@ -2025,8 +2028,7 @@ class LauncherControlServer implements SessionMcp {
         'repository': repo.name,
         'environmentId': repo.path.environmentId,
         'depth': launcher.depthForChildOf(callerSessionId).depth,
-        'permissionMode':
-            launched.session.permissionMode?.name ?? 'not recorded',
+        'permissionMode': launched.session.permissionMode?.name ?? 'not recorded',
         if (launched.session.worktree != null)
           'worktree': launched.session.worktree!.path,
       };

@@ -76,7 +76,9 @@ class McpCallerRegistry {
 /// reach, so a predictable one would be the whole boundary.
 String generateSecret([Random? random]) {
   final source = random ?? Random.secure();
-  return base64Url.encode(List<int>.generate(24, (_) => source.nextInt(256)));
+  return base64Url.encode(
+    List<int>.generate(24, (_) => source.nextInt(256)),
+  );
 }
 
 /// Compares two secrets without leaking where they first differ.
