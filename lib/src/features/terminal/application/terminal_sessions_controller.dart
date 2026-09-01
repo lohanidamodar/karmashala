@@ -913,9 +913,29 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
             orElse: () => tab.focusedPaneId,
           )
         : tab.focusedPaneId;
-    final title = _titles.putIfAbsent(named, () => _titleForPane(named));
-    final count = tab.layout.panes.length;
-    return count > 1 ? '$title ($count)' : title;
+    final occupied = tab.layout.panes.where((id) => !_isEmptyRegion(id));
+    if (occupied.length > 1) {
+      // A split tab names *itself*, not one of its regions. Each region now
+      // carries its own header, so borrowing the focused pane's name printed
+      // the same word twice — once on the tab and once in the region below it
+      // — and the `(2)` counted panes the user can already see. The owner read
+      // the result as an extra tab that "doesn't do anything".
+      //
+      // The directory is what a terminal tab is *about*, and unlike a borrowed
+      // session name it does not change as focus moves between regions. Taken
+      // from the first occupied region rather than the focused one for exactly
+      // that reason.
+      final first = occupied.first;
+      final directory = _instances[first]?.workingDirectory;
+      if (directory != null && directory.isNotEmpty) {
+        return directoryLabel(directory, home: _homeDirectory);
+      }
+      // No directory to name it by — a stub pane, or a shell that has not
+      // reported one. Fall back to the borrowed name, but still without the
+      // count: the regions it counts are on screen either way.
+      return _titles.putIfAbsent(named, () => _titleForPane(named));
+    }
+    return _titles.putIfAbsent(named, () => _titleForPane(named));
   }
 
   /// What one pane is called — the label a region's header puts on its tab.

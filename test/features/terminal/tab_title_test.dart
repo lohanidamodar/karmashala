@@ -301,14 +301,26 @@ void main() {
       expect(controller.titleForTab(opened.tabId), 'Work');
     });
 
-    test('the pane count suffix survives all of it', () {
+    test('a split tab names its directory, not a region and not a count', () {
+      // It used to end with " (2)". Once every region grew a header of its own
+      // that became two problems at once: the tab repeated a name the region
+      // below it already showed, and counted panes that were both on screen.
+      // The owner read the result as "an extra tab at the top... it doesn't do
+      // anything it's just there".
       final tabId = controller.openTab(
         TerminalProfile.powerShell,
         workingDirectory: r'C:\src\karmashala',
       );
       controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
 
-      expect(controller.titleForTab(tabId), endsWith(' (2)'));
+      final title = controller.titleForTab(tabId);
+      expect(title, isNot(contains('(')));
+      expect(
+        title,
+        'src/karmashala',
+        reason: 'the directory is what the tab is about, and unlike a borrowed '
+            'session name it does not move as focus moves between regions',
+      );
     });
   });
 }
