@@ -14,9 +14,9 @@ void main() {
       .toList();
 
   test('migrates a fresh database to the current schema version', () {
-    expect(db.schemaVersion, 22);
+    expect(db.schemaVersion, 23);
     final version = db.query('PRAGMA user_version;').first.values.first! as int;
-    expect(version, 22);
+    expect(version, 23);
   });
 
   test('the migration keys stay contiguous, and the version is their '
@@ -121,7 +121,7 @@ void main() {
     db.writeMetadata('k', 'v');
     // A second AppDatabase on a fresh memory db is independent; instead verify
     // idempotency by confirming user_version is stable and tables intact.
-    expect(db.schemaVersion, 22);
+    expect(db.schemaVersion, 23);
     expect(tableNames(), contains('sessions'));
     expect(db.readMetadata('k'), 'v');
   });

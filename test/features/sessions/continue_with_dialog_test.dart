@@ -122,6 +122,7 @@ class _RecordingService extends SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool isFork = false,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
+    HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async {
     packetFor = targetAgentName;
     packetInstruction = instruction;

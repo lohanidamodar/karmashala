@@ -4,6 +4,7 @@ import '../../../core/database/database_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import 'session_repositories_service.dart';
 import '../data/session_dao.dart';
+import '../data/decision_record_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_repository_dao.dart';
 
@@ -15,6 +16,11 @@ final sessionDaoProvider = Provider<SessionDao>(
 /// Repository-layer provider for the append-only session event log.
 final sessionEventDaoProvider = Provider<SessionEventDao>(
   (ref) => SessionEventDao(ref.watch(databaseProvider)),
+);
+
+/// Repository-layer provider for the append-only decision record.
+final decisionRecordDaoProvider = Provider<DecisionRecordDao>(
+  (ref) => DecisionRecordDao(ref.watch(databaseProvider)),
 );
 
 /// Repository-layer provider for the session↔repository link table.

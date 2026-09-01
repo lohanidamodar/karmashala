@@ -53,6 +53,7 @@ import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
 import '../verification/application/verification_tools.dart';
 import 'attention_tools.dart';
+import 'decision_tools.dart';
 import 'control_server_status.dart';
 import 'handshake_file_permissions.dart';
 import 'mcp_caller_registry.dart';
@@ -909,6 +910,7 @@ class LauncherControlServer implements SessionMcp {
         return _checkpointCapture(
           args['sessionId'] as String? ?? callerSessionId,
           args['label'] as String?,
+          callerSessionId: callerSessionId,
         );
       case 'checkpoint_diff':
         return _checkpointDiff(args['id'] as String?);
@@ -1035,6 +1037,13 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // What was decided, as opposed to what was said. The one write path into
+      // the decision record that is not attached to some other act.
+      case final String name when DecisionControlTools.handles(name):
+        return DecisionControlTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // Where the work is: checkouts, and what one of them owes.
       case final String name when WorkspaceControlTools.handles(name):
         return WorkspaceControlTools(
@@ -1058,12 +1067,25 @@ class LauncherControlServer implements SessionMcp {
       // that needs it and the app may not have asked for it yet.
       case final String name when VerificationTools.handles(name):
         await resolveVerificationRoot();
+        final verification = _container.read(verificationServiceProvider);
+        // The run being closed, noted *before* the call because finishing it
+        // clears the service's active run. `verification_finish` is one of the
+        // four explicit acts that write to a session's decision record (G1),
+        // and this is the seam where it does — the verification feature is
+        // another owner's and does not need to know the record exists.
+        final finishing = name == 'verification_finish'
+            ? verification.activeRun?.id
+            : null;
         // The caller is the producer of every verdict recorded here (G3): the
         // one thing a self-graded run could never say about itself.
-        return VerificationTools(
-          _container.read(verificationServiceProvider),
+        final answer = await VerificationTools(
+          verification,
           callerSessionId: callerSessionId,
         ).call(name, args);
+        if (finishing != null) {
+          recordFinishedVerdict(_container, verification.get(finishing));
+        }
+        return answer;
       default:
         throw ArgumentError('Unknown tool: $tool');
     }
@@ -1682,6 +1704,7 @@ class LauncherControlServer implements SessionMcp {
     ...terminalControlToolSchemas,
     ...workspaceControlToolSchemas,
     ...attentionControlToolSchemas,
+    ...decisionControlToolSchemas,
     ...browserToolSchemas,
     ...verificationToolSchemas,
   ];
@@ -2861,7 +2884,11 @@ class LauncherControlServer implements SessionMcp {
     return [for (final checkpoint in checkpoints) _checkpointJson(checkpoint)];
   }
 
-  Future<Object?> _checkpointCapture(String? sessionId, String? label) async {
+  Future<Object?> _checkpointCapture(
+    String? sessionId,
+    String? label, {
+    String? callerSessionId,
+  }) async {
     if (sessionId == null) {
       throw ArgumentError(
         'sessionId is required for checkpoint_capture when the caller is not '
@@ -2870,7 +2897,17 @@ class LauncherControlServer implements SessionMcp {
     }
     final checkpoint = await _container
         .read(sessionCheckpointRecorderProvider.notifier)
-        .captureNow(sessionId, label: label);
+        .captureNow(
+          sessionId,
+          label: label,
+          // A labelled capture lands in the decision record, and the record
+          // attributes every row. Null when the bridge has no session of its
+          // own, which reads as "not recorded" rather than as the user.
+          decidedBy: callerSessionId == null
+              ? null
+              : 'an agent in session $callerSessionId',
+          decidedBySessionId: callerSessionId,
+        );
     if (checkpoint == null) {
       return {
         'captured': false,

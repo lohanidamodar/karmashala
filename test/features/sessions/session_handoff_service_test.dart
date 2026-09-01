@@ -18,7 +18,9 @@ import 'package:chitragupta/src/features/sessions/application/delivery_providers
 import 'package:chitragupta/src/features/sessions/application/session_chat_source.dart';
 import 'package:chitragupta/src/features/sessions/application/session_handoff_service.dart';
 import 'package:chitragupta/src/features/sessions/application/session_working_directory.dart';
+import 'package:chitragupta/src/features/sessions/data/decision_record_dao.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
+import 'package:chitragupta/src/features/sessions/domain/decision_record.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_delivery.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_fork.dart';
 import 'package:chitragupta/src/features/sessions/domain/session_lineage.dart';
@@ -335,6 +337,125 @@ void main() {
             instruction: 'Finish it.',
           );
       expect(packet.render(), contains('unknown (git could not be asked)'));
+    });
+  });
+
+  group('the decision record in the packet', () {
+    void record(
+      AppDatabase db, {
+      String sessionId = 'src',
+      DecisionKind kind = DecisionKind.approachRejected,
+      String summary = 'The isolate pool deadlocked on Windows.',
+      DecisionOrigin origin = DecisionOrigin.decisionTool,
+      String? originId,
+      String? decidedBy = 'Forker CLI',
+      int minute = 0,
+    }) => DecisionRecordDao(db).append(
+      DecisionRecord(
+        sessionId: sessionId,
+        kind: kind,
+        summary: summary,
+        origin: origin,
+        originId: originId,
+        decidedBy: decidedBy,
+        recordedAt: DateTime.utc(2026, 8, 31, 12, minute),
+      ),
+    );
+
+    test('carries what the session decided, ahead of what it said', () async {
+      final path = writeTranscript([('user', 'Parse the header.')]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+      record(h.db);
+      record(
+        h.db,
+        kind: DecisionKind.verificationVerdict,
+        summary: 'Pass — the header parses.',
+        origin: DecisionOrigin.verificationRun,
+        originId: 'v-1',
+        minute: 5,
+      );
+      // Another session's decisions are its own.
+      record(h.db, sessionId: 'other', summary: 'Nothing to do with this.');
+
+      final packet = await h.container
+          .read(sessionHandoffServiceProvider)
+          .buildPacket(
+            sessionId: 'src',
+            targetAgentName: 'Mute CLI',
+            instruction: 'Finish it.',
+          );
+      final text = packet.render();
+
+      expect(packet.decisions, hasLength(2));
+      expect(text, contains('> The isolate pool deadlocked on Windows.'));
+      expect(text, contains('> Pass — the header parses.'));
+      expect(text, contains('from verification run `v-1`'));
+      expect(text, contains('decided by Forker CLI'));
+      expect(text, isNot(contains('Nothing to do with this.')));
+      expect(
+        text.indexOf('## Decisions on record'),
+        lessThan(text.indexOf('## Conversation so far')),
+      );
+    });
+
+    test('a session that recorded nothing says "not recorded"', () async {
+      final h = harness(transcriptPath: writeTranscript([('user', 'Hi.')]));
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final packet = await h.container
+          .read(sessionHandoffServiceProvider)
+          .buildPacket(
+            sessionId: 'src',
+            targetAgentName: 'Mute CLI',
+            instruction: 'Finish it.',
+          );
+      expect(packet.decisions, isEmpty);
+      expect(
+        packet.render(),
+        contains('nothing was written to this session\'s decision record'),
+      );
+    });
+
+    test('the recap is what gives when both will not fit', () async {
+      // A long session: the case the whole feature is for.
+      final path = writeTranscript([
+        for (var i = 0; i < 80; i++) ('user', 'turn $i ${'.' * 200}'),
+      ]);
+      final h = harness(transcriptPath: path);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedSession(h.db);
+
+      final service = h.container.read(sessionHandoffServiceProvider);
+      final before = await service.buildPacket(
+        sessionId: 'src',
+        targetAgentName: 'Mute CLI',
+        instruction: 'Finish it.',
+      );
+
+      for (var i = 0; i < 15; i++) {
+        record(h.db, summary: 'Decision $i ${'.' * 150}', minute: i);
+      }
+      final after = await service.buildPacket(
+        sessionId: 'src',
+        targetAgentName: 'Mute CLI',
+        instruction: 'Finish it.',
+      );
+
+      // Every decision survives...
+      expect(after.decisions, hasLength(15));
+      expect(after.omittedDecisions, 0);
+      for (var i = 0; i < 15; i++) {
+        expect(after.render(), contains('Decision $i'));
+      }
+      // ...and the quoted tail is what paid for them.
+      expect(after.recap.length, lessThan(before.recap.length));
+      expect(after.omittedTurns, greaterThan(before.omittedTurns));
     });
   });
 

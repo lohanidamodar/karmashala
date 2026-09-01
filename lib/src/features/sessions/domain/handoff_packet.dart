@@ -82,6 +82,67 @@ class HandoffTurn {
   int get hashCode => Object.hash(speaker, text);
 }
 
+/// One recorded decision, as the packet states it.
+///
+/// A local shape rather than `DecisionRecord`, for the same reason
+/// [HandoffChange] is not `FileChange`: the packet is the thing with all the
+/// wording in it, and it must be renderable and testable without a database.
+/// The builder maps one to the other in one place.
+///
+/// Everything here is already words. [kind] is the heading, [decidedBy] is the
+/// attribution, [origin] and [originId] are the pointer back to the act — and
+/// **the pointer is printed, never followed**, so a decision whose verification
+/// run has been pruned reads exactly as well as one whose run is still there.
+class HandoffDecision {
+  const HandoffDecision({
+    required this.kind,
+    required this.summary,
+    this.detail,
+    this.decidedBy,
+    this.origin,
+    this.originId,
+    this.recordedAt,
+  });
+
+  /// Plain words for what sort of decision this is: `Approach rejected`,
+  /// `Verification verdict`.
+  final String kind;
+
+  /// The decision in the words of whoever made it. Quoted, never paraphrased.
+  final String summary;
+
+  /// More of those words, when there were more.
+  final String? detail;
+
+  /// Who decided — "the user", or an agent's display name. Null renders as
+  /// **"not recorded"**, never as an omitted attribution.
+  final String? decidedBy;
+
+  /// The act that produced it, as a noun phrase: `verification run`.
+  final String? origin;
+
+  /// That act's own identifier, when it left a record. Null for an act that
+  /// did not, such as an approval prompt on another program's screen.
+  final String? originId;
+
+  final DateTime? recordedAt;
+
+  @override
+  bool operator ==(Object other) =>
+      other is HandoffDecision &&
+      other.kind == kind &&
+      other.summary == summary &&
+      other.detail == detail &&
+      other.decidedBy == decidedBy &&
+      other.origin == origin &&
+      other.originId == originId &&
+      other.recordedAt == recordedAt;
+
+  @override
+  int get hashCode =>
+      Object.hash(kind, summary, detail, decidedBy, origin, originId, recordedAt);
+}
+
 /// Everything the receiving agent is told, and the renderer that says it.
 ///
 /// Every field that could be unknown is nullable, and **null renders as a
@@ -103,6 +164,8 @@ class HandoffPacket {
     this.changes,
     this.recap = const [],
     this.omittedTurns = 0,
+    this.decisions = const [],
+    this.omittedDecisions = 0,
     this.unresolvedTasks = const [],
     this.isFork = false,
   });
@@ -135,6 +198,23 @@ class HandoffPacket {
   /// How many earlier turns were left out, so the receiving agent knows the
   /// recap is a tail and not the whole thing.
   final int omittedTurns;
+
+  /// The session's decision record, oldest first, or **null for "it could not
+  /// be read"**.
+  ///
+  /// An empty list does *not* mean "nothing was decided", and this is the one
+  /// place the packet deliberately breaks the reading it uses for [changes]. An
+  /// empty `changes` is a positive answer — git was asked and the tree is
+  /// clean. An empty decision record is not an answer at all: the record is
+  /// written only by explicit acts, so an empty one means nobody wrote anything
+  /// down. Both null and empty therefore render as **"not recorded"**, in
+  /// different words, and neither ever renders as "none".
+  final List<HandoffDecision>? decisions;
+
+  /// How many older decisions were left out. Effectively always zero — the
+  /// decisions are charged to the budget *before* the recap precisely so that
+  /// the recap is what gives — but reported rather than assumed.
+  final int omittedDecisions;
 
   /// Whatever the user typed as still-open work. Free text, one item per line,
   /// passed through unedited — Chitragupta has no idea which of these are done.
@@ -169,6 +249,15 @@ class HandoffPacket {
     out.writeln('## Files changed in the working tree');
     out.writeln();
     out.writeln(_changesSection());
+    out.writeln();
+
+    // Ahead of the recap, and not by taste: the recap is the part that gets
+    // truncated, and the decisions are exactly what a long session's truncated
+    // turns were carrying. Putting them first is what stops the packet losing
+    // them again.
+    out.writeln('## Decisions on record');
+    out.writeln();
+    out.writeln(_decisionsSection());
     out.writeln();
 
     out.writeln('## Conversation so far');
@@ -233,6 +322,94 @@ class HandoffPacket {
     return out.toString().trimRight();
   }
 
+  String _decisionsSection() {
+    final recorded = decisions;
+    if (recorded == null) {
+      return 'Not recorded — this session\'s decision record could not be '
+          'read. Ask the user what was decided rather than guessing.';
+    }
+    if (recorded.isEmpty) {
+      // Never "none". An empty record is a gap in the *recording*, and reading
+      // it as "nothing was decided" is the one wrong conclusion available
+      // here — it would tell an agent taking over a forty-turn session that it
+      // is starting from an unconstrained position.
+      return 'Not recorded: nothing was written to this session\'s decision '
+          'record.\n\n'
+          'That is not the same as "nothing was decided". The record is only '
+          'written by explicit acts — an approval answered, a verification '
+          'finished, a checkpoint labelled, an agent recording a decision '
+          'deliberately — so an empty one means nobody wrote anything down. '
+          'Ask the user what was settled rather than assuming nothing was.';
+    }
+
+    final out = StringBuffer();
+    final shown = recorded.length;
+    if (omittedDecisions > 0) {
+      final total = shown + omittedDecisions;
+      out.writeln(
+        '_The last $shown of $total decisions, oldest first. The earlier '
+        '$omittedDecisions are not included — ask rather than assume what was '
+        'in them._',
+      );
+    } else {
+      out.writeln(
+        '_$shown decision${shown == 1 ? '' : 's'}, oldest first, each written '
+        'at the moment it was made. Nothing here was inferred from what was '
+        'said._',
+      );
+    }
+    out.writeln();
+    for (final decision in recorded) {
+      out.writeln('**${decision.kind}** — ${_attribution(decision)}');
+      out.writeln();
+      for (final line in _lines(decision.summary)) {
+        out.writeln('> $line');
+      }
+      final detail = decision.detail;
+      if (detail != null && detail.trim().isNotEmpty) {
+        out.writeln('>');
+        for (final line in _lines(detail)) {
+          out.writeln('> $line');
+        }
+      }
+      out.writeln();
+    }
+    return out.toString().trimRight();
+  }
+
+  /// Who decided, when, and which act wrote it down.
+  ///
+  /// Every part says "not recorded" rather than disappearing. An omitted
+  /// attribution reads as an unattributed *fact*, which is exactly how a
+  /// constraint an agent invented for itself gets mistaken for one the user
+  /// imposed.
+  String _attribution(HandoffDecision decision) {
+    final parts = <String>['decided by ${decision.decidedBy ?? 'not recorded'}'];
+    final at = decision.recordedAt;
+    parts.add(at == null ? 'time not recorded' : _stamp(at));
+    final origin = decision.origin;
+    parts.add(
+      origin == null
+          ? 'source not recorded'
+          : decision.originId == null
+          ? 'from $origin'
+          : 'from $origin `${decision.originId}`',
+    );
+    return parts.join(', ');
+  }
+
+  static List<String> _lines(String text) =>
+      text.replaceAll('\r\n', '\n').trim().split('\n');
+
+  /// `2026-08-31 12:05Z` — minutes and UTC, which is as much precision as a
+  /// reader can do anything with and no more than the record actually knows.
+  static String _stamp(DateTime at) {
+    final utc = at.toUtc();
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${utc.year}-${two(utc.month)}-${two(utc.day)} '
+        '${two(utc.hour)}:${two(utc.minute)}Z';
+  }
+
   String _recapSection() {
     if (recap.isEmpty) {
       return omittedTurns > 0
@@ -283,6 +460,98 @@ class HandoffRecapBudget {
   final int maxCharacters;
   final int maxTurns;
   final int maxCharactersPerTurn;
+
+  /// The same budget with [spent] characters already gone.
+  ///
+  /// This is how the decision record is paid for. The packet has one size, the
+  /// receiving agent pays for all of it on its first turn, and something has to
+  /// give when a session has both a long conversation and a lot of decisions.
+  /// Charging the decisions first and handing the remainder here makes the
+  /// *recap* the thing that shrinks — which is the trade this feature exists to
+  /// make, because a quoted turn is recoverable from the transcript and a
+  /// decision forty turns back is not.
+  ///
+  /// Floors at zero rather than going negative; `trimRecap` always keeps the
+  /// final turn, so a fully spent budget still quotes the last thing said.
+  HandoffRecapBudget reducedBy(int spent) => HandoffRecapBudget(
+    maxCharacters: maxCharacters - spent < 0 ? 0 : maxCharacters - spent,
+    maxTurns: maxTurns,
+    maxCharactersPerTurn: maxCharactersPerTurn,
+  );
+}
+
+/// How much of a decision record a packet carries.
+///
+/// Generous on purpose, and generous in a different way from the recap's
+/// budget. Decisions are written only by explicit acts, so there are tens of
+/// them where there are hundreds of turns, and each is a sentence rather than a
+/// pasted log. The caps here are a backstop against a pathological session, not
+/// a routine trim: in ordinary use nothing is dropped and the whole record
+/// travels.
+class HandoffDecisionBudget {
+  const HandoffDecisionBudget({
+    this.maxCharacters = 4000,
+    this.maxDecisions = 40,
+    this.maxCharactersPerDecision = 400,
+  });
+
+  final int maxCharacters;
+  final int maxDecisions;
+  final int maxCharactersPerDecision;
+}
+
+/// Trims [decisions] (oldest first) to fit [budget], keeping the **most
+/// recent**, and reports how many were dropped and what the rest cost.
+///
+/// [cost] is what the caller subtracts from the recap's budget. Measured from
+/// the text that will actually be rendered rather than estimated, because an
+/// estimate that runs low is a packet over its size in exactly the case — a
+/// long session — where the size was the reason for handing off.
+///
+/// An over-long decision is truncated *in the middle*, like a turn: a decision
+/// with a rationale attached has the conclusion at one end and the reason at
+/// the other, and cutting either end reliably loses one of them.
+({List<HandoffDecision> decisions, int omitted, int cost}) trimDecisions(
+  List<HandoffDecision> decisions, [
+  HandoffDecisionBudget budget = const HandoffDecisionBudget(),
+]) {
+  final kept = <HandoffDecision>[];
+  var used = 0;
+  for (var i = decisions.length - 1; i >= 0; i--) {
+    if (kept.length >= budget.maxDecisions) break;
+    final decision = decisions[i];
+    final summary = _truncateMiddle(
+      decision.summary,
+      budget.maxCharactersPerDecision,
+    );
+    final detail = decision.detail == null
+        ? null
+        : _truncateMiddle(decision.detail!, budget.maxCharactersPerDecision);
+    final cost =
+        summary.length +
+        (detail?.length ?? 0) +
+        decision.kind.length +
+        (decision.decidedBy?.length ?? 0) +
+        (decision.origin?.length ?? 0);
+    if (kept.isNotEmpty && used + cost > budget.maxCharacters) break;
+    kept.add(
+      HandoffDecision(
+        kind: decision.kind,
+        summary: summary,
+        detail: detail,
+        decidedBy: decision.decidedBy,
+        origin: decision.origin,
+        originId: decision.originId,
+        recordedAt: decision.recordedAt,
+      ),
+    );
+    used += cost;
+  }
+  return (
+    decisions: kept.reversed.toList(),
+    omitted: decisions.length - kept.length,
+    cost: used,
+  );
 }
 
 /// Trims [turns] (oldest first) to fit [budget], keeping the **most recent**,

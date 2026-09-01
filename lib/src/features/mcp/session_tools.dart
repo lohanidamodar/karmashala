@@ -136,9 +136,16 @@ class SessionControlTools {
         'there is no key to press. Answer it in the pane.',
       );
     }
+    // Named rather than left to default to "the user": an agent answering
+    // another agent's prompt is a different fact, and the decision record this
+    // write lands in is read by somebody who was not there.
     if (!_container.read(sessionLauncherProvider).answerPrompt(
       sessionId,
       key.keys,
+      decidedBy: callerSessionId == null
+          ? 'an agent through the MCP bridge'
+          : 'an agent in session $callerSessionId',
+      decidedBySessionId: callerSessionId,
     )) {
       throw StateError(
         'This session has no live terminal to answer in.',

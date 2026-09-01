@@ -172,6 +172,7 @@ class SessionHandoffService {
     List<String> unresolvedTasks = const [],
     bool isFork = false,
     HandoffRecapBudget budget = const HandoffRecapBudget(),
+    HandoffDecisionBudget decisionBudget = const HandoffDecisionBudget(),
   }) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('This session no longer exists.');
@@ -185,7 +186,18 @@ class SessionHandoffService {
         : registry.displayNameFor(agentId);
 
     final directory = sessionWorkingDirectory(_ref, sessionId);
-    final recap = await _recapFor(session, agentId, sourceName, budget);
+    // Charged *before* the recap, on purpose. Both come out of one packet the
+    // receiving agent pays for on its first turn, and if something has to give
+    // it must be the quoted tail: a dropped turn is still in the transcript
+    // the new agent can read, while a dropped decision is the thing nobody
+    // wrote down twice.
+    final decisions = _decisionsFor(sessionId, decisionBudget);
+    final recap = await _recapFor(
+      session,
+      agentId,
+      sourceName,
+      budget.reducedBy(decisions.cost),
+    );
     final changes = directory == null ? null : await _changesIn(directory);
     final delivery = directory == null
         ? null
@@ -204,12 +216,54 @@ class SessionHandoffService {
       changes: changes,
       recap: recap.turns,
       omittedTurns: recap.omitted,
+      decisions: decisions.decisions,
+      omittedDecisions: decisions.omitted,
       unresolvedTasks: [
         for (final task in unresolvedTasks)
           if (task.trim().isNotEmpty) task.trim(),
       ],
       isFork: isFork,
     );
+  }
+
+  /// What this session decided, as recorded at the time.
+  ///
+  /// A straight read of the append-only record — no interpretation, no
+  /// deduplication, no folding of a reversal into its reversal. The rows were
+  /// written by explicit acts and the packet prints them; the only work done
+  /// here is turning the stored enums into the words the packet renders.
+  ///
+  /// A database that will not answer yields **null**, which the packet renders
+  /// as "could not be read". That is a different admission from an empty
+  /// record, which means nobody wrote anything down — and the packet says so
+  /// in different words, because an agent taking over a long session must not
+  /// read either as "nothing was decided".
+  ({List<HandoffDecision>? decisions, int omitted, int cost}) _decisionsFor(
+    String sessionId,
+    HandoffDecisionBudget budget,
+  ) {
+    try {
+      final rows = _ref.read(decisionRecordDaoProvider).forSession(sessionId);
+      final trimmed = trimDecisions([
+        for (final row in rows)
+          HandoffDecision(
+            kind: row.kind.label,
+            summary: row.summary,
+            detail: row.detail,
+            decidedBy: row.decidedBy,
+            origin: row.origin.label,
+            originId: row.originId,
+            recordedAt: row.recordedAt,
+          ),
+      ], budget);
+      return (
+        decisions: trimmed.decisions,
+        omitted: trimmed.omitted,
+        cost: trimmed.cost,
+      );
+    } catch (_) {
+      return (decisions: null, omitted: 0, cost: 0);
+    }
   }
 
   /// The tail of the conversation, read from the **agent's own transcript** —

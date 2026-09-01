@@ -7,6 +7,7 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
+import '../../agents/domain/agent_status.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
@@ -29,6 +30,7 @@ import '../domain/session_lineage.dart';
 import '../domain/session_naming.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
+import 'decision_recorder.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
 import 'session_working_directory.dart';
@@ -925,12 +927,73 @@ class SessionLauncher {
   ///
   /// Returns false when the session has no live pane, so the caller can say the
   /// answer did not land instead of assuming it did.
-  bool answerPrompt(String sessionId, String keys) {
+  ///
+  /// **This is where an approval reaches the decision record**, and it is the
+  /// only place both answering paths meet: the approval card presses these
+  /// keys and so does `session_answer`. Recording here means the packet carries
+  /// what the user allowed however they allowed it, rather than only what came
+  /// through the bridge.
+  ///
+  /// [decidedBy] names who answered — the user by default, since the card is
+  /// the ordinary route; `session_answer` passes the agent that called it.
+  bool answerPrompt(
+    String sessionId,
+    String keys, {
+    String decidedBy = 'the user',
+    String? decidedBySessionId,
+  }) {
     if (keys.isEmpty) return false;
     final terminal = _liveTerminalFor(sessionId);
     if (terminal == null) return false;
     terminal.textInput(keys);
+    _recordAnswer(
+      sessionId,
+      keys,
+      decidedBy: decidedBy,
+      decidedBySessionId: decidedBySessionId,
+    );
     return true;
+  }
+
+  /// Writes the answered prompt to the session's decision record, when the
+  /// keystroke is one the agent itself named.
+  ///
+  /// **A table lookup, not an interpretation.** [keys] is matched against the
+  /// agent's own [AgentApprovalRules] — the same table the card read to draw
+  /// the button — so what is recorded is the agent's own words for what that
+  /// key does. Keys that match neither answer record *nothing*: this method
+  /// also carries whatever an agent's prompt was answered with by some other
+  /// route, and guessing at what an unrecognised keystroke authorised is
+  /// exactly the inference the record must never contain.
+  void _recordAnswer(
+    String sessionId,
+    String keys, {
+    required String decidedBy,
+    required String? decidedBySessionId,
+  }) {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) return;
+    final agentId = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.agentId;
+    if (agentId == null) return;
+    final rules =
+        _ref.read(agentRegistryProvider).byId(agentId)?.approval ??
+        const AgentApprovalRules();
+    final granted = rules.approve?.keys == keys;
+    final answer = granted ? rules.approve : rules.deny;
+    if (answer == null || answer.keys != keys) return;
+    _ref
+        .read(decisionRecorderProvider)
+        .recordApproval(
+          sessionId: sessionId,
+          granted: granted,
+          effect: answer.effect,
+          answerLabel: answer.label,
+          decidedBy: decidedBy,
+          decidedBySessionId: decidedBySessionId,
+        );
   }
 
   /// The live terminal behind [sessionId], or null. Three things have to be

@@ -41,6 +41,9 @@ typedef MigrationStep = void Function(Database db);
 ///   instead of acting on it, with the session and message it was taken from.
 /// * **v22** — T10 follow-up: the directory a session's agent actually runs
 ///   in, which an adopted session knew and threw away.
+/// * **v23** — G1: a session's append-only decision record — the constraints,
+///   rejected approaches, approvals, verdicts and marked checkpoints that a
+///   handoff packet was carrying a transcript instead of.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -64,7 +67,82 @@ final Map<int, MigrationStep> schemaMigrations = {
   20: _migrateToV20,
   21: _migrateToV21,
   22: _migrateToV22,
+  23: _migrateToV23,
 };
+
+void _migrateToV23(Database db) {
+  // The decision record (G1): what a session decided, as opposed to what it
+  // said.
+  //
+  // `HandoffPacket` carries a quoted tail of the conversation and a count of
+  // the turns it dropped, and the dropped ones are disproportionately
+  // load-bearing — a decision is made once and thereafter assumed, so "the
+  // isolate pool deadlocked on Windows" is forty turns back inside
+  // `omittedTurns`. This table is where such a thing is written down *once*,
+  // at the moment it is decided, so a later reader does not have to find it in
+  // a transcript that no longer includes it.
+  //
+  // **Append-only, and only by explicit acts.** Nothing here is derived from
+  // prose. A row exists because somebody answered an approval prompt, finished
+  // a verification run, labelled a checkpoint, or called `decision_record` —
+  // and the DAO offers no update and no delete, so the record of what was
+  // decided cannot be quietly revised into what is convenient now. That is the
+  // same argument `handoff_packet.dart` makes at length about the recap: there
+  // is no model in this path, and a paraphrase's errors are invisible to the
+  // reader who most needs them.
+  //
+  // `sequence` is 1-based within a session and unique, which is what makes the
+  // chain a chain: two writers cannot both claim position 4, and a gap is
+  // visible rather than silently closed.
+  //
+  // `summary` is the decision **in the words of whoever made it** — an agent's
+  // own sentence, or the agent's own description of what a keystroke does. Not
+  // a gist of it.
+  //
+  // `origin_kind`/`origin_id` are the pointer back to the act. The id is
+  // nullable because some acts leave no row of their own: an approval prompt
+  // lives on the agent's screen and is gone when it is answered, so the honest
+  // pointer names the act without pretending there is a record to open.
+  // Deliberately **not** a foreign key, like `notes.source_session_id` and
+  // `verification_runs.session_id`: a decision has to outlive the run or
+  // checkpoint that produced it, and a row whose origin has been pruned still
+  // says everything it said before.
+  //
+  // `decided_by` is words, not an id — "the user", or the agent's display
+  // name at the time. The packet attributes every line it renders, and the
+  // reader needs a name they recognise rather than a key to resolve;
+  // `recorded_by_session_id` is beside it for the case where the resolution
+  // still matters.
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_decisions (
+      id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id             TEXT NOT NULL,
+      sequence               INTEGER NOT NULL,
+      kind                   TEXT NOT NULL,
+      summary                TEXT NOT NULL,
+      detail                 TEXT,
+      decided_by             TEXT,
+      recorded_by_session_id TEXT,
+      origin_kind            TEXT NOT NULL,
+      origin_id              TEXT,
+      recorded_at            TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_session_decisions_sequence '
+    'ON session_decisions (session_id, sequence);',
+  );
+
+  // Deliberately **not** backfilled, for the same reason v20 was not.
+  //
+  // There is nothing to recover. Every existing session has checkpoints saying
+  // a turn happened and possibly verification runs saying a check was made,
+  // and neither is a decision: a turn checkpoint records that time passed, and
+  // a run this session may well have graded itself records a claim. Turning
+  // either into a decision row would put a sentence in the user's mouth for
+  // every session that already exists. An empty record reads as "not
+  // recorded", which is exactly what it is.
+}
 
 void _migrateToV22(Database db) {
   // Where a session's agent is actually running (T10 follow-up).
