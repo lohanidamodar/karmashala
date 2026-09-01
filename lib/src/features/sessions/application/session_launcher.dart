@@ -8,6 +8,8 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../agents/domain/agent_status.dart';
+import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/domain/conversation_presence.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
@@ -135,6 +137,58 @@ class SessionAlreadyRunning implements Exception {
         ? 'That conversation is already open in another process.'
         : '"$title" is already running in Chitragupta.';
     return '$where ${resumeBlockedMessage(agentName)}';
+  }
+}
+
+/// Raised when a resume names a conversation the agent's own store has never
+/// held.
+///
+/// The other side of `sessionIdAssignment`. Passing Claude Code our id as
+/// `--session-id` is what lets a row know its conversation without parsing
+/// anything, but it also means the row records that id **before** the CLI has
+/// written a single byte — so a launch that failed, or a session nothing was
+/// ever said in, leaves a row claiming a conversation that does not exist.
+/// Nothing distinguished such a row from a real one, and resuming it ran
+///
+/// ```
+/// No conversation found with session ID: 4b13c55e-…
+/// [process exited with code 1]
+/// ```
+///
+/// on the user's screen while the app said nothing and went on creating
+/// sessions around it.
+///
+/// **Only thrown on certain knowledge.** The store must have been read to the
+/// end without the conversation in it; a store we could not locate or reach
+/// answers `unknown` and the resume proceeds exactly as it did before (see
+/// `conversationPresenceProvider`).
+class SessionConversationMissing implements Exception {
+  const SessionConversationMissing({
+    required this.agentName,
+    required this.conversationId,
+    this.sessionId,
+    this.title,
+  });
+
+  /// The CLI id that names nothing. Included in [toString] because a user whose
+  /// store is configured somewhere unusual needs to be able to go and look.
+  final String conversationId;
+
+  /// Our row for it, so a caller can reveal or tidy it.
+  final String? sessionId;
+
+  /// That row's title, for the message.
+  final String? title;
+
+  /// The agent's display name, so the sentence says who has no record.
+  final String agentName;
+
+  @override
+  String toString() {
+    final what = title == null ? 'This session' : '"$title"';
+    return '$what cannot be resumed: '
+        '${resumeMissingConversationMessage(agentName)} '
+        '(conversation id $conversationId)';
   }
 }
 
@@ -437,6 +491,74 @@ class SessionLauncher {
     );
   }
 
+  // --- was the conversation ever written? ------------------------------------
+
+  /// The row that **minted** [externalSessionId], or `null` when that id was
+  /// read back from the agent rather than handed to it.
+  ///
+  /// The whole distinction this fix turns on, and it is readable straight off
+  /// the data: `launch` assigns a new session *our own row id* as the CLI's
+  /// session id (see `assignsOwnId`), so `sessions.id == external_session_id`
+  /// is the signature of an id we promised rather than one we observed.
+  ///
+  /// An observed id — a hook payload, an imported store entry, a discovered
+  /// Codex thread — is evidence the conversation existed, and is deliberately
+  /// left alone here: the store is the only witness for it, and asking the
+  /// store about a conversation the store already told us about would let a
+  /// misconfigured `CLAUDE_CONFIG_DIR` retract a fact we had.
+  Session? rowThatMinted(String? externalSessionId) {
+    if (externalSessionId == null || externalSessionId.isEmpty) return null;
+    final row = _ref.read(sessionDaoProvider).getById(externalSessionId);
+    return row != null && row.externalSessionId == externalSessionId
+        ? row
+        : null;
+  }
+
+  /// Throws [SessionConversationMissing] when [request] would resume a
+  /// conversation the agent's store has read to the end without finding, and
+  /// returns normally in every other case — including "we could not tell".
+  ///
+  /// Also corrects the row on the way out. It said `running` from the moment it
+  /// was written, which is the earliest anything *could* have said so and, for
+  /// a conversation that was never written, was never true. This is the first
+  /// moment the app knows better, so it is the moment to stop the row claiming
+  /// otherwise.
+  Future<void> refuseIfConversationMissing(SessionLaunchRequest request) async {
+    final externalId = request.resumeExternalSessionId;
+    final minted = rowThatMinted(externalId);
+    if (minted == null || minted.isArchived) return;
+    final descriptor = _ref
+        .read(agentRegistryProvider)
+        .byId(request.installation.agentId);
+    // Expressed through the descriptor, never through an agent's name: an
+    // agent that does not take an id from us cannot have made this promise,
+    // and its store is asked about nothing.
+    if (descriptor == null ||
+        !descriptor.launch.sessionIdAssignment.isSupported) {
+      return;
+    }
+    final presence = await _ref.read(conversationPresenceProvider)(
+      descriptor: descriptor,
+      // Where the agent would have written it: the directory the session runs
+      // in decides which environment's store holds the transcript.
+      environmentId:
+          (minted.workingDirectory ??
+                  minted.worktree ??
+                  request.repository.path)
+              .environmentId,
+      conversationId: externalId!,
+    );
+    if (presence != ConversationPresence.absent) return;
+    _ref.read(sessionDaoProvider).updateStatus(minted.id, SessionStatus.failed);
+    _bump();
+    throw SessionConversationMissing(
+      agentName: agentDisplayName(request.installation.agentId),
+      conversationId: externalId,
+      sessionId: minted.id,
+      title: minted.title,
+    );
+  }
+
   /// Creates the session row and starts it on the requested surface.
   Future<SessionLaunchResult> launch(SessionLaunchRequest request) async {
     // Before anything is written: a resume of a conversation we are still
@@ -452,6 +574,12 @@ class SessionLauncher {
       agentId: request.installation.agentId,
       externalSessionId: request.resumeExternalSessionId,
     );
+
+    // And a resume of a conversation the agent never wrote is not a resume at
+    // all. Asked here, before anything is written, for the same reason as the
+    // refusal above: every surface that continues a session comes through this
+    // method, and none of them should have to remember.
+    await refuseIfConversationMissing(request);
 
     // A request cannot both continue and branch one conversation: the two
     // produce different command lines (a resume convention vs a fork one) and

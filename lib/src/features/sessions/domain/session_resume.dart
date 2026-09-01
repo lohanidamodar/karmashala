@@ -169,3 +169,23 @@ String resumeBlockedMessage(String agentName) =>
 /// The banner shown on a pane whose agent refused for this reason.
 String resumeConflictPaneMessage(String agentName) =>
     'Open somewhere else — $agentName allows one process per conversation';
+
+/// The plain words for a resume of a conversation that was never written.
+///
+/// A session whose agent takes a `--session-id` gets one of *our* ids at
+/// launch, and the row records it immediately. That id is a **promise**: it
+/// says what the conversation will be called once the CLI writes it. A launch
+/// that failed, or a session nothing was ever said in, leaves the promise
+/// unkept — the row names a conversation that does not exist, and the agent
+/// answers a later resume with its own version of "no conversation found",
+/// which reaches the user as a pane that flashes an error and exits.
+///
+/// Three things this has to say, in this order: that there is nothing to
+/// resume, *why* there is nothing (so it does not read as data loss), and what
+/// to do instead.
+String resumeMissingConversationMessage(String agentName) =>
+    '$agentName has no record of this conversation, so there is nothing to '
+    'resume. The session reserved its id when it started but the agent never '
+    'wrote a transcript for it — which is what a session nothing was ever said '
+    'in looks like, and what a launch that failed leaves behind. No work has '
+    'been lost. Start a new session in this repository.';
