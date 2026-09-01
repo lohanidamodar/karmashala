@@ -29,6 +29,7 @@ import 'package:chitragupta/src/features/terminal/application/system_terminal_pr
 import 'package:chitragupta/src/features/terminal/data/system_terminal_service.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
 import 'package:chitragupta/src/features/terminal/presentation/terminal_panel.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1148,30 +1149,129 @@ void main() {
     expect(surfaces(tester).index, 0);
   });
 
-  testWidgets('the selected session losing its pane stays on the terminal', (
-    tester,
-  ) async {
-    // The workbench never moves the user to the conversation by itself, not
-    // even here. The pane going away changes what the terminal surface *says*,
-    // not which surface is up.
-    seedSessionInAPane();
-    container.read(selectedSessionIdProvider.notifier).select('s1');
-    await pump(tester);
-    expect(surfaces(tester).index, 0);
+  group('ending a session moves the user on', () {
+    // The report: "when i end session why show this, why not switch to another
+    // existing tab and show empty if no other tabs exist?" — the workbench sat
+    // on the empty state of the session that had just been ended, with live
+    // tabs behind it, because ending it took its pane away and left its row
+    // selected.
 
-    container
-        .read(terminalSessionsControllerProvider.notifier)
-        .closeTab(
-          container.read(terminalSessionsControllerProvider).tabs.single.id,
-          detach: false,
-        );
-    await tester.pumpAndSettle();
+    /// Right-clicks the [index]th tab and picks **End session** — the
+    /// affordance the report was filed against, driven the way the user
+    /// reaches it rather than by calling the controller.
+    Future<void> endSessionOnTab(WidgetTester tester, int index) async {
+      await tester.tap(
+        find.byType(TerminalTabChip).at(index),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('End session'));
+      await tester.pumpAndSettle();
+    }
 
-    expect(surfaces(tester).index, 0);
-    expect(
-      find.textContaining('No terminal of ours is running this session'),
-      findsOneWidget,
+    final tombstone = find.textContaining(
+      'No terminal of ours is running this session',
     );
+
+    testWidgets('the tab that took its place is on screen, and says so', (
+      tester,
+    ) async {
+      seedSessionInAPane(title: 'Refactor the parser');
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.openTab(TerminalProfile.powerShell);
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+      expect(find.byType(TerminalTabChip), findsNWidgets(3));
+
+      await endSessionOnTab(tester, 0);
+
+      expect(tombstone, findsNothing);
+      expect(find.byType(TerminalPaneStack), findsOneWidget);
+      expect(find.byType(TerminalTabChip), findsNWidgets(2));
+      expect(
+        tester
+            .widgetList<TerminalTabChip>(find.byType(TerminalTabChip))
+            .where((chip) => chip.selected),
+        hasLength(1),
+        reason: 'the tab on screen is the one drawn as active',
+      );
+      expect(
+        container.read(selectedSessionIdProvider),
+        isNull,
+        reason: 'the selection is released, not pointed somewhere else',
+      );
+    });
+
+    testWidgets('ending the last one leaves the empty workbench', (
+      tester,
+    ) async {
+      seedSessionInAPane(title: 'Refactor the parser');
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+
+      await endSessionOnTab(tester, 0);
+
+      expect(tombstone, findsNothing);
+      expect(find.byType(SessionTranscriptView), findsNothing);
+      expect(
+        find.byType(TerminalPaneStack),
+        findsOneWidget,
+        reason: 'with nothing selected the workbench is the terminal',
+      );
+      expect(container.read(selectedSessionIdProvider), isNull);
+      // The panes' own standing rule, not this one: there is always at least
+      // one terminal once they are what the workbench is showing.
+      expect(find.byType(TerminalTabChip), findsOneWidget);
+    });
+
+    testWidgets('ending a session in another tab moves nothing', (
+      tester,
+    ) async {
+      // Ending a session is "I am done with *this*". A background one is not
+      // the thing the user is looking at, so their surface must stay put.
+      final paneId = seedSessionInAPane(title: 'Refactor the parser');
+      seedSessionInAPane(id: 's2', title: 'Audit the shell');
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+
+      await endSessionOnTab(tester, 1);
+
+      expect(container.read(selectedSessionIdProvider), 's1');
+      expect(
+        container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
+            .focusedPaneId,
+        paneId,
+      );
+      expect(tombstone, findsNothing);
+      expect(surfaces(tester).index, 0);
+    });
+
+    testWidgets('reading the conversation is left alone', (tester) async {
+      // The empty state is what the user is being moved off, and it is not up
+      // here. Releasing the selection on this surface would hand the reader
+      // whichever session the neighbouring tab runs — the wrong transcript
+      // rather than a tidier one.
+      seedSessionInAPane(title: 'Refactor the parser');
+      seedSessionInAPane(id: 's2', title: 'Audit the shell');
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await pump(tester);
+      await tester.tap(find.byTooltip('Chat view'));
+      await tester.pumpAndSettle();
+
+      await endSessionOnTab(tester, 0);
+
+      expect(
+        container.read(selectedSessionIdProvider),
+        's1',
+        reason: 'still the session whose conversation was open',
+      );
+      expect(surfaces(tester).index, 1);
+    });
   });
 
   testWidgets('a session selected at mount never paints its chat first', (
