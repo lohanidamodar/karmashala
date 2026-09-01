@@ -13,6 +13,7 @@ import '../../../features/notifications/application/notification_providers.dart'
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/repositories/application/repository_providers.dart';
+import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/sessions/application/session_providers.dart';
 import '../../../features/sessions/domain/session.dart';
 import '../../../features/sessions/domain/session_launch.dart';
@@ -343,13 +344,41 @@ class QuickOpenSources {
 
   /// Selects a session and everything above it, through the one walk that
   /// already exists for a clicked toast and a clicked tray item.
-  void _focusSession(String openId, {required bool imported}) {
+  Future<void> _focusSession(String openId, {required bool imported}) async {
     focusWatchedSession(
       ProviderScope.containerOf(context, listen: false),
       openId: openId,
       imported: imported,
     );
     ref.read(shellControllerProvider.notifier).focusPane(ShellPane.detail);
+
+    // And actually open it. Picking a session by name is a request to be *in*
+    // it, not to be shown a screen offering to put you in it — the owner asked
+    // why resuming from here stopped at "No terminal of ours is running this
+    // session" with a button, when they had already said which session they
+    // wanted. Focusing alone left that screen as the answer.
+    //
+    // [ExplorerActions.openNative] is the same action the Explorer's own click
+    // runs, and it decides between reattach, resume and select — so a session
+    // already running in a pane is reattached rather than started twice, and
+    // one that cannot be resumed still just gets selected, leaving the
+    // placeholder to explain why.
+    final result = await _open(openId, imported: imported);
+    final message = result.message;
+    if (message == null || !context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Reattach, resume or select — whichever [openId] needs.
+  Future<ExplorerResult> _open(String openId, {required bool imported}) {
+    final actions = ref.read(explorerActionsProvider);
+    if (!imported) return actions.openNative(openId);
+    final record = ref.read(importedSessionDaoProvider).getById(openId);
+    return record == null
+        ? Future.value(const ExplorerResult(ExplorerOutcome.selected))
+        : actions.openImported(record);
   }
 
   // --- open terminal tabs --------------------------------------------------

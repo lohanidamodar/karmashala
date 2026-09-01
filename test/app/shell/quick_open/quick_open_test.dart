@@ -8,6 +8,7 @@ import 'package:chitragupta/src/features/git/application/changes_providers.dart'
 import 'package:chitragupta/src/features/github/application/github_providers.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
+import 'package:chitragupta/src/features/explorer/application/explorer_actions.dart';
 import 'package:chitragupta/src/features/sessions/data/session_dao.dart';
 import 'package:chitragupta/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:chitragupta/src/features/terminal/domain/terminal_profile.dart';
@@ -43,9 +44,17 @@ void main() {
   Future<ProviderContainer> open(
     WidgetTester tester, {
     void Function(ProviderContainer container)? before,
+    // A factory rather than a list of overrides: `Override` is not a nameable
+    // type here, which is the same reason `fakeTerminalOverrides` leaves its
+    // own return type inferred.
+    ExplorerActions Function(Ref ref)? explorerActions,
   }) async {
     final container = ProviderContainer(
-      overrides: fakeTerminalOverrides(database: db),
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        if (explorerActions != null)
+          explorerActionsProvider.overrideWith(explorerActions),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -293,6 +302,30 @@ void main() {
     expect(container.read(terminalVisibleProvider), isTrue);
   });
 
+  testWidgets('picking a session opens it, not just selects it', (
+    tester,
+  ) async {
+    // The owner: "quick menu bataa session resume garda kina yesto aaucha?
+    // kina sidhai resume hunna?" — picking a session by name landed on the
+    // workbench's "No terminal of ours is running this session" screen with a
+    // Resume button, having already been told which session was wanted.
+    // Focusing selected the row and stopped; nothing ever opened it.
+    late _SpyActions actions;
+    final container = await open(
+      tester,
+      explorerActions: (ref) => actions = _SpyActions(ref),
+    );
+    await type(tester, '#');
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(
+      actions.opened,
+      hasLength(1),
+      reason: 'the pick reached the same action the Explorer click runs',
+    );
+    expect(actions.opened.single, container.read(selectedSessionIdProvider));
+  });
+
   testWidgets('a tab running one of our sessions is not listed twice', (
     tester,
   ) async {
@@ -365,4 +398,18 @@ void main() {
     expect(container.exists(repositoryChangesProvider), isFalse);
     expect(container.exists(repoWorktreesProvider), isFalse);
   });
+}
+
+/// Records what quick open asked to open, standing in for the real actions so
+/// the test never starts a process.
+class _SpyActions extends ExplorerActions {
+  _SpyActions(super.ref);
+
+  final List<String> opened = [];
+
+  @override
+  Future<ExplorerResult> openNative(String sessionId) async {
+    opened.add(sessionId);
+    return const ExplorerResult(ExplorerOutcome.selected);
+  }
 }
