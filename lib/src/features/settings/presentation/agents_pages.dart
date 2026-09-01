@@ -180,6 +180,19 @@ class _PermissionCard extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: Insets.xs),
+            // Says which way the precedence runs, because the natural reading
+            // of a settings screen is the opposite one: these are the modes a
+            // session starts under **until it chooses**, and a session that has
+            // chosen keeps its own when this changes.
+            Text(
+              'Defaults for sessions that have not chosen a mode of their own. '
+              'A mode picked on a session keeps that session, even after this '
+              'changes.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
             if (dangerous)
               Padding(
                 padding: const EdgeInsets.only(top: Insets.sm),
