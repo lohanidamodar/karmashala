@@ -131,6 +131,15 @@ const _claudeCode = AgentDescriptor(
     // it wants. It was decoded for the session id and dropped, which is why the
     // app could say an approval was pending and never what for.
     messagePath: ['message'],
+    // `Notification` is fired for two unrelated things — "Claude needs your
+    // permission to use Bash", and the 60-second nudge "Claude is waiting for
+    // your input" after a turn ends. Both used to arrive as `awaitingApproval`
+    // with an Approve button that types Enter, which at an idle prompt submits
+    // the composer instead of confirming anything.
+    messageWaiting: {
+      'needs your permission': AgentWaitKind.approval,
+      'waiting for your input': AgentWaitKind.input,
+    },
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,
@@ -162,7 +171,15 @@ const _claudeCode = AgentDescriptor(
       GridMatcher('Esc to cancel'),
     ],
     working: [GridMatcher('esc to interrupt')],
-    idle: [GridMatcher('shift+tab to cycle')],
+    // Two footers, because the hint segment is mode-dependent: a session in
+    // bypass mode drops `(shift+tab to cycle)` entirely and reads
+    // `bypass permissions on · 1 shell · ← for agents · ↓ to manage`. That screen
+    // matched nothing, so the source declined and the grid could not say the
+    // session was merely sitting at its prompt.
+    idle: [
+      GridMatcher('shift+tab to cycle'),
+      GridMatcher('bypass permissions on'),
+    ],
   ),
   // Both keys are read off the same footer the matchers above fire on —
   // `Enter to confirm · Esc to cancel` — so we are sending keys the agent

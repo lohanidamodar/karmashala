@@ -31,6 +31,15 @@ import '../application/session_status_providers.dart';
 /// `AgentApprovalRules`, read off the agent's own footer. Codex's prompt names
 /// no way to decline, so Codex gets no Deny button — not an Esc we assumed
 /// would work.
+///
+/// **It only offers keys at all when a prompt is open.** `awaitingApproval`
+/// means the session has stopped for the user; it does not mean there is
+/// something to confirm. Claude Code fires the same hook when it merely
+/// finished a turn and is sitting at its own input, and Approve types Enter —
+/// which at an idle prompt submits whatever is in the composer. So the buttons
+/// hang off `AgentStatusReport.waiting`, and only [AgentWaitKind.approval]
+/// draws them. The other two kinds get the same notice with the same quoted
+/// words and nothing to press.
 class ApprovalRequestCard extends ConsumerWidget {
   const ApprovalRequestCard({
     required this.sessionId,
@@ -58,6 +67,7 @@ class ApprovalRequestCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
+    final waiting = report.waiting;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final descriptor = ref.read(agentRegistryProvider).byId(report.agentId);
@@ -86,11 +96,23 @@ class ApprovalRequestCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(AppIcons.warningCircle, size: 14, color: scheme.tertiary),
+              Icon(
+                waiting == AgentWaitKind.approval
+                    ? AppIcons.warningCircle
+                    : AppIcons.chatCircleDots,
+                size: 14,
+                color: scheme.tertiary,
+              ),
               const SizedBox(width: Insets.xs),
               Expanded(
                 child: Text(
-                  '$agentName is waiting for you',
+                  switch (waiting) {
+                    AgentWaitKind.approval => '$agentName is waiting for you',
+                    AgentWaitKind.input =>
+                      '$agentName is waiting for your input',
+                    AgentWaitKind.unrecorded =>
+                      '$agentName needs your attention',
+                  },
                   style: theme.textTheme.labelLarge,
                 ),
               ),
@@ -103,13 +125,21 @@ class ApprovalRequestCard extends ConsumerWidget {
             hostedOnTerminal: hostedOnTerminal,
           ),
           const SizedBox(height: Insets.sm),
-          _Answers(
-            sessionId: sessionId,
-            rules: rules,
-            agentName: agentName,
-            canAnswer: canAnswer,
-            hostedOnTerminal: hostedOnTerminal,
-          ),
+          if (waiting == AgentWaitKind.approval)
+            _Answers(
+              sessionId: sessionId,
+              rules: rules,
+              agentName: agentName,
+              canAnswer: canAnswer,
+              hostedOnTerminal: hostedOnTerminal,
+            )
+          else
+            _NothingToAnswer(
+              sessionId: sessionId,
+              waiting: waiting,
+              agentName: agentName,
+              hostedOnTerminal: hostedOnTerminal,
+            ),
         ],
       ),
     );
@@ -134,12 +164,25 @@ class _Evidence extends StatelessWidget {
     final scheme = theme.colorScheme;
 
     if (report.evidence.isEmpty) {
-      // The honest empty state, and the one the brief insists on: a hook that
-      // carried no message, or a source that only knows a prompt is up. Saying
-      // "needs your input in the terminal" is the complete truth here.
+      // The honest empty state: a hook that carried no message, or a source that
+      // only knows the session has stopped. What it can honestly say depends on
+      // whether a prompt is open — "asking for something" is a claim, and it is
+      // false for an agent that has simply finished its turn.
+      final terminal = hostedOnTerminal
+          ? 'in the terminal above'
+          : 'in the terminal view';
       return Text(
-        'We can tell $agentName is asking for something, but not what. '
-        '${hostedOnTerminal ? 'Read the prompt in the terminal above.' : 'Open the terminal view to read the prompt.'}',
+        switch (report.waiting) {
+          AgentWaitKind.approval =>
+            'We can tell $agentName is asking for something, but not what. '
+                '${hostedOnTerminal ? 'Read the prompt in the terminal above.' : 'Open the terminal view to read the prompt.'}',
+          AgentWaitKind.input =>
+            '$agentName has finished its turn and is sitting at its own '
+                'prompt. Reply to it $terminal.',
+          AgentWaitKind.unrecorded =>
+            'We can tell $agentName has stopped for you, but not what it '
+                'wants. Read what it is showing $terminal.',
+        },
         style: theme.textTheme.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant,
         ),
@@ -178,6 +221,63 @@ class _Evidence extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// The notice for a session that has stopped for the user with no prompt open.
+///
+/// Deliberately has no buttons at all rather than disabled ones. Every key this
+/// card can send is a keystroke into another program's interface, and there is
+/// no prompt here for one to land on: Claude Code's Enter would submit whatever
+/// is in its composer, and Esc would cancel something else.
+class _NothingToAnswer extends ConsumerWidget {
+  const _NothingToAnswer({
+    required this.sessionId,
+    required this.waiting,
+    required this.agentName,
+    required this.hostedOnTerminal,
+  });
+
+  final String sessionId;
+  final AgentWaitKind waiting;
+  final String agentName;
+  final bool hostedOnTerminal;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final terminal = hostedOnTerminal
+        ? 'in the terminal above'
+        : 'in the terminal view';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          switch (waiting) {
+            AgentWaitKind.input =>
+              'There is nothing to approve — $agentName is at its own prompt, '
+                  'so answer it $terminal.',
+            _ =>
+              'We cannot tell whether $agentName has a prompt open, so '
+                  'Chitragupta will not send it a key. Answer it $terminal.',
+          },
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        if (!hostedOnTerminal) ...[
+          const SizedBox(height: Insets.xs),
+          TextButton.icon(
+            onPressed: () => _openTerminal(ref, sessionId),
+            icon: const Icon(AppIcons.terminal, size: 13),
+            label: const Text('Terminal view'),
+          ),
+        ],
       ],
     );
   }
@@ -233,7 +333,7 @@ class _Answers extends ConsumerWidget {
               ),
             if (!hostedOnTerminal)
               TextButton.icon(
-                onPressed: () => _openTerminal(ref),
+                onPressed: () => _openTerminal(ref, sessionId),
                 icon: const Icon(AppIcons.terminal, size: 13),
                 label: const Text('Terminal view'),
               ),
@@ -286,15 +386,19 @@ class _Answers extends ConsumerWidget {
       ),
     );
   }
+}
 
-  /// Reveals the pane so the user can answer anything we could not represent.
-  void _openTerminal(WidgetRef ref) {
-    final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
-    if (paneId != null) {
-      ref.read(terminalSessionsControllerProvider.notifier)
-        ..reattachSession(paneId)
-        ..focusPane(paneId);
-    }
-    ref.read(terminalVisibleProvider.notifier).set(true);
+/// Reveals the pane so the user can answer anything we could not represent.
+///
+/// Shared by both halves of the card: whatever it can and cannot offer, the
+/// terminal is always the complete answer, and pointing at it is the one thing
+/// that is true in every state.
+void _openTerminal(WidgetRef ref, String sessionId) {
+  final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+  if (paneId != null) {
+    ref.read(terminalSessionsControllerProvider.notifier)
+      ..reattachSession(paneId)
+      ..focusPane(paneId);
   }
+  ref.read(terminalVisibleProvider.notifier).set(true);
 }

@@ -64,6 +64,7 @@ void main() {
   /// which is when the overridden providers are first read.
   late AgentActivityStatus agentStatus;
   late List<String> agentEvidence;
+  late AgentWaitKind agentWaiting;
   late SessionDelivery delivery;
   late SessionContinuation continuation;
 
@@ -90,6 +91,7 @@ void main() {
     AgentInstallationDao(db).insert(agentInstallation());
     agentStatus = AgentActivityStatus.idle;
     agentEvidence = const [];
+    agentWaiting = AgentWaitKind.unrecorded;
     delivery = SessionDelivery.unknown;
     continuation = SessionContinuation(
       targets: const [],
@@ -122,6 +124,7 @@ void main() {
               observedAt: testTime,
               source: AgentStatusSource.terminalGrid,
               evidence: agentEvidence,
+              waiting: agentWaiting,
             ),
           ),
         ),
@@ -919,6 +922,7 @@ void main() {
   ) async {
     agentStatus = AgentActivityStatus.awaitingApproval;
     agentEvidence = const ['Do you want to make this edit to main.dart?'];
+    agentWaiting = AgentWaitKind.approval;
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
@@ -946,6 +950,28 @@ void main() {
     await pump(tester);
 
     expect(tester.getSize(find.byType(ApprovalRequestCard)).height, 0);
+  });
+
+  testWidgets('an agent that merely messaged is offered no keys', (
+    tester,
+  ) async {
+    // The live complaint: a finished turn nudged the user, and the dock offered
+    // Approve — a button that types Enter into a prompt with nothing open.
+    agentStatus = AgentActivityStatus.awaitingApproval;
+    agentEvidence = const ['Claude is waiting for your input'];
+    agentWaiting = AgentWaitKind.input;
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+
+    // The headline, not the quoted message: both say it, and only one of them
+    // is the app speaking.
+    expect(
+      find.textContaining('Claude Code is waiting for your input'),
+      findsOneWidget,
+    );
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(OutlinedButton), findsNothing);
   });
 
   testWidgets('a shell tab gets no session controls at all', (tester) async {

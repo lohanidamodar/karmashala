@@ -20,6 +20,34 @@ enum AgentStatusSource {
   none,
 }
 
+/// What an agent that has stopped for the user is actually waiting on.
+///
+/// [AgentActivityStatus.awaitingApproval] answers "is this session holding the
+/// user up" — the question the badge ("Needs you"), the tray and the
+/// notification reasons already ask of it. It does **not** answer "is a prompt
+/// open", and the two are not the same question. Claude Code fires one
+/// `Notification` hook both when it wants permission and when it has merely
+/// finished a turn and is sitting at its own input; the app read every one of
+/// them as an approval and offered an Approve button that types Enter. At an
+/// idle prompt Enter submits whatever is in the composer, so the misread turned
+/// a passive notice into a keystroke in the user's live agent.
+///
+/// This is the axis that separates them, and only [approval] may ever be
+/// answered on the user's behalf.
+enum AgentWaitKind {
+  /// A prompt with options is open, and the agent named the keys that answer
+  /// it. Approve/Deny mean something here.
+  approval,
+
+  /// The agent is at its own input with nothing to confirm — it finished its
+  /// turn, or it is nudging about a message it already posted.
+  input,
+
+  /// No source could tell which. Treated exactly like [input] where it matters:
+  /// a key we are not sure lands on a prompt is a key we do not send.
+  unrecorded,
+}
+
 /// One observation of an agent session's status.
 class AgentStatusReport {
   const AgentStatusReport({
@@ -31,6 +59,7 @@ class AgentStatusReport {
     this.detail,
     this.sourceModifiedAt,
     this.evidence = const [],
+    this.waiting = AgentWaitKind.unrecorded,
   });
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -78,9 +107,18 @@ class AgentStatusReport {
   /// synthesised — a source that cannot quote the agent contributes nothing.
   final List<String> evidence;
 
+  /// What the agent is waiting on, when the source could tell.
+  ///
+  /// Defaults to [AgentWaitKind.unrecorded] because most sources cannot tell: a
+  /// transcript records what was said, never that a modal is on screen. Only a
+  /// source with positive evidence — a rendered prompt, or a hook message the
+  /// agent's descriptor recognises — may claim [AgentWaitKind.approval].
+  final AgentWaitKind waiting;
+
   @override
   String toString() =>
-      'AgentStatusReport($agentId/$sessionId, ${status.name}, ${source.name})';
+      'AgentStatusReport($agentId/$sessionId, ${status.name}, ${source.name}, '
+      '${waiting.name})';
 }
 
 /// What to ask the status service about.
@@ -157,6 +195,7 @@ class AgentHookSpec {
     this.sessionIdPath = const ['session_id'],
     this.cwdPath = const ['cwd'],
     this.messagePath = const [],
+    this.messageWaiting = const {},
     required this.eventStatus,
   });
 
@@ -190,6 +229,17 @@ class AgentHookSpec {
 
   /// Hook event name → the status it implies.
   final Map<String, AgentActivityStatus> eventStatus;
+
+  /// Substring of the hook's message → what the agent is waiting on, matched
+  /// case-insensitively in declaration order.
+  ///
+  /// An event name alone cannot answer this. Claude Code's `Notification` fires
+  /// both for a permission request and for a turn that ended and is waiting on
+  /// the user, and only the message tells them apart. A message matching
+  /// nothing here stays [AgentWaitKind.unrecorded]: an agent that reworded its
+  /// prompt costs us an Approve button, which is the direction that cannot send
+  /// a keystroke into a session with no prompt open.
+  final Map<String, AgentWaitKind> messageWaiting;
 }
 
 /// One answer we can send to an agent's approval prompt, and what it does.

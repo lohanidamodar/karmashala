@@ -100,6 +100,11 @@ Future<void> main() async {
   // than a process that happens to end. See `AppLifecycle`.
   final lifecycle = AppLifecycle(container, logger: logger);
 
+  // An already-discovered workspace still has to notice agents it has never
+  // looked for — the ones an app upgrade added to the registry after the
+  // one-time scan above had already run.
+  lifecycle.startAgentDiscovery();
+
   // Desktop OS integration: window/tray/keep-awake/launch-at-login.
   if (SystemIntegrationService.isSupported) {
     try {

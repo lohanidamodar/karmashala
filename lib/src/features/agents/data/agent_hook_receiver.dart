@@ -66,9 +66,28 @@ class AgentHookReceiver {
       observedAt: clock.nowUtc(),
       detail: name.isEmpty ? null : name,
       evidence: message.isEmpty ? const [] : [message],
+      waiting: spec == null
+          ? AgentWaitKind.unrecorded
+          : _waitKind(spec, message),
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
+  }
+
+  /// What [message] says the agent is waiting on, per [spec]'s own rules.
+  ///
+  /// The event name cannot answer this: Claude Code's `Notification` fires both
+  /// for a permission request and for a turn that ended and is waiting on the
+  /// user. An unmatched message stays [AgentWaitKind.unrecorded] rather than
+  /// falling back to an approval, because the fallback is what decides whether
+  /// a button that types Enter is offered.
+  AgentWaitKind _waitKind(AgentHookSpec spec, String message) {
+    if (message.isEmpty) return AgentWaitKind.unrecorded;
+    final lower = message.toLowerCase();
+    for (final entry in spec.messageWaiting.entries) {
+      if (lower.contains(entry.key.toLowerCase())) return entry.value;
+    }
+    return AgentWaitKind.unrecorded;
   }
 
   String _sessionId(List<String> path, String body) => _stringAt(path, body);
