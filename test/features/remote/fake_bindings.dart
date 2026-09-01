@@ -32,6 +32,11 @@ class FakeRemoteBindings {
   /// poll sweep run rather than infer it.
   int transcriptReads = 0;
 
+  /// Held open, every transcript read waits here — a store big enough that the
+  /// parse does not finish inside the phone's request timeout. The owner's
+  /// largest is 115 MB, which is what put `session.subscribe` past it.
+  Completer<void>? transcriptGate;
+
   /// The same for the delivery-stage lookup, which is what a snapshot push
   /// pays per session.
   Duration stageCost = Duration.zero;
@@ -77,6 +82,8 @@ class FakeRemoteBindings {
     },
     transcriptFor: (id) async {
       transcriptReads++;
+      final gate = transcriptGate;
+      if (gate != null) await gate.future;
       if (transcriptCost > Duration.zero) {
         await Future<void>.delayed(transcriptCost);
       }

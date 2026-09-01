@@ -3,6 +3,8 @@
 /// and frames out.
 library;
 
+import 'dart:async';
+
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/host_session_api.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
@@ -42,6 +44,20 @@ class Harness {
   /// the host really gets into: the link the phone last used is closed and
   /// nothing else could carry the frame.
   bool delivers = true;
+
+  /// What the phone does when it opens a session: subscribe, then ask for the
+  /// history. `_reloadTranscript` in the gateway is exactly these two calls in
+  /// this order, and it is the second one that makes the session *watched* —
+  /// the host reads a transcript for the poll sweep only once it has served
+  /// one, because subscription alone means "keep this card live" and the phone
+  /// subscribes to every session it lists.
+  Future<void> watch(String sessionId) async {
+    await request(
+      FrameType.sessionSubscribe,
+      payload: {'sessionId': sessionId},
+    );
+    await request(FrameType.transcriptGet, payload: {'sessionId': sessionId});
+  }
 
   /// Frames the transport refused, so a test can name what was lost.
   final List<SentFrame> dropped = [];
@@ -329,10 +345,7 @@ void main() {
       harness.fake.transcripts['s1'] = [
         const RemoteTranscriptMessage(role: 'user', text: 'one'),
       ];
-      await harness.request(
-        FrameType.sessionSubscribe,
-        payload: const {'sessionId': 's1'},
-      );
+      await harness.watch('s1');
 
       await harness.api.pollTranscripts();
       final before = harness.sent.length;
@@ -444,10 +457,7 @@ void main() {
       harness.fake.transcripts['s1'] = [
         const RemoteTranscriptMessage(role: 'user', text: 'one'),
       ];
-      await harness.request(
-        FrameType.sessionSubscribe,
-        payload: const {'sessionId': 's1'},
-      );
+      await harness.watch('s1');
       await harness.api.pollTranscripts();
 
       harness.fake.transcripts['s1']!.add(
@@ -468,6 +478,107 @@ void main() {
       final page = RemoteTranscriptPage.fromJson(harness.last.payload);
       expect([for (final m in page.messages) m.text], ['two', 'three']);
       expect(page.cursor, 3);
+    });
+  });
+
+  group('subscribing does not wait on the transcript', () {
+    // The owner's report, reproduced on a real phone: "connection is fine,
+    // sessions are listed, but opening a session fails". The link was up and
+    // `sessions.list` answered; `session.subscribe` timed out every time, and
+    // the desktop later logged a result frame it could no longer deliver.
+    //
+    // The cause was here: subscribe parsed the whole transcript to learn a
+    // *count* before replying. On a 115 MB store that is far past the phone's
+    // request timeout — and because a device's frames are handled on one
+    // serial chain, every request queued behind it timed out too.
+
+    test('the result arrives without reading the transcript at all', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        for (var i = 0; i < 50; i++)
+          RemoteTranscriptMessage(role: 'user', text: 'line $i'),
+      ];
+
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+
+      expect(
+        harness.fake.transcriptReads,
+        0,
+        reason: 'a subscribe is bookkeeping; the phone asks for history itself',
+      );
+      expect(
+        harness.sent.any((f) => f.type == FrameType.result),
+        isTrue,
+      );
+    });
+
+    test('and answers even while a transcript read would never finish', () async {
+      final harness = Harness();
+      // A read that never completes is the limit of a read that is merely far
+      // too slow, and it is the honest shape of the bug: the phone gave up
+      // first every time.
+      harness.fake.transcriptGate = Completer<void>();
+      addTearDown(() => harness.fake.transcriptGate!.complete());
+
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      ).timeout(const Duration(seconds: 5));
+
+      expect(harness.sent.any((f) => f.type == FrameType.result), isTrue);
+    });
+
+    test('a subscribed session nobody is reading is never polled', () async {
+      // The other half of the same bug, and the larger one. The phone
+      // subscribes to *every* session it lists, because subscription is what
+      // keeps the cards live — so polling on subscription alone meant a full
+      // transcript parse per listed session, every tick.
+      final harness = Harness()..fake.addSession('s2');
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's2'},
+      );
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+      final afterHistory = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscripts();
+
+      expect(
+        harness.fake.transcriptReads - afterHistory,
+        1,
+        reason: 'only the session whose history was asked for',
+      );
+    });
+
+    test('and the one being read still gets its delta', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'before'),
+      ];
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'assistant', text: 'after'),
+      );
+      await harness.api.pollTranscript('s1');
+
+      final appended = harness.sent.firstWhere(
+        (f) => f.type == FrameType.transcriptAppended,
+      );
+      final messages = appended.payload['messages']! as List;
+      expect(messages, hasLength(1));
+      expect((messages.single as Map)['text'], 'after');
     });
   });
 }

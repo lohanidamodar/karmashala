@@ -127,17 +127,18 @@ class HostSessionApi {
         case FrameType.sessionSubscribe:
           final sessionId = _requireSession(envelope);
           _subscribed.add(sessionId);
-          if (device.capabilities.has(Capability.readTranscript)) {
-            // Prime the cursor to *now*: `appended` carries what happens from
-            // here on; history is the phone's `transcript.get` to make.
-            try {
-              _transcriptCursors[sessionId] = (await bindings.transcriptFor(
-                sessionId,
-              )).cursor;
-            } on Object {
-              _transcriptCursors[sessionId] = 0;
-            }
-          }
+          // **Nothing here reads the transcript.** It used to, to prime the
+          // cursor to *now* — a count, for which it parsed the entire file.
+          // On the owner's 115 MB store that ran far past the phone's request
+          // timeout, and because a device's frames are handled on one serial
+          // chain, every request queued behind it timed out too: the link was
+          // up, `sessions.list` answered, and opening a session never did.
+          // The desktop then logged a result frame it could no longer deliver,
+          // because by then the phone had given up and redialled.
+          //
+          // The priming still happens, on the first poll after this — see
+          // [pollTranscript], which has to read the transcript anyway. The
+          // semantics are unchanged; only the request path is.
           await _result(envelope.id, const {});
           await _pushSnapshot(sessionId);
         case FrameType.sessionUnsubscribe:
@@ -154,6 +155,13 @@ class HostSessionApi {
           final start = from > page.messages.length
               ? page.messages.length
               : from;
+          // Serving history is also what marks this session as *watched*: from
+          // here the poll sweep carries its growth, and until here it does not
+          // read it at all. The phone asks for history only for the session it
+          // has open, so this is the cheapest true signal of what is on screen
+          // — and it costs no extra read, because the cursor is a by-product
+          // of the page just built.
+          _transcriptCursors[sessionId] = page.cursor;
           await _result(
             envelope.id,
             RemoteTranscriptPage(
@@ -306,13 +314,25 @@ class HostSessionApi {
   Future<void> pollTranscript(String sessionId) async {
     if (!device.capabilities.has(Capability.readTranscript)) return;
     if (!_subscribed.contains(sessionId)) return;
+    // **Only a session the phone is actually reading.** A cursor exists once
+    // `transcript.get` has served one, which the phone asks for only for the
+    // session it has open — so this is "what is on screen", stated by the
+    // phone's own behaviour rather than guessed at.
+    //
+    // Subscription cannot be that signal: the phone subscribes to *every*
+    // session it lists, because subscription is also what keeps the session
+    // cards live. Polling on it meant a full transcript parse per listed
+    // session per tick, and the parse of the largest one starved the link the
+    // phone was waiting on.
+    final known = _transcriptCursors[sessionId];
+    if (known == null) return;
     final RemoteTranscriptPage page;
     try {
       page = await bindings.transcriptFor(sessionId);
     } on Object {
       return;
     }
-    final cursor = _transcriptCursors[sessionId] ?? 0;
+    final cursor = known;
     if (page.cursor <= cursor || cursor > page.messages.length) {
       _transcriptCursors[sessionId] = page.cursor;
       return;

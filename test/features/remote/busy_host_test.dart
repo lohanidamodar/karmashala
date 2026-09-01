@@ -147,8 +147,12 @@ void main() {
     final client = await connectedPhone();
 
     // Exactly what the phone does on every connect: subscribe to every session
-    // the desktop listed. That is what makes each sweep expensive, and it is
-    // not something the phone can be asked to stop doing.
+    // the desktop listed, because subscription is also what keeps the cards
+    // live — and it is not something the phone can be asked to stop doing.
+    // It used to make every sweep read every one of those transcripts; the
+    // host now reads only the session whose history the phone has asked for,
+    // so this loop is the cheap case rather than the expensive one. The
+    // deadline below is what stops that regressing.
     fake.transcriptCost = _transcriptCost;
     for (var i = 0; i < _sessionCount; i++) {
       await client.subscribeSession('s$i');
@@ -182,6 +186,10 @@ void main() {
     final client = await connectedPhone();
     for (var i = 0; i < _sessionCount; i++) {
       await client.subscribeSession('s$i');
+      // And read each one's history, which is what makes the host poll it:
+      // subscription alone only keeps the card live, because the phone
+      // subscribes to every session it lists.
+      await client.transcript('s$i');
     }
     fake.transcriptCost = _transcriptCost;
     fake.transcriptReads = 0;
