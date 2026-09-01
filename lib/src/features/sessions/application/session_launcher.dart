@@ -19,6 +19,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/pty_launch.dart';
 import '../../terminal/domain/agent_pane_launch.dart';
 import '../../terminal/domain/launch_context.dart';
+import '../../terminal/domain/pane_liveness.dart';
 import '../data/session_repository_dao.dart';
 import '../domain/session.dart';
 import '../domain/session_attribution.dart';
@@ -271,6 +272,32 @@ class SessionLauncher {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(paneId);
     return instance != null && instance.liveness.value.isLive ? paneId : null;
+  }
+
+  /// The pane [sessionId] was **restored** into and has never run, or `null`.
+  ///
+  /// Deliberately a second question rather than a loosening of [livePaneFor],
+  /// because the two are asked for opposite reasons and both answers are
+  /// load-bearing. A dormant pane is replayed history with nothing behind it,
+  /// so it must never be reattached and presented as a running session — which
+  /// is what [livePaneFor] gates, for the double-writer refusal, the archive
+  /// guard and the permission chip. But it *is* a real pane holding this
+  /// session's own scrollback, so resuming into it is what leaves the user one
+  /// terminal for one session instead of a dead pane and a live one side by
+  /// side.
+  ///
+  /// A pane whose process ran and exited is not dormant: it belongs to this run
+  /// of the app, its buffer has moved on since anything was restored into it,
+  /// and a resume gets a pane of its own. [PaneLiveness.restored] is the only
+  /// state that says "rebuilt from disk, never started".
+  String? dormantPaneFor(String? sessionId) {
+    if (sessionId == null) return null;
+    final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+    if (paneId == null) return null;
+    final instance = _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId);
+    return instance?.liveness.value == PaneLiveness.restored ? paneId : null;
   }
 
   /// The session we are already running the CLI conversation
@@ -727,9 +754,23 @@ class SessionLauncher {
       sessionId: session.id,
       title: session.title,
     );
-    final opened = _ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .openAgentTab(launch);
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+    // A session whose pane was restored but never started already has a
+    // terminal: the one holding everything it printed before the app was last
+    // closed. Running the resume *in* it continues that record, where opening a
+    // second pane would leave the user two terminals for one session — the
+    // dormant one the workbench shows, and a live one beside it.
+    //
+    // Only a dormant pane. `reveal` has already brought back a live one, and an
+    // exited pane is this run's record of a process that stopped rather than
+    // history waiting to be continued.
+    final dormant = dormantPaneFor(session.id);
+    final resumedTab = dormant == null
+        ? null
+        : terminals.startAgentInPane(dormant, launch);
+    final opened = resumedTab == null
+        ? terminals.openAgentTab(launch)
+        : (tabId: resumedTab, paneId: dormant!);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
     _ref.read(terminalVisibleProvider.notifier).set(true);
     return SessionLaunchResult(

@@ -345,6 +345,13 @@ class _OpenInTerminalButton extends ConsumerWidget {
 /// tab or detached. A pane restored from disk counts — its scrollback is the
 /// session's record even though nothing is running in it.
 ///
+/// That the restored pane counts is now a promise the resume keeps rather than
+/// one it broke. `SessionLauncher.livePaneFor` requires a *live* instance and
+/// still does, so `reveal` refuses a dormant pane; but the launch it falls
+/// through to resumes **into** that pane
+/// (`SessionLauncher.dormantPaneFor`), instead of opening a second one beside
+/// the one shown here.
+///
 /// The single answer to "has this session got a terminal", so which surface the
 /// workbench opens and what the conversation says about the terminal cannot
 /// disagree.
