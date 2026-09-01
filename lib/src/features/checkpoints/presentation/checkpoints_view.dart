@@ -198,7 +198,7 @@ class _CheckpointDiff extends ConsumerWidget {
                     Text(
                       line.text,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
+                        fontFamily: kMonoFamily,
                         color: switch (line.kind) {
                           DiffLineKind.added => semantic.diffAdded,
                           DiffLineKind.removed => semantic.diffRemoved,

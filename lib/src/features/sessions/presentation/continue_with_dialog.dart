@@ -316,7 +316,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                     child: SelectableText(
                       _preview!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
+                        fontFamily: kMonoFamily,
                       ),
                     ),
                   ),

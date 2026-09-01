@@ -721,7 +721,7 @@ class _FileTileState extends ConsumerState<_FileTile> {
             child: SelectableText(
               _text ?? 'Reading ${widget.artifact.relativePath}…',
               style: theme.textTheme.labelSmall?.copyWith(
-                fontFamily: 'monospace',
+                fontFamily: kMonoFamily,
                 fontFamilyFallback: const ['Consolas', 'Menlo', 'monospace'],
               ),
             ),
