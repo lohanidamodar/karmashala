@@ -375,6 +375,110 @@ void main() {
     expect(container.read(terminalVisibleProvider), isTrue);
   });
 
+  testWidgets('a pane reached only by its tab still offers the Chat half', (
+    tester,
+  ) async {
+    // Loop 85 §7: with nothing selected in the Explorer but an agent pane
+    // focused, the permission chip and the delivery strip worked — they follow
+    // the pane — while the toggle was absent, because the toggle and the chat
+    // surface both read the *selection*. So an agent you reached by activating
+    // its terminal tab had every session control except the way to its
+    // transcript.
+    seedSessionInAPane(title: 'Refactor the parser');
+    // A shell on top of it, so the agent's tab is not the one in front and the
+    // only way to it is the strip.
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await pump(tester);
+
+    expect(find.byTooltip('Chat view'), findsNothing, reason: 'a shell tab');
+
+    // The tap the user makes: the agent's tab in the strip, nothing else.
+    await tester.tap(find.byType(TerminalTabChip).first);
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Chat view'), findsOneWidget);
+    expect(
+      container.read(selectedSessionIdProvider),
+      isNull,
+      reason: 'the toggle is offered by following the pane, not by selecting',
+    );
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+
+    expect(surfaces(tester).index, 1, reason: 'the conversation is up');
+    expect(
+      tester
+          .widget<SessionTranscriptView>(find.byType(SessionTranscriptView))
+          .sessionId,
+      's1',
+      reason: 'and it is this pane\'s session, not whatever was selected',
+    );
+  });
+
+  testWidgets('the way to that transcript does not bounce back to the pane', (
+    tester,
+  ) async {
+    // The trap the follow-up recorded: the obvious fix is to *select* the
+    // focused pane's session on the way to chat, and selecting fires the
+    // listener that opens the session's terminal — so the toggle would fight
+    // the surface it just left. Nothing here writes the selection, so there is
+    // no second write to order against the first; this pins that.
+    final paneId = seedSessionInAPane();
+    await pump(tester);
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+    expect(surfaces(tester).index, 1);
+
+    // Two of the things the app publishes constantly while a session runs. A
+    // fix that selected the pane's session to make the toggle appear would
+    // have armed the listener that opens that session's terminal, and either
+    // of these would then have taken the surface back.
+    container.read(sessionsRevisionProvider.notifier).bump();
+    await tester.pumpAndSettle();
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .focusPane(paneId);
+    await tester.pumpAndSettle();
+
+    expect(container.read(selectedSessionIdProvider), isNull);
+    expect(container.read(terminalVisibleProvider), isFalse);
+    expect(surfaces(tester).index, 1, reason: 'still the conversation');
+
+    // What does take it back is a deliberate request to *see* a tab, which is
+    // the whole of what the strip's own tap means.
+    await tester.tap(find.byType(TerminalTabChip).first);
+    await tester.pumpAndSettle();
+
+    expect(container.read(terminalVisibleProvider), isTrue);
+    expect(surfaces(tester).index, 0);
+  });
+
+  testWidgets('the strip draws no active tab while that conversation is up', (
+    tester,
+  ) async {
+    // The strip may only mark a tab active while panes are what the workbench
+    // is showing. With nothing selected that used to be unconditional, because
+    // nothing selected meant there was no second surface to be on.
+    seedSessionInAPane();
+    await pump(tester);
+    expect(
+      tester.widget<TerminalTabChip>(find.byType(TerminalTabChip)).selected,
+      isTrue,
+    );
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TerminalTabChip>(find.byType(TerminalTabChip)).selected,
+      isFalse,
+      reason: 'no terminal tab is on screen, so none of them may say it is',
+    );
+  });
+
   testWidgets('the two surfaces switch inside one IndexedStack', (
     tester,
   ) async {

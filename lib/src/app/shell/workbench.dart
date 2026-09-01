@@ -16,6 +16,7 @@ import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/domain/pane_liveness.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
@@ -227,7 +228,17 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
                     index: onTerminal ? 0 : 1,
                     children: [
                       _TerminalSurface(session: session),
-                      const WorkbenchSessionView(),
+                      // [WorkbenchSessionView] renders whatever the Explorer
+                      // has selected, which is right until nothing is: a
+                      // session the workbench reached by following the pane
+                      // would find that view's "open a session" placeholder
+                      // behind the toggle. It is named outright in that case.
+                      // Only a native session is ever reached that way — an
+                      // imported one has no pane of ours to follow.
+                      if (session.selected)
+                        const WorkbenchSessionView()
+                      else
+                        SessionTranscriptView(sessionId: session.id),
                     ],
                   ),
           ),
@@ -246,9 +257,21 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     );
   }
 
-  /// The session the Explorer has selected, if any, as the workbench needs it:
-  /// a title, whether it has a pane of ours, and whether it is one of ours at
-  /// all (imported CLI sessions have no pane and no live status).
+  /// The session the workbench is about, if any, as it needs it: a title,
+  /// whether it has a pane of ours, and whether it is one of ours at all
+  /// (imported CLI sessions have no pane and no live status).
+  ///
+  /// **The Explorer's selection, and failing that the pane on screen.** The
+  /// rest of the bar already follows the pane — the permission chip, the
+  /// delivery strip, the approval — so an agent reached by activating its
+  /// terminal tab had every session control except the one thing only this
+  /// answers: the toggle, and therefore the way to its transcript.
+  ///
+  /// The fallback is deliberately a **read**, not a selection. Writing
+  /// `selectedSessionIdProvider` to make the toggle appear would fire the
+  /// listener in [build] that opens the session's terminal, so the way to the
+  /// conversation would fight the surface the user is already on. Nothing here
+  /// writes anything.
   _WorkbenchSession? _selectedSession() {
     ref.watch(sessionsRevisionProvider);
     // A pane appearing or ending changes whether this session has a terminal at
@@ -268,7 +291,8 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         native: false,
       );
     }
-    final sessionId = ref.watch(selectedSessionIdProvider);
+    final selected = ref.watch(selectedSessionIdProvider);
+    final sessionId = selected ?? ref.watch(activePaneSessionIdProvider);
     if (sessionId == null) return null;
     final Session? record = ref.read(sessionDaoProvider).getById(sessionId);
     return _WorkbenchSession(
@@ -276,6 +300,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       title: record?.title ?? 'Session',
       paneId: sessionTerminalPane(ref, sessionId),
       native: true,
+      selected: selected != null,
     );
   }
 }
@@ -286,10 +311,16 @@ class _WorkbenchSession {
     required this.title,
     required this.paneId,
     required this.native,
+    this.selected = true,
   });
 
   final String id;
   final String title;
+
+  /// Whether the Explorer picked this session, rather than the workbench
+  /// having followed the pane on screen to it. What decides which widget draws
+  /// the conversation — see the [IndexedStack] in `build`.
+  final bool selected;
 
   /// The pane this session can be *shown* in — it runs in one of ours and that
   /// pane is still there. Null for an imported CLI session, one opened in an
@@ -644,27 +675,71 @@ class _TabStrip extends ConsumerWidget {
 
   /// Every tab in the strip, left to right.
   ///
-  /// Deliberately cheap — a title and a liveness per tab, no database. It runs
-  /// on every terminal state publish, which at a hundred panes is often.
+  /// **The shape of the strip, and nothing that happens inside a tab.** Watched
+  /// narrowly on purpose: the whole [TerminalSessionsState] is republished
+  /// whenever any pane's process dies, and at a hundred panes a process exiting
+  /// is the common event — so watching it here rebuilt every chip in the strip
+  /// for a dot that moved in one of them. Liveness is subscribed to per tab, by
+  /// [_TabChip].
   List<_StripTab> _tabs(WidgetRef ref) {
-    final terminals = ref.watch(terminalSessionsControllerProvider);
-    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final tabs = ref.watch(terminalTabsProvider);
+    final active = ref.watch(terminalActiveTabIdProvider);
     final onPanes = _showingPanes(ref);
-    final active = terminals.activeTabId;
     return [
-      for (final tab in terminals.tabs)
+      for (final tab in tabs)
         _StripTab(
           active: onPanes && tab.id == active,
-          chip: () => TerminalTabChip(
-            title: sessions.titleForTab(tab.id),
-            liveness: sessions.livenessForTab(tab.id),
-            selected: onPanes && tab.id == active,
-            onTap: () => activateTerminalTab(ref, tab.id),
-            onClose: () => sessions.closeTab(tab.id),
-            onEnd: () => sessions.closeTab(tab.id, detach: false),
-          ),
+          chip: () =>
+              _TabChip(tab: tab, selected: onPanes && tab.id == active),
         ),
     ];
+  }
+}
+
+/// One tab's chip, holding the strip's only watch on what happens *inside* a
+/// tab.
+///
+/// A tab draws a liveness dot, so the strip cannot simply stop knowing about
+/// liveness — but it can stop being told as a whole. Each chip subscribes to
+/// its own panes through [terminalPaneLivenessProvider], so a process exiting
+/// redraws that tab and leaves the other ninety-nine alone.
+class _TabChip extends ConsumerWidget {
+  const _TabChip({required this.tab, required this.selected});
+
+  final TerminalTab tab;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    return TerminalTabChip(
+      title: sessions.titleForTab(tab.id),
+      liveness: _liveness(ref),
+      selected: selected,
+      onTap: () => activateTerminalTab(ref, tab.id),
+      onClose: () => sessions.closeTab(tab.id),
+      onEnd: () => sessions.closeTab(tab.id, detach: false),
+    );
+  }
+
+  /// The strongest liveness among this tab's panes — `livenessForTab`'s rule,
+  /// asked pane by pane so a split's second pane is watched too.
+  ///
+  /// Every pane is watched rather than stopping at the first live one: the
+  /// subscription set has to be the whole tab, or a pane this chip never asked
+  /// about could die unnoticed.
+  PaneLiveness _liveness(WidgetRef ref) {
+    var strongest = PaneLiveness.exited;
+    for (final paneId in tab.layout.panes) {
+      final liveness = ref.watch(terminalPaneLivenessProvider(paneId));
+      if (liveness == PaneLiveness.live) {
+        strongest = PaneLiveness.live;
+      } else if (liveness == PaneLiveness.restored &&
+          strongest != PaneLiveness.live) {
+        strongest = PaneLiveness.restored;
+      }
+    }
+    return strongest;
   }
 }
 
@@ -676,12 +751,19 @@ class _TabStrip extends ConsumerWidget {
 /// strip or in the picker.
 bool _showingPanes(WidgetRef ref) {
   // A pane appearing or ending changes the answer, and so does the launch that
-  // rewrites `pane_id` on the row.
-  ref.watch(terminalSessionsControllerProvider);
+  // rewrites `pane_id` on the row. Only the tab list, though: a *process* dying
+  // cannot change which panes exist, and this is read from the tab strip on
+  // every build.
+  ref.watch(terminalTabsProvider);
   ref.watch(sessionsRevisionProvider);
   final imported = ref.watch(selectedImportedSessionIdProvider);
-  final selected = ref.watch(selectedSessionIdProvider);
-  // With nothing selected the workbench is the terminal, whatever the flag
+  // The same fallback the workbench itself makes: with nothing selected it
+  // still follows the pane on screen to its session, and that session has a
+  // conversation the strip has to account for. See [_selectedSession].
+  final selected =
+      ref.watch(selectedSessionIdProvider) ??
+      ref.watch(activePaneSessionIdProvider);
+  // With no session at all the workbench is the terminal, whatever the flag
   // says — there is no second surface to be on.
   if (imported == null && selected == null) return true;
   if (!ref.watch(terminalVisibleProvider)) return false;
