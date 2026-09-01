@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../editor/application/code_editor_providers.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/chat_transcript.dart';
@@ -113,8 +115,19 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
             data: (messages) => ChatTranscriptView(
               messages: [
                 for (final m in messages)
-                  ChatMessage(role: m.role, text: m.text),
+                  ChatMessage(role: m.role, text: m.text, tool: m.tool),
               ],
+              // An imported session records paths in the environment it ran
+              // in; an image read in WSL needs its host form before `dart:io`
+              // here can open it.
+              resolveHostPath: (path) => ref
+                  .read(editorActionsProvider)
+                  .windowsPathFor(
+                    EnvironmentPath(
+                      environmentId: session.environmentId,
+                      path: path,
+                    ),
+                  ),
               emptyHint: 'No readable history — send a message to continue it.',
               footer: MessageComposer(
                 hintText: 'Continue this session — type a message',

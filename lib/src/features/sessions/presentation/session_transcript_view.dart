@@ -7,6 +7,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
+import '../../editor/application/code_editor_providers.dart';
+import '../../environments/domain/environment_path.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -87,6 +89,27 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
+  /// Translates a path the agent wrote into one this process can open, or null
+  /// when the session's environment is unknown.
+  ///
+  /// The agent may be running in WSL while `dart:io` here is the Windows host,
+  /// so `/mnt/c/…/shot.png` has to become `C:\…\shot.png` before an image can
+  /// be drawn. Explicit, environment-aware, and the same call every other
+  /// feature makes — `EditorActions.windowsPathFor`.
+  String? Function(String)? _hostPathResolver() {
+    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    if (session == null) return null;
+    final environmentId = ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId)
+        ?.environmentId;
+    if (environmentId == null) return null;
+    final editor = ref.read(editorActionsProvider);
+    return (path) => editor.windowsPathFor(
+      EnvironmentPath(environmentId: environmentId, path: path),
+    );
+  }
+
   Future<void> _stop() async {
     await ref.read(sessionEngineProvider).stop(widget.sessionId);
     ref.read(sessionsRevisionProvider.notifier).bump();
@@ -161,6 +184,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             error: (e, _) => Center(child: Text('$e')),
             data: (messages) => ChatTranscriptView(
               messages: messages,
+              resolveHostPath: _hostPathResolver(),
               // Null when Notes is off: the transcript never learns the
               // feature exists, so there is nothing left behind to hide.
               onSaveNote: notesEnabled ? _saveNote : null,
@@ -237,12 +261,20 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         : 'No messages yet.';
   }
 
-  /// The agent's own transcript as chat messages. Tool lines are dropped: the
-  /// terminal view already shows them, in the form the agent drew them.
+  /// The agent's own transcript as chat messages.
+  ///
+  /// Tool lines used to be dropped here, on the argument that the terminal view
+  /// already showed them. The owner's report retired that argument: the
+  /// conversation is where they read what the agent did, and a session whose
+  /// commands and screenshots are invisible is a session they have to go and
+  /// watch in a second window.
   List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) => [
     for (final message in messages)
-      if (message.role != 'tool')
-        ChatMessage(role: message.role, text: message.text),
+      ChatMessage(
+        role: message.role,
+        text: message.text,
+        tool: message.tool,
+      ),
   ];
 
   /// Maps the persisted event log to displayable chat messages, dropping

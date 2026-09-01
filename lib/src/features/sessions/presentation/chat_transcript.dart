@@ -5,16 +5,25 @@ import 'package:flutter/services.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../domain/tool_activity.dart';
 import 'markdown_message.dart';
+import 'tool_activity_row.dart';
 
 /// A normalized chat message for the transcript view, independent of whether it
 /// came from a native session's event log or an imported CLI transcript.
 class ChatMessage {
-  const ChatMessage({required this.role, required this.text});
+  const ChatMessage({required this.role, required this.text, this.tool});
 
   /// `user`, `agent`, `tool`, or `error`.
   final String role;
   final String text;
+
+  /// The structured call behind a `tool` row, when the source carried one.
+  ///
+  /// Null for a tool line we only have prose for — a CLI whose record we can
+  /// only read as text, or the engine's own `Session ended.` marker. Those keep
+  /// rendering exactly as they did.
+  final ToolActivity? tool;
 }
 
 /// Called when the user keeps a message as a note: the message itself, and its
@@ -32,12 +41,22 @@ class ChatTranscriptView extends StatefulWidget {
     this.footer,
     this.emptyHint = 'No messages yet.',
     this.onSaveNote,
+    this.resolveHostPath,
     super.key,
   });
 
   final List<ChatMessage> messages;
   final Widget? footer;
   final String emptyHint;
+
+  /// Turns a path an agent wrote into one this process can open — a WSL
+  /// `/mnt/c/…` into its Windows form. Supplied by whoever knows the session's
+  /// environment; omitted means the paths are already host paths.
+  ///
+  /// The translation is explicit and passed in rather than guessed at here,
+  /// which is the rule the whole codebase follows (`PathTranslator`,
+  /// `EditorActions.windowsPathFor`).
+  final String? Function(String path)? resolveHostPath;
 
   /// Keeps a message as a note. Null hides the affordance entirely — the view
   /// knows nothing about the Notes feature or the setting behind it, only
@@ -140,6 +159,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                     final message = visible[offset];
                     return _ChatMessageTile(
                       message: message,
+                      resolveHostPath: widget.resolveHostPath,
                       onSaveNote: widget.onSaveNote == null
                           ? null
                           : () => widget.onSaveNote!(message, start + offset),
@@ -154,9 +174,14 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 }
 
 class _ChatMessageTile extends StatelessWidget {
-  const _ChatMessageTile({required this.message, this.onSaveNote});
+  const _ChatMessageTile({
+    required this.message,
+    this.onSaveNote,
+    this.resolveHostPath,
+  });
   final ChatMessage message;
   final VoidCallback? onSaveNote;
+  final String? Function(String path)? resolveHostPath;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +195,11 @@ class _ChatMessageTile extends StatelessWidget {
       _ => ('●', scheme.onSurface, 'Agent'),
     };
 
+    final activity = message.tool;
+    // A tool row is named by the tool that ran, not by the word "tool": an
+    // eyebrow reading TOOL over a body reading `tool: Bash` was the same thing
+    // written twice, and told the reader nothing about which call this was.
+    final eyebrow = activity == null ? label : activity.name;
     final prose = message.role == 'user' || message.role == 'agent';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.sm),
@@ -191,7 +221,7 @@ class _ChatMessageTile extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      label.toUpperCase(),
+                      eyebrow.toUpperCase(),
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: color,
                         fontWeight: FontWeight.w700,
@@ -203,7 +233,12 @@ class _ChatMessageTile extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                if (prose)
+                if (activity != null)
+                  ToolActivityBody(
+                    activity: activity,
+                    resolveHostPath: resolveHostPath,
+                  )
+                else if (prose)
                   MarkdownMessage(message.text)
                 else
                   SelectableText(

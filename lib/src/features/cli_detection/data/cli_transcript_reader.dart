@@ -2,15 +2,24 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../agents/domain/agent_ids.dart';
+import '../../sessions/domain/tool_activity.dart';
 
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
 class TranscriptMessage {
-  const TranscriptMessage({required this.role, required this.text});
+  const TranscriptMessage({
+    required this.role,
+    required this.text,
+    this.tool,
+  });
 
   /// `user`, `agent`, or `tool`.
   final String role;
   final String text;
+
+  /// The structured call behind a `tool` message: what it ran, and what it
+  /// answered. Null for the other two roles.
+  final ToolActivity? tool;
 }
 
 /// Reads a CLI session's full transcript (Claude Code / Codex JSONL) into a flat
@@ -75,7 +84,16 @@ void _parseClaudeLine(Map<String, dynamic> json, List<TranscriptMessage> out) {
           _add(out, role, part['text']);
         case 'tool_use':
           final name = part['name'];
-          if (name is String) _add(out, 'tool', 'tool: $name');
+          if (name is String) {
+            final activity = toolActivityFor(name, part['input']);
+            out.add(
+              TranscriptMessage(
+                role: 'tool',
+                text: activity.summary,
+                tool: activity,
+              ),
+            );
+          }
       }
     }
   }
