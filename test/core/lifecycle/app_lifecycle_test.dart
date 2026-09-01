@@ -4,6 +4,11 @@ import 'dart:io';
 import 'package:chitragupta/src/core/database/app_database.dart';
 import 'package:chitragupta/src/core/database/database_providers.dart';
 import 'package:chitragupta/src/core/lifecycle/app_lifecycle.dart';
+import 'package:chitragupta/src/core/process/command_runner.dart';
+import 'package:chitragupta/src/core/process/command_runner_providers.dart';
+import 'package:chitragupta/src/features/agents/data/agent_probe_log.dart';
+import 'package:chitragupta/src/features/agents/domain/agent_ids.dart';
+import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/mcp/launcher_control_server.dart';
 import 'package:chitragupta/src/features/notifications/application/notification_providers.dart';
 import 'package:chitragupta/src/features/remote/relay_local/local_relay_providers.dart';
@@ -16,6 +21,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fake_command_runner.dart';
+import '../../support/fixtures.dart';
 import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
 
@@ -455,6 +462,58 @@ void main() {
       expect(File(bridge).existsSync(), isFalse);
       expect(natives.window.destroyed, isTrue);
       expect(isDisposed(container), isTrue);
+    });
+  });
+
+  group('agents nobody has ever looked for', () {
+    test('a workspace that has discovered before sweeps for new agents', () async {
+      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
+      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      final runner = FakeCommandRunner(
+        responder: (req) => const CommandResult(
+          exitCode: 1,
+          stdout: '',
+          stderr: '',
+        ),
+      );
+      final scoped = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: runner),
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+
+      AppLifecycle(scoped).startAgentDiscovery();
+      await pumpEventQueue();
+
+      // Every shipped agent, asked about once, because this workspace has no
+      // record of ever having looked.
+      expect(runner.requests, isNotEmpty);
+      expect(AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'), isTrue);
+    });
+
+    test('a workspace that has never discovered leaves it to the first run', () async {
+      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      final runner = FakeCommandRunner();
+      final scoped = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: runner),
+          ),
+        ],
+      );
+      addTearDown(scoped.dispose);
+
+      AppLifecycle(scoped).startAgentDiscovery();
+      await pumpEventQueue();
+
+      // The one-time startup scan is already probing everything; two sweeps
+      // racing would spawn every probe twice.
+      expect(runner.requests, isEmpty);
     });
   });
 }

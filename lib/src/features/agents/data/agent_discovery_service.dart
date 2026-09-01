@@ -80,10 +80,21 @@ class AgentDiscoveryService {
   final AgentRegistry registry;
 
   /// Every registry agent found in this environment, descriptor included.
-  Future<List<DiscoveredAgent>> probeAll() async {
+  ///
+  /// [agentIds] narrows the search to those descriptors. Each probe is a
+  /// process — two over WSL, where every one is slow — so a caller that already
+  /// knows which agents are worth asking about says so rather than paying for
+  /// the whole registry.
+  Future<List<DiscoveredAgent>> probeAll({Set<String>? agentIds}) async {
+    final wanted = agentIds == null
+        ? registry.descriptors
+        : [
+            for (final d in registry.descriptors)
+              if (agentIds.contains(d.id)) d,
+          ];
     // The probes are independent subprocesses. Run them concurrently so a
     // slow or missing CLI does not serially delay every other agent check.
-    final probed = await Future.wait(registry.descriptors.map(_probe));
+    final probed = await Future.wait(wanted.map(_probe));
     return probed.whereType<DiscoveredAgent>().toList();
   }
 
@@ -92,8 +103,8 @@ class AgentDiscoveryService {
   /// Every descriptor that was found becomes an installation, keyed by its
   /// `AgentDescriptor.id`. An agent needs no `AgentKind` member to be stored —
   /// only a registry entry.
-  Future<List<AgentInstallation>> discover() async {
-    final found = await probeAll();
+  Future<List<AgentInstallation>> discover({Set<String>? agentIds}) async {
+    final found = await probeAll(agentIds: agentIds);
     return [
       for (final agent in found)
         AgentInstallation(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/agents/application/agent_hook_installation_service.dart';
+import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/mcp/launcher_control_server.dart';
 import '../../features/notifications/application/notification_providers.dart';
 import '../../features/remote/application/remote_access_controller.dart';
@@ -12,6 +13,7 @@ import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../database/database_providers.dart';
 import '../logging/app_logger.dart';
 import '../logging/diagnostics.dart';
 
@@ -202,6 +204,45 @@ class AppLifecycle {
           onError: (Object error, StackTrace stack) =>
               _logger.warning('Agent hook installation failed.', error, stack),
         );
+  }
+
+  /// Looks for agents this workspace has never searched for, in the background.
+  ///
+  /// Agent discovery was a single scan at workspace creation, so a descriptor
+  /// that joined the registry in an app *upgrade* — `antigravity` in 1.1.4 —
+  /// stayed invisible until the user happened to find "Discover agents" in
+  /// Settings. This asks only about the `(agent, environment)` pairs with
+  /// neither an installation row nor a probe record, so a launch with nothing
+  /// new to look for spawns no processes at all.
+  ///
+  /// Skipped on a workspace that has never discovered anything: that launch's
+  /// own first-run scan is doing the same work, and racing it would probe every
+  /// agent twice.
+  ///
+  /// Not awaited and not retained. Each probe is a bounded subprocess with
+  /// nothing to tear down, and the window must not wait on WSL to answer.
+  void startAgentDiscovery() {
+    final database = _container.read(databaseProvider);
+    if (database.readMetadata(MetadataKeys.agentsDiscoveredAt) == null) return;
+    unawaited(
+      _container
+          .read(agentInstallationsControllerProvider.notifier)
+          .discoverUnprobed()
+          .then(
+            (found) {
+              if (found.isEmpty) return;
+              _logger.info(
+                'Agent discovery found ${found.length} agent(s) nobody had '
+                'looked for yet.',
+              );
+            },
+            onError: (Object error, StackTrace stack) => _logger.warning(
+              'Discovery of never-probed agents failed.',
+              error,
+              stack,
+            ),
+          ),
+    );
   }
 
   /// Takes ownership of components built elsewhere.
