@@ -159,6 +159,24 @@ abstract interface class SimulatorBackend {
 
   Future<void> pressButton(String udid, SimulatorButton button);
 
+  /// Whether the device is showing its lock screen.
+  Future<bool> isLocked(String udid);
+
+  /// Locks or unlocks the device.
+  ///
+  /// Both directions, because locking is a state and not a keypress: a button
+  /// that could only ever lock leaves the user looking at a lock screen with
+  /// nothing on the toolbar to undo it.
+  Future<void> setLocked(String udid, {required bool locked});
+
+  /// Opens the app switcher.
+  ///
+  /// Not a button, which is why it is not in [SimulatorButton]: on a device
+  /// with a home indicator the switcher is a swipe up from the bottom edge that
+  /// **pauses** before letting go, and on one with a physical Home button it is
+  /// a double press. Neither is something a single press can express.
+  Future<void> showAppSwitcher(String udid);
+
   /// The accessibility tree of whatever is on screen, mapped onto the same
   /// [UiHierarchy] the Android side produces so queries and taps-by-label are
   /// written once.

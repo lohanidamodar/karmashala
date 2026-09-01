@@ -92,7 +92,13 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
 
     SimulatorFrames? frames;
     try {
-      final feed = await backend.startVideo(udid);
+      // Half resolution, deliberately. WebDriverAgent streams the device's
+      // full backing store — 1206x2622 on an iPhone 17 — and every frame of it
+      // is decoded and uploaded as a new texture thirty times a second. The
+      // pane is a few hundred points wide, so that detail is thrown away by the
+      // scale down; asking for half cuts the decode and the upload to a quarter
+      // and nothing about the picture looks different.
+      final feed = await backend.startVideo(udid, scale: 0.5);
       // Read once, here: it costs an accessibility round trip, and it cannot
       // change while the picture is up short of a rotation.
       final screen = await backend.screen(udid);

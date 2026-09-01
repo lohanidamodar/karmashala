@@ -186,6 +186,10 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   /// `simctl ui appearance` can be read back, but only by spawning a process,
   /// and the answer is only ever wrong if something outside this app changed it.
   bool _dark = false;
+
+  /// What the last toggle left the device in. Re-read before every toggle, so a
+  /// device locked from somewhere else cannot leave the button inverted.
+  bool _locked = false;
   bool _busy = false;
 
   Future<void> _run(String what, Future<void> Function() action) async {
@@ -208,6 +212,22 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
     final backend = ref.read(simulatorBackendProvider);
     if (backend == null) return;
     await _run(button.name, () => backend.pressButton(widget.udid, button));
+  }
+
+  Future<void> _toggleLock() async {
+    final backend = ref.read(simulatorBackendProvider);
+    if (backend == null) return;
+    await _run('Lock', () async {
+      final locked = await backend.isLocked(widget.udid);
+      await backend.setLocked(widget.udid, locked: !locked);
+      if (mounted) setState(() => _locked = !locked);
+    });
+  }
+
+  Future<void> _appSwitcher() async {
+    final backend = ref.read(simulatorBackendProvider);
+    if (backend == null) return;
+    await _run('App switcher', () => backend.showAppSwitcher(widget.udid));
   }
 
   Future<void> _appearance() async {
@@ -269,18 +289,24 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          button(
-            canPress
-                ? 'Home'
-                : 'Home needs WebDriverAgent, which this build has no copy of',
-            AppIcons.circle,
-            canPress ? () => _press(SimulatorButton.home) : null,
-            key: const Key('simulator-home'),
+          // Long press for the app switcher, the way the hardware button
+          // behaves. A wrapper rather than an `IconButton` parameter because
+          // `IconButton` has no long press of its own.
+          GestureDetector(
+            onLongPress: canPress && !_busy ? _appSwitcher : null,
+            child: button(
+              canPress
+                  ? 'Home — press and hold for the app switcher'
+                  : 'Home needs WebDriverAgent, which this build has no copy of',
+              AppIcons.circle,
+              canPress ? () => _press(SimulatorButton.home) : null,
+              key: const Key('simulator-home'),
+            ),
           ),
           button(
-            'Lock',
+            _locked ? 'Unlock' : 'Lock',
             AppIcons.power,
-            canPress ? () => _press(SimulatorButton.lock) : null,
+            canPress ? _toggleLock : null,
             key: const Key('simulator-lock'),
           ),
           button(
@@ -334,7 +360,10 @@ Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
       // The frames are already device pixels. Leaving this at the window's
       // ratio would ask Flutter to shrink them again on a Retina display.
       scale: 1,
-      filterQuality: FilterQuality.medium,
+      // Bilinear, not `medium`. `medium` builds mipmaps, and every frame here
+      // is a *new* image — so it was regenerating them thirty times a second
+      // for a picture that is only ever scaled down a little.
+      filterQuality: FilterQuality.low,
     );
   },
 );

@@ -3,8 +3,25 @@ import FlutterMacOS
 
 @main
 class AppDelegate: FlutterAppDelegate {
-  override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-    return true
+  /// Whether losing the last window ends the app. It does not.
+  ///
+  /// This app has a tray icon and a close-to-tray setting, and hiding to the
+  /// tray is `orderOut(nil)` — the window goes away without closing. With this
+  /// answering `true`, AppKit took that as the app being finished and called
+  /// `applicationShouldTerminate`, which runs the ordered shutdown below: so
+  /// hiding to the tray quit the app instead, whether it was reached from the
+  /// window's close button or from clicking the tray icon while the window was
+  /// in front. Close-to-tray could not work while this said `true`.
+  ///
+  /// Dart decides. Prevent-close is on unconditionally, so the window's X
+  /// always reaches `onWindowClose`, which hides or quits according to the
+  /// setting — and the tray's Quit and Cmd+Q both go through the same ordered
+  /// path. There is no case left where the app should end merely because
+  /// nothing is on screen.
+  override func applicationShouldTerminateAfterLastWindowClosed(
+    _ sender: NSApplication
+  ) -> Bool {
+    return false
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

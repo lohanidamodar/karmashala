@@ -611,6 +611,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
     try {
       final visible = await _native.window.isVisible();
       final focused = visible && await _native.window.isFocused();
+      _logger.info(
+        'system: tray toggle → ${visible && focused ? 'hide' : 'show'} '
+        '(visible=$visible focused=$focused)',
+      );
       if (visible && focused) {
         await _native.window.hide();
       } else {
@@ -715,7 +719,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
   // --- TrayListener ---
 
   @override
-  void onTrayIconMouseDown() => unawaited(_toggleWindow());
+  void onTrayIconMouseDown() {
+    _logger.info('system: tray icon clicked');
+    unawaited(_toggleWindow());
+  }
 
   @override
   void onTrayIconRightMouseDown() => unawaited(_native.tray.popUpContextMenu());

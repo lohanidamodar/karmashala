@@ -155,9 +155,23 @@ void main(List<String> args) async {
       await backend.inputText(target.udid, 'hello 123');
       stdout.writeln('$_tick text accepted');
     });
+    await step('app switcher', () async {
+      await backend.showAppSwitcher(target.udid);
+      stdout.writeln('$_tick app switcher accepted');
+    });
+    await step('lock', () async {
+      final before = await backend.isLocked(target.udid);
+      await backend.setLocked(target.udid, locked: !before);
+      final after = await backend.isLocked(target.udid);
+      if (after == before) {
+        throw StateError('lock did not change state (still $before)');
+      }
+      await backend.setLocked(target.udid, locked: before);
+      stdout.writeln('$_tick lock toggles both ways (was $before)');
+    });
     await step('video', () async {
       final started = DateTime.now();
-      final feed = await backend.startVideo(target.udid, fps: 30);
+      final feed = await backend.startVideo(target.udid, fps: 30, scale: 0.5);
       stdout.writeln('$_tick video url ${feed.url}');
 
       // Pull the stream the way the pane does, through the same parser, and
@@ -168,6 +182,7 @@ void main(List<String> args) async {
       // read them. Frames are the thing that matters.
       var frames = 0;
       var bytes = 0;
+      String dimensions = 'unknown';
       var shortest = 1 << 30;
       final malformed = <String>[];
       final done = Completer<void>();
@@ -176,6 +191,7 @@ void main(List<String> args) async {
           frames++;
           bytes += frame.length;
           if (frame.length < shortest) shortest = frame.length;
+          dimensions = _jpegSize(frame) ?? dimensions;
           final soi = frame.length > 1 && frame[0] == 0xFF && frame[1] == 0xD8;
           final eoi = frame.length > 1 &&
               frame[frame.length - 2] == 0xFF &&
@@ -201,8 +217,9 @@ void main(List<String> args) async {
 
       final seconds = DateTime.now().difference(started).inSeconds;
       stdout.writeln(
-        '$_tick video: $frames frames, ${(bytes / 1024).round()} KiB in '
-        '${seconds}s (~${seconds == 0 ? frames : frames ~/ seconds} fps), '
+        '$_tick video: $frames frames at $dimensions, '
+        '${(bytes / 1024).round()} KiB in ${seconds}s '
+        '(~${seconds == 0 ? frames : frames ~/ seconds} fps), '
         'smallest ${shortest ~/ 1024} KiB',
       );
       if (frames == 0) {
@@ -228,4 +245,39 @@ void main(List<String> args) async {
     failures == 0 ? '\nAll checks passed.' : '\n$failures check(s) failed.',
   );
   exit(failures == 0 ? 0 : 1);
+}
+
+
+/// The pixel size in a JPEG's start-of-frame marker, or null if it has none.
+///
+/// Byte size is no guide to what the stream is actually sending — a busier
+/// screen makes a bigger file at the same resolution — so the only way to see
+/// whether `mjpegScalingFactor` took effect is to read the dimensions out of
+/// the frame itself.
+String? _jpegSize(List<int> jpeg) {
+  var i = 2; // past SOI
+  while (i + 9 < jpeg.length) {
+    if (jpeg[i] != 0xFF) {
+      i++;
+      continue;
+    }
+    final marker = jpeg[i + 1];
+    // The SOF markers that carry a frame header. C4, C8 and CC are tables and
+    // definitions rather than frames, which is why they are excluded.
+    final isFrameHeader =
+        marker >= 0xC0 &&
+        marker <= 0xCF &&
+        marker != 0xC4 &&
+        marker != 0xC8 &&
+        marker != 0xCC;
+    if (isFrameHeader) {
+      final height = (jpeg[i + 5] << 8) | jpeg[i + 6];
+      final width = (jpeg[i + 7] << 8) | jpeg[i + 8];
+      return '${width}x$height';
+    }
+    final length = (jpeg[i + 2] << 8) | jpeg[i + 3];
+    if (length < 2) return null;
+    i += 2 + length;
+  }
+  return null;
 }

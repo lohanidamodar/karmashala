@@ -285,11 +285,19 @@ class SimctlService {
     return parseSimctlLaunchPid(result.stdout);
   }
 
+  /// Terminates an app, tolerating one that is not running.
+  ///
+  /// The same shape as [boot] and [shutdown]: asking for a state a device is
+  /// already in is not a failure. Terminating is a cleanup step — WebDriverAgent
+  /// detaches this way, including during the app's ordered shutdown — and the
+  /// runner having already exited is the ordinary case, not an error worth
+  /// aborting a teardown over.
   Future<void> terminateApp(String udid, String bundleId) => _act(
     udid,
     ['terminate', udid, bundleId],
     verb: 'terminate',
     summary: 'Terminated $bundleId',
+    tolerate: 'found nothing to terminate',
   );
 
   /// Opens a URL on the simulator — a web link, or a custom scheme to reach a

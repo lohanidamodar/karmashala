@@ -169,8 +169,11 @@ class WdaBackend implements SimulatorBackend {
     _attached = null;
     try {
       await simctl.terminateApp(udid, kWdaBundleId);
-    } on CommandException {
-      // Already gone.
+    } on Object catch (error) {
+      // Every kind, not just CommandException: `simctl` reports a refusal as a
+      // StateError, which escaped this and took the ordered shutdown with it —
+      // `detachAll` runs from a provider's dispose during quit.
+      _logger.info('WebDriverAgent was already gone: $error');
     }
   }
 
@@ -279,6 +282,77 @@ class WdaBackend implements SimulatorBackend {
   }
 
   @override
+  Future<bool> isLocked(String udid) async {
+    await attach(udid);
+    final session = await _session();
+    final response = await _get('/session/$session/wda/locked');
+    // WebDriverAgent is inconsistent about booleans — `isVisible` and
+    // `isEnabled` come back as the strings "1" and "0" — so this accepts both
+    // rather than trusting the type.
+    final value = response['value'];
+    return value == true || value == 1 || value == '1';
+  }
+
+  @override
+  Future<void> setLocked(String udid, {required bool locked}) async {
+    await attach(udid);
+    final session = await _session();
+    await _post('/session/$session/wda/${locked ? 'lock' : 'unlock'}', const {});
+  }
+
+  @override
+  Future<void> showAppSwitcher(String udid) async {
+    await attach(udid);
+    // The gesture needs the screen's height, and it is in points because that
+    // is the space WebDriverAgent takes coordinates in.
+    final size = (await screen(udid))?.points;
+    if (size == null) {
+      throw CommandException(
+        'The app switcher needs the screen size, and WebDriverAgent would not '
+        'report it.',
+      );
+    }
+    final session = await _session();
+    final x = size.width ~/ 2;
+
+    // Swipe up from the bottom edge and *hold*. The hold is the whole gesture:
+    // the same swipe released immediately goes to the home screen, and it is
+    // the pause partway up that iOS reads as "show me what is running".
+    //
+    // Written as a W3C action sequence rather than through
+    // `dragfromtoforduration`, whose duration is the press *before* the drag —
+    // there is no way to ask that endpoint to wait at the far end.
+    await _post('/session/$session/actions', {
+      'actions': [
+        {
+          'type': 'pointer',
+          'id': 'finger1',
+          'parameters': {'pointerType': 'touch'},
+          'actions': [
+            // The very bottom row. Starting even a few points higher is an
+            // in-app swipe rather than a system edge gesture.
+            {
+              'type': 'pointerMove',
+              'duration': 0,
+              'x': x,
+              'y': size.height - 1,
+            },
+            {'type': 'pointerDown', 'button': 0},
+            {
+              'type': 'pointerMove',
+              'duration': 400,
+              'x': x,
+              'y': (size.height * 0.45).round(),
+            },
+            {'type': 'pause', 'duration': 900},
+            {'type': 'pointerUp', 'button': 0},
+          ],
+        },
+      ],
+    });
+  }
+
+  @override
   Future<void> inputText(String udid, String text) async {
     await attach(udid);
     final session = await _session();
@@ -299,8 +373,7 @@ class WdaBackend implements SimulatorBackend {
         // not a route, and asking for it answers "unknown command".
         await _post('/wda/homescreen', const {});
       case SimulatorButton.lock:
-        final session = await _session();
-        await _post('/session/$session/wda/lock', const {});
+        await setLocked(udid, locked: true);
       case SimulatorButton.sideButton:
       case SimulatorButton.siri:
       case SimulatorButton.applePay:
