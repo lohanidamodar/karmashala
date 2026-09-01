@@ -9,6 +9,7 @@ import '../../../app/theme/app_icons.dart';
 import '../application/device_providers.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_stream.dart';
+import '../application/ios_device_providers.dart';
 import '../domain/android_device.dart';
 import '../domain/device_input.dart';
 import 'device_stream_status.dart';
@@ -560,6 +561,12 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   }
 }
 
+/// Prefixes that keep an Android serial and a simulator udid apart in the one
+/// picker. Both are opaque strings, and a value that could be either would make
+/// the selection ambiguous the first time a serial looked like a udid.
+const String _androidValue = 'android:';
+const String _simulatorValue = 'simulator:';
+
 class _DeviceToolbar extends ConsumerWidget {
   const _DeviceToolbar({
     required this.devices,
@@ -585,6 +592,22 @@ class _DeviceToolbar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Android devices and booted simulators in one list. They are the same
+    // thing to the user — a device with a screen they want to see — and keeping
+    // them apart meant a booted simulator was invisible in the picker that is
+    // supposed to name what the pane is about.
+    final simulators = ref.watch(bootedSimulatorsProvider);
+    final chosenSimulator = ref.watch(selectedSimulatorUdidProvider);
+    final simulatorSelected =
+        selected == null &&
+        chosenSimulator != null &&
+        simulators.any((s) => s.udid == chosenSimulator);
+    final simulatorStreaming =
+        ref.watch(simulatorLiveViewProvider) is! SimulatorLiveViewIdle;
+    // Without a backend a simulator can still be listed, started and stopped;
+    // only the picture is unavailable.
+    final canMirror = ref.watch(simulatorBackendProvider) != null;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
@@ -593,12 +616,16 @@ class _DeviceToolbar extends ConsumerWidget {
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 isExpanded: true,
-                value: selected?.serial,
+                value: selected != null
+                    ? '$_androidValue${selected!.serial}'
+                    : simulatorSelected
+                    ? '$_simulatorValue$chosenSimulator'
+                    : null,
                 hint: const Text('No device selected'),
                 items: [
                   for (final device in devices)
                     DropdownMenuItem(
-                      value: device.serial,
+                      value: '$_androidValue${device.serial}',
                       enabled: device.isReady,
                       child: Text(
                         device.isReady
@@ -606,13 +633,33 @@ class _DeviceToolbar extends ConsumerWidget {
                             : '${device.displayName} — ${device.state.name}',
                       ),
                     ),
+                  for (final simulator in simulators)
+                    DropdownMenuItem(
+                      value: '$_simulatorValue${simulator.udid}',
+                      child: Text(simulator.displayName),
+                    ),
                 ],
                 // Picking a device here moves the live view with it: the pane is
                 // about one device at a time, and the picture follows the picker
                 // rather than staying on whatever was streaming first.
-                onChanged: (serial) => ref
-                    .read(selectedDeviceSerialProvider.notifier)
-                    .select(serial),
+                //
+                // Picking one kind clears the other, so the picker always shows
+                // exactly what the pane is about rather than two selections
+                // disagreeing about it.
+                onChanged: (value) {
+                  if (value == null) return;
+                  if (value.startsWith(_simulatorValue)) {
+                    ref.read(selectedDeviceSerialProvider.notifier).select(null);
+                    ref
+                        .read(selectedSimulatorUdidProvider.notifier)
+                        .select(value.substring(_simulatorValue.length));
+                  } else {
+                    ref.read(selectedSimulatorUdidProvider.notifier).select(null);
+                    ref
+                        .read(selectedDeviceSerialProvider.notifier)
+                        .select(value.substring(_androidValue.length));
+                  }
+                },
               ),
             ),
           ),
@@ -626,6 +673,7 @@ class _DeviceToolbar extends ConsumerWidget {
             onPressed: () {
               ref.invalidate(devicesProvider);
               ref.invalidate(avdsProvider);
+              ref.invalidate(iosSimulatorsProvider);
             },
           ),
           if (onRestart != null)
@@ -655,15 +703,23 @@ class _DeviceToolbar extends ConsumerWidget {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             )
-          else if (streaming)
+          else if (simulatorSelected ? simulatorStreaming : streaming)
             TextButton.icon(
-              onPressed: onStop,
+              onPressed: simulatorSelected
+                  ? () => ref.read(simulatorLiveViewProvider.notifier).stop()
+                  : onStop,
               icon: const Icon(AppIcons.stop),
               label: const Text('Stop'),
             )
           else
             TextButton.icon(
-              onPressed: onStart,
+              onPressed: simulatorSelected
+                  ? (canMirror
+                        ? () => ref
+                              .read(simulatorLiveViewProvider.notifier)
+                              .start(chosenSimulator)
+                        : null)
+                  : onStart,
               icon: const Icon(AppIcons.play),
               label: const Text('Live view'),
             ),

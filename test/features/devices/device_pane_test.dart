@@ -1,6 +1,9 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/devices/application/device_providers.dart';
+import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
+import 'package:karmashala/src/features/devices/data/wda_backend.dart';
+import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 import 'package:karmashala/src/features/devices/domain/android_device.dart';
 import 'package:karmashala/src/features/devices/domain/device_input.dart';
 import 'package:karmashala/src/features/devices/presentation/device_pane.dart';
@@ -52,6 +55,8 @@ Future<void> _pump(
   Map<String, DeviceScreenSize> screens = const {},
   Size size = _desktop,
   FakeCommandRunner? runner,
+  List<IosSimulator> simulators = const [],
+  bool simulatorBackend = false,
 }) async {
   tester.view
     ..physicalSize = size
@@ -71,6 +76,11 @@ Future<void> _pump(
         deviceScreenSizeProvider.overrideWith(
           (ref, serial) async => screens[serial],
         ),
+        hostCanRunSimulatorsProvider.overrideWithValue(simulators.isNotEmpty),
+        iosSimulatorsProvider.overrideWith((ref) async => simulators),
+        simulatorBackendProvider.overrideWithValue(
+          simulatorBackend ? _StubSimulatorBackend() : null,
+        ),
       ],
       child: const MaterialApp(home: Scaffold(body: DevicePane())),
     ),
@@ -78,7 +88,99 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+class _StubSimulatorBackend implements WdaBackend {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('these cases never start a live view');
+}
+
+IosSimulator _bootedSimulator(String udid, String name) => IosSimulator(
+  udid: udid,
+  name: name,
+  state: SimulatorState.booted,
+  runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-4',
+  deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17',
+  isAvailable: true,
+);
+
 void main() {
+  group('the device picker', () {
+    testWidgets('lists Android devices and booted simulators together', (
+      tester,
+    ) async {
+      // They are one thing to the user: a device with a screen to look at.
+      // Listed apart, a booted simulator was absent from the very picker that
+      // names what the pane is showing, which read as the app not seeing it.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device(serial: 'emulator-5554')],
+        simulators: [_bootedSimulator('UDID-1', 'iPhone 17')],
+        simulatorBackend: true,
+      );
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('emulator-5554'), findsWidgets);
+      expect(find.textContaining('iPhone 17'), findsWidgets);
+    });
+
+    testWidgets('picking a simulator offers its live view', (tester) async {
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        simulators: [_bootedSimulator('UDID-1', 'iPhone 17')],
+        simulatorBackend: true,
+      );
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('iPhone 17').last);
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<TextButton>(
+        find.ancestor(
+          of: find.text('Live view'),
+          matching: find.byType(TextButton),
+        ).first,
+      );
+      expect(
+        button.onPressed,
+        isNotNull,
+        reason: 'a picked simulator is one the pane can mirror',
+      );
+    });
+
+    testWidgets('without a backend the live view is not offered', (
+      tester,
+    ) async {
+      // A button that always failed would be worse than none: WebDriverAgent is
+      // what makes the picture possible, and a build without it can still start
+      // and stop simulators perfectly well.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        simulators: [_bootedSimulator('UDID-1', 'iPhone 17')],
+      );
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('iPhone 17').last);
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<TextButton>(
+        find.ancestor(
+          of: find.text('Live view'),
+          matching: find.byType(TextButton),
+        ).first,
+      );
+      expect(button.onPressed, isNull);
+    });
+  });
+
   group('DevicePane empty states', () {
     testWidgets('explains how to install the SDK when none is found', (
       tester,
