@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fakes.dart';
+import '../../support/second_local_address.dart';
 import '../../support/fixtures.dart';
 
 /// The address each kind of session is told to dial, and what that address
@@ -25,16 +26,23 @@ import '../../support/fixtures.dart';
 /// below pin both halves of it: the right URL comes out per environment, and
 /// the second listener serves `/mcp` and nothing else.
 ///
-/// `127.0.0.2` stands in for the switch address. It is a real second address on
-/// a real second socket — Windows accepts binds anywhere in `127.0.0.0/8` — so
-/// these are genuine two-interface tests, and they run on a machine with no WSL
-/// installed.
-void main() {
+/// A second local address stands in for the switch address. It is a real
+/// second address on a real second socket, so these are genuine two-interface
+/// tests, and they run on a machine with no WSL installed. Which address that
+/// is depends on the host — `127.0.0.2` on Windows and Linux, something else on
+/// macOS, which assigns only `127.0.0.1` to `lo0`. See
+/// [findSecondLocalAddress].
+void main() async {
+  // Resolved before the cases are declared so a machine with no second address
+  // reports an honest skip rather than failing on a bind it could never make.
+  final secondAddress = await findSecondLocalAddress();
+  final skip = secondAddress == null ? noSecondAddressReason : null;
+
   late Directory tmp;
   late ProviderContainer container;
   late LauncherControlServer server;
 
-  final wslStandIn = InternetAddress('127.0.0.2');
+  final wslStandIn = secondAddress ?? InternetAddress.loopbackIPv4;
 
   Future<LauncherControlServer> startServer({
     Future<InternetAddress?> Function()? wslHostAddress,
@@ -52,6 +60,9 @@ void main() {
       bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
       socketDirectory: p.join(tmp.path, 'ipc'),
       wslHostAddress: wslHostAddress ?? () async => null,
+      // Every case here injects its own stand-in for the switch, so the WSL
+      // listener is wanted whatever OS the suite is running on.
+      hostCanHaveWsl: true,
     );
     addTearDown(() async {
       await started.stop();
@@ -81,7 +92,7 @@ void main() {
       server = await startServer(wslHostAddress: () async => wslStandIn);
 
       final url = server.mcpUrlFor('s1', environment: EnvironmentKind.wsl)!;
-      expect(url, startsWith('http://127.0.0.2:'));
+      expect(url, startsWith('http://${wslStandIn.address}:'));
       // The same port and the same session credential — one server, two doors.
       expect(
         Uri.parse(url).port,
@@ -89,10 +100,7 @@ void main() {
           server.mcpUrlFor('s1', environment: EnvironmentKind.windowsNative)!,
         ).port,
       );
-      expect(
-        server.callers.sessionFor(Uri.parse(url).pathSegments.last),
-        's1',
-      );
+      expect(server.callers.sessionFor(Uri.parse(url).pathSegments.last), 's1');
     });
 
     test('a WSL session on a host with no switch is given nothing', () async {
@@ -116,58 +124,65 @@ void main() {
       expect(server.mcpUrlFor('s1', environment: EnvironmentKind.ssh), isNull);
     });
 
-    test('nothing is offered anywhere when the endpoint has no credential', () async {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final closedContainer = ProviderContainer(
-        overrides: [
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-          databaseProvider.overrideWithValue(db),
-        ],
-      );
-      final closed = LauncherControlServer(
-        closedContainer,
-        permissions: _RefusingPermissions(),
-      );
-      await closed.start(
-        bridgeFilePath: p.join(tmp.path, 'closed.json'),
-        socketDirectory: p.join(tmp.path, 'closed-ipc'),
-        wslHostAddress: () async => wslStandIn,
-      );
-      addTearDown(() async {
-        await closed.stop();
-        closedContainer.dispose();
-      });
+    test(
+      'nothing is offered anywhere when the endpoint has no credential',
+      () async {
+        final db = AppDatabase.memory();
+        addTearDown(db.close);
+        final closedContainer = ProviderContainer(
+          overrides: [
+            clockProvider.overrideWithValue(FixedClock(testTime)),
+            databaseProvider.overrideWithValue(db),
+          ],
+        );
+        final closed = LauncherControlServer(
+          closedContainer,
+          permissions: _RefusingPermissions(),
+        );
+        await closed.start(
+          bridgeFilePath: p.join(tmp.path, 'closed.json'),
+          socketDirectory: p.join(tmp.path, 'closed-ipc'),
+          wslHostAddress: () async => wslStandIn,
+          hostCanHaveWsl: true,
+        );
+        addTearDown(() async {
+          await closed.stop();
+          closedContainer.dispose();
+        });
 
-      expect(closed.mcpUrlFor('s1', environment: EnvironmentKind.wsl), isNull);
-      // The door is still bound, because `/agent-hook` is still served — the
-      // same fail-*open* rule that keeps the hook route up on loopback when
-      // hardening fails, since an agent that cannot report status is a worse
-      // outcome than one that cannot drive a device. What it must not do is
-      // serve `/mcp` there: a withheld credential is withheld on every door.
-      expect(closed.wslHost, isNotNull);
-      final port = closed.hookEndpoint!.port;
-      expect(
-        (await post(
-          Uri.parse('http://127.0.0.2:$port/mcp'),
-          const <String, Object?>{},
-        )).status,
-        401,
-      );
-      expect(
-        (await post(
-          closed.hookEndpoint!.uriFor(
-            agentId: 'claudeCode',
-            event: 'Stop',
-            environment: EnvironmentKind.wsl,
-          )!,
-          const {'session_id': 's1'},
-          token: closed.hookEndpoint!.token,
-        )).status,
-        200,
-      );
-    });
-  });
+        expect(
+          closed.mcpUrlFor('s1', environment: EnvironmentKind.wsl),
+          isNull,
+        );
+        // The door is still bound, because `/agent-hook` is still served — the
+        // same fail-*open* rule that keeps the hook route up on loopback when
+        // hardening fails, since an agent that cannot report status is a worse
+        // outcome than one that cannot drive a device. What it must not do is
+        // serve `/mcp` there: a withheld credential is withheld on every door.
+        expect(closed.wslHost, isNotNull);
+        final port = closed.hookEndpoint!.port;
+        expect(
+          (await post(
+            Uri.parse('http://${wslStandIn.address}:$port/mcp'),
+            const <String, Object?>{},
+          )).status,
+          401,
+        );
+        expect(
+          (await post(
+            closed.hookEndpoint!.uriFor(
+              agentId: 'claudeCode',
+              event: 'Stop',
+              environment: EnvironmentKind.wsl,
+            )!,
+            const {'session_id': 's1'},
+            token: closed.hookEndpoint!.token,
+          )).status,
+          200,
+        );
+      },
+    );
+  }, skip: skip);
 
   group('the second listener', () {
     test('answers /mcp', () async {
@@ -201,7 +216,7 @@ void main() {
 
       for (final path in ['/rpc', '/']) {
         final response = await post(
-          Uri.parse('http://127.0.0.2:$port$path'),
+          Uri.parse('http://${wslStandIn.address}:$port$path'),
           const <String, Object?>{},
         );
         expect(response.status, 404, reason: path);
@@ -244,13 +259,13 @@ void main() {
 
       expect(response.status, 401);
     });
-  });
+  }, skip: skip);
 
   group('the address the hook endpoint hands to the installer', () {
     test('is the switch address once that interface is bound', () async {
       server = await startServer(wslHostAddress: () async => wslStandIn);
 
-      expect(server.hookEndpoint!.wslHost, '127.0.0.2');
+      expect(server.hookEndpoint!.wslHost, wslStandIn.address);
       expect(
         server.hookEndpoint!.reaches(EnvironmentKind.wsl),
         isTrue,
@@ -269,15 +284,21 @@ void main() {
       );
     });
 
-    test('the token is spelled in a shell command, so it stays shell-safe', () async {
-      server = await startServer(wslHostAddress: () async => wslStandIn);
-      // It is pasted verbatim into a `curl` line in the agent's own config and
-      // run by whatever shell that agent has. A quote, a `$` or a backtick in
-      // it would be a malformed hook in somebody's settings.json — installed,
-      // silent, and reported by nothing.
-      expect(server.hookEndpoint!.token, matches(RegExp(r'^[A-Za-z0-9_=-]+$')));
-    });
-  });
+    test(
+      'the token is spelled in a shell command, so it stays shell-safe',
+      () async {
+        server = await startServer(wslHostAddress: () async => wslStandIn);
+        // It is pasted verbatim into a `curl` line in the agent's own config and
+        // run by whatever shell that agent has. A quote, a `$` or a backtick in
+        // it would be a malformed hook in somebody's settings.json — installed,
+        // silent, and reported by nothing.
+        expect(
+          server.hookEndpoint!.token,
+          matches(RegExp(r'^[A-Za-z0-9_=-]+$')),
+        );
+      },
+    );
+  }, skip: skip);
 }
 
 /// One JSON POST, returning the status and the body.
