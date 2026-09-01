@@ -610,7 +610,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
   void _saveTerminalWorkspace() {
     try {
       if (!_container.exists(terminalSessionsControllerProvider)) return;
-      // persistWorkspace re-encodes every pane, so it covers the autosave too.
+      // persistWorkspace, not persistStructure: this is the last write before
+      // the process ends, so it has to re-encode every pane the structural
+      // saves left for the autosave. It covers the autosave too.
       _container
           .read(terminalSessionsControllerProvider.notifier)
           .persistWorkspace();
