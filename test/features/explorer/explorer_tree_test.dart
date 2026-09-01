@@ -12,9 +12,9 @@ import 'package:chitragupta/src/features/cli_detection/application/cli_detection
 import 'package:chitragupta/src/features/cli_detection/application/project_import_service.dart';
 import 'package:chitragupta/src/features/environments/data/execution_environment_dao.dart';
 import 'package:chitragupta/src/features/environments/domain/environment_path.dart';
-import 'package:chitragupta/src/features/explorer/presentation/checkout_row.dart';
 import 'package:chitragupta/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:chitragupta/src/features/explorer/presentation/project_card.dart';
+import 'package:chitragupta/src/features/explorer/presentation/session_card.dart';
 import 'package:chitragupta/src/features/projects/data/project_dao.dart';
 import 'package:chitragupta/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:chitragupta/src/features/repositories/data/repository_dao.dart';
@@ -37,12 +37,24 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// The Explorer drawn as a tree: **Project → Repository → Worktree → Session**.
+/// The Explorer drawn as a tree: **Project → Session**, and deliberately
+/// nothing between them.
 ///
-/// The shape under test is the owner's own workspace — a hub folder that is
-/// itself a git repository and holds a dozen clones. Before Loop 57 that was one
-/// repository row with every session piled on it; the question these tests exist
-/// to keep answered is *which sub-directory is that agent working in*.
+/// The fixture is still the owner's own workspace — a hub folder that is itself
+/// a git repository and holds a dozen clones — and the question these tests
+/// exist to keep answered is still *which sub-directory is that agent working
+/// in*. What changed is where it is answered. Loop 58 answered it with a row
+/// per checkout; a `project_rescan` then recorded 69 of them and the panel
+/// charged six git subprocesses each to draw thirteen visible rows, on WSL
+/// paths over 9p, again on every workspace mutation — the freeze the owner
+/// reported, measured in `checkout_scale_cost_test.dart`. The repository,
+/// worktree and "not scanned yet" rows are gone with it, and the answer now
+/// lives on the session's own card, as the sub-path it works in.
+///
+/// So what is covered here is the panel as it now is: every clone's sessions
+/// listed under the one project header, each still saying where it is; lineage;
+/// the menus and the keyboard's path to them; and the layout at the widths the
+/// pane is actually dragged between.
 void main() {
   late AppDatabase db;
   late FakeCommandRunner git;
@@ -154,23 +166,25 @@ void main() {
   }
 
   group('the hub case', () {
-    testWidgets('each nested repository is its own row', (tester) async {
-      await pump(tester);
-      expect(find.text('hub'), findsOneWidget);
-      expect(find.text('app'), findsOneWidget);
-      expect(find.text('lib'), findsOneWidget);
-      // And each says where it is, relative to the project.
-      expect(find.text('projects/app'), findsOneWidget);
-      expect(find.text('projects/lib'), findsOneWidget);
-    });
-
-    testWidgets('sessions land on their own repository, not in one pile', (
+    testWidgets('every clone\'s sessions list under the one project header', (
       tester,
     ) async {
+      // The inversion of what this file used to assert. Three clones used to be
+      // three rows, and the sessions hung off them; now the clones are not rows
+      // at all — the hub, `app` and `lib` are nowhere in the pane — and all
+      // three sessions sit directly under the one header. The user still tells
+      // them apart, because the fact that identifies the work travelled with
+      // the session onto its own card.
       addSession('s1', repositoryId: 'r1', title: 'On the hub');
       addSession('s2', repositoryId: 'r2', title: 'On app');
       addSession('s3', repositoryId: 'r3', title: 'On lib');
       await pump(tester);
+
+      expect(find.byType(ProjectCard), findsOneWidget);
+      expect(find.byType(SessionCard), findsNWidgets(3));
+      expect(find.text('hub'), findsNothing);
+      expect(find.text('app'), findsNothing);
+      expect(find.text('lib'), findsNothing);
 
       expect(find.text('On the hub'), findsOneWidget);
       expect(find.text('On app'), findsOneWidget);
@@ -178,7 +192,8 @@ void main() {
 
       // The owner's question, answered on the card itself: this agent is
       // working in `projects/app`, not merely "somewhere in Hub".
-      expect(find.textContaining('projects/app'), findsWidgets);
+      expect(find.textContaining('projects/app'), findsOneWidget);
+      expect(find.textContaining('projects/lib'), findsOneWidget);
     });
 
     testWidgets('a session at the project root shows no sub-path', (
@@ -196,14 +211,46 @@ void main() {
       expect(card, findsWidgets);
       expect(find.textContaining('C:\\hub  ·'), findsNothing);
     });
+
+    testWidgets('a session in a folder no scan recorded still says where', (
+      tester,
+    ) async {
+      // Loop 50 §8.4's real case, which used to be drawn as a "not scanned yet"
+      // row between the repository and the session: a checkout made outside the
+      // repository's own environment, which Windows git will not list and
+      // discovery never recorded. There is no row for it any more, and there
+      // does not need to be — the session knows its own directory, so the card
+      // still names the place rather than the nearest thing we happened to have
+      // a row for.
+      addSession(
+        's1',
+        repositoryId: 'r2',
+        title: 'In an unknown checkout',
+        worktree: at(r'C:\hub\projects\app\vendor\pinned'),
+      );
+      await pump(tester);
+
+      expect(find.text('In an unknown checkout'), findsOneWidget);
+      expect(
+        find.textContaining('projects/app/vendor/pinned'),
+        findsOneWidget,
+        reason: 'the whole sub-path, not the recorded repository above it',
+      );
+    });
   });
 
   group('cost', () {
+    // The curve — what a project costs as the number of *recorded* checkouts
+    // grows — is measured at three scales in `checkout_scale_cost_test.dart`.
+    // What is left here is the invariant that file does not exercise, because
+    // it holds one session fixed and varies the checkouts: many sessions in one
+    // working tree.
     testWidgets('twenty sessions in one repository share one git status', (
       tester,
     ) async {
-      // The rule Loop 50 established and Loop 57 re-keyed to survive worktree
-      // rows: however many rows describe a working tree, it is asked once.
+      // The rule Loop 50 established, and the reason the delivery providers are
+      // keyed by the checkout rather than by the session: however many cards
+      // describe one working tree, it is asked once.
       for (var i = 0; i < 20; i++) {
         addSession('s$i', repositoryId: 'r2', title: 'Session $i', minutes: i);
       }
@@ -216,70 +263,13 @@ void main() {
       expect(
         statusCallsFor(r'C:\hub\projects\app'),
         1,
-        reason: 'one working tree, one `git status` — row and cards share it',
-      );
-    });
-
-    testWidgets('expanding a project lists worktrees once per repository', (
-      tester,
-    ) async {
-      await pump(tester);
-      final lists = git.requests
-          .where((r) => r.arguments.contains('worktree'))
-          .map(dirOf)
-          .toList();
-      expect(lists.toSet().length, lists.length, reason: 'no repeats');
-      expect(lists.toSet(), {
-        r'C:\hub',
-        r'C:\hub\projects\app',
-        r'C:\hub\projects\lib',
-      });
-    });
-
-    testWidgets('a collapsed project asks git nothing', (tester) async {
-      await pump(tester, expand: false);
-      expect(
-        git.requests.where((r) => r.arguments.contains('worktree')),
-        isEmpty,
-        reason: 'the tree is lazy: nothing is asked until a project is opened',
+        reason: 'one working tree, one `git status` — twenty cards share it',
       );
     });
   });
 
   group('worktrees', () {
-    setUp(() {
-      git.responder = (request) {
-        final dir = dirOf(request);
-        if (request.arguments.contains('worktree') && dir == r'C:\hub') {
-          return const CommandResult(
-            exitCode: 0,
-            stdout:
-                'worktree C:/hub\nHEAD abc\nbranch refs/heads/main\n\n'
-                'worktree C:/hub/wt-side\nHEAD def\n'
-                'branch refs/heads/feature/side\n\n',
-            stderr: '',
-          );
-        }
-        if (request.arguments.contains('--abbrev-ref')) {
-          return CommandResult(
-            exitCode: 0,
-            stdout: dir.contains('wt-side') ? 'feature/side\n' : 'main\n',
-            stderr: '',
-          );
-        }
-        return _defaultGit(request);
-      };
-    });
-
-    testWidgets('a linked worktree is a row under its repository', (
-      tester,
-    ) async {
-      await pump(tester);
-      expect(find.text('wt-side'), findsOneWidget);
-      expect(find.text('feature/side'), findsWidgets);
-    });
-
-    testWidgets('a session in a worktree is drawn on that worktree', (
+    testWidgets('a session in a worktree names the worktree, not its repo', (
       tester,
     ) async {
       addSession(
@@ -292,103 +282,11 @@ void main() {
       await pump(tester);
 
       expect(find.text('Side work'), findsOneWidget);
-      // Its sub-path is the worktree, not the repository it belongs to.
-      expect(find.textContaining('wt-side'), findsWidgets);
-    });
-
-    testWidgets(
-      'a worktree with no repositories row of its own is still startable',
-      (tester) async {
-        // Loop 57 had to refuse this. `existingWorktree` pairs the owning
-        // repository's id with the worktree's directory.
-        await pump(tester);
-        await tester.tap(find.byTooltip('New session in this worktree'));
-        await tester.pumpAndSettle();
-
-        final started = SessionDao(db).getAll();
-        expect(started, hasLength(1));
-        expect(started.single.worktree, at(r'C:/hub/wt-side'));
-        expect(started.single.repositoryId, 'r1');
-      },
-    );
-
-    testWidgets('git failing to list is said, and only once it has failed', (
-      tester,
-    ) async {
-      git.responder = (request) => request.arguments.contains('worktree')
-          ? const CommandResult(
-              exitCode: 128,
-              stdout: '',
-              stderr: 'not a working tree',
-            )
-          : _defaultGit(request);
-      addSession('s1', repositoryId: 'r1', title: 'Somewhere');
-      await pump(tester);
-
-      // "We could not ask" is a different fact from "there are none", and it is
-      // said on the one row that is open — the two empty repositories stay shut
-      // and say nothing at all.
-      expect(
-        find.textContaining('Worktrees could not be listed'),
-        findsOneWidget,
-      );
-    });
-  });
-
-  group('a folder the scanner has not reached', () {
-    testWidgets('is drawn between the repository and the session', (
-      tester,
-    ) async {
-      // Loop 50 §8.4's real case: a checkout made outside the repository's own
-      // environment, which Windows git will not list and discovery never
-      // recorded. The session still nests where the work is.
-      addSession(
-        's1',
-        repositoryId: 'r2',
-        title: 'In an unknown checkout',
-        worktree: at(r'C:\hub\projects\app\vendor\pinned'),
-      );
-      await pump(tester);
-
-      expect(find.text('vendor/pinned'), findsOneWidget);
-      expect(find.text('not scanned yet'), findsOneWidget);
-      expect(find.text('In an unknown checkout'), findsOneWidget);
-      expect(find.byTooltip('Rescan for repositories'), findsOneWidget);
-    });
-
-    testWidgets('the rescan turns it into a real repository row', (
-      tester,
-    ) async {
-      // `ProjectService.rediscover` had never had a caller. This is the whole
-      // reason the "not scanned yet" row is allowed to exist rather than being
-      // persisted on sight: the scanner's job stays the scanner's.
-      discovery.result = [
-        DiscoveredRepository(name: 'hub', path: at(r'C:\hub')),
-        DiscoveredRepository(name: 'app', path: at(r'C:\hub\projects\app')),
-        DiscoveredRepository(name: 'lib', path: at(r'C:\hub\projects\lib')),
-        DiscoveredRepository(
-          name: 'pinned',
-          path: at(r'C:\hub\projects\app\vendor\pinned'),
-        ),
-      ];
-      addSession(
-        's1',
-        repositoryId: 'r2',
-        title: 'Unrecorded',
-        worktree: at(r'C:\hub\projects\app\vendor\pinned'),
-      );
-      await pump(tester);
-      expect(find.text('not scanned yet'), findsOneWidget);
-
-      await tester.tap(find.byTooltip('Rescan for repositories'));
-      await tester.pumpAndSettle();
-
-      expect(discovery.calls, isNotEmpty);
-      expect(find.text('Found 1 repository.'), findsOneWidget);
-      // It is a checkout now, not a folder we could only describe.
-      expect(find.text('not scanned yet'), findsNothing);
-      expect(find.text('pinned'), findsOneWidget);
-      expect(find.text('Unrecorded'), findsOneWidget);
+      // Its sub-path is the worktree, not the repository it belongs to — and
+      // the glyph that says "this has a checkout of its own" is on that card
+      // alone, so the two sessions cannot be confused for each other.
+      expect(find.textContaining('wt-side'), findsOneWidget);
+      expect(find.byTooltip('Runs in its own worktree'), findsOneWidget);
     });
   });
 
@@ -469,9 +367,11 @@ void main() {
       expect(find.text('Reachable'), findsOneWidget);
     });
 
-    testWidgets('a repository row offers reveal and copy path', (tester) async {
-      await pump(tester);
-      await openMenu(tester, find.byType(CheckoutRow).first);
+    testWidgets('the project card offers reveal and copy path', (tester) async {
+      // The folder verbs used to sit on the repository row; the project header
+      // is the only row that names a directory now, so it is where they are.
+      await pump(tester, expand: false);
+      await openMenu(tester, find.byType(ProjectCard));
 
       expect(find.text('Open in File Explorer'), findsOneWidget);
       expect(find.text('Copy path'), findsOneWidget);
@@ -486,8 +386,8 @@ void main() {
       tester,
     ) async {
       revealHost.throwError = CommandException('explorer.exe not found');
-      await pump(tester);
-      await openMenu(tester, find.byType(CheckoutRow).first);
+      await pump(tester, expand: false);
+      await openMenu(tester, find.byType(ProjectCard));
 
       await tester.tap(find.text('Open in File Explorer'));
       await tester.pumpAndSettle();
@@ -542,14 +442,43 @@ void main() {
       expect(find.text('Rescan for repositories'), findsOneWidget);
     });
 
+    testWidgets('and running it scans and says what it found', (tester) async {
+      // `ProjectService.rediscover` had never had a caller until the tree grew
+      // this entry. The tree row that used to advertise it — a folder drawn as
+      // "not scanned yet" — is gone, so the project menu is now the only way a
+      // repository created after the import reaches the workspace, and it has
+      // to report what it did.
+      discovery.result = [
+        DiscoveredRepository(name: 'hub', path: at(r'C:\hub')),
+        DiscoveredRepository(name: 'app', path: at(r'C:\hub\projects\app')),
+        DiscoveredRepository(name: 'lib', path: at(r'C:\hub\projects\lib')),
+        DiscoveredRepository(
+          name: 'pinned',
+          path: at(r'C:\hub\projects\app\vendor\pinned'),
+        ),
+      ];
+      await pump(tester, expand: false);
+      await openMenu(tester, find.byType(ProjectCard));
+
+      await tester.tap(find.text('Rescan for repositories'));
+      await tester.pumpAndSettle();
+
+      expect(discovery.calls, isNotEmpty);
+      // Three of the four were already recorded, so one is news.
+      expect(find.text('Found 1 repository.'), findsOneWidget);
+    });
+
     testWidgets('Shift+F10 opens a row menu with no pointer at all', (
       tester,
     ) async {
-      // The keyboard's own path to the same menu, in the panel rather than in
-      // a hosted row: hiding the overflow button until it is wanted is only
-      // honest while this works.
+      // The keyboard's own path to the same menu, in the panel rather than in a
+      // hosted row, and now on the only row kind the tree has below the header:
+      // hiding the overflow button until it is wanted is only honest while this
+      // works.
+      addSession('s1', repositoryId: 'r1', title: 'Reachable');
       await pump(tester);
-      Focus.of(tester.element(find.text('hub').first)).requestFocus();
+      expect(find.text('Rename'), findsNothing);
+      Focus.of(tester.element(find.text('Reachable'))).requestFocus();
       await tester.pumpAndSettle();
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
@@ -557,7 +486,7 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
       await tester.pumpAndSettle();
 
-      expect(find.text('Copy path'), findsOneWidget);
+      expect(find.text('Rename'), findsOneWidget);
     });
   });
 
@@ -595,24 +524,34 @@ void main() {
       expect(find.textContaining('1 session'), findsNothing);
     });
 
-    testWidgets('a repository row keeps its change count at the default width', (
+    testWidgets('a session card keeps its change count at the default width', (
       tester,
     ) async {
-      // 304px is what the Explorer opens at. A single width gate above it left
-      // every repository row with nothing at all on its right — no branch, no
-      // count — which only showed up when the app was actually run. With no
-      // sessions in the fixture, the three counts here are the three rows'.
+      // 304px is what the Explorer opens at. A single width gate above it once
+      // left every row with nothing at all on its right — no branch, no count —
+      // which only showed up when the app was actually run. The rows that gate
+      // belonged to are gone, but the card inherited their right-hand fact, and
+      // the default width is still the one nobody looks at.
+      addSession('s1', repositoryId: 'r2', title: 'Counted');
       await pump(tester, size: const Size(304, 900));
 
       expect(tester.takeException(), isNull);
-      expect(find.text('3 changed'), findsNWidgets(3));
+      expect(find.text('3 changed'), findsOneWidget);
     });
 
-    testWidgets('and gains the branch when the pane is dragged wider', (
+    testWidgets('and the branch joins the sub-path when the pane is wider', (
       tester,
     ) async {
+      // Line three is one run of text rather than a set of separately-gated
+      // facts, so what widens with the pane is how much of it survives the
+      // ellipsis, not which facts are built. This is the width at which both
+      // halves of the answer — where the work is, and on what branch — are
+      // there to be read.
+      addSession('s1', repositoryId: 'r2', title: 'Wide');
       await pump(tester, size: const Size(460, 900));
-      expect(find.text('main'), findsNWidgets(3));
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('projects/app  ·  main'), findsOneWidget);
     });
 
     testWidgets('the header does not overflow between its two breakpoints', (
@@ -638,22 +577,33 @@ void main() {
       expect(find.byTooltip('1 session is running'), findsOneWidget);
     });
 
-    testWidgets('a long repository name truncates rather than overflowing', (
-      tester,
-    ) async {
+    testWidgets('a long title and a deep sub-path truncate rather than '
+        'overflowing', (tester) async {
+      // Both of the card's long strings at once, at the narrowest the pane
+      // clamps to: the title, which is the only thing identifying the session,
+      // and the sub-path of a clone buried five folders down, which is the
+      // string a hub project makes long.
       RepositoryDao(db).insert(
         repository(
           id: 'r4',
-          name: 'a-repository-name-far-longer-than-any-pane-is-wide',
+          name: 'clone',
           path: r'C:\hub\projects\very\deeply\nested\clone',
         ),
       );
-      addSession('s1', repositoryId: 'r4', title: 'Deep');
+      addSession(
+        's1',
+        repositoryId: 'r4',
+        title: 'a-session-title-far-longer-than-any-pane-is-wide',
+      );
       await pump(tester, size: const Size(200, 900));
 
       expect(tester.takeException(), isNull);
       expect(
-        find.text('a-repository-name-far-longer-than-any-pane-is-wide'),
+        find.text('a-session-title-far-longer-than-any-pane-is-wide'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('projects/very/deeply/nested/clone'),
         findsOneWidget,
       );
     });

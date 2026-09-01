@@ -64,6 +64,34 @@ class RepositoryDao {
     _db.execute('DELETE FROM repositories WHERE id = ?;', [id]);
   }
 
+  /// How many rows of recorded history a [delete] of [repositoryId] would
+  /// destroy: native sessions, the extra links of sessions whose *primary*
+  /// repository is elsewhere, imported CLI history, and fanout comparisons.
+  ///
+  /// Every one of those foreign keys is `ON DELETE CASCADE`, so this number is
+  /// not advisory — it is the size of the hole [delete] would leave. It exists
+  /// because a rescan may now retire a checkout whose folder has gone, and a
+  /// folder going away is no reason at all to lose the transcript of the work
+  /// that was done in it. `fanout_comparisons` is counted with the rest
+  /// deliberately: those rows are written to stay readable *after* the worktree
+  /// they describe is removed, which is exactly this situation.
+  ///
+  /// `UNION` rather than four sums, because a session's primary link appears in
+  /// both `sessions` and `session_repositories` and counting it twice would
+  /// overstate what is at stake.
+  int historyReferenceCount(String repositoryId) {
+    final rows = _db.query(
+      'SELECT COUNT(*) AS n FROM ('
+      'SELECT id FROM sessions WHERE repository_id = ? '
+      'UNION SELECT session_id FROM session_repositories WHERE repository_id = ? '
+      'UNION SELECT id FROM imported_sessions WHERE repository_id = ? '
+      'UNION SELECT id FROM fanout_comparisons WHERE repository_id = ?'
+      ');',
+      [repositoryId, repositoryId, repositoryId, repositoryId],
+    );
+    return rows.first['n']! as int;
+  }
+
   Repository _fromRow(Map<String, Object?> row) => Repository(
     id: row['id']! as String,
     projectId: row['project_id']! as String,

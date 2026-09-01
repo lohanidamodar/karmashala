@@ -29,7 +29,6 @@ import '../application/explorer_actions.dart';
 import '../application/project_tree.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_forest.dart';
-import 'checkout_row.dart';
 import 'explorer_row.dart';
 import 'project_card.dart';
 import 'session_card.dart';
@@ -47,20 +46,34 @@ import '../../sessions/presentation/new_session_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 
-/// The unified left pane: **Project → Repository → Worktree → Session**.
+/// The unified left pane: **Project → Session**, and deliberately nothing else.
 ///
-/// Until Loop 58 this was a flat Project → (Repository) → Sessions list, and it
-/// could not answer the question the owner actually asks of it — *which of these
-/// twelve clones is that agent working in?* The rows now come from
-/// [projectTreeViewProvider]: repositories that are really worktrees of another
-/// are folded underneath it, and every session is placed on the **deepest** row
-/// whose directory contains the one its agent is running in, including a folder
-/// the scanner has never recorded.
+/// Loop 58 made this Project → Repository → Worktree → Session, to answer
+/// *which of these twelve clones is that agent working in?* It answered it in
+/// the wrong place. A `project_rescan` of the owner's hub recorded **69**
+/// checkouts — a dozen sibling clones and ~25 `wt-*` worktrees — and the tree
+/// dutifully drew a row for each, every row watching a per-checkout git
+/// provider: **six git subprocesses per recorded checkout**, 414 of them to
+/// draw thirteen visible rows, repeated on every workspace mutation, each on a
+/// WSL path reached over 9p at 1.19 ms a stat. That is the freeze the owner
+/// reported. `test/features/explorer/checkout_scale_cost_test.dart` is the
+/// measurement.
 ///
-/// **What it costs to open a project.** One `git worktree list` per repository
-/// row, once, cached by Riverpod. No `git status` of its own: every row shares
-/// `checkoutStatProvider` with the cards beneath it, so twenty sessions in one
-/// repository still cost one `git status` — asserted, not assumed.
+/// The question was good; the surface was wrong. *Which checkout is this agent
+/// in* is a question about the session you are looking at, so it is answered
+/// where that session is already the subject — the right sidebar's Changes,
+/// GitHub and Repository surfaces, from [projectCheckoutsProvider]. The
+/// Explorer lists sessions, and a session's own card still carries the
+/// sub-path it works in.
+///
+/// **What it costs to open a project.** Two indexed DAO reads. No git at all:
+/// there is no longer a row here that describes a checkout, so there is
+/// nothing here to ask git about. What a session card costs is charged when
+/// that card is *inflated*, because [_NativeSessionRow] and
+/// [_ImportedSessionRow] are `ConsumerWidget`s that watch inside their own
+/// `build` — which is the distinction the old checkout rows got wrong, since
+/// they watched during the panel's own build and so paid for every row the
+/// list would never show.
 class ExplorerPanel extends ConsumerStatefulWidget {
   const ExplorerPanel({super.key});
 
@@ -71,19 +84,6 @@ class ExplorerPanel extends ConsumerStatefulWidget {
 class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   String _query = '';
   final Set<String> _expandedProjects = {};
-
-  /// Rows the user has explicitly opened or closed, by row key. Absent means
-  /// "whatever [_defaultOpen] says", so a repository that has sessions opens on
-  /// its own and one that does not stays quiet — without forgetting the user's
-  /// choice the moment a session is added.
-  final Map<String, bool> _rowOverrides = {};
-
-  bool _isOpen(String key, {required bool defaultOpen}) =>
-      _rowOverrides[key] ?? defaultOpen;
-
-  void _toggleRow(String key, {required bool defaultOpen}) => setState(
-    () => _rowOverrides[key] = !_isOpen(key, defaultOpen: defaultOpen),
-  );
 
   void _showDetected() {
     ref.read(detectedProjectsControllerProvider.notifier).detect();
@@ -127,9 +127,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       final added = await ref
           .read(projectsControllerProvider.notifier)
           .rediscover(project.id);
-      // The tree is rebuilt from the repositories table, so invalidating it is
-      // what makes a newly-found checkout appear without reopening the project.
-      ref.invalidate(projectTreeProvider(project.id));
       _say(
         added.isEmpty
             ? 'No new repositories found in ${project.name}.'
@@ -533,279 +530,19 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     ];
     if (!expanded) return rows;
 
-    // Asynchronous only in its worktrees: while git is answering, the
-    // repositories are drawn as peers with no worktrees, so expanding a project
-    // shows its contents immediately.
-    final view = ref.watch(projectTreeViewProvider(project.id));
-    final loading = ref.watch(projectTreeProvider(project.id)).isLoading;
-    final nodes = view.tree.repositories;
-    if (nodes.isEmpty) {
+    // Two indexed DAO reads, and no git at any depth: the checkouts a session
+    // works in are the right sidebar's subject now, not a row here.
+    final sessions = ref.watch(projectSessionsProvider(project.id));
+    if (sessions.isEmpty) {
       rows.add(
-        _TreeHint(
+        const _TreeHint(
           depth: 1,
-          message:
-              'No repositories in this project. Use ⋯ → Rescan for '
-              'repositories if one was cloned since.',
+          message: 'No sessions yet — start one with the + on this project.',
         ),
       );
       return rows;
     }
-    // Path order, so a repository nested inside another is drawn immediately
-    // beneath it rather than wherever discovery happened to record it.
-    final ordered = [...nodes]
-      ..sort(
-        (a, b) => canonicalPathKey(
-          a.repository.path.path,
-        ).compareTo(canonicalPathKey(b.repository.path.path)),
-      );
-    for (final node in ordered) {
-      rows.addAll(
-        _repoNodes(
-          project,
-          node,
-          view.placement,
-          onlyRepository: ordered.length == 1,
-          worktreesLoading: loading,
-        ),
-      );
-    }
-    return rows;
-  }
-
-  List<Widget> _repoNodes(
-    Project project,
-    RepoNode node,
-    SessionPlacement placement, {
-    required bool onlyRepository,
-    required bool worktreesLoading,
-  }) {
-    final repository = node.repository;
-    final key = repoRowKey(repository);
-    final sessions = placement.at(key);
-    final folders = placement.under(key);
-    // A repository the user has work in opens itself; an empty one stays quiet.
-    // The single-repository project always opens, which is what makes tapping a
-    // project header show its sessions.
-    final open = _isOpen(
-      key,
-      defaultOpen:
-          onlyRepository ||
-          !sessions.isEmpty ||
-          folders.isNotEmpty ||
-          node.worktrees.isNotEmpty,
-    );
-    final stat = ref
-        .watch(checkoutStatProvider(Checkout(repository.path)))
-        .asData
-        ?.value;
-    final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
-
-    final rows = <Widget>[
-      CheckoutRow(
-        depth: 1,
-        icon: AppIcons.gitBranch,
-        title: repository.name,
-        subtitle: _subPathOf(project, repository.path, unless: repository.name),
-        expanded: open,
-        selected: repository.id == selectedRepoId,
-        stat: stat,
-        onTap: () {
-          ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
-          _toggleRow(
-            key,
-            defaultOpen:
-                onlyRepository ||
-                !sessions.isEmpty ||
-                folders.isNotEmpty ||
-                node.worktrees.isNotEmpty,
-          );
-        },
-        onNewSession: () => _startSession(repository: repository),
-        menuItems: [
-          DesktopMenuItem(
-            value: 'new-session',
-            label: 'New session…',
-            icon: AppIcons.chatCircleDots,
-          ),
-          ..._agentMenuItems(repository.path.environmentId),
-          ..._pathMenuItems(repository.path),
-        ],
-        onMenu: (action) {
-          final installation = _installationFromMenu(
-            action,
-            repository.path.environmentId,
-          );
-          if (installation != null) {
-            _startSession(repository: repository, installation: installation);
-            return;
-          }
-          switch (action) {
-            case 'new-session':
-              _newSessionDialog(project, repository: repository);
-            case 'reveal':
-              _reveal(repository.path);
-            case 'copy-path':
-              _copyPath(repository.path);
-          }
-        },
-      ),
-    ];
-    if (!open) return rows;
-
-    for (final worktree in node.worktrees) {
-      rows.addAll(_worktreeNodes(project, node, worktree, placement));
-    }
-    // "We could not ask" is a different fact from "there are none", and only
-    // said once git has actually failed — never while it is still answering.
-    if (!node.worktreesKnown && !worktreesLoading) {
-      rows.add(
-        const _TreeHint(
-          depth: 2,
-          message: 'Worktrees could not be listed for this folder.',
-        ),
-      );
-    }
-    for (final folder in folders) {
-      rows.addAll(_folderNodes(project, folder, placement, depth: 2));
-    }
-    rows.addAll(_sessionCards(project, sessions, depth: 2));
-    if (sessions.isEmpty &&
-        folders.isEmpty &&
-        node.worktrees.isEmpty &&
-        node.worktreesKnown) {
-      rows.add(
-        const _TreeHint(
-          depth: 2,
-          message: 'No sessions yet — start one with the + on this row.',
-        ),
-      );
-    }
-    return rows;
-  }
-
-  List<Widget> _worktreeNodes(
-    Project project,
-    RepoNode node,
-    WorktreeNode worktree,
-    SessionPlacement placement,
-  ) {
-    final key = worktreeRowKey(worktree.path);
-    final sessions = placement.at(key);
-    final folders = placement.under(key);
-    final open = _isOpen(key, defaultOpen: true);
-    // Shared with every card inside, so a worktree with four sessions costs
-    // what an empty one does.
-    final stat = ref
-        .watch(
-          worktreeStatProvider((
-            repo: node.repository.path,
-            worktree: worktree.path,
-          )),
-        )
-        .asData
-        ?.value;
-    final name = _basename(worktree.path.path);
-
-    final rows = <Widget>[
-      CheckoutRow(
-        depth: 2,
-        icon: AppIcons.treeStructure,
-        title: name,
-        subtitle: _subPathOf(project, worktree.path, unless: name),
-        expanded: open,
-        stat: stat ?? SessionDiffStat(branch: worktree.branch),
-        onTap: () => _toggleRow(key, defaultOpen: true),
-        // Startable whatever the workspace has recorded: the owning repository
-        // supplies the id and `existingWorktree` supplies the directory, which
-        // is the pairing Loop 57 did not have and had to refuse.
-        onNewSession: () => _startSession(
-          repository: node.repository,
-          existingWorktree: worktree.path,
-        ),
-        newSessionTooltip: 'New session in this worktree',
-        menuItems: [
-          ..._agentMenuItems(worktree.path.environmentId),
-          ..._pathMenuItems(worktree.path),
-        ],
-        onMenu: (action) {
-          final installation = _installationFromMenu(
-            action,
-            worktree.path.environmentId,
-          );
-          if (installation != null) {
-            _startSession(
-              repository: node.repository,
-              existingWorktree: worktree.path,
-              installation: installation,
-            );
-            return;
-          }
-          switch (action) {
-            case 'reveal':
-              _reveal(worktree.path);
-            case 'copy-path':
-              _copyPath(worktree.path);
-          }
-        },
-      ),
-    ];
-    if (!open) return rows;
-    for (final folder in folders) {
-      rows.addAll(_folderNodes(project, folder, placement, depth: 3));
-    }
-    rows.addAll(_sessionCards(project, sessions, depth: 3));
-    return rows;
-  }
-
-  /// A directory an agent is working in that the workspace has no repository
-  /// row for. Rendered, never persisted — the row says what it is and offers the
-  /// rescan that would make it real.
-  List<Widget> _folderNodes(
-    Project project,
-    UnscannedNode folder,
-    SessionPlacement placement, {
-    required int depth,
-  }) {
-    final key = folderRowKey(folder.path);
-    final sessions = placement.at(key);
-    final open = _isOpen(key, defaultOpen: true);
-    final rows = <Widget>[
-      CheckoutRow(
-        depth: depth,
-        icon: AppIcons.folder,
-        title: folder.label,
-        expanded: open,
-        note: 'not scanned yet',
-        noteTooltip:
-            'An agent is working here, but the workspace has no repository '
-            'record for this folder. Rescan the project to add one.',
-        extraAction: ExplorerRowAction(
-          tooltip: 'Rescan for repositories',
-          icon: AppIcons.arrowsClockwise,
-          onPressed: () => _rescan(project),
-        ),
-        onTap: () => _toggleRow(key, defaultOpen: true),
-        menuItems: [
-          DesktopMenuItem(
-            value: 'rescan',
-            label: 'Rescan for repositories',
-            icon: AppIcons.arrowsClockwise,
-          ),
-          ..._pathMenuItems(folder.path),
-        ],
-        onMenu: (action) {
-          switch (action) {
-            case 'rescan':
-              _rescan(project);
-            case 'reveal':
-              _reveal(folder.path);
-            case 'copy-path':
-              _copyPath(folder.path);
-          }
-        },
-      ),
-    ];
-    if (open) rows.addAll(_sessionCards(project, sessions, depth: depth + 1));
+    rows.addAll(_sessionCards(project, sessions, depth: 1));
     return rows;
   }
 
@@ -935,14 +672,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
   // --- paths ------------------------------------------------------------------
 
-  /// [path] written relative to the project, or null when it says nothing the
-  /// row's own name does not already say.
-  String? _subPathOf(Project project, EnvironmentPath path, {String? unless}) {
-    final relative = relativeSubPath(project.root, path);
-    if (relative == null || relative == unless) return null;
-    return relative;
-  }
-
   String? _subPathForNative(Project project, Session session) {
     final directory =
         session.worktree ??
@@ -957,13 +686,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         ?.path;
     return path == null ? null : relativeSubPath(project.root, path);
   }
-}
-
-String _basename(String path) {
-  final parts = canonicalPathKey(
-    path,
-  ).split('/').where((part) => part.isNotEmpty).toList();
-  return parts.isEmpty ? path : parts.last;
 }
 
 /// A non-interactive hint shown under an expanded, empty node.
