@@ -265,4 +265,67 @@ void main() {
       expect(layout.withoutMissing({'a', 'b'})!.panes, ['a', 'b']);
     });
   });
+
+  /// What moving a tab into an empty region of a split is made of.
+  ///
+  /// An empty region is a leaf like any other, so filling it is a leaf swap —
+  /// for one pane, or for the whole pane tree of the tab being moved in.
+  group('replaceLeaf', () {
+    test('swaps one leaf for another, keeping its place and its share', () {
+      final layout = PaneLayout.single('a')
+          .split('a', SplitAxis.horizontal, 'slot', 's1')
+          .resize('s1', 0, 0.2);
+      final filled = layout.replaceLeaf('slot', const PaneLeaf('b'));
+
+      expect(filled.panes, ['a', 'b']);
+      expect((filled.root as PaneSplit).weights[0], closeTo(0.7, 1e-9));
+    });
+
+    test('a whole sub-tree can take a leaf\'s place', () {
+      final target = PaneLayout.single(
+        'a',
+      ).split('a', SplitAxis.horizontal, 'slot', 's1');
+      final incoming = PaneLayout.single(
+        'b',
+      ).split('b', SplitAxis.vertical, 'c', 's2');
+
+      final merged = target.replaceLeaf('slot', incoming.root);
+
+      expect(merged.panes, ['a', 'b', 'c']);
+      final root = merged.root as PaneSplit;
+      expect(root.axis, SplitAxis.horizontal);
+      expect(root.children[1], isA<PaneSplit>());
+    });
+
+    test('a sub-tree on the parent axis is flattened, not nested', () {
+      final target = PaneLayout.single(
+        'a',
+      ).split('a', SplitAxis.horizontal, 'slot', 's1');
+      final incoming = PaneLayout.single(
+        'b',
+      ).split('b', SplitAxis.horizontal, 'c', 's2');
+
+      final merged = target.replaceLeaf('slot', incoming.root);
+
+      expect(merged.panes, ['a', 'b', 'c']);
+      expect(
+        (merged.root as PaneSplit).children.every((c) => c is PaneLeaf),
+        isTrue,
+        reason: 'three columns, not a column holding two',
+      );
+    });
+
+    test('replacing the only leaf makes the incoming node the root', () {
+      final filled = PaneLayout.single(
+        'slot',
+      ).replaceLeaf('slot', const PaneLeaf('a'));
+      expect(filled.panes, ['a']);
+      expect(filled.root, isA<PaneLeaf>());
+    });
+
+    test('an unknown leaf leaves the layout alone', () {
+      final layout = PaneLayout.single('a');
+      expect(layout.replaceLeaf('zzz', const PaneLeaf('b')).panes, ['a']);
+    });
+  });
 }
