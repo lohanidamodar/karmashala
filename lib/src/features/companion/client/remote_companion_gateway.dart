@@ -615,6 +615,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   void _resetHostState() {
     // A verdict about reaching THAT desktop says nothing about this one.
     _lanUpgradeRefused.clear();
+    _unanswered = 0;
     _sessions = null;
     _hostOrder.clear();
     if (!_sessionChanges.isClosed) _sessionChanges.add(const []);
@@ -1149,6 +1150,8 @@ class RemoteCompanionGateway implements CompanionGateway {
           final won = _activeRelay;
           if (won != null) await _noteRelayOutcome(won, ok: true);
           _switching = false;
+          // A fresh link owes nothing to what the last one failed to answer.
+          _unanswered = 0;
           unawaited(_noteConnected(client.pairing));
           _resetBackoff();
           _bindTransport(_dialled);
@@ -1954,27 +1957,19 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// Runs one request, rewriting every way it can fail into a sentence.
   Future<T> _mapRefusals<T>(Future<T> Function() action) async {
     try {
-      return await action();
+      final answer = await action();
+      // Whatever went unanswered before it, this link is demonstrably
+      // carrying traffic both ways.
+      _unanswered = 0;
+      return answer;
     } on RemoteApiException catch (error) {
       if (error.code == null) {
-        // Nobody answered inside the request timeout — and that is a fact
-        // about the REQUEST, not about the link.
-        //
-        // The relay disposes a rendezvous the moment either peer leaves, and
-        // closes both sockets doing it, so a transport that is still up means
-        // the desktop's socket is still at the other end. What a timeout
-        // means there is that the desktop is busy: the host serialises every
-        // frame for one device on a single chain (`_DeviceRuntime._chain`, so
-        // that `Envelope.seq` and the sealed sequence agree), so one slow
-        // binding call holds up everything behind it — including the hello a
-        // proof would send. Re-dialling cannot help that: the same runtime,
-        // with the same blocked chain, is still there afterwards. So the user
-        // gets the refusal and the link is left alone; a link that is really
-        // gone is found by the things that actually watch it — the heartbeat,
-        // the relay's own teardown, and the proof on resume.
-        onLog?.call('a request went unanswered; the link itself still holds');
+        _noteUnanswered();
         throw const GatewayException(_kUnreachable);
       }
+      // A refusal is an ANSWER: the desktop read the frame and said no, which
+      // is the strongest possible evidence the link works.
+      _unanswered = 0;
       throw GatewayException(_sentenceFor(error));
     } on TransportException {
       _declareDead();
@@ -1983,6 +1978,54 @@ class RemoteCompanionGateway implements CompanionGateway {
       throw const GatewayException(_kUnreachable);
     }
   }
+
+  /// Requests that have gone unanswered with nothing answered between them.
+  int _unanswered = 0;
+
+  /// How many of those the link is given before the phone stops calling it
+  /// connected.
+  ///
+  /// ONE is a busy desktop, and must cost nothing: the host serialises every
+  /// frame for one device on a single chain (`_DeviceRuntime._chain`, so that
+  /// `Envelope.seq` and the sealed sequence agree), so one slow binding call
+  /// holds up whatever is behind it. Re-dialling would not help — the same
+  /// runtime, with the same busy chain, is still there afterwards.
+  ///
+  /// TWO in a row, with nothing answered in between, is a different animal:
+  /// the phone is putting frames into a link that brings nothing back. That is
+  /// where the owner's phone sat, showing the last list the desktop ever sent
+  /// and calling itself connected, for as long as the app was left open.
+  static const int _kUnansweredBeforeDoubt = 2;
+
+  void _noteUnanswered() {
+    _unanswered++;
+    if (_unanswered < _kUnansweredBeforeDoubt) {
+      onLog?.call('a request went unanswered; the link itself still holds');
+      return;
+    }
+    onLog?.call('nothing on this link is being answered; it is not a link');
+    _noteTrouble(_kHostSilentTrouble);
+    // Said here rather than waiting for the loop to say it: the knowledge is
+    // gained now, and a screen that keeps claiming "connected" until a teardown
+    // gets round to it is the whole complaint.
+    if (_link.value == CompanionLinkState.connected) {
+      _link.value = CompanionLinkState.connecting;
+    }
+    // And dial again. A busy desktop is unhelped by it and loses nothing; a
+    // link whose channel the desktop can no longer open — a phone back on a
+    // generation it had already used — is fixed by exactly this, because the
+    // next dial lands on a fresh generation with a fresh channel.
+    _unanswered = 0;
+    _declareDead();
+  }
+
+  /// What a link that carries frames one way and brings nothing back reads
+  /// like. Never "connected", and never "check your connection": the socket is
+  /// up, the relay is fine, and the list on screen is real — it is simply the
+  /// last thing the desktop sent rather than anything it is saying now.
+  static const String _kHostSilentTrouble =
+      'Your desktop is keeping this connection open but not answering it. '
+      'What you can see here is what it last sent.';
 
   /// The protocol-error → user-sentence table.
   String _sentenceFor(RemoteApiException error) => switch (error.code!) {
