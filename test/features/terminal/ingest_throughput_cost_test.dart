@@ -103,6 +103,34 @@ void main() {
         '${m.writes} parse entries · ${m.notifies} notifications',
       );
     });
+
+    test('a burst is chunked so no one frame is held by all of it', () {
+      // The other half of the coalescer's contract, and the one that decides
+      // how long a frame can be held: `cat` of a huge file, or an agent
+      // dumping a diff, must be split across frames rather than parsed in one.
+      // Everything the pane is holding is offered at once; the cap is what
+      // decides how much of it a single `Terminal.write` receives.
+      final m = _burst(bytes: kMaxPendingBytes);
+      final cap = kMaxFlushBytes < kIngestHotReserveBytes
+          ? kMaxFlushBytes
+          : kIngestHotReserveBytes;
+      // ignore: avoid_print
+      print(
+        'burst chunking · ${m.bytes} bytes offered at once · ${m.writes} parse '
+        'entries · largest ${m.largestWrite} bytes · ${m.droppedBytes} dropped',
+      );
+      expect(
+        m.largestWrite,
+        lessThanOrEqualTo(cap),
+        reason: 'a flush is capped, so a burst cannot hold one frame open',
+      );
+      expect(
+        m.droppedBytes,
+        0,
+        reason: 'and the rest is carried, not thrown away',
+      );
+      expect(m.writes, greaterThan(1), reason: 'so it took more than a frame');
+    });
   });
 
   group('the pane in front does not pay for the panes behind it', () {
@@ -285,6 +313,7 @@ class _Pane {
       onData: (data) {
         writes++;
         chars += data.length;
+        if (data.length > largestWrite) largestWrite = data.length;
         terminal.write(data);
         linesAllocated += _sweepNewLines();
       },
@@ -309,6 +338,10 @@ class _Pane {
   int chars = 0;
   int notifies = 0;
   int linesAllocated = 0;
+
+  /// The biggest single payload ever handed to `Terminal.write` — the longest
+  /// one frame can be held by this pane's ingest.
+  int largestWrite = 0;
 
   /// Which `BufferLine` objects this pane has already been charged for.
   ///
@@ -336,6 +369,7 @@ class _Pane {
     chars = 0;
     notifies = 0;
     linesAllocated = 0;
+    largestWrite = 0;
   }
 
   /// Delivers [bytes] the way the pipe does: [_ptyReadBytes] at a time.
@@ -457,6 +491,7 @@ typedef _Measured = ({
   int notifies,
   int chars,
   int linesAllocated,
+  int largestWrite,
   int droppedBytes,
   int elapsedMicros,
 });
@@ -495,6 +530,46 @@ _Measured _ingestOnce(PerfCorpus corpus, int repeats) {
     notifies: pane.notifies,
     chars: pane.chars,
     linesAllocated: pane.linesAllocated,
+    largestWrite: pane.largestWrite,
+    droppedBytes: pane.droppedBytes,
+    elapsedMicros: watch.elapsedMicroseconds,
+  );
+  pane.dispose();
+  return measured;
+}
+
+/// One hot pane handed [bytes] of output all at once, then drained frame by
+/// frame — `cat hugefile`, or an agent dumping a diff in one go.
+_Measured _burst({required int bytes}) {
+  var now = Duration.zero;
+  final budget = TerminalIngestBudget(clock: () => now);
+  final pane = _Pane(budget: budget, clock: () => now, tier: IngestTier.hot)
+    ..warmUp();
+  final payload = _corpusBytes(
+    PerfCorpus.plainLog,
+    (bytes / _corpusBytes(PerfCorpus.plainLog, 1).length).ceil(),
+  );
+  final offered = Uint8List.sublistView(payload, 0, bytes);
+
+  final watch = Stopwatch()..start();
+  pane.feed(offered);
+  var frames = 0;
+  while (pane.hasPending && frames < 1000) {
+    now += kIngestRefillInterval;
+    pane.runFrame();
+    frames++;
+  }
+  watch.stop();
+
+  final measured = (
+    bytes: offered.length,
+    chunks: (offered.length + _ptyReadBytes - 1) ~/ _ptyReadBytes,
+    frames: frames,
+    writes: pane.writes,
+    notifies: pane.notifies,
+    chars: pane.chars,
+    linesAllocated: pane.linesAllocated,
+    largestWrite: pane.largestWrite,
     droppedBytes: pane.droppedBytes,
     elapsedMicros: watch.elapsedMicroseconds,
   );
