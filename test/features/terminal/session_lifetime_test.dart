@@ -227,7 +227,12 @@ void main() {
       controller.persistWorkspace();
       first.dispose();
 
-      final next = fakeTerminalContainer(database: db);
+      // This is about the Start button, so the pane has to be one that did not
+      // start itself. Every pane a launch declines — an agent pane, a
+      // background tab, a pane whose process had already exited, or any pane at
+      // all with this setting off — arrives in exactly this state and is
+      // started by exactly this call. See `pane_restart_on_launch_test.dart`.
+      final next = fakeTerminalContainer(database: db, restoreLivePanes: false);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider.notifier);
       expect(

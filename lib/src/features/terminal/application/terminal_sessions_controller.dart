@@ -20,6 +20,7 @@ import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
+import '../domain/pane_restart.dart';
 import '../domain/pane_title.dart';
 import '../domain/terminal_profile.dart';
 import 'scrollback_autosave.dart';
@@ -31,6 +32,15 @@ import 'scrollback_autosave.dart';
 /// the same seam `terminalInstanceFactoryProvider` already provides.
 final shellIntegrationEnabledProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).shellIntegrationEnabled,
+);
+
+/// Whether a restore puts a process back into the panes that had one.
+///
+/// The same seam and the same reason as [shellIntegrationEnabledProvider]: the
+/// restore runs in `build`, and reading the setting directly would make every
+/// terminal test stand up a settings store to open a pane.
+final restoreLivePanesProvider = Provider<bool>(
+  (ref) => ref.watch(settingsControllerProvider).restoreLivePanes,
 );
 
 /// The production factory: each pane is backed by a real ConPTY.
@@ -1075,10 +1085,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Starts a process in [paneId], replaying whatever is already in its buffer
   /// above the new one.
   ///
-  /// This is the *only* way a restored pane gets a process: nothing runs at
-  /// launch, so restarting the app can never re-execute a build or an agent
-  /// behind the user's back. Also the retry path for a pane whose process
-  /// exited or failed to spawn.
+  /// This is the only way a pane the launch declined to restart gets a process
+  /// — an agent pane, a background tab, a pane whose process had already
+  /// exited, or any pane at all when the setting is off — so restarting the app
+  /// can still never re-execute a build or an agent behind the user's back.
+  /// Also the retry path for a pane whose process exited or failed to spawn.
+  ///
+  /// What a launch *does* start, and why those cases are different, is
+  /// `shouldRestartOnLaunch`; it builds the pane live rather than coming
+  /// through here.
   ///
   /// Does nothing for a pane that is already live.
   void startPane(String paneId) {
@@ -1429,6 +1444,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               workingDirectory: instance.workingDirectory,
               scrollback: _scrollbackOf(paneId, instance, refresh: refresh),
               agentLaunch: instance.agentLaunch,
+              wasLive: instance.liveness.value.isLive,
             ),
       ],
     );
@@ -1458,19 +1474,30 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           workingDirectory: instance.workingDirectory,
           scrollback: _scrollbackOf(session.paneId, instance, refresh: refresh),
           agentLaunch: instance.agentLaunch,
+          wasLive: instance.liveness.value.isLive,
         ),
       ],
     );
   }
 
   /// Recreates the stored workspace: the tabs, the splits inside them, and each
-  /// pane's scrollback replayed into a **dormant** buffer.
+  /// pane's scrollback — as a **dormant** buffer, except for the panes of the
+  /// active tab that were running when the app closed, which get a process back.
   ///
-  /// No process is started. A reboot ends every process regardless, so a stored
-  /// pane is a record, not a session — and spawning something for each one at
-  /// launch would both re-execute work the user never asked to repeat and make
-  /// week-old history indistinguishable from a live shell. Each pane instead
-  /// comes back marked as restored, with an explicit start.
+  /// The owner, twice: *"why when app restart the active pane doesn't
+  /// automatically resume the session? why must i tap start again"*, and then
+  /// *"if there were active panes on last close start all those panes on active
+  /// tab"*. `shouldRestartOnLaunch` holds the whole of which panes those are and
+  /// why the others are still records; the ones it refuses come back exactly as
+  /// they always did, marked restored with an explicit Start.
+  ///
+  /// A restarted pane is built **here**, in place of the dormant one, rather
+  /// than started afterwards through [startPane]. Three things follow from that
+  /// and all three are the point: nothing publishes state during `build` (which
+  /// Riverpod forbids), the first frame already shows a live terminal instead of
+  /// a "Session ended" bar that vanishes, and the stored scrollback is parsed
+  /// once — where starting afterwards would build the dormant pane's buffer and
+  /// then throw it away.
   ///
   /// Defensive at every step: a layout that will not parse, a pane whose profile
   /// no longer exists, a tab left with nothing in it — each is dropped rather
@@ -1486,11 +1513,22 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
     try {
       final stored = dao.loadWorkspace();
+      // Which tab counts as "the active tab" has to be decided before any pane
+      // is built, and the same way the fallback below decides it: a workspace
+      // stored with no active row activates its last tab. Resolved against the
+      // *stored* list rather than the rebuilt one, so a last tab that turns out
+      // to be unrebuildable starts nothing rather than promoting another tab's
+      // panes into a decision the user never made.
+      final activeTabId =
+          stored.activeTabId ??
+          (stored.tabs.isEmpty ? null : stored.tabs.last.id);
       for (final storedTab in stored.tabs) {
         final rebuilt = <String>{};
         for (final pane in storedTab.panes) {
           if (!storedTab.layout.contains(pane.id)) continue;
-          if (_adoptDormant(pane)) rebuilt.add(pane.id);
+          if (_adoptRestored(pane, inActiveTab: storedTab.id == activeTabId)) {
+            rebuilt.add(pane.id);
+          }
         }
 
         final layout = storedTab.layout.withoutMissing(rebuilt);
@@ -1513,9 +1551,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
       // Sessions that had no tab last time stay tab-less: they come back in the
       // background list, where the user reopens the ones still worth having.
+      // They are in no tab, so they are never in the *active* one, and a
+      // detached session is precisely the thing the user already closed the
+      // view of — starting one would spawn a process with nowhere to show it.
       for (final storedTab in stored.detached) {
         for (final pane in storedTab.panes) {
-          if (!_adoptDormant(pane)) continue;
+          if (!_adoptRestored(pane, inActiveTab: false)) continue;
           _detached.add(
             DetachedSession(
               paneId: pane.id,
@@ -1534,17 +1575,28 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Rebuilds [pane] as a process-free buffer holding its stored scrollback.
+  /// Rebuilds [pane]: with a process when it earned one, and as a process-free
+  /// buffer holding its stored scrollback when it did not.
   ///
   /// Returns false when the pane's profile no longer resolves — a WSL distro
   /// that has been removed, say — since there would be nothing to start it with.
-  bool _adoptDormant(StoredTerminalPane pane) {
+  bool _adoptRestored(StoredTerminalPane pane, {required bool inActiveTab}) {
     // An agent pane carries its own command, so it does not need — and never
     // had — a resolvable shell profile.
-    if (pane.agentLaunch == null &&
-        terminalProfileFromId(pane.profileId) == null) {
-      return false;
+    final profile = terminalProfileFromId(pane.profileId);
+    if (pane.agentLaunch == null && profile == null) return false;
+
+    if (profile != null &&
+        shouldRestartOnLaunch(
+          enabled: _restoreLivePanes,
+          wasLive: pane.wasLive,
+          inActiveTab: inActiveTab,
+          isAgentPane: pane.agentLaunch != null,
+        ) &&
+        _adoptRestarted(pane, profile)) {
+      return true;
     }
+
     _adopt(
       pane.id,
       DormantTerminalInstance(
@@ -1557,6 +1609,42 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       ),
     );
     return true;
+  }
+
+  /// Gives [pane] a process again, replaying its stored scrollback above it.
+  ///
+  /// The same factory every other pane comes from, so a shell that will not
+  /// spawn degrades exactly as it does anywhere else: to an
+  /// [ErrorTerminalInstance] holding the reason above the history, reported as
+  /// [PaneLiveness.exited] with a Restart on it. A pane that cannot start says
+  /// so; it never comes back as a blank buffer pretending to be a shell.
+  ///
+  /// Returns false — and the caller falls back to the dormant pane — if the
+  /// factory *throws* rather than degrading. Nothing in production does that,
+  /// and this runs inside the restore: a workspace must not be lost because one
+  /// pane could not be started.
+  bool _adoptRestarted(StoredTerminalPane pane, TerminalProfile profile) {
+    try {
+      _adopt(
+        pane.id,
+        ref.read(terminalInstanceFactoryProvider)(
+          id: pane.id,
+          profile: profile,
+          workingDirectory: pane.workingDirectory,
+          restoredScrollback: pane.scrollback,
+          shellIntegration: _shellIntegrationEnabled,
+        ),
+      );
+      return true;
+    } catch (error, stack) {
+      _log.warning(
+        'Could not restart pane ${pane.id} on launch; it comes back as '
+        'restored history instead.',
+        error,
+        stack,
+      );
+      return false;
+    }
   }
 
   /// The workspace DAO, or `null` when no database is wired up.
@@ -1578,6 +1666,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// panes only and never restarts a running shell underneath the user.
   bool get _shellIntegrationEnabled =>
       ref.read(shellIntegrationEnabledProvider);
+
+  /// Read once per restore, for the same reason: this decides what a *launch*
+  /// does, and toggling it must never reach into panes that are already open.
+  bool get _restoreLivePanes => ref.read(restoreLivePanesProvider);
 
   String _createPane(
     TerminalProfile profile, {

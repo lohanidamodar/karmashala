@@ -629,6 +629,12 @@ class _Constant<T> implements ValueListenable<T> {
 /// terminal, and — once a pane records a launch command rather than just a
 /// profile — would re-execute it. A dormant pane re-executes nothing; the user
 /// starts it, or does not.
+///
+/// A launch does restart *some* panes now — the shells of the active tab that
+/// were running when the app closed. Those are built as live panes instead of
+/// this one, so nothing here changed: the argument above is still the reason
+/// every other stored pane arrives dormant. `shouldRestartOnLaunch` is where
+/// the line is drawn.
 class DormantTerminalInstance
     implements TerminalInstance, AdoptableTerminalInstance {
   DormantTerminalInstance({

@@ -49,6 +49,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v25** — G2: what a session left behind when it ended, so a crash or an
 ///   unfinished check is still waiting in the morning rather than scrolling
 ///   past at 14:32.
+/// * **v26** — whether each stored terminal pane had a process behind it when
+///   it was written, so a restart can put back what was running.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -75,7 +77,37 @@ final Map<int, MigrationStep> schemaMigrations = {
   23: _migrateToV23,
   24: _migrateToV24,
   25: _migrateToV25,
+  26: _migrateToV26,
 };
+
+/// Was this pane running when its row was written?
+///
+/// The owner: *"if there were active panes on last close start all those panes
+/// on active tab"*. The store could not answer that. Every pane came back
+/// [PaneLiveness.restored] — replayed history with a Start button — because a
+/// row recorded a pane's *shape* (profile, directory, scrollback, launch) and
+/// never whether anything was running in it, so "put back what was running" and
+/// "re-run week-old history" were the same statement.
+///
+/// One column separates them, and it is the pane's, not the tab's: a split can
+/// hold a live shell beside a pane whose process exited an hour ago, and only
+/// the first should come back.
+///
+/// `DEFAULT 0` is the honest reading of every row written before this: those
+/// rows never claimed anything was running, and inventing a claim for them
+/// would spawn a shell per pane on the first launch after an upgrade.
+/// `terminal_panes_backup` gets it too — a backup with a column missing is a
+/// backup that cannot be restored by the same code that reads the live table.
+void _migrateToV26(Database db) {
+  db.execute(
+    'ALTER TABLE terminal_panes ADD COLUMN was_live INTEGER NOT NULL '
+    'DEFAULT 0;',
+  );
+  db.execute(
+    'ALTER TABLE terminal_panes_backup ADD COLUMN was_live INTEGER NOT NULL '
+    'DEFAULT 0;',
+  );
+}
 
 /// What a session left behind when it ended.
 ///

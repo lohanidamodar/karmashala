@@ -67,6 +67,17 @@ class TerminalPage extends ConsumerWidget {
                 value: settings.shellIntegrationEnabled,
                 onChanged: controller.setShellIntegrationEnabled,
               ),
+              SettingsSwitchRow(
+                label: 'Resume running panes on launch',
+                help:
+                    'Panes that had something running when the app last '
+                    'closed start again, in the tab that was in front. Other '
+                    'tabs, and any pane running an agent CLI, come back as '
+                    'history with a Start button — starting an agent would '
+                    're-run its conversation unasked.',
+                value: settings.restoreLivePanes,
+                onChanged: controller.setRestoreLivePanes,
+              ),
             ],
           ),
         ),

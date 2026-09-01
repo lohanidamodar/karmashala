@@ -20,6 +20,13 @@ enum PaneLiveness {
   /// Rebuilt from a stored record after a restart. Nothing has ever run in this
   /// buffer: everything in it is replayed history, and no command has been (or
   /// will be) re-executed unless the user asks.
+  ///
+  /// A launch does now give some panes a process back — the shells of the
+  /// active tab that were running when the app closed, which the owner asked
+  /// for — but those never reach this state: they are built live and report
+  /// [live] from the first frame. So this still means exactly what it says, and
+  /// `shouldRestartOnLaunch` is the one place that decides which panes it
+  /// applies to.
   restored;
 
   /// Whether a process is running behind the buffer.

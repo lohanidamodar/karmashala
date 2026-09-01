@@ -217,8 +217,15 @@ void giveShellHistory(TerminalInstance instance) {
 
 /// A container whose terminals are fakes, optionally over a real in-memory
 /// database so persistence can be exercised.
-ProviderContainer fakeTerminalContainer({AppDatabase? database}) =>
-    ProviderContainer(overrides: fakeTerminalOverrides(database: database));
+ProviderContainer fakeTerminalContainer({
+  AppDatabase? database,
+  bool restoreLivePanes = true,
+}) => ProviderContainer(
+  overrides: fakeTerminalOverrides(
+    database: database,
+    restoreLivePanes: restoreLivePanes,
+  ),
+);
 
 /// The overrides behind [fakeTerminalContainer], so a test that needs more of
 /// them can spread this list rather than reproduce a second, friendlier fake.
@@ -230,6 +237,7 @@ fakeTerminalOverrides({
   AppDatabase? database,
   TerminalInstanceFactory? instanceFactory,
   bool shellIntegration = false,
+  bool restoreLivePanes = true,
 }) {
   return [
     if (database != null) databaseProvider.overrideWithValue(database),
@@ -245,6 +253,11 @@ fakeTerminalOverrides({
     // Off unless a test says otherwise; also keeps the terminal controller
     // from pulling in settings (and therefore a database) just to open a pane.
     shellIntegrationEnabledProvider.overrideWithValue(shellIntegration),
+    // Defaulted to what production ships, so the whole suite exercises the real
+    // restore: a pane that was running when the app closed comes back running.
+    // Same seam and same reason as the line above — reading the setting would
+    // drag a database into every terminal test.
+    restoreLivePanesProvider.overrideWithValue(restoreLivePanes),
     // The delivery strip polls `gh` on a periodic timer, which would outlive
     // the widget tree and trip the pending-timer check in every test that
     // renders a session. Same reason as the autosave above; tests that care
