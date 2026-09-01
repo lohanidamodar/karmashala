@@ -53,7 +53,8 @@ class FileExplorerView extends ConsumerWidget {
                 iconSize: 16,
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(AppIcons.arrowsClockwise),
-                onPressed: () => ref.invalidate(directoryListingProvider),
+                onPressed: () =>
+                    ref.read(fileListingRefreshProvider.notifier).refresh(),
               ),
             ],
           ),
