@@ -30,11 +30,17 @@ void main() {
     TerminalIngestBudget? budget,
     int rows = 10,
     int maxPendingBytes = kColdScreenPendingMaxBytes,
+    bool altBuffer = false,
   }) {
     var now = Duration.zero;
     final terminal = Terminal(maxLines: 1000)..resize(40, rows);
     for (var i = 0; i < 200; i++) {
       terminal.write('history line $i\r\n');
+    }
+    if (altBuffer) {
+      // What an agent CLI does: take the display and draw the whole screen.
+      terminal.write('\x1b[?1049h');
+      terminal.write('the frame it was detached on');
     }
     final park = ScrollbackPark(terminal)..park();
     final screen = ColdScreen(
@@ -227,5 +233,51 @@ void main() {
     pane.screen.add(Uint8List.sublistView(bytes, 2));
 
     expect(terminalTailLines(pane.terminal).join('\n'), contains('héllo'));
+  });
+
+  group('a pane a full-screen program owns', () {
+    test('keeps its screen current, exactly as a main-buffer pane does', () {
+      final normal = coldPane();
+      final tui = coldPane(altBuffer: true);
+      expect(normal.park.isParked, isTrue);
+      expect(
+        tui.park.isParked,
+        isFalse,
+        reason: 'the park declines a pane it cannot write a snapshot back into',
+      );
+
+      for (final pane in [normal, tui]) {
+        pane.screen.add(utf8Bytes('Do you want to proceed?\r\n'));
+      }
+
+      expect(
+        terminalTailLines(normal.terminal).join('\n'),
+        contains('Do you want to proceed?'),
+      );
+      expect(
+        terminalTailLines(tui.terminal).join('\n'),
+        contains('Do you want to proceed?'),
+        reason:
+            'an agent CLI draws its own full-screen UI, so the detached panes '
+            'whose approval prompts matter most were exactly the frozen ones',
+      );
+    });
+
+    test('does not go on showing the frame it was detached on', () {
+      final tui = coldPane(altBuffer: true);
+
+      // A TUI repaints absolutely: erase the screen, home the cursor, redraw.
+      tui.screen.add(utf8Bytes('\x1b[2J\x1b[Hesc to interrupt\r\n'));
+
+      final tail = terminalTailLines(tui.terminal).join('\n');
+      expect(tail, contains('esc to interrupt'));
+      expect(
+        tail,
+        isNot(contains('the frame it was detached on')),
+        reason:
+            'a grid read at detach and never again is exactly the failure '
+            'ColdScreen exists to prevent',
+      );
+    });
   });
 }
