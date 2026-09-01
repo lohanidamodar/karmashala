@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/antigravity_resume_providers.dart';
@@ -37,6 +38,11 @@ import 'session_working_directory.dart';
 class SessionActions {
   SessionActions(this._ref);
   final Ref _ref;
+
+  /// Only the destructive path writes here. Renames and resumes are frequent,
+  /// reversible and already visible in the UI; a delete that also removed the
+  /// agent's own transcript is none of those things.
+  static final _log = AppLogger.named('sessions.actions');
 
   void renameNative(String id, String title) {
     _ref.read(sessionDaoProvider).updateTitle(id, title);
@@ -81,6 +87,15 @@ class SessionActions {
     if (_ref.read(selectedSessionIdProvider) == id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
+    // The one destructive action in this class, and the only one that can reach
+    // outside the app: with `deleteFromCli` it removes the agent's own
+    // transcript, which nothing here can put back. Logged after the fact so the
+    // line means it happened rather than that it was attempted — the throws
+    // above all abandon the delete with the CLI store untouched.
+    _log.info(
+      'Deleted session $id (${session.title}): '
+      'fromCliStore=$deleteFromCli agent=${session.agentInstallationId}',
+    );
     _publish(SessionChange.removed(id));
   }
 
