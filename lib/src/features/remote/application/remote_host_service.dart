@@ -541,6 +541,11 @@ class _DeviceRuntime {
   _listenerSubscriptions = {};
   final Map<int, String> _rendezvousHexByGeneration = {};
 
+  /// Generations abandoned by [_retireGeneration], kept so a frame still in
+  /// flight from one of them cannot re-open it. Pruned by [listenFrom] once
+  /// the window has moved a whole width past them.
+  final Set<int> _retired = <int>{};
+
   /// Which relays [_listeners] are dialling; empty while parked.
   List<Uri> _listenerUrls = const [];
 
@@ -671,6 +676,7 @@ class _DeviceRuntime {
   /// no relay); relay listeners open only while the device's relay is active.
   Future<void> listenFrom(int from) async {
     if (_closed) return;
+    _retired.removeWhere((g) => g < from - kHostRelayListenWindow);
     for (var g = from; g < from + kHostRelayListenWindow; g++) {
       if (_rendezvousHexByGeneration.containsKey(g)) continue;
       final rendezvous = await rendezvousFor(key, g);
@@ -729,6 +735,33 @@ class _DeviceRuntime {
     if (transport != null) await transport.close();
   }
 
+  /// Abandons [generation] and slides the window onto the next one.
+  ///
+  /// Called when a frame the paired phone genuinely sealed cannot be admitted
+  /// — the phone rebuilt its channel while this end still held the old one.
+  /// Both ends recover by themselves: this end stops listening at the poisoned
+  /// generation, and the phone's probe-forward window finds the successor.
+  Future<void> _retireGeneration(int generation) async {
+    if (_closed) return;
+    // Something already moved the link on; the frame that got us here is
+    // simply late.
+    if (_active?.generation != generation) return;
+    _retired.add(generation);
+    _active = null;
+    peerLive = false;
+    await _liveWatch?.cancel();
+    _liveWatch = null;
+    _watchedTransport = null;
+    final next = generation + 1;
+    device = device.copyWith(generation: next);
+    service.devices.updateGeneration(device.id, next);
+    // Opens [next, next + window) and closes everything below it, which
+    // includes the socket the confused phone is sitting on — that drop is how
+    // it learns to dial again.
+    await listenFrom(next);
+    service.onDevicesChanged?.call();
+  }
+
   Future<void> _closeGeneration(int generation) async {
     final hex = _rendezvousHexByGeneration.remove(generation);
     if (hex != null) service._lanRoutes.remove(hex);
@@ -745,6 +778,10 @@ class _DeviceRuntime {
     Uint8List frame,
   ) async {
     if (_closed) return;
+    // A generation that has been retired is over. Its listeners are already
+    // closing, and anything still draining out of them must not walk the
+    // window back down to it — `_activate` would happily re-open it.
+    if (_retired.contains(generation)) return;
     // Revocation is enforced at the door: a revoked row has no key, and its
     // frames are dropped before anything tries to answer them.
     final current = service.devices.getById(device.id);
@@ -761,8 +798,34 @@ class _DeviceRuntime {
     final SealedFrame opened;
     try {
       opened = await active.channel.unseal(frame);
-    } on SealedChannelException catch (error) {
+    } on SealedFrameException catch (error) {
+      // The tag did not verify, so this frame proves nothing about who sent
+      // it — a stranger at the rendezvous, a relay playing games, a mangled
+      // byte. Drop it and change nothing: letting junk move a generation
+      // would hand anyone who can reach the meeting place a way to rotate a
+      // link at will.
       service.onLog?.call('refused a frame: $error');
+      return;
+    } on SealedChannelException catch (error) {
+      // The tag DID verify, so the paired phone sealed this — but its
+      // sequence is one this channel has already seen, or a wild jump. That
+      // is a phone which rebuilt its channel from zero and came back on a
+      // generation it had already used: its counter bump never reached its
+      // keystore, or it was killed before the write landed.
+      //
+      // Left alone this is the owner's bug. The plaintext `LinkHello` is
+      // answered whatever the channel thinks, so the phone is greeted, calls
+      // itself connected, and then has every single request refused here in
+      // silence — "subscribe … failed: the host did not answer", for ever.
+      //
+      // The channel cannot simply be reset: its replay window is the only
+      // thing standing between a captured frame and being replayed into this
+      // generation. So retire the generation instead. Its successor is keyed
+      // differently (the generation is bound into both direction keys), so
+      // nothing from this one can open there, and the phone's probe-forward
+      // window walks onto it without being told anything.
+      service.onLog?.call('retiring generation $generation: $error');
+      await _retireGeneration(generation);
       return;
     }
     final Envelope envelope;
