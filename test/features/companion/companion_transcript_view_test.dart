@@ -196,4 +196,87 @@ void main() {
     expect(find.text('Jump to latest'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  group("the tile shows the store's own bytes", () {
+    // 1b, diagnosed 2026-09-02. `&lt;explicit paths&gt;` on the phone was not
+    // introduced anywhere in this app: the agent CLI HTML-escapes a subagent's
+    // report when it writes the `<task-notification>` envelope into the parent
+    // transcript, and the entity landed inside a code span, where CommonMark
+    // keeps it literal. So nothing here escapes — and nothing here unescapes
+    // either, because a message may genuinely be quoting an entity.
+
+    testWidgets('angle brackets reach the tile as they were typed', (
+      tester,
+    ) async {
+      await openSession(
+        tester,
+        gatewayWith(const [
+          CompanionChatMessage(
+            role: 'user',
+            text: 'git commit -F msg -- <explicit paths>',
+          ),
+          CompanionChatMessage(
+            role: 'agent',
+            text: 'run `git commit -F msg -- <explicit paths>`',
+          ),
+        ]),
+      );
+
+      expect(
+        find.textContaining(
+          'git commit -F msg -- <explicit paths>',
+          findRichText: true,
+        ),
+        findsNWidgets(2),
+      );
+      expect(find.textContaining('&lt;', findRichText: true), findsNothing);
+    });
+
+    testWidgets('a message that really quotes &lt; keeps it', (tester) async {
+      await openSession(
+        tester,
+        gatewayWith(const [
+          CompanionChatMessage(
+            role: 'user',
+            text: 'the JSONL holds `&lt;explicit paths&gt;` literally',
+          ),
+        ]),
+      );
+
+      // In a code span, which is both where the phone really showed it and
+      // where a downstream "just unescape it" would silently corrupt it.
+      expect(
+        find.textContaining('&lt;explicit paths&gt;', findRichText: true),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a folded task notification reads as machinery', (
+      tester,
+    ) async {
+      // What the host now sends in place of 7 KB of envelope.
+      await openSession(
+        tester,
+        gatewayWith(const [
+          CompanionChatMessage(role: 'user', text: 'go on then'),
+          CompanionChatMessage(
+            role: 'tool',
+            text: 'Agent "Mobile chat scroll to latest" finished',
+          ),
+        ]),
+      );
+
+      expect(
+        find.textContaining(
+          'Agent "Mobile chat scroll to latest" finished',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      // Gutter and label say machine, not person — the point of the choice.
+      expect(find.text('TOOL'), findsOneWidget);
+      expect(find.text('YOU'), findsOneWidget);
+      expect(find.textContaining('subagent_tokens'), findsNothing);
+    });
+  });
 }
