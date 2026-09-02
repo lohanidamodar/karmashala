@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/host_session_api.dart';
@@ -781,16 +782,58 @@ void main() {
       );
     });
 
-    test('and it is a fraction of the bytes it replaces', () async {
+    test('and the frame it sends is a fraction of the bytes', () async {
+      // Counted, not timed. Measured against this session's own store: 199
+      // envelopes, 691,852 bytes of them, folding to 27,305 — and the real
+      // 300-message tail page holds five, which is 189,609 bytes before and
+      // 128,805 after. This pins the shape of that with one worst-case
+      // envelope (the largest real one is 32,708 bytes, folding to 75).
       final raw = envelope(
         summary: 'Agent "Mobile chat scroll to latest" finished',
-        body: List.filled(400, 'a paragraph of the report').join('\n'),
+        body: List.filled(1200, 'a paragraph of the report').join('\n'),
       );
-      final page = await pageOf([
+      final stored = [
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
         RemoteTranscriptMessage(role: 'user', text: raw),
+      ];
+      final before = jsonEncode(
+        RemoteTranscriptPage(
+          sessionId: 's1',
+          messages: stored,
+          cursor: stored.length,
+        ).toJson(),
+      ).length;
+
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = stored;
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+      final after = jsonEncode(harness.last.payload).length;
+
+      expect(after * 20, lessThan(before));
+    });
+
+    test('and a store written with CRLF folds the same way', () async {
+      // The host runs on Windows, macOS and Linux. A transcript line's own
+      // content can carry \r\n, and a trailing \r would otherwise leave the
+      // envelope unrecognised — and the summary carrying one.
+      final page = await pageOf([
+        RemoteTranscriptMessage(
+          role: 'user',
+          text:
+              '${envelope(summary: 'Agent "Windows host" finished').replaceAll('\n', '\r\n')}\r\n',
+        ),
       ]);
 
-      expect(page.messages.single.text.length, lessThan(raw.length ~/ 20));
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'Agent "Windows host" finished',
+        ),
+      );
     });
 
     test('an envelope that names no summary claims no outcome', () async {
