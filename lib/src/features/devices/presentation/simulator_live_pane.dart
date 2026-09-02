@@ -222,7 +222,11 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   Future<void> _appearance() async {
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
-    final wanted = !_dark;
+    // Asked, not remembered — the same way the Android control does it. The
+    // local flag started at light, so a simulator already dark went dark again
+    // on the first press, and a rebuild of this row reset the flag and left the
+    // device stuck in dark with the button offering to darken it further.
+    final wanted = !(await simctl.isDarkAppearance(widget.udid) ?? _dark);
     await simctl.setAppearance(widget.udid, wanted ? 'dark' : 'light');
     if (mounted) setState(() => _dark = wanted);
   }

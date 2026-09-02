@@ -114,6 +114,9 @@ void main() {
     WidgetTester tester, {
     required SimulatorLiveViewState live,
     List<AndroidDevice> devices = const [],
+    // Overridable so a case can take the simulator away underneath a running
+    // live view, which is what shutting one down does.
+    List<IosSimulator>? simulators,
     String? picked = _udid,
     // A live view that is *starting* draws a spinner that never stops, so
     // `pumpAndSettle` would sit there until it timed out.
@@ -133,7 +136,9 @@ void main() {
           avdsProvider.overrideWith((ref) async => const <Avd>[]),
           deviceScreenSizeProvider.overrideWith((ref, serial) async => null),
           hostCanRunSimulatorsProvider.overrideWithValue(true),
-          iosSimulatorsProvider.overrideWith((ref) async => [_booted()]),
+          iosSimulatorsProvider.overrideWith(
+            (ref) async => simulators ?? [_booted()],
+          ),
           simulatorBackendProvider.overrideWithValue(_StubBackend()),
           selectedSimulatorUdidProvider.overrideWith(
             () => _PickedSimulator(picked),
@@ -390,6 +395,39 @@ void main() {
 
       expect(find.byTooltip('Stop Pixel'), findsOneWidget);
       expect(find.byTooltip('Shut down iPhone 17'), findsNothing);
+    });
+  });
+
+  group('shutting a simulator down', () {
+    testWidgets('asks first, and cancelling leaves it running', (tester) async {
+      // Stopping an emulator has always confirmed; stopping a simulator was
+      // reachable from the row and the toolbar with no warning at all, and it
+      // ends a running machine and the picture the user is looking at.
+      await pump(tester, live: _running());
+
+      await tester.tap(find.byTooltip('Shut down iPhone 17'));
+      await tester.pumpAndSettle();
+      expect(find.text('Shut down iPhone 17?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Shut down iPhone 17?'), findsNothing);
+    });
+  });
+
+  group('a simulator that goes away', () {
+    testWidgets('takes its live view with it', (tester) async {
+      // Shutting the simulator down left its picture up, showing the last
+      // frame that ever arrived — indistinguishable from a live device that
+      // has stopped moving, with every control still offering to drive it.
+      final fake = await pump(tester, live: _running(), simulators: const []);
+      await tester.pumpAndSettle();
+
+      expect(
+        fake.stops,
+        greaterThan(0),
+        reason: 'the picture cannot outlive the device it is of',
+      );
     });
   });
 }

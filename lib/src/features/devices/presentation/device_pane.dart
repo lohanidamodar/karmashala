@@ -525,6 +525,37 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       });
     }
 
+    // The same rule for a simulator, which did not have it: shutting one down
+    // left its picture on screen showing the last frame that ever arrived. A
+    // still image of a device that no longer exists is the worst kind of
+    // wrong — it is indistinguishable from a live device that has stopped
+    // moving, and every control on it goes on offering to drive something that
+    // is gone.
+    final liveSimulatorUdid = switch (ref.watch(simulatorLiveViewProvider)) {
+      SimulatorLiveViewRunning(:final view) => view.udid,
+      SimulatorLiveViewStarting(:final udid) => udid,
+      _ => null,
+    };
+    // Only once the list has actually come back. `bootedSimulatorsProvider`
+    // reads the same empty list while the load is in flight as it does when
+    // every simulator really has gone, so testing it directly would tear the
+    // picture down on every refresh — the same "null means both *loading* and
+    // *absent*" mistake that made the device surface report a missing Android
+    // SDK on a machine that had one.
+    final simulatorList = ref.watch(iosSimulatorsProvider);
+    final knownBooted = simulatorList.asData?.value.where(
+      (s) => s.state.isReady || s.state == SimulatorState.booting,
+    );
+    if (liveSimulatorUdid != null &&
+        knownBooted != null &&
+        !knownBooted.any((s) => s.udid == liveSimulatorUdid)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(ref.read(simulatorLiveViewProvider.notifier).stop());
+        }
+      });
+    }
+
     // The device the pane is about. While the live view is running it is the
     // device that view is for; the two are the same by construction, and
     // reading it from one place is what keeps them that way.
@@ -876,9 +907,14 @@ class _DeviceToolbar extends ConsumerWidget {
                   stoppingEmulator || busySimulators.contains(liveOrPicked)
                   ? null
                   : switch (powerTarget) {
-                      _SimulatorPower(:final udid) => () => ref
-                          .read(simulatorTransitionsProvider.notifier)
-                          .shutdown(udid),
+                      _SimulatorPower(:final udid, :final name) => () async {
+                        if (!await confirmSimulatorShutdown(context, name)) {
+                          return;
+                        }
+                        await ref
+                            .read(simulatorTransitionsProvider.notifier)
+                            .shutdown(udid);
+                      },
                       _AndroidPower() => onStopEmulator,
                     },
             ),
@@ -1366,9 +1402,17 @@ class _DeviceList extends ConsumerWidget {
                     key: Key('stop-simulator-${simulator.udid}'),
                     label: 'Stop',
                     busy: busySimulators.contains(simulator.udid),
-                    onPressed: () async => ref
-                        .read(simulatorTransitionsProvider.notifier)
-                        .shutdown(simulator.udid),
+                    onPressed: () async {
+                      if (!await confirmSimulatorShutdown(
+                        context,
+                        simulator.name,
+                      )) {
+                        return;
+                      }
+                      await ref
+                          .read(simulatorTransitionsProvider.notifier)
+                          .shutdown(simulator.udid);
+                    },
                   ),
               ],
             ),
@@ -1553,4 +1597,37 @@ class _SimulatorPower extends _PowerTarget {
 
 class _AndroidPower extends _PowerTarget {
   const _AndroidPower(super.name);
+}
+
+
+/// Confirms before shutting a simulator down, the way stopping an emulator
+/// already did.
+///
+/// The same act with the same cost — a running machine ends and anything on it
+/// goes with it, including the picture the user is looking at — and it was
+/// reachable from the row and from the toolbar without a word of warning.
+/// A file-level function because both of those live in different widgets and
+/// the question they ask has to be the same one.
+Future<bool> confirmSimulatorShutdown(BuildContext context, String name) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Shut down $name?'),
+      content: const Text(
+        'The simulator will shut down. Anything running on it ends, and its '
+        'live view closes with it.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Shut down'),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
 }
