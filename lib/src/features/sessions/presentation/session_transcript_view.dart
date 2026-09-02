@@ -40,6 +40,7 @@ import 'chat_transcript.dart';
 import 'delivery_strip.dart';
 import 'message_composer.dart';
 import 'permission_mode_chip.dart';
+import 'model_chip.dart';
 import 'session_notice_line.dart';
 import 'session_repositories_bar.dart';
 import 'session_stats_dialog.dart';
@@ -167,7 +168,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   void _say(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// What a click on a file path in the conversation does.
@@ -185,8 +188,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final parsed = tokenForMatch(token);
     final base = _workingDirectory();
     if (base == null) {
-      _say('Karmashala has no record of where this session runs, so it '
-          'cannot place ${parsed.path}.');
+      _say(
+        'Karmashala has no record of where this session runs, so it '
+        'cannot place ${parsed.path}.',
+      );
       return;
     }
     final kind = ref
@@ -208,8 +213,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     final revealer = ref.read(revealInFileManagerProvider);
     final hostPath = ref.read(editorActionsProvider).windowsPathFor(path);
     if (hostPath == null) {
-      _say((await revealer.reveal(path)).error ?? 'There is no path on this '
-          'machine for $resolved.');
+      _say(
+        (await revealer.reveal(path)).error ??
+            'There is no path on this '
+                'machine for $resolved.',
+      );
       return;
     }
 
@@ -240,8 +248,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // costs nothing and turns a click that would do nothing into one that says
     // why.
     if (!revealer.canReveal(path)) {
-      _say((await revealer.reveal(path)).error ?? 'There is no way to show '
-          '$resolved on this machine.');
+      _say(
+        (await revealer.reveal(path)).error ??
+            'There is no way to show '
+                '$resolved on this machine.',
+      );
       return;
     }
     final outcome = await revealer.reveal(path, select: !isDirectory);
@@ -375,6 +386,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                     // and belongs beside it rather than in the global chrome.
                     chips: [
                       PermissionModeChip(sessionId: widget.sessionId),
+                      // The same pair as the terminal's own bar, in the same
+                      // order: what this session may do without asking, and
+                      // what it is thinking with.
+                      SessionModelChip(sessionId: widget.sessionId),
                       SessionStatsButton(sessionId: widget.sessionId),
                     ],
                     hintText: active

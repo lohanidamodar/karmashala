@@ -302,15 +302,31 @@ class ModelChip extends StatelessWidget {
   }
 }
 
-/// [ModelChip] bound to one session. The composer's chip.
+/// [ModelChip] bound to one session. The composer's chip, and the terminal
+/// bar's.
 class SessionModelChip extends ConsumerWidget {
-  const SessionModelChip({required this.sessionId, super.key});
+  const SessionModelChip({
+    required this.sessionId,
+    this.maxLabelWidth = 120,
+    super.key,
+  });
 
   final String sessionId;
 
+  /// How much of the model's name to show before ellipsising. The terminal's
+  /// bar asks for less than the composer does: it shares a row with the
+  /// delivery actions, and those wrap to a second run rather than shrink — so
+  /// every pixel this takes is one that can push `Commit` onto a line of its
+  /// own.
+  final double maxLabelWidth;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      _buildModelChip(context, ref, ref.watch(sessionModelProvider(sessionId)));
+  Widget build(BuildContext context, WidgetRef ref) => _buildModelChip(
+    context,
+    ref,
+    ref.watch(sessionModelProvider(sessionId)),
+    maxLabelWidth: maxLabelWidth,
+  );
 }
 
 /// [ModelChip] following the focused session. The status bar's chip.

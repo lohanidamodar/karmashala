@@ -34,6 +34,7 @@ import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/presentation/approval_request_card.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
+import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -518,9 +519,9 @@ void main() {
       container
           .read(terminalSessionsControllerProvider.notifier)
           .openTab(TerminalProfile.powerShell);
-      SessionDao(db).insert(
-        session(id: 's3', title: 'Audit and improve Karmashala app'),
-      );
+      SessionDao(
+        db,
+      ).insert(session(id: 's3', title: 'Audit and improve Karmashala app'));
       container.read(selectedSessionIdProvider.notifier).select('s3');
       return paneId;
     }
@@ -560,7 +561,8 @@ void main() {
         findsNothing,
       );
       expect(
-        tester.widget<TerminalTabChip>(find.byType(TerminalTabChip).first)
+        tester
+            .widget<TerminalTabChip>(find.byType(TerminalTabChip).first)
             .selected,
         isTrue,
         reason: 'and the tab that is on screen says so',
@@ -652,7 +654,11 @@ void main() {
     IndexedStack surfaces() =>
         tester.widget<IndexedStack>(find.byKey(kWorkbenchSurfaces));
 
-    expect(surfaces().children.length, 1, reason: 'only the terminal is asked for');
+    expect(
+      surfaces().children.length,
+      1,
+      reason: 'only the terminal is asked for',
+    );
     expect(surfaces().index, 0, reason: 'the terminal is showing');
 
     await tester.tap(find.byTooltip('Chat view'));
@@ -857,6 +863,45 @@ void main() {
         moreOrLessEquals(line, epsilon: 0.5),
         reason: 'the view toggle floats above the actions',
       );
+    });
+
+    testWidgets('the model is chosen from the session, not the window', (
+      tester,
+    ) async {
+      seedTheFullestBar();
+      await pump(tester, size: desktopWindow.size);
+
+      // It used to live in the window's status bar beside the account quota,
+      // which put a per-session control among window-wide ones — and left it
+      // describing whichever session the app believed was focused. It belongs
+      // with the other answer to "how does this session run": its permission
+      // mode, on the same centre-line as the actions it sits beside.
+      final chip = find.byType(SessionModelChip);
+      expect(chip, findsOneWidget);
+      expect(
+        tester.getCenter(chip).dy,
+        moreOrLessEquals(tester.getCenter(inTheBar('Commit')).dy, epsilon: 0.5),
+      );
+      expect(
+        tester.getRect(chip).left,
+        greaterThan(tester.getRect(find.byType(PermissionModeChip)).right - 1),
+        reason: 'beside the permission mode, not before it',
+      );
+    });
+
+    testWidgets('and steps aside when the bar has no room for it', (
+      tester,
+    ) async {
+      seedTheFullestBar();
+      await pump(tester, size: minimumWindow.size);
+
+      // At 720px the row is already 14px over with this chip squeezed to its
+      // glyphs. Absent beats crushed: the chat surface carries the same chip at
+      // full width, so a narrow terminal loses a shortcut rather than the
+      // control — and the actions keep the single line the complaint behind
+      // this bar was about.
+      expect(find.byType(SessionModelChip), findsNothing);
+      expect(find.byType(PermissionModeChip), findsOneWidget);
     });
 
     testWidgets('exactly one action is filled, and it is the next step', (

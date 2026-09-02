@@ -13,6 +13,7 @@ import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/sessions/presentation/session_notice_line.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
+import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
@@ -687,35 +688,77 @@ class _SessionBar extends ConsumerWidget {
                 // chips that post it.
                 SessionNoticeLine(sessionId: sessionId),
               ],
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (sessionId == null)
-                    const Spacer()
-                  else ...[
-                    PermissionModeChip(sessionId: sessionId),
-                    const SizedBox(width: Insets.sm),
-                    // The delivery actions take the room the other two do not:
-                    // they are the part that has something new to say as the
-                    // work moves, and the part that wraps when there is no room
-                    // left. They wrap *within* this box, so a second run stays
-                    // inside the group instead of pushing the ends around.
-                    Expanded(
-                      child: DeliveryStrip(
-                        sessionId: sessionId,
-                        hostedOnTerminal: true,
-                      ),
-                    ),
-                  ],
-                  if (selected != null) ...[
-                    const SizedBox(width: Insets.sm),
-                    _ViewToggle(
-                      onTerminal: onTerminal,
-                      onChat: onChat,
-                      onTerminalView: onTerminalView,
-                    ),
-                  ],
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Whether a third control fits beside the permission mode and
+                  // the delivery actions. Measured rather than guessed: at
+                  // 720px — the smallest window the app supports — the row is
+                  // already 14px over with the model chip squeezed to its
+                  // glyphs, and 23px over at the 1.3x text step. Scaled by the
+                  // text step for the same reason: the two fixed controls grow
+                  // with it and the room does not.
+                  final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+                  final roomForModel = constraints.maxWidth > 820 * scale;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (sessionId == null)
+                        const Spacer()
+                      else ...[
+                        PermissionModeChip(sessionId: sessionId),
+                        const SizedBox(width: Insets.xs),
+                        // Beside the permission chip because they are the same kind
+                        // of fact: what *this* session runs under, changed from
+                        // where the session is. It used to live in the window's
+                        // status bar next to the account quota, which put a
+                        // per-session control among window-wide ones and left it
+                        // describing whichever session the app thought was focused.
+                        // Flexible, and the only control here that is. The
+                        // delivery actions do not shrink — they wrap to a second
+                        // run, which is what put `Commit` a row above its own peers
+                        // — and the permission mode is a fixed vocabulary. A model
+                        // name is neither: it is the one label here whose width
+                        // nobody can predict, so it is the one that gives way. One
+                        // part against the strip's eight leaves it the ~118px it
+                        // wants at the fullest bar without letting it push the
+                        // actions onto a second run.
+                        //
+                        // Absent rather than crushed below that: the chat surface
+                        // carries the same chip at full width, so a narrow terminal
+                        // loses a shortcut, not the control.
+                        if (roomForModel) ...[
+                          Flexible(
+                            child: SessionModelChip(
+                              sessionId: sessionId,
+                              maxLabelWidth: 72,
+                            ),
+                          ),
+                          const SizedBox(width: Insets.sm),
+                        ],
+                        // The delivery actions take the room the other two do not:
+                        // they are the part that has something new to say as the
+                        // work moves, and the part that wraps when there is no room
+                        // left. They wrap *within* this box, so a second run stays
+                        // inside the group instead of pushing the ends around.
+                        Expanded(
+                          flex: 8,
+                          child: DeliveryStrip(
+                            sessionId: sessionId,
+                            hostedOnTerminal: true,
+                          ),
+                        ),
+                      ],
+                      if (selected != null) ...[
+                        const SizedBox(width: Insets.sm),
+                        _ViewToggle(
+                          onTerminal: onTerminal,
+                          onChat: onChat,
+                          onTerminalView: onTerminalView,
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
             ],
           ),

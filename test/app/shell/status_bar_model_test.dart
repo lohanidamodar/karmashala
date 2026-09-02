@@ -25,16 +25,18 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
-/// **What the model chip costs the row it sits in.**
+/// **What a model change costs the window's own row — which is now nothing.**
 ///
-/// The same obligation the usage chip carries, measured the same way: counted,
-/// never timed, because the suite runs at `--concurrency=4` and a wall-clock
+/// The model chip used to live here, beside the account quota, and this file
+/// measured that it repainted itself and none of its neighbours. The chip has
+/// since moved to the session's bar, where it belongs: which model a session
+/// runs under is a fact about that session, not about the window.
+///
+/// So the obligation inverts, and is worth keeping either way. The row must not
+/// repaint for a model change *at all* now — no chip of its own to justify it —
+/// and it must still hold at 720x560 with the quota on it. Counted, never
+/// timed, because the suite runs at `--concurrency=4` and a wall-clock
 /// assertion over a few milliseconds is a coin toss.
-///
-/// What it measures (2026-09-02): a model change costs **1 chip build and 0
-/// builds of the row's other items**. The row now carries a branch, a tab
-/// count, a background count, an attention count, a model and a quota, so the
-/// matrix cell that matters is 720x560 with both chips present.
 class _StaticSettings extends SettingsController {
   _StaticSettings(this._settings);
   final Settings _settings;
@@ -90,30 +92,25 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('a model change repaints the chip and nothing else in the row', (
+  testWidgets('a model change does not reach the window row at all', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
-    expect(find.text('default'), findsOneWidget);
+
+    // Gone from here on purpose. The model is a session control and lives in
+    // the session's bar with the permission mode and the delivery actions.
+    expect(find.byType(ModelChip), findsNothing);
 
     ShellStatusBar.debugItemBuildCount = 0;
     ModelChip.debugBuildCount = 0;
     UsageChip.debugBuildCount = 0;
 
-    // Not running, so this is the deferred path — which is the one the status
-    // bar will nearly always be on, and the one whose cost matters.
     container.read(sessionLauncherProvider).setModel('s1', 'opus');
     await tester.pump();
 
-    expect(find.text('Opus'), findsOneWidget);
-    expect(
-      ModelChip.debugBuildCount,
-      greaterThan(0),
-      reason: 'the chip is the thing that changed',
-    );
     expect(
       ShellStatusBar.debugItemBuildCount,
       0,
@@ -124,30 +121,32 @@ void main() {
     expect(
       UsageChip.debugBuildCount,
       0,
-      reason: 'and neither does the chip beside it',
+      reason: 'and the quota is about the account, not the session',
     );
     await quiesce(tester, container);
   });
 
-  testWidgets('a rename does not wake the chip', (tester) async {
-    // The narrowing this control was asked for: the CLI store sweep renames
-    // rows on a timer, without the user doing anything at all.
+  testWidgets('a rename does not wake the row either', (tester) async {
+    // The narrowing this row was asked for: the CLI store sweep renames rows on
+    // a timer, without the user doing anything at all.
     service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     await tester.pumpWidget(bar(container));
     await tester.pump();
 
-    ModelChip.debugBuildCount = 0;
-    container.read(sessionsRevisionProvider.notifier).changed(
-      const SessionChange.renamed('s1'),
-    );
+    ShellStatusBar.debugItemBuildCount = 0;
+    UsageChip.debugBuildCount = 0;
+    container
+        .read(sessionsRevisionProvider.notifier)
+        .changed(const SessionChange.renamed('s1'));
     await tester.pump();
 
-    expect(ModelChip.debugBuildCount, 0);
+    expect(ShellStatusBar.debugItemBuildCount, 0);
+    expect(UsageChip.debugBuildCount, 0);
     await quiesce(tester, container);
   });
 
-  testWidgets('the row holds at the minimum window with both chips on it', (
+  testWidgets('the row holds at the minimum window with the quota on it', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
@@ -157,17 +156,19 @@ void main() {
       tester,
       build: () => bar(container),
       because:
-          'the status bar carries branch, tabs, background, attention, model '
-          'and usage, and 720x560 is where the sixth item is felt',
+          'the status bar carries branch, tabs, background, attention and the '
+          'quota, and 720x560 is where the last item is felt',
     );
     await quiesce(tester, container);
   });
 
-  testWidgets('and holds with the longest model name a shipped agent has', (
+  testWidgets('and a long model name cannot reach this row to widen it', (
     tester,
   ) async {
     // `Gemini 3.7 Flash (Medium)` is a real slug from `agy models`, and the
-    // widest thing this chip can be asked to draw.
+    // widest thing the chip can be asked to draw. It used to be this row's
+    // problem; the session bar owns it now, where it is the one label that
+    // gives way.
     service.answer = usageSnapshot(percent: 62);
     final container = barContainer();
     container
@@ -176,7 +177,7 @@ void main() {
     await expectSurvivesWindowMatrix(
       tester,
       build: () => bar(container),
-      because: 'a long model name must cost the label, never the row',
+      because: 'no model name belongs in the window chrome any more',
     );
     await quiesce(tester, container);
   });
