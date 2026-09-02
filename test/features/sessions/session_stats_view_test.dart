@@ -127,6 +127,97 @@ void main() {
     });
   });
 
+  group('where the lifetime numbers came from', () {
+    test('a cache dates itself and warns that it lags', () {
+      final line = lifetimeStatsProvenance(
+        LifetimeStats(
+          source: LifetimeStatsSource.agentCache,
+          computedAt: DateTime.utc(2026, 2, 24),
+        ),
+        'Claude Code',
+      );
+      expect(line, contains('Claude Code\u2019s own /stats cache'));
+      expect(line, contains('2026-02-24'));
+      expect(line, contains('rewritten only when that screen is run'));
+      expect(line, contains('smaller'));
+    });
+
+    test('an undated cache still warns, without inventing a date', () {
+      final line = lifetimeStatsProvenance(
+        const LifetimeStats(source: LifetimeStatsSource.agentCache),
+        'Claude Code',
+      );
+      expect(line, isNot(contains('last written')));
+      expect(line, contains('rewritten only when that screen is run'));
+    });
+
+    test('an index says it is current instead', () {
+      final line = lifetimeStatsProvenance(
+        const LifetimeStats(source: LifetimeStatsSource.agentIndex),
+        'Codex',
+      );
+      expect(line, 'Codex\u2019s own thread index, kept current as it runs.');
+      expect(line, isNot(contains('older')));
+    });
+  });
+
+  group('why there are no lifetime numbers', () {
+    test('an agent with no books says nothing was added up for it', () {
+      final text = lifetimeStatsExplanation(
+        LifetimeStatsUnavailable.agentKeepsNoAggregate,
+        'Antigravity',
+      );
+      expect(text, startsWith('Antigravity keeps no lifetime totals'));
+      expect(text, contains('does not add sessions together'));
+      // The reason we refuse to synthesise one is on screen, not just in a
+      // commit message.
+      expect(text, contains('replay'));
+    });
+
+    test('books that exist but were never written here say that', () {
+      final text = lifetimeStatsExplanation(
+        LifetimeStatsUnavailable.sourceNotFound,
+        'Claude Code',
+      );
+      expect(text, contains('none could be read on this machine'));
+    });
+  });
+
+  group('how old a cache is', () {
+    final now = DateTime.utc(2026, 9, 2, 12);
+
+    test('it reads at one unit', () {
+      expect(formatStatAge(now, now: now), 'just now');
+      expect(
+        formatStatAge(now.subtract(const Duration(minutes: 1)), now: now),
+        '1 minute ago',
+      );
+      expect(
+        formatStatAge(now.subtract(const Duration(minutes: 40)), now: now),
+        '40 minutes ago',
+      );
+      expect(
+        formatStatAge(now.subtract(const Duration(hours: 5)), now: now),
+        '5 hours ago',
+      );
+      expect(
+        formatStatAge(DateTime.utc(2026, 2, 24), now: now),
+        '190 days ago',
+      );
+    });
+
+    test('a clock that ran backwards is not negative days ago', () {
+      expect(
+        formatStatAge(now.add(const Duration(hours: 3)), now: now),
+        'just now',
+      );
+    });
+
+    test('a day prints as a day, with no invented midnight', () {
+      expect(formatStatDay(DateTime(2026, 2, 24)), '2026-02-24');
+    });
+  });
+
   group('the totals a tally will and will not claim', () {
     test('reasoning is inside output, so it is not added again', () {
       const tokens = TokenTally(

@@ -2,11 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_descriptor.dart';
+import '../../cli_detection/application/cli_detection_providers.dart';
+import '../../cli_detection/data/agent_lifetime_reader.dart';
 import '../../cli_detection/data/claude_store_reader.dart';
 import '../../cli_detection/data/codex_stats_reader.dart';
 import '../../cli_detection/domain/session_stats.dart';
+import '../../environments/application/environment_providers.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
+import '../domain/session.dart';
 import 'session_signals.dart';
 
 /// Why a session has no stats to show.
@@ -36,14 +40,30 @@ enum SessionStatsUnavailable {
 /// A value rather than widget state so the four outcomes can be asserted
 /// without pumping a frame — the same bargain `UsageChipView` makes.
 class SessionStatsView {
-  const SessionStatsView.computed(SessionStats this.stats, this.agentName)
-    : unavailable = null;
+  const SessionStatsView.computed(
+    SessionStats this.stats,
+    this.agentName, {
+    this.lifetime,
+    this.lifetimeUnavailable,
+  }) : unavailable = null;
 
-  const SessionStatsView.unavailable(this.unavailable, this.agentName)
-    : stats = null;
+  const SessionStatsView.unavailable(
+    this.unavailable,
+    this.agentName, {
+    this.lifetime,
+    this.lifetimeUnavailable,
+  }) : stats = null;
 
   final SessionStats? stats;
   final SessionStatsUnavailable? unavailable;
+
+  /// The agent's own lifetime totals. **Independent of [stats]**: a session
+  /// that has not written a transcript yet still runs on an agent with a
+  /// history, and one section going quiet must not take the other with it.
+  final LifetimeStats? lifetime;
+
+  /// Why [lifetime] is absent. Null exactly when [lifetime] is present.
+  final LifetimeStatsUnavailable? lifetimeUnavailable;
 
   /// What to call the agent in the dialog. Empty when the session named none.
   final String agentName;
@@ -67,6 +87,7 @@ class SessionStatsService {
       return const SessionStatsView.unavailable(
         SessionStatsUnavailable.unknownSession,
         '',
+        lifetimeUnavailable: LifetimeStatsUnavailable.agentKeepsNoAggregate,
       );
     }
 
@@ -79,11 +100,17 @@ class SessionStatsService {
         : _ref.read(agentRegistryProvider).byId(agentId);
     final name = descriptor?.displayName ?? agentId ?? '';
 
+    // Read first and independently of everything below: the two sections
+    // answer different questions and neither is a precondition of the other.
+    final lifetime = await _lifetimeFor(agentId, descriptor, session);
+
     final format = descriptor?.store?.format;
     if (!agentStoreRecordsStats(descriptor)) {
       return SessionStatsView.unavailable(
         SessionStatsUnavailable.agentRecordsNoCounts,
         name,
+        lifetime: lifetime.$1,
+        lifetimeUnavailable: lifetime.$2,
       );
     }
 
@@ -92,6 +119,8 @@ class SessionStatsService {
       return SessionStatsView.unavailable(
         SessionStatsUnavailable.transcriptNotFound,
         name,
+        lifetime: lifetime.$1,
+        lifetimeUnavailable: lifetime.$2,
       );
     }
 
@@ -105,6 +134,8 @@ class SessionStatsService {
       return SessionStatsView.unavailable(
         SessionStatsUnavailable.transcriptNotFound,
         name,
+        lifetime: lifetime.$1,
+        lifetimeUnavailable: lifetime.$2,
       );
     }
 
@@ -115,9 +146,68 @@ class SessionStatsService {
       return SessionStatsView.unavailable(
         SessionStatsUnavailable.transcriptNotFound,
         name,
+        lifetime: lifetime.$1,
+        lifetimeUnavailable: lifetime.$2,
       );
     }
-    return SessionStatsView.computed(stats, name);
+    return SessionStatsView.computed(
+      stats,
+      name,
+      lifetime: lifetime.$1,
+      lifetimeUnavailable: lifetime.$2,
+    );
+  }
+
+  /// The agent's own books, or why there are none.
+  ///
+  /// Read from the store home the rest of detection already resolves, so a WSL
+  /// or SSH environment gets its own agent's totals rather than the host's.
+  Future<(LifetimeStats?, LifetimeStatsUnavailable?)> _lifetimeFor(
+    String? agentId,
+    AgentDescriptor? descriptor,
+    Session session,
+  ) async {
+    final format = descriptor?.store?.format;
+    if (agentId == null ||
+        (format != AgentStoreFormat.claudeJsonl &&
+            format != AgentStoreFormat.codexRollout)) {
+      return (null, LifetimeStatsUnavailable.agentKeepsNoAggregate);
+    }
+
+    final home = await _storeHome(agentId, session);
+    if (home == null) {
+      return (null, LifetimeStatsUnavailable.sourceNotFound);
+    }
+
+    final stats = format == AgentStoreFormat.claudeJsonl
+        ? await _ref.read(claudeLifetimeReaderProvider).read(home)
+        : await _ref.read(codexLifetimeReaderProvider).read(home);
+    return stats == null
+        ? (null, LifetimeStatsUnavailable.sourceNotFound)
+        : (stats, null);
+  }
+
+  /// This agent's store home in the environment the session runs in, falling
+  /// back to any environment that has one — a session whose environment row has
+  /// gone is still running against some agent's books.
+  Future<String?> _storeHome(String agentId, Session session) async {
+    try {
+      final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
+      final stores = await _ref
+          .read(cliStoreLocatorProvider)
+          .locate(environments);
+      final wanted = session.workingDirectory?.environmentId;
+      String? fallback;
+      for (final store in stores) {
+        final home = store.homesByAgentId[agentId];
+        if (home == null) continue;
+        if (store.environmentId == wanted) return home;
+        fallback ??= home;
+      }
+      return fallback;
+    } catch (_) {
+      return null;
+    }
   }
 }
 
@@ -143,6 +233,14 @@ final claudeStatsReaderProvider = Provider<ClaudeStoreReader>(
 
 final codexStatsReaderProvider = Provider<CodexStatsReader>(
   (ref) => CodexStatsReader(),
+);
+
+final claudeLifetimeReaderProvider = Provider<ClaudeLifetimeReader>(
+  (ref) => ClaudeLifetimeReader(),
+);
+
+final codexLifetimeReaderProvider = Provider<CodexLifetimeReader>(
+  (ref) => const CodexLifetimeReader(),
 );
 
 final sessionStatsServiceProvider = Provider<SessionStatsService>(

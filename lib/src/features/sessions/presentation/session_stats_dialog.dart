@@ -44,7 +44,7 @@ class SessionStatsDialog extends ConsumerWidget {
         title: 'Session stats',
         subtitle: view == null
             ? (async.hasError ? 'Could not be read' : 'Reading the store…')
-            : sessionStatsProvenance(view),
+            : (view.agentName.isEmpty ? null : view.agentName),
       ),
       content: SizedBox(
         width: 460,
@@ -86,47 +86,20 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final reason = view.unavailable;
-    if (reason != null) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: Insets.sm),
-        child: Text(
-          sessionStatsExplanation(reason, view.agentName),
-          style: theme.textTheme.bodySmall,
-        ),
-      );
-    }
-
-    final stats = view.stats!;
-    final tokens = stats.tokens;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _Section('Conversation'),
-        _StatRow('Turns', formatStatCount(stats.turns)),
-        _StatRow('Replies', formatStatCount(stats.replies)),
-        _StatRow('Tool calls', formatStatCount(stats.toolCalls)),
-        const _Section('Tokens'),
-        _StatRow('Input', formatStatCount(tokens.input)),
-        _StatRow('Output', formatStatCount(tokens.output)),
-        _StatRow('Cache created', formatStatCount(tokens.cacheCreated)),
-        _StatRow('Cache read', formatStatCount(tokens.cacheRead)),
-        // Only where the agent breaks it out — Claude Code folds thinking into
-        // its output count and there is no honest number to print.
-        if (tokens.reasoning != null)
-          _StatRow('of which reasoning', formatStatCount(tokens.reasoning)),
-        _StatRow('Total', formatStatCount(tokens.total), emphasise: true),
-        if (stats.contextWindow != null)
-          _StatRow('Context window', formatStatCount(stats.contextWindow)),
-        const _Section('Timing'),
-        _StatRow('First activity', formatStatMoment(stats.firstActivityAt)),
-        _StatRow('Last activity', formatStatMoment(stats.lastActivityAt)),
-        _StatRow('Elapsed', formatStatSpan(stats.span)),
+        // Two sections, one scroll, never a tab strip: the whole point is
+        // seeing both at once, and each carries its own provenance because
+        // they come from different books and can honestly disagree.
+        _SessionSection(view: view),
+        _LifetimeSection(view: view),
         const SizedBox(height: Insets.md),
         Text(
-          'Counts only — no cost estimate. Elapsed is first record to last, '
-          'not time spent working.',
+          'Counts only \u2014 no cost estimate, and not a bill: these are what '
+          'the agents wrote down, which can differ from what a vendor charges. '
+          'Live quota is in the status bar.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -136,22 +109,183 @@ class _Body extends StatelessWidget {
   }
 }
 
+class _SessionSection extends StatelessWidget {
+  const _SessionSection({required this.view});
+
+  final SessionStatsView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final reason = view.unavailable;
+    if (reason != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _Section('This session', first: true),
+          Text(
+            sessionStatsExplanation(reason, view.agentName),
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      );
+    }
+
+    final stats = view.stats!;
+    final tokens = stats.tokens;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Section(
+          'This session',
+          first: true,
+          provenance: sessionStatsProvenance(view),
+        ),
+        _StatRow('Turns', formatStatCount(stats.turns)),
+        _StatRow('Replies', formatStatCount(stats.replies)),
+        _StatRow('Tool calls', formatStatCount(stats.toolCalls)),
+        _StatRow('Input tokens', formatStatCount(tokens.input)),
+        _StatRow('Output tokens', formatStatCount(tokens.output)),
+        _StatRow('Cache created', formatStatCount(tokens.cacheCreated)),
+        _StatRow('Cache read', formatStatCount(tokens.cacheRead)),
+        // Only where the agent breaks it out — Claude Code folds thinking into
+        // its output count and there is no honest number to print.
+        if (tokens.reasoning != null)
+          _StatRow('of which reasoning', formatStatCount(tokens.reasoning)),
+        _StatRow('Total tokens', formatStatCount(tokens.total), emphasise: true),
+        if (stats.contextWindow != null)
+          _StatRow('Context window', formatStatCount(stats.contextWindow)),
+        _StatRow('First activity', formatStatMoment(stats.firstActivityAt)),
+        _StatRow('Last activity', formatStatMoment(stats.lastActivityAt)),
+        _StatRow('Elapsed', formatStatSpan(stats.span)),
+        const SizedBox(height: Insets.xs),
+        Text(
+          'Elapsed is first record to last, not time spent working.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LifetimeSection extends StatelessWidget {
+  const _LifetimeSection({required this.view});
+
+  final SessionStatsView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final lifetime = view.lifetime;
+    if (lifetime == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _Section('All time'),
+          Text(
+            lifetimeStatsExplanation(
+              view.lifetimeUnavailable ??
+                  LifetimeStatsUnavailable.agentKeepsNoAggregate,
+              view.agentName,
+            ),
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      );
+    }
+
+    final tokens = lifetime.tokens;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Section(
+          'All time',
+          provenance: lifetimeStatsProvenance(lifetime, view.agentName),
+        ),
+        _StatRow(
+          lifetime.source == LifetimeStatsSource.agentIndex
+              ? 'Threads'
+              : 'Sessions',
+          formatStatCount(lifetime.sessions),
+        ),
+        if (lifetime.messages != null)
+          _StatRow('Messages', formatStatCount(lifetime.messages)),
+        _StatRow('Input tokens', formatStatCount(tokens.input)),
+        _StatRow('Output tokens', formatStatCount(tokens.output)),
+        _StatRow('Cache created', formatStatCount(tokens.cacheCreated)),
+        _StatRow('Cache read', formatStatCount(tokens.cacheRead)),
+        _StatRow(
+          'Total tokens',
+          formatStatCount(lifetime.totalTokens),
+          emphasise: true,
+        ),
+        _StatRow('First activity', formatStatMoment(lifetime.firstActivityAt)),
+        _StatRow('Last activity', formatStatMoment(lifetime.lastActivityAt)),
+        // The source's own caveat, in its own words: what these numbers count
+        // is not what the section above counts, and saying so here is cheaper
+        // than a bug report about the two disagreeing.
+        if (lifetime.note case final note?) ...[
+          const SizedBox(height: Insets.xs),
+          Text(
+            note,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _Section extends StatelessWidget {
-  const _Section(this.label);
+  const _Section(this.label, {this.provenance, this.first = false});
 
   final String label;
+
+  /// Where this section's numbers came from. Per section, never once for the
+  /// dialog: two numbers from two books under one unlabelled heading is how
+  /// someone compares them and concludes we have a bug.
+  final String? provenance;
+
+  final bool first;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(top: Insets.md, bottom: Insets.xs),
-      child: Text(
-        label.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          letterSpacing: 0.8,
-        ),
+      padding: EdgeInsets.only(
+        top: first ? 0 : Insets.lg,
+        bottom: Insets.xs,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              letterSpacing: 0.8,
+            ),
+          ),
+          if (provenance case final line?)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                line,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -309,6 +443,46 @@ String sessionStatsExplanation(
   };
 }
 
+/// Where the lifetime numbers came from, and how far behind they can be.
+///
+/// The staleness sentence is not hedging: on this machine Claude Code's cache
+/// says one session while thirty-eight sit in the store beside it, so an
+/// unlabelled all-time total can be *smaller* than the single session shown
+/// above it. Saying that here is cheaper than a bug report about it.
+String lifetimeStatsProvenance(LifetimeStats lifetime, String agentName) {
+  final agent = agentName.isEmpty ? 'The agent' : agentName;
+  switch (lifetime.source) {
+    case LifetimeStatsSource.agentIndex:
+      return '$agent\u2019s own thread index, kept current as it runs.';
+    case LifetimeStatsSource.agentCache:
+      final written = lifetime.computedAt;
+      final when = written == null
+          ? ''
+          : ', last written ${formatStatDay(written)} '
+                '(${formatStatAge(written)})';
+      return '$agent\u2019s own /stats cache$when. It is rewritten only when '
+          'that screen is run, so it can be older \u2014 and smaller \u2014 '
+          'than the session above.';
+  }
+}
+
+/// Why there are no lifetime totals, in full sentences.
+String lifetimeStatsExplanation(
+  LifetimeStatsUnavailable reason,
+  String agentName,
+) {
+  final agent = agentName.isEmpty ? 'This agent' : agentName;
+  return switch (reason) {
+    LifetimeStatsUnavailable.agentKeepsNoAggregate =>
+      '$agent keeps no lifetime totals of its own, and this app does not add '
+          'sessions together to invent them \u2014 a store where one session '
+          'can replay another\u2019s history is exactly where that goes wrong.',
+    LifetimeStatsUnavailable.sourceNotFound =>
+      '$agent keeps lifetime totals, but none could be read on this machine. '
+          'Its own stats have probably never been computed here.',
+  };
+}
+
 /// A count, grouped, or [kStatNotRecorded] when the route did not supply one.
 String formatStatCount(int? value) {
   if (value == null) return kStatNotRecorded;
@@ -339,4 +513,26 @@ String formatStatSpan(Duration? value) {
     return '${value.inHours}h ${value.inMinutes % 60}m';
   }
   return '${value.inDays}d ${value.inHours % 24}h';
+}
+
+/// A whole day, in local time. Used where the source records a date and not an
+/// instant — printing 00:00 beside it would be a precision it does not have.
+String formatStatDay(DateTime value) {
+  final at = value.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${at.year}-${two(at.month)}-${two(at.day)}';
+}
+
+/// How long ago, at one unit. [now] is injectable so the wording is testable
+/// without the clock moving under the assertion.
+String formatStatAge(DateTime at, {DateTime? now}) {
+  final elapsed = (now ?? DateTime.now()).difference(at);
+  if (elapsed.isNegative || elapsed.inMinutes < 1) return 'just now';
+  if (elapsed.inHours < 1) {
+    return '${elapsed.inMinutes} minute${elapsed.inMinutes == 1 ? '' : 's'} ago';
+  }
+  if (elapsed.inDays < 1) {
+    return '${elapsed.inHours} hour${elapsed.inHours == 1 ? '' : 's'} ago';
+  }
+  return '${elapsed.inDays} day${elapsed.inDays == 1 ? '' : 's'} ago';
 }
