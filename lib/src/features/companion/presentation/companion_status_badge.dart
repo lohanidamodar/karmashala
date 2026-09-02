@@ -50,19 +50,26 @@ class CompanionStatusBadge extends StatelessWidget {
         children: [
           Icon(
             appearance.icon,
-            size: density.isTouch ? Touch.iconSmall : 13,
+            // The pointer step is Chrome's, not UiDensity's 11: this glyph
+            // sits beside `labelSmall`, where a toolbar-sized mark is wrong
+            // and an 11px one disappears.
+            size: density.isTouch ? Touch.iconSmall : Chrome.iconSmall,
             color: colour,
           ),
           if (showLabel) ...[
-            const SizedBox(width: 4),
+            SizedBox(width: density.glyphGap),
             Text(
               appearance.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: (density.isTouch
-                      ? theme.textTheme.bodySmall
-                      : theme.textTheme.labelSmall)
-                  ?.copyWith(color: wordColour, fontWeight: FontWeight.w600),
+              style:
+                  (density.isTouch
+                          ? theme.textTheme.bodySmall
+                          : theme.textTheme.labelSmall)
+                      ?.copyWith(
+                        color: wordColour,
+                        fontWeight: FontWeight.w600,
+                      ),
             ),
           ],
         ],

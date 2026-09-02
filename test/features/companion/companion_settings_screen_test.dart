@@ -5,6 +5,7 @@ library;
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/companion_settings_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
@@ -46,5 +47,54 @@ void main() {
 
     expect(find.text('Host unreachable'), findsOneWidget);
     expect(find.textContaining('Connected'), findsNothing);
+  });
+
+  testWidgets('the whole settings screen survives 200% text', (tester) async {
+    final gateway = FakeCompanionGateway.paired(
+      link: CompanionLinkState.disconnected,
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const CompanionSettingsScreen(),
+      textScale: 2.0,
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    // Every section still names itself; a heading that vanished at large text
+    // would take the structure of the screen with it.
+    for (final heading in const [
+      'PAIRED DESKTOP',
+      'THIS CONNECTION',
+      'PAIRING RELAY',
+      'DIAGNOSTICS',
+    ]) {
+      await tester.scrollUntilVisible(
+        find.text(heading),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text(heading), findsOneWidget);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('every section heading is a header for a screen reader', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await pumpPhone(
+      tester,
+      gateway: FakeCompanionGateway.paired(),
+      home: const CompanionSettingsScreen(),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.text('THIS CONNECTION')),
+      matchesSemantics(label: 'THIS CONNECTION', isHeader: true),
+    );
+    handle.dispose();
   });
 }

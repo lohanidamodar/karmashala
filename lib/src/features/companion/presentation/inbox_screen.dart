@@ -106,7 +106,9 @@ class _InboxRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              // Half a line gap: an optical nudge so the glyph sits on the
+              // title's first line rather than on the top of its box.
+              padding: EdgeInsets.only(top: density.lineGap / 2),
               child: Icon(icon, size: density.icon, color: colour),
             ),
             SizedBox(width: density.isTouch ? Insets.md : Insets.sm),

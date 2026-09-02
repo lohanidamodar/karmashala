@@ -13,13 +13,19 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_status_badge.dart';
 import 'session_view_screen.dart';
 
 /// One project's sessions, in the host's order, one tap from their transcripts.
 class CompanionSessionList extends ConsumerWidget {
-  const CompanionSessionList({required this.sessions, this.header, super.key});
+  const CompanionSessionList({
+    required this.sessions,
+    this.header,
+    this.bottomInset = Insets.xl,
+    super.key,
+  });
 
   /// Exactly as the host ordered them. Never sorted here.
   final List<CompanionSessionSummary> sessions;
@@ -28,13 +34,18 @@ class CompanionSessionList extends ConsumerWidget {
   /// belongs to, when the screen has not already named it in its app bar.
   final Widget? header;
 
+  /// Room under the last row. [companionFabGutter] where a floating action
+  /// button hovers over the list, so the last session is not half-covered by
+  /// the button offering to start another one.
+  final double bottomInset;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.read(clockProvider).nowUtc();
     final scheme = Theme.of(context).colorScheme;
     final offset = header == null ? 0 : 1;
     return ListView.separated(
-      padding: const EdgeInsets.only(bottom: Insets.xl),
+      padding: EdgeInsets.only(bottom: bottomInset),
       itemCount: sessions.length + offset,
       separatorBuilder: (context, index) => Divider(
         height: 1,

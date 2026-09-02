@@ -9,6 +9,7 @@ import '../../remote/domain/remote_payloads.dart';
 import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 import 'link_banner.dart';
@@ -237,33 +238,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   Future<T?> _sheet<T>({
     required String title,
     required List<Widget> children,
-  }) => showModalBottomSheet<T>(
-    context: context,
-    isScrollControlled: true,
-    builder: (context) => SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.lg,
-                Insets.lg,
-                Insets.lg,
-                Insets.sm,
-              ),
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
-            ...children,
-          ],
-        ),
-      ),
-    ),
-  );
+  }) => companionSheet<T>(context, title: title, children: children);
 
   Future<void> _start(
     RemoteCheckoutOption checkout,
@@ -319,10 +294,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     final workspace = ref.watch(companionWorkspaceProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: Touch.appBarOf(context),
-        title: const Text('New session'),
-      ),
+      appBar: companionAppBar(context, title: const Text('New session')),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -569,10 +541,12 @@ class _Environment extends StatelessWidget {
         name,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: UiDensity.of(context).muted(theme)?.copyWith(
-          color: theme.colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
-        ),
+        style: UiDensity.of(context)
+            .muted(theme)
+            ?.copyWith(
+              color: theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
       ),
     );
   }

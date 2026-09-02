@@ -199,4 +199,24 @@ void main() {
       );
     });
   });
+
+  group('at 200% text', () {
+    testWidgets('a failed attempt still shows every step, the reason, and '
+        'both ways on', (tester) async {
+      final gateway = FakeCompanionGateway();
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: PairingProgressScreen(attempt: (g) => g.pairWithCode('WRONG000')),
+        textScale: 2.0,
+      );
+      await tester.pump();
+
+      expect(find.text('Code accepted'), findsOneWidget);
+      expect(find.textContaining('did not recognise'), findsOneWidget);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

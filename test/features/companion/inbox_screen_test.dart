@@ -2,6 +2,8 @@ import 'package:karmashala/src/features/companion/client/companion_gateway.dart'
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
 import 'package:karmashala/src/features/companion/presentation/inbox_screen.dart';
 import 'package:karmashala/src/features/companion/presentation/session_view_screen.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'companion_test_support.dart';
@@ -70,5 +72,51 @@ void main() {
     final gateway = FakeCompanionGateway.paired(sessions: [summary('s1')]);
     await pumpPhone(tester, gateway: gateway, home: const InboxScreen());
     expect(find.text('Nothing needs you.'), findsOneWidget);
+  });
+
+  testWidgets('a long attention row survives 200% text on a phone', (
+    tester,
+  ) async {
+    final gateway = FakeCompanionGateway.paired(
+      sessions: [
+        summary(
+          's1',
+          title: 'Rewrite the authentication middleware end to end',
+          project: 'a-project-with-a-very-long-name',
+          attention: CompanionAttention(
+            kind: CompanionAttentionKind.needsYou,
+            at: DateTime.now().toUtc().subtract(const Duration(hours: 4)),
+          ),
+        ),
+      ],
+    );
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const InboxScreen(),
+      textScale: 2.0,
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byType(InkWell).first).height,
+      greaterThan(Touch.target),
+      reason: 'the row grows with the text; it does not clip it',
+    );
+  });
+
+  testWidgets('the empty inbox reads at 200% without overflowing', (
+    tester,
+  ) async {
+    final gateway = FakeCompanionGateway.paired(sessions: [summary('s1')]);
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const InboxScreen(),
+      textScale: 2.0,
+    );
+
+    expect(find.text('Nothing needs you.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

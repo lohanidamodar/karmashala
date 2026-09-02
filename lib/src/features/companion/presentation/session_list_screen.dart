@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
 import '../../explorer/presentation/project_card.dart';
 import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
@@ -53,7 +53,10 @@ class SessionListScreen extends ConsumerWidget {
               .has(Capability.startSession)
           ? FloatingActionButton.extended(
               onPressed: () => Navigator.of(context).push(
-                companionRoute<void>(context, (_) => const StartSessionScreen()),
+                companionRoute<void>(
+                  context,
+                  (_) => const StartSessionScreen(),
+                ),
               ),
               icon: const Icon(AppIcons.plus),
               label: const Text('New session'),
@@ -73,10 +76,8 @@ class SessionListScreen extends ConsumerWidget {
     return companionAsync(
       sessions,
       loading: () => const CompanionSkeletonList(lines: 2),
-      error: (error) => CompanionNotice.failure(
-        error: error,
-        onRetry: () => _retry(ref),
-      ),
+      error: (error) =>
+          CompanionNotice.failure(error: error, onRetry: () => _retry(ref)),
       data: (list) {
         if (list.isEmpty) return _empty(context, ref, link, hostName);
         final groups = groupByProject(list);
@@ -85,10 +86,13 @@ class SessionListScreen extends ConsumerWidget {
           return CompanionSessionList(
             sessions: only.sessions,
             header: ProjectHeaderCard(group: only),
+            bottomInset: companionFabGutter,
           );
         }
         return ListView.separated(
-          padding: const EdgeInsets.only(bottom: Insets.xl),
+          // Clear of the floating action button, which hovers over this list
+          // and covered the last project's row at Insets.xl.
+          padding: const EdgeInsets.only(bottom: companionFabGutter),
           itemCount: groups.length,
           separatorBuilder: (context, index) => Divider(
             height: 1,

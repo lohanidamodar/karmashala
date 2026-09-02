@@ -30,9 +30,7 @@ void main() {
   tearDown(() => Diagnostics.instance = previous);
 
   void log(Level level, String channel, String message) {
-    Diagnostics.instance.handle(
-      LogRecord(level, message, channel),
-    );
+    Diagnostics.instance.handle(LogRecord(level, message, channel));
   }
 
   testWidgets('shows the warnings and errors, not the chatter', (tester) async {
@@ -146,5 +144,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CompanionLogScreen), findsOneWidget);
+  });
+
+  testWidgets('reads at 200% text without clipping its own title', (
+    tester,
+  ) async {
+    log(Level.SEVERE, 'companion.gateway', 'relay closed the socket');
+    await pumpPhone(
+      tester,
+      gateway: FakeCompanionGateway.paired(),
+      home: const CompanionLogScreen(),
+      textScale: 2.0,
+    );
+
+    expect(find.text('Diagnostics'), findsOneWidget);
+    expect(find.textContaining('relay closed the socket'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../client/companion_gateway.dart';
 
 /// The phone's message box: what the composer is once it is reduced to the one
@@ -57,12 +58,21 @@ class _CompanionComposerState extends State<CompanionComposer> {
   @override
   Widget build(BuildContext context) {
     final canType = widget.enabled && !_busy;
+    final density = UiDensity.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Divider(height: 1),
         Padding(
-          padding: const EdgeInsets.all(8),
+          // The screen gutter, not a hand-picked 8: the composer sits directly
+          // under a transcript indented by [Insets.md] and above a home
+          // indicator, and it was the only row on the phone inset by 8.
+          padding: EdgeInsets.fromLTRB(
+            density.padX,
+            density.padY,
+            density.padX,
+            density.padY,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -75,23 +85,30 @@ class _CompanionComposerState extends State<CompanionComposer> {
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
                   decoration: InputDecoration(
-                    isDense: true,
+                    // `isDense` was undoing the touch theme's own input
+                    // padding, so the one field a thumb uses most was the
+                    // tightest in the app. The theme decides the density now.
                     border: const OutlineInputBorder(),
                     hintText: widget.hintText,
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: Touch.gap),
               IconButton.filled(
                 tooltip: 'Send',
                 onPressed: canType ? _send : null,
+                // Never smaller than the target floor, whatever a theme
+                // upstream decides: this is the button the whole screen is for.
+                constraints: BoxConstraints(
+                  minWidth: density.minRow,
+                  minHeight: density.minRow,
+                ),
                 icon: _busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    ? SizedBox.square(
+                        dimension: density.icon,
+                        child: const CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(AppIcons.paperPlaneRight, size: 18),
+                    : Icon(AppIcons.paperPlaneRight, size: density.icon),
               ),
             ],
           ),

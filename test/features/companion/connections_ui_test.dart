@@ -6,6 +6,7 @@ library;
 import 'dart:async';
 
 import 'package:karmashala/src/app/companion/companion_shell.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/companion/application/companion_providers.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/fake_companion_gateway.dart';
@@ -411,4 +412,42 @@ void main() {
       reason: 'and the switch is over, so the next tap is not swallowed',
     );
   });
+
+  group('at 200% text', () {
+    testWidgets('the connections section lists, badges and forgets without '
+        'overflowing', (tester) async {
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+        textScale: 2.0,
+      );
+
+      expect(find.text('DESKTOPS'), findsOneWidget);
+      expect(find.text('Active'), findsOneWidget);
+      expect(find.text('Add a desktop'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the switcher strip keeps its name, count and caret on one '
+        'row', (tester) async {
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const HostSwitcherBar(),
+        textScale: 2.0,
+      );
+
+      expect(find.text('Studio'), findsOneWidget);
+      expect(find.text('2 saved'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(InkWell).first).height,
+        greaterThan(Touch.target),
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
 }
