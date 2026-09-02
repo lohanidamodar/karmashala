@@ -1,3 +1,6 @@
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -163,15 +166,52 @@ void main() {
     for (final mode in PermissionMode.values) {
       expect(find.text(mode.label), findsOneWidget, reason: mode.name);
     }
-    PopupMenuItem<PermissionChoice> item(PermissionMode mode) => tester
-        .widgetList<PopupMenuItem<PermissionChoice>>(
-          find.byType(PopupMenuItem<PermissionChoice>),
+    DesktopMenuDetailItem<PermissionChoice> item(PermissionMode mode) => tester
+        .widgetList<DesktopMenuDetailItem<PermissionChoice>>(
+          find.byType(DesktopMenuDetailItem<PermissionChoice>),
         )
         .firstWhere((w) => w.value?.mode == mode);
 
     expect(item(PermissionMode.ask).enabled, isFalse);
     expect(item(PermissionMode.acceptEdits).enabled, isFalse);
     expect(item(PermissionMode.bypass).enabled, isTrue);
+  });
+
+  testWidgets('the menu draws the house two-line row', (tester) async {
+    // Its rows were a `Row`/`Column` of their own inside a plain
+    // `PopupMenuItem`; the Explorer's menus a pane away were `DesktopMenuItem`.
+    final h = harness(agentId: AgentIds.claudeCode, mode: PermissionMode.ask);
+    addTearDown(h.db.close);
+    await tester.pumpWidget(h.app);
+
+    await tester.tap(find.byType(PermissionModeChip));
+    await tester.pumpAndSettle();
+
+    // Every mode, plus the "follow the default" row above the divider.
+    expect(
+      find.byType(DesktopMenuDetailItem<PermissionChoice>),
+      findsNWidgets(PermissionMode.values.length + 1),
+    );
+    expect(find.byType(DesktopMenuDivider), findsOneWidget);
+    expect(
+      tester
+          .getSize(
+            find.widgetWithText(
+              DesktopMenuDetailItem<PermissionChoice>,
+              'Follow the Settings default',
+            ),
+          )
+          .height,
+      greaterThanOrEqualTo(Chrome.menuRowTall),
+    );
+    // The mode this session actually holds is the checked one, and only it.
+    expect(
+      find.descendant(
+        of: find.byType(DesktopMenuDetailItem<PermissionChoice>),
+        matching: find.byIcon(AppIcons.check),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('choosing a mode writes the row and says when it applies', (

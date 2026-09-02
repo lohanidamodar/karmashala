@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/continue_with_dialog.dart';
 import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -256,9 +257,9 @@ void main() {
     // Prompting CLI has only `ask`, so the rest are listed and unselectable.
     expect(
       tester
-          .widget<PopupMenuItem<PermissionMode>>(
+          .widget<DesktopMenuDetailItem<PermissionMode>>(
             find.widgetWithText(
-              PopupMenuItem<PermissionMode>,
+              DesktopMenuDetailItem<PermissionMode>,
               'Bypass (full autonomy)',
             ),
           )
@@ -275,9 +276,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<PopupMenuItem<PermissionMode>>(
+          .widget<DesktopMenuDetailItem<PermissionMode>>(
             find.widgetWithText(
-              PopupMenuItem<PermissionMode>,
+              DesktopMenuDetailItem<PermissionMode>,
               'Bypass (full autonomy)',
             ),
           )

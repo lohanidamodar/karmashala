@@ -1,3 +1,6 @@
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_permission_options.dart';
 import 'package:karmashala/src/features/agents/presentation/permission_mode_picker.dart';
@@ -69,11 +72,48 @@ void main() {
     expect(find.textContaining('takes no flag for this'), findsOneWidget);
     expect(
       tester
-          .widget<PopupMenuItem<PermissionMode>>(
-            find.widgetWithText(PopupMenuItem<PermissionMode>, 'Accept edits'),
+          .widget<DesktopMenuDetailItem<PermissionMode>>(
+            find.widgetWithText(
+              DesktopMenuDetailItem<PermissionMode>,
+              'Accept edits',
+            ),
           )
           .enabled,
       isFalse,
+    );
+  });
+
+  testWidgets('the rows are the house two-line menu row', (tester) async {
+    // They were a `Row`/`Column` of their own inside a plain `PopupMenuItem`,
+    // beside menus built from `DesktopMenuItem` — a different gutter and
+    // Material's own label size.
+    await pump(tester);
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byType(DesktopMenuDetailItem<PermissionMode>),
+      findsNWidgets(PermissionMode.values.length),
+    );
+    // Selected is the checked one, and only it. (The chip's own face carries a
+    // check too, so the search is confined to the menu.)
+    expect(
+      find.descendant(
+        of: find.byType(DesktopMenuDetailItem<PermissionMode>),
+        matching: find.byIcon(AppIcons.check),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .getSize(
+            find.widgetWithText(
+              DesktopMenuDetailItem<PermissionMode>,
+              'Bypass (full autonomy)',
+            ),
+          )
+          .height,
+      greaterThanOrEqualTo(Chrome.menuRowTall),
     );
   });
 
