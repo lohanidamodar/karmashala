@@ -144,6 +144,10 @@ void main() {
             () => _PickedSimulator(picked),
           ),
           simulatorLiveViewProvider.overrideWith(() => fake),
+          // The iOS "Slim on start" row reads saved settings, which live in
+          // the database, and is on screen whenever a simulator is booted.
+          slimmingOnStartProvider.overrideWithValue(false),
+          slimmingKeptCategoriesProvider.overrideWithValue(const {}),
         ],
         child: const MaterialApp(home: Scaffold(body: DevicePane())),
       ),

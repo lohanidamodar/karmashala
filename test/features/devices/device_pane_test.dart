@@ -87,6 +87,11 @@ Future<void> _pump(
         // here so these cases stay about the pane.
         androidEmulatorArgumentsProvider.overrideWithValue(slimmingArguments),
         androidSlimmingServiceProvider.overrideWithValue(null),
+        // The iOS side reads the same saved settings, and its "Slim on start"
+        // row is now on screen whenever a simulator is booted rather than only
+        // when one is startable.
+        slimmingOnStartProvider.overrideWithValue(false),
+        slimmingKeptCategoriesProvider.overrideWithValue(const {}),
         devicesProvider.overrideWith(
           (ref) => stillProbing
               ? Completer<List<AndroidDevice>>().future
@@ -794,6 +799,29 @@ void main() {
         '-gpu',
         'host',
       ]);
+    });
+
+    testWidgets('Slimming stays reachable when every emulator is running', (
+      tester,
+    ) async {
+      // The button hung off the *idle* list, so the one machine-with-one-AVD
+      // case took the dialog away the moment that AVD started — and with it
+      // Restore, which only works on a running emulator and is the escape
+      // hatch for one whose Play services are disabled.
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: [_device()],
+        avds: const [Avd(name: 'Pixel_8_Pro', runningSerial: _emulator)],
+      );
+
+      expect(find.byKey(const Key('android-slimming-open')), findsOneWidget);
+      expect(
+        find.byKey(const Key('start-avd-Pixel_8_Pro')),
+        findsNothing,
+        reason: 'it is running, so there is nothing to start',
+      );
+      expect(find.textContaining('Every emulator is running'), findsOneWidget);
     });
 
     testWidgets('the toggle really controls the window', (tester) async {

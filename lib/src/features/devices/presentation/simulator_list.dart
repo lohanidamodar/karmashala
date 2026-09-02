@@ -18,6 +18,11 @@ import 'simulator_slimming_dialog.dart';
 /// A booted simulator is **not** listed here: it is a connected device, and it
 /// belongs with the others under Connected rather than beneath the idle ones.
 ///
+/// It does stay, though, when every simulator is booted and none is startable:
+/// the Slimming button and the "Slim on start" switch govern the *next* boot,
+/// and that is exactly when a user has just been told to stop and start the
+/// device.
+///
 /// The whole section disappears off macOS rather than showing an empty state.
 /// Windows and Linux cannot have simulators at all, and a permanently empty
 /// "iOS Simulators" heading is a question the user cannot answer.
@@ -41,7 +46,11 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
     final busy = ref.watch(simulatorTransitionsProvider);
     final transitions = ref.read(simulatorTransitionsProvider.notifier);
 
-    if (startable.isEmpty) return const SizedBox.shrink();
+    // A booted simulator keeps the section alive even when nothing is left to
+    // start: the Slimming button and the switch below govern the *next* boot,
+    // and hiding them the moment the only simulator is running takes away the
+    // controls at the point the user has just been told to stop and start it.
+    if (startable.isEmpty && !anyBooted) return const SizedBox.shrink();
 
     // A simulator that was picked and has since started is no longer in the
     // list it was picked from; falling back keeps the picker on something real
@@ -104,7 +113,7 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
               ],
             ),
           ),
-        if (startable.isNotEmpty) _SlimOnStart(booted: anyBooted),
+        _SlimOnStart(booted: anyBooted),
       ],
     );
   }

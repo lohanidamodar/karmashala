@@ -228,6 +228,27 @@ void main() {
     expect(find.byKey(const Key('slimming-widgets')), findsOneWidget);
   });
 
+  testWidgets('the section survives the last simulator booting', (
+    tester,
+  ) async {
+    // Slimming applies at boot, so the controls matter most just after the
+    // user has been told to stop and start the device — which is precisely
+    // when nothing was left to start and the whole section disappeared.
+    await _pump(
+      tester,
+      simulators: [_sim('booted', 'iPhone 17 Pro', SimulatorState.booted)],
+    );
+
+    expect(find.text('iOS Simulators'), findsOneWidget);
+    expect(find.byKey(const Key('simulator-slimming-open')), findsOneWidget);
+    expect(find.byKey(const Key('slim-on-start')), findsOneWidget);
+    expect(
+      find.byKey(const Key('simulator-picker')),
+      findsNothing,
+      reason: 'there is nothing left to start',
+    );
+  });
+
   testWidgets('the heading lines up with the rows under it', (tester) async {
     await _pump(
       tester,

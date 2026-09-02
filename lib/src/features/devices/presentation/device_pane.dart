@@ -1630,6 +1630,12 @@ class _DeviceList extends ConsumerWidget {
       for (final avd in avds)
         if (!avd.isRunning) avd,
     ];
+    // The Emulators section exists whenever there is an emulator to start *or*
+    // one to put back. Hanging it off the idle list alone hid the Slimming
+    // dialog — and with it Restore, which only works on a *running* emulator —
+    // in exactly the case Restore is for: the one AVD on the machine started,
+    // so nothing was idle and the header that carries the button was gone.
+    final anyEmulator = avds.isNotEmpty || devices.any((d) => d.isEmulator);
     if (devices.isEmpty && idle.isEmpty && simulators.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1706,7 +1712,7 @@ class _DeviceList extends ConsumerWidget {
               ],
             ),
         ],
-        if (idle.isNotEmpty) ...[
+        if (anyEmulator) ...[
           const SizedBox(height: 16),
           DeviceSectionHeader(
             title: 'Emulators',
@@ -1716,6 +1722,16 @@ class _DeviceList extends ConsumerWidget {
               child: const Text('Slimming'),
             ),
           ),
+          if (idle.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Text(
+                'Every emulator is running — they are listed above.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           for (final avd in idle)
             _DeviceRow(
               title: avd.name,
