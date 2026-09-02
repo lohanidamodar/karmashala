@@ -463,6 +463,82 @@ String? resumeRefusalFor(
       'instead, where the agent is launched from its own registry entry.';
 }
 
+/// The second way a resume can quietly become a fresh conversation: it is run
+/// in a directory the conversation was not written in, by an agent nobody has
+/// checked can find it from there. `null` when there is nothing to say.
+///
+/// Deliberately beside [resumeRefusalFor] — same file, same family, one
+/// wording — and deliberately **not** part of it, because the two are different
+/// strengths of claim and this file family does not blur those:
+///
+/// * [resumeRefusalFor] is a **certainty**. The registry says this agent has no
+///   resume convention at all, so the command line cannot continue anything.
+///   There is nothing to weigh; it refuses.
+/// * This is a **possibility**. The agent's [AgentResumeLocality] says only that
+///   nobody has verified the resume survives a change of directory. Turning that
+///   into a refusal would make an unmounted drive or an archived worktree mean
+///   "you can never open this session again", and every other unknown in this
+///   area resolves the permissive way for exactly that reason —
+///   `conversationPresenceProvider` will not refuse on a store it merely failed
+///   to read, and `sessionDirectoryPresentProvider` will not call a directory
+///   missing when it could not look.
+///
+/// So the honest answer for an unverified agent is the third of the three the
+/// app has: keep the directory stable where it can, refuse where it is certain,
+/// and otherwise **say the session may start fresh**. This is that sentence. It
+/// is unreachable for the three agents shipped today — all three declare
+/// [AgentResumeLocality.anyDirectory] against evidence read off their own stores
+/// and binaries — and it is here for the fourth.
+///
+/// [recordedDirectory] is where the conversation was written and
+/// [launchDirectory] is where this run will happen. They differ whenever the app
+/// moves a session: an archived worktree falling back to the repository root, a
+/// native fork launched into a fresh worktree. Either being null means "we do
+/// not know", which says nothing.
+String? resumeDirectoryCaveatFor(
+  AgentRegistry registry,
+  String cli,
+  String? externalId, {
+  String? recordedDirectory,
+  String? launchDirectory,
+}) {
+  if (externalId == null || externalId.isEmpty) return null;
+  final descriptor = registry.byId(cli);
+  if (descriptor == null) return null;
+  if (descriptor.launch.resumeLocality.findsConversationAnywhere) return null;
+  if (!_directoryMoved(recordedDirectory, launchDirectory)) return null;
+  return 'This runs in $launchDirectory rather than $recordedDirectory, where '
+      'the conversation was written, and ${descriptor.displayName} has not been '
+      'verified to find a conversation from anywhere but its own launch '
+      'directory. It may open a new conversation rather than continue '
+      '$externalId.';
+}
+
+/// Whether the two directories are both known and different.
+///
+/// Compared as written, with trailing separators trimmed and no case folding —
+/// the same rule `conversationForDirectory` states for Antigravity's store, and
+/// for the same reason: these are paths a CLI was launched in, and folding
+/// `/work` onto `/Work` would call two directories one. Comparing paths rather
+/// than re-deriving an agent's own directory key is deliberate: Claude's key is
+/// a lossy dash-encoding, so two different directories can share one bucket,
+/// and a comparison that reproduced the encoding could only ever *miss* a move
+/// the path comparison catches.
+bool _directoryMoved(String? recorded, String? launch) {
+  if (recorded == null || launch == null) return false;
+  final a = _withoutTrailingSeparators(recorded);
+  final b = _withoutTrailingSeparators(launch);
+  return a.isNotEmpty && b.isNotEmpty && a != b;
+}
+
+String _withoutTrailingSeparators(String path) {
+  var end = path.length;
+  while (end > 1 && (path[end - 1] == '/' || path[end - 1] == r'\')) {
+    end--;
+  }
+  return path.substring(0, end);
+}
+
 /// A single shell-pasteable command, **spelled for the shell [environment]
 /// actually opens**: PowerShell for a Windows-native session, POSIX `sh` for
 /// WSL, SSH and a local Mac or Linux host.

@@ -22,6 +22,7 @@ import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/pty_launch.dart';
+import '../../terminal/data/system_terminal_service.dart';
 import '../../terminal/domain/agent_pane_launch.dart';
 import '../../terminal/domain/launch_context.dart';
 import '../../terminal/domain/pane_liveness.dart';
@@ -60,9 +61,15 @@ class SessionLaunchResult {
   /// recorded as running, and started somewhere else instead.
   ///
   /// Null in the ordinary case. Non-null is not a failure — the session is up —
-  /// but it is the one thing the user must be told, because a resume in the
-  /// wrong directory is how an agent CLI quietly opens a new conversation
-  /// rather than the one that was asked for.
+  /// but it is the one thing the user must be told, because the agent is now
+  /// looking at a different tree from the one its transcript describes.
+  ///
+  /// It used to justify itself with "a resume in the wrong directory is how an
+  /// agent CLI quietly opens a new conversation". That is the cmux claim, and it
+  /// does not survive contact with the three CLIs we launch — see
+  /// [AgentResumeLocality]. An agent for which it *would* be true never reaches
+  /// this notice at all: [SessionLauncher.refuseIfConversationIsElsewhere]
+  /// refuses the launch instead.
   final String? workingDirectoryNotice;
 }
 
@@ -869,6 +876,55 @@ class SessionLauncher {
     );
   }
 
+  /// What to tell the user when [request] continues or forks a conversation
+  /// from a directory it was not recorded in, or `null` when there is nothing
+  /// to say.
+  ///
+  /// **This app moves sessions between directories on purpose**, which is why
+  /// the question is asked at all:
+  ///
+  /// * `SessionArchiveService` removes a worktree and keeps the row, so
+  ///   `directoryOrFallback` resumes from the repository root instead;
+  /// * `SessionHandoffService.forkSession(intoNewWorktree: true)` launches
+  ///   `--resume <source> --fork-session` in a worktree the source conversation
+  ///   was never started in.
+  ///
+  /// (A third path was suspected and is not one: `select_checkout` moves the
+  /// Explorer's selection through `CheckoutPicker` and never touches a
+  /// session's working directory. `session_cwd_rule_test.dart` pins that.)
+  ///
+  /// A sentence and not a refusal, for the reason [resumeDirectoryCaveatFor]
+  /// gives at length: the launch is still the best thing to do, and every other
+  /// unknown in this area resolves the permissive way. It is also unreachable
+  /// for the three agents shipped today, all of which declare
+  /// [AgentResumeLocality.anyDirectory] against evidence.
+  String? conversationElsewhereCaveat(
+    SessionLaunchRequest request,
+    EnvironmentPath launchDirectory,
+  ) {
+    final conversationId =
+        request.resumeExternalSessionId ?? request.forkExternalSessionId;
+    if (conversationId == null || conversationId.isEmpty) return null;
+    // The row that *holds* this conversation, which for a fork is the source
+    // session and not the one being created. Asked of the id rather than of
+    // `reused`, because a fork has no reusable row at all.
+    final holder = _ref
+        .read(sessionDaoProvider)
+        .getByExternalSessionId(conversationId);
+    final recorded = holder?.workingDirectory ?? holder?.worktree;
+    // A row that never recorded a directory (before schema v22) tells us
+    // nothing about where the conversation was written, and an unknown earns
+    // no sentence.
+    if (recorded == null) return null;
+    return resumeDirectoryCaveatFor(
+      _ref.read(agentRegistryProvider),
+      request.installation.agentId,
+      conversationId,
+      recordedDirectory: recorded.path,
+      launchDirectory: launchDirectory.path,
+    );
+  }
+
   /// Creates the session row and starts it on the requested surface.
   Future<SessionLaunchResult> launch(SessionLaunchRequest request) async {
     // Before anything is written: a resume of a conversation we are still
@@ -1020,6 +1076,18 @@ class SessionLauncher {
       workingDirectoryNotice = resolved.notice;
       recordDirectory = resolved.notice == null;
     }
+
+    // Asked last, because it is the first thing that can only be answered once
+    // the directory is known: is this launch continuing or forking a
+    // conversation from somewhere other than where it was recorded, on an agent
+    // nobody has verified can find it from there? Joined onto whatever the
+    // fallback above already had to say, because both sentences are about the
+    // same substitution and the user reads one line.
+    workingDirectoryNotice = [
+      ?workingDirectoryNotice,
+      ?conversationElsewhereCaveat(request, workingDirectory),
+    ].join(' ');
+    if (workingDirectoryNotice.isEmpty) workingDirectoryNotice = null;
 
     // A resumed session already has a CLI id. A new one gets *ours* when the
     // agent will accept it — our ids are RFC-4122 v4, which is what

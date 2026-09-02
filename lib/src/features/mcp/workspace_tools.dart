@@ -7,6 +7,7 @@ import '../repositories/application/repository_providers.dart';
 import '../repositories/domain/repository.dart';
 import '../sessions/application/delivery_providers.dart';
 import '../sessions/application/session_providers.dart';
+import '../sessions/domain/session_checkouts.dart';
 
 /// Where the work is: the checkouts under a project, and what one of them owes.
 ///
@@ -69,6 +70,15 @@ class WorkspaceControlTools {
       checkoutLabelsProvider(projectId).future,
     );
     final selected = _container.read(selectedRepositoryIdProvider);
+    // Who else is standing here. This tool is where an agent learns the paths
+    // it can `cd` into and hand to `terminal_open`, and until now it handed
+    // them over without a word about occupancy — so N fan-out candidates, each
+    // isolated in its own worktree of the primary repository, were told about
+    // one shared checkout of every other repository and given no way to notice
+    // each other in it. `SessionLauncher` worktrees the primary repository and
+    // nothing else, deliberately (see `SessionRepositoriesService
+    // .checkoutsFor`), which makes naming the occupants the honest half.
+    final rows = _container.read(sessionDaoProvider).getAll();
     return <String, Object?>{
       'projectId': projectId,
       'checkouts': <Object?>[
@@ -81,6 +91,24 @@ class WorkspaceControlTools {
             'selected': repository.id == selected,
             'branch': labels[repository.id]?.branch ?? 'not recorded',
             'isWorktree': labels[repository.id]?.isWorktree,
+            // Sessions the workspace records as working in this exact
+            // directory. An empty list is **not** a promise that nobody is
+            // here — a plain shell, an agent started outside Karmashala and a
+            // row that recorded no directory are all invisible to it — which is
+            // why the key names what was found rather than claiming the
+            // checkout is free.
+            'sessionsWorkingHere': <Object?>[
+              for (final session in sessionsWorkingIn(
+                repository.path,
+                excluding: '',
+                among: rows,
+              ))
+                <String, Object?>{
+                  'sessionId': session.id,
+                  'title': session.title,
+                  'status': session.status.name,
+                },
+            ],
           },
       ],
     };
@@ -208,9 +236,16 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
     'name': 'list_checkouts',
     'description':
         'The checkouts under a project: the main clone and every worktree, '
-        'with the branch each is on and which one the side panel is pointed '
-        'at. A branch reads "not recorded" when git could not be asked — that '
-        'is not the same as being on no branch.',
+        'with the branch each is on, which one the side panel is pointed at, '
+        'and which sessions Karmashala records as working in each. A branch '
+        'reads "not recorded" when git could not be asked — that is not the '
+        'same as being on no branch. Only a session\'s own worktree is '
+        'isolated: a session works in one worktree at most, so any other '
+        'repository it touches is a checkout shared with every other session '
+        'that touches it — same working tree, same index, same branch. Read '
+        'sessionsWorkingHere before editing or running a build in a checkout '
+        'that is not your own; an empty list means none was recorded, not that '
+        'the checkout is free.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -237,8 +272,26 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
               'selected': {'type': 'boolean'},
               'branch': {'type': 'string'},
               'isWorktree': {'type': ['boolean', 'null']},
+              'sessionsWorkingHere': {
+                'type': 'array',
+                'items': {
+                  'type': 'object',
+                  'properties': {
+                    'sessionId': {'type': 'string'},
+                    'title': {'type': 'string'},
+                    'status': {'type': 'string'},
+                  },
+                  'required': ['sessionId', 'title', 'status'],
+                },
+              },
             },
-            'required': ['repositoryId', 'name', 'path', 'branch'],
+            'required': [
+              'repositoryId',
+              'name',
+              'path',
+              'branch',
+              'sessionsWorkingHere',
+            ],
           },
         },
       },

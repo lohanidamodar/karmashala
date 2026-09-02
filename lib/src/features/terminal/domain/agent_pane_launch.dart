@@ -11,6 +11,73 @@ import '../../agents/domain/agent_registry.dart';
 /// recursion cap needs to be worth anything.
 const String kSessionIdEnvironmentVariable = 'KARMASHALA_SESSION_ID';
 
+/// The environment variable carrying a **port base** derived from that session
+/// id, so two sessions running the same repository's scripts at once do not
+/// both bind 8080.
+///
+/// The gap this closes is the one `docs/compare-cmux.md` F5(a) names: a worktree
+/// isolates the *files* and nothing else. cmux derives every shared resource in
+/// its own stack from one seed per workspace — `CMUX_PORT` gives the dev port,
+/// the Postgres port at `+10000`, the test database at `+30000`, and the Docker
+/// container and network names — and its worktree prototype does the same in
+/// miniature (`let port = 4_100 + abs(branchName.hashValue % 800)`). We had one
+/// stamped variable and no per-session ports at all.
+///
+/// It is a **namespace, not a lock**, and the difference matters enough to say
+/// twice. Nothing here reserves a port, checks whether one is free, or notices a
+/// collision; a repository's own scripts and `AGENTS.md` opt in by reading the
+/// variable, and a repository that ignores it collides exactly as it does today.
+/// Two sessions can also land on the same base — see [sessionPortBase] for the
+/// odds. What it buys is that N *different* sessions almost always get N
+/// different numbers, deterministically, for free, and that the number is stable
+/// across a restart because it is a function of the session id and nothing else.
+const String kSessionPortBaseEnvironmentVariable = 'KARMASHALA_PORT_BASE';
+
+/// The lowest port [sessionPortBase] will hand out.
+///
+/// 20000 is chosen to sit below **both** default ephemeral ranges — Linux
+/// starts at 32768, Windows at 49152 — so a derived port is never one the OS
+/// may already have given to something else. The window between 20000 and those
+/// floors is what [kSessionPortBaseSlots] divides up.
+const int kSessionPortBaseFloor = 20000;
+
+/// How many ports each session's base reserves *by convention*.
+///
+/// Ten, because a repository that wants more than one — a dev server, a
+/// database, a mock API — should be able to say `base + 1`, `base + 2` without
+/// stepping on the next session, and because ten into the available window
+/// leaves enough slots to make collisions rare.
+const int kSessionPortsPerSession = 10;
+
+/// How many distinct bases exist: `(32760 - 20000) / 10`.
+const int kSessionPortBaseSlots = 1276;
+
+/// A deterministic port base for [sessionId], in
+/// `[kSessionPortBaseFloor, 32760)` and always a multiple of
+/// [kSessionPortsPerSession].
+///
+/// **It can collide, and it is not allowed to pretend otherwise.** With 1276
+/// slots, ten sessions running at once have roughly a 3.5% chance that some two
+/// of them share a base (45 pairs over 1276). That is the price of being a pure
+/// function of the id — which is what makes the number survive a restart, an
+/// app upgrade and a session resumed tomorrow, none of which an allocated port
+/// would. cmux's own prototype makes the same trade with 800 slots.
+///
+/// The hash is written out rather than taken from `sessionId.hashCode`: Dart
+/// does not promise `String.hashCode` is stable across runs or versions, and a
+/// base that changed under a resumed session would be worse than no base at all.
+int sessionPortBase(String sessionId) {
+  // FNV-1a, 32-bit, masked at every step so it stays inside a JS-safe integer
+  // on web as well as native.
+  var hash = 0x811c9dc5;
+  for (final unit in sessionId.codeUnits) {
+    hash = (hash ^ unit) & 0xffffffff;
+    hash = (hash * 0x01000193) & 0xffffffff;
+  }
+  return kSessionPortBaseFloor +
+      (hash % kSessionPortBaseSlots) * kSessionPortsPerSession;
+}
+
 /// A pane that runs an agent CLI interactively rather than a shell.
 ///
 /// This is the whole of "adding an agent is a data entry" at the terminal layer:

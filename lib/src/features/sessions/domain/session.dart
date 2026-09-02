@@ -56,9 +56,13 @@ class Session {
   /// have no worktree at all — which is the ordinary case for a session adopted
   /// out of a terminal pane.
   ///
-  /// It matters because Claude Code and Codex key their conversation stores by
-  /// working directory: resuming in the wrong one may not find the
-  /// conversation, and starts a new one wearing this row's title.
+  /// It matters because it is the tree the agent sees. It used to say it also
+  /// decides whether a resume *finds the conversation* — "Claude Code and Codex
+  /// key their conversation stores by working directory" — which was checked
+  /// and is not true of either; see `AgentResumeLocality`, which now carries
+  /// that claim per agent with its evidence. This field is still what the
+  /// refusal there compares against, because it is the only record of where the
+  /// conversation was written.
   ///
   /// Null means **unknown**, never "the repository root": every row written
   /// before schema v22 is null, and readers fall back to the root themselves

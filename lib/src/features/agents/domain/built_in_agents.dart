@@ -76,6 +76,46 @@ const _claudeCode = AgentDescriptor(
     },
     resume: AgentResume.flag('--resume'),
     interactiveResume: AgentResume.flag('--resume'),
+    // **The store is cwd-keyed and the resume is not**, and the gap between
+    // those two sentences is the whole of this entry.
+    //
+    // The store really is keyed by the launch directory: a transcript is
+    // written to `<config>/projects/<key>/<id>.jsonl` where the key is the
+    // process's own project root put through `e.replace(/[^a-zA-Z0-9]/g,"-")`
+    // (truncated at 200 characters plus a hash). Read out of the 2.1.258
+    // binary — `function k(e){return e.replace(/[^a-zA-Z0-9]/g,"-")}`, wrapped
+    // by `WA`, joined in `Yo`'s `transcript` case — and confirmed against the
+    // owner's own store, where all eight top-level buckets are exactly that
+    // encoding of the `cwd` recorded inside their files (`G:\dev\godot\
+    // sampada_trails` → `G--dev-godot-sampada-trails`, underscore included).
+    //
+    // cmux stops there and concludes that a resume from elsewhere "fails with
+    // 'No conversation found'". It does not, because the CLI does not stop
+    // there either. `--resume <id>` resolves through three lookups in order:
+    // the cwd-keyed path, then a **git-worktree fallback** that runs
+    // `git worktree list --porcelain` in the launch directory and tries every
+    // sibling worktree's bucket, then a **full id scan** of every top-level
+    // bucket that accepts the file when exactly one bucket holds it and it
+    // contains at least one user or assistant line. The two fallbacks announce
+    // themselves in the binary's own telemetry names,
+    // `tengu_resume_worktree_fallback` and `tengu_transcript_id_scan_fallback`,
+    // and both are present in 2.1.252, 2.1.257, 2.1.258 and the Windows
+    // `claude.exe` this machine launches. Both lanes reach them: the TTY resume
+    // and the `stream-json` one both call the loader with no explicit file.
+    //
+    // So a resume by id is directory-independent, and `ConversationStoreIndex`
+    // already agrees by construction — it scans every project bucket rather
+    // than deriving one, which is the same answer the CLI's own scan gives.
+    //
+    // What is **not** covered by this: `--continue`, which has no id to scan
+    // for and is genuinely scoped to the directory. Karmashala never passes it.
+    resumeLocality: AgentResumeLocality.anyDirectory(
+      evidence:
+          'claude 2.1.258 (and the Windows claude.exe): `--resume <id>` falls '
+          'back through a git-worktree sweep (tengu_resume_worktree_fallback) '
+          'and then a scan of every <config>/projects/* bucket for <id>.jsonl '
+          '(tengu_transcript_id_scan_fallback) when the cwd-keyed path misses',
+    ),
     // `claude --session-id <uuid>` pins the CLI's session id to one we choose.
     // Karmashala's own session ids are already RFC-4122 v4, so one string is
     // both — which is what makes a PTY-hosted Claude session's transcript
@@ -449,6 +489,21 @@ const _codex = AgentDescriptor(
     resume: AgentResume.flag('--resume'),
     // Interactively Codex resumes with a subcommand, not a flag.
     interactiveResume: AgentResume.subcommand('resume'),
+    // Nothing about Codex's store mentions the working directory. A thread is
+    // `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-<timestamp>-<id>.jsonl` —
+    // keyed by the date it was started — and the cwd is a field *inside* it,
+    // in the `session_meta` record on the first line. There is a global
+    // `~/.codex/session_index.jsonl` mapping id to thread name beside it. This
+    // is cmux's `cwdInFile` shape exactly, and it is the one claim of cmux's
+    // this machine confirms outright rather than qualifies.
+    resumeLocality: AgentResumeLocality.anyDirectory(
+      evidence:
+          r'~/.codex/sessions/2026/07/31/rollout-2026-07-31T07-46-11-<id>.jsonl'
+          ' opens with {"type":"session_meta","payload":{"session_id":"<id>",'
+          '…,"cwd":"/mnt/c/Users/dlohani/projects/popupbits",…}} — the path '
+          'is date-keyed, the cwd is content, and ~/.codex/session_index.jsonl '
+          'indexes ids globally',
+    ),
     prompt: AgentPromptSupport.positional(
       evidence: 'codex --help (0.146): "Usage: codex [OPTIONS] [PROMPT]"',
     ),
@@ -864,6 +919,23 @@ const _antigravity = AgentDescriptor(
     // at all, whatever the rest of the registry said.
     resume: AgentResume.flag('--conversation'),
     interactiveResume: AgentResume.flag('--conversation'),
+    // Flat by id: `conversations/<uuid>.db` (and the `.pb` beside it), with
+    // nothing in the path naming a directory. `agy --conversation=<id>` names
+    // the file, so it opens from anywhere.
+    //
+    // The directory-keyed half of this store is `cache/last_conversations.json`
+    // — a `{directory: conversation id}` map — and that is what `--continue`
+    // resolves through, which is why [continueLatest] below declares
+    // [AgentContinueScope.workingDirectory] and why `AntigravityResumePlan`
+    // deliberately spells even its fallback as `--conversation <id>` rather
+    // than `-c`. The cwd-scoped path exists here; it is simply never taken.
+    resumeLocality: AgentResumeLocality.anyDirectory(
+      evidence:
+          '~/.gemini/antigravity-cli/conversations/<uuid>.db is flat by id; '
+          'the only directory key in the store is '
+          r'cache/last_conversations.json, e.g. {"C:\\Users\\dlohani": '
+          '"0dee27dc-…"}, which indexes --continue and not --conversation',
+    ),
     // **`agy` says which conversation it was.** The 2026-08-31 note recorded
     // that it "announces the id nowhere", which is why resume was left with a
     // flag nothing could supply a value for, and it is wrong: the CLI prints

@@ -218,6 +218,10 @@ PtyLaunch throughCommandPrompt(
 /// agent spawns — and an argument would not. For WSL that also means naming the
 /// variable in `WSLENV`, which is the only way a Win32 variable crosses into the
 /// distro; [wrapForPty] does that.
+///
+/// A derived port base rides along beside it for the same reason and by the same
+/// route: the thing that has to read it is a script the agent runs, which is a
+/// grandchild too. See [kSessionPortBaseEnvironmentVariable].
 PtyLaunch agentPtyLaunchFor(AgentPaneLaunch launch, {LaunchContext? context}) =>
     wrapForPty(
       ShellCommand(
@@ -227,8 +231,18 @@ PtyLaunch agentPtyLaunchFor(AgentPaneLaunch launch, {LaunchContext? context}) =>
         arguments: launch.commandArguments,
         workingDirectory: launch.workingDirectory,
         environment: {
-          if (launch.sessionId != null)
+          if (launch.sessionId != null) ...{
             kSessionIdEnvironmentVariable: launch.sessionId!,
+            // Beside the id and through the same `WSLENV` plumbing — the
+            // wrapper names every key it is given, so a second variable costs
+            // nothing to carry. See [kSessionPortBaseEnvironmentVariable]: it
+            // is a namespace a repository's own scripts opt into, not a lock,
+            // and it exists so two worktree sessions running the same script do
+            // not both bind the same port.
+            kSessionPortBaseEnvironmentVariable: '${sessionPortBase(
+              launch.sessionId!,
+            )}',
+          },
         },
       ),
       context ?? LaunchContext.forAgent(launch, hostIsWindows: true),

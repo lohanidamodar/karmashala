@@ -30,6 +30,16 @@ class SessionRepositoriesBar extends ConsumerWidget {
         .toList();
 
     final service = ref.read(sessionRepositoriesServiceProvider);
+    // Which of these chips is this session's own tree and which is a checkout
+    // it shares. A worktree session is isolated in exactly one repository — its
+    // primary — and every other chip on this row points at a directory any
+    // other session can be standing in. Saying so is the whole of
+    // `SessionRepositoriesService.checkoutsFor`'s reason for existing: the
+    // sharing is deliberate, and it used to be invisible.
+    final checkouts = {
+      for (final checkout in service.checkoutsFor(sessionId))
+        checkout.repositoryId: checkout,
+    };
     // Attaching or detaching a checkout moves where this session works, and
     // nothing else about it.
     void bump() => ref.publishSessionChange(SessionChange.moved(sessionId));
@@ -47,6 +57,10 @@ class SessionRepositoriesBar extends ConsumerWidget {
               avatar: repo.id == primary.id
                   ? const Icon(AppIcons.star, size: Chrome.iconAction)
                   : const Icon(AppIcons.gitBranch, size: Chrome.iconAction),
+              // The one thing a reader cannot see from the name. Null for a
+              // worktree of this session's own, so the tooltip appears exactly
+              // where there is something to warn about.
+              tooltip: checkouts[repo.id]?.note,
               onDeleted: repo.id == primary.id
                   ? null
                   : () {
