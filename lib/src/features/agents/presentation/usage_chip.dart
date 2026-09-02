@@ -160,7 +160,7 @@ String formatUsageDuration(Duration span) {
 /// It never raises a `SnackBar`. A stale token would nag once a minute; the
 /// failure lives in the chip and in its tooltip, where the user can read it
 /// when they choose to.
-class UsageChip extends ConsumerWidget {
+class UsageChip extends ConsumerStatefulWidget {
   const UsageChip({super.key});
 
   /// Builds of the chip, counted so the status bar's cost test can prove a
@@ -169,14 +169,37 @@ class UsageChip extends ConsumerWidget {
   static int debugBuildCount = 0;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    debugBuildCount++;
+  ConsumerState<UsageChip> createState() => _UsageChipState();
+}
+
+class _UsageChipState extends ConsumerState<UsageChip> {
+  /// The policy this chip keeps alive, held as a plain object so it can be
+  /// stopped from [dispose], where `ref` is no longer safe to read.
+  UsageRefreshController? _policy;
+
+  @override
+  void dispose() {
+    // The widget tree going away must take the timer with it. Riverpod's own
+    // scheduled auto-dispose is cancelled when the surrounding `ProviderScope`
+    // unmounts, so this is the only hook that always runs.
+    _policy?.stopPolling();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    UsageChip.debugBuildCount++;
     final installation = ref.watch(focusedUsageInstallationProvider);
     if (installation == null) return const SizedBox.shrink();
 
     // Keeps the one refresh timer alive for exactly as long as a chip is on
-    // screen; the policy owns the ticking, this only asks for it to exist.
+    // screen; the policy owns the ticking, this only asks for it to exist —
+    // and re-arms the tick that this widget's own teardown cancelled.
     ref.watch(usageRefreshProvider);
+    final policy = ref.read(usageRefreshProvider.notifier);
+    _policy = policy;
+    policy.ensurePolling();
+
     final view = usageChipViewFor(
       ref.watch(agentUsageProvider(installation)),
       ref.read(clockProvider).nowUtc(),
@@ -191,7 +214,7 @@ class UsageChip extends ConsumerWidget {
 
     return InkWell(
       onTap: () {
-        ref.read(usageRefreshProvider.notifier).refresh();
+        policy.refresh();
         SettingsScreen.show(context, section: SettingsSectionId.agents);
       },
       child: Tooltip(

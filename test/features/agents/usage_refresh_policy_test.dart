@@ -233,15 +233,32 @@ void main() {
     );
   });
 
-  testWidgets('the timer dies with the container', (tester) async {
+  testWidgets('the timer dies with the widget tree', (tester) async {
+    // Riverpod cancels its own scheduled auto-dispose when the surrounding
+    // scope unmounts, so the chip's `dispose` is the only hook that always
+    // runs — and a 60-second timer that outlived the tree is what failed
+    // eleven unrelated tests in the suite.
     final container = await pumpChip(tester);
     final policy = policyOf(container);
     expect(policy.isPolling, isTrue);
 
     await tester.pumpWidget(const SizedBox.shrink());
+
+    expect(policy.isPolling, isFalse, reason: 'nothing outlives the chip');
+  });
+
+  testWidgets('a tick that lands after disposal asks for nothing', (
+    tester,
+  ) async {
+    final container = await pumpChip(tester);
+    final policy = policyOf(container);
+    await tester.pumpWidget(const SizedBox.shrink());
     container.dispose();
 
-    expect(policy.isPolling, isFalse, reason: 'shutdown leaves nothing behind');
+    // The case a bare `cancel()` misses: a timer that already fired, or an
+    // in-flight fetch, calling back into a container that has gone.
+    expect(policy.refresh, returnsNormally);
+    expect(policy.isPolling, isFalse);
   });
 
   testWidgets('a pane running another agent starts no timer at all', (

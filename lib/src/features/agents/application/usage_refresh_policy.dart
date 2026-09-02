@@ -11,12 +11,23 @@ import 'agent_usage_providers.dart';
 /// How often the usage chip re-reads the quota while the window has focus.
 const kUsageRefreshInterval = Duration(seconds: 60);
 
+/// The interval actually in effect — the seam a test uses to turn the tick off.
+///
+/// [Duration.zero] means **no timer at all**. A real periodic timer outlives
+/// the widget tree and trips `flutter_test`'s pending-timer check in every test
+/// that draws the shell, which is why `deliveryPollIntervalProvider` and the
+/// scrollback autosave already have exactly this seam; tests that are *about*
+/// polling hand back a real interval.
+final usageRefreshIntervalProvider = Provider<Duration>(
+  (ref) => kUsageRefreshInterval,
+);
+
 /// **The one timer behind the usage chip**, and the only thing that decides
 /// when the quota is read again.
 ///
 /// The triggers, and no others:
 ///
-/// * a [kUsageRefreshInterval] tick **while the window has focus**;
+/// * a [usageRefreshIntervalProvider] tick **while the window has focus**;
 /// * a session's status moving — the moment usage actually changed;
 /// * the user clicking the chip;
 /// * the chip appearing (the provider fetches when first watched);
@@ -28,19 +39,29 @@ const kUsageRefreshInterval = Duration(seconds: 60);
 ///
 /// **Blur cancels the timer outright** rather than skipping its work, and the
 /// status trigger is gated on focus too, so an app in the background makes no
-/// requests at all. That is not tidiness: the token in `.credentials.json`
-/// expires, and a loop that kept firing would spend the night 401ing against
-/// the vendor endpoint on behalf of a user who is not there.
+/// requests at all. That is not tidiness: the stored token expires, and a loop
+/// that kept firing would spend the night 401ing against the vendor endpoint on
+/// behalf of a user who is not there.
 ///
-/// `autoDispose`, so the timer exists only while a chip is watching it — a
-/// pane running an agent we have no usage endpoint for draws no chip and
-/// therefore starts nothing.
+/// **Nothing may outlive the chip.** Three things cancel the tick and one
+/// re-arms it: [stopPolling] is called on blur, on provider disposal *and* from
+/// `UsageChip`'s own `dispose`, because Riverpod's scheduled auto-dispose is
+/// itself cancelled when the surrounding `ProviderScope` unmounts — so a
+/// widget-tree teardown would otherwise leave a 60-second timer holding the
+/// container alive. [ensurePolling] is idempotent and runs from the chip's
+/// build, so a remount re-arms what the unmount cancelled.
+///
+/// `autoDispose`, so the timer exists only while a chip is watching it — a pane
+/// running an agent we have no usage endpoint for draws no chip and therefore
+/// starts nothing.
 ///
 /// Refreshing means invalidating [agentUsageProvider]. There is no second fetch
 /// path, and none may be added: the failure states depend on `AsyncValue`
 /// carrying the previous value through a failed refresh.
 class UsageRefreshController extends Notifier<int> {
   Timer? _timer;
+  Duration _interval = kUsageRefreshInterval;
+  var _disposed = false;
 
   /// When a read was last asked for. Mounting counts: the chip fetches as soon
   /// as it is watched.
@@ -49,22 +70,25 @@ class UsageRefreshController extends Notifier<int> {
   @override
   int build() {
     final clock = ref.watch(clockProvider);
-    ref.onDispose(_stopPolling);
+    _interval = ref.watch(usageRefreshIntervalProvider);
+    _disposed = false;
+    ref.onDispose(() {
+      _disposed = true;
+      stopPolling();
+    });
     ref.listen(windowFocusedProvider, (_, focused) {
       if (!focused) {
-        _stopPolling();
+        stopPolling();
         return;
       }
-      _startPolling();
+      ensurePolling();
       final now = clock.nowUtc();
       final last = _lastAsked;
-      if (last == null || now.difference(last) >= kUsageRefreshInterval) {
-        refresh();
-      }
+      if (last == null || now.difference(last) >= _interval) refresh();
     });
     // The `status` concern only. A title sync runs on the CLI store sweep's own
     // timer and moves no quota; waking on it would double the request rate for
-    // nothing.
+    // nothing. One subscription, not one per session row.
     ref.listen(
       sessionSignalsProvider.select(
         (signals) => signals.forKinds(const {SessionChangeKind.status}),
@@ -73,7 +97,7 @@ class UsageRefreshController extends Notifier<int> {
         if (ref.read(windowFocusedProvider)) refresh();
       },
     );
-    if (ref.read(windowFocusedProvider)) _startPolling();
+    ensurePolling();
     _lastAsked = clock.nowUtc();
     return 0;
   }
@@ -86,21 +110,31 @@ class UsageRefreshController extends Notifier<int> {
   @visibleForTesting
   bool get isPolling => _timer != null;
 
+  /// Arms the tick if the window has focus and an interval is configured.
+  /// Idempotent, and safe to call from a widget's `build`.
+  void ensurePolling() {
+    if (_disposed || _interval <= Duration.zero) return;
+    if (!ref.read(windowFocusedProvider)) return;
+    _timer ??= Timer.periodic(_interval, (_) => refresh());
+  }
+
+  /// Cancels the tick. Blur, disposal and the chip leaving the tree all land
+  /// here; only [ensurePolling] may arm one again.
+  void stopPolling() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
   /// Ask for a fresh read. The tick, the click and the end of a run all land
   /// here; the count is what the chip watches.
+  ///
+  /// A no-op once disposed: a tick that fired just before teardown must not
+  /// invalidate a provider on a container that has gone.
   void refresh() {
+    if (_disposed) return;
     _lastAsked = ref.read(clockProvider).nowUtc();
     ref.invalidate(agentUsageProvider);
     state++;
-  }
-
-  void _startPolling() {
-    _timer ??= Timer.periodic(kUsageRefreshInterval, (_) => refresh());
-  }
-
-  void _stopPolling() {
-    _timer?.cancel();
-    _timer = null;
   }
 }
 
