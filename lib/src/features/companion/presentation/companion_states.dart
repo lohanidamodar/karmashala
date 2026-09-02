@@ -163,6 +163,7 @@ class CompanionNotice extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
+    final density = UiDensity.of(context);
     final colour = switch (tone) {
       null => scheme.onSurfaceVariant,
       NoticeTone.attention => semantic.attention,
@@ -184,13 +185,24 @@ class CompanionNotice extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: colour.withValues(alpha: 0.12),
                 ),
-                child: Icon(icon, size: Insets.xl, color: colour),
+                // The one picture on a screen with nothing else on it, so it
+                // is sized as an illustration rather than as chrome.
+                child: Icon(
+                  icon,
+                  size: density.isTouch ? Touch.iconHero : Chrome.iconHero,
+                  color: colour,
+                ),
               ),
               const SizedBox(height: Insets.xl),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
+                // A phone's empty state is the whole screen and its title is
+                // the only display line on it; a pane's shares the pane with
+                // whatever is beside it, and stays at the smaller step.
+                style: density.isTouch
+                    ? theme.textTheme.titleLarge
+                    : theme.textTheme.titleMedium,
               ),
               const SizedBox(height: Insets.sm),
               Text(

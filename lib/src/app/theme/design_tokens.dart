@@ -186,6 +186,14 @@ class Touch {
   static const icon = 18.0;
   static const iconSmall = 14.0;
 
+  /// The glyph in an empty state — [Chrome.iconHero]'s touch counterpart.
+  ///
+  /// Bigger than the desktop's 28 because it is not competing with a 240px
+  /// side panel for room: on a phone the empty state owns the whole screen,
+  /// and a 28px mark on 390px of nothing reads as a stray icon rather than as
+  /// the one picture the screen has.
+  static const iconHero = 32.0;
+
   /// A touch surface's app bar, at the default text scale.
   static const appBar = 56.0;
 
