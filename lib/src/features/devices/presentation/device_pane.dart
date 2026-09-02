@@ -685,6 +685,15 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                   keyboard: _keyboardSink,
                   health: _health,
                   exhausted: _restarts.isExhausted && _reconnectTimer == null,
+                  // Still being found out, rather than found to be empty. The
+                  // SDK is resolved once, and the device list is only
+                  // "unknown" until its first answer — a later refresh has the
+                  // previous answer to stand on, and re-announcing the search
+                  // over a list the user can already see would be a flicker,
+                  // not information.
+                  probing:
+                      !(sdk.asData != null || sdk.hasError) ||
+                      !ref.watch(devicesProvider).hasValue,
                   onRestart: _restartStream,
                   stopping: _stopping,
                   booting: _booting,
@@ -1044,6 +1053,7 @@ class _LiveView extends ConsumerWidget {
     required this.keyboard,
     required this.health,
     required this.exhausted,
+    required this.probing,
     required this.onRestart,
     required this.stopping,
     required this.booting,
@@ -1075,6 +1085,15 @@ class _LiveView extends ConsumerWidget {
   /// Whether automatic reconnection has given up.
   final bool exhausted;
 
+  /// Whether the app is still finding out what is attached.
+  ///
+  /// The first listing costs about 460ms on a Mac — an SDK to discover, `adb`
+  /// and `simctl` to ask — and for that time the pane invited the user to
+  /// "pick a device below" from a list that had not arrived. Not false, but a
+  /// prompt for something nobody could do yet, which reads as "there is
+  /// nothing here" the moment it is wrong.
+  final bool probing;
+
   final VoidCallback onRestart;
   final Set<String> stopping;
   final Set<String> booting;
@@ -1094,7 +1113,9 @@ class _LiveView extends ConsumerWidget {
     final currentDevice = device;
     if (controller == null || currentDevice == null) {
       return _DeviceEmptyState(
-        message: 'Pick a device below, or start an emulator.',
+        message: probing
+            ? 'Looking for devices…'
+            : 'Pick a device below, or start an emulator.',
         stopping: stopping,
         booting: booting,
         onPreview: onPreview,
