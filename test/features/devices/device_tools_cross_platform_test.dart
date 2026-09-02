@@ -281,6 +281,15 @@ Port: com.apple.iphonesimulator.rgba
         stderr: '',
       );
     }
+    if (args.contains('pull')) {
+      // `screenshot` goes device-file → `adb pull` → host-file, and then reads
+      // the host file. Without this the case only ever passed on a machine
+      // where an earlier real run had left that PNG in the temp directory.
+      File(args.last).writeAsBytesSync(
+        Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47]),
+      );
+      return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+    }
     if (args.contains('wm')) {
       return const CommandResult(
         exitCode: 0,
