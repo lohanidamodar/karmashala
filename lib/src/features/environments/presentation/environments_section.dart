@@ -127,7 +127,7 @@ class _EnvironmentCard extends ConsumerWidget {
               host == null
                   ? environment.id
                   : '${environment.id} · ${host!.address}',
-              style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11),
+              style: MonoStyles.small,
             ),
             if (isSsh && host != null) ...[
               const SizedBox(height: Insets.sm),
@@ -164,10 +164,7 @@ class _EnvironmentCard extends ConsumerWidget {
                           '${installation.executable.path}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: kMonoFamily,
-                            fontSize: 11,
-                          ),
+                          style: MonoStyles.small,
                         ),
                       ),
                     ],
