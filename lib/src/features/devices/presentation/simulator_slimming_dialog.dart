@@ -2,23 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/design_tokens.dart';
-import '../../devices/application/ios_device_providers.dart';
-import '../../devices/domain/simulator_slimming.dart';
-import '../application/settings_controller.dart';
-import 'settings_section.dart';
+import '../../settings/application/settings_controller.dart';
+import '../application/ios_device_providers.dart';
+import '../domain/simulator_slimming.dart';
 
-/// Which iOS Simulator background services a new simulator starts with.
+/// What an iOS simulator starts with, and what gets switched off inside it.
 ///
-/// macOS only — `simctl` ships with Xcode, and the nav hides this section
-/// everywhere else.
+/// A dialog on the device pane rather than a Settings page, for the reason
+/// `AndroidSlimmingDialog` gives: it is a decision about the Start button a few
+/// rows below it. It used to live under Settings › Simulators while Android's
+/// equivalent lived on the pane, so the same decision was made in two different
+/// places depending on which phone you were pointing at.
 ///
-/// Every category can be switched either way, and each says what stops working
-/// if it is switched off. That is the whole point of the page: the right answer
-/// depends on the app being built, and only the person building it knows
-/// whether it needs the photo picker or push notifications. A page that just
-/// said "slim: on" would leave them guessing at why the picker came up empty.
-class SimulatorsPage extends ConsumerWidget {
-  const SimulatorsPage({super.key});
+/// Every category says what stops working when it is switched off, because the
+/// right answer depends on the app being built and only the person building it
+/// knows whether it needs the photo picker or push notifications. A control
+/// that just said "slim: on" would leave them guessing at why the picker came
+/// up empty.
+///
+/// The tick boxes read the opposite way round from the Android dialog: there a
+/// tick *applies* a category, here it *spares* one. iOS slims by default and
+/// Android's risky layer is opt-in, so in both cases the polarity is "ticked
+/// means the thing keeps working", and the feature-loss warnings appear on the
+/// unticked ones.
+class SimulatorSlimmingDialog extends ConsumerWidget {
+  const SimulatorSlimmingDialog({super.key});
+
+  static Future<void> show(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => const SimulatorSlimmingDialog(),
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,13 +50,14 @@ class SimulatorsPage extends ConsumerWidget {
       controller.setSimulatorSlimmingKept([for (final c in next) c.id]);
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SettingsSection(
-          title: 'Slimming',
+    return AlertDialog(
+      title: const Text('Simulator slimming'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               SwitchListTile(
                 key: const Key('slimming-enabled'),
@@ -69,16 +83,13 @@ class SimulatorsPage extends ConsumerWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            ],
-          ),
-        ),
-        SettingsSection(
-          title: 'Keep running',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+              const Divider(height: Insets.xl),
+              Text('Keep running', style: theme.textTheme.titleSmall),
               Padding(
-                padding: const EdgeInsets.only(bottom: Insets.sm),
+                padding: const EdgeInsets.only(
+                  top: Insets.xs,
+                  bottom: Insets.sm,
+                ),
                 child: Text(
                   'Ticked groups keep running. The three ticked by default are '
                   'the ones a Flutter app is most likely to need and whose '
@@ -102,6 +113,12 @@ class SimulatorsPage extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
       ],
     );
   }
@@ -123,7 +140,9 @@ class _CategoryTile extends StatelessWidget {
     final theme = Theme.of(context);
     // Only shown when the category is about to be switched off: a warning about
     // something that is still running is noise.
-    final losses = keep ? const <String>[] : category.featureLoss.values.toList();
+    final losses = keep
+        ? const <String>[]
+        : category.featureLoss.values.toList();
 
     return CheckboxListTile(
       key: Key('slimming-${category.id}'),
@@ -131,7 +150,9 @@ class _CategoryTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       controlAffinity: ListTileControlAffinity.leading,
       value: keep,
-      onChanged: onChanged == null ? null : (value) => onChanged!(value ?? false),
+      onChanged: onChanged == null
+          ? null
+          : (value) => onChanged!(value ?? false),
       title: Row(
         children: [
           Expanded(child: Text(category.displayName)),

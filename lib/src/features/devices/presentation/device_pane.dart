@@ -19,6 +19,7 @@ import '../domain/android_device.dart';
 import '../domain/ios_simulator.dart';
 import '../domain/device_input.dart';
 import 'android_slimming_dialog.dart';
+import 'device_section_header.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_stream_status.dart';
@@ -450,9 +451,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     if (adb != null && _keyboardSink is! AdbKeyboardSink) {
       // The keyboard falls back on its own: it does not need the screen size
       // the gesture sink is about to go and fetch.
-      setState(
-        () => _keyboardSink = AdbKeyboardSink(adb: adb, serial: serial),
-      );
+      setState(() => _keyboardSink = AdbKeyboardSink(adb: adb, serial: serial));
     }
     if (_sink is AdbGestureSink) return;
     unawaited(_useAdbSink(serial));
@@ -806,7 +805,8 @@ class _DeviceToolbar extends ConsumerWidget {
                 .firstOrNull ??
             'this simulator',
       ),
-      (null, final AndroidDevice device) when device.isEmulator && onStopEmulator != null =>
+      (null, final AndroidDevice device)
+          when device.isEmulator && onStopEmulator != null =>
         _AndroidPower(device.displayName),
       _ => null,
     };
@@ -882,12 +882,16 @@ class _DeviceToolbar extends ConsumerWidget {
                 onChanged: (value) {
                   if (value == null) return;
                   if (value.startsWith(_simulatorValue)) {
-                    ref.read(selectedDeviceSerialProvider.notifier).select(null);
+                    ref
+                        .read(selectedDeviceSerialProvider.notifier)
+                        .select(null);
                     ref
                         .read(selectedSimulatorUdidProvider.notifier)
                         .select(value.substring(_simulatorValue.length));
                   } else {
-                    ref.read(selectedSimulatorUdidProvider.notifier).select(null);
+                    ref
+                        .read(selectedSimulatorUdidProvider.notifier)
+                        .select(null);
                     // …and take the simulator's picture down with it. The pane
                     // gives that picture priority over everything else while it
                     // is up, so merely deselecting the simulator would leave an
@@ -1307,9 +1311,7 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
         ),
         DeviceControl(
           name: 'Screenshot',
-          tooltip: target == null
-              ? idle
-              : 'Save a screenshot to the Desktop',
+          tooltip: target == null ? idle : 'Save a screenshot to the Desktop',
           icon: AppIcons.image,
           onPressed: canReach ? _screenshot : null,
           buttonKey: const Key('android-screenshot'),
@@ -1430,7 +1432,6 @@ class _DeviceList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final devices =
         ref.watch(devicesProvider).asData?.value ?? const <AndroidDevice>[];
     // A booted simulator is a connected device. It was listed in its own
@@ -1459,7 +1460,7 @@ class _DeviceList extends ConsumerWidget {
       children: [
         if (devices.isNotEmpty || simulators.isNotEmpty) ...[
           const SizedBox(height: 16),
-          Text('Connected', style: theme.textTheme.labelLarge),
+          const DeviceSectionHeader(title: 'Connected'),
           const SizedBox(height: 4),
           for (final simulator in simulators)
             _DeviceRow(
@@ -1527,18 +1528,14 @@ class _DeviceList extends ConsumerWidget {
             ),
         ],
         if (idle.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text('Emulators', style: theme.textTheme.labelLarge),
-              ),
-              TextButton(
-                key: const Key('android-slimming-open'),
-                onPressed: () => AndroidSlimmingDialog.show(context),
-                child: const Text('Slimming'),
-              ),
-            ],
+          const SizedBox(height: 16),
+          DeviceSectionHeader(
+            title: 'Emulators',
+            action: TextButton(
+              key: const Key('android-slimming-open'),
+              onPressed: () => AndroidSlimmingDialog.show(context),
+              child: const Text('Slimming'),
+            ),
           ),
           for (final avd in idle)
             _DeviceRow(
@@ -1616,7 +1613,6 @@ class _DeviceRow extends StatelessWidget {
   }
 }
 
-
 /// The one switch that decides whether a started device gets a window.
 ///
 /// Hidden when there is nothing to start: a switch about starting devices is
@@ -1635,7 +1631,9 @@ class _HeadlessDeviceToggle extends ConsumerWidget {
     final idleAvds = (ref.watch(avdsProvider).asData?.value ?? const <Avd>[])
         .where((avd) => !avd.isRunning)
         .isNotEmpty;
-    final startableSimulators = ref.watch(startableSimulatorsProvider).isNotEmpty;
+    final startableSimulators = ref
+        .watch(startableSimulatorsProvider)
+        .isNotEmpty;
     if (!idleAvds && !startableSimulators) return const SizedBox.shrink();
 
     final both = idleAvds && startableSimulators;
@@ -1659,7 +1657,6 @@ class _HeadlessDeviceToggle extends ConsumerWidget {
   }
 }
 
-
 /// Which device the toolbar's power button would shut down.
 ///
 /// A sealed pair rather than a nullable udid beside a nullable serial: the two
@@ -1681,7 +1678,6 @@ class _SimulatorPower extends _PowerTarget {
 class _AndroidPower extends _PowerTarget {
   const _AndroidPower(super.name);
 }
-
 
 /// Confirms before shutting a simulator down, the way stopping an emulator
 /// already did.

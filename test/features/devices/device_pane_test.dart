@@ -179,6 +179,15 @@ void main() {
       expect(find.text('iPhone 17 Pro'), findsWidgets);
       expect(find.byKey(const Key('stop-simulator-booted')), findsOneWidget);
       expect(find.byKey(const Key('live-view-booted')), findsOneWidget);
+
+      // And the heading starts where its own rows start. It inherited the
+      // pane's centred column while every row under it was inset 16, so a
+      // one-device list read as a caption floating over a left-aligned list.
+      expect(
+        tester.getRect(find.text('Connected')).left,
+        tester.getRect(find.text('iPhone 17 Pro').first).left,
+        reason: 'the heading is aligned with the device under it',
+      );
     });
 
     testWidgets('a simulator row offers no live view without a backend', (

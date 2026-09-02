@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/ios_device_providers.dart';
 import '../domain/simulator_slimming.dart';
+import 'device_section_header.dart';
+import 'simulator_slimming_dialog.dart';
 
 /// The iOS Simulators section of the device sidebar.
 ///
@@ -34,7 +36,6 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
     if (!ref.watch(hostCanRunSimulatorsProvider)) {
       return const SizedBox.shrink();
     }
-    final theme = Theme.of(context);
     final anyBooted = ref.watch(bootedSimulatorsProvider).isNotEmpty;
     final startable = ref.watch(startableSimulatorsProvider);
     final busy = ref.watch(simulatorTransitionsProvider);
@@ -53,10 +54,14 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 12),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text('iOS Simulators', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 16),
+        DeviceSectionHeader(
+          title: 'iOS Simulators',
+          action: TextButton(
+            key: const Key('simulator-slimming-open'),
+            onPressed: () => SimulatorSlimmingDialog.show(context),
+            child: const Text('Slimming'),
+          ),
         ),
         if (startable.isNotEmpty)
           Padding(
@@ -127,7 +132,6 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-
 /// The "slim it when it starts" switch, and the one thing about it that
 /// surprises people.
 ///
@@ -161,7 +165,7 @@ class _SlimOnStart extends ConsumerWidget {
           subtitle: Text(
             enabled
                 ? 'Starts without $trimmed groups of background services. '
-                      'Choose which in Settings › Simulators.'
+                      'Choose which under Slimming, above.'
                 : 'Starts with every background service iOS ships.',
             style: theme.textTheme.bodySmall,
           ),

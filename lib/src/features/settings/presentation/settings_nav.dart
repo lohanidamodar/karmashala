@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -86,14 +85,6 @@ enum SettingsSectionId {
     'save for later',
     'later',
   ]),
-  simulators(
-    'Simulators',
-    AppIcons.deviceMobile,
-    ['ios', 'simulator', 'slim', 'memory', 'services', 'boot', 'xcode'],
-    // Xcode is macOS-only, so there is nothing here to configure anywhere else
-    // and an empty section is a question the user cannot answer.
-    macOsOnly: true,
-  ),
   diagnostics('Diagnostics', AppIcons.listMagnifyingGlass, [
     'logs',
     'log file',
@@ -104,22 +95,11 @@ enum SettingsSectionId {
     'report',
   ]);
 
-  const SettingsSectionId(
-    this.label,
-    this.icon,
-    this.keywords, {
-    this.macOsOnly = false,
-  });
+  const SettingsSectionId(this.label, this.icon, this.keywords);
 
   final String label;
   final IconData icon;
   final List<String> keywords;
-
-  /// Whether the section is listed only on macOS.
-  final bool macOsOnly;
-
-  /// Whether this host has anything to show for the section at all.
-  bool get availableHere => !macOsOnly || Platform.isMacOS;
 
   /// Whether the section should stay listed while [query] is in the filter.
   bool matches(String query) {
@@ -165,7 +145,7 @@ class _SettingsNavState extends State<SettingsNav> {
 
   List<SettingsSectionId> get _visible => [
     for (final section in SettingsSectionId.values)
-      if (section.availableHere && section.matches(_filter.text)) section,
+      if (section.matches(_filter.text)) section,
   ];
 
   KeyEventResult _onListKey(FocusNode node, KeyEvent event) {

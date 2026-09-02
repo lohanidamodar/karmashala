@@ -133,7 +133,10 @@ class _GpuPicker extends ConsumerWidget {
             for (final option in AndroidGpuMode.values)
               DropdownMenuItem(
                 value: option,
-                child: Text(option.displayName, overflow: TextOverflow.ellipsis),
+                child: Text(
+                  option.displayName,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
           ],
           onChanged: enabled
@@ -237,7 +240,9 @@ class _CategoryTile extends StatelessWidget {
     final theme = Theme.of(context);
     // Shown only while the category is about to be applied: a warning about
     // something that is not happening is noise.
-    final losses = apply ? category.featureLoss.values.toList() : const <String>[];
+    final losses = apply
+        ? category.featureLoss.values.toList()
+        : const <String>[];
 
     return CheckboxListTile(
       key: Key('android-slimming-${category.id}'),
