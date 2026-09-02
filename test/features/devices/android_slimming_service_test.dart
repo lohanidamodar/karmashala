@@ -287,5 +287,40 @@ void main() {
       expect(status.isSlimmed, isFalse);
       expect(status.disabledPackages, isEmpty);
     });
+
+    test('summarises what is here and what will be left alone', () async {
+      // The line the Restore row shows. Counts rather than names: the decision
+      // it informs is only "press Restore or not", and the unmanaged tail is
+      // said out loud because restore deliberately does not touch it.
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          final argv = request.arguments.join(' ');
+          if (argv.contains('pm list packages')) {
+            return _ok(
+              'package:com.google.android.gms\npackage:com.android.nfc\n',
+            );
+          }
+          if (argv.contains('window_animation_scale')) return _ok('0\n');
+          return _ok('null\n');
+        },
+      );
+      final status = await _service(runner).status('emulator-5554');
+
+      expect(status.slimmedSettings, {'window_animation_scale'});
+      expect(
+        status.summary,
+        'This app has 1 setting and 1 disabled package on it. '
+        '1 package something else disabled is left alone.',
+      );
+    });
+
+    test('a stock emulator says so instead of naming a count', () {
+      const status = AndroidSlimmingStatus(
+        serial: 'emulator-5554',
+        disabledPackages: {},
+        settings: {},
+      );
+      expect(status.summary, 'Nothing this app applied is on it.');
+    });
   });
 }

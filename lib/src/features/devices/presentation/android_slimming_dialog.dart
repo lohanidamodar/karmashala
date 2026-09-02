@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/device_providers.dart';
+import '../data/android_slimming_service.dart';
 import '../domain/android_device.dart';
 import '../domain/android_slimming.dart';
 
@@ -185,10 +186,14 @@ class _LayerSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // A Wrap rather than a Row: "Disabled packages" beside the chip is
+          // already within a few pixels of the dialog's width, so at a larger
+          // text scale the heading overflowed rather than moving the chip down.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: Insets.sm,
             children: [
               Text(layer.displayName, style: theme.textTheme.labelLarge),
-              const SizedBox(width: Insets.sm),
               if (layer.persists)
                 // The single most important thing on this dialog: unlike the
                 // iOS side, switching slimming off does not undo these.
@@ -292,7 +297,6 @@ class _RestoreRow extends ConsumerWidget {
       for (final device in devices)
         if (device.isEmulator && device.isReady) device,
     ];
-    final busy = ref.watch(androidSlimmingProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,47 +317,102 @@ class _RestoreRow extends ConsumerWidget {
             ),
           ),
         ),
-        for (final emulator in emulators)
-          Padding(
-            padding: const EdgeInsets.only(top: Insets.xs),
-            child: Row(
+        for (final emulator in emulators) _RestoreTarget(emulator: emulator),
+      ],
+    );
+  }
+}
+
+/// One running emulator, what this build has on it, and — only if that is
+/// something — a Restore button.
+///
+/// The dialog used to offer Restore for every running emulator unconditionally,
+/// which made the safe case indistinguishable from the one that matters: an
+/// emulator that was never slimmed and one whose Play services are disabled
+/// looked exactly alike, so the button was either pressed for nothing or not
+/// trusted. [AndroidSlimmingService.status] was written and tested for this and
+/// then never asked.
+class _RestoreTarget extends ConsumerWidget {
+  const _RestoreTarget({required this.emulator});
+
+  final AndroidDevice emulator;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final busy = ref.watch(androidSlimmingProvider).contains(emulator.serial);
+    final status = ref.watch(androidSlimmingStatusProvider(emulator.serial));
+    final carried = status.asData?.value;
+
+    // Unknown is not "nothing". While the device is still being asked there is
+    // no button; if the ask failed there is one anyway, because a restore the
+    // user cannot reach is worse than one they did not need — and a device
+    // that was never slimmed costs a single `pm list` to restore.
+    final offerRestore = carried?.isSlimmed ?? status.hasError;
+    final detail = carried?.summary ??
+        (status.hasError
+            ? 'Could not read what is applied — the emulator did not answer.'
+            : 'Checking what is applied…');
+
+    return Padding(
+      padding: const EdgeInsets.only(top: Insets.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: Text(emulator.displayName)),
-                OutlinedButton(
-                  key: Key('android-slimming-restore-${emulator.serial}'),
-                  onPressed: busy.contains(emulator.serial)
-                      ? null
-                      : () async {
-                          final report = await ref
-                              .read(androidSlimmingProvider.notifier)
-                              .restore(emulator.serial);
-                          if (!context.mounted || report == null) return;
-                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                report.ok
-                                    ? 'Restored ${report.applied.length} '
-                                          'setting(s) and package(s) on '
-                                          '${emulator.serial}.'
-                                    : 'Restored ${report.applied.length}, '
-                                          'could not restore '
-                                          '${report.failed.keys.join(', ')}.',
-                              ),
-                            ),
-                          );
-                        },
-                  child: busy.contains(emulator.serial)
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Restore'),
+                Text(emulator.displayName),
+                Text(
+                  detail,
+                  key: Key('android-slimming-status-${emulator.serial}'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
           ),
-      ],
+          const SizedBox(width: Insets.sm),
+          if (offerRestore)
+            OutlinedButton(
+              key: Key('android-slimming-restore-${emulator.serial}'),
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final report = await ref
+                          .read(androidSlimmingProvider.notifier)
+                          .restore(emulator.serial);
+                      // What is on the device is exactly what just changed.
+                      ref.invalidate(
+                        androidSlimmingStatusProvider(emulator.serial),
+                      );
+                      if (!context.mounted || report == null) return;
+                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            report.ok
+                                ? 'Restored ${report.applied.length} '
+                                      'setting(s) and package(s) on '
+                                      '${emulator.serial}.'
+                                : 'Restored ${report.applied.length}, '
+                                      'could not restore '
+                                      '${report.failed.keys.join(', ')}.',
+                          ),
+                        ),
+                      );
+                    },
+              child: busy
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Restore'),
+            ),
+        ],
+      ),
     );
   }
 }

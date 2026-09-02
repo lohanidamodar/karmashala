@@ -149,6 +149,22 @@ final androidSlimmingServiceProvider = Provider<AndroidSlimmingService?>((ref) {
   );
 });
 
+/// What one emulator currently carries from this build, by serial.
+///
+/// Auto-disposed rather than cached: it is read while the slimming dialog is
+/// open, and the answer changes the moment Restore runs. A cached one would go
+/// on offering Restore for something already put back.
+///
+/// Two `adb` calls against a device that may have gone away, so it retries
+/// nothing — a failure stays a failure until the dialog is opened again, which
+/// is cheaper than a background loop polling a device nobody is looking at.
+final androidSlimmingStatusProvider = FutureProvider.autoDispose
+    .family<AndroidSlimmingStatus?, String>((ref, serial) async {
+      final service = ref.watch(androidSlimmingServiceProvider);
+      if (service == null) return null;
+      return service.status(serial);
+    }, retry: (_, _) => null);
+
 /// Whether starting an emulator slims it at all — the master switch.
 final androidSlimmingOnStartProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider.select((s) => s.androidSlimming)),

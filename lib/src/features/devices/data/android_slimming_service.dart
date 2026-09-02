@@ -76,10 +76,42 @@ class AndroidSlimmingStatus {
   Set<String> get disabledUnmanaged =>
       disabledPackages.difference(allManagedPackages);
 
-  /// Whether any managed setting is switched off.
-  bool get settingsSlimmed => settings.values.any((v) => v == '0');
+  /// The managed settings currently switched off — exactly what
+  /// [AndroidSlimmingService.restore] would put back.
+  Set<String> get slimmedSettings => {
+    for (final entry in settings.entries)
+      if (entry.value == '0') entry.key,
+  };
 
+  /// Whether any managed setting is switched off.
+  bool get settingsSlimmed => slimmedSettings.isNotEmpty;
+
+  /// Whether there is anything for [AndroidSlimmingService.restore] to do.
   bool get isSlimmed => disabledManaged.isNotEmpty || settingsSlimmed;
+
+  /// One line describing what is on the device, for the Restore row.
+  ///
+  /// Counts rather than names: seven package names is a paragraph nobody
+  /// reads, and the decision this informs — press Restore or not — only needs
+  /// to know whether anything is there. The unmanaged tail is said out loud
+  /// because Restore deliberately leaves it alone, and a user who disabled
+  /// something by hand would otherwise read "restored" as "back to stock".
+  String get summary {
+    final left = disabledUnmanaged.isEmpty
+        ? ''
+        : ' ${_count(disabledUnmanaged.length, 'package')} something else '
+              'disabled ${disabledUnmanaged.length == 1 ? 'is' : 'are'} left '
+              'alone.';
+    if (!isSlimmed) return 'Nothing this app applied is on it.$left';
+    final applied = [
+      if (settingsSlimmed) _count(slimmedSettings.length, 'setting'),
+      if (disabledManaged.isNotEmpty)
+        _count(disabledManaged.length, 'disabled package'),
+    ];
+    return 'This app has ${applied.join(' and ')} on it.$left';
+  }
+
+  static String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 
   @override
   String toString() =>
