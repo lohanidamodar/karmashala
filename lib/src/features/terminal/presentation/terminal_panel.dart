@@ -540,26 +540,56 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                 if (liveness.isLive) return const SizedBox.shrink();
                 return PaneStatusBar(
                   liveness: liveness,
-                  workingDirectory: instance.workingDirectory,
+                  // The pane's *current* instance for the same reason the view
+                  // below takes one: a restart replaces it, and a bar quoting
+                  // the released one would name the directory of the session
+                  // before last if the new process also stopped.
+                  workingDirectory:
+                      (ref.watch(terminalPaneInstanceProvider(paneId)) ??
+                              instance)
+                          .workingDirectory,
                   onStart: () => _sessions.startPane(paneId),
                 );
               },
             ),
             Expanded(
-              child: TerminalPaneView(
-                // Starting a pane swaps its instance in place; without a key
-                // the element would be reused and keep the disposed focus node.
-                key: ObjectKey(instance),
-                instance: instance,
-                focused: focused,
-                fontSize: fontSize,
-                terminalTheme: terminalThemeFor(theme, _importedPalette()),
-                chordOverrides: chordOverrides,
-                onKeyEvent: _actions.onPaneKey,
-                // Right-click → copy selection / paste / end the session.
-                onSecondaryTapDown: (position) =>
-                    _terminalMenu(context, position, paneId, instance),
-                linkActions: ref.read(terminalLinkActionsProvider),
+              // In its own `Consumer`, watching *which object* is behind this
+              // pane, for the same reason the status bar above has one: the
+              // stack's own watch is the tab topology, and starting a pane
+              // moves neither the tabs nor which one is in front. So the swap
+              // `startPane` performs — release the instance, adopt a new one
+              // with a new `Terminal`, `FocusNode` and `ScrollController` —
+              // was invisible from up there, and the pane went on rendering
+              // the instance that had just been disposed. See
+              // [terminalPaneInstanceProvider] for what that looked like from
+              // the focus node's side, and why the pane came back typable only
+              // when something else happened to rebuild the stack.
+              //
+              // Falling back to [instance] rather than dropping the pane:
+              // `_buildPane` has already established there is one, and the
+              // provider can only disagree while a rebuild is in flight.
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final live =
+                      ref.watch(terminalPaneInstanceProvider(paneId)) ??
+                      instance;
+                  return TerminalPaneView(
+                    // Starting a pane swaps its instance in place; without a
+                    // key the element would be reused and keep the disposed
+                    // focus node.
+                    key: ObjectKey(live),
+                    instance: live,
+                    focused: focused,
+                    fontSize: fontSize,
+                    terminalTheme: terminalThemeFor(theme, _importedPalette()),
+                    chordOverrides: chordOverrides,
+                    onKeyEvent: _actions.onPaneKey,
+                    // Right-click → copy selection / paste / end the session.
+                    onSecondaryTapDown: (position) =>
+                        _terminalMenu(context, position, paneId, live),
+                    linkActions: ref.read(terminalLinkActionsProvider),
+                  );
+                },
               ),
             ),
           ],

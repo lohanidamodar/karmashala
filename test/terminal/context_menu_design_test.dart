@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.d
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
 import '../features/terminal/fake_instance.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 
 /// The terminal's three right-click menus draw the *house* menu row.
 ///
@@ -22,6 +23,14 @@ import '../features/terminal/fake_instance.dart';
 /// every row is a [DesktopMenuItem], so a change back to a plain item is a test
 /// failure rather than something only a screenshot would catch.
 void main() {
+  // Pinned to the platform whose modifier these labels name. The menu draws
+  // whatever the chord table says, and on macOS copy is `⌘C` — a Mac terminal
+  // has no reason for the shift, because Ctrl+C is not copy there. Which
+  // modifier each chord carries is pinned in
+  // `test/app/shell/shell_shortcuts_platform_test.dart`; what this case is
+  // about is that the menu shows the chord it really binds.
+  setUp(() => commandKeyIsMeta = false);
+
   late AppDatabase db;
   late ProviderContainer container;
 

@@ -423,7 +423,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     try {
       serial = await adb.bootAvdAndWait(
         name,
-        headless: ref.read(headlessEmulatorProvider),
+        headless: ref.read(headlessDeviceProvider),
         extraArguments: ref.read(androidEmulatorArgumentsProvider),
       );
       // After the wait, never before: `settings put` and `pm disable-user` both
@@ -1023,6 +1023,11 @@ class _DeviceEmptyState extends ConsumerWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
+              // Above both lists, because it governs both. It used to sit
+              // inside the Emulators section, which meant a Mac with Xcode and
+              // no Android SDK — where the only startable devices are iOS
+              // simulators — never saw the switch that decides how they start.
+              const _HeadlessDeviceToggle(),
               _DeviceList(
                 stopping: stopping,
                 booting: booting,
@@ -1186,21 +1191,6 @@ class _DeviceList extends ConsumerWidget {
               ),
             ],
           ),
-          // Headless is the default because the live preview above *is* the
-          // screen. The toggle sits here rather than in a settings page: it
-          // changes what happens when you press Start on the row below it.
-          SwitchListTile(
-            key: const Key('headless-emulator-toggle'),
-            dense: true,
-            value: ref.watch(headlessEmulatorProvider),
-            onChanged: (value) =>
-                ref.read(headlessEmulatorProvider.notifier).update(value),
-            title: const Text('Start without a window'),
-            subtitle: const Text(
-              'Watch it here instead. Turn off for the emulator\'s own '
-              'extended controls.',
-            ),
-          ),
           for (final avd in idle)
             _DeviceRow(
               title: avd.name,
@@ -1273,6 +1263,49 @@ class _DeviceRow extends StatelessWidget {
       trailing: actions.isEmpty
           ? null
           : Row(mainAxisSize: MainAxisSize.min, children: actions),
+    );
+  }
+}
+
+
+/// The one switch that decides whether a started device gets a window.
+///
+/// Hidden when there is nothing to start: a switch about starting devices is
+/// noise on a machine with none, and the empty state already says why there
+/// are none.
+///
+/// The subtitle names both platforms because the switch means opposite
+/// mechanics on each — `-no-window` for an AVD, and *not* opening
+/// Simulator.app for an iOS device, which `simctl` never opens by itself.
+/// What it promises the user is the same on both, so that is what it says.
+class _HeadlessDeviceToggle extends ConsumerWidget {
+  const _HeadlessDeviceToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final idleAvds = (ref.watch(avdsProvider).asData?.value ?? const <Avd>[])
+        .where((avd) => !avd.isRunning)
+        .isNotEmpty;
+    final startableSimulators = ref.watch(startableSimulatorsProvider).isNotEmpty;
+    if (!idleAvds && !startableSimulators) return const SizedBox.shrink();
+
+    final both = idleAvds && startableSimulators;
+    return SwitchListTile(
+      key: const Key('headless-emulator-toggle'),
+      dense: true,
+      value: ref.watch(headlessDeviceProvider),
+      onChanged: (value) =>
+          ref.read(headlessDeviceProvider.notifier).update(value),
+      title: const Text('Start without a window'),
+      subtitle: Text(
+        both
+            ? 'Watch it here instead. Turn off for the emulator\'s extended '
+                  'controls, or the Simulator app.'
+            : startableSimulators
+            ? 'Watch it here instead. Turn off to open the Simulator app too.'
+            : 'Watch it here instead. Turn off for the emulator\'s own '
+                  'extended controls.',
+      ),
     );
   }
 }

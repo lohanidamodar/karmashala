@@ -22,6 +22,8 @@ import 'fake_instance.dart';
 /// deliberately does **not** do — see `pane_restart.dart` for the argument
 /// behind each one.
 void main() {
+  _restoreOnActivateTests();
+
   group('shouldRestartOnLaunch', () {
     test('a live shell in the active tab starts', () {
       expect(
@@ -342,6 +344,130 @@ void main() {
 ///
 /// The history matters: it is what a restart has to replay, and
 /// `shouldDetachOnClose` only keeps a pane that has some.
+/// The other half of the rule: a tab that was not active at launch.
+///
+/// The launch rule stops at the active tab to avoid spawning shells nobody is
+/// looking at. That left every other tab with a Start button forever — so the
+/// answer to "why must I press Start?" was "because this was not the active tab
+/// when the app opened", which is not a reason anyone can see. Opening the tab
+/// is the moment that condition was standing in for.
+void _restoreOnActivateTests() {
+  group('a background tab', () {
+    test('starts what it was left running, when it is opened', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      late String background;
+      late String backgroundTab;
+      _closeWith(db, (container, controller) {
+        backgroundTab = controller.openTab(TerminalProfile.powerShell);
+        background = _panesOfTab(container, backgroundTab).single;
+        // A second tab, so the first is not the one left in front.
+        controller.openTab(TerminalProfile.commandPrompt);
+      });
+
+      final next = fakeTerminalContainer(database: db);
+      addTearDown(next.dispose);
+      final restored = next.read(terminalSessionsControllerProvider);
+      expect(
+        restored.livenessOf(background),
+        PaneLiveness.restored,
+        reason: 'still history while nobody has looked at it',
+      );
+
+      next
+          .read(terminalSessionsControllerProvider.notifier)
+          .activateTab(backgroundTab);
+
+      expect(
+        next.read(terminalSessionsControllerProvider).livenessOf(background),
+        PaneLiveness.live,
+      );
+    });
+
+    test('costs nothing while nobody opens it', () {
+      // The whole reason the launch rule stopped at the active tab.
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      late String background;
+      _closeWith(db, (container, controller) {
+        background = _panesOfTab(
+          container,
+          controller.openTab(TerminalProfile.powerShell),
+        ).single;
+        controller.openTab(TerminalProfile.commandPrompt);
+      });
+
+      final next = fakeTerminalContainer(database: db);
+      addTearDown(next.dispose);
+
+      expect(
+        next.read(terminalSessionsControllerProvider).livenessOf(background),
+        PaneLiveness.restored,
+      );
+    });
+
+    test('still never starts an agent pane', () {
+      // The reason the launch rule excludes them holds just as well here:
+      // starting one re-runs its recorded command — tokens spent and tools run
+      // because a tab was clicked — and steals the pane a proper `--resume` is
+      // looking for.
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      late String agentPane;
+      late String tabId;
+      _closeWith(db, (container, controller) {
+        final opened = controller.openAgentTab(
+          const AgentPaneLaunch(
+            agentId: 'claudeCode',
+            executable: '/usr/bin/claude',
+            workingDirectory: '/home/dev/repo',
+            title: 'a conversation',
+          ),
+        );
+        tabId = opened.tabId;
+        agentPane = opened.paneId;
+        controller.openTab(TerminalProfile.commandPrompt);
+      });
+
+      final next = fakeTerminalContainer(database: db);
+      addTearDown(next.dispose);
+      next.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
+
+      expect(
+        next.read(terminalSessionsControllerProvider).livenessOf(agentPane),
+        PaneLiveness.restored,
+      );
+    });
+
+    test('does not start a pane the user had already stopped', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      late String pane;
+      late String tabId;
+      _closeWith(db, (container, controller) {
+        tabId = controller.openTab(TerminalProfile.powerShell);
+        pane = _panesOfTab(container, tabId).single;
+        // Left as a record on purpose: nothing was running here at close.
+        (controller.instanceFor(pane)! as FakeTerminalInstance).exitCleanly();
+        controller.openTab(TerminalProfile.commandPrompt);
+      });
+
+      final next = fakeTerminalContainer(database: db);
+      addTearDown(next.dispose);
+      next.read(terminalSessionsControllerProvider.notifier).activateTab(tabId);
+
+      expect(
+        next.read(terminalSessionsControllerProvider).livenessOf(pane),
+        isNot(PaneLiveness.live),
+      );
+    });
+  });
+}
+
 List<String> _closeWith(
   AppDatabase db,
   void Function(

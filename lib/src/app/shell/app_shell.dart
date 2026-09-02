@@ -465,9 +465,8 @@ class _DesktopMenuBar extends ConsumerWidget {
           menuChildren: [
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.folderPlus),
-              shortcut: const SingleActivator(
+              shortcut: commandActivator(
                 LogicalKeyboardKey.keyN,
-                control: true,
                 shift: true,
               ),
               onPressed: () => NewProjectDialog.show(context),
@@ -475,10 +474,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             ),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.chatCircleDots),
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.keyN,
-                control: true,
-              ),
+              shortcut: commandActivator(LogicalKeyboardKey.keyN),
               onPressed: selectedRepo == null
                   ? null
                   : () => NewSessionDialog.show(context),
@@ -487,10 +483,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             const Divider(height: 1),
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.magnifyingGlass),
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.keyK,
-                control: true,
-              ),
+              shortcut: commandActivator(LogicalKeyboardKey.keyK),
               onPressed: () => QuickOpen.show(context),
               child: const Text('Go to…'),
             ),
@@ -528,9 +521,8 @@ class _DesktopMenuBar extends ConsumerWidget {
               value: shell.explorerPaneVisible,
               // Ctrl+Shift+B, not Ctrl+B: a menu should teach the chord that
               // works everywhere, and Ctrl+B belongs to tmux inside a pane.
-              shortcut: const SingleActivator(
+              shortcut: commandActivator(
                 LogicalKeyboardKey.keyB,
-                control: true,
                 shift: true,
               ),
               onChanged: (_) => ref
@@ -540,10 +532,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             ),
             CheckboxMenuButton(
               value: panel != null,
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.digit3,
-                control: true,
-              ),
+              shortcut: commandActivator(LogicalKeyboardKey.digit3),
               onChanged: (_) => ref.read(sidePanelProvider.notifier).toggle(),
               child: const Text('Side panel'),
             ),
@@ -565,10 +554,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             const Divider(height: 1),
             CheckboxMenuButton(
               value: zen,
-              shortcut: const SingleActivator(
-                LogicalKeyboardKey.backslash,
-                control: true,
-              ),
+              shortcut: commandActivator(LogicalKeyboardKey.backslash),
               onChanged: (_) =>
                   ref.read(terminalMaximizedProvider.notifier).toggle(),
               child: const Text('Focus mode'),

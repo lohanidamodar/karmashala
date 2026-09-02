@@ -31,6 +31,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 
 /// The inbox in the shell: one count, three places that show it, and a list
 /// that jumps to the thing it names.
@@ -39,6 +40,13 @@ import '../../support/fixtures.dart';
 /// the tray menu and the (non-existent) in-app count were three different
 /// derivations of the same idea, and nothing checked that they matched.
 void main() {
+  // These cases press `Ctrl+…` by name, so they pin the platform whose command
+  // modifier that is. The chord table follows the host — on macOS every one of
+  // them is `⌘` instead — and which modifier carries a command is pinned in
+  // `shell_shortcuts_platform_test.dart`. What is under test here is what the
+  // chord *does*, which is the same on every platform.
+  setUp(() => commandKeyIsMeta = false);
+
   late AppDatabase db;
   late ProviderContainer container;
 

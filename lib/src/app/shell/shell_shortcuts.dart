@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -233,65 +236,107 @@ class ShellChord {
 /// `Ctrl+V` pastes, costing readline's `quoted-insert` (`^V`). Copy is on
 /// `Ctrl+Shift+C`, which a terminal cannot encode and which therefore costs
 /// nothing.
-const List<ShellChord> shellChords = [
+
+/// Whether the app's own commands are reached with Cmd rather than Ctrl.
+///
+/// Injectable so the chord table can be built for either platform in a test;
+/// production reads the host once.
+bool commandKeyIsMeta = Platform.isMacOS;
+
+/// Copy and paste inside a terminal pane.
+///
+/// A different *shape* per platform rather than a different modifier: a Mac
+/// terminal copies with ⌘C and pastes with ⌘V, while on Windows and Linux
+/// `Ctrl+C` is SIGINT, so copy has to take `Ctrl+Shift+C`.
+SingleActivator _paneEdit(LogicalKeyboardKey key) => SingleActivator(
+  key,
+  control: !commandKeyIsMeta,
+  meta: commandKeyIsMeta,
+  shift: !commandKeyIsMeta,
+);
+
+String _paneEditLabel(String key) =>
+    commandKeyIsMeta ? '⌘$key' : 'Ctrl+Shift+$key';
+
+/// A chord on the platform's *command* modifier — Cmd on macOS, Ctrl elsewhere.
+///
+/// Not every Ctrl chord becomes a Cmd one. Tab cycling is `Ctrl+Tab` on macOS
+/// too, and inside a terminal `Ctrl+C` is SIGINT and `Ctrl+V` is readline's
+/// quoted-insert — a Mac reaches those with Cmd, which is why copy and paste
+/// below change *shape* rather than swapping a modifier.
+SingleActivator commandActivator(
+  LogicalKeyboardKey key, {
+  bool shift = false,
+}) =>
+    SingleActivator(
+      key,
+      control: !commandKeyIsMeta,
+      meta: commandKeyIsMeta,
+      shift: shift,
+    );
+
+/// How that chord is written for the user: `⇧⌘K` on macOS, `Ctrl+Shift+K`
+/// elsewhere. The macOS order is the platform's own — modifiers ascending, then
+/// the key — so it reads the way every other Mac menu does.
+String _commandLabel(String key, {bool shift = false}) => commandKeyIsMeta
+    ? '${shift ? '⇧' : ''}⌘$key'
+    : 'Ctrl+${shift ? 'Shift+' : ''}$key';
+
+List<ShellChord> _buildChords() => [
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.digit1, control: true),
+    activator: commandActivator(LogicalKeyboardKey.digit1),
     intent: FocusPaneIntent(ShellPane.explorer),
-    label: 'Ctrl+1',
+    label: _commandLabel('1'),
     does: 'Focus the Explorer',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.digit2, control: true),
+    activator: commandActivator(LogicalKeyboardKey.digit2),
     intent: FocusPaneIntent(ShellPane.detail),
-    label: 'Ctrl+2',
+    label: _commandLabel('2'),
     does: 'Focus the workbench',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.digit3, control: true),
+    activator: commandActivator(LogicalKeyboardKey.digit3),
     intent: ToggleSidePanelIntent(),
-    label: 'Ctrl+3',
+    label: _commandLabel('3'),
     does: 'Show or hide the side panel',
     skipsShell: true,
   ),
   // The tmux prefix. Bound app-wide, deliberately absent from the skip-list.
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyB, control: true),
+    activator: commandActivator(LogicalKeyboardKey.keyB),
     intent: ToggleExplorerPaneIntent(),
-    label: 'Ctrl+B',
+    label: _commandLabel('B'),
     does: 'Show or hide the Explorer',
   ),
   ShellChord(
-    activator: SingleActivator(
-      LogicalKeyboardKey.keyB,
-      control: true,
-      shift: true,
-    ),
+    activator: commandActivator(LogicalKeyboardKey.keyB, shift: true),
     intent: ToggleExplorerPaneIntent(),
-    label: 'Ctrl+Shift+B',
+    label: _commandLabel('B', shift: true),
     does: 'Show or hide the Explorer',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.backquote, control: true),
+    activator: commandActivator(LogicalKeyboardKey.backquote),
     intent: ToggleTerminalIntent(),
-    label: 'Ctrl+`',
+    label: _commandLabel('`'),
     does: 'Switch between the terminal and the chat view',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.backslash, control: true),
+    activator: commandActivator(LogicalKeyboardKey.backslash),
     intent: ToggleFocusModeIntent(),
-    label: 'Ctrl+\\',
+    label: _commandLabel('\\'),
     does: 'Focus mode',
     skipsShell: true,
     shellCost: 'SIGQUIT (^\\) — use kill -QUIT',
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyK, control: true),
+    activator: commandActivator(LogicalKeyboardKey.keyK),
     intent: OpenQuickOpenIntent(),
-    label: 'Ctrl+K',
+    label: _commandLabel('K'),
     does: 'Quick open',
     skipsShell: true,
     shellCost:
@@ -299,33 +344,25 @@ const List<ShellChord> shellChords = [
         'cursor, and Ctrl+Shift+K is free if you want it back',
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyP, control: true),
+    activator: commandActivator(LogicalKeyboardKey.keyP),
     intent: OpenQuickOpenIntent(),
-    label: 'Ctrl+P',
+    label: _commandLabel('P'),
     does: 'Quick open',
     skipsShell: true,
     shellCost: 'readline previous-history (^P) — Up does the same thing',
   ),
   // Straight into the command list, VS Code style.
   ShellChord(
-    activator: SingleActivator(
-      LogicalKeyboardKey.keyP,
-      control: true,
-      shift: true,
-    ),
+    activator: commandActivator(LogicalKeyboardKey.keyP, shift: true),
     intent: OpenQuickOpenIntent(query: '>'),
-    label: 'Ctrl+Shift+P',
+    label: _commandLabel('P', shift: true),
     does: 'Quick open, filtered to commands',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(
-      LogicalKeyboardKey.keyA,
-      control: true,
-      shift: true,
-    ),
+    activator: commandActivator(LogicalKeyboardKey.keyA, shift: true),
     intent: OpenAttentionInboxIntent(),
-    label: 'Ctrl+Shift+A',
+    label: _commandLabel('A', shift: true),
     does: 'Open or close the attention inbox',
     skipsShell: true,
   ),
@@ -336,30 +373,30 @@ const List<ShellChord> shellChords = [
   // bare pair is offered too, but the shell keeps it unless Settings says
   // otherwise, so nobody loses a key they were using by upgrading.
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyT, control: true, shift: true),
+    activator: commandActivator(LogicalKeyboardKey.keyT, shift: true),
     intent: NewTerminalTabIntent(),
-    label: 'Ctrl+Shift+T',
+    label: _commandLabel('T', shift: true),
     does: 'New terminal tab',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyW, control: true, shift: true),
+    activator: commandActivator(LogicalKeyboardKey.keyW, shift: true),
     intent: CloseTerminalTabIntent(),
-    label: 'Ctrl+Shift+W',
+    label: _commandLabel('W', shift: true),
     does: 'Close the terminal pane, or its tab when it is the last',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyT, control: true),
+    activator: commandActivator(LogicalKeyboardKey.keyT),
     intent: NewTerminalTabIntent(),
-    label: 'Ctrl+T',
+    label: _commandLabel('T'),
     does: 'New terminal tab',
     shellCost: 'readline transpose-chars (^T)',
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyW, control: true),
+    activator: commandActivator(LogicalKeyboardKey.keyW),
     intent: CloseTerminalTabIntent(),
-    label: 'Ctrl+W',
+    label: _commandLabel('W'),
     does: 'Close the terminal pane, or its tab when it is the last',
     shellCost: 'readline delete previous word (^W)',
   ),
@@ -404,49 +441,41 @@ const List<ShellChord> shellChords = [
     shellCost: 'a page-up some full-screen programs read',
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.equal, control: true),
+    activator: commandActivator(LogicalKeyboardKey.equal),
     intent: TerminalFontSizeIntent.increase(),
-    label: 'Ctrl+=',
+    label: _commandLabel('='),
     does: 'Terminal font size up',
     skipsShell: true,
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.minus, control: true),
+    activator: commandActivator(LogicalKeyboardKey.minus),
     intent: TerminalFontSizeIntent.decrease(),
-    label: 'Ctrl+-',
+    label: _commandLabel('-'),
     does: 'Terminal font size down',
     skipsShell: true,
     shellCost: 'readline undo (^_) — Ctrl+X Ctrl+U does the same thing',
   ),
   ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.digit0, control: true),
+    activator: commandActivator(LogicalKeyboardKey.digit0),
     intent: TerminalFontSizeIntent.reset(),
-    label: 'Ctrl+0',
+    label: _commandLabel('0'),
     does: 'Terminal font size back to the default',
     skipsShell: true,
   ),
   // Copy and paste. Pane-only: outside a terminal the platform's own Ctrl+C /
   // Ctrl+V already work and must not be re-bound.
   ShellChord(
-    activator: SingleActivator(
-      LogicalKeyboardKey.keyC,
-      control: true,
-      shift: true,
-    ),
+    activator: _paneEdit(LogicalKeyboardKey.keyC),
     intent: CopySelectionTextIntent.copy,
-    label: 'Ctrl+Shift+C',
+    label: _paneEditLabel('C'),
     does: 'Copy the selection',
     skipsShell: true,
     paneOnly: true,
   ),
   ShellChord(
-    activator: SingleActivator(
-      LogicalKeyboardKey.keyV,
-      control: true,
-      shift: true,
-    ),
+    activator: _paneEdit(LogicalKeyboardKey.keyV),
     intent: TerminalPasteIntent(),
-    label: 'Ctrl+Shift+V',
+    label: _paneEditLabel('V'),
     does: 'Paste into the terminal',
     skipsShell: true,
     paneOnly: true,
@@ -454,6 +483,11 @@ const List<ShellChord> shellChords = [
   // The chord every Windows user already has in their fingers. See the
   // "Ctrl+V is paste" section above for why it is claimed by default and why
   // it stays contested.
+  //
+  // Not on macOS. There ⌘V already pastes, and `Ctrl+V` is readline's
+  // quoted-insert — claiming it would cost a shell binding to duplicate a
+  // chord the platform's own modifier already covers.
+  if (!commandKeyIsMeta)
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.keyV, control: true),
     intent: TerminalPasteIntent(),
@@ -467,10 +501,32 @@ const List<ShellChord> shellChords = [
   ),
 ];
 
+/// Every chord, for the platform [commandKeyIsMeta] describes.
+///
+/// Cached on that flag rather than rebuilt per read: `shellShortcutMap` is
+/// handed to a `Shortcuts` widget on every build, and this list has no business
+/// allocating there. A test that flips the platform gets a fresh table on its
+/// next read.
+List<ShellChord> get shellChords {
+  if (_chordsBuiltForMeta != commandKeyIsMeta || _chords == null) {
+    _chords = _buildChords();
+    _chordsBuiltForMeta = commandKeyIsMeta;
+    _shortcutMap = null;
+  }
+  return _chords!;
+}
+
+List<ShellChord>? _chords;
+bool? _chordsBuiltForMeta;
+Map<ShortcutActivator, Intent>? _shortcutMap;
+
 /// The bindings [ShellShortcuts] installs, derived from [shellChords].
 /// Pane-only chords are absent on purpose: they are copy and paste, and the
 /// rest of the app already has those from the platform.
-final Map<ShortcutActivator, Intent> shellShortcutMap = {
+Map<ShortcutActivator, Intent> get shellShortcutMap =>
+    _shortcutMap ??= _buildShortcutMap();
+
+Map<ShortcutActivator, Intent> _buildShortcutMap() => {
   for (final chord in shellChords)
     if (!chord.paneOnly) chord.activator: chord.intent,
 };
@@ -597,13 +653,95 @@ bool handleAppChordFromTerminal(
 /// the terminal in front of them. On a session with a chat view it toggles
 /// between the two renderings of that one session; everywhere else it simply
 /// lands on the terminal, which is already what the workbench shows.
-class ShellShortcuts extends ConsumerWidget {
+class ShellShortcuts extends ConsumerStatefulWidget {
   const ShellShortcuts({required this.child, super.key});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ShellShortcuts> createState() => _ShellShortcutsState();
+}
+
+class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
+  /// Where macOS hands back the Cmd chords the Flutter view would have eaten.
+  ///
+  /// On macOS a `Cmd` combination is a *key equivalent*, offered to the key
+  /// window's views before anything else — and Flutter's text-input plugin
+  /// answers for the whole window while a field is focused. The terminal keeps
+  /// a hidden field focused for its keyboard input, so with a pane in front,
+  /// every one of these was swallowed before `Shortcuts` was consulted. It is
+  /// the same path that made Cmd+Q do nothing, and it is new here only because
+  /// these chords moved from Ctrl, which is not a key equivalent at all.
+  ///
+  /// The window claims only what is registered below, so Cmd+A, Cmd+C and
+  /// Cmd+V still reach a real text field.
+  static const MethodChannel _chords = MethodChannel(
+    'karmashala/command_chords',
+  );
+
+  /// A context below [Actions], since that is where an intent is invoked.
+  BuildContext? _actionsContext;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!Platform.isMacOS) return;
+    _chords.setMethodCallHandler(_onChord);
+    unawaited(_registerChords());
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isMacOS) _chords.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  /// The character each Cmd chord is reached by, as AppKit reports it.
+  ///
+  /// Pane-only chords are left out: copy and paste belong to the pane's own
+  /// `ShortcutManager`, and there is no shell-level action to invoke for them.
+  Future<void> _registerChords() async {
+    final plain = <String>[];
+    final shifted = <String>[];
+    for (final chord in shellChords) {
+      if (chord.paneOnly || !chord.activator.meta) continue;
+      final key = chord.activator.trigger.keyLabel.toLowerCase();
+      if (key.isEmpty || key.length > 1) continue;
+      (chord.activator.shift ? shifted : plain).add(key);
+    }
+    try {
+      await _chords.invokeMethod('register', {
+        'plain': plain,
+        'shifted': shifted,
+      });
+    } on PlatformException {
+      // A host without the channel simply keeps the old behaviour.
+    } on MissingPluginException {
+      // Same.
+    }
+  }
+
+  Future<void> _onChord(MethodCall call) async {
+    if (call.method != 'chord') return;
+    final arguments = call.arguments;
+    if (arguments is! Map) return;
+    final key = arguments['key'];
+    final shift = arguments['shift'] == true;
+    final context = _actionsContext;
+    if (key is! String || context == null || !context.mounted) return;
+    for (final chord in shellChords) {
+      if (chord.paneOnly || !chord.activator.meta) continue;
+      if (chord.activator.shift != shift) continue;
+      if (chord.activator.trigger.keyLabel.toLowerCase() != key) continue;
+      Actions.maybeInvoke(context, chord.intent);
+      return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
+    final child = widget.child;
     final controller = ref.read(shellControllerProvider.notifier);
     return Shortcuts(
       shortcuts: shellShortcutMap,
@@ -689,7 +827,15 @@ class ShellShortcuts extends ConsumerWidget {
             },
           ),
         },
-        child: Focus(autofocus: true, child: child),
+        // A context beneath [Actions], so a chord arriving from the window
+        // has somewhere to be invoked. Captured here rather than passed down
+        // because the intent must be dispatched from inside this subtree.
+        child: Builder(
+          builder: (context) {
+            _actionsContext = context;
+            return Focus(autofocus: true, child: child);
+          },
+        ),
       ),
     );
   }

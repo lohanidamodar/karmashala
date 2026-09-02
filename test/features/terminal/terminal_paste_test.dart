@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 
 /// Pasting into a pane, and the one case the text-only paste got wrong.
 ///
@@ -23,6 +24,13 @@ import 'fake_instance.dart';
 /// something to paste. With no text on the clipboard a terminal paste can do
 /// nothing anyway, so the program gets its key back.
 void main() {
+  // These cases press `Ctrl+…` by name, so they pin the platform whose command
+  // modifier that is. The chord table follows the host — on macOS every one of
+  // them is `⌘` instead — and which modifier carries a command is pinned in
+  // `shell_shortcuts_platform_test.dart`. What is under test here is what the
+  // chord *does*, which is the same on every platform.
+  setUp(() => commandKeyIsMeta = false);
+
   late AppDatabase db;
   late ProviderContainer container;
 
