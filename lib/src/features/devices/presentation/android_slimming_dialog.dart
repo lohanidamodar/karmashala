@@ -384,11 +384,16 @@ class _RestoreTarget extends ConsumerWidget {
                       final report = await ref
                           .read(androidSlimmingProvider.notifier)
                           .restore(emulator.serial);
+                      // Mounted first: `ref` belongs to this element, and a
+                      // dialog closed while the restore ran has no element to
+                      // invalidate through. The provider is auto-disposed, so
+                      // there is nothing stale left behind either way.
+                      if (!context.mounted) return;
                       // What is on the device is exactly what just changed.
                       ref.invalidate(
                         androidSlimmingStatusProvider(emulator.serial),
                       );
-                      if (!context.mounted || report == null) return;
+                      if (report == null) return;
                       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                         SnackBar(
                           content: Text(
