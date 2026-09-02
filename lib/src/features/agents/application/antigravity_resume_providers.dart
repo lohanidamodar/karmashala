@@ -66,9 +66,9 @@ final antigravityResumePlannerProvider = Provider<AntigravityResumePlanner>((
     String? latest;
     try {
       final environments = ref.read(executionEnvironmentDaoProvider).getAll();
-      final stores = await ref.read(cliStoreLocatorProvider).locate(
-        environments,
-      );
+      final stores = await ref
+          .read(cliStoreLocatorProvider)
+          .locate(environments);
       for (final store in stores) {
         // Only the environment the session runs in. `agy` writes its store
         // beside the process, so a Windows install's entries say nothing about

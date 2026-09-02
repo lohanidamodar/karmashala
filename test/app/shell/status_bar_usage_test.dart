@@ -1,4 +1,10 @@
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
@@ -38,10 +44,16 @@ import '../../support/window_matrix.dart';
 void main() {
   late FakeAgentUsageService service;
 
+  /// The database `barContainer` seeded, so a test that has to reach past the
+  /// providers — writing a pane id onto a session row — writes into the one the
+  /// container is reading.
+  late AppDatabase seeded;
+
   setUp(() => service = FakeAgentUsageService());
 
   ProviderContainer barContainer() {
     final db = seedUsageDatabase();
+    seeded = db;
     addTearDown(db.close);
     // A name long enough to compete for the row's width at 720px, which is
     // where the chip's arrival is felt.
@@ -68,6 +80,26 @@ void main() {
     container.read(selectedRepositoryIdProvider.notifier).select('r2');
     container.read(selectedSessionIdProvider.notifier).select('s1');
     return container;
+  }
+
+  /// Puts session `s1` in the terminal tab on screen and takes the Explorer's
+  /// selection away — the state a user is in after activating a tab whose
+  /// session has no pane yet, which is where the chips went missing.
+  void showInTerminalOnly(ProviderContainer container) {
+    final opened = container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openAgentTab(
+          const AgentPaneLaunch(
+            agentId: AgentIds.claudeCode,
+            executable: r'C:\Users\me\.bin\claude.exe',
+            arguments: [],
+            workingDirectory: r'C:\src\demo\app',
+            sessionId: 's1',
+            title: 'Session',
+          ),
+        );
+    SessionDao(seeded).updatePaneId('s1', opened.paneId);
+    container.read(selectedSessionIdProvider.notifier).select(null);
   }
 
   Widget bar(ProviderContainer container) => UncontrolledProviderScope(
@@ -162,6 +194,67 @@ void main() {
       tester,
       build: () => bar(container),
       because: 'a muted chip must not change the row it sits in',
+    );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('the chip follows the terminal tab when the tree selects nothing', (
+    tester,
+  ) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = barContainer();
+    await tester.pumpWidget(bar(container));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('62%'), findsOneWidget);
+
+    showInTerminalOnly(container);
+    await tester.pumpAndSettle();
+
+    // The regression: selection is dropped on purpose whenever a selected
+    // session has no live pane, so a window with an agent plainly running in it
+    // was left with no quota and no model — the two facts about that agent.
+    expect(
+      find.textContaining('62%'),
+      findsOneWidget,
+      reason: 'the session in the tab on screen is the one the window is about',
+    );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('the panel toggle keeps the right edge to itself', (
+    tester,
+  ) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = barContainer();
+    await tester.pumpWidget(bar(container));
+    await tester.pumpAndSettle();
+
+    final row = tester.getRect(find.byType(ShellStatusBar));
+    // The whole item, not its glyph: the label sits to the right of the icon,
+    // so measuring the icon would call the item short by the width of whatever
+    // the panel is currently called.
+    final toggle = tester.getRect(
+      find
+          .ancestor(
+            of: find.byIcon(AppIcons.sidebarSimple),
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    final chip = tester.getRect(find.textContaining('62%'));
+
+    expect(
+      row.right - toggle.right,
+      lessThan(24),
+      reason: 'the panel toggle is the last item on the row',
+    );
+    // And the running-state group is a zone of its own rather than a queue
+    // pushed up against the toggle: with one spacer the tab count sat against
+    // it and shifted every time a chip appeared or a label grew.
+    expect(
+      toggle.left - chip.right,
+      greaterThan(24),
+      reason: 'the middle group is not pinned to the right edge',
     );
     await quiesce(tester, container);
   });

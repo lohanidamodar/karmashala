@@ -58,9 +58,6 @@ class AgentProbeLog {
   void record(String agentId, String environmentId, DateTime at) {
     final log = read();
     final forAgent = {...?log[agentId], environmentId: at.toIso8601String()};
-    _db.writeMetadata(
-      metadataKey,
-      jsonEncode({...log, agentId: forAgent}),
-    );
+    _db.writeMetadata(metadataKey, jsonEncode({...log, agentId: forAgent}));
   }
 }

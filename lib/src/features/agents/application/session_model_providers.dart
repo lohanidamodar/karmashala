@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../sessions/application/session_launcher.dart';
+import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../domain/agent_descriptor.dart';
 
@@ -90,7 +91,7 @@ final sessionModelProvider = Provider.autoDispose
 final focusedSessionModelProvider = Provider.autoDispose<SessionModelState?>((
   ref,
 ) {
-  final sessionId = ref.watch(selectedSessionIdProvider);
+  final sessionId = ref.watch(focusedSessionIdProvider);
   if (sessionId == null) return null;
   return ref.watch(sessionModelProvider(sessionId));
 });

@@ -24,9 +24,7 @@ const String agentHookMarker = 'karmashala-agent-hook';
 /// These strings are literals on purpose and must survive any future rename —
 /// `legacy_hook_marker_test.dart` fails if a find-and-replace rewrites them,
 /// which is exactly how they would otherwise be lost.
-const List<String> legacyAgentHookMarkers = <String>[
-  'chitragupta-agent-hook',
-];
+const List<String> legacyAgentHookMarkers = <String>['chitragupta-agent-hook'];
 
 /// Top-level config keys this app wrote under names it no longer uses.
 ///
@@ -229,14 +227,13 @@ class AgentHookInstaller {
       environment: environment,
     );
     if (base == null) return null;
-    final uri = base
-        .replace(
-          queryParameters: {
-            'agent': descriptor.id,
-            'event': event,
-            'marker': agentHookMarker,
-          },
-        );
+    final uri = base.replace(
+      queryParameters: {
+        'agent': descriptor.id,
+        'event': event,
+        'marker': agentHookMarker,
+      },
+    );
     // Silent, and it always succeeds. A status callback is Karmashala's
     // business, not the agent's: the owner watched `curl: (52) Empty reply
     // from server` print into a live session and the shell exit non-zero

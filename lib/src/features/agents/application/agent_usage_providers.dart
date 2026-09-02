@@ -4,6 +4,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/agent_usage_service.dart';
 import '../domain/agent_ids.dart';
@@ -55,7 +56,7 @@ final focusedUsageInstallationProvider =
         SessionChangeKind.membership,
         SessionChangeKind.placement,
       });
-      final sessionId = ref.watch(selectedSessionIdProvider);
+      final sessionId = ref.watch(focusedSessionIdProvider);
       if (sessionId == null) return null;
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       if (session == null) return null;

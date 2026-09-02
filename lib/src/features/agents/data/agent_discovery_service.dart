@@ -89,7 +89,8 @@ CommandRequest? reachabilityRequest(EnvironmentKind kind) =>
 String? expandWindowsPath(String template, Map<String, String> environment) {
   // Windows environment variable names are case-insensitive; the map is not.
   final byUpperCase = {
-    for (final entry in environment.entries) entry.key.toUpperCase(): entry.value,
+    for (final entry in environment.entries)
+      entry.key.toUpperCase(): entry.value,
   };
   var missing = false;
   final expanded = template.replaceAllMapped(RegExp(r'%([^%]+)%'), (match) {
@@ -297,7 +298,10 @@ class AgentDiscoveryService {
           ),
         );
         // It started, so the file is there — even if it exited non-zero.
-        return (path: path, version: result.ok ? parseAgentVersion(result.stdout) : null);
+        return (
+          path: path,
+          version: result.ok ? parseAgentVersion(result.stdout) : null,
+        );
       } on CommandException {
         continue; // Nothing at this location.
       }
