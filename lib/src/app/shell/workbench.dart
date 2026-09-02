@@ -11,7 +11,6 @@ import '../../features/explorer/application/session_context.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
-import '../../features/sessions/presentation/approval_request_card.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
@@ -59,8 +58,7 @@ const Key kWorkbenchSurfaces = ValueKey('workbench-surfaces');
 /// **The terminal is the one you land on.** Until Loop 85 selecting a session
 /// switched the workbench to its *chat*, which made the secondary view the
 /// default one and left every session action (handoff, fork, the delivery
-/// lifecycle, an approval that is blocking the agent) reachable only from
-/// there. Now a selection opens the session's pane, and those controls are
+/// lifecycle) reachable only from there. Now a selection opens the session's pane, and those controls are
 /// composed around it from the same widgets the conversation uses — see
 /// [_SessionBar]. Chat is one labelled tap, or `` Ctrl+` ``, away.
 ///
@@ -370,7 +368,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   ///
   /// **The Explorer's selection, and failing that the pane on screen.** The
   /// rest of the bar already follows the pane — the permission chip, the
-  /// delivery strip, the approval — so an agent reached by activating its
+  /// delivery strip — so an agent reached by activating its
   /// terminal tab had every session control except the one thing only this
   /// answers: the toggle, and therefore the way to its transcript.
   ///
@@ -443,16 +441,13 @@ class _WorkbenchSession {
   final bool native;
 }
 
-/// The terminal rendering of a session: the panes, and the one thing that has
-/// to be answered before anything else offered around them will be read.
+/// The terminal rendering of a session: the panes, and nothing over them.
 ///
-/// The approval card is the chat view's own widget, not a lookalike — one
-/// [ApprovalRequestCard] exists in the app, so the two views cannot offer
-/// different answers. It sits *below* the panes because that is where the thing
-/// it responds to is: an agent's prompt is drawn at the bottom of its terminal,
-/// so the buttons that answer it are the next thing under it rather than a
-/// header the eye has to travel back up to. Everything else that belongs to the
-/// session is one row further down, in [_SessionBar].
+/// No approval card. The agent draws its own prompt here and it is answered by
+/// typing into it, so a card repeating the question under the pane duplicated a
+/// control the terminal already has; the approval card belongs to the
+/// conversation, which has no other way to see that prompt. Everything else
+/// that belongs to the session is one row further down, in [_SessionBar].
 ///
 /// With a session selected that has **no pane of ours**, the panes are not what
 /// this surface should show — the tab on screen would be some other session's.
@@ -468,13 +463,7 @@ class _TerminalSurface extends StatelessWidget {
     if (selected != null && selected.paneId == null) {
       return _NoPaneForSession(session: selected);
     }
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(child: TerminalPaneStack()),
-        _PaneApproval(),
-      ],
-    );
+    return const TerminalPaneStack();
   }
 }
 
@@ -587,25 +576,6 @@ class _NoPaneForSession extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-/// The approval blocking the pane on screen, drawn under it.
-///
-/// Above the session bar for the same reason it is above the delivery row in
-/// the conversation: it is the thing blocking the session, and nothing else
-/// offered here will be read until the agent's prompt is answered. It follows
-/// the focused pane, so a shell tab has nothing to answer and draws nothing —
-/// and it draws nothing until there *is* an approval, because nothing here may
-/// reserve terminal rows for something it might one day have to say.
-class _PaneApproval extends ConsumerWidget {
-  const _PaneApproval();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sessionId = ref.watch(activePaneSessionIdProvider);
-    if (sessionId == null) return const SizedBox.shrink();
-    return ApprovalRequestCard(sessionId: sessionId, hostedOnTerminal: true);
   }
 }
 

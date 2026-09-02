@@ -3,12 +3,25 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/data/agent_hook_receiver.dart';
+import 'package:karmashala/src/features/agents/data/agent_status_service.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/domain/diff_stat.dart';
+import 'package:karmashala/src/features/notifications/application/agent_status_watcher.dart';
+import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
+import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
+import 'package:karmashala/src/features/notifications/domain/notification_settings.dart';
+import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -27,7 +40,9 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:karmashala/src/features/terminal/presentation/session_status.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +63,17 @@ const minimumWindowHugestText = WindowCell(
   '720x560 @ 2.0x text',
   Size(720, 560),
   textScale: 2.0,
+);
+
+/// The pane's own screen, read exactly as `sessionStatusRegistryProvider` reads
+/// it for the ambient status pipeline. A function behind a provider, not a
+/// family: what it answers changes with every row the agent draws.
+final paneTailProvider = Provider<List<String> Function(String)>(
+  (ref) => (sessionId) {
+    final row = ref.read(sessionDaoProvider).getById(sessionId);
+    if (row == null) return const [];
+    return sessionTerminalTail(ref, row, agentId: AgentIds.claudeCode);
+  },
 );
 
 void main() {
@@ -931,52 +957,187 @@ void main() {
     );
   });
 
-  testWidgets('an agent blocked on a prompt is answerable from the terminal', (
-    tester,
-  ) async {
+  /// Puts a session's agent in front of an open approval prompt.
+  void seedAPendingApproval() {
     agentStatus = AgentActivityStatus.awaitingApproval;
     agentEvidence = const ['Do you want to make this edit to main.dart?'];
     agentWaiting = AgentWaitKind.approval;
+  }
+
+  testWidgets('a pending approval draws no card on the terminal surface', (
+    tester,
+  ) async {
+    // The card used to sit under the panes, and this used to assert it was
+    // there. What it answers is the prompt the agent draws in the terminal
+    // directly above it — already answerable by typing there — so the surface
+    // carried a second copy of a control it hosts. Gone on purpose, which is
+    // what this now pins.
+    seedAPendingApproval();
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
 
+    expect(find.byType(ApprovalRequestCard), findsNothing);
+    expect(find.textContaining('is waiting for you'), findsNothing);
+    expect(find.textContaining('Do you want to make this edit'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Deny'), findsNothing);
+    // The rows it took are the terminal's again: the surface is the panes and
+    // nothing else, whether or not something is waiting.
+    expect(
+      tester.getSize(find.byType(TerminalPaneStack)).height,
+      tester.getSize(find.byKey(kWorkbenchSurfaces)).height,
+    );
+  });
+
+  testWidgets('the conversation still draws the approval the terminal drops', (
+    tester,
+  ) async {
+    seedAPendingApproval();
+    seedSessionInAPane();
+    container.read(selectedSessionIdProvider.notifier).select('s1');
+    await pump(tester);
+    expect(find.byType(ApprovalRequestCard), findsNothing);
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
+
+    // Unchanged here, and for the reason the terminal does not need it: the
+    // conversation has no other way to see the prompt, so it quotes the agent,
+    // offers the keys and offers the way to the terminal.
     expect(find.byType(ApprovalRequestCard), findsOneWidget);
     expect(find.textContaining('is waiting for you'), findsOneWidget);
-    // The agent's own words, and the buttons its descriptor names.
     expect(
       find.textContaining('Do you want to make this edit'),
       findsOneWidget,
     );
-    expect(find.byType(FilledButton), findsWidgets);
-    // The card's "Terminal view" button is the one thing that makes no sense
-    // here: it is hosted *on* the terminal.
-    expect(find.widgetWithText(TextButton, 'Terminal view'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Terminal view'), findsOneWidget);
   });
 
-  testWidgets('the approval card takes no height until there is an approval', (
+  testWidgets('the terminal surface survives the window matrix without it', (
     tester,
   ) async {
-    // The rule for everything in the dock: it must not reserve terminal rows
-    // for something it might one day have to say.
+    // Dropping a row from a surface is a layout change, so the surface is
+    // asked the same question every other one is.
+    seedAPendingApproval();
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
-    await pump(tester);
 
-    expect(tester.getSize(find.byType(ApprovalRequestCard)).height, 0);
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+      ),
+      because: 'the panes now run to the session bar',
+    );
   });
+
+  testWidgets(
+    'an approval nobody is looking at still reaches the tray, the toast and '
+    'the inbox with no card under the terminal',
+    (tester) async {
+      // The one real risk in dropping the card: it was the loudest sign that a
+      // session had stopped for the user. Nothing that *finds* an approval for
+      // you ever read it — the ambient pipeline reads the pane's own screen —
+      // and this is what says so, end to end, for a pane-surface session.
+      final paneId = seedSessionInAPane();
+      // Elsewhere, which is the case the inbox exists for: an approval that
+      // lands while the window is behind something else.
+      container.read(windowFocusedProvider.notifier).set(false);
+      await pump(tester);
+      expect(find.byType(ApprovalRequestCard), findsNothing);
+
+      const watched = WatchedSession(
+        key: AgentSessionKey(AgentIds.claudeCode, 's1'),
+        label: 'Session',
+        openId: 's1',
+        imported: false,
+      );
+      final tail = container.read(paneTailProvider);
+      var attention = <SessionAttention>[];
+      final notified = <PendingNotification>[];
+      final registry = SessionStatusRegistry(
+        statusService: AgentStatusService(
+          registry: AgentRegistry.builtIn,
+          hookReports: AgentHookReports(),
+          clock: FixedClock(testTime),
+        ),
+        agents: AgentRegistry.builtIn,
+        loadSessions: () => const [watched],
+        clock: FixedClock(testTime),
+        readTail: (session) => tail(session.openId),
+      );
+      addTearDown(registry.dispose);
+      final watcher = AgentStatusWatcher(
+        registry: registry,
+        readSettings: () => const NotificationSettings(),
+        isWindowFocused: () => container.read(windowFocusedProvider),
+        visibleSessionIds: () => const {},
+        onAttention: (next) => attention = next,
+        onNotify: notified.add,
+        // Wired exactly as `agentStatusWatcherProvider` wires it, so the count
+        // asserted below is the one the status bar and the rail badge read.
+        onInbox: container.read(attentionInboxProvider.notifier).apply,
+      );
+      addTearDown(watcher.dispose);
+
+      final terminal = container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId)!
+          .terminal;
+      terminal.write('  esc to interrupt  \r\n');
+      await watcher.poll();
+      expect(watcher.lastStatusOf(watched.key), AgentActivityStatus.working);
+
+      // Cleared first: the tail is the bottom of the screen, and leaving the
+      // working marker up there would be two answers at once.
+      terminal.write('\x1b[2J\x1b[H  Enter to confirm  \r\n');
+      await watcher.poll();
+
+      expect(attention.single.kind, AttentionKind.needsInput);
+      expect(attention.single.menuLabel, 'Session — needs approval');
+      expect(notified.single.reason, NotificationReason.needsInput);
+      expect(container.read(attentionCountProvider), 1);
+      expect(
+        container.read(attentionInboxProvider).items.single.kind,
+        InboxItemKind.needsApproval,
+      );
+      // And the projection every status badge draws — the Explorer's row dot
+      // included — still reads the prompt off the pane.
+      expect(
+        registry.reportForOpenId('s1')?.status,
+        AgentActivityStatus.awaitingApproval,
+      );
+      // The tab's dot is about the pane's *process*, which nothing here
+      // touched: still live, so it still draws nothing. It never carried an
+      // approval, before this change or after it.
+      expect(
+        container.read(terminalPaneLivenessProvider(paneId)),
+        PaneLiveness.live,
+      );
+      expect(tester.getSize(find.byType(TabLivenessDot)).height, 0);
+    },
+  );
 
   testWidgets('an agent that merely messaged is offered no keys', (
     tester,
   ) async {
-    // The live complaint: a finished turn nudged the user, and the dock offered
-    // Approve — a button that types Enter into a prompt with nothing open.
+    // The live complaint: a finished turn nudged the user and the app offered
+    // Approve — a button that types Enter into a prompt with nothing open. The
+    // dock this was reported against is gone, so the case is asked of the
+    // surface that still carries the card.
     agentStatus = AgentActivityStatus.awaitingApproval;
     agentEvidence = const ['Claude is waiting for your input'];
     agentWaiting = AgentWaitKind.input;
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
+    expect(find.textContaining('waiting for your input'), findsNothing);
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await tester.pumpAndSettle();
 
     // The headline, not the quoted message: both say it, and only one of them
     // is the app speaking.
@@ -984,8 +1145,9 @@ void main() {
       find.textContaining('Claude Code is waiting for your input'),
       findsOneWidget,
     );
-    expect(find.byType(FilledButton), findsNothing);
-    expect(find.byType(OutlinedButton), findsNothing);
+    expect(find.textContaining('nothing to approve'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Deny'), findsNothing);
   });
 
   testWidgets('a shell tab gets no session controls at all', (tester) async {

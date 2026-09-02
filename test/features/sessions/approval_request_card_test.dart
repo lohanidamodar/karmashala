@@ -34,7 +34,6 @@ import '../terminal/fake_instance.dart';
   required String agentId,
   required AgentStatusReport report,
   bool live = true,
-  bool hostedOnTerminal = false,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -84,10 +83,7 @@ import '../terminal/fake_instance.dart';
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: ApprovalRequestCard(
-            sessionId: 's1',
-            hostedOnTerminal: hostedOnTerminal,
-          ),
+          body: ApprovalRequestCard(sessionId: 's1'),
         ),
       ),
     ),
@@ -336,32 +332,30 @@ void main() {
     });
   });
 
-  testWidgets('hosted on the terminal, it stops pointing at the terminal', (
+  testWidgets('it always points at the terminal view, in every state', (
     tester,
   ) async {
-    // Loop 85 hosts this same card under the terminal as well as in the
-    // conversation. Everything it can only say from the conversation — "open
-    // the terminal view", and the button that does it — would send the user to
-    // where they already are.
+    // Loop 85 also hosted this card under the terminal panes, where "open the
+    // terminal view" would have sent the user to where they already were, and
+    // a `hostedOnTerminal` flag suppressed it. The terminal answers its own
+    // prompts now and the card is the conversation's alone, so there is one
+    // wording and one route out — and nothing may reintroduce a second.
     final h = harness(
       agentId: AgentIds.codex,
       report: report(agentId: AgentIds.codex),
-      hostedOnTerminal: true,
     );
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     await tester.pumpWidget(h.app);
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(TextButton, 'Terminal view'), findsNothing);
-    expect(
-      find.textContaining('Read the prompt in the terminal above'),
-      findsOneWidget,
-    );
-    // Codex names no way to decline, and the refusal route is the terminal it
-    // is already sitting under.
-    expect(find.textContaining('type into the terminal above'), findsOneWidget);
-    // What it does offer is unchanged: the answer the agent itself named.
     expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Terminal view'), findsOneWidget);
+    // Codex names no way to decline, and the refusal route is the one surface
+    // that can carry a refusal.
+    expect(find.textContaining('use the terminal view'), findsOneWidget);
+    // The wording the flag used to switch to is gone with it: nothing here may
+    // claim the prompt is on screen above the card.
+    expect(find.textContaining('terminal above'), findsNothing);
   });
 }
