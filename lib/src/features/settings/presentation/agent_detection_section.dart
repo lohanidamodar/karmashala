@@ -49,7 +49,7 @@ class AgentDetectionSection extends ConsumerWidget {
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(AppIcons.arrowsClockwise, size: 16),
+                  : const Icon(AppIcons.arrowsClockwise),
               label: const Text('Detect agents'),
             ),
           ),

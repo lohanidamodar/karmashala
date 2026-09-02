@@ -322,7 +322,7 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
                     const SizedBox(width: Insets.sm),
                     OutlinedButton.icon(
                       onPressed: _browseForKey,
-                      icon: const Icon(AppIcons.folderOpen, size: 16),
+                      icon: const Icon(AppIcons.folderOpen),
                       label: const Text('Browse'),
                     ),
                   ],
@@ -356,7 +356,7 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
                           height: 14,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(AppIcons.play, size: 16),
+                      : const Icon(AppIcons.play),
                   label: const Text('Test connection'),
                 ),
               ),
@@ -404,7 +404,7 @@ class _ProbeResult extends StatelessWidget {
     final elapsed = probe.elapsed;
     return Row(
       children: [
-        Icon(AppIcons.checkCircle, size: 16, color: theme.colorScheme.primary),
+        Icon(AppIcons.checkCircle, color: theme.colorScheme.primary),
         const SizedBox(width: Insets.sm),
         Expanded(
           child: Text(

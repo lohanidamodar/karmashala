@@ -365,7 +365,7 @@ class _DiffFullscreenDialog extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(_iconFor(file.type), size: 16),
+                  Icon(_iconFor(file.type)),
                   const SizedBox(width: Insets.sm),
                   Expanded(
                     child: Text(
@@ -379,7 +379,7 @@ class _DiffFullscreenDialog extends StatelessWidget {
                   Consumer(
                     builder: (context, ref, _) => IconButton(
                       tooltip: 'Copy diff',
-                      icon: const Icon(AppIcons.copySimple, size: 18),
+                      icon: const Icon(AppIcons.copySimple),
                       onPressed: () async {
                         final diff = await ref.read(
                           fileDiffByPathProvider(file.path).future,
@@ -390,7 +390,7 @@ class _DiffFullscreenDialog extends StatelessWidget {
                   ),
                   IconButton(
                     tooltip: 'Close',
-                    icon: const Icon(AppIcons.x, size: 18),
+                    icon: const Icon(AppIcons.x),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],

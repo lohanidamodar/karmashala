@@ -37,11 +37,7 @@ class NativeSettingStatusLine extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            AppIcons.warningCircle,
-            size: 16,
-            color: theme.colorScheme.error,
-          ),
+          Icon(AppIcons.warningCircle, color: theme.colorScheme.error),
           const SizedBox(width: Insets.xs),
           Expanded(
             child: Text(

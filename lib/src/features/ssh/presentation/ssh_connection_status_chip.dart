@@ -78,7 +78,7 @@ class SshConnectionStatusChip extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(described.icon, size: 14, color: colour),
+        Icon(described.icon, size: Chrome.iconAction, color: colour),
         const SizedBox(width: Insets.xs),
         Text(
           described.label,

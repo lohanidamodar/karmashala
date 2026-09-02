@@ -79,7 +79,7 @@ class _CommandRow extends StatelessWidget {
             // Never colour alone: a failure also carries its exit code as text.
             Icon(
               block.failed ? AppIcons.xCircle : AppIcons.check,
-              size: 14,
+              size: Chrome.iconAction,
               color: block.failed ? scheme.error : scheme.onSurfaceVariant,
               semanticLabel: block.failed ? 'Failed' : 'Succeeded',
             ),

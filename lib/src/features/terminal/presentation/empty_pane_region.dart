@@ -102,7 +102,7 @@ class EmptyPaneRegion extends ConsumerWidget {
                       children: [
                         Icon(
                           AppIcons.squareSplitHorizontal,
-                          size: 28,
+                          size: Chrome.iconHero,
                           color: scheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: Insets.sm),

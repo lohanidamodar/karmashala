@@ -291,6 +291,8 @@ class ModelChip extends StatelessWidget {
                   ),
                 ),
               ],
+              // A disclosure caret, deliberately a step under the chip's own
+              // glyph — the same 11 the permission chips and the picker draw.
               Icon(AppIcons.caretDown, size: 11, color: foreground),
             ],
           ),

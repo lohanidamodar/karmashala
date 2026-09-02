@@ -47,7 +47,11 @@ class HostKeyChangedAlert extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(AppIcons.warning, size: 18, color: scheme.error),
+              Icon(
+                AppIcons.warning,
+                size: Chrome.iconTitle,
+                color: scheme.error,
+              ),
               const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
@@ -98,7 +102,7 @@ class HostKeyChangedAlert extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               onPressed: () => _forget(context),
-              icon: const Icon(AppIcons.trash, size: 16),
+              icon: const Icon(AppIcons.trash),
               label: const Text('Forget the pinned key…'),
               style: OutlinedButton.styleFrom(foregroundColor: scheme.error),
             ),

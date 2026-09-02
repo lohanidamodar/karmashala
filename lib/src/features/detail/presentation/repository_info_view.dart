@@ -338,7 +338,11 @@ class _GitDetails extends ConsumerWidget {
     padding: const EdgeInsets.only(bottom: 4),
     child: Row(
       children: [
-        Icon(icon, size: 13, color: theme.colorScheme.onSurfaceVariant),
+        Icon(
+          icon,
+          size: Chrome.iconSmall,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
         const SizedBox(width: 6),
         leadWidget ??
             Text(
@@ -447,7 +451,7 @@ class _CopyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       tooltip: 'Copy ${what.toLowerCase()}',
-      iconSize: 13,
+      iconSize: Chrome.iconSmall,
       visualDensity: VisualDensity.compact,
       constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
       padding: EdgeInsets.zero,

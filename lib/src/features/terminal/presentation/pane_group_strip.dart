@@ -164,7 +164,7 @@ class PaneTabChip extends ConsumerWidget {
         tooltip: liveness.isLive
             ? 'Close pane (the session keeps running)'
             : 'Close pane',
-        iconSize: 13,
+        iconSize: Chrome.iconSmall,
         visualDensity: VisualDensity.compact,
         constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
         padding: EdgeInsets.zero,

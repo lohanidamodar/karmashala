@@ -296,7 +296,7 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
               isDir
                   ? (_expanded ? AppIcons.folderOpen : AppIcons.folder)
                   : AppIcons.article,
-              size: 15,
+              size: Chrome.iconAction,
               color: isDir
                   ? theme.colorScheme.tertiary
                   : theme.colorScheme.onSurfaceVariant,

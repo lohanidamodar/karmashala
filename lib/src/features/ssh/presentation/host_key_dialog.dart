@@ -133,7 +133,7 @@ class _HostKeyTrustDialogState extends State<HostKeyTrustDialog> {
         ),
         FilledButton.icon(
           onPressed: _compared ? () => Navigator.of(context).pop(true) : null,
-          icon: const Icon(AppIcons.check, size: 16),
+          icon: const Icon(AppIcons.check),
           label: const Text('Trust this key'),
         ),
       ],
@@ -180,7 +180,7 @@ class _KeyFacts extends StatelessWidget {
               IconButton(
                 tooltip: 'Copy fingerprint',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(AppIcons.copySimple, size: 16),
+                icon: const Icon(AppIcons.copySimple),
                 onPressed: () =>
                     Clipboard.setData(ClipboardData(text: fingerprint)),
               ),

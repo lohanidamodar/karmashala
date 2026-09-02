@@ -152,7 +152,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
               endpoints[i].kind == PairingRelayKind.local
                   ? AppIcons.linkSimple
                   : AppIcons.globe,
-              size: 14,
+              size: Chrome.iconAction,
             ),
             label: Text(endpoints[i].label),
           ),
@@ -242,7 +242,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
           children: [
             Icon(
               AppIcons.checkCircle,
-              size: 40,
+              size: Chrome.iconHero,
               color: SemanticColors.of(context).idle,
             ),
             const SizedBox(height: Insets.sm),
@@ -261,7 +261,11 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(AppIcons.warning, size: 24, color: theme.colorScheme.error),
+            Icon(
+              AppIcons.warning,
+              size: Chrome.iconHero,
+              color: theme.colorScheme.error,
+            ),
             const SizedBox(height: Insets.sm),
             Text(
               error,
@@ -342,10 +346,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
               child: Text(_showCode ? 'Hide payload' : 'Show full payload'),
             ),
             OutlinedButton.icon(
-              icon: Icon(
-                _copied ? AppIcons.checkCircle : AppIcons.copy,
-                size: 16,
-              ),
+              icon: Icon(_copied ? AppIcons.checkCircle : AppIcons.copy),
               label: Text(_copied ? 'Copied' : 'Copy'),
               onPressed: () async {
                 await Clipboard.setData(

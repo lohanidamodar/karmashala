@@ -928,7 +928,7 @@ class TerminalTabChip extends StatelessWidget {
         tooltip: liveness.isLive
             ? 'Close tab (the session keeps running)'
             : 'Close tab',
-        iconSize: 13,
+        iconSize: Chrome.iconSmall,
         visualDensity: VisualDensity.compact,
         constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
         padding: EdgeInsets.zero,

@@ -336,7 +336,10 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                 else
                   TextButton.icon(
                     onPressed: _fetch,
-                    icon: const Icon(AppIcons.arrowsClockwise, size: 15),
+                    icon: const Icon(
+                      AppIcons.arrowsClockwise,
+                      size: Chrome.iconAction,
+                    ),
                     label: Text(usage == null ? 'Check usage' : 'Refresh'),
                   ),
               ],
@@ -557,7 +560,7 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                     onPressed: () => ref.invalidate(
                       claudeAuthSnapshotProvider(_installation),
                     ),
-                    icon: const Icon(AppIcons.arrowsClockwise, size: 16),
+                    icon: const Icon(AppIcons.arrowsClockwise),
                   ),
               ],
             ),
@@ -585,7 +588,7 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                           () => controller.captureCurrent(_installation),
                           'Captured the current account.',
                         ),
-                  icon: const Icon(AppIcons.downloadSimple, size: 16),
+                  icon: const Icon(AppIcons.downloadSimple),
                   label: const Text('Capture current'),
                 ),
                 if (accounts.isNotEmpty)
@@ -618,10 +621,13 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(AppIcons.arrowsClockwise, size: 15),
+                          const Icon(
+                            AppIcons.arrowsClockwise,
+                            size: Chrome.iconAction,
+                          ),
                           const SizedBox(width: Insets.xs),
                           const Text('Switch to'),
-                          Icon(AppIcons.caretDown, size: 14),
+                          Icon(AppIcons.caretDown, size: Chrome.iconAction),
                         ],
                       ),
                     ),
@@ -709,6 +715,8 @@ class _SavedAccountRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
+          // A bullet in front of the account, not a glyph — same call as the
+          // project card's running badge.
           const Icon(AppIcons.circle, size: 8),
           const SizedBox(width: Insets.sm),
           Expanded(
@@ -733,7 +741,7 @@ class _SavedAccountRow extends StatelessWidget {
             tooltip: 'Forget this saved account',
             visualDensity: VisualDensity.compact,
             onPressed: onForget,
-            icon: const Icon(AppIcons.trash, size: 15),
+            icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
           ),
         ],
       ),

@@ -363,7 +363,10 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         ReviewAction(
           sessionId: widget.sessionId,
           builder: (context, offer) => ActionChip(
-            avatar: const Icon(AppIcons.listMagnifyingGlass, size: 14),
+            avatar: const Icon(
+              AppIcons.listMagnifyingGlass,
+              size: Chrome.iconAction,
+            ),
             label: Text(review.label),
             tooltip: offer.tooltip,
             onPressed: _busy ? null : offer.onPressed,
@@ -371,7 +374,10 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         ),
       if (canContinue)
         ActionChip(
-          avatar: const Icon(AppIcons.arrowBendDownRight, size: 14),
+          avatar: const Icon(
+            AppIcons.arrowBendDownRight,
+            size: Chrome.iconAction,
+          ),
           label: const Text('Continue with…'),
           tooltip: continueTooltip,
           onPressed: _busy ? null : continueWith,
@@ -491,7 +497,7 @@ List<Widget> _deliveryFacts(
     Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(_stageIcon(stage), size: 12, color: colour),
+        Icon(_stageIcon(stage), size: Chrome.iconSmall, color: colour),
         const SizedBox(width: 4),
         Text(stage.label, style: label?.copyWith(color: colour)),
       ],
@@ -508,7 +514,7 @@ List<Widget> _deliveryFacts(
         children: [
           Icon(
             AppIcons.gitBranch,
-            size: 12,
+            size: Chrome.iconSmall,
             color: theme.colorScheme.onSurfaceVariant,
           ),
           const SizedBox(width: 4),
@@ -586,7 +592,7 @@ class _ActionChip extends StatelessWidget {
     // The primary action keeps its weight and its container in either host —
     // which of these to press next is the one thing the strip is saying.
     final chip = ActionChip(
-      avatar: Icon(_actionIcon(action), size: 14),
+      avatar: Icon(_actionIcon(action), size: Chrome.iconAction),
       label: Text(action.label),
       backgroundColor: offered.isPrimary && offered.isEnabled
           ? theme.colorScheme.primaryContainer

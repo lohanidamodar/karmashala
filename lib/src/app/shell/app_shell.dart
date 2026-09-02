@@ -423,7 +423,7 @@ class _DesktopMenuBar extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton.icon(
-            icon: const Icon(AppIcons.arrowsClockwise, size: 16),
+            icon: const Icon(AppIcons.arrowsClockwise),
             onPressed: () => Navigator.of(context).pop(true),
             label: const Text('Clear and re-import'),
           ),

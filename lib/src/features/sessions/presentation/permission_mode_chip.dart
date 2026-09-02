@@ -176,6 +176,8 @@ class PermissionModeChip extends ConsumerWidget {
                   ),
                 ),
               ],
+              // A disclosure caret, a step under the chip's own glyph — the
+              // same 11 the model chip and the permission picker draw.
               Icon(AppIcons.caretDown, size: 11, color: foreground),
             ],
           ),

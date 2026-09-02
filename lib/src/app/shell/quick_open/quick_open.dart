@@ -416,7 +416,11 @@ class QuickOpenButton extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(AppIcons.magnifyingGlass, size: 13, color: muted),
+                  Icon(
+                    AppIcons.magnifyingGlass,
+                    size: Chrome.iconSmall,
+                    color: muted,
+                  ),
                   const SizedBox(width: Insets.sm),
                   Flexible(
                     child: Text(

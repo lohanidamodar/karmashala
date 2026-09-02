@@ -70,7 +70,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
             children: [
               IconButton(
                 tooltip: 'Back',
-                icon: const Icon(AppIcons.arrowLeft, size: 18),
+                icon: const Icon(AppIcons.arrowLeft),
                 onPressed: () => ref
                     .read(selectedImportedSessionIdProvider.notifier)
                     .select(null),
@@ -88,7 +88,7 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                     ? const SizedBox.shrink()
                     : PopupMenuButton<SystemTerminal>(
                         tooltip: 'Open in system terminal',
-                        icon: const Icon(AppIcons.arrowSquareOut, size: 18),
+                        icon: const Icon(AppIcons.arrowSquareOut),
                         onSelected: (t) => _openIn(session, t),
                         itemBuilder: (context) => [
                           for (final t in list)

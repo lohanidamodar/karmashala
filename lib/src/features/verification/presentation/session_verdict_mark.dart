@@ -78,7 +78,7 @@ class SessionVerdictMark extends ConsumerWidget {
         children: [
           // A glyph as well as a colour, like the stage mark beside it: state
           // is never carried by colour alone.
-          Icon(_iconOf(verdict.state), size: 12, color: colour),
+          Icon(_iconOf(verdict.state), size: Chrome.iconSmall, color: colour),
           const SizedBox(width: 4),
           Text(
             verdict.state.label,

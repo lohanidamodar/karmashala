@@ -81,10 +81,7 @@ class _SshSecretDialogState extends State<SshSecretDialog> {
                 labelText: isPassphrase ? 'Passphrase' : 'Password',
                 suffixIcon: IconButton(
                   tooltip: _visible ? 'Hide' : 'Show',
-                  icon: Icon(
-                    _visible ? AppIcons.xCircle : AppIcons.circle,
-                    size: 16,
-                  ),
+                  icon: Icon(_visible ? AppIcons.xCircle : AppIcons.circle),
                   onPressed: () => setState(() => _visible = !_visible),
                 ),
               ),

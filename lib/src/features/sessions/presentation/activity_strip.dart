@@ -126,7 +126,7 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
                 single != null && single.isSubagent
                     ? AppIcons.robot
                     : AppIcons.circleHalf,
-                size: 13,
+                size: Chrome.iconSmall,
                 color: colour,
               ),
               const SizedBox(width: Insets.xs),
