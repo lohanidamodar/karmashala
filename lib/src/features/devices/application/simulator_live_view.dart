@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/logging/app_logger.dart';
 import '../data/mjpeg_stream.dart';
 import '../domain/simulator_backend.dart';
+import 'device_providers.dart';
 import 'ios_device_providers.dart';
 import 'simulator_frames.dart';
 
@@ -109,6 +110,19 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
         }
       });
 
+      // Whatever the picture is of is what the picker should name, however the
+      // view was started — the row's own Live view button does not go through
+      // the picker at all.
+      //
+      // Both halves, or neither: naming the simulator while an Android serial
+      // stayed selected left the pane with two answers to "which device is
+      // this about", and the toolbar believed the Android one — so the Stop
+      // beside the picker went to a scrcpy stream while the user was looking
+      // at an iPhone. Clearing the serial also takes that stream down, through
+      // the pane's own `_onSelectionChanged`, which is right: this pane shows
+      // one device at a time and the simulator's picture is the one that wins.
+      ref.read(selectedDeviceSerialProvider.notifier).select(null);
+      ref.read(selectedSimulatorUdidProvider.notifier).select(udid);
       _set(
         SimulatorLiveViewRunning(
           SimulatorLiveView(

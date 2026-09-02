@@ -200,4 +200,23 @@ sambandha_test
       expect(parseOwnedScrcpyPids('1 $ours scid=1\n', jarPath: ours), isEmpty);
     });
   });
+
+  group('parseNightMode', () {
+    test('reads the one line `cmd uimode night` prints', () {
+      // Verified against an API 34 emulator, which answers exactly this.
+      expect(parseNightMode('Night mode: yes\n'), isTrue);
+      expect(parseNightMode('Night mode: no\n'), isFalse);
+    });
+
+    test('anything a two-state button cannot represent is unknown', () {
+      // `auto` is "whatever the light sensor says" and the custom modes are
+      // schedules — none of them a state this app set or can promise. Saying
+      // "unknown" lets the caller leave the control alone instead of claiming
+      // the device is light while it is dark.
+      expect(parseNightMode('Night mode: auto'), isNull);
+      expect(parseNightMode('Night mode: custom_schedule'), isNull);
+      expect(parseNightMode(''), isNull);
+      expect(parseNightMode('cmd: Failure calling service uimode'), isNull);
+    });
+  });
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../../core/logging/app_logger.dart';
+import '../../../core/widgets/keyboard_capture.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../sessions/application/session_mcp_arguments.dart';
@@ -2216,10 +2217,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       if (tab == null) return;
       final node = _instances[tab.focusedPaneId]?.focusNode;
       if (node == null || node.hasFocus) return;
-      // Never out of a text field the user is typing in — quick open, the
-      // search bar, a composer, a dialog. Opening or closing a terminal tab is
-      // not worth taking the keyboard away from what someone is writing.
-      if (_keyboardIsInATextField()) return;
+      // Never out of somewhere the keyboard is already spoken for — a text
+      // field the user is typing in, or a device mirror that is forwarding
+      // every keystroke to a phone. Opening or closing a terminal tab is not
+      // worth taking the keyboard away from either of them.
+      if (keyboardIsSpokenFor()) return;
       node.requestFocus();
     });
   }
@@ -2252,12 +2254,6 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Whether the keyboard currently belongs to a text field.
-  static bool _keyboardIsInATextField() {
-    final context = FocusManager.instance.primaryFocus?.context;
-    if (context == null) return false;
-    return context.findAncestorWidgetOfExactType<EditableText>() != null;
-  }
 }
 
 /// Whether [title] is a pane reciting the program we launched rather than

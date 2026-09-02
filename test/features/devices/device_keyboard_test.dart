@@ -139,6 +139,22 @@ void main() {
       expect(up.action, AndroidKeyAction.up);
     });
 
+    test('the key that was pressed travels with its Android keycode', () {
+      // A sink that does not speak Android — the iOS one — maps by logical
+      // key. Without this it would be handed an `int` from a numbering scheme
+      // its device has never heard of, and would have to refuse every key.
+      final translator = DeviceKeyTranslator();
+      final down =
+          translator.translate(_down(LogicalKeyboardKey.arrowLeft), _plain)!
+              as DeviceKeycodeIntent;
+      expect(down.logicalKey, LogicalKeyboardKey.arrowLeft);
+
+      final up =
+          translator.translate(_up(LogicalKeyboardKey.arrowLeft), _plain)!
+              as DeviceKeycodeIntent;
+      expect(up.logicalKey, LogicalKeyboardKey.arrowLeft);
+    });
+
     test('a modifier chord goes as a keycode, carrying its meta state', () {
       // Ctrl+A must select all on the device. As text it would type "a".
       final translator = DeviceKeyTranslator();
@@ -217,6 +233,10 @@ void main() {
       expect(released, hasLength(1));
       expect(released.single.action, AndroidKeyAction.up);
       expect(released.single.keyCode, AndroidKeyCode.dpadDown);
+      // The release goes out with no key event in hand, so the logical key has
+      // to have been remembered — a sink that maps by it cannot lift a key it
+      // cannot name.
+      expect(released.single.logicalKey, LogicalKeyboardKey.arrowDown);
       // And the second call has nothing left to lift.
       expect(translator.releaseAll(), isEmpty);
     });

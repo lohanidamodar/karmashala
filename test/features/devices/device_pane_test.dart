@@ -22,8 +22,8 @@ const _desktop = Size(1440, 900);
 const _emulator = 'emulator-5554';
 const _phoneSerial = 'F6IZLV6LMFT4U4ZT';
 
-/// The tooltip a hardware key wears while nothing is running behind it.
-const _idleKeys = 'Start the live view to use the hardware keys';
+/// The tooltip every device control wears while nothing is running behind it.
+const _idleKeys = 'Start the live view to use the device controls';
 
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'windows', path: r'C:\sdk'),
@@ -313,16 +313,18 @@ void main() {
       expect(find.byTooltip(_idleKeys), findsNothing);
     });
 
-    testWidgets('the hardware keys cannot reach a device with no live view', (
+    testWidgets('the device controls cannot reach a device with no live view', (
       tester,
     ) async {
       final runner = FakeCommandRunner();
       await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
 
       // Present — so the row does not appear from nowhere when the live view
-      // starts — but inert, and saying so.
+      // starts — but inert, and saying so. Six of them now: the three hardware
+      // keys, plus the appearance switch, the screenshot and the deep link
+      // that Android gained to match what the simulator row already offered.
       final idle = find.byTooltip(_idleKeys);
-      expect(idle, findsNWidgets(3));
+      expect(idle, findsNWidgets(6));
       for (final button in tester.widgetList<IconButton>(
         find.descendant(of: idle, matching: find.byType(IconButton)),
       )) {
@@ -331,13 +333,13 @@ void main() {
 
       // The real assertion: nothing reaches the phone. This is the bug —
       // stopping the live view left Home and Back driving the device the user
-      // believed they had disconnected from.
-      await tester.tap(idle.first, warnIfMissed: false);
+      // believed they had disconnected from. Now that the row can also take a
+      // screenshot and open a deep link, *no* adb command may leave it.
+      for (var i = 0; i < 6; i++) {
+        await tester.tap(idle.at(i), warnIfMissed: false);
+      }
       await tester.pumpAndSettle();
-      expect(
-        runner.requests.where((r) => r.arguments.contains('keyevent')),
-        isEmpty,
-      );
+      expect(runner.requests, isEmpty);
     });
   });
 
@@ -443,7 +445,9 @@ void main() {
 
     testWidgets('offers to stop a selected emulator', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
-      expect(find.byTooltip('Stop emulator'), findsOneWidget);
+      // The tooltip names the device now, because the button used to be able
+              // to stop one the user was not looking at.
+      expect(find.byTooltip('Stop Pixel'), findsOneWidget);
     });
 
     testWidgets('does not offer to stop a physical device', (tester) async {
@@ -454,7 +458,7 @@ void main() {
         sdk: _sdk(),
         devices: [_device(serial: _phoneSerial)],
       );
-      expect(find.byTooltip('Stop emulator'), findsNothing);
+      expect(find.byTooltip('Stop Pixel'), findsNothing);
       expect(
         find.byKey(const Key('stop-emulator-$_phoneSerial')),
         findsNothing,
@@ -466,7 +470,7 @@ void main() {
       (tester) async {
         final runner = FakeCommandRunner();
         await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
-        await tester.tap(find.byTooltip('Stop emulator'));
+        await tester.tap(find.byTooltip('Stop Pixel'));
         await tester.pumpAndSettle();
         expect(find.textContaining('is lost'), findsOneWidget);
 

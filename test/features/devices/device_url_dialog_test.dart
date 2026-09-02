@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/devices/presentation/simulator_live_pane.dart';
+import 'package:karmashala/src/features/devices/presentation/device_controls.dart';
 
 /// The Open-a-URL dialog, which took the whole app down with it.
+///
+/// Shared by the simulator and Android control rows — one dialog, because both
+/// platforms ask the user for exactly the same thing.
 ///
 /// The first version held a `TextEditingController` and disposed it as soon as
 /// `showDialog` returned — which is after the route pops but *before* its exit
@@ -17,7 +20,7 @@ void main() {
       MaterialApp(
         home: Builder(
           builder: (context) => ElevatedButton(
-            onPressed: () => result = askForSimulatorUrl(context),
+            onPressed: () => result = askForDeviceUrl(context),
             child: const Text('open'),
           ),
         ),
@@ -58,10 +61,10 @@ void main() {
     final result = await open(tester);
 
     await tester.enterText(
-      find.byKey(const Key('simulator-url-field')),
+      find.byKey(const Key('device-url-field')),
       'myapp://deep/link',
     );
-    await tester.tap(find.byKey(const Key('simulator-url-open')));
+    await tester.tap(find.byKey(const Key('device-url-open')));
     await tester.pumpAndSettle();
 
     expect(await result, 'myapp://deep/link');
@@ -72,7 +75,7 @@ void main() {
     final result = await open(tester);
 
     await tester.enterText(
-      find.byKey(const Key('simulator-url-field')),
+      find.byKey(const Key('device-url-field')),
       'https://example.com',
     );
     await tester.testTextInput.receiveAction(TextInputAction.done);

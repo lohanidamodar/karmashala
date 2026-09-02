@@ -171,6 +171,28 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
         idempotent: true,
         openWorld: true,
       ),
+      // Starting something is not destructive — see the rule at the top of this
+      // file — and asking twice for a device that is already up leaves it up,
+      // which is what idempotent means here.
+      'device_boot': McpToolAnnotations(idempotent: true, openWorld: true),
+      // Overwrites whatever build of the same app was on the device, with no
+      // undo: the previous binary is gone. Idempotent because installing the
+      // same artifact twice leaves the same device.
+      'device_install_app': McpToolAnnotations(
+        destructive: true,
+        idempotent: true,
+        openWorld: true,
+      ),
+      // A launch runs somebody's code on a device. Not idempotent: launching
+      // twice is two starts, and with relaunch it is two *cold* starts, which
+      // is a different device state from one.
+      'device_launch_app': McpToolAnnotations(openWorld: true),
+      // Ends a running process, and anything it had not saved goes with it.
+      'device_terminate_app': McpToolAnnotations(
+        destructive: true,
+        idempotent: true,
+        openWorld: true,
+      ),
 
       // Browser. The page is someone's real logged-in session, so the same
       // reasoning as devices applies to anything that acts on it.

@@ -215,6 +215,12 @@ class SimulatorTransitions extends Notifier<Set<String>> {
   Future<void> boot(String udid) => _run(udid, (simctl) async {
     await _slim(udid);
     await simctl.bootAndWait(udid);
+    // The picker names what the pane is about, so starting a simulator has to
+    // move it — otherwise the device you just started is running while the
+    // control above it still says "No device selected", and the only way to
+    // point the pane at it is to pick it again by hand. The Android side gets
+    // this for free by selecting the serial it booted.
+    ref.read(selectedSimulatorUdidProvider.notifier).select(udid);
     // Only when the user asked for a window. `simctl boot` opens none, so this
     // is the step that *adds* one — the mirror image of the emulator's
     // `-no-window`, which takes one away. The pane mirrors the device either
@@ -233,10 +239,16 @@ class SimulatorTransitions extends Notifier<Set<String>> {
   /// optimisation; refusing to start the simulator because its services could
   /// not be trimmed would turn a saving into an outage.
   Future<void> _slim(String udid) async {
-    if (!ref.read(slimmingOnStartProvider)) return;
-    final slimming = ref.read(simulatorSlimmingServiceProvider);
-    if (slimming == null) return;
     try {
+      // Inside the guard, all of it. Reading the setting is itself a database
+      // read, and it used to sit outside — so a settings store that could not
+      // be opened did not merely skip slimming, it aborted the boot. Refusing
+      // to start a simulator because an optimisation could not be looked up is
+      // the outage this catch exists to prevent, and it was reachable through
+      // the very first line.
+      if (!ref.read(slimmingOnStartProvider)) return;
+      final slimming = ref.read(simulatorSlimmingServiceProvider);
+      if (slimming == null) return;
       await slimming.slim(
         udid,
         except: ref.read(slimmingKeptCategoriesProvider),

@@ -225,6 +225,157 @@ void main() {
     });
   });
 
+  group('appearance', () {
+    test('flips the ui mode through the service the tile uses', () async {
+      // `cmd uimode night`, not `settings put secure ui_night_mode`: the
+      // setting records the preference, but the running system UI and every
+      // foreground app keep the appearance they were configured with until
+      // `UiModeManager` tells them otherwise.
+      final runner = FakeCommandRunner();
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).setNightMode('S1', dark: true);
+
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'cmd',
+        'uimode',
+        'night',
+        'yes',
+      ]);
+    });
+
+    test('light is "no", which is the other word the command takes', () async {
+      final runner = FakeCommandRunner();
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).setNightMode('S1', dark: false);
+
+      expect(_argv(runner, 0).last, 'no');
+    });
+
+    test('reads the device rather than trusting the last write', () async {
+      // The Quick Settings tile and a scheduled switch at dusk both move this
+      // behind the pane's back, so a remembered flag would offer "dark" on a
+      // device that is already dark.
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 0,
+          stdout: 'Night mode: yes\n',
+          stderr: '',
+        ),
+      );
+
+      expect(
+        await AdbService(runner: runner, sdk: _sdk()).isNightMode('S1'),
+        isTrue,
+      );
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'cmd',
+        'uimode',
+        'night',
+      ]);
+    });
+
+    test('a device that will not answer says so instead of guessing', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 1, stdout: '', stderr: 'no such cmd'),
+      );
+
+      expect(
+        await AdbService(runner: runner, sdk: _sdk()).isNightMode('S1'),
+        isNull,
+      );
+    });
+
+    test('a refused write is thrown, not swallowed', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 255,
+          stdout: '',
+          stderr: "Error: mode must be 'yes', 'no', or 'auto'",
+        ),
+      );
+
+      expect(
+        () => AdbService(runner: runner, sdk: _sdk())
+            .setNightMode('S1', dark: true),
+        throwsStateError,
+      );
+    });
+  });
+
+  group('openUrl', () {
+    test('sends a VIEW intent with the url as data', () async {
+      final runner = FakeCommandRunner();
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).openUrl('S1', 'myapp://deep/link');
+
+      expect(_argv(runner, 0), [
+        '-s',
+        'S1',
+        'shell',
+        'am',
+        'start',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        'myapp://deep/link',
+      ]);
+    });
+
+    test('a link nothing can handle is a failure, exit code notwithstanding', () async {
+      // Measured against an API 34 emulator: `am start` exits **0** when the
+      // intent resolves to nothing and complains on stderr instead. Trusting
+      // the exit code would report success for the single most likely mistake
+      // anyone makes here — a scheme no installed app registers.
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 0,
+          stdout: 'Starting: Intent { act=android.intent.action.VIEW }\n',
+          stderr:
+              'Error: Activity not started, unable to resolve Intent '
+              '{ act=android.intent.action.VIEW dat=nosuchapp://x }\n',
+        ),
+      );
+
+      expect(
+        () => AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).openUrl('S1', 'nosuchapp://x'),
+        throwsStateError,
+      );
+    });
+
+    test('an ordinary start is not treated as a failure', () async {
+      // `am start` narrates every launch on stdout; only the stderr complaint
+      // means anything went wrong.
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 0,
+          stdout: 'Starting: Intent { dat=https://example.com/... }\n',
+          stderr: '',
+        ),
+      );
+
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).openUrl('S1', 'https://example.com');
+    });
+  });
+
   group('logcat', () {
     test('filters to the package pids', () async {
       final runner = FakeCommandRunner(
