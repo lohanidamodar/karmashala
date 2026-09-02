@@ -8,10 +8,16 @@ import 'package:path/path.dart' as p;
 
 /// Session stats read out of a Codex rollout.
 ///
-/// Codex's `token_count` records are **cumulative**, which is what makes a
-/// resumed read give the same answer a full one would: the last record seen
-/// wins, and a reader that stops at byte n and continues later still ends on
-/// the same one.
+/// Codex's `token_count` records are **cumulative**, which is what makes both
+/// of this reader's tricks legal: a resumed read gives the same answer a full
+/// one would, and a cold read can find the whole token answer by scanning
+/// backwards from EOF instead of decoding the file.
+///
+/// The cost group is the point of the design. A rollout is big because a
+/// handful of pasted-context lines are enormous — 22 MB, in the owner's
+/// largest — and the usage records in it are a thousandth of its size. So the
+/// claim under test is not "it is fast" but "it does not decode what it does
+/// not need", counted in lines.
 void main() {
   late Directory tmp;
 
@@ -99,10 +105,7 @@ void main() {
       agentMessage(),
     ]);
 
-    final reader = CodexStatsReader(
-      cache: CodexStatsCache(),
-      inBackground: false,
-    );
+    final reader = CodexStatsReader(cache: CodexStatsCache());
     final stats = await reader.readSessionStats(rollout('r1'));
 
     expect(stats, isNotNull);
@@ -130,10 +133,7 @@ void main() {
   test('a rollout with no usage record reports no tokens', () async {
     write('r1', [meta(), userMessage()]);
 
-    final reader = CodexStatsReader(
-      cache: CodexStatsCache(),
-      inBackground: false,
-    );
+    final reader = CodexStatsReader(cache: CodexStatsCache());
     final stats = (await reader.readSessionStats(rollout('r1')))!;
 
     expect(stats.tokens.isUnknown, isTrue);
@@ -142,33 +142,9 @@ void main() {
   });
 
   test('a missing rollout has no stats at all', () async {
-    final reader = CodexStatsReader(
-      cache: CodexStatsCache(),
-      inBackground: false,
-    );
+    final reader = CodexStatsReader(cache: CodexStatsCache());
     expect(await reader.readSessionStats(rollout('nope')), isNull);
     expect(reader.bytesRead, 0);
-  });
-
-  test('the scan gives the same answer on a spawned isolate', () async {
-    write('r1', [
-      meta(),
-      userMessage(),
-      toolCall('function_call'),
-      tokenCount(input: 900, cached: 400, output: 90),
-    ]);
-
-    final onIsolate = await CodexStatsReader(
-      cache: CodexStatsCache(),
-    ).readSessionStats(rollout('r1'));
-    final inProcess = await CodexStatsReader(
-      cache: CodexStatsCache(),
-      inBackground: false,
-    ).readSessionStats(rollout('r1'));
-
-    expect(onIsolate!.turns, inProcess!.turns);
-    expect(onIsolate.toolCalls, inProcess.toolCalls);
-    expect(onIsolate.tokens.total, inProcess.tokens.total);
   });
 
   group('cost', () {
@@ -184,10 +160,7 @@ void main() {
 
     test('reading a rollout\'s stats twice reads nothing again', () async {
       writeBulky('r1');
-      final reader = CodexStatsReader(
-        cache: CodexStatsCache(),
-        inBackground: false,
-      );
+      final reader = CodexStatsReader(cache: CodexStatsCache());
 
       final first = await reader.readSessionStats(rollout('r1'));
       expect(first, isNotNull);
@@ -207,10 +180,7 @@ void main() {
 
     test('a live rollout resumes from where the last read stopped', () async {
       writeBulky('r1');
-      final reader = CodexStatsReader(
-        cache: CodexStatsCache(),
-        inBackground: false,
-      );
+      final reader = CodexStatsReader(cache: CodexStatsCache());
       final before = (await reader.readSessionStats(rollout('r1')))!;
       final sizeBefore = File(rollout('r1')).lengthSync();
       final afterFirst = reader.bytesRead;
@@ -237,10 +207,7 @@ void main() {
 
     test('a record still being written is not resumed inside', () async {
       write('r1', [meta(), userMessage()]);
-      final reader = CodexStatsReader(
-        cache: CodexStatsCache(),
-        inBackground: false,
-      );
+      final reader = CodexStatsReader(cache: CodexStatsCache());
       expect((await reader.readSessionStats(rollout('r1')))!.turns, 1);
 
       // A half-written line: no newline yet, which is what a live CLI leaves
@@ -257,12 +224,71 @@ void main() {
       expect((await reader.readSessionStats(rollout('r1')))!.turns, 2);
     });
 
+    test('a huge pasted line is skipped, never decoded', () async {
+      // The shape that made a naive reader cost 1.9 seconds: one 2 MB user
+      // message, the sort a pasted IDE context block produces. The reader must
+      // count it as a turn from its head and never build a String out of it.
+      final huge = 'x' * (2 * 1024 * 1024);
+      write('r1', [
+        meta(),
+        {
+          'timestamp': '2026-01-01T00:00:10.000Z',
+          'type': 'event_msg',
+          'payload': {'type': 'user_message', 'message': huge},
+        },
+        toolCall('function_call'),
+        {
+          'timestamp': '2026-01-01T00:00:20.000Z',
+          'type': 'response_item',
+          'payload': {'type': 'message', 'role': 'user', 'content': huge},
+        },
+        tokenCount(input: 900, cached: 400, output: 90),
+      ]);
+      final size = File(rollout('r1')).lengthSync();
+      expect(size, greaterThan(4 * 1024 * 1024));
+
+      final reader = CodexStatsReader(cache: CodexStatsCache());
+      final stats = (await reader.readSessionStats(rollout('r1')))!;
+
+      expect(stats.turns, 1);
+      expect(stats.toolCalls, 1);
+      expect(stats.tokens.total, 990, reason: 'found by reading the tail');
+      expect(
+        reader.linesDecoded,
+        1,
+        reason: 'the only line worth decoding is the last usage record',
+      );
+    });
+
+    test('a cold read of a big rollout decodes exactly one line', () async {
+      // Padded past the 64 KB tail window so the backwards read is the one
+      // that answers, and the forward scan decodes nothing at all.
+      write('r1', [
+        meta(),
+        for (var i = 0; i < 300; i++) ...[
+          userMessage(),
+          toolCall('custom_tool_call'),
+          {
+            'type': 'response_item',
+            'payload': {'type': 'message', 'role': 'user', 'content': 'y' * 900},
+          },
+          tokenCount(input: 100 * (i + 1), cached: 0, output: 1),
+        ],
+      ]);
+      expect(File(rollout('r1')).lengthSync(), greaterThan(64 * 1024));
+
+      final reader = CodexStatsReader(cache: CodexStatsCache());
+      final stats = (await reader.readSessionStats(rollout('r1')))!;
+
+      expect(stats.turns, 300);
+      expect(stats.toolCalls, 300);
+      expect(stats.tokens.input, 30000, reason: 'the newest cumulative total');
+      expect(reader.linesDecoded, 1);
+    });
+
     test('a rollout replaced under the same name starts over', () async {
       writeBulky('r1');
-      final reader = CodexStatsReader(
-        cache: CodexStatsCache(),
-        inBackground: false,
-      );
+      final reader = CodexStatsReader(cache: CodexStatsCache());
       expect((await reader.readSessionStats(rollout('r1')))!.turns, 300);
 
       write('r1', [meta(), userMessage()]);

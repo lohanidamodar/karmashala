@@ -1,56 +1,76 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
+import 'dart:typed_data';
 
 import '../domain/session_stats.dart';
 
-/// Session stats read out of a Codex rollout.
+/// Session stats read out of a Codex rollout, without decoding the rollout.
 ///
 /// A separate reader rather than an extension of `CodexStoreReader`, and the
 /// separation is the point. That reader caches a rollout on its **size alone**
 /// and never looks past the opening `session_meta`, because every field it
 /// wants is first-wins from the head of the file; folding the tally into it
 /// would make each detection sweep read every rollout to the end, which is the
-/// exact cost its comments exist to explain away. This reads the tail, and only
-/// when someone asks for it.
+/// exact cost its comments exist to explain away.
 ///
-/// What the rollout records, and why each is trustworthy:
+/// ## Why a rollout is big, and why that does not have to cost anything
 ///
-/// | Field | Source | Notes |
-/// | --- | --- | --- |
-/// | tokens | `event_msg` / `token_count` → `info.total_token_usage` | **cumulative**, so the last one wins |
-/// | context window | the same record's `info.model_context_window` | Claude Code writes no equivalent |
-/// | turns | `event_msg` / `user_message` | one per prompt |
-/// | tool calls | `response_item` of `function_call`, `custom_tool_call`, `local_shell_call` | |
+/// The owner's largest rollout is **120 MB in 1,392 lines**. Eleven of those
+/// lines are over 500 KB and the largest is **22 MB** — they are pasted IDE
+/// context blocks, written twice each (once as `response_item`, once as
+/// `event_msg`). Every `token_count` record in that file put together is
+/// **126 KB, one thousandth of it**. The stats were never the big part; the
+/// big part is a handful of user messages, and decoding a 22 MB line to
+/// discover it is not a usage record is the entire cost.
 ///
-/// Cumulative totals are what makes this cheap to resume: a reader that stops
-/// at byte *n* and continues from there later still ends on the same last
-/// `token_count` a full read would have found.
+/// So nothing here decodes a line it does not need, and nothing here builds a
+/// `String` out of one. Two reads, each cheap for a different reason:
+///
+/// * **Tokens come from the tail.** `total_token_usage` is cumulative, so only
+///   the *last* `token_count` in the file matters. Seeking to the end and
+///   scanning back over a bounded window finds it in one decode: in that
+///   120 MB rollout the last one begins **1,282 bytes from EOF**, so a 64 KB
+///   window has 50× the room it needs. O(window), not O(file).
+/// * **Counts come from a prefix scan.** A record's kind is at the head of its
+///   line — `"payload":{"type":"` never appears past **byte 82** across the
+///   51,060 lines of this machine's 52 rollouts — so only the first
+///   [_prefixCap] bytes of each line are ever copied and the rest is skipped
+///   to the newline. A line whose prefix does not classify is simply not
+///   counted; nothing throws.
+///
+/// Measured on that 120 MB rollout, for the same answer (18 turns, 279 tool
+/// calls, the same cumulative total):
+///
+/// | | wall | bytes into Strings | lines decoded |
+/// | --- | --- | --- | --- |
+/// | decode every line | 1,882 ms | 114.9 MB | 1,392 |
+/// | prefix scan + tail read | **156 ms** | **345 KB** | **1** |
+///
+/// That is what retired the isolate this used to need: 156 ms spread over
+/// ~1,900 chunk callbacks blocks no frame, so there is nothing left to move
+/// off the UI isolate.
 class CodexStatsReader {
-  CodexStatsReader({CodexStatsCache? cache, this.inBackground = true})
+  CodexStatsReader({CodexStatsCache? cache})
     : _cache = cache ?? CodexStatsCache.shared;
 
   final CodexStatsCache _cache;
 
-  /// Whether the scan runs on a spawned isolate.
-  ///
-  /// On by default because the first read of a rollout is unbounded — the
-  /// owner's largest is **120 MB** — and decoding that many lines on the UI
-  /// isolate drops frames for as long as it takes. Off only in a test that
-  /// wants a deterministic single-isolate run.
-  final bool inBackground;
-
   /// Bytes pulled off the disk by this reader, over every read it has run.
   int bytesRead = 0;
+
+  /// Lines handed to `jsonDecode`. The cost claim, and what a test asserts on:
+  /// a cold read of any rollout decodes **one** line, whatever its size.
+  int linesDecoded = 0;
 
   /// What one rollout adds up to, resumed from wherever the last read stopped.
   ///
   /// Null when the file cannot be stat'ed. A second read of an untouched
   /// rollout costs a `stat` and nothing else.
   Future<SessionStats?> readSessionStats(String filePath) async {
+    final file = File(filePath);
     final FileStat stat;
     try {
-      stat = await File(filePath).stat();
+      stat = await file.stat();
     } on Object {
       return null;
     }
@@ -68,26 +88,300 @@ class CodexStatsReader {
     final resume = cached != null && stat.size >= cached.consumed
         ? cached
         : null;
-    final request = _CodexScanRequest(
-      path: filePath,
-      from: resume?.consumed ?? 0,
-      counters: resume?.counters.copy() ?? CodexStatsCounters(),
-    );
+    final counters = resume?.counters.copy() ?? CodexStatsCounters();
+    final from = resume?.consumed ?? 0;
 
-    final result = inBackground
-        ? await Isolate.run(() => _scanCodexRollout(request))
-        : await _scanCodexRollout(request);
-    bytesRead += result.bytesRead;
-    if (!result.readable) return result.counters.toStats();
+    // The tail read earns its second pass only on a rollout big enough for the
+    // forward scan to want to skip usage records entirely. A rollout that fits
+    // inside one tail window would be read twice for nothing, and a resumed
+    // read already has the newest usage record in its delta — so both of those
+    // decode as they go, which is also what keeps an incremental read
+    // proportional to what was appended.
+    final useTail = from == 0 && stat.size > _tailWindow;
+    if (useTail) await _readLastUsage(file, stat.size, counters);
+
+    final scan = await _scanForward(
+      file,
+      from: from,
+      counters: counters,
+      decodeUsage: !useTail,
+    );
+    if (!scan.readable) return counters.toStats();
 
     _cache._byPath[filePath] = _CodexStatsEntry(
       size: stat.size,
       modified: stat.modified,
-      consumed: result.consumed,
-      counters: result.counters,
+      consumed: scan.consumed,
+      counters: counters,
     );
-    return result.counters.toStats();
+    return counters.toStats();
   }
+
+  /// The newest `token_count`, found by scanning backwards from EOF.
+  ///
+  /// The window grows only when the one before it held no usage record at all
+  /// — a rollout whose model calls are all near the top, which is a short file
+  /// by construction. It gives up rather than reading the whole thing.
+  Future<void> _readLastUsage(
+    File file,
+    int size,
+    CodexStatsCounters counters,
+  ) async {
+    if (size <= 0) return;
+    var window = _tailWindow;
+    while (window <= _tailWindowCap) {
+      final from = size - window < 0 ? 0 : size - window;
+      final Uint8List buffer;
+      try {
+        final handle = await file.open();
+        try {
+          await handle.setPosition(from);
+          buffer = await handle.read(size - from);
+        } finally {
+          await handle.close();
+        }
+      } on Object {
+        return;
+      }
+      bytesRead += buffer.length;
+
+      for (var at = buffer.length - _usageMarker.length; at >= 0; at--) {
+        if (!_matchesAt(buffer, _usageMarker, at)) continue;
+        var start = at;
+        while (start > 0 && buffer[start - 1] != _newline) {
+          start--;
+        }
+        var end = at;
+        while (end < buffer.length && buffer[end] != _newline) {
+          end++;
+        }
+        // A first window that begins mid-record would decode a fragment; the
+        // line is only trustworthy when its own start was inside the window.
+        if (start == 0 && from > 0) break;
+        _decodeUsage(buffer.sublist(start, end), counters);
+        return;
+      }
+      if (from == 0) return;
+      window *= 4;
+    }
+  }
+
+  /// One resumable pass for the counts, copying at most [_prefixCap] bytes of
+  /// any line and skipping the rest to the newline.
+  ///
+  /// Byte-accurate rather than `LineSplitter`, because the offset to resume
+  /// from has to land on a line boundary: a rollout whose last line has no
+  /// newline yet is a record the CLI is still flushing, and must be read whole
+  /// next time.
+  ///
+  /// The buffer is fixed and reused, so a 22 MB pasted-context line costs a
+  /// scan for its newline and not one byte of allocation. Only a line whose
+  /// head says it is a usage record is allowed to grow past [_prefixCap], and
+  /// only when [decodeUsage] asked for one.
+  Future<_CodexScan> _scanForward(
+    File file, {
+    required int from,
+    required CodexStatsCounters counters,
+    required bool decodeUsage,
+  }) async {
+    var consumed = from;
+    final buffer = Uint8List(_lineCap);
+    var held = 0;
+    // Bytes of the current line, including the part deliberately not kept —
+    // `consumed` has to advance by the whole line, not by what was copied.
+    var lineLength = 0;
+    var cap = _prefixCap;
+    var classified = false;
+
+    // Loops rather than copying once, because [cap] can be raised *by* this
+    // copy: a whole line usually arrives inside one chunk, and stopping at the
+    // 256-byte cap in the same call that decided the line was worth keeping
+    // whole would hand `_count` a truncated record to fail on.
+    void keep(List<int> chunk, int start, int end) {
+      lineLength += end - start;
+      var at = start;
+      while (at < end) {
+        final room = cap - held;
+        if (room <= 0) return;
+        final take = end - at;
+        final n = take < room ? take : room;
+        buffer.setRange(held, held + n, chunk, at);
+        held += n;
+        at += n;
+        // Once the head is long enough to have shown what the record is,
+        // decide whether the body is worth keeping. Only a usage record is.
+        if (!classified && held >= _prefixCap) {
+          classified = true;
+          if (decodeUsage && _containsIn(buffer, held, _usageMarker)) {
+            cap = _lineCap;
+          }
+        }
+      }
+    }
+
+    try {
+      await for (final chunk in file.openRead(from)) {
+        bytesRead += chunk.length;
+        var start = 0;
+        for (var i = 0; i < chunk.length; i++) {
+          if (chunk[i] != _newline) continue;
+          keep(chunk, start, i);
+          consumed += lineLength + 1;
+          _count(buffer, held, counters, decodeUsage: decodeUsage);
+          held = 0;
+          lineLength = 0;
+          cap = _prefixCap;
+          classified = false;
+          start = i + 1;
+        }
+        if (start < chunk.length) keep(chunk, start, chunk.length);
+      }
+      // Whatever is left has no newline after it: a record still being written.
+      // Deliberately not counted as consumed.
+    } catch (_) {
+      return _CodexScan(consumed: consumed, readable: false);
+    }
+    return _CodexScan(consumed: consumed, readable: true);
+  }
+
+  void _count(
+    Uint8List head,
+    int length,
+    CodexStatsCounters counters, {
+    required bool decodeUsage,
+  }) {
+    if (length == 0) return;
+    counters.markTime(_timestampIn(head, length));
+    if (_containsIn(head, length, _userMessageMarker)) {
+      counters.turns++;
+      return;
+    }
+    if (_containsIn(head, length, _agentMessageMarker)) {
+      counters.replies++;
+      return;
+    }
+    for (final marker in _toolCallMarkers) {
+      if (_containsIn(head, length, marker)) {
+        counters.toolCalls++;
+        return;
+      }
+    }
+    if (decodeUsage && _containsIn(head, length, _usageMarker)) {
+      _decodeUsage(Uint8List.sublistView(head, 0, length), counters);
+    }
+  }
+
+  void _decodeUsage(List<int> line, CodexStatsCounters counters) {
+    linesDecoded++;
+    try {
+      final decoded = jsonDecode(utf8.decode(line, allowMalformed: true));
+      if (decoded is! Map) return;
+      final payload = decoded['payload'];
+      if (payload is! Map || payload['type'] != 'token_count') return;
+      _readUsageInfo(payload['info'], counters);
+    } on Object {
+      // A fragment, or a shape we do not know. The tally keeps what it had.
+    }
+  }
+
+  /// The envelope's own `timestamp`, read out of the head without decoding it.
+  static String? _timestampIn(Uint8List head, int length) {
+    final at = _indexIn(head, length, _timestampMarker);
+    if (at < 0) return null;
+    final from = at + _timestampMarker.length;
+    var to = from;
+    while (to < length && head[to] != _quote) {
+      to++;
+    }
+    if (to <= from || to >= length) return null;
+    return String.fromCharCodes(head, from, to);
+  }
+}
+
+/// Bytes of a line kept for classification. The marker this reads never appears
+/// past byte 82 in any of this machine's 51,060 rollout lines, so this is
+/// threefold headroom rather than a guess.
+const int _prefixCap = 256;
+
+/// The most of any one line that is ever held, which is what a usage record
+/// needs (~721 bytes) plus room to grow.
+const int _lineCap = 8 * 1024;
+
+/// Where the backwards search for the newest usage record starts. The last one
+/// in the owner's 120 MB rollout begins 1,282 bytes from EOF.
+const int _tailWindow = 64 * 1024;
+
+/// Where it gives up rather than reading a whole rollout backwards.
+const int _tailWindowCap = 16 * 1024 * 1024;
+
+const int _newline = 0x0A;
+const int _quote = 0x22;
+
+final Uint8List _usageMarker = _bytes('"payload":{"type":"token_count"');
+final Uint8List _userMessageMarker = _bytes('"payload":{"type":"user_message"');
+final Uint8List _agentMessageMarker = _bytes(
+  '"payload":{"type":"agent_message"',
+);
+final List<Uint8List> _toolCallMarkers = [
+  _bytes('"payload":{"type":"function_call"'),
+  _bytes('"payload":{"type":"custom_tool_call"'),
+  _bytes('"payload":{"type":"local_shell_call"'),
+];
+final Uint8List _timestampMarker = _bytes('"timestamp":"');
+
+Uint8List _bytes(String value) => Uint8List.fromList(utf8.encode(value));
+
+bool _matchesAt(List<int> haystack, List<int> needle, int at) {
+  if (at + needle.length > haystack.length) return false;
+  for (var i = 0; i < needle.length; i++) {
+    if (haystack[at + i] != needle[i]) return false;
+  }
+  return true;
+}
+
+/// [needle]'s offset within the first [length] bytes of [haystack], or -1.
+///
+/// Takes a length rather than a view because the scan reuses one buffer: a
+/// `sublist` per line would be the allocation this whole reader avoids.
+int _indexIn(List<int> haystack, int length, List<int> needle) {
+  final last = length - needle.length;
+  for (var i = 0; i <= last; i++) {
+    if (_matchesAt(haystack, needle, i)) return i;
+  }
+  return -1;
+}
+
+bool _containsIn(List<int> haystack, int length, List<int> needle) =>
+    _indexIn(haystack, length, needle) >= 0;
+
+void _readUsageInfo(Object? info, CodexStatsCounters counters) {
+  if (info is! Map) return;
+  final total = info['total_token_usage'];
+  if (total is Map) {
+    counters.inputTokens = _int(total['input_tokens']) ?? counters.inputTokens;
+    counters.cachedInputTokens =
+        _int(total['cached_input_tokens']) ?? counters.cachedInputTokens;
+    counters.cacheWriteTokens =
+        _int(total['cache_write_input_tokens']) ?? counters.cacheWriteTokens;
+    counters.outputTokens =
+        _int(total['output_tokens']) ?? counters.outputTokens;
+    counters.reasoningTokens =
+        _int(total['reasoning_output_tokens']) ?? counters.reasoningTokens;
+  }
+  counters.contextWindow =
+      _int(info['model_context_window']) ?? counters.contextWindow;
+}
+
+int? _int(Object? value) => value is num ? value.toInt() : null;
+
+class _CodexScan {
+  const _CodexScan({required this.consumed, required this.readable});
+
+  final int consumed;
+
+  /// False when the read threw. Its partial answer is still returned, but it is
+  /// not remembered — a locked file gets another chance next time.
+  final bool readable;
 }
 
 /// What each rollout was last seen to say, and how much of it was read.
@@ -126,9 +420,6 @@ class _CodexStatsEntry {
 }
 
 /// The running tally for one rollout.
-///
-/// Public and plain so it can cross an isolate boundary with the scan that
-/// produced it.
 class CodexStatsCounters {
   CodexStatsCounters();
 
@@ -161,8 +452,8 @@ class CodexStatsCounters {
     ..firstAt = firstAt
     ..lastAt = lastAt;
 
-  void markTime(Object? timestamp) {
-    if (timestamp is! String || timestamp.isEmpty) return;
+  void markTime(String? timestamp) {
+    if (timestamp == null || timestamp.isEmpty) return;
     final at = DateTime.tryParse(timestamp)?.toUtc();
     if (at == null) return;
     final first = firstAt, last = lastAt;
@@ -196,127 +487,3 @@ class CodexStatsCounters {
     );
   }
 }
-
-class _CodexScanRequest {
-  const _CodexScanRequest({
-    required this.path,
-    required this.from,
-    required this.counters,
-  });
-
-  final String path;
-  final int from;
-  final CodexStatsCounters counters;
-}
-
-class _CodexScanResult {
-  const _CodexScanResult({
-    required this.counters,
-    required this.consumed,
-    required this.bytesRead,
-    required this.readable,
-  });
-
-  final CodexStatsCounters counters;
-  final int consumed;
-  final int bytesRead;
-
-  /// False when the read threw. Its partial answer is still returned, but it is
-  /// not remembered — a locked file gets another chance next time.
-  final bool readable;
-}
-
-/// One resumable pass over a rollout. Top-level so [Isolate.run] can carry it.
-///
-/// Byte-accurate rather than `LineSplitter`, because the offset to resume from
-/// has to land on a line boundary: a rollout whose last line has no newline yet
-/// is a record the CLI is still flushing, and must be read whole next time.
-Future<_CodexScanResult> _scanCodexRollout(_CodexScanRequest request) async {
-  final counters = request.counters;
-  var consumed = request.from;
-  var bytesRead = 0;
-  var readable = true;
-
-  try {
-    final pending = <int>[];
-    await for (final chunk in File(request.path).openRead(request.from)) {
-      bytesRead += chunk.length;
-      var start = 0;
-      for (var i = 0; i < chunk.length; i++) {
-        if (chunk[i] != 0x0A) continue;
-        pending.addAll(chunk.sublist(start, i));
-        start = i + 1;
-        consumed += pending.length + 1;
-        final line = utf8.decode(pending, allowMalformed: true);
-        pending.clear();
-        if (line.isEmpty) continue;
-        final Map<String, dynamic> json;
-        try {
-          final decoded = jsonDecode(line);
-          if (decoded is! Map<String, dynamic>) continue;
-          json = decoded;
-        } on FormatException {
-          continue;
-        }
-        _countRecord(json, counters);
-      }
-      pending.addAll(chunk.sublist(start));
-    }
-  } catch (_) {
-    readable = false;
-  }
-
-  return _CodexScanResult(
-    counters: counters,
-    consumed: consumed,
-    bytesRead: bytesRead,
-    readable: readable,
-  );
-}
-
-const _toolCallTypes = {
-  'function_call',
-  'custom_tool_call',
-  'local_shell_call',
-};
-
-void _countRecord(Map<String, dynamic> json, CodexStatsCounters counters) {
-  counters.markTime(json['timestamp']);
-  final payload = json['payload'];
-  if (payload is! Map) return;
-  final type = payload['type'];
-
-  switch (json['type']) {
-    case 'event_msg':
-      switch (type) {
-        case 'user_message':
-          counters.turns++;
-        case 'agent_message':
-          counters.replies++;
-        case 'token_count':
-          _countTokens(payload['info'], counters);
-      }
-    case 'response_item':
-      if (_toolCallTypes.contains(type)) counters.toolCalls++;
-  }
-}
-
-void _countTokens(Object? info, CodexStatsCounters counters) {
-  if (info is! Map) return;
-  final total = info['total_token_usage'];
-  if (total is Map) {
-    counters.inputTokens = _int(total['input_tokens']) ?? counters.inputTokens;
-    counters.cachedInputTokens =
-        _int(total['cached_input_tokens']) ?? counters.cachedInputTokens;
-    counters.cacheWriteTokens =
-        _int(total['cache_write_input_tokens']) ?? counters.cacheWriteTokens;
-    counters.outputTokens =
-        _int(total['output_tokens']) ?? counters.outputTokens;
-    counters.reasoningTokens =
-        _int(total['reasoning_output_tokens']) ?? counters.reasoningTokens;
-  }
-  counters.contextWindow =
-      _int(info['model_context_window']) ?? counters.contextWindow;
-}
-
-int? _int(Object? value) => value is num ? value.toInt() : null;
