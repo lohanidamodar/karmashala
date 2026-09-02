@@ -45,7 +45,7 @@ import 'scale_harness.dart';
 /// nothing here flakes at `--concurrency=4`.
 ///
 /// Units, all counted rather than timed, in the shape
-/// `workspace_save_cost_test` and `session_signal_cost_test` established:
+/// `layout_save_cost_test` and `session_signal_cost_test` established:
 ///
 /// * **database statements** — every SELECT, INSERT, UPDATE and DELETE the app
 ///   issues. Synchronous `package:sqlite3` on the UI isolate, so a statement is

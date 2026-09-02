@@ -245,7 +245,7 @@ class AgentMcpSupport {
   ///   Error: Invalid MCP configuration:
   ///   MCP config file not found: `…/karmashala/mcp/session-<uuid>.json`
   ///
-  /// So a workspace stored by the old code has to be repaired on the way in, or
+  /// So a layout stored by the old code has to be repaired on the way in, or
   /// installing the fix leaves every pane the user already had just as broken.
   /// Matched on **our own** value and never on the flag alone: Codex's `-c`
   /// takes any config override, and a user's `-c model=…` is not ours to drop.

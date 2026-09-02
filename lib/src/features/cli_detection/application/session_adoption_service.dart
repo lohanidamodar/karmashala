@@ -155,7 +155,7 @@ class SessionAdoptionService {
   final IdGenerator ids;
   final Clock clock;
 
-  /// Every pane the terminal workspace is tracking. Called once a cycle.
+  /// Every pane the terminal layout is tracking. Called once a cycle.
   final List<AdoptablePane> Function() readPanes;
 
   /// The bottom rows of one pane's screen. Called only on the rationed slot,

@@ -109,7 +109,7 @@ void main() {
   }
 
   group('terminal_open', () {
-    test('a tab appears in the workspace, not somewhere private', () async {
+    test('a tab appears in the layout, not somewhere private', () async {
       expect(state().tabs, isEmpty);
 
       final result = await callTool('terminal_open', {

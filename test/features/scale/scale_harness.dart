@@ -61,7 +61,7 @@ class CountingDatabase extends AppDatabase {
 ///
 /// `mainBuffer` is the scrollback codec's single entry point into the buffer —
 /// it reads the getter once per `encodeScrollback` call — so [bufferReads] is
-/// the encode count, the same unit `workspace_save_cost_test` uses.
+/// the encode count, the same unit `layout_save_cost_test` uses.
 ///
 /// `listeners` is a plain public field on xterm's `Observable`, so the live
 /// listener count needs nothing added to the app to be observed.
@@ -82,7 +82,7 @@ class CountingTerminal extends Terminal {
 /// A scheduler with no clock: it records what was armed and fires it only when
 /// a test says so.
 ///
-/// The same seam `workspace_save_cost_test` records the autosave's cadence
+/// The same seam `layout_save_cost_test` records the autosave's cadence
 /// through, plus the ability to actually run the tick — which is what makes a
 /// soak of a stated length in *app* time cost nothing in wall time.
 class RecordedSchedule {

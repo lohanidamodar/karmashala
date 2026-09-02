@@ -295,7 +295,7 @@ void main() {
 ///
 /// `Terminal.mainBuffer` is the codec's single entry point into the buffer, so
 /// counting reads of it *is* the encode count — the same probe
-/// `workspace_save_cost_test.dart` uses. `charsParsed` is the other half: what
+/// `layout_save_cost_test.dart` uses. `charsParsed` is the other half: what
 /// a new pane had to hand to the VT parser in order to hold its history.
 class _CountingInstance
     implements
