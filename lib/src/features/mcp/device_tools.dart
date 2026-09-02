@@ -4,24 +4,20 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import '../devices/application/device_providers.dart';
-import '../devices/application/ios_device_providers.dart';
-import '../devices/data/adb_service.dart';
-import '../devices/data/simctl_service.dart';
+import '../devices/application/device_fleet.dart';
+import '../devices/domain/device_driver.dart';
 import '../devices/domain/device_input.dart';
+import '../devices/domain/device_target.dart';
 import '../devices/domain/ios_simulator.dart';
-import '../devices/domain/logcat_entry.dart';
-import '../devices/domain/simulator_backend.dart';
 import '../devices/domain/ui_node.dart';
 import '../devices/domain/ui_summary.dart';
-import 'device_targets.dart';
 
 /// An attached Android device, an Android emulator, or an iOS Simulator, as an
 /// agent can drive it end to end: list, boot, install, launch, tap, read back.
 ///
-/// Everything goes through the same `AdbService`, `SimctlService` and
-/// `SimulatorBackend` the device pane uses, so the agent and the person beside
-/// it are looking at and touching one device rather than two views of it.
+/// Everything goes through the same services the device pane uses, so the agent
+/// and the person beside it are looking at and touching one device rather than
+/// two views of it.
 ///
 /// ## One vocabulary, not two
 ///
@@ -33,21 +29,28 @@ import 'device_targets.dart';
 /// give nothing away: `emulator-5554` and `70592006-11CD-…` are both just
 /// strings that came out of `list_devices`.
 ///
-/// So there is one family, the id is the discriminator, and
-/// [DeviceTargetResolver] does the dispatch once. An agent pastes back whatever
-/// `list_devices` gave it. Every existing Android caller keeps working
-/// unchanged, because an Android serial still resolves to exactly what it
-/// always did and the Android code paths below are the ones that were already
-/// here.
+/// So there is one family, the id is the discriminator, and `DeviceFleet` does
+/// the dispatch. Every existing Android caller keeps working unchanged, because
+/// an Android serial still resolves to exactly what it always did.
 ///
-/// ## Coordinate spaces are not the same on both platforms, and it matters
+/// ## Nothing in this file knows what kind of device it is holding
 ///
-/// Android reports and accepts **device pixels**. WebDriverAgent reports
-/// element frames and accepts taps in **points** — an iPhone 17 Pro is 402x874
-/// points on a 1206x2622 pixel screen. Multiplying by the wrong one puts a tap
-/// three times too far down and to the right, off the screen, while the call
-/// still reports success. Every listing and every tap reply below therefore
-/// names its own space, and [_ScreenRead.space] carries it.
+/// Every handler below resolves a [DeviceDriver] and then speaks only that
+/// interface. There is no `if (isSimulator)` here, and adding one would be the
+/// bug: the engine behind a simulator has already been swapped once — idb out,
+/// WebDriverAgent in — and a `CoreSimulator` or `pymobiledevice3` driver should
+/// cost this file nothing. The only place that names a platform is
+/// `list_devices`, which is a *listing* and whose whole job is to say which is
+/// which.
+///
+/// ## A tool never pretends
+///
+/// Two mechanisms, both of them checked here before anything is attempted:
+/// [DeviceCapability], for what a driver cannot do at all, and [DeviceRefusal],
+/// for what it cannot do with these particular arguments. Either way the caller
+/// gets a sentence naming the device, the thing that is missing, and what still
+/// works. An agent has no eyes, so a verb that quietly does nothing reads to it
+/// as a verb that worked.
 ///
 /// Lifted out of `LauncherControlServer` unchanged. It was the largest family
 /// still inline there, and the seam was already drawn — the terminal, browser,
@@ -112,7 +115,9 @@ class DeviceControlTools {
           index: (args['index'] as num?)?.round(),
         ),
         'device_stop_emulator' => _deviceStopEmulator(_id(args)),
-        'device_boot' => _deviceBoot(_id(args) ?? args['name'] as String?),
+        'device_boot' => _deviceBoot(
+          (args['name'] as String?) ?? _id(args),
+        ),
         'device_install_app' => _deviceInstallApp(
           id: _id(args),
           path: args['path'] as String?,
@@ -136,70 +141,41 @@ class DeviceControlTools {
   /// caller passes and cannot change; `udid` is what `list_devices` calls a
   /// simulator's id and therefore the word an agent has in front of it when it
   /// writes the next call. Accepting both costs one line and removes a class of
-  /// "I copied the field name from your own output and you rejected it".
+  /// "I copied the field name out of your own output and you rejected it".
   static String? _id(Map<String, dynamic> args) =>
       (args['serial'] ?? args['udid'] ?? args['device']) as String?;
 
-  DeviceTargetResolver _resolver() => DeviceTargetResolver(
-    adb: _container.read(adbServiceProvider),
-    simctl: _container.read(simctlServiceProvider),
-  );
+  DeviceFleet _fleet() => _container.read(deviceFleetProvider);
 
-  AdbService _requireAdb() {
-    final adb = _container.read(adbServiceProvider);
-    if (adb == null) {
-      throw StateError(
-        'No Android SDK found. Set ANDROID_HOME or install the SDK to the '
-        r'default location (%LOCALAPPDATA%\Android\Sdk).',
-      );
-    }
-    return adb;
-  }
+  /// The driver for this call, or a refusal naming the device.
+  Future<DeviceDriver> _driver(String? id, String verb) =>
+      _fleet().driverFor(id, verb: verb);
 
-  SimctlService _requireSimctl() {
-    final simctl = _container.read(simctlServiceProvider);
-    if (simctl == null) {
-      throw StateError(
-        'iOS Simulators need macOS with Xcode installed, and this host is not '
-        'one.',
-      );
-    }
-    return simctl;
-  }
-
-  /// The thing that can actually touch a simulator, or a refusal that says
-  /// exactly what is missing and what still works without it.
+  /// The driver for this call, having first established that it can do the
+  /// thing about to be asked of it.
   ///
-  /// `simctl` genuinely has no touch injection and no way to read the element
-  /// tree — that is not a gap in this app, it is the boundary of the tool — so
-  /// a build assembled without `tool/vendor/fetch_wda.sh` can manage a
-  /// simulator completely and drive it not at all. Listing what survives is the
-  /// difference between an agent rerouting and an agent concluding that iOS is
-  /// unsupported.
-  SimulatorBackend _requireBackend(String verb) {
-    final backend = _container.read(simulatorBackendProvider);
-    if (backend == null) {
-      throw StateError(
-        '$verb cannot drive an iOS simulator in this build: it ships no '
-        'WebDriverAgent, and simctl on its own has no touch injection and no '
-        'way to read the screen. Still available for simulators: '
-        'list_devices, device_boot, device_stop_emulator, device_screenshot, '
-        'device_logcat, device_install_app, device_launch_app and '
-        'device_terminate_app. Run tool/vendor/fetch_wda.sh and rebuild to get '
-        'taps, typing and the element tree.',
+  /// Checked up front rather than left to fail inside the driver, so the
+  /// refusal names the capability that is missing and what still works — the
+  /// driver's own error would name whatever step happened to fall over first.
+  Future<DeviceDriver> _driverThatCan(
+    String? id,
+    String verb,
+    DeviceCapability capability,
+  ) async {
+    final driver = await _driver(id, verb);
+    if (!driver.can(capability)) {
+      throw DeviceRefusal(
+        '$verb: ${driver.missingReason(capability)!}',
       );
     }
-    return backend;
+    return driver;
   }
-
-  /// Resolves which device to act on. With exactly one ready device — of
-  /// either platform — the id can be omitted, which is what a caller will want
-  /// almost every time.
-  Future<DeviceTarget> _resolveDevice(String? id, String verb) =>
-      _resolver().require(id, verb: verb);
 
   // ---------------------------------------------------------------------------
   // Listing
+  //
+  // The one handler that names platforms, because saying which is which is its
+  // entire job.
   // ---------------------------------------------------------------------------
 
   /// How many simulators to list before saying "there are more".
@@ -212,91 +188,92 @@ class DeviceControlTools {
   static const int _simulatorListLimit = 40;
 
   Future<Object?> _listDevices(int? limit) async {
-    final adb = _container.read(adbServiceProvider);
-    final simctl = _container.read(simctlServiceProvider);
+    final fleet = _fleet();
+    final android = await fleet.androidTargets();
+    final simulators = await fleet.simulatorTargets();
+    final avds = await fleet.avds();
 
-    // Not `_requireAdb()`. list_devices used to throw when no Android SDK was
-    // found, which on a Mac with Xcode and no SDK meant an agent could never
-    // discover the simulators sitting right there — the one tool whose job is
-    // to say what exists refused to say anything. A missing SDK is now a note
-    // beside an empty Android list.
-    final devices = adb == null ? const [] : await adb.listDevices();
-    final avds = adb == null ? const [] : await adb.listAvds();
-
-    final simulators = simctl == null
-        ? const <IosSimulator>[]
-        : await simctl.listSimulators();
     final booted = [
-      for (final simulator in simulators)
-        if (simulator.state.isReady || simulator.state == SimulatorState.booting)
-          simulator,
+      for (final target in simulators)
+        if (target.isReady ||
+            target.simulator.state == SimulatorState.booting)
+          target,
     ];
     final bootable =
         [
-          for (final simulator in simulators)
-            if (!booted.contains(simulator) &&
-                simulator.isAvailable &&
-                simulator.state == SimulatorState.shutdown)
-              simulator,
+          for (final target in simulators)
+            if (!booted.contains(target) &&
+                target.simulator.isAvailable &&
+                target.simulator.state == SimulatorState.shutdown)
+              target,
         ]..sort((a, b) {
-          final runtime = b.runtime.compareTo(a.runtime);
-          return runtime != 0 ? runtime : a.name.compareTo(b.name);
+          final runtime = b.simulator.runtime.compareTo(a.simulator.runtime);
+          return runtime != 0
+              ? runtime
+              : a.simulator.name.compareTo(b.simulator.name);
         });
     final cap = (limit ?? _simulatorListLimit).clamp(1, 1000);
-    final shownBootable = bootable.take((cap - booted.length).clamp(0, cap));
+    final shown = bootable.take((cap - booted.length).clamp(0, cap)).toList();
 
     return {
       'devices': [
-        for (final device in devices)
+        for (final target in android)
           {
-            'serial': device.serial,
-            'name': device.displayName,
+            'serial': target.id,
+            'name': target.label,
             'platform': 'android',
-            'state': device.state.name,
-            'ready': device.isReady,
-            'emulator': device.isEmulator,
-            'environmentId': device.environmentId,
-            if (device.isReady)
-              'screenSize': (await adb!.screenSize(device.serial))?.toString(),
-            if (device.isReady) 'coordinateSpace': 'device px',
+            'state': target.device.state.name,
+            'ready': target.isReady,
+            'emulator': target.device.isEmulator,
+            'environmentId': target.device.environmentId,
+            if (target.isReady) ...{
+              'screenSize': (await fleet.adb!.screenSize(target.id))?.toString(),
+              'coordinateSpace': CoordinateSpace.devicePixels.label,
+            },
           },
       ],
       'avds': [
         for (final avd in avds) {'name': avd.name, 'running': avd.isRunning},
       ],
       'simulators': [
-        for (final simulator in [...booted, ...shownBootable])
+        for (final target in [...booted, ...shown])
           {
-            'udid': simulator.udid,
-            'name': simulator.name,
+            'udid': target.id,
+            'name': target.simulator.name,
             'platform': 'ios',
-            'runtime': simulator.runtimeName,
-            'state': simulator.state.name,
-            'running': simulator.state.isReady,
-            'available': simulator.isAvailable,
-            if (simulator.state.isReady)
-              'screenSizePixels': (await simctl!.screenSize(
-                simulator.udid,
+            'runtime': target.simulator.runtimeName,
+            'state': target.simulator.state.name,
+            'running': target.isReady,
+            'available': target.simulator.isAvailable,
+            if (target.isReady) ...{
+              'screenSizePixels': (await fleet.simctl!.screenSize(
+                target.id,
               ))?.toString(),
-            // Named rather than measured. Asking WebDriverAgent for the point
-            // size means installing and launching the runner inside the
-            // simulator, which is seconds of work and a foreground app change —
-            // far too much for a listing. device_ui_dump reports it, and its
-            // coordinates are already in the right space.
-            if (simulator.state.isReady) 'coordinateSpace': 'points',
+              // Named rather than measured. Asking the backend for the point
+              // size means installing and launching a runner inside the
+              // simulator — seconds of work and a foreground app change, far
+              // too much for a listing. device_ui_dump reports it, and its
+              // coordinates are already in the right space.
+              'coordinateSpace': CoordinateSpace.points.label,
+            },
           },
       ],
-      if (bootable.length > shownBootable.length)
+      if (bootable.length > shown.length)
         'simulatorsNotShown':
-            '${bootable.length - shownBootable.length} more simulators are '
-            'installed and bootable but not listed. Raise limit, or name one '
-            'directly: device_boot accepts a simulator name as well as a udid.',
-      if (adb == null)
+            '${bootable.length - shown.length} more simulators are installed '
+            'and bootable but not listed. Raise limit, or name one directly: '
+            'device_boot accepts a simulator name as well as a udid.',
+      // list_devices used to throw when no Android SDK was found, which on a
+      // Mac with Xcode and no SDK meant an agent could never discover the
+      // simulators sitting right there — the one tool whose job is to say what
+      // exists refused to say anything. A missing SDK is now a note beside an
+      // empty list.
+      if (fleet.adb == null)
         'androidNote':
             'No Android SDK was found, so no Android device or emulator could '
             r'be listed. Set ANDROID_HOME (or install to %LOCALAPPDATA%\'
             'Android\\Sdk on Windows, ~/Library/Android/sdk on macOS).',
-      if (simctl == null)
+      if (fleet.simctl == null)
         'iosNote':
             'iOS Simulators need macOS with Xcode, and this host is not one.',
     };
@@ -307,56 +284,54 @@ class DeviceControlTools {
   // ---------------------------------------------------------------------------
 
   Future<Object?> _deviceScreenshot(String? id) async {
-    final target = await _resolveDevice(id, 'device_screenshot');
+    final driver = await _driverThatCan(
+      id,
+      'device_screenshot',
+      DeviceCapability.screenshot,
+    );
+    final shot = await driver.screenshot();
     final file = File(
       p.join(
         Directory.systemTemp.path,
-        'karmashala_${target.id}_'
+        'karmashala_${driver.target.id}_'
             '${DateTime.now().millisecondsSinceEpoch}.png',
       ),
     );
+    await file.writeAsBytes(shot.bytes, flush: true);
 
-    final String note;
-    switch (target) {
-      case AndroidTarget():
-        final adb = _requireAdb();
-        final bytes = await adb.screenshot(target.id);
-        await file.writeAsBytes(bytes, flush: true);
-        final size = await adb.screenSize(target.id);
-        note =
-            'Screenshot of ${target.label} (${target.id})'
-            '${size == null ? '' : ', screen $size device px'}. '
-            'Saved to ${file.path}. Tap coordinates are in device pixels.';
-        return _screenshotContent(bytes, note);
-      case SimulatorTarget():
-        final simctl = _requireSimctl();
-        final bytes = await simctl.screenshot(target.id, hostPath: file.path);
-        final pixels = await simctl.screenSize(target.id);
-        // The warning is the point of this branch. `simctl` captures the
-        // backing store in pixels, WebDriverAgent takes taps in points, and on
-        // a 3x phone the two differ by a factor of three — a coordinate read
-        // off this image and handed to device_tap lands off the bottom of the
-        // screen while the call reports success.
-        note =
-            'Screenshot of ${target.label} (${target.id})'
-            '${pixels == null ? '' : ', $pixels pixels'}. '
-            'Saved to ${file.path}. WARNING: this image is in PIXELS, but '
-            'device_tap on a simulator takes POINTS — on a 3x device they '
-            'differ by a factor of three. Use device_ui_dump or '
-            'device_tap_element, whose coordinates are already in points, '
-            'rather than measuring off this picture.';
-        return _screenshotContent(bytes, note);
-    }
+    // The warning is the whole reason DeviceScreenshot carries two spaces. On a
+    // simulator the capture is the pixel backing store and the tap is in
+    // points; a coordinate measured off this image and handed to device_tap
+    // lands off the bottom of the screen while the call reports success.
+    final spaces = shot.spacesAgree
+        ? 'Tap coordinates are in ${shot.tapSpace.label}, the same space as '
+              'this image.'
+        : 'WARNING: this image is in ${shot.imageSpace.label}, but device_tap '
+              'on this device takes ${shot.tapSpace.label} — on a 3x display '
+              'they differ by a factor of three. Use device_ui_dump or '
+              'device_tap_element, whose coordinates are already in '
+              '${shot.tapSpace.label}, rather than measuring off this picture.';
+
+    // Returned as MCP content blocks so the model actually sees the image
+    // instead of a wall of base64 in a JSON string.
+    return {
+      '_mcpContent': [
+        {
+          'type': 'image',
+          'data': base64Encode(shot.bytes),
+          'mimeType': 'image/png',
+        },
+        {
+          'type': 'text',
+          'text':
+              'Screenshot of ${driver.target.label} (${driver.target.id})'
+              '${shot.size == null ? '' : ', ${shot.size} '
+                        '${shot.imageSpace.label}'}. '
+              'Saved to ${file.path}. $spaces',
+        },
+      ],
+    };
   }
-
-  /// Returned as MCP content blocks so the model actually sees the image
-  /// instead of a wall of base64 in a JSON string.
-  Object _screenshotContent(List<int> bytes, String note) => {
-    '_mcpContent': [
-      {'type': 'image', 'data': base64Encode(bytes), 'mimeType': 'image/png'},
-      {'type': 'text', 'text': note},
-    ],
-  };
 
   // ---------------------------------------------------------------------------
   // Touching one
@@ -364,31 +339,33 @@ class DeviceControlTools {
 
   Future<Object?> _deviceTap(String? id, int? x, int? y) async {
     if (x == null || y == null) throw ArgumentError('x and y are required.');
-    final target = await _resolveDevice(id, 'device_tap');
-    switch (target) {
-      case AndroidTarget():
-        await _requireAdb().tap(target.id, x, y);
-      case SimulatorTarget():
-        await _requireBackend('device_tap').tap(target.id, x, y);
-    }
+    final driver = await _driverThatCan(
+      id,
+      'device_tap',
+      DeviceCapability.input,
+    );
+    await driver.tap(x, y);
     return {
       'tapped': '($x, $y)',
-      'serial': target.id,
-      'platform': target.platform.name,
-      'coordinateSpace': _spaceOf(target),
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+      'coordinateSpace': driver.coordinateSpace.label,
     };
   }
 
   Future<Object?> _deviceType(String? id, String? text) async {
     if (text == null) throw ArgumentError('text is required.');
-    final target = await _resolveDevice(id, 'device_type');
-    switch (target) {
-      case AndroidTarget():
-        await _requireAdb().inputText(target.id, text);
-      case SimulatorTarget():
-        await _requireBackend('device_type').inputText(target.id, text);
-    }
-    return {'typed': text, 'serial': target.id, 'platform': target.platform.name};
+    final driver = await _driverThatCan(
+      id,
+      'device_type',
+      DeviceCapability.input,
+    );
+    await driver.type(text);
+    return {
+      'typed': text,
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+    };
   }
 
   Future<Object?> _deviceKey(String? id, String? key) async {
@@ -400,85 +377,17 @@ class DeviceControlTools {
         '${DeviceKey.values.map((k) => k.name).join(', ')}.',
       );
     }
-    final target = await _resolveDevice(id, 'device_key');
-    switch (target) {
-      case AndroidTarget():
-        await _requireAdb().pressKey(target.id, parsed);
-        return {'pressed': parsed.name, 'serial': target.id};
-      case SimulatorTarget():
-        return _simulatorKey(target, parsed);
-    }
-  }
-
-  /// [DeviceKey] on a simulator, refusing the ones iOS does not have.
-  ///
-  /// Three groups, and the split is the whole content of this method:
-  ///
-  /// * **Buttons the hardware has.** home and power (lock) map onto
-  ///   [SimulatorButton] and go through the backend.
-  /// * **Keyboard keys.** enter, tab and delete are not buttons at all — they
-  ///   are characters the iOS keyboard produces, and XCUITest types them as
-  ///   `\n`, `\t` and `\b` through the same `/wda/keys` route ordinary text
-  ///   takes. Routing them there is what lets "type a query, press enter" work.
-  /// * **Buttons iOS does not have.** back, recents and the volume rocker.
-  ///   [SimulatorButton.forDeviceKey] returns null for these deliberately: iOS
-  ///   has no system back button (an app draws its own), the app switcher is a
-  ///   system gesture WebDriverAgent's synthesized touches never reach — see
-  ///   the long note in `simulator_backend.dart` — and WDA exposes no volume
-  ///   control. Each is refused by name with what to do instead, because the
-  ///   alternative is pressing a plausible substitute and reporting success.
-  Future<Object?> _simulatorKey(SimulatorTarget target, DeviceKey key) async {
-    final backend = _requireBackend('device_key');
-    const keyboard = <DeviceKey, String>{
-      DeviceKey.enter: '\n',
-      DeviceKey.tab: '\t',
-      DeviceKey.delete: '',
+    final driver = await _driverThatCan(id, 'device_key', DeviceCapability.keys);
+    // The driver refuses the individual keys its device does not have. That is
+    // per-key rather than a capability because a device with *some* of them is
+    // the normal case — see SimulatorDeviceDriver.pressKey.
+    final press = await driver.pressKey(parsed);
+    return {
+      'pressed': press.key.name,
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+      'as': press.how,
     };
-    final button = SimulatorButton.forDeviceKey(key);
-    if (button != null) {
-      await backend.pressButton(target.id, button);
-      return {
-        'pressed': key.name,
-        'serial': target.id,
-        'platform': 'ios',
-        'as': 'the ${button.name} button',
-      };
-    }
-    if (keyboard[key] case final character?) {
-      await backend.inputText(target.id, character);
-      return {
-        'pressed': key.name,
-        'serial': target.id,
-        'platform': 'ios',
-        'as':
-            'the keyboard key, typed into the focused field — iOS has no '
-            'hardware ${key.name}. Tap a field first if nothing has focus.',
-      };
-    }
-    throw StateError(
-      switch (key) {
-        DeviceKey.back =>
-          'iOS has no system back button, so device_key(back) has nothing to '
-              'press on ${target.label}. Apps draw their own — find it with '
-              'device_find_elements(text: "Back") and tap it, or use '
-              'device_key(home) to leave the app.',
-        DeviceKey.recents =>
-          'device_key(recents) cannot open the iOS app switcher. It is a '
-              'system gesture, and WebDriverAgent\'s synthesized touches are '
-              'delivered into the foreground application, so they never reach '
-              'SpringBoard — tested against a real device and confirmed by '
-              'screenshot. Use device_key(home) and launch the other app with '
-              'device_launch_app.',
-        DeviceKey.volumeUp || DeviceKey.volumeDown =>
-          'WebDriverAgent exposes no volume control on a simulator, so '
-              'device_key(${key.name}) cannot be honoured on ${target.label}. '
-              'home and power are the two hardware buttons it can press.',
-        _ =>
-          'device_key(${key.name}) has no iOS equivalent on ${target.label}. '
-              'home and power are the hardware buttons; enter, tab and delete '
-              'go to the keyboard.',
-      },
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -491,93 +400,22 @@ class DeviceControlTools {
     String? level,
     int? lines,
   }) async {
-    final target = await _resolveDevice(id, 'device_logcat');
-    switch (target) {
-      case AndroidTarget():
-        final minLevel = _parseLogLevel(level) ?? LogLevel.verbose;
-        final entries = await _requireAdb().readLogcat(
-          target.id,
-          packageName: packageName,
-          minLevel: minLevel,
-          maxLines: lines ?? 200,
-        );
-        if (entries.isEmpty && packageName != null) {
-          return {
-            'serial': target.id,
-            'package': packageName,
-            'lines': <String>[],
-            'note': 'No output — $packageName does not appear to be running.',
-          };
-        }
-        return {
-          'serial': target.id,
-          'package': ?packageName,
-          'lines': [for (final entry in entries) entry.toString()],
-        };
-      case SimulatorTarget():
-        return _simulatorLog(target, packageName: packageName, level: level, lines: lines);
-    }
-  }
-
-  /// `device_logcat` against a simulator, over `simctl spawn <udid> log show`.
-  ///
-  /// Wired rather than refused: iOS does have a device log, this app already
-  /// reads it for the log panel, and "no iOS equivalent" would have been a
-  /// convenient falsehood. What it is *not* is logcat, and the two differences
-  /// that would silently mislead a caller are handled explicitly.
-  ///
-  /// **level is refused, not ignored.** `log show --style compact` labels lines
-  /// with its own type letters, which are not Android's verbose/debug/info/
-  /// warn/error ladder — `Default`, `Info`, `Debug`, `Error`, `Fault`. Mapping
-  /// "warning" onto that means choosing which lines to throw away on the
-  /// caller's behalf and being wrong about it, so it says so instead.
-  ///
-  /// **package is a substring match, and the reply says so.** There is no
-  /// per-bundle-id filter to pass along; the process name appears in the line,
-  /// so filtering here does something useful and predictable, but calling it a
-  /// package filter would overstate it.
-  Future<Object?> _simulatorLog(
-    SimulatorTarget target, {
-    String? packageName,
-    String? level,
-    int? lines,
-  }) async {
-    if (level != null && level.trim().isNotEmpty) {
-      throw ArgumentError(
-        'device_logcat cannot filter a simulator log by level. iOS labels each '
-        'line Default/Info/Debug/Error/Fault, which is not Android\'s '
-        'verbose→fatal ladder, and mapping "$level" onto it would quietly drop '
-        'lines you asked for. Drop level, or pass package to narrow by text.',
-      );
-    }
-    final maxLines = lines ?? 200;
-    final all = await _requireSimctl().readLog(target.id, lines: maxLines);
-    if (packageName == null || packageName.trim().isEmpty) {
-      return {
-        'serial': target.id,
-        'platform': 'ios',
-        'lines': all,
-        'note':
-            'The whole device log for the last 5 minutes, newest last — every '
-            'process on the simulator, not one app. Pass package to narrow it.',
-      };
-    }
-    final needle = packageName.trim().toLowerCase();
-    final matched = [
-      for (final line in all)
-        if (line.toLowerCase().contains(needle)) line,
-    ];
+    final driver = await _driverThatCan(
+      id,
+      'device_logcat',
+      DeviceCapability.logs,
+    );
+    final read = await driver.readLog(
+      filter: packageName,
+      level: level,
+      lines: lines ?? 200,
+    );
     return {
-      'serial': target.id,
-      'platform': 'ios',
-      'package': packageName,
-      'lines': matched,
-      'note':
-          'iOS has no per-bundle-id log filter, so "$packageName" was matched '
-          'as a plain substring of each line (the process name is in there). '
-          '${matched.length} of ${all.length} lines from the last 5 minutes '
-          'matched${matched.isEmpty ? ' — the app may not be running, or may '
-                    'log under a different process name' : ''}.',
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+      'package': ?packageName,
+      'lines': read.lines,
+      'note': ?read.note,
     };
   }
 
@@ -585,19 +423,6 @@ class DeviceControlTools {
   // Lifecycle: boot, install, launch, terminate, stop
   // ---------------------------------------------------------------------------
 
-  /// Starts a virtual device and waits until it can actually be talked to.
-  ///
-  /// Takes a **name or an id**, because the two platforms name the thing you
-  /// boot differently and neither name is the one you drive afterwards. An AVD
-  /// is booted by name and then answers to `emulator-5554`; a simulator is
-  /// booted by udid and keeps it. Accepting an AVD name, a udid, or a
-  /// simulator's own name means an agent can act on a task description
-  /// ("start an iPhone 17 Pro") without a lookup step, and the reply always
-  /// carries the id every other tool wants.
-  ///
-  /// Booted through the same providers the pane uses, not straight through
-  /// `simctl`: that is what makes the device the agent started the device the
-  /// person watching is shown, and it is what applies their slimming setting.
   Future<Object?> _deviceBoot(String? name) async {
     if (name == null || name.trim().isEmpty) {
       throw ArgumentError(
@@ -605,160 +430,19 @@ class DeviceControlTools {
         'simulator name. list_devices shows all three.',
       );
     }
-    final wanted = name.trim();
-    final resolver = _resolver();
-    final existing = await resolver.find(wanted);
-
-    switch (existing) {
-      case SimulatorTarget():
-        return _bootSimulator(existing);
-      case AndroidTarget():
-        // The id already names a device adb can see, so it is up. Booting is a
-        // request for a state, and it is in it.
-        return {
-          'serial': existing.id,
-          'platform': 'android',
-          'booted': existing.isReady,
-          'note': existing.isReady
-              ? '${existing.id} is already running.'
-              : 'was already running but is ${existing.device.state.name}: '
-                    '${existing.notReadyReason}',
-        };
-      case null:
-        break;
-    }
-
-    // Not a device, so it may be an AVD — which is a name in a different
-    // namespace from every serial and udid above, and only exists while
-    // stopped.
-    final adb = _container.read(adbServiceProvider);
-    if (adb != null) {
-      final avds = await adb.listAvds();
-      for (final avd in avds) {
-        if (avd.name != wanted) continue;
-        if (avd.runningSerial case final serial?) {
-          return {
-            'serial': serial,
-            'platform': 'android',
-            'booted': true,
-            'note': '$wanted is already running as $serial.',
-          };
-        }
-        final serial = await adb.bootAvdAndWait(wanted, headless: true);
-        _container.invalidate(devicesProvider);
-        _container.invalidate(avdsProvider);
-        return {
-          'serial': serial,
-          'name': wanted,
-          'platform': 'android',
-          'booted': true,
-          'note':
-              'Booted headless — it has no window of its own. Use '
-              'device_screenshot and device_ui_dump to see it.',
-        };
-      }
-    }
-    throw StateError(
-      'Nothing bootable is called "$wanted". '
-      '${await _bootableSummary(resolver, adb)}',
-    );
-  }
-
-  Future<Object?> _bootSimulator(SimulatorTarget target) async {
-    if (!target.simulator.isAvailable) {
-      throw StateError(
-        '${target.label} cannot be booted: its runtime '
-        '(${target.simulator.runtimeName}) is not installed. Install it in '
-        'Xcode, or boot a simulator list_devices reports as available.',
-      );
-    }
-    if (target.isReady) {
-      return {
-        'udid': target.id,
-        'serial': target.id,
-        'name': target.simulator.name,
-        'platform': 'ios',
-        'booted': true,
-        'note': '${target.label} is already booted.',
-      };
-    }
-    final transitions = _container.read(simulatorTransitionsProvider.notifier);
-    // The notifier returns silently when a boot is already in flight for this
-    // udid, which for the UI is right — a second click on a spinning button is
-    // nothing — but for a tool it would be a call that reported success having
-    // done nothing at all.
-    if (transitions.isBusy(target.id)) {
-      throw StateError(
-        '${target.label} is already being started or stopped by this app. Wait '
-        'for that to finish, then call list_devices to see where it got to.',
-      );
-    }
-    await transitions.boot(target.id);
-    final booted = await _resolver().find(target.id);
+    final booted = await _fleet().boot(name.trim());
     return {
-      'udid': target.id,
-      'serial': target.id,
-      'name': target.simulator.name,
-      'platform': 'ios',
-      'booted': booted?.isReady ?? false,
-      'state': switch (booted) {
-        SimulatorTarget(simulator: final s) => s.state.name,
-        _ => 'unknown',
-      },
-      'note':
-          'Booted headless — simctl opens no window, and this pane mirrors it. '
-          'Coordinates for device_tap on this device are in POINTS; '
-          'device_ui_dump reports them in the right space.',
+      // Both spellings, because the id is what every following call needs and
+      // an agent should not have to know which key its platform uses.
+      'serial': booted.id,
+      if (booted.platform == DevicePlatform.ios) 'udid': booted.id,
+      'name': booted.name,
+      'platform': booted.platform.name,
+      'booted': booted.booted,
+      'note': booted.note,
     };
   }
 
-  Future<String> _bootableSummary(
-    DeviceTargetResolver resolver,
-    AdbService? adb,
-  ) async {
-    final parts = <String>[];
-    if (adb == null) {
-      parts.add('There is no Android SDK here, so there are no AVDs.');
-    } else {
-      final stopped = [
-        for (final avd in await adb.listAvds())
-          if (!avd.isRunning) avd.name,
-      ];
-      parts.add(
-        stopped.isEmpty
-            ? 'No stopped AVDs.'
-            : 'AVDs: ${stopped.take(20).join(', ')}'
-                  '${stopped.length > 20 ? ', …' : ''}.',
-      );
-    }
-    final simulators = await resolver.simulatorTargets();
-    final bootable = [
-      for (final target in simulators)
-        if (target.simulator.isAvailable &&
-            target.simulator.state == SimulatorState.shutdown)
-          target.label,
-    ];
-    parts.add(
-      bootable.isEmpty
-          ? 'No bootable simulators.'
-          : '${bootable.length} bootable simulators, e.g. '
-                '${bootable.take(6).join(', ')}. Call list_devices for the '
-                'rest.',
-    );
-    return parts.join(' ');
-  }
-
-  /// Installs a build onto a device or simulator.
-  ///
-  /// The half of the loop that was missing. An agent could tap and read a
-  /// screen but could not put its own build in front of itself, which made the
-  /// whole surface useful only for apps somebody had already installed by hand.
-  ///
-  /// The artifact kinds are checked here rather than left to the tool
-  /// underneath, because both tools fail obscurely on the other platform's
-  /// file: `adb install` on a `.app` directory reports a parse failure, and
-  /// `simctl install` on an `.ipa` reports an architecture mismatch. Neither
-  /// says "you gave this to the wrong device", which is the actual mistake.
   Future<Object?> _deviceInstallApp({String? id, String? path}) async {
     if (path == null || path.trim().isEmpty) {
       throw ArgumentError(
@@ -766,86 +450,19 @@ class DeviceControlTools {
         'iOS.',
       );
     }
-    final artifact = path.trim();
-    final lower = artifact.toLowerCase();
-    final target = await _resolveDevice(id, 'device_install_app');
-
-    switch (target) {
-      case AndroidTarget():
-        if (lower.endsWith('.app') || lower.endsWith('.ipa')) {
-          throw ArgumentError(
-            '$artifact is an iOS build, and ${target.id} is an Android device. '
-            'Give an .apk, or install this onto a simulator — list_devices '
-            'shows which are booted.',
-          );
-        }
-        if (!lower.endsWith('.apk')) {
-          throw ArgumentError(
-            'device_install_app installs an .apk on Android, and $artifact is '
-            'not one. Split builds (.aab, .apks) have to be turned into an APK '
-            'first — bundletool build-apks, then install the universal APK.',
-          );
-        }
-        await _requireAdb().installApk(target.id, artifact);
-        return {
-          'serial': target.id,
-          'platform': 'android',
-          'installed': artifact,
-          'note':
-              'Launch it with device_launch_app(appId: "<applicationId>"). '
-              'adb does not report the package name an APK declares, so pass '
-              'the applicationId from the build — this tool cannot infer it.',
-        };
-      case SimulatorTarget():
-        if (lower.endsWith('.apk')) {
-          throw ArgumentError(
-            '$artifact is an Android build, and ${target.label} is an iOS '
-            'simulator. Give a simulator .app bundle, or install this onto an '
-            'Android device.',
-          );
-        }
-        if (lower.endsWith('.ipa')) {
-          throw ArgumentError(
-            'simctl cannot install an .ipa. An .ipa carries the device slice '
-            '(arm64 built against the iOS SDK) and a simulator needs the '
-            'simulator slice — they are different binaries, not different '
-            'packaging. Build for the simulator '
-            '(flutter build ios --simulator, or xcodebuild -sdk '
-            'iphonesimulator) and pass the .app.',
-          );
-        }
-        if (!lower.endsWith('.app')) {
-          throw ArgumentError(
-            'device_install_app installs a .app bundle on a simulator, and '
-            '$artifact is not one.',
-          );
-        }
-        // simctl is always local — it only exists on this Mac — so the
-        // filesystem here is the filesystem it will look at, and checking
-        // first turns "The application at … could not be opened" into a
-        // sentence about the path that was actually passed.
-        if (!Directory(artifact).existsSync()) {
-          throw ArgumentError(
-            'There is no .app bundle at $artifact. A .app is a directory, not '
-            'a file — check the path, and note that a Flutter simulator build '
-            'lands in build/ios/iphonesimulator/Runner.app.',
-          );
-        }
-        final simctl = _requireSimctl();
-        await simctl.installApp(target.id, artifact);
-        final bundleId = await simctl.readAppBundleId(artifact);
-        return {
-          'udid': target.id,
-          'serial': target.id,
-          'platform': 'ios',
-          'installed': artifact,
-          'bundleId': ?bundleId,
-          'note': bundleId == null
-              ? 'Could not read CFBundleIdentifier out of the bundle, so '
-                    'device_launch_app needs the bundle id from you.'
-              : 'Launch it with device_launch_app(appId: "$bundleId").',
-        };
-    }
+    final driver = await _driverThatCan(
+      id,
+      'device_install_app',
+      DeviceCapability.installApp,
+    );
+    final installed = await driver.installApp(path.trim());
+    return {
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+      'installed': installed.path,
+      'appId': ?installed.appId,
+      'note': ?installed.note,
+    };
   }
 
   Future<Object?> _deviceLaunchApp({
@@ -860,73 +477,41 @@ class DeviceControlTools {
         'iOS bundle id (com.example.App).',
       );
     }
-    final app = appId.trim();
-    final target = await _resolveDevice(id, 'device_launch_app');
-    switch (target) {
-      case AndroidTarget():
-        final adb = _requireAdb();
-        if (activity != null && activity.trim().isNotEmpty) {
-          await adb.startActivity(target.id, app, activity.trim());
-        } else {
-          await adb.launchPackage(target.id, app);
-        }
-        return {
-          'serial': target.id,
-          'platform': 'android',
-          'launched': app,
-          'activity': ?activity,
-          'note':
-              'Give it a moment to draw, then read it with device_ui_dump.'
-              '${relaunch ? ' (relaunch is an iOS-only option and was ignored '
-                        'here — on Android, device_terminate_app then '
-                        'device_launch_app does the same thing.)' : ''}',
-        };
-      case SimulatorTarget():
-        if (activity != null && activity.trim().isNotEmpty) {
-          throw ArgumentError(
-            'activity is an Android idea and ${target.label} is a simulator: '
-            'an iOS app has one entry point, not a set of activities. Drop '
-            'activity to launch the app, or reach a particular screen through '
-            'its URL scheme.',
-          );
-        }
-        final pid = await _requireSimctl().launchApp(
-          target.id,
-          app,
-          relaunch: relaunch,
-        );
-        return {
-          'udid': target.id,
-          'serial': target.id,
-          'platform': 'ios',
-          'launched': app,
-          'pid': ?pid,
-          'note':
-              'Give it a moment to draw, then read it with device_ui_dump. '
-              '${relaunch ? 'Any running copy was terminated first, so this is '
-                        'a cold start.' : 'An already-running app is brought to '
-                        'the front rather than restarted — pass relaunch=true '
-                        'for a cold start.'}',
-        };
-    }
+    final driver = await _driverThatCan(
+      id,
+      'device_launch_app',
+      DeviceCapability.appLifecycle,
+    );
+    final launched = await driver.launchApp(
+      appId.trim(),
+      activity: activity,
+      relaunch: relaunch,
+    );
+    return {
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+      'launched': launched.appId,
+      'pid': ?launched.pid,
+      'note':
+          'Give it a moment to draw, then read it with device_ui_dump.'
+          '${launched.note == null ? '' : ' ${launched.note}'}',
+    };
   }
 
   Future<Object?> _deviceTerminateApp({String? id, String? appId}) async {
     if (appId == null || appId.trim().isEmpty) {
       throw ArgumentError('appId is required.');
     }
-    final app = appId.trim();
-    final target = await _resolveDevice(id, 'device_terminate_app');
-    switch (target) {
-      case AndroidTarget():
-        await _requireAdb().forceStopPackage(target.id, app);
-      case SimulatorTarget():
-        await _requireSimctl().terminateApp(target.id, app);
-    }
+    final driver = await _driverThatCan(
+      id,
+      'device_terminate_app',
+      DeviceCapability.appLifecycle,
+    );
+    await driver.terminateApp(appId.trim());
     return {
-      'serial': target.id,
-      'platform': target.platform.name,
-      'terminated': app,
+      'serial': driver.target.id,
+      'platform': driver.target.platform.name,
+      'terminated': appId.trim(),
       // Both platforms treat "it was not running" as success, and saying so is
       // the difference between a caller trusting this reply and a caller
       // re-checking with a UI dump.
@@ -944,8 +529,8 @@ class DeviceControlTools {
   /// `list_devices` has to work out which platform it belongs to before it can
   /// choose a verb, which is the exact failure the one-family decision above
   /// exists to prevent. Renaming the tool was the other option and was rejected
-  /// outright: `device_stop_emulator` is what existing callers already call.
-  /// So the verb keeps its name and grows a second meaning, and its description
+  /// outright: `device_stop_emulator` is what existing callers already call. So
+  /// the verb keeps its name and grows a second meaning, and its description
   /// says both.
   ///
   /// The id is required rather than inferred: every other device tool defaults
@@ -959,57 +544,34 @@ class DeviceControlTools {
         'loses whatever was on it.',
       );
     }
-    final target = await _resolver().requireExisting(
+    final fleet = _fleet();
+    // Not `driverFor`: a simulator that is already shut down is not "ready",
+    // and refusing to stop something that is already stopped would turn asking
+    // for a state into an error about being in it.
+    final target = await fleet.requireTarget(
       id,
       verb: 'device_stop_emulator',
     );
-    switch (target) {
-      case AndroidTarget():
-        if (!target.device.isEmulator) {
-          throw StateError(
-            '${target.id} is a physical device. Only emulators and simulators '
-            'can be stopped this way — unplug it, or turn it off yourself.',
-          );
-        }
-        final stopped = await _requireAdb().stopEmulator(target.id);
-        if (!stopped) {
-          throw StateError(
-            '${target.id} did not exit. It may be busy; try again, or close '
-            'its window.',
-          );
-        }
-        return {'serial': target.id, 'platform': 'android', 'stopped': true};
-      case SimulatorTarget():
-        if (!target.isReady && target.simulator.state == SimulatorState.shutdown) {
-          return {
-            'udid': target.id,
-            'serial': target.id,
-            'platform': 'ios',
-            'stopped': true,
-            'note': '${target.label} was already shut down.',
-          };
-        }
-        final transitions = _container.read(
-          simulatorTransitionsProvider.notifier,
-        );
-        if (transitions.isBusy(target.id)) {
-          throw StateError(
-            '${target.label} is already being started or stopped by this app. '
-            'Wait for that to finish, then check list_devices.',
-          );
-        }
-        await transitions.shutdown(target.id);
-        final after = await _resolver().find(target.id);
-        return {
-          'udid': target.id,
-          'serial': target.id,
-          'platform': 'ios',
-          'stopped': after == null || !after.isReady,
-          'note':
-              'Shut down, not erased — its apps and data are still there for '
-              'the next boot. device_boot brings it back.',
-        };
+    final driver = fleet.driverForTarget(target);
+    if (!target.isReady &&
+        target is SimulatorTarget &&
+        target.simulator.state == SimulatorState.shutdown) {
+      return {
+        'serial': target.id,
+        'udid': target.id,
+        'platform': 'ios',
+        'stopped': true,
+        'note': '${target.label} was already shut down.',
+      };
     }
+    final outcome = await fleet.powerOff(driver);
+    return {
+      'serial': target.id,
+      if (target.platform == DevicePlatform.ios) 'udid': target.id,
+      'platform': target.platform.name,
+      'stopped': true,
+      'note': outcome,
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -1021,8 +583,8 @@ class DeviceControlTools {
   // reporting success. These three tools hand it the view hierarchy instead:
   // what is on screen, and exactly where to hit it.
   //
-  // On iOS this is the *only* honest way to get a coordinate, because the
-  // screenshot is in pixels and the tap is in points. See [_ScreenRead].
+  // On a simulator this is the *only* honest way to get a coordinate, because
+  // the screenshot is in pixels and the tap is in points.
   // ---------------------------------------------------------------------------
 
   UiElementQuery _uiQuery(Map<String, dynamic> args) => UiElementQuery(
@@ -1034,51 +596,18 @@ class DeviceControlTools {
     clickableOnly: args['clickable'] == true,
   );
 
-  /// One read of what is on a screen, with the coordinate space it is in.
-  ///
-  /// The space is carried rather than assumed because the two platforms differ
-  /// and the difference is invisible in the numbers: `(201, 437)` is a
-  /// plausible point on either device, and only one of them is right.
-  Future<_ScreenRead> _readScreen(DeviceTarget target, String verb) async {
-    switch (target) {
-      case AndroidTarget():
-        final adb = _requireAdb();
-        final tree = await adb.dumpUiHierarchy(target.id);
-        return _ScreenRead(
-          tree: tree,
-          screen: await adb.screenSize(target.id),
-          space: 'device px',
-          app: tree.packageName,
-        );
-      case SimulatorTarget():
-        final tree = await _requireBackend(verb).describeUi(target.id);
-        // The size comes out of the tree rather than from a second round trip.
-        // WebDriverAgent's root element *is* the application window, so its
-        // frame is the screen — which is precisely how `parseWdaUiRead` derives
-        // the `screen` it reports, and asking the backend again would fetch and
-        // parse the whole `/source` document a second time to learn the same
-        // number.
-        final root = tree.roots.firstOrNull;
-        final bounds = root?.bounds;
-        return _ScreenRead(
-          tree: tree,
-          screen: bounds == null || bounds.isEmpty
-              ? null
-              : DeviceScreenSize(width: bounds.width, height: bounds.height),
-          space: 'points',
-          // WDA puts the bundle id on the Application element's `name`, which
-          // this build maps onto `resourceId`. iOS nodes carry no package, so
-          // `UiHierarchy.packageName` is always null here.
-          app: root == null || root.resourceId.isEmpty ? null : root.resourceId,
-        );
-    }
-  }
-
   /// One line naming the device, the foreground app and the coordinate space.
-  String _uiHeader(DeviceTarget target, _ScreenRead read) =>
-      '${target.id} · ${read.app ?? 'unknown app'} · '
-      'screen ${read.screen ?? 'unknown'} ${read.space} · '
+  String _uiHeader(DeviceDriver driver, ScreenRead read) =>
+      '${driver.target.id} · ${read.app ?? 'unknown app'} · '
+      'screen ${read.screen ?? 'unknown'} ${read.space.label} · '
       'rotation ${read.tree.rotation}';
+
+  /// The coordinate space, said once per listing where it cannot be missed.
+  String _spaceLine(ScreenRead read) => read.space == CoordinateSpace.points
+      ? 'Coordinates are in POINTS, which is what device_tap and '
+            'device_tap_element take on this device — NOT the pixels a '
+            'device_screenshot image is in.'
+      : 'Coordinates are in device pixels.';
 
   Future<Object?> _deviceUiDump({
     String? id,
@@ -1086,15 +615,19 @@ class DeviceControlTools {
     String? filter,
     int? limit,
   }) async {
-    final target = await _resolveDevice(id, 'device_ui_dump');
-    final read = await _readScreen(target, 'device_ui_dump');
+    final driver = await _driverThatCan(
+      id,
+      'device_ui_dump',
+      DeviceCapability.uiTree,
+    );
+    final read = await driver.describeScreen();
     final tree = read.tree;
     final screen = read.screen;
 
     if (full && filter == null) {
       final body = renderUiTree(tree, screen: screen);
       return _uiText([
-        'Full UI hierarchy · ${_uiHeader(target, read)}',
+        'Full UI hierarchy · ${_uiHeader(driver, read)}',
         '${tree.nodeCount} nodes, indented by depth.',
         uiListingLegend,
         _spaceLine(read),
@@ -1122,7 +655,7 @@ class DeviceControlTools {
       limit: limit ?? 200,
     );
     return _uiText([
-      'UI hierarchy · ${_uiHeader(target, read)}',
+      'UI hierarchy · ${_uiHeader(driver, read)}',
       '${rendered.shown} of ${tree.nodeCount} nodes'
           '${full ? '' : ' (text-bearing or interactable)'}'
           '${filter == null ? '' : ', filtered by "$filter"'}'
@@ -1150,14 +683,18 @@ class DeviceControlTools {
         'Use device_ui_dump to see the whole screen.',
       );
     }
-    final target = await _resolveDevice(id, 'device_find_elements');
-    final read = await _readScreen(target, 'device_find_elements');
+    final driver = await _driverThatCan(
+      id,
+      'device_find_elements',
+      DeviceCapability.uiTree,
+    );
+    final read = await driver.describeScreen();
     final tree = read.tree;
     final screen = read.screen;
     final matches = tree.find(query);
     if (matches.isEmpty) {
       return _uiText([
-        'No element matches $query on ${_uiHeader(target, read)}',
+        'No element matches $query on ${_uiHeader(driver, read)}',
         '',
         'What is on screen instead:',
         uiListingLegend,
@@ -1176,7 +713,7 @@ class DeviceControlTools {
     );
     return _uiText([
       '${matches.length} element${matches.length == 1 ? '' : 's'} match '
-          '$query · ${_uiHeader(target, read)}',
+          '$query · ${_uiHeader(driver, read)}',
       'Best match first; an exact label beats a substring.',
       uiListingLegend,
       _spaceLine(read),
@@ -1195,29 +732,41 @@ class DeviceControlTools {
         'Give at least one of text, resourceId, contentDesc or className.',
       );
     }
-    final target = await _resolveDevice(id, 'device_tap_element');
-    final read = await _readScreen(target, 'device_tap_element');
+    // Both capabilities, checked before the read: a driver that could describe
+    // a screen but not touch it would otherwise dump the tree, pick a target
+    // and fail at the last step, having spent the round trip.
+    final driver = await _driverThatCan(
+      id,
+      'device_tap_element',
+      DeviceCapability.uiTree,
+    );
+    if (!driver.can(DeviceCapability.input)) {
+      throw DeviceRefusal(
+        'device_tap_element: ${driver.missingReason(DeviceCapability.input)!}',
+      );
+    }
+    final read = await driver.describeScreen();
     final tree = read.tree;
     final screen = read.screen;
     final matches = tree.find(query);
 
     if (matches.isEmpty) {
-      throw StateError(
-        'Nothing matches $query on ${target.id}. On screen now:\n'
+      throw DeviceRefusal(
+        'Nothing matches $query on ${driver.target.id}. On screen now:\n'
         '${renderUiElements(interestingNodes(tree), screen: screen, limit: 60).listing}',
       );
     }
 
-    final UiNode target0;
+    final UiNode element;
     if (index != null) {
       if (index < 0 || index >= matches.length) {
         throw ArgumentError(
           'index $index is out of range: there are ${matches.length} matches.',
         );
       }
-      target0 = matches[index];
+      element = matches[index];
     } else if (matches.length == 1) {
-      target0 = matches.first;
+      element = matches.first;
     } else {
       // Several matches. One unambiguous exact label is still a decision we can
       // make; anything else is a guess, and a wrong tap is worse than an error
@@ -1227,62 +776,43 @@ class DeviceControlTools {
           if (query.rank(node) == 0) node,
       ];
       if (exact.length == 1) {
-        target0 = exact.single;
+        element = exact.single;
       } else {
-        throw StateError(
-          '$query matches ${matches.length} elements on ${target.id}. '
+        throw DeviceRefusal(
+          '$query matches ${matches.length} elements on ${driver.target.id}. '
           'Pass index to choose, or narrow the query:\n'
           '${_indexed(matches, screen)}',
         );
       }
     }
 
-    final bounds = target0.tapBounds;
+    final bounds = element.tapBounds;
     if (bounds == null) {
-      throw StateError(
+      throw DeviceRefusal(
         'The matched element reports no bounds, so there is nowhere to tap: '
-        '${describeUiNode(target0, screen: screen)}',
+        '${describeUiNode(element, screen: screen)}',
       );
     }
     if (screen != null && !bounds.centerIsOnScreen(screen)) {
-      throw StateError(
+      throw DeviceRefusal(
         'The matched element is off screen at ${bounds.raw} on a $screen '
-        '${read.space} display — it is scrolled out of view. Scroll it into '
-        'view first; tapping its centre would hit whatever is really at that '
-        'point.',
+        '${read.space.label} display — it is scrolled out of view. Scroll it '
+        'into view first; tapping its centre would hit whatever is really at '
+        'that point.',
       );
     }
 
     final point = bounds.center;
-    switch (target) {
-      case AndroidTarget():
-        await _requireAdb().tap(target.id, point.x, point.y);
-      case SimulatorTarget():
-        await _requireBackend('device_tap_element').tap(
-          target.id,
-          point.x,
-          point.y,
-        );
-    }
+    await driver.tap(point.x, point.y);
     return _uiText([
-      'Tapped (${point.x}, ${point.y}) ${read.space} on '
-          '${describeUiNode(target0, screen: screen)}',
-      'Device ${target.id}, ${read.app ?? 'unknown app'}'
+      'Tapped (${point.x}, ${point.y}) ${read.space.label} on '
+          '${describeUiNode(element, screen: screen)}',
+      'Device ${driver.target.id}, ${read.app ?? 'unknown app'}'
           '${matches.length == 1 ? '' : ', chosen from ${matches.length} matches'}.'
-          '${target0.enabled ? '' : ' NOTE: this element is disabled.'}',
+          '${element.enabled ? '' : ' NOTE: this element is disabled.'}',
       'Take a screenshot or dump again to confirm what changed.',
     ]);
   }
-
-  /// The coordinate space, said once per listing where it cannot be missed.
-  String _spaceLine(_ScreenRead read) => read.space == 'points'
-      ? 'Coordinates are in POINTS (iOS), which is what device_tap and '
-            'device_tap_element take on a simulator — NOT the pixels a '
-            'device_screenshot image is in.'
-      : 'Coordinates are in device pixels.';
-
-  static String _spaceOf(DeviceTarget target) =>
-      target.platform == DevicePlatform.ios ? 'points' : 'device px';
 
   /// The matches numbered, so the caller can pass `index`.
   String _indexed(List<UiNode> matches, DeviceScreenSize? screen) => [
@@ -1301,38 +831,6 @@ class DeviceControlTools {
       {'type': 'text', 'text': sections.join('\n')},
     ],
   };
-
-  LogLevel? _parseLogLevel(String? level) {
-    if (level == null) return null;
-    final needle = level.trim().toLowerCase();
-    for (final value in LogLevel.values) {
-      if (value.name == needle || value.code.toLowerCase() == needle) {
-        return value;
-      }
-    }
-    return null;
-  }
-}
-
-/// What one screen read produced, and which coordinate space it is in.
-class _ScreenRead {
-  const _ScreenRead({
-    required this.tree,
-    required this.screen,
-    required this.space,
-    required this.app,
-  });
-
-  final UiHierarchy tree;
-
-  /// The screen, in [space]. Null when the platform would not say.
-  final DeviceScreenSize? screen;
-
-  /// `device px` on Android, `points` on iOS.
-  final String space;
-
-  /// The foreground app: a package name on Android, a bundle id on iOS.
-  final String? app;
 }
 
 /// The schemas for [DeviceControlTools].
@@ -1341,10 +839,10 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
     'name': 'list_devices',
     'description':
         'List everything this machine can drive: connected Android devices '
-        'and running emulators, plus iOS Simulators (every booted one, and '
-        'the bootable ones newest-runtime-first). Android devices appear '
-        'under "devices" keyed by serial; simulators under "simulators" keyed '
-        'by udid, with "running" saying which are up. Either identifier can be '
+        'and running emulators, plus iOS Simulators (every booted one, and the '
+        'bootable ones newest-runtime-first). Android devices appear under '
+        '"devices" keyed by serial; simulators under "simulators" keyed by '
+        'udid, with "running" saying which are up. Either identifier can be '
         'passed to every other device_* tool. Devices that are not usable '
         '(unauthorized, offline, no installed runtime) are included and marked '
         'so you can explain the problem rather than reporting no devices. '
@@ -1364,8 +862,8 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
   {
     'name': 'device_screenshot',
     'description':
-        'Capture the current screen of an Android device or iOS simulator as '
-        'a PNG image. Use this to see what an app is actually showing. serial '
+        'Capture the current screen of an Android device or iOS simulator as a '
+        'PNG image. Use this to see what an app is actually showing. serial '
         '(or udid) is optional when exactly one device is ready. NOTE on a '
         'simulator the image is in PIXELS while taps are in POINTS — prefer '
         'device_ui_dump when you intend to touch something.',
@@ -1387,8 +885,8 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'space list_devices reports as screen size, not the size of any '
         'screenshot you scaled). On an iOS simulator they are POINTS, which a '
         'screenshot is NOT in. Prefer device_tap_element; if you must use '
-        'coordinates, take them from device_ui_dump, which reports them in '
-        'the right space for the device.',
+        'coordinates, take them from device_ui_dump, which reports them in the '
+        'right space for the device.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1434,8 +932,8 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'key': {
           'type': 'string',
           'description':
-              'back | home | recents | power | volumeUp | '
-              'volumeDown | enter | tab | delete',
+              'back | home | recents | power | volumeUp | volumeDown | enter | '
+              'tab | delete',
         },
       },
       'required': ['key'],
@@ -1445,11 +943,12 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
     'name': 'device_logcat',
     'description':
         'Read recent device log output, newest last. On Android this is '
-        'logcat: filter to one app with package (strongly recommended) and '
-        'raise level to see only warnings or errors. On an iOS simulator it is '
-        '`log show` over the last 5 minutes: level is refused (iOS levels are '
-        'not Android levels) and package is matched as a plain substring of '
-        'each line, which the reply says.',
+        'logcat: filter to one app with package (strongly recommended — the '
+        'unfiltered system log is huge and mostly noise) and raise level to '
+        'see only warnings or errors. On an iOS simulator it is `log show` '
+        'over the last 5 minutes: level is refused (iOS levels are not Android '
+        'levels) and package is matched as a plain substring of each line, '
+        'which the reply says.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1502,7 +1001,8 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'one loop. An .ipa is refused — it carries the device slice, and a '
         'simulator needs the simulator slice (flutter build ios --simulator). '
         'On iOS the reply carries the bundle id read out of the bundle, ready '
-        'for device_launch_app.',
+        'for device_launch_app; on Android adb does not report one, so pass '
+        'your applicationId.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1520,11 +1020,11 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
   {
     'name': 'device_launch_app',
     'description':
-        'Launch an installed app by Android applicationId or iOS bundle id. '
-        'On Android the launcher activity is resolved for you; pass activity '
-        'to start a specific one instead. On iOS pass relaunch=true to '
-        'terminate any running copy first, which is what makes it a cold '
-        'start rather than a switch to the front.',
+        'Launch an installed app by Android applicationId or iOS bundle id. On '
+        'Android the launcher activity is resolved for you; pass activity to '
+        'start a specific one instead. On iOS pass relaunch=true to terminate '
+        'any running copy first, which is what makes it a cold start rather '
+        'than a switch to the front.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1537,8 +1037,8 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'activity': {
           'type': 'string',
           'description':
-              'Android only. Activity to start, e.g. .MainActivity. Refused '
-              'on iOS, which has no activities.',
+              'Android only. Activity to start, e.g. .MainActivity. Refused on '
+              'iOS, which has no activities.',
         },
         'relaunch': {
           'type': 'boolean',
@@ -1576,8 +1076,7 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
       'properties': {
         'serial': {
           'type': 'string',
-          'description':
-              'Emulator serial (emulator-5554) or simulator udid.',
+          'description': 'Emulator serial (emulator-5554) or simulator udid.',
         },
         'udid': {'type': 'string', 'description': 'Alias for serial.'},
       },
@@ -1588,13 +1087,14 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
     'name': 'device_ui_dump',
     'description':
         'Read the accessibility (view) hierarchy of the current screen: what '
-        'is on it, what each element says, and the exact point to tap for '
-        'each one. Works on Android (uiautomator) and on an iOS simulator '
+        'is on it, what each element says, and the exact point to tap for each '
+        'one. Works on Android (uiautomator) and on an iOS simulator '
         '(WebDriverAgent). Prefer this over device_screenshot when you intend '
         'to touch something — a screenshot cannot tell you what is tappable, '
         'coordinates read off an image are guesswork, and on iOS the image is '
         'in a different unit from the tap. By default only nodes that carry '
-        'text or accept input are listed; pass full=true for every node.',
+        'text or accept input are listed; pass full=true for every node, '
+        'including layout containers.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -1610,8 +1110,8 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'filter': {
           'type': 'string',
           'description':
-              'Keep only nodes whose text, content-description, resource id '
-              'or class contains this (case-insensitive).',
+              'Keep only nodes whose text, content-description, resource id or '
+              'class contains this (case-insensitive).',
         },
         'limit': {
           'type': 'number',
@@ -1625,12 +1125,12 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
     'description':
         'Find elements on the current screen by text, resource id, '
         'content-description or class, and get the point to tap for each. '
-        'Matching is case-insensitive and by substring unless exact=true. '
-        'text matches BOTH the text and the content-description, which is '
-        'what makes it work on Flutter apps: they put their labels in '
-        'content-desc and leave text empty. On iOS the same query runs against '
-        'the XCUITest tree, where an element\'s label and value are mapped '
-        'onto the same two fields.',
+        'Matching is case-insensitive and by substring unless exact=true. text '
+        'matches BOTH the text and the content-description, which is what '
+        'makes it work on Flutter apps: they put their labels in content-desc '
+        'and leave text empty. On iOS the same query runs against the XCUITest '
+        'tree, where an element\'s value and label are mapped onto those same '
+        'two fields.',
     'inputSchema': {
       'type': 'object',
       'properties': {

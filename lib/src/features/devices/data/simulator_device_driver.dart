@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../../../core/logging/app_logger.dart';
 import '../domain/device_driver.dart';
 import '../domain/device_input.dart';
 import '../domain/device_target.dart';
@@ -29,15 +30,16 @@ class SimulatorDeviceDriver implements DeviceDriver {
   SimulatorDeviceDriver({
     required this.simctl,
     required this.backend,
-    required SimulatorTarget target,
-  }) : _target = target;
+    required this.target,
+  });
 
   final SimctlService simctl;
 
   /// The engine that can touch the screen, or null when this build has none.
   final SimulatorBackend? backend;
 
-  final SimulatorTarget _target;
+  @override
+  final SimulatorTarget target;
 
   @override
   String get id => backend == null ? 'simctl' : 'simctl+${backend!.id}';
@@ -46,10 +48,7 @@ class SimulatorDeviceDriver implements DeviceDriver {
   String get displayName =>
       backend == null ? 'simctl' : 'simctl + ${backend!.displayName}';
 
-  @override
-  SimulatorTarget get target => _target;
-
-  String get _udid => _target.id;
+  String get _udid => target.id;
 
   @override
   Set<DeviceCapability> get capabilities => {
@@ -77,7 +76,7 @@ class SimulatorDeviceDriver implements DeviceDriver {
     // message says what remains rather than "unsupported" — an agent that reads
     // "unsupported" concludes iOS is a dead end, when in fact it can still
     // boot, install, launch and screenshot, which is most of a working loop.
-    return 'This build ships no WebDriverAgent, so ${_target.label} cannot be '
+    return 'This build ships no WebDriverAgent, so ${target.label} cannot be '
         'tapped, typed into, or read as an element tree: simctl on its own has '
         'no touch injection and no way to see the screen. Still available for '
         'this simulator: list_devices, device_boot, device_stop_emulator, '
@@ -146,23 +145,46 @@ class SimulatorDeviceDriver implements DeviceDriver {
   Future<void> type(String text) =>
       _requireBackend(DeviceCapability.input).inputText(_udid, text);
 
+  /// [DeviceKey] onto the keyboard iOS believes is plugged in.
+  ///
+  /// Kept here rather than beside [SimulatorButton.forDeviceKey] in the domain,
+  /// where it would sit more naturally: that file is being changed on another
+  /// branch as this is written, and a three-line map is not worth a merge
+  /// conflict in a file two live panes depend on.
+  ///
+  /// The route matters more than the map does. These go to
+  /// [SimulatorBackend.pressKey], which delivers a **HID key event**, and
+  /// emphatically not to [SimulatorBackend.inputText] — read [SimulatorKey]'s
+  /// doc comment for the measurements. `/wda/keys` transliterates a named key
+  /// into a character: Left Arrow arrives in the field as an invisible
+  /// `U+F702` instead of moving the caret, and Escape is swallowed with
+  /// neither an error nor an effect. Typing a key name looks like it works and
+  /// does not, which is exactly the failure this surface exists to refuse.
+  static const Map<DeviceKey, SimulatorKey> _keyboardKeys = {
+    DeviceKey.enter: SimulatorKey.returnKey,
+    DeviceKey.tab: SimulatorKey.tab,
+    DeviceKey.delete: SimulatorKey.backspace,
+  };
+
   /// A [DeviceKey] on a simulator, refusing the ones iOS does not have.
   ///
   /// Three groups, and the split is the whole content of this method:
   ///
   /// * **Buttons the hardware has.** home and power (lock) map onto
-  ///   [SimulatorButton] and go through the backend.
-  /// * **Keyboard keys.** enter, tab and delete are not buttons at all — they
-  ///   are characters the iOS keyboard produces, and XCUITest types them as
-  ///   `\n`, `\t` and `\b` through the same route ordinary text takes. Routing
-  ///   them there is what makes "type a query, then press enter" work.
+  ///   [SimulatorButton] and go through [SimulatorBackend.pressButton].
+  /// * **Keyboard keys.** enter, tab and delete are not device buttons at all;
+  ///   they are keys on a keyboard, and they go through
+  ///   [SimulatorBackend.pressKey] as HID events. That is what makes "type a
+  ///   query, then press enter" submit the field rather than insert a newline
+  ///   into it.
   /// * **Buttons iOS does not have.** back, recents and the volume rocker.
   ///   [SimulatorButton.forDeviceKey] returns null for these deliberately: iOS
   ///   has no system back button (an app draws its own), the app switcher is a
   ///   system gesture WebDriverAgent's synthesized touches never reach — see
-  ///   the long note in `simulator_backend.dart` — and WDA exposes no volume
-  ///   control. Each is refused by name with what to do instead, because the
-  ///   alternative is pressing a plausible substitute and reporting success.
+  ///   the long note in `simulator_backend.dart` — and the HID route used here
+  ///   is the keyboard page, which has no volume on it. Each is refused by
+  ///   name with what to do instead, because the alternative is pressing a
+  ///   plausible substitute and reporting success.
   @override
   Future<KeyPress> pressKey(DeviceKey key) async {
     final engine = _requireBackend(DeviceCapability.keys);
@@ -171,28 +193,24 @@ class SimulatorDeviceDriver implements DeviceDriver {
       await engine.pressButton(_udid, button);
       return KeyPress(key: key, how: 'the ${button.name} button');
     }
-    const keyboard = <DeviceKey, String>{
-      DeviceKey.enter: '\n',
-      DeviceKey.tab: '\t',
-      DeviceKey.delete: '',
-    };
-    if (keyboard[key] case final character?) {
-      await engine.inputText(_udid, character);
+    if (_keyboardKeys[key] case final keyboardKey?) {
+      await engine.pressKey(_udid, keyboardKey);
       return KeyPress(
         key: key,
         how:
-            'the keyboard key, typed into whatever has focus — iOS has no '
-            'hardware ${key.name}. Tap a field first if nothing does.',
+            'the ${keyboardKey.name} key on the keyboard, delivered as a real '
+            'key event — iOS has no hardware ${key.name}. Tap a field first if '
+            'nothing has focus.',
       );
     }
     throw DeviceRefusal(switch (key) {
       DeviceKey.back =>
         'iOS has no system back button, so there is nothing to press on '
-            '${_target.label}. Apps draw their own — find it with '
+            '${target.label}. Apps draw their own — find it with '
             'device_find_elements(text: "Back") and tap it, or press home to '
             'leave the app.',
       DeviceKey.recents =>
-        'The iOS app switcher cannot be opened this way on ${_target.label}. '
+        'The iOS app switcher cannot be opened this way on ${target.label}. '
             'It is a system gesture, and WebDriverAgent\'s synthesized touches '
             'are delivered into the foreground application, so they never '
             'reach SpringBoard — tried against a real device and confirmed by '
@@ -200,10 +218,10 @@ class SimulatorDeviceDriver implements DeviceDriver {
             'device_launch_app.',
       DeviceKey.volumeUp || DeviceKey.volumeDown =>
         'WebDriverAgent exposes no volume control, so ${key.name} cannot be '
-            'honoured on ${_target.label}. home and power are the two '
+            'honoured on ${target.label}. home and power are the two '
             'hardware buttons it can press.',
       _ =>
-        '${key.name} has no iOS equivalent on ${_target.label}. home and power '
+        '${key.name} has no iOS equivalent on ${target.label}. home and power '
             'are the hardware buttons; enter, tab and delete go to the '
             'keyboard.',
     });
@@ -269,7 +287,7 @@ class SimulatorDeviceDriver implements DeviceDriver {
     final lower = path.toLowerCase();
     if (lower.endsWith('.apk')) {
       throw DeviceRefusal(
-        '$path is an Android build and ${_target.label} is an iOS simulator. '
+        '$path is an Android build and ${target.label} is an iOS simulator. '
         'Give a simulator .app bundle, or install this onto an Android device.',
       );
     }
@@ -317,11 +335,38 @@ class SimulatorDeviceDriver implements DeviceDriver {
   }) async {
     if (activity != null && activity.trim().isNotEmpty) {
       throw DeviceRefusal(
-        'activity is an Android idea and ${_target.label} is a simulator: an '
+        'activity is an Android idea and ${target.label} is a simulator: an '
         'iOS app has one entry point, not a set of activities. Drop activity '
         'to launch the app, or reach a particular screen through its URL '
         'scheme.',
       );
+    }
+    // The runner comes up **before** the app, and the order is the whole
+    // point. WebDriverAgent is an app: starting it puts it in the foreground,
+    // and iOS then drops back to SpringBoard when it settles. Attaching after
+    // a launch therefore replaces the app that was just launched, and the
+    // first `device_ui_dump` of a session reports the home screen — observed
+    // exactly that way against an iPhone 17 Pro on iOS 26.4 before this line
+    // existed. Attaching first means the launch is the last thing to touch the
+    // foreground, so install → launch → dump reads the app, which is the order
+    // the whole surface tells a caller to work in.
+    //
+    // [SimulatorBackend.attach] is idempotent and returns immediately once the
+    // runner is up, so this costs one round trip after the first call. A
+    // failure is logged rather than raised: the caller asked for a launch, not
+    // for a runner, and refusing to start their app because the *driving*
+    // engine would not come up would break the one half that still works. The
+    // next verb that genuinely needs the backend fails loudly with the real
+    // reason.
+    final engine = backend;
+    if (engine != null) {
+      try {
+        await engine.attach(_udid);
+      } on Object catch (error) {
+        AppLogger.named(
+          'simulator',
+        ).info('Launching $appId with no driving engine attached: $error');
+      }
     }
     final pid = await simctl.launchApp(_udid, appId, relaunch: relaunch);
     return LaunchedApp(

@@ -12,11 +12,12 @@ import 'adb_service.dart';
 /// the honest capability report and the refusals — the things a caller with no
 /// eyes needs and a pane with a user in front of it does not.
 class AdbDeviceDriver implements DeviceDriver {
-  AdbDeviceDriver({required this.adb, required AndroidTarget target})
-    : _target = target;
+  AdbDeviceDriver({required this.adb, required this.target});
 
   final AdbService adb;
-  final AndroidTarget _target;
+
+  @override
+  final AndroidTarget target;
 
   @override
   String get id => 'adb';
@@ -24,10 +25,7 @@ class AdbDeviceDriver implements DeviceDriver {
   @override
   String get displayName => 'adb';
 
-  @override
-  AndroidTarget get target => _target;
-
-  String get _serial => _target.id;
+  String get _serial => target.id;
 
   /// Everything except [DeviceCapability.powerOff] on a physical device.
   ///
@@ -44,7 +42,7 @@ class AdbDeviceDriver implements DeviceDriver {
     DeviceCapability.logs,
     DeviceCapability.installApp,
     DeviceCapability.appLifecycle,
-    if (_target.device.isEmulator) DeviceCapability.powerOff,
+    if (target.device.isEmulator) DeviceCapability.powerOff,
   };
 
   @override

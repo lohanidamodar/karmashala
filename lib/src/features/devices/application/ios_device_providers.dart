@@ -239,10 +239,16 @@ class SimulatorTransitions extends Notifier<Set<String>> {
   /// optimisation; refusing to start the simulator because its services could
   /// not be trimmed would turn a saving into an outage.
   Future<void> _slim(String udid) async {
-    if (!ref.read(slimmingOnStartProvider)) return;
-    final slimming = ref.read(simulatorSlimmingServiceProvider);
-    if (slimming == null) return;
     try {
+      // Inside the guard, all of it. Reading the setting is itself a database
+      // read, and it used to sit outside — so a settings store that could not
+      // be opened did not merely skip slimming, it aborted the boot. Refusing
+      // to start a simulator because an optimisation could not be looked up is
+      // the outage this catch exists to prevent, and it was reachable through
+      // the very first line.
+      if (!ref.read(slimmingOnStartProvider)) return;
+      final slimming = ref.read(simulatorSlimmingServiceProvider);
+      if (slimming == null) return;
       await slimming.slim(
         udid,
         except: ref.read(slimmingKeptCategoriesProvider),

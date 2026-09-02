@@ -48,14 +48,11 @@ class DeviceFleet {
     required this.adb,
     required this.simctl,
     required this.backend,
-    required Future<void> Function(String udid) bootSimulator,
-    required bool Function(String udid) simulatorIsBusy,
-    required void Function() refreshAndroid,
-    required void Function() refreshSimulators,
-  }) : _bootSimulator = bootSimulator,
-       _simulatorIsBusy = simulatorIsBusy,
-       _refreshAndroid = refreshAndroid,
-       _refreshSimulators = refreshSimulators;
+    required this.bootSimulator,
+    required this.simulatorIsBusy,
+    required this.refreshAndroid,
+    required this.refreshSimulators,
+  });
 
   /// adb, or null when no Android SDK was found. Null is a supported state, not
   /// a failure: this app runs on Macs with Xcode and no SDK, where "there are
@@ -78,10 +75,15 @@ class DeviceFleet {
   /// the device the person watching is shown. It is *not* on [DeviceDriver],
   /// because a driver is bound to a device and a device being booted does not
   /// have one yet.
-  final Future<void> Function(String udid) _bootSimulator;
-  final bool Function(String udid) _simulatorIsBusy;
-  final void Function() _refreshAndroid;
-  final void Function() _refreshSimulators;
+  final Future<void> Function(String udid) bootSimulator;
+
+  /// Whether the app is already starting or stopping this simulator.
+  final bool Function(String udid) simulatorIsBusy;
+
+  /// Told after a lifecycle change, so the pane's listings are re-read rather
+  /// than left showing a device that is no longer in that state.
+  final void Function() refreshAndroid;
+  final void Function() refreshSimulators;
 
   List<AndroidTarget>? _android;
   List<SimulatorTarget>? _ios;
@@ -280,7 +282,7 @@ class DeviceFleet {
           );
         }
         final serial = await service.bootAvdAndWait(wanted, headless: true);
-        _refreshAndroid();
+        refreshAndroid();
         return BootedDevice(
           id: serial,
           platform: DevicePlatform.android,
@@ -318,13 +320,13 @@ class DeviceFleet {
     // flight for this udid, which for the UI is right — a second click on a
     // spinning button is nothing — but for a tool it would be a call that
     // reported success having done nothing at all.
-    if (_simulatorIsBusy(target.id)) {
+    if (simulatorIsBusy(target.id)) {
       throw DeviceRefusal(
         '${target.label} is already being started or stopped by this app. Wait '
         'for that to finish, then call list_devices to see where it got to.',
       );
     }
-    await _bootSimulator(target.id);
+    await bootSimulator(target.id);
     _ios = null; // The listing this fleet cached is now a lie.
     final after = await find(target.id);
     return BootedDevice(
@@ -349,7 +351,7 @@ class DeviceFleet {
       throw DeviceRefusal(driver.missingReason(DeviceCapability.powerOff)!);
     }
     if (driver.target is SimulatorTarget &&
-        _simulatorIsBusy(driver.target.id)) {
+        simulatorIsBusy(driver.target.id)) {
       throw DeviceRefusal(
         '${driver.target.label} is already being started or stopped by this '
         'app. Wait for that to finish, then check list_devices.',
@@ -359,10 +361,10 @@ class DeviceFleet {
     switch (driver.target) {
       case AndroidTarget():
         _android = null;
-        _refreshAndroid();
+        refreshAndroid();
       case SimulatorTarget():
         _ios = null;
-        _refreshSimulators();
+        refreshSimulators();
     }
     return outcome;
   }

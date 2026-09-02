@@ -271,6 +271,32 @@ void _slimmingTests() {
     expect(simctl.booted, ['UDID']);
   });
 
+  test('a simulator still starts when the setting cannot be read', () async {
+    // The guard used to begin *after* the settings read, so a settings store
+    // that would not open did not skip slimming — it aborted the boot. An
+    // optimisation that cannot be looked up must not cost the user their
+    // simulator.
+    final simctl = _RecordingSimctl();
+    final container = ProviderContainer(
+      overrides: [
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(),
+        ),
+        hostCanRunSimulatorsProvider.overrideWithValue(true),
+        iosSimulatorsProvider.overrideWith((ref) async => const []),
+        simctlServiceProvider.overrideWithValue(simctl),
+        slimmingOnStartProvider.overrideWith(
+          (ref) => throw StateError('the settings store would not open'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(simctl.booted, ['UDID']);
+  });
+
   test('a simulator still starts when it cannot be slimmed', () async {
     // Slimming is an optimisation. Refusing to start the simulator because its
     // services could not be trimmed would turn a saving into an outage.
