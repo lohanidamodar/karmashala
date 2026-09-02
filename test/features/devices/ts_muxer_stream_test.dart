@@ -110,15 +110,83 @@ void main() {
       expect(muxer.basePtsUs, uptimeUs);
     });
 
-    test('clamps a timestamp that steps backwards', () {
+    test('a backwards step costs one frame, not the rest of the session', () {
+      // This case used to expect `[0, 9000, 9000]`, and that expectation was
+      // the bug: clamping to the highest timestamp seen does not clamp one
+      // frame, it latches. Every frame after it carried that same value, so
+      // PTS and PCR stopped advancing while bytes kept flowing — a stream whose
+      // clock has stopped, which is a frozen picture on a healthy socket.
       final muxer = TsMuxer();
       final out = BytesBuilder()
         ..add(muxer.frame(_unit(100), 1000000, keyframe: true))
         ..add(muxer.frame(_unit(100), 1100000, keyframe: false))
-        ..add(muxer.frame(_unit(100), 1050000, keyframe: false));
+        ..add(muxer.frame(_unit(100), 1050000, keyframe: false))
+        ..add(muxer.frame(_unit(100), 1150000, keyframe: false));
       final report = validateTransportStream(out.toBytes());
       expect(report.errors, isEmpty, reason: report.toString());
-      expect(report.pes.map((p) => p.pts90), [0, 9000, 9000]);
+      expect(report.pes.map((p) => p.pts90), [0, 9000, 10440, 19440]);
+    });
+
+    test('an idle gap does not become a gap in the stream', () {
+      // scrcpy encodes on change, so an untouched phone sends nothing for
+      // minutes; the cached keyframe a new viewer starts from can be older
+      // still. Measured before this: a viewer attaching after two minutes of
+      // idle got 120 seconds of PCR in one step, on its second frame.
+      final muxer = TsMuxer();
+      final out = BytesBuilder()
+        ..add(muxer.frame(_unit(64), 5000000, keyframe: true))
+        ..add(muxer.frame(_unit(64), 125000000, keyframe: false))
+        ..add(muxer.frame(_unit(64), 125016000, keyframe: false));
+      final report = validateTransportStream(out.toBytes());
+      expect(report.errors, isEmpty, reason: report.toString());
+      expect(report.pes.map((p) => p.pts90), [0, 1440, 2880]);
+      expect(
+        report.maxPcrGap90,
+        lessThan(90000),
+        reason: 'no jump longer than a second reaches the demuxer',
+      );
+    });
+
+    test('one impossible timestamp does not stop the clock', () {
+      final muxer = TsMuxer();
+      final out = BytesBuilder();
+      for (final pts in [0, 16000, 32000, 9999999999, 48000, 64000]) {
+        out.add(muxer.frame(_unit(48), pts, keyframe: pts == 0));
+      }
+      final report = validateTransportStream(out.toBytes());
+      expect(report.errors, isEmpty, reason: report.toString());
+      expect(report.pes.map((p) => p.pts90), [0, 1440, 2880, 4320, 5760, 7200]);
+    });
+
+    test('the stream clock only ever moves forward', () {
+      final muxer = TsMuxer();
+      final out = BytesBuilder();
+      // Every shape of device clock at once: normal, repeated, backwards, a
+      // long idle, and a spike.
+      for (final pts in [
+        1000000,
+        1016000,
+        1016000,
+        1000000,
+        900000,
+        200000000,
+        200016000,
+        1 << 40,
+        200032000,
+      ]) {
+        out.add(muxer.frame(_unit(24), pts, keyframe: pts == 1000000));
+      }
+      final report = validateTransportStream(out.toBytes());
+      expect(report.errors, isEmpty, reason: report.toString());
+      final stamps = report.pes.map((p) => p.pts90).toList();
+      expect(stamps, everyElement(isNotNull));
+      for (var i = 1; i < stamps.length; i++) {
+        expect(
+          stamps[i]!,
+          greaterThan(stamps[i - 1]!),
+          reason: 'frame $i went backwards or stood still: $stamps',
+        );
+      }
     });
 
     test('flags the first video packet discontinuous', () {

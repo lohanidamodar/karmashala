@@ -24,6 +24,23 @@ const int kPesOverhead = 14;
 /// the tables) waits seconds before it can name the program.
 const int kTablePeriodUs = 100000;
 
+/// How far the device's clock may jump between two frames and still be taken
+/// as elapsed presentation time.
+///
+/// Beyond this it is a gap in *capture*, not in presentation. scrcpy encodes on
+/// change, so an untouched phone sends nothing for minutes and the next frame's
+/// timestamp is minutes later; the cached keyframe a new viewer starts from can
+/// be older still. Honouring those puts a minutes-long jump in the stream's
+/// clock — measured at **120 s of PCR in a single step** for a viewer attaching
+/// after a two-minute idle — which is a far worse thing to hand a demuxer than
+/// a missing frame.
+const int kMaxBelievableStepUs = 1000000;
+
+/// What the clock advances by when the device's cannot be believed. One frame
+/// at 60 fps: enough to keep PTS and PCR moving, small enough that no player
+/// waits for it.
+const int kNominalStepUs = 16000;
+
 /// CRC-32/MPEG-2: polynomial 0x04C11DB7, init 0xFFFFFFFF, MSB-first, no final
 /// XOR. Required by the PSI table format.
 int mpegCrc32(List<int> data) {
@@ -52,10 +69,18 @@ int mpegCrc32(List<int> data) {
 /// previously emitted packets to a second consumer duplicates continuity
 /// counters and the demuxer reports corrupt packets.
 class TsMuxer {
-  TsMuxer({this.tablePeriodUs = kTablePeriodUs});
+  TsMuxer({
+    this.tablePeriodUs = kTablePeriodUs,
+    this.maxBelievableStepUs = kMaxBelievableStepUs,
+    this.nominalStepUs = kNominalStepUs,
+  });
 
   /// How often PAT/PMT are repeated, in stream microseconds.
   final int tablePeriodUs;
+
+  /// See [kMaxBelievableStepUs] and [kNominalStepUs].
+  final int maxBelievableStepUs;
+  final int nominalStepUs;
 
   int _videoContinuity = 0;
   int _patContinuity = 0;
@@ -66,6 +91,11 @@ class TsMuxer {
   /// plausible session — scrcpy hands us the device's monotonic clock, which on
   /// a device up for more than ~26 h would otherwise overflow mid-stream.
   int? _basePtsUs;
+
+  /// The device timestamp of the previous frame, for measuring its step.
+  int? _lastDevicePtsUs;
+
+  /// **Our** clock, not the device's.
   int _lastPtsUs = 0;
   int _lastTablesUs = 0;
   bool _startedVideo = false;
@@ -156,12 +186,32 @@ class TsMuxer {
   /// PAT/PMT are repeated on every keyframe and at least every
   /// [tablePeriodUs] so a consumer joining mid-stream can start quickly.
   Uint8List frame(Uint8List accessUnit, int ptsUs, {required bool keyframe}) {
-    final base = _basePtsUs ??= ptsUs;
-    // scrcpy's timestamps are monotonic in practice, but a backwards step would
-    // be read as a timestamp discontinuity and re-buffered, so clamp.
-    final relative = ptsUs - base;
-    final ptsRelUs = relative > _lastPtsUs ? relative : _lastPtsUs;
-    _lastPtsUs = ptsRelUs;
+    // The output has its own clock, advanced by each frame's *step* rather than
+    // rebased from the device's. Echoing the device clock is what made this
+    // muxer the reason the live view froze.
+    //
+    // The rule it replaced clamped a backwards step to the highest timestamp
+    // seen — which does not clamp one frame, it **latches**: every frame after
+    // it is stamped with that same value, so PTS and PCR stop advancing for the
+    // rest of the session while bytes keep flowing. Measured: four frames after
+    // a clock restart all carried PCR 2880. A stream whose time has stopped is
+    // exactly the frozen picture with a healthy socket the owner reported, and
+    // scrcpy had nothing to do with it.
+    //
+    // A step that is negative, zero or implausibly large is a discontinuity —
+    // a capture reset, an idle gap, a bad timestamp — and the honest thing to
+    // do with a discontinuity is to carry on, one nominal frame later.
+    final previous = _lastDevicePtsUs;
+    _lastDevicePtsUs = ptsUs;
+    if (previous == null) {
+      _basePtsUs = ptsUs;
+    } else {
+      final step = ptsUs - previous;
+      _lastPtsUs += (step <= 0 || step > maxBelievableStepUs)
+          ? nominalStepUs
+          : step;
+    }
+    final ptsRelUs = _lastPtsUs;
 
     final out = BytesBuilder(copy: false);
     if (keyframe ||
