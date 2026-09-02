@@ -1,0 +1,416 @@
+import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
+import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
+import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_chat_source.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/domain/session.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
+import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../features/scale/scale_harness.dart';
+import '../../features/terminal/fake_instance.dart';
+import '../../support/fake_command_runner.dart';
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+
+/// **What one session switch costs.**
+///
+/// The report is the owner's: *"it's lagging again, i only have two sessions
+/// active and i switch between them. switching is very laggy."* Two sessions,
+/// so this is not a scale problem — it is per-switch work that is large.
+///
+/// Counted, never timed, for the reason `session_signal_cost_test.dart` and
+/// `workspace_save_cost_test.dart` both give: the suite runs at
+/// `--concurrency=4`, so a wall-clock assertion over a few milliseconds is a
+/// coin toss — while the units that matter (database statements, provider
+/// builds, transcript subscriptions, subprocesses, scrollback encodes) are all
+/// countable directly.
+///
+/// The **whole app** is mounted, not a slice of it: a switch's bill is spread
+/// across the Explorer, the workbench, the session bar and the side panel, and
+/// any one of them measured alone looks cheap.
+///
+/// What it found (2026-09-02): the database was never the problem — one switch
+/// costs ~90 statements against indexed rows, spawns nothing and re-encodes no
+/// scrollback. The expensive thing was the **conversation being built behind
+/// the terminal**: `WorkbenchView` put both surfaces in an `IndexedStack`,
+/// which builds every child, so landing on a session's terminal also mounted
+/// its chat view — and `sessionChatTranscriptProvider` is an `autoDispose`
+/// family, so every switch started a fresh CLI **store scan** and then read and
+/// JSON-parsed that session's **whole transcript file**, for a surface nobody
+/// was looking at.
+void main() {
+  late CountingDatabase db;
+  late FakeCommandRunner git;
+  late _Rebuilds rebuilds;
+  late ProviderContainer container;
+  final terminals = <String, CountingTerminal>{};
+
+  /// Every session whose agent transcript was subscribed to, in order.
+  ///
+  /// One entry is one CLI store scan plus one whole-file JSONL parse — see
+  /// `sessionChatTranscriptProvider`, which does both on creation and is
+  /// `autoDispose`, so leaving a session and coming back pays again. Counted
+  /// through an override rather than run, because running it needs the real
+  /// store and a two-second poll timer.
+  final chatSubscriptions = <String>[];
+
+  setUp(() {
+    db = CountingDatabase();
+    terminals.clear();
+    chatSubscriptions.clear();
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    ProjectDao(db).insert(project());
+    RepositoryDao(db).insert(repository());
+    AgentInstallationDao(db).insert(agentInstallation());
+    // Two running sessions in one repository — the owner's exact workspace.
+    // Both carry a CLI id, because that is what makes a chat rendering possible
+    // and therefore what makes a transcript worth reading.
+    for (final id in ['s1', 's2']) {
+      SessionDao(db).insert(
+        Session(
+          id: id,
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Session $id',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: testTime,
+          externalSessionId: 'ext-$id',
+        ),
+      );
+    }
+    git = FakeCommandRunner();
+    rebuilds = _Rebuilds();
+    container = ProviderContainer(
+      observers: [rebuilds],
+      overrides: [
+        // Every pane's buffer counts what reads it, so a switch that re-encodes
+        // scrollback shows up in the unit `workspace_save_cost_test` uses.
+        ...fakeTerminalOverrides(
+          database: db,
+          instanceFactory: _countingFactory(terminals),
+        ),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: git),
+        ),
+        hostCommandRunnerProvider.overrideWithValue(git),
+        // Counted rather than run: the real one scans the CLI store, reads a
+        // multi-megabyte JSONL and then polls it on a two-second timer, none of
+        // which a widget test may do. What it costs is not in dispute; how
+        // often a switch starts one is the measurement.
+        sessionChatTranscriptProvider.overrideWith((ref, sessionId) {
+          chatSubscriptions.add(sessionId);
+          return Stream.value(const <TranscriptMessage>[]);
+        }),
+        // Real hosts and real timers, neither of which a widget test may have.
+        // Deliberately **not** overridden: the delivery providers, the session
+        // verdict and the review offer — those are the suspects, so they run.
+        availableSystemTerminalsProvider.overrideWith(
+          (ref) async => const <SystemTerminal>[],
+        ),
+        autoImportRunnerProvider.overrideWithValue(
+          (_) async => const ImportSummary(),
+        ),
+        agentSessionStatusProvider.overrideWith(
+          (ref, id) => const Stream<AgentStatusReport>.empty(),
+        ),
+        sessionTranscriptProvider.overrideWith((ref) => Stream.value(const [])),
+        importedTranscriptProvider.overrideWith(
+          (ref, _) => Stream.value(const []),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+  });
+  tearDown(() => db.close());
+
+  /// A bounded settle. `pumpAndSettle` never returns against the whole shell —
+  /// something always has a frame scheduled — and the measurement only needs
+  /// the work a switch queues to have drained, which a fixed run of frames
+  /// does deterministically.
+  Future<void> settle(WidgetTester tester, {int frames = 12}) async {
+    for (var i = 0; i < frames; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+  }
+
+  /// Mounts the whole app and gives each session a live pane of its own, which
+  /// is what "two active sessions" means.
+  Future<void> mount(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    // Registered after the container's own teardown, so it runs before it:
+    // disposing the container under a live tree leaves widgets calling into
+    // providers that are already gone.
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    for (final id in ['s1', 's2']) {
+      controller.openTab(TerminalProfile.powerShell);
+      final paneId = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      SessionDao(db).updatePaneId(id, paneId);
+    }
+    container.read(selectedRepositoryIdProvider.notifier).select('r1');
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const KarmashalaApp(),
+      ),
+    );
+    await settle(tester);
+  }
+
+  int encodes() => terminals.values.fold(0, (sum, t) => sum + t.bufferReads);
+
+  /// Opens both sessions once, so neither side of a measurement is the
+  /// first-ever look at a session, and leaves `s1` up.
+  Future<void> warmUp(WidgetTester tester) async {
+    await container.read(explorerActionsProvider).openNative('s2');
+    await settle(tester);
+    await container.read(explorerActionsProvider).openNative('s1');
+    await settle(tester);
+  }
+
+  void reset() {
+    db.reset();
+    rebuilds.reset();
+    git.requests.clear();
+    chatSubscriptions.clear();
+  }
+
+  void report(String label, int encodesBefore) {
+    // ignore: avoid_print
+    print(
+      '$label statements=${db.count} reads=${db.reads.length} '
+      'writes=${db.writes.length} rebuilds=${rebuilds.total} '
+      'chatTranscripts=${chatSubscriptions.length}$chatSubscriptions '
+      'processes=${git.requests.length} '
+      'encodes=${encodes() - encodesBefore}',
+    );
+    // ignore: avoid_print
+    print('$label-SQL ${_tally(db.statements)}');
+    // ignore: avoid_print
+    print('$label-PROVIDERS ${rebuilds.report}');
+  }
+
+  testWidgets('one Explorer switch spawns nothing and re-encodes nothing', (
+    tester,
+  ) async {
+    await mount(tester);
+    await warmUp(tester);
+    reset();
+    final before = encodes();
+
+    await container.read(explorerActionsProvider).openNative('s2');
+    await settle(tester);
+
+    report('SWITCH-COST', before);
+    expect(container.read(selectedSessionIdProvider), 's2');
+    expect(
+      git.requests,
+      isEmpty,
+      reason:
+          'choosing which session to look at says nothing about any working '
+          'tree, so it must start no process',
+    );
+    expect(
+      encodes() - before,
+      0,
+      reason: 'no pane moved, so no scrollback may be re-encoded',
+    );
+  });
+
+  testWidgets('a switch does not build the conversation behind the terminal', (
+    tester,
+  ) async {
+    await mount(tester);
+    await warmUp(tester);
+    reset();
+
+    await container.read(explorerActionsProvider).openNative('s2');
+    await settle(tester);
+
+    // The workbench lands on the terminal — always, by construction — so the
+    // chat rendering of the session is not on screen and must not be built.
+    expect(container.read(terminalVisibleProvider), isTrue);
+    expect(
+      find.byType(SessionTranscriptView),
+      findsNothing,
+      reason:
+          'the conversation is not the surface the switch opened, and building '
+          'it costs a CLI store scan and a whole-transcript parse for a view '
+          'nobody is looking at',
+    );
+    expect(
+      chatSubscriptions,
+      isEmpty,
+      reason:
+          'each entry is one store scan plus one whole-file JSONL parse: '
+          '$chatSubscriptions',
+    );
+  });
+
+  testWidgets('the conversation is still one labelled tap away, and stays', (
+    tester,
+  ) async {
+    // The guard against a false green: a cost test that passes because the
+    // feature stopped working is worse than the cost it removed.
+    await mount(tester);
+    await warmUp(tester);
+
+    await tester.tap(find.byTooltip('Chat view'));
+    await settle(tester);
+
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+    expect(chatSubscriptions, contains('s1'));
+
+    // ...and it survives the revision bumps the app publishes constantly.
+    container.read(sessionsRevisionProvider.notifier).bump();
+    await settle(tester);
+    expect(find.byType(SessionTranscriptView), findsOneWidget);
+  });
+
+  testWidgets('switching away from the conversation lets it go', (tester) async {
+    // The other half of the rule: a conversation that was asked for belongs to
+    // the session it was asked for. Landing on another session's terminal must
+    // not keep drawing — or re-reading — the one before it.
+    await mount(tester);
+    await warmUp(tester);
+    await tester.tap(find.byTooltip('Chat view'));
+    await settle(tester);
+    reset();
+
+    await container.read(explorerActionsProvider).openNative('s2');
+    await settle(tester);
+
+    expect(find.byType(SessionTranscriptView), findsNothing);
+    expect(chatSubscriptions, isEmpty, reason: '$chatSubscriptions');
+  });
+
+  testWidgets('one workbench tab switch spawns nothing', (tester) async {
+    await mount(tester);
+    await container.read(explorerActionsProvider).openNative('s1');
+    await settle(tester);
+
+    final tabs = container.read(terminalSessionsControllerProvider).tabs;
+    reset();
+    final before = encodes();
+
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .activateTab(tabs.last.id);
+    await settle(tester);
+
+    report('TAB-SWITCH-COST', before);
+    expect(git.requests, isEmpty);
+    expect(encodes() - before, 0);
+    expect(chatSubscriptions, isEmpty, reason: '$chatSubscriptions');
+  });
+}
+
+/// Counts every provider build and rebuild, by provider.
+///
+/// Riverpod carries no variable name into a `ProviderBase`, so a provider is
+/// reported by its runtime type and family argument —
+/// `Provider<ReviewOffer>(s2)` — which names every one in this app.
+final class _Rebuilds extends ProviderObserver {
+  final Map<String, int> counts = {};
+
+  int get total => counts.values.fold(0, (a, b) => a + b);
+
+  void reset() => counts.clear();
+
+  void _bump(ProviderObserverContext context) {
+    final provider = context.provider;
+    final argument = provider.from == null ? '' : '(${provider.argument})';
+    final name = '${provider.runtimeType}$argument';
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+
+  @override
+  void didAddProvider(ProviderObserverContext context, Object? value) =>
+      _bump(context);
+
+  @override
+  void didUpdateProvider(
+    ProviderObserverContext context,
+    Object? previousValue,
+    Object? newValue,
+  ) => _bump(context);
+
+  String get report {
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return entries.map((e) => '${e.key}=${e.value}').join(' | ');
+  }
+}
+
+/// The statements issued, tallied by shape, commonest first.
+String _tally(List<String> statements) {
+  final counts = <String, int>{};
+  for (final sql in statements) {
+    final flat = sql.replaceAll(RegExp(r'\s+'), ' ').trim();
+    counts[flat] = (counts[flat] ?? 0) + 1;
+  }
+  final entries = counts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  return entries.map((e) => '${e.value}x ${e.key}').join(' || ');
+}
+
+/// A pane factory whose terminals count reads of their buffer.
+TerminalInstanceFactory _countingFactory(Map<String, CountingTerminal> into) =>
+    ({
+      required id,
+      required profile,
+      workingDirectory,
+      restoredScrollback,
+      shellIntegration = false,
+      agentLaunch,
+      adoptTerminal,
+    }) {
+      final terminal = CountingTerminal()..resize(120, 40);
+      if (restoredScrollback != null && restoredScrollback.isNotEmpty) {
+        terminal.write(restoredScrollback);
+      }
+      into[id] = terminal;
+      return FakeTerminalInstance(
+        id: id,
+        title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
+        profileId: agentLaunch?.profileId ?? profile.id,
+        workingDirectory: workingDirectory,
+        agentLaunch: agentLaunch,
+        adoptTerminal: terminal,
+      );
+    };

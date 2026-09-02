@@ -98,6 +98,25 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// publish that changes nothing about *this* session costs one lookup.
   String? _shownPane;
 
+  /// The session whose **conversation** is mounted, or null when none is.
+  ///
+  /// The conversation is built only once it has been asked for, and only for
+  /// the session it was asked for. An [IndexedStack] builds every child, so
+  /// putting the two surfaces in one meant that landing on a session's terminal
+  /// — which is what every tap does — also mounted its chat view, and
+  /// `sessionChatTranscriptProvider` answers a fresh subscription with a CLI
+  /// **store scan** followed by a read and JSON parse of that session's
+  /// **whole transcript file**. Two sessions switched back and forth paid that
+  /// on every switch, for a surface nobody was looking at: the lag the owner
+  /// reported. Measured in `session_switch_cost_test.dart`.
+  ///
+  /// What the stack was for survives: while the conversation *is* the surface
+  /// the user chose, both children stay built, so toggling to the terminal and
+  /// back keeps its scroll position. Only the never-asked-for case is dropped —
+  /// and a switch to another session is exactly that case, because a different
+  /// session's transcript has no scroll position to keep.
+  String? _conversationFor;
+
   @override
   void initState() {
     super.initState();
@@ -273,6 +292,15 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // With nothing to read, the workbench is the terminal — an empty middle
     // would be worse than the surface the app is primarily about.
     final onTerminal = ref.watch(terminalVisibleProvider) || session == null;
+    // Asked for, or let go of — see [_conversationFor]. Written here rather
+    // than in a listener because both inputs are read here and nowhere else,
+    // and neither is a provider this may write to.
+    if (!onTerminal) {
+      _conversationFor = session.id;
+    } else if (_conversationFor != session?.id) {
+      _conversationFor = null;
+    }
+    final conversationMounted = session != null && _conversationFor != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -282,10 +310,12 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         Expanded(
           child: ColoredBox(
             color: scheme.surfaceContainerLowest,
-            // With two surfaces, an IndexedStack rather than a branch: the
+            // With two surfaces up, an IndexedStack rather than a branch: the
             // conversation keeps its scroll position while the terminal is up,
             // and — the Loop 26 property — the hidden one paints nothing. With
-            // one surface there is nothing to keep alive, so it is not paid for.
+            // one surface there is nothing to keep alive, so it is not paid
+            // for — and until the conversation has been asked for there is no
+            // second surface at all ([_conversationFor]).
             child: session == null
                 ? const _TerminalSurface()
                 : IndexedStack(
@@ -300,10 +330,11 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
                       // behind the toggle. It is named outright in that case.
                       // Only a native session is ever reached that way — an
                       // imported one has no pane of ours to follow.
-                      if (session.selected)
-                        const WorkbenchSessionView()
-                      else
-                        SessionTranscriptView(sessionId: session.id),
+                      if (conversationMounted)
+                        if (session.selected)
+                          const WorkbenchSessionView()
+                        else
+                          SessionTranscriptView(sessionId: session.id),
                     ],
                   ),
           ),
