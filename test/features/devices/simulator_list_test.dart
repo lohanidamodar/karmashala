@@ -4,7 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/devices/application/ios_device_providers.dart';
 import 'package:karmashala/src/features/devices/data/wda_backend.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
+import 'package:karmashala/src/features/devices/presentation/device_section_header.dart';
 import 'package:karmashala/src/features/devices/presentation/simulator_list.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/settings/domain/settings.dart';
 
 IosSimulator _sim(
   String udid,
@@ -26,6 +29,7 @@ Future<void> _pump(
   required List<IosSimulator> simulators,
   bool macOS = true,
   bool backend = false,
+  Settings? settings,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -40,6 +44,8 @@ Future<void> _pump(
         // list rather than about how a preference is stored.
         slimmingOnStartProvider.overrideWithValue(true),
         slimmingKeptCategoriesProvider.overrideWithValue(const {}),
+        if (settings != null)
+          settingsControllerProvider.overrideWith(() => _Settings(settings)),
       ],
       child: const MaterialApp(
         home: Scaffold(body: SingleChildScrollView(child: SimulatorList())),
@@ -47,6 +53,18 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// A real settings controller over a fixed value, for the one case that opens
+/// the slimming dialog — which reads the stored categories rather than the
+/// derived providers the other cases stub.
+class _Settings extends SettingsController {
+  _Settings(this.value);
+
+  final Settings value;
+
+  @override
+  Settings build() => value;
 }
 
 class _StubBackend implements WdaBackend {
@@ -107,8 +125,9 @@ void main() {
     );
   });
 
-  testWidgets('a simulator with no runtime installed cannot be started',
-      (tester) async {
+  testWidgets('a simulator with no runtime installed cannot be started', (
+    tester,
+  ) async {
     // It is still a row in the device set, but booting it only produces a
     // spinner that never ends.
     await _pump(
@@ -128,10 +147,18 @@ void main() {
     await _pump(
       tester,
       simulators: [
-        _sim('old', 'iPhone 8', SimulatorState.shutdown,
-            runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-17-0'),
-        _sim('new', 'iPhone 17 Pro', SimulatorState.shutdown,
-            runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-4'),
+        _sim(
+          'old',
+          'iPhone 8',
+          SimulatorState.shutdown,
+          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-17-0',
+        ),
+        _sim(
+          'new',
+          'iPhone 17 Pro',
+          SimulatorState.shutdown,
+          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-4',
+        ),
       ],
     );
 
@@ -160,8 +187,9 @@ void main() {
     expect(find.text('iOS Simulators'), findsNothing);
   });
 
-  testWidgets('a picked simulator that starts falls back to a real one',
-      (tester) async {
+  testWidgets('a picked simulator that starts falls back to a real one', (
+    tester,
+  ) async {
     // The one that was picked leaves the startable list the moment it boots;
     // the picker must not be left showing a blank selection.
     await _pump(
@@ -176,5 +204,44 @@ void main() {
       find.byKey(const Key('simulator-picker')),
     );
     expect(picker.initialValue, isNotNull);
+  });
+
+  testWidgets('the slimming choice is on the pane, not in Settings', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      simulators: [_sim('a', 'iPhone A', SimulatorState.shutdown)],
+      settings: const Settings(),
+    );
+
+    // The whole point of the change: Android's slimming opens from its own
+    // section header, and this one used to send the user to Settings ›
+    // Simulators — the same decision made in two different places depending on
+    // which phone you were pointing at.
+    await tester.tap(find.byKey(const Key('simulator-slimming-open')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('slimming-enabled')), findsOneWidget);
+    // And the categories are reachable from here, which is what used to be
+    // Settings-only.
+    expect(find.byKey(const Key('slimming-widgets')), findsOneWidget);
+  });
+
+  testWidgets('the heading lines up with the rows under it', (tester) async {
+    await _pump(
+      tester,
+      simulators: [_sim('a', 'iPhone A', SimulatorState.shutdown)],
+    );
+
+    // One indent down the pane. The heading was inset 16 while the Android
+    // headings above it were centred over rows inset 16, so the same column
+    // read as three unrelated panels.
+    expect(
+      tester.getRect(find.text('iOS Simulators')).left,
+      tester.getRect(find.byKey(const Key('simulator-picker'))).left,
+      reason: 'the heading starts where the picker under it starts',
+    );
+    expect(find.byType(DeviceSectionHeader), findsOneWidget);
   });
 }
