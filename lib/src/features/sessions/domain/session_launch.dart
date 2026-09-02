@@ -126,9 +126,18 @@ class SessionLaunchRequest {
   /// it is a worktree.
   ///
   /// What a handoff, a fork and a resume of an adopted session all need: the
-  /// work is in a subdirectory, and Claude Code and Codex key their
-  /// conversation stores by working directory, so starting at the root can
-  /// silently open a *new* conversation instead of the one that was asked for.
+  /// work is in a subdirectory, and starting at the repository root would put
+  /// the agent in a tree that is not the one it was working in.
+  ///
+  /// It used to say that this also protects the *conversation* — "Claude Code
+  /// and Codex key their conversation stores by working directory, so starting
+  /// at the root can silently open a new conversation". That was checked and is
+  /// not true of either: Codex's store is date-keyed with the cwd inside the
+  /// file, and Claude Code's resume falls back past its cwd-keyed bucket to a
+  /// git-worktree sweep and then a scan of every bucket for the id. See
+  /// [AgentResumeLocality], which is where that claim now lives, per agent,
+  /// with its evidence — and where an unverified agent still gets the cautious
+  /// answer this comment assumed for everybody.
   ///
   /// [existingWorktree] wins when both are set, because it is the stronger
   /// statement — it says the directory is a worktree as well as where to run —

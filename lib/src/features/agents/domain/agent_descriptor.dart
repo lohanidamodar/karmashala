@@ -636,6 +636,54 @@ class PermissionModeMapping {
   final String? note;
 }
 
+/// Whether an agent can still find a conversation when it is asked to resume it
+/// from a directory other than the one it was launched in.
+///
+/// The question exists because this app **moves sessions between directories on
+/// purpose**: archiving a worktree keeps the session row and falls back to the
+/// repository root, and a native fork into a new worktree runs
+/// `--resume <id> --fork-session` from a directory the source conversation was
+/// never started in. If a resume were cwd-keyed, each of those would hand the
+/// user a CLI that starts a *brand-new* conversation wearing the old session's
+/// name — the same failure [AgentResume]'s `_ => []` arm used to cause, and the
+/// one `resumeRefusalFor` exists to prevent.
+///
+/// cmux models the same fact as `AgentCwdNamespacing.byDirectory` vs
+/// `cwdInFile` and states the consequence flatly: *"Resuming from a different
+/// directory looks in the wrong namespace and fails with 'No conversation
+/// found'."* **That consequence was checked against the CLIs on this machine
+/// and does not hold for any of the three we ship against** — see each
+/// descriptor's [evidence] in `built_in_agents.dart`. What survives the check is
+/// cmux's *default*, which is kept here for the same reason it keeps it: an
+/// agent whose store nobody has read is assumed to be cwd-keyed, because
+/// refusing a resume that would have worked costs a click and a resume that
+/// silently opens an empty conversation costs the user's work.
+///
+/// [evidence] is required for [AgentResumeLocality.anyDirectory] and is the
+/// store layout or decompiled lookup this was read off, so a future CLI version
+/// can be re-checked rather than trusted. It is the same contract
+/// [AgentForkSupport], [AgentMcpSupport] and [AgentContinueSupport] hold their
+/// claims to.
+class AgentResumeLocality {
+  /// The conversation is addressed by id and the CLI finds it wherever it is
+  /// launched.
+  const AgentResumeLocality.anyDirectory({required this.evidence})
+    : findsConversationAnywhere = true;
+
+  /// The conversation can only be found from the directory it was started in —
+  /// or nobody has checked, which is treated the same way. The default.
+  const AgentResumeLocality.launchDirectory({this.evidence = ''})
+    : findsConversationAnywhere = false;
+
+  /// True only when a resume by id has been *verified* to work from any
+  /// directory.
+  final bool findsConversationAnywhere;
+
+  /// Where that was verified. Empty means "nobody looked", which is exactly
+  /// what a [AgentResumeLocality.launchDirectory] default means.
+  final String evidence;
+}
+
 /// The command-line vocabulary of one agent.
 ///
 /// [resume] is the headless/protocol convention the adapters use;
@@ -648,6 +696,7 @@ class AgentLaunchSpec {
     this.permissionModes = const {},
     this.resume = const AgentResume.unsupported(),
     this.interactiveResume = const AgentResume.unsupported(),
+    this.resumeLocality = const AgentResumeLocality.launchDirectory(),
     this.sessionIdAssignment = const AgentSessionIdAssignment.unsupported(),
     this.sessionIdAnnouncement = const AgentSessionIdAnnouncement.none(),
     this.continueLatest = const AgentContinueSupport.unsupported(),
@@ -671,6 +720,11 @@ class AgentLaunchSpec {
 
   final AgentResume resume;
   final AgentResume interactiveResume;
+
+  /// Whether [resume]/[interactiveResume] still find the conversation when the
+  /// CLI is launched somewhere other than where the conversation was started.
+  /// See [AgentResumeLocality]; defaults to "assume not".
+  final AgentResumeLocality resumeLocality;
 
   /// Whether a second process may resume a conversation another process is
   /// already holding.

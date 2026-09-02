@@ -30,6 +30,7 @@ import '../domain/session_launch.dart';
 import '../domain/session_resume.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
+import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
 import 'session_working_directory.dart';
@@ -738,23 +739,46 @@ class SessionActions {
         'their id automatically.',
       );
     }
-    // After the id is resolved, not before: `_recoverExternalSessionId` and
-    // `_continuableConversationFor` can both supply one the row did not carry,
-    // and it is the id we end up with that the command has to continue.
-    _refuseWhatCannotResume(installation.agentId, externalId);
     final env = _ref
         .read(executionEnvironmentDaoProvider)
         .getById(repo.path.environmentId);
     if (env == null) {
       throw StateError('The session\'s environment is unavailable.');
     }
-    // Resolved once and used twice: the command line's `cd` and the terminal's
-    // own start directory must never disagree.
+    // Resolved once and used three times: the command line's `cd`, the
+    // terminal's own start directory, and the refusal below — which is about
+    // the difference between this and where the conversation was written.
+    final recorded = sessionWorkingDirectoryOf(_ref, session);
     final directory = directoryOrFallback(
       _ref,
-      directory: sessionWorkingDirectoryOf(_ref, session),
+      directory: recorded,
       fallback: repo.path,
     ).directory;
+    // After the id is resolved, not before: `_recoverExternalSessionId` and
+    // `_continuableConversationFor` can both supply one the row did not carry,
+    // and it is the id we end up with that the command has to continue.
+    _refuseWhatCannotResume(installation.agentId, externalId);
+    // The weaker sibling of that refusal, and the reason it is a notice rather
+    // than a throw is [resumeDirectoryCaveatFor]'s: this surface is where the
+    // substitution actually happens — an archived worktree opens the repository
+    // root here — and a session the user can no longer open at all is worse
+    // than one they were warned about. Posted against the session rather than
+    // raised, because the terminal is about to open either way.
+    final caveat = resumeDirectoryCaveatFor(
+      _ref.read(agentRegistryProvider),
+      installation.agentId,
+      externalId,
+      recordedDirectory: recorded?.path,
+      launchDirectory: directory.path,
+    );
+    if (caveat != null) {
+      _ref
+          .read(sessionNoticesProvider.notifier)
+          .post(
+            sessionId,
+            SessionNotice(message: caveat, tone: SessionNoticeTone.warning),
+          );
+    }
     final command = resumeCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
