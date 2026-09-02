@@ -24,6 +24,7 @@ import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
+import '../application/session_selection.dart';
 import 'section_membership_dialog.dart';
 import 'session_card.dart';
 
@@ -69,7 +70,18 @@ class NativeSessionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(selectedSessionIdProvider) == session.id;
+    // `.select` on the one fact each row draws, never the whole value: the
+    // Explorer inflates one of these per visible row, and opening a session or
+    // ticking a box must move that row alone. See [sessionSelectionProvider].
+    final selected = ref.watch(
+      selectedSessionIdProvider.select((id) => id == session.id),
+    );
+    final selecting = ref.watch(
+      sessionSelectionProvider.select((s) => s.active),
+    );
+    final ticked = ref.watch(
+      sessionSelectionProvider.select((s) => s.contains(session.id)),
+    );
     final actions = ref.read(sessionActionsProvider);
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
@@ -163,7 +175,14 @@ class NativeSessionRow extends ConsumerWidget {
       link: link,
       parentTitle: parentTitle,
       lineageBroken: lineageBroken,
-      onTap: open,
+      selecting: selecting,
+      ticked: ticked,
+      // In selection mode a plain click ticks. That is the whole trade the
+      // checkbox mode makes, and it is why leaving the mode is one click away
+      // in two places — the toolbar toggle and the bar's Done.
+      onTap: selecting
+          ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
+          : open,
       menuItems: [
         // Moving a session to another agent, or branching it, belongs on the
         // session — not only on the delivery strip, which is the one place it
@@ -286,7 +305,15 @@ class ImportedSessionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(selectedImportedSessionIdProvider) == session.id;
+    final selected = ref.watch(
+      selectedImportedSessionIdProvider.select((id) => id == session.id),
+    );
+    final selecting = ref.watch(
+      sessionSelectionProvider.select((s) => s.active),
+    );
+    final ticked = ref.watch(
+      sessionSelectionProvider.select((s) => s.contains(session.id)),
+    );
     final actions = ref.read(sessionActionsProvider);
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
@@ -357,7 +384,11 @@ class ImportedSessionRow extends ConsumerWidget {
       branch: stat?.branch,
       subPath: subPath,
       stat: stat,
-      onTap: () => _open(context, ref, session),
+      selecting: selecting,
+      ticked: ticked,
+      onTap: selecting
+          ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
+          : () => _open(context, ref, session),
       menuItems: [
         DesktopMenuItem(
           value: 'resume',

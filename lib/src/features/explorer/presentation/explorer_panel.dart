@@ -29,10 +29,12 @@ import '../application/explorer_actions.dart';
 import '../application/project_tree.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_forest.dart';
+import '../application/session_selection.dart';
 import 'explorer_row.dart';
 import 'project_card.dart';
 import 'explorer_sections_view.dart';
 import 'session_rows.dart';
+import 'session_selection_bar.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
@@ -322,6 +324,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final syncing = ref.watch(sessionSyncingProvider) > 0;
+    // Only whether the mode is on, never the ticked set: this panel builds
+    // every row of every expanded project, so watching the selection itself
+    // would rebuild the whole tree to tick one box. The count is the bar's
+    // business and membership is each row's own — see [sessionSelectionProvider].
+    final selecting = ref.watch(
+      sessionSelectionProvider.select((s) => s.active),
+    );
 
     final Widget body;
     if (projects.isEmpty) {
@@ -356,36 +365,51 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       icon: AppIcons.treeStructure,
       focused: focused,
       actions: [
-        if (syncing)
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+        _HeaderActions(
+          children: [
+            if (syncing)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: Insets.sm),
+                child: SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            IconButton(
+              // The mode's only entrance, and one of its two exits. A toggle
+              // rather than a modifier key: Ctrl-click is invisible until somebody
+              // tells you about it, and the price of making it visible is that a
+              // click means "tick" while the mode is on.
+              tooltip: selecting ? 'Leave selection' : 'Select sessions',
+              isSelected: selecting,
+              icon: Icon(selecting ? AppIcons.x : AppIcons.check, size: 18),
+              onPressed: () =>
+                  ref.read(sessionSelectionProvider.notifier).toggleMode(),
             ),
-          ),
-        IconButton(
-          tooltip: 'Detect CLI sessions',
-          // Not `globe`, which is the Browser surface's glyph (Loop 56 found
-          // the collision and left it here). Finding conversations an agent
-          // already wrote is history, and the imported cards use this glyph for
-          // exactly that.
-          icon: const Icon(AppIcons.clockCounterClockwise, size: 18),
-          onPressed: _showDetected,
-        ),
-        IconButton(
-          tooltip: selectedRepoId == null
-              ? 'Select a repository first'
-              : 'New session',
-          icon: const Icon(AppIcons.chatCircleDots, size: 18),
-          onPressed: selectedRepoId == null
-              ? null
-              : () => NewSessionDialog.show(context),
-        ),
-        IconButton(
-          tooltip: 'New project',
-          icon: const Icon(AppIcons.folderPlus, size: 18),
-          onPressed: () => NewProjectDialog.show(context),
+            IconButton(
+              tooltip: 'Detect CLI sessions',
+              // Not `globe`, which is the Browser surface's glyph (Loop 56 found
+              // the collision and left it here). Finding conversations an agent
+              // already wrote is history, and the imported cards use this glyph for
+              // exactly that.
+              icon: const Icon(AppIcons.clockCounterClockwise, size: 18),
+              onPressed: _showDetected,
+            ),
+            IconButton(
+              tooltip: selectedRepoId == null
+                  ? 'Select a repository first'
+                  : 'New session',
+              icon: const Icon(AppIcons.chatCircleDots, size: 18),
+              onPressed: selectedRepoId == null
+                  ? null
+                  : () => NewSessionDialog.show(context),
+            ),
+            IconButton(
+              tooltip: 'New project',
+              icon: const Icon(AppIcons.folderPlus, size: 18),
+              onPressed: () => NewProjectDialog.show(context),
+            ),
+          ],
         ),
       ],
       body: Column(
@@ -410,6 +434,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
+          if (selecting) const SessionSelectionBar(),
           Expanded(child: body),
         ],
       ),
@@ -732,6 +757,36 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final path = repositoryPaths[session.repositoryId];
     return path == null ? null : relativeSubPath(project.root, path);
   }
+}
+
+/// The pane header's action row, sized for the pane the Explorer actually
+/// clamps to.
+///
+/// Material gives an `IconButton` a 48px square, and the Explorer's minimum
+/// width is 200: four of them plus the sync spinner want 227px of that row, so
+/// the header wore yellow stripes the moment anyone dragged the pane in. The
+/// header is only [Chrome.tabStrip] tall anyway, so the 48dp square was never
+/// honoured here vertically either — this makes the width agree with the
+/// height that was already imposed.
+class _HeaderActions extends StatelessWidget {
+  const _HeaderActions({required this.children});
+
+  final List<Widget> children;
+
+  static const _slot = Size(30, Chrome.tabStrip);
+
+  @override
+  Widget build(BuildContext context) => IconButtonTheme(
+    data: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: _slot,
+        maximumSize: _slot,
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: children),
+  );
 }
 
 /// A non-interactive hint shown under an expanded, empty node.

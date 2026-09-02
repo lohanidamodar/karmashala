@@ -66,6 +66,8 @@ class SessionCard extends StatelessWidget {
     this.parentTitle,
     this.lineageBroken = false,
     this.showMenu = true,
+    this.selecting = false,
+    this.ticked = false,
     super.key,
   });
 
@@ -147,6 +149,17 @@ class SessionCard extends StatelessWidget {
   /// target that does nothing.
   final bool showMenu;
 
+  /// Whether the Explorer is asking which rows to act on.
+  ///
+  /// Draws the tick box, and makes [onTap] mean *tick* rather than *open* —
+  /// the trade taken for a mode discoverable from a toolbar button instead of
+  /// hidden behind a Ctrl-click nobody guesses at. The card decides none of
+  /// that; it is told, so one place owns what a click means.
+  final bool selecting;
+
+  /// Whether this row is in the selection. Ignored unless [selecting].
+  final bool ticked;
+
   /// The glyph for a link kind. Three shapes for three genuinely different
   /// facts: an agent delegated this, the user moved it to another provider, the
   /// user branched it.
@@ -175,29 +188,60 @@ class SessionCard extends StatelessWidget {
       onTap: onTap,
       menuItems: menuItems,
       onMenu: onMenu,
-      builder: (context, menuVisible) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _line1(context, muted, density),
-          SizedBox(height: density.lineGap),
-          _line2(theme, density, menuVisible: menuVisible),
-          // A worktree session draws its third line even before git has
-          // answered: the glyph that says "this has its own checkout" is a
-          // persisted fact, and it must not blink into existence.
-          if (worktree ||
-              branch != null ||
-              subPath != null ||
-              lineageBroken ||
-              whereabouts != null ||
-              !(stat?.isEmpty ?? true)) ...[
+      builder: (context, menuVisible) {
+        final lines = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _line1(context, muted, density),
             SizedBox(height: density.lineGap),
-            _line3(context, muted, density),
+            _line2(theme, density, menuVisible: menuVisible),
+            // A worktree session draws its third line even before git has
+            // answered: the glyph that says "this has its own checkout" is a
+            // persisted fact, and it must not blink into existence.
+            if (worktree ||
+                branch != null ||
+                subPath != null ||
+                lineageBroken ||
+                whereabouts != null ||
+                !(stat?.isEmpty ?? true)) ...[
+              SizedBox(height: density.lineGap),
+              _line3(context, muted, density),
+            ],
           ],
-        ],
-      ),
+        );
+        if (!selecting) return lines;
+        // The box leads the whole card rather than sitting on one of its three
+        // lines: it is about the row, not about anything the row says.
+        return Row(
+          children: [
+            _tickBox(density),
+            SizedBox(width: density.glyphGap),
+            Expanded(child: lines),
+          ],
+        );
+      },
     );
   }
+
+  /// The tick, sized by density rather than by [ExplorerRow.slotOf]: a
+  /// checkbox has Material's own hit area, and squeezing it into the menu
+  /// button's slot would overflow it instead of shrinking it.
+  Widget _tickBox(UiDensity density) => Checkbox(
+    value: ticked,
+    // Named so Narrator says which row it is on. The row itself is not a
+    // button, so nothing else in the semantics tree carries the title here.
+    semanticLabel: 'Select "$title"',
+    visualDensity: density.isTouch
+        ? VisualDensity.standard
+        : VisualDensity.compact,
+    materialTapTargetSize: density.isTouch
+        ? MaterialTapTargetSize.padded
+        : MaterialTapTargetSize.shrinkWrap,
+    // The same callback the row's own tap runs, so ticking the box and
+    // clicking the card cannot come to mean two different things.
+    onChanged: (_) => onTap(),
+  );
 
   Widget _line1(BuildContext context, TextStyle? muted, UiDensity density) {
     final scheme = Theme.of(context).colorScheme;
