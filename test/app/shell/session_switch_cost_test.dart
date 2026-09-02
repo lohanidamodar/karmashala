@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/cli_detection/data/cli_transcript_reader.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/explorer/presentation/session_card.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -50,15 +51,43 @@ import '../../support/fixtures.dart';
 /// across the Explorer, the workbench, the session bar and the side panel, and
 /// any one of them measured alone looks cheap.
 ///
-/// What it found (2026-09-02): the database was never the problem — one switch
-/// costs ~90 statements against indexed rows, spawns nothing and re-encodes no
-/// scrollback. The expensive thing was the **conversation being built behind
-/// the terminal**: `WorkbenchView` put both surfaces in an `IndexedStack`,
-/// which builds every child, so landing on a session's terminal also mounted
-/// its chat view — and `sessionChatTranscriptProvider` is an `autoDispose`
-/// family, so every switch started a fresh CLI **store scan** and then read and
-/// JSON-parsed that session's **whole transcript file**, for a surface nobody
-/// was looking at.
+/// What it found (2026-09-02), with two live sessions and a third row drawn:
+/// **105 statements, 47 provider builds, one whole-transcript read**, no
+/// subprocess and no scrollback encode — and the bill grew by about one
+/// statement per session in the workspace. Three things were paying for it,
+/// none of them the database itself:
+///
+/// 1. **The conversation was built behind the terminal.** `WorkbenchView` put
+///    both surfaces in an `IndexedStack`, which builds every child, so landing
+///    on a session's terminal also mounted its chat view — and
+///    `sessionChatTranscriptProvider` is an `autoDispose` family, so every
+///    switch started a fresh CLI **store scan** and then read and JSON-parsed
+///    that session's **whole transcript file**, for a surface nobody was
+///    looking at. Fixed by building the conversation only once it is asked for.
+///
+/// 2. **The switch named no row.** The workbench published its "the pane on
+///    screen moved" change without a session id, which `SessionSignals`
+///    correctly reads as "all of them", so every per-session provider in the
+///    app rebuilt: five builds and a handful of reads per Explorer card, per
+///    switch, for rows nothing had happened to.
+///
+/// 3. **The Explorer asked the database where every session lives.** A switch
+///    moves placement, the tree watches placement, and the tree is built for
+///    every session in the project — only the cards on screen are *inflated* —
+///    so `_subPathFor*` cost one `repositories` lookup per session. That is the
+///    term that grew: 475 statements at 400 sessions.
+///
+/// After all three: **62 statements, 29 provider builds, no transcript read,
+/// nothing at all for a session the switch did not name, and a flat curve —
+/// 73 statements whether the workspace holds 20 sessions or 400.**
+///
+/// What was measured and left alone, because no number justified touching it:
+/// the delivery strip, `sessionVerdictProvider` and
+/// `ReviewSessionService.offerFor` cost about a dozen indexed row lookups
+/// between them and start no process; `checkoutDeliveryProvider` is keyed by
+/// checkout and stays warm across a switch, so no git runs; and narrowing the
+/// session rows' `watch(selectedSessionIdProvider)` to a `select` changed the
+/// count by nothing at all, because the panel above them rebuilds wholesale.
 void main() {
   late CountingDatabase db;
   late FakeCommandRunner git;
@@ -83,10 +112,11 @@ void main() {
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    // Two running sessions in one repository — the owner's exact workspace.
-    // Both carry a CLI id, because that is what makes a chat rendering possible
-    // and therefore what makes a transcript worth reading.
-    for (final id in ['s1', 's2']) {
+    // Two running sessions in one repository — the owner's exact workspace —
+    // plus a third the switch never touches, which is what makes a fan-out
+    // visible. All carry a CLI id, because that is what makes a chat rendering
+    // possible and therefore what makes a transcript worth reading.
+    for (final id in ['s1', 's2', 's3']) {
       SessionDao(db).insert(
         Session(
           id: id,
@@ -156,6 +186,26 @@ void main() {
     }
   }
 
+  /// Adds [count] more idle rows to the same repository. Nothing about a
+  /// switch is about them; they are there so a per-row cost shows up as a
+  /// curve rather than as a constant.
+  void seedIdleRows(int count) {
+    for (var i = 0; i < count; i++) {
+      SessionDao(db).insert(
+        Session(
+          id: 'idle$i',
+          repositoryId: 'r1',
+          agentInstallationId: 'a1',
+          title: 'Idle $i',
+          useWorktree: false,
+          status: SessionStatus.completed,
+          createdAt: testTime,
+          externalSessionId: 'ext-idle$i',
+        ),
+      );
+    }
+  }
+
   /// Mounts the whole app and gives each session a live pane of its own, which
   /// is what "two active sessions" means.
   Future<void> mount(WidgetTester tester) async {
@@ -190,6 +240,16 @@ void main() {
       ),
     );
     await settle(tester);
+    // The Explorer draws a card per session, and each card is a fistful of
+    // per-session providers. A tree nobody has opened would hide the whole
+    // per-row half of a switch's bill.
+    await tester.tap(find.text('Demo'));
+    await settle(tester);
+    expect(
+      find.byType(SessionCard),
+      findsAtLeastNWidgets(3),
+      reason: 'the rows whose cost is being measured have to be on screen',
+    );
   }
 
   int encodes() => terminals.values.fold(0, (sum, t) => sum + t.bufferReads);
@@ -319,6 +379,76 @@ void main() {
     expect(chatSubscriptions, isEmpty, reason: '$chatSubscriptions');
   });
 
+  testWidgets('a switch wakes nothing belonging to an untouched session', (
+    tester,
+  ) async {
+    // `s3` is neither the session left nor the session opened. Waking it is a
+    // fan-out: the workbench used to publish its "the pane on screen moved"
+    // change without naming a row, and a change that names no row is read —
+    // correctly — as being about every row, so every per-session provider in
+    // the app rebuilt on every switch. That is the cost the session-signal
+    // work removed from a rename; a switch must not put it back.
+    await mount(tester);
+    await warmUp(tester);
+    reset();
+
+    await container.read(explorerActionsProvider).openNative('s2');
+    await settle(tester);
+
+    // ignore: avoid_print
+    print('SWITCH-COST-UNTOUCHED ${rebuilds.forSession('s3')}');
+    expect(
+      rebuilds.forSession('s3'),
+      isEmpty,
+      reason: 'a session the switch never named must stay asleep',
+    );
+  });
+
+  group('a switch costs the same however large the workspace is', () {
+    /// Filled by the cases below so the shape can be asserted across them.
+    final statements = <int, int>{};
+    final cards = <int, int>{};
+
+    // Past the viewport on purpose. The Explorer builds only the cards a
+    // screenful holds (`explorer_panel_scale_test`), so beyond that point the
+    // *whole* switch has to stop noticing rows exist — which is the property
+    // the session-signal work bought and this guards.
+    for (final extra in [20, 100, 400]) {
+      testWidgets('with $extra rows in the tree', (tester) async {
+        seedIdleRows(extra);
+        await mount(tester);
+        cards[extra] = tester.widgetList(find.byType(SessionCard)).length;
+        await warmUp(tester);
+        reset();
+
+        await container.read(explorerActionsProvider).openNative('s2');
+        await settle(tester);
+
+        statements[extra] = db.count;
+        // ignore: avoid_print
+        print(
+          'SWITCH-SCALE rows=$extra cardsDrawn=${cards[extra]} '
+          'statements=${db.count} rebuilds=${rebuilds.total}',
+        );
+      });
+    }
+
+    test('so the curve is flat past the viewport', () {
+      expect(statements.keys, containsAll([20, 100, 400]));
+      expect(
+        cards.values.toSet(),
+        hasLength(1),
+        reason: 'the viewport must already be full at the smallest size: $cards',
+      );
+      expect(
+        statements.values.toSet(),
+        hasLength(1),
+        reason: 'a switch is about two rows, not about the workspace: '
+            '$statements',
+      );
+    });
+  });
+
   testWidgets('one workbench tab switch spawns nothing', (tester) async {
     await mount(tester);
     await container.read(explorerActionsProvider).openNative('s1');
@@ -375,6 +505,13 @@ final class _Rebuilds extends ProviderObserver {
       ..sort((a, b) => b.value.compareTo(a.value));
     return entries.map((e) => '${e.key}=${e.value}').join(' | ');
   }
+
+  /// Everything rebuilt *for* one session, by name. A family provider carries
+  /// its argument in the label, so this is the whole per-row bill for a row.
+  Map<String, int> forSession(String sessionId) => {
+    for (final entry in counts.entries)
+      if (entry.key.endsWith('($sessionId)')) entry.key: entry.value,
+  };
 }
 
 /// The statements issued, tallied by shape, commonest first.

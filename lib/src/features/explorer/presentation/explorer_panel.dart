@@ -562,6 +562,19 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     required int depth,
   }) {
     if (sessions.isEmpty) return const [];
+    // Where each of this project's repositories lives, read **once**. The two
+    // `_subPathFor*` helpers used to ask the DAO per row, and this list is
+    // built for every session in the project — only the cards on screen are
+    // *inflated* — so an Explorer rebuild cost one query per session: 403 of
+    // them at 400 sessions, on every session switch, because a switch moves
+    // placement and this tree watches it. Measured in
+    // `session_switch_cost_test.dart`.
+    final repositoryPaths = <String, EnvironmentPath>{
+      for (final repository in ref
+          .read(repositoryDaoProvider)
+          .getByProject(project.id))
+        repository.id: repository.path,
+    };
     final pinnedIds = ref
         .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
         .toSet();
@@ -579,7 +592,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             (
               ts: node.session.createdAt,
               pinned: pinnedIds.contains(node.session.id),
-              rows: _lineageRows(project, node, depth: depth, parent: null),
+              rows: _lineageRows(
+                project,
+                node,
+                depth: depth,
+                parent: null,
+                repositoryPaths: repositoryPaths,
+              ),
             ),
           for (final imported in sessions.imported)
             (
@@ -589,7 +608,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 _ImportedSessionRow(
                   session: imported,
                   depth: depth + (imported.isSubagent ? 1 : 0),
-                  subPath: _subPathForImported(project, imported),
+                  subPath: _subPathForImported(
+                    project,
+                    imported,
+                    repositoryPaths,
+                  ),
                   pinned: pinnedIds.contains(imported.id),
                 ),
               ],
@@ -606,11 +629,12 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     SessionNode node, {
     required int depth,
     required Session? parent,
+    required Map<String, EnvironmentPath> repositoryPaths,
   }) => [
     _NativeSessionRow(
       session: node.session,
       depth: depth,
-      subPath: _subPathForNative(project, node.session),
+      subPath: _subPathForNative(project, node.session, repositoryPaths),
       pinned: ref
           .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
           .contains(node.session.id),
@@ -619,7 +643,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       lineageBroken: node.lineageBroken,
     ),
     for (final child in node.children)
-      ..._lineageRows(project, child, depth: depth + 1, parent: node.session),
+      ..._lineageRows(
+        project,
+        child,
+        depth: depth + 1,
+        parent: node.session,
+        repositoryPaths: repositoryPaths,
+      ),
   ];
 
   // --- shared menu fragments --------------------------------------------------
@@ -680,18 +710,24 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
   // --- paths ------------------------------------------------------------------
 
-  String? _subPathForNative(Project project, Session session) {
-    final directory =
-        session.worktree ??
-        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+  /// [repositoryPaths] is this project's repositories, already read — see
+  /// [_sessionCards]. A row whose repository is not in it belongs to another
+  /// project and has no sub-path *here*, which is the same answer the DAO gave.
+  String? _subPathForNative(
+    Project project,
+    Session session,
+    Map<String, EnvironmentPath> repositoryPaths,
+  ) {
+    final directory = session.worktree ?? repositoryPaths[session.repositoryId];
     return directory == null ? null : relativeSubPath(project.root, directory);
   }
 
-  String? _subPathForImported(Project project, ImportedSession session) {
-    final path = ref
-        .read(repositoryDaoProvider)
-        .getById(session.repositoryId)
-        ?.path;
+  String? _subPathForImported(
+    Project project,
+    ImportedSession session,
+    Map<String, EnvironmentPath> repositoryPaths,
+  ) {
+    final path = repositoryPaths[session.repositoryId];
     return path == null ? null : relativeSubPath(project.root, path);
   }
 }

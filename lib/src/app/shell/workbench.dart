@@ -138,7 +138,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // selected; the side panel should describe that session, not the row the
       // Explorer happens to highlight first.
       if (active != null) ref.read(sessionContextProvider).follow(active);
-      if (selected != null) _showSurfaceFor(_shownPane);
+      if (selected != null) _showSurfaceFor(_shownPane, selected);
     });
   }
 
@@ -147,20 +147,30 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// opens the conversation" a property rather than a race won.
   void _showChat() => ref.read(terminalVisibleProvider.notifier).set(false);
 
-  /// Reveals the pane the selected session is already running in. Starts and
-  /// stops nothing: a detached pane comes back as a tab, one already in a tab is
+  /// Reveals the pane [sessionId] is already running in. Starts and stops
+  /// nothing: a detached pane comes back as a tab, one already in a tab is
   /// simply focused.
-  void _showTerminalFor(String? paneId) {
+  ///
+  /// [sessionId] is carried alongside the pane purely to **name the change**.
+  /// This used to publish a placement change with no row on it, and a change
+  /// that names no row is read — correctly — as being about every row, so one
+  /// switch woke every per-session provider in the app: at a screenful of
+  /// Explorer cards that is five rebuilds and a handful of reads per row, for a
+  /// session nothing happened to. Every caller knows whose pane this is, so it
+  /// says so. Measured in `session_switch_cost_test.dart`.
+  void _showTerminalFor(String? paneId, String? sessionId) {
     if (paneId != null) {
       final terminals = ref.read(terminalSessionsControllerProvider.notifier);
       terminals
         ..reattachSession(paneId)
         ..focusPane(paneId);
-      // Which pane a session is showing in moved. The pane is what is known
-      // here, not the row, so this names no session — which
-      // [SessionSignals.forSession] reads as "all of them", the safe answer.
+      // Which pane this session is showing in moved, and nothing about any
+      // other row. A pane with no session behind it — there is no such caller
+      // today — would still be the honest broadcast.
       ref.publishSessionChange(
-        const SessionChange(kinds: {SessionChangeKind.placement}),
+        sessionId == null
+            ? const SessionChange(kinds: {SessionChangeKind.placement})
+            : SessionChange.moved(sessionId),
       );
     }
     ref.read(terminalVisibleProvider.notifier).set(true);
@@ -174,7 +184,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// place that says so, in the same words the conversation's own empty hint
   /// reads off the same helper.
   void _openSession(String sessionId) =>
-      _showSurfaceFor(sessionTerminalPane(ref, sessionId));
+      _showSurfaceFor(sessionTerminalPane(ref, sessionId), sessionId);
 
   /// Follows the selected session onto the pane it acquires, or loses.
   ///
@@ -202,7 +212,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // Gaining a pane moves the workbench onto it, or the session would be off
     // screen.
     if (paneId != null) {
-      _showTerminalFor(paneId);
+      _showTerminalFor(paneId, sessionId);
     } else if (ended) {
       _releaseEndedPane();
     }
@@ -237,9 +247,9 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.read(selectedSessionIdProvider.notifier).select(null);
   }
 
-  void _showSurfaceFor(String? paneId) {
+  void _showSurfaceFor(String? paneId, String? sessionId) {
     _shownPane = paneId;
-    _showTerminalFor(paneId);
+    _showTerminalFor(paneId, sessionId);
   }
 
   @override
@@ -255,7 +265,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // selected it is already resuming it into one (`openImported`). This used
       // to switch straight to the transcript, which is how the one path the
       // user could not miss opened the chat interface every single time.
-      if (next != null) _showSurfaceFor(null);
+      if (next != null) _showSurfaceFor(null, null);
     });
     // ...and the pane the selected session has can arrive after the tap that
     // selected it, or go away under it. Both of these move it: the terminal's
@@ -347,7 +357,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
           session: session,
           onTerminal: onTerminal,
           onChat: _showChat,
-          onTerminalView: () => _showTerminalFor(session?.paneId),
+          onTerminalView: () => _showTerminalFor(session?.paneId, session?.id),
         ),
       ],
     );
