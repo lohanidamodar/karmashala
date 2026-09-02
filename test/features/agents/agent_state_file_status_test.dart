@@ -63,6 +63,69 @@ void main() {
     expect(report.status, AgentActivityStatus.unknown);
   });
 
+  test(
+    'an assistant record that still carries a tool_use is not idle',
+    () async {
+      // The shape a Claude Code transcript really has while a subagent runs.
+      // Copied from the owner's own store: the `Agent`/`Task` call is written
+      // as an assistant record carrying a `tool_use` block, and the matching
+      // `tool_result` does not arrive — in a *later* user record — until the
+      // subagent finishes, which can be many minutes.
+      //
+      // `type == assistant` alone therefore reads a turn in flight as a
+      // finished one, and a finished turn is what fires the "finished"
+      // notification. Replaying the owner's live transcript
+      // (`-mnt-c-...-8a817d98-....jsonl`) finds 6,291 points where the last
+      // record is an assistant record with an unanswered tool_use — 18 hours
+      // of wall time that would have been reported as idle, the longest single
+      // window being 25 minutes on an `AskUserQuestion` the session was
+      // literally waiting on the user for.
+      final path = write('m.jsonl', [
+        '{"type":"user","message":{"content":"delegate this"}}',
+        '{"type":"assistant","message":{"role":"assistant","content":'
+            '[{"type":"tool_use","id":"toolu_01","name":"Task",'
+            '"input":{"subagent_type":"Explore"}}]}}',
+      ]);
+
+      final report = (await source.read(claude, path, fresh(path)))!;
+
+      expect(report.status, AgentActivityStatus.working);
+    },
+  );
+
+  test('a finished turn is still idle', () async {
+    // The other half of the same rule. A turn that really ended writes an
+    // assistant record whose content holds only text, so nothing here makes a
+    // session that has stopped look busy.
+    final path = write('n.jsonl', [
+      '{"type":"user","message":{"content":"hi"}}',
+      '{"type":"assistant","message":{"role":"assistant","content":'
+          '[{"type":"text","text":"All done."}]}}',
+    ]);
+
+    final report = (await source.read(claude, path, stale(path)))!;
+
+    expect(report.status, AgentActivityStatus.idle);
+  });
+
+  test(
+    'a subagent call nobody has answered for hours is unknown, not idle',
+    () async {
+      // The staleness rule already says a `working` record stops meaning
+      // working once nothing is writing the file. `unknown` is the honest
+      // answer for a transcript frozen mid-tool-call, and — unlike `idle` — it
+      // is not news, so it cannot fire a completion.
+      final path = write('o.jsonl', [
+        '{"type":"assistant","message":{"role":"assistant","content":'
+            '[{"type":"tool_use","id":"toolu_02","name":"Task","input":{}}]}}',
+      ]);
+
+      final report = (await source.read(claude, path, stale(path)))!;
+
+      expect(report.status, AgentActivityStatus.unknown);
+    },
+  );
+
   test('a Codex rollout ending in an assistant message is idle', () async {
     final path = write('d.jsonl', [
       '{"type":"response_item","payload":{"type":"message","role":"user",'

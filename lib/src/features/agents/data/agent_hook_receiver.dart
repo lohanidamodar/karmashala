@@ -48,8 +48,21 @@ class AgentHookReceiver {
     final id = agentId ?? '';
     final name = event ?? '';
     final spec = id.isEmpty ? null : registry.byId(id)?.hooks;
-    final status = spec?.eventStatus[name] ?? AgentActivityStatus.unknown;
     final sessionId = spec == null ? '' : _sessionId(spec.sessionIdPath, body);
+    // The agent's own subtype for this event, when its payload carries one.
+    // Empty means it does not — every Claude Code event but `Notification`, and
+    // any CLI predating the field — and then the event name is all we have.
+    final kind = spec == null || spec.eventKindPath.isEmpty
+        ? ''
+        : _stringAt(spec.eventKindPath, body);
+    final declared = kind.isEmpty ? null : spec!.eventKindMeaning[kind];
+    // A subtype the agent named and we do not recognise is `unknown`, not the
+    // event's default. `Notification` defaults to `awaitingApproval`, and its
+    // subtypes include a successful login and an MCP elicitation result — a
+    // notice nobody is waiting on must not raise "this session needs you".
+    final status = kind.isEmpty
+        ? spec?.eventStatus[name] ?? AgentActivityStatus.unknown
+        : declared?.status ?? AgentActivityStatus.unknown;
     // The agent's own description of what it wants, when its hooks carry one.
     // Claude Code's `Notification` payload has a `message`; this used to be
     // decoded for the session id and discarded, which is why an approval could
@@ -64,11 +77,13 @@ class AgentHookReceiver {
       status: status,
       source: AgentStatusSource.hook,
       observedAt: clock.nowUtc(),
-      detail: name.isEmpty ? null : name,
+      detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
       waiting: spec == null
           ? AgentWaitKind.unrecorded
-          : _waitKind(spec, message),
+          : kind.isEmpty
+          ? _waitKind(spec, message)
+          : declared?.waiting ?? AgentWaitKind.unrecorded,
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
