@@ -340,6 +340,37 @@ void main() {
     expect(fake.approvalAnswers, isEmpty);
   });
 
+  test('a session merely waiting for input crosses the wire as a notice, not '
+      'an approval', timeout: const Timeout(Duration(minutes: 2)), () async {
+    // The host fires the same event for both — `needs_approval` means the
+    // session has stopped for the user, which an agent sitting at its own
+    // prompt has also done. What separates them is the wait kind, and the
+    // keys that ride with it.
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+    await gateway.listSessions();
+
+    final approvals = ItemQueue(gateway.pendingApproval('s1'));
+    expect(await approvals.next, isNull);
+
+    fake.approvals['s1'] = const RemoteApprovalRequest(
+      sessionId: 's1',
+      evidence: ['Claude is waiting for your input'],
+      waiting: RemoteWaitKind.input,
+    );
+    fake.setAwaitingApproval('s1');
+    await service!.notifyApprovalRequested('s1');
+
+    final pending = (await approvals.next)!;
+    expect(pending.waiting, RemoteWaitKind.input);
+    // No key survives the crossing, so there is nothing for the card to press.
+    expect(pending.approveLabel, isNull);
+    expect(pending.denyLabel, isNull);
+    // The agent's own words still do.
+    expect(pending.evidence, ['Claude is waiting for your input']);
+  });
+
   test('a transcript too long for one frame arrives with its top named',
       timeout: const Timeout(Duration(minutes: 2)), () async {
     // The host answers with the tail and says how much it kept back; the

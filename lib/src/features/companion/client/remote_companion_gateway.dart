@@ -1920,6 +1920,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // The wire carries no agent name, and the phone invents no claim.
       agentName: 'The agent',
       evidence: request.evidence,
+      waiting: request.waiting,
       approveLabel: request.approveLabel,
       denyLabel: request.denyLabel,
     );
