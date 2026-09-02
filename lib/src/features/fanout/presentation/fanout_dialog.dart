@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../git/application/changes_providers.dart';
@@ -197,7 +198,7 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
                 title: Text(install.agentId),
                 subtitle: Text(
                   install.version ?? install.executable.path,
-                  style: const TextStyle(fontFamily: kMonoFamily),
+                  style: MonoStyles.body,
                 ),
                 onChanged: _busy
                     ? null
@@ -217,11 +218,7 @@ class _FanOutDialogState extends ConsumerState<FanOutDialog> {
       FanOutUsageStrip(
         installations: installs.where((i) => _selected.contains(i.id)).toList(),
       ),
-      if (_error != null)
-        Text(
-          _error!,
-          style: TextStyle(color: SemanticColors.of(context).failure),
-        ),
+      if (_error != null) DesktopErrorBanner(_error!),
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
