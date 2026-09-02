@@ -86,6 +86,111 @@ class StreamStalledOverlay extends StatelessWidget {
   }
 }
 
+/// Says the picture is standing still, without claiming anything is wrong.
+///
+/// A device nobody is touching sends no frames — scrcpy encodes on change — so
+/// this is the ordinary state of a phone on a desk, and it gets a chip rather
+/// than the scrim [StreamStalledOverlay] draws. The counter is there because
+/// "is it live or has it frozen?" is a fair question to have about a still
+/// picture, and this is the answer to it.
+class StreamIdleBadge extends StatelessWidget {
+  const StreamIdleBadge({super.key, required this.detail});
+
+  /// The stream's own line, e.g. `No screen changes for 20s.`
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.scrim.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                AppIcons.pauseCircle,
+                size: 14,
+                color: theme.colorScheme.onInverseSurface,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                detail,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onInverseSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Covers the last frame of a stream that is being restarted.
+///
+/// The picture underneath is deliberately kept — a held frame is a far better
+/// thing to look at than the spinner that used to replace it — which is
+/// exactly why this has to be over it. A stale frame with nothing said about
+/// it is indistinguishable from a live one, and it is a picture people tap.
+class StreamReconnectingOverlay extends StatelessWidget {
+  const StreamReconnectingOverlay({super.key, required this.deviceLabel});
+
+  final String? deviceLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = deviceLabel;
+    return ColoredBox(
+      color: theme.colorScheme.scrim.withValues(alpha: 0.72),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.onInverseSurface,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Reconnecting…',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.onInverseSurface,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label == null
+                    ? 'This is the last frame received, not a live picture.'
+                    : 'This is the last frame received from $label, not a '
+                          'live picture.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onInverseSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Says which device the live view is showing, and which transport its
 /// gestures are using.
 ///

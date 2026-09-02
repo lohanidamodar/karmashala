@@ -7,7 +7,9 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/logging/app_logger.dart';
 import '../application/device_providers.dart';
+import '../application/stream_restart_policy.dart';
 import '../data/device_gesture_sink.dart';
 import '../data/device_keyboard_sink.dart';
 import '../data/device_stream.dart';
@@ -22,19 +24,6 @@ import '../application/simulator_live_view.dart';
 import 'simulator_live_pane.dart';
 import 'simulator_list.dart';
 import 'device_touch_surface.dart';
-
-/// How long to wait before each automatic reconnection attempt.
-///
-/// Bounded on purpose. A live view that silently retries forever is the same
-/// failure the watchdog exists to end — the user is told after the last one and
-/// given the button instead.
-const List<Duration> kStreamReconnectBackoff = [
-  Duration(seconds: 1),
-  Duration(seconds: 2),
-  Duration(seconds: 4),
-  Duration(seconds: 8),
-  Duration(seconds: 15),
-];
 
 /// What the live view must do when the user's chosen device changes.
 enum LiveViewSelectionAction {
@@ -131,8 +120,21 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// already careful about — with a keyboard instead of three buttons.
   bool _keyboardForwarding = false;
 
+  /// The previous session's player, kept alive across a restart so the last
+  /// frame it decoded stays on screen instead of the picture going blank.
+  ///
+  /// It is a *held* picture, never a live one: whenever this is what is on
+  /// screen, [StreamReconnectingOverlay] is over it saying so. Disposed as soon
+  /// as the new stream has a picture of its own.
+  Player? _heldPlayer;
+  VideoController? _heldVideo;
+
   Timer? _reconnectTimer;
-  int _reconnectAttempt = 0;
+
+  /// When an unwell stream is worth restarting, and how long to wait first.
+  final StreamRestartPolicy _restarts = StreamRestartPolicy();
+
+  static final AppLogger _log = AppLogger.named('device-stream');
 
   /// Emulators with a shutdown in flight, by serial — one per row, because the
   /// list can offer to stop more than one.
@@ -146,16 +148,23 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   void dispose() {
     _reconnectTimer?.cancel();
     _disposeSession();
+    _releaseHeldPicture();
     super.dispose();
   }
 
   /// Tears the running session down. Leaves [_liveSerial] alone: this is what a
   /// restart or a device switch uses, and both are still "the live view is on".
-  Future<void> _disposeSession() async {
+  ///
+  /// With [retainPicture] the player outlives the session it was showing, so a
+  /// restart of the same device replaces the picture rather than removing it.
+  /// Everything that carries input — the sockets, the sinks, the keyboard — is
+  /// torn down either way: only the frame is kept.
+  Future<void> _disposeSession({bool retainPicture = false}) async {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     final session = _session;
     final player = _player;
+    final video = _video;
     final health = _healthSubscription;
     _healthSubscription = null;
     _session = null;
@@ -167,6 +176,21 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     _health = null;
     await health?.cancel();
     await session?.stop();
+    if (retainPicture && player != null) {
+      await _releaseHeldPicture();
+      _heldPlayer = player;
+      _heldVideo = video;
+      return;
+    }
+    await player?.dispose();
+  }
+
+  /// Lets go of the held frame. Idempotent: a restart, a stop, a device switch
+  /// and `dispose` all pass through here.
+  Future<void> _releaseHeldPicture() async {
+    final player = _heldPlayer;
+    _heldPlayer = null;
+    _heldVideo = null;
     await player?.dispose();
   }
 
@@ -174,6 +198,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   Future<void> _stopStream() async {
     _liveSerial = null;
     await _disposeSession();
+    await _releaseHeldPicture();
   }
 
   /// Keeps the live view on whatever device the user has chosen.
@@ -197,7 +222,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       case LiveViewSelectionAction.stop:
         unawaited(_stopAndRebuild());
       case LiveViewSelectionAction.moveTo:
-        _reconnectAttempt = 0;
+        _restarts.reset();
         unawaited(_startStream(next.device!));
     }
   }
@@ -220,22 +245,28 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         .where((candidate) => candidate.serial == serial)
         .firstOrNull;
     if (device == null) return;
-    if (manual) _reconnectAttempt = 0;
+    if (manual) _restarts.reset();
     await _startStream(device);
   }
 
-  /// Reacts to the stream reporting itself unwell.
+  /// Reacts to the stream's opinion of itself.
+  ///
+  /// **Restarting is [StreamRestartPolicy]'s decision, not this method's.** It
+  /// used to be "anything that is not healthy", which included a device sitting
+  /// on a static screen, and the live view spent nine minutes restarting a
+  /// phone nobody was touching.
   void _onHealth(DeviceStreamHealth health) {
     if (!mounted) return;
     setState(() => _health = health);
-    if (health.isHealthy) {
-      _reconnectAttempt = 0;
-      return;
-    }
     if (_reconnectTimer != null) return;
-    if (_reconnectAttempt >= kStreamReconnectBackoff.length) return;
-    final delay = kStreamReconnectBackoff[_reconnectAttempt];
-    _reconnectAttempt += 1;
+    final delay = _restarts.onHealth(health, DateTime.now());
+    if (delay == null) return;
+    // Said out loud, because the log of the restart loop recorded only that
+    // the stream had stopped — never why, which is what made it a mystery.
+    _log.warning(
+      'Restarting the live view on $_liveSerial in ${delay.inSeconds}s '
+      '(attempt ${_restarts.attempt}): ${health.detail}',
+    );
     _reconnectTimer = Timer(delay, () {
       _reconnectTimer = null;
       if (mounted) _restartStream(manual: false);
@@ -256,11 +287,14 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     // toolbar, the picture, the gestures and the hardware keys cannot disagree
     // about which device the pane is about.
     ref.read(selectedDeviceSerialProvider.notifier).select(device.serial);
+    // Only for the device already on screen. Another device's last frame is
+    // not a stale picture of this one — it is the wrong phone.
+    final retainPicture = _session?.serial == device.serial && _player != null;
     setState(() {
       _starting = true;
       _streamError = null;
     });
-    await _disposeSession();
+    await _disposeSession(retainPicture: retainPicture);
     try {
       final session = await service.start(device.serial);
       if (!mounted || token != _startToken) {
@@ -292,6 +326,11 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         'demuxer-lavf-o':
             'fflags=+nobuffer,seg_max_retry=5,strict=experimental,'
             'allowed_extensions=ALL,protocol_whitelist=[file,tcp,http]',
+        // The stream ends the moment the session it is reading from stops, and
+        // without this mpv clears the video output there — which would make the
+        // held frame a black rectangle. Paused on the last frame is the whole
+        // point of holding it.
+        'keep-open': 'yes',
         'untimed': 'yes',
         'vd-lavc-threads': '1',
         'audio': 'no',
@@ -320,12 +359,18 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         _keyboardSink = _keyboardSinkFor(session);
         _keyboardForwarding = false;
       });
+      // After the frame that shows the new picture, never before: disposing a
+      // player whose texture is still on screen is how a live view flashes.
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_releaseHeldPicture()),
+      );
       // No control socket: the adb fallback needs the device's screen size,
       // which is a round trip. Fetched off the start path so a slow `wm size`
       // delays gestures rather than the picture.
       if (sink == null) unawaited(_useAdbSink(session.serial));
     } catch (error) {
       if (!mounted || token != _startToken) return;
+      unawaited(_releaseHeldPicture());
       setState(() {
         _starting = false;
         _liveSerial = null;
@@ -589,18 +634,20 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                   onBootAvd: _bootAvd,
                 )
               : _LiveView(
-                  video: _video,
+                  // The held frame while a restart is in flight, so the
+                  // picture does not blink out and back. It is covered and
+                  // labelled — see [_LiveView.reconnecting].
+                  video: _video ?? _heldVideo,
                   device: live,
                   starting: _starting,
+                  reconnecting: _video == null && _heldVideo != null,
                   sink: _sink,
                   keyboard: _keyboardSink,
                   forwardingKeyboard: _keyboardForwarding,
                   onForwardingChanged: (value) =>
                       setState(() => _keyboardForwarding = value),
                   health: _health,
-                  exhausted:
-                      _reconnectAttempt >= kStreamReconnectBackoff.length &&
-                      _reconnectTimer == null,
+                  exhausted: _restarts.isExhausted && _reconnectTimer == null,
                   onRestart: _restartStream,
                   stopping: _stopping,
                   booting: _booting,
@@ -825,6 +872,7 @@ class _LiveView extends ConsumerWidget {
     required this.video,
     required this.device,
     required this.starting,
+    required this.reconnecting,
     required this.sink,
     required this.keyboard,
     required this.forwardingKeyboard,
@@ -844,6 +892,13 @@ class _LiveView extends ConsumerWidget {
   /// The device this picture is of — never merely the selected one.
   final AndroidDevice? device;
   final bool starting;
+
+  /// Whether [video] is the previous session's held frame rather than a live
+  /// picture. It is covered and labelled while this is true, and nothing taps
+  /// through it: a stale frame is the one thing a live view must never be
+  /// mistaken for.
+  final bool reconnecting;
+
   final DeviceGestureSink? sink;
 
   /// Where keystrokes go, and whether they are going. `null` when neither the
@@ -867,7 +922,9 @@ class _LiveView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (starting) {
+    // A spinner only when there is nothing better to show. With a held frame
+    // there is.
+    if (starting && !reconnecting) {
       return const Center(child: CircularProgressIndicator());
     }
     final controller = video;
@@ -890,7 +947,8 @@ class _LiveView extends ConsumerWidget {
         ?.value;
     final aspect = screen == null ? 9 / 19.5 : screen.width / screen.height;
     final report = health;
-    final unwell = report != null && !report.isHealthy;
+    final unwell = !reconnecting && report != null && !report.isHealthy;
+    final idle = !reconnecting && report?.state == DeviceStreamState.idle;
 
     return Column(
       children: [
@@ -910,13 +968,26 @@ class _LiveView extends ConsumerWidget {
                   fit: StackFit.expand,
                   children: [
                     DeviceTouchSurface(
-                      sink: sink,
+                      // No input against a frame that is no longer live: the
+                      // tap would land somewhere the user cannot see.
+                      sink: reconnecting ? null : sink,
                       child: Video(
                         controller: controller,
                         fit: BoxFit.fill,
                         controls: NoVideoControls,
                       ),
                     ),
+                    if (reconnecting)
+                      StreamReconnectingOverlay(
+                        deviceLabel: currentDevice.displayName,
+                      ),
+                    // A device with nothing new to show is not a fault, so it
+                    // gets a chip rather than the scrim below.
+                    if (idle)
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: StreamIdleBadge(detail: report!.detail),
+                      ),
                     // A stale picture must not pass for a live one. The frame
                     // underneath is left visible — it is still the last thing
                     // the device showed — but it is dimmed and labelled.
