@@ -143,6 +143,15 @@ class SessionTitleSyncService {
     // but only while the session is running. A stopped session has no CLI to be
     // renamed in, and leaving it waiting would buy a store scan on every slow
     // slot for the rest of the app's run; resuming it makes it running again.
+    //
+    // **This is affordable only because the scan is incremental.** Every
+    // running session with a CLI name is permanently waiting here, so
+    // [wantsStoreSweep] is true for as long as one is running and the sweep
+    // runs on every slow slot. That is the price of a second `/rename`
+    // landing, and it is a fair one against `ClaudeStoreReader`'s cache — a
+    // repeat scan of an unchanged store reads **zero bytes**, measured. If that
+    // cache is ever removed, this returns to re-decoding the whole store
+    // forever, which is the lag it was reported as.
     return row.status == SessionStatus.running;
   }
 }
