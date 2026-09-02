@@ -196,7 +196,10 @@ void main() {
     );
     expect(iconDefault.hasMatch('Icon(AppIcons.x, size: 16)'), isTrue);
     expect(iconDefault.hasMatch('IconButton(iconSize: 16.0)'), isTrue);
-    expect(iconDefault.hasMatch('Icon(AppIcons.x, size: Chrome.icon)'), isFalse);
+    expect(
+      iconDefault.hasMatch('Icon(AppIcons.x, size: Chrome.icon)'),
+      isFalse,
+    );
     expect(iconDefault.hasMatch('const SizedBox(width: 16)'), isFalse);
     expect(iconDefault.hasMatch('TextStyle(fontSize: 16)'), isFalse);
     expect(iconDefault.hasMatch('Icon(AppIcons.x, size: 160)'), isFalse);

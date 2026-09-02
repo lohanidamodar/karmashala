@@ -158,7 +158,7 @@ class _CandidateChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        CandidateDot(candidate: candidate, isWinner: isWinner),
+        CandidateStateMark(candidate: candidate, isWinner: isWinner),
         const SizedBox(width: Insets.xs),
         Text(
           candidate.agentId,

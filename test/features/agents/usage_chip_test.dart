@@ -23,8 +23,8 @@ import 'usage_fixtures.dart';
 
 /// **The four states the chip can be in**, and the rule that outranks all of
 /// them: the number is always spelled out, so the colour is never the only
-/// signal (`session_verdict_mark.dart` states it; `CandidateDot` is the app's
-/// one violation and is being fixed elsewhere).
+/// signal (`session_verdict_mark.dart` states it, and `CandidateStateMark` —
+/// the last surface that broke it — now keeps it too).
 void main() {
   late FakeAgentUsageService service;
   final light = SemanticColors.forBrightness(Brightness.light);
