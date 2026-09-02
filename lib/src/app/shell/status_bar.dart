@@ -9,6 +9,7 @@ import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/projects/application/projects_controller.dart';
+import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 
 /// The window's bottom rule: where you are, and what is still running.
@@ -116,9 +117,21 @@ class ShellStatusBar extends ConsumerWidget {
                     .read(sidePanelProvider.notifier)
                     .select(SidePanelSurface.inbox),
               ),
-            // `const`, so a rebuild of this row cannot rebuild the chip and a
-            // usage change cannot rebuild the row — the subscription is the
-            // chip's own, and it is the only thing that repaints for it.
+            // Both `const`, so a rebuild of this row cannot rebuild either
+            // chip and neither a quota nor a model change can rebuild the row —
+            // each subscription is the chip's own, and it is the only thing
+            // that repaints for it.
+            //
+            // The model before the quota: it is the fact about the session you
+            // are looking at that you can *act* on, and the one whose label
+            // changes when you change it.
+            //
+            // `Flexible`, and the only right-hand item that is: a model name is
+            // the one thing on this side whose width is not ours to predict —
+            // `Gemini 3.7 Flash (Medium)` is a real one — so it is the item
+            // that gives way at 720px with Windows' largest text step rather
+            // than pushing the panel toggle off the window.
+            const Flexible(child: FocusedModelChip()),
             const UsageChip(),
             _Item(
               icon: AppIcons.sidebarSimple,
