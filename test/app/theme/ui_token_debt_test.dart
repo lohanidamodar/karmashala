@@ -106,9 +106,6 @@ void main() {
       'lib/src/features/environments/presentation/environments_section.dart',
       'lib/src/features/fanout/presentation/comparison_view.dart',
       'lib/src/features/git/presentation/changes_view.dart',
-      'lib/src/features/sessions/presentation/chat_transcript.dart',
-      'lib/src/features/sessions/presentation/markdown_message.dart',
-      'lib/src/features/sessions/presentation/message_composer.dart',
     };
     // A literal size only: `fontSize: someVariable` is a value that came from
     // somewhere accountable (a setting, a theme style) and is allowed.

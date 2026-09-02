@@ -28,9 +28,7 @@ class MarkdownMessage extends StatelessWidget {
 
     final sheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
       p: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
-      code: TextStyle(
-        fontFamily: kMonoFamily,
-        fontSize: 12.5,
+      code: MonoStyles.label.copyWith(
         color: scheme.onSurface,
         backgroundColor: codeBg,
       ),
@@ -67,7 +65,7 @@ class _HighlightAdapter extends SyntaxHighlighter {
   @override
   TextSpan format(String source) {
     return TextSpan(
-      style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12.5),
+      style: MonoStyles.label,
       children: _convert(
         highlight.parse(source, autoDetection: true).nodes ?? const [],
       ),

@@ -257,7 +257,9 @@ class _MessageComposerState extends State<MessageComposer> {
             child: Text(
               'Images are saved to a temp folder and referenced by path so the '
               'agent can read them.',
-              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
       ],
