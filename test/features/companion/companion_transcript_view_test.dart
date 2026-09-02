@@ -251,32 +251,102 @@ void main() {
       );
     });
 
-    testWidgets('a folded task notification reads as machinery', (
+    for (final scale in const [1.0, 2.0]) {
+      testWidgets('a folded task notification reads as machinery at ${scale}x', (
+        tester,
+      ) async {
+        // What the host now sends in place of 7 KB of envelope.
+        await openSession(
+          tester,
+          gatewayWith(const [
+            CompanionChatMessage(role: 'user', text: 'go on then'),
+            CompanionChatMessage(
+              role: 'tool',
+              text: 'Agent "Mobile chat scroll to latest" finished',
+            ),
+          ]),
+          textScale: scale,
+        );
+
+        expect(
+          find.textContaining(
+            'Agent "Mobile chat scroll to latest" finished',
+            findRichText: true,
+          ),
+          findsOneWidget,
+        );
+        // Gutter and label say machine, not person — the point of the choice.
+        expect(find.text('TOOL'), findsOneWidget);
+        expect(find.text('YOU'), findsOneWidget);
+        expect(find.textContaining('subagent_tokens'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
+  group('the way back never sits on the newest message', () {
+    // 1c, seen on the phone 2026-09-02: the pill floated centred inside the
+    // list's viewport, so while it was up it covered a line or two of the
+    // newest turn — the very text a reader scrolling back is heading for.
+    List<CompanionChatMessage> historyThen(String newest) => [
+      for (var i = 0; i < 80; i++)
+        CompanionChatMessage(role: 'agent', text: 'old-$i'),
+      CompanionChatMessage(role: 'agent', text: newest),
+    ];
+
+    final pill = find.widgetWithText(FilledButton, 'Jump to latest');
+
+    for (final scale in const [1.0, 2.0]) {
+      testWidgets('at a ${scale}x text scale', (tester) async {
+        await openSession(
+          tester,
+          gatewayWith(historyThen('the-newest-word')),
+          textScale: scale,
+        );
+
+        // The smallest move that raises the pill, so the newest turn has
+        // barely begun to leave the bottom — the state that hid it.
+        positionOf(tester).jumpTo(30);
+        await tester.pump();
+        expect(pill, findsOneWidget);
+
+        // Outside the list entirely, so no transcript pixel can be under it —
+        // and no pill height to keep a padding constant in step with as the
+        // text scale moves it.
+        expect(
+          tester.getRect(pill).overlaps(tester.getRect(find.byType(ListView))),
+          isFalse,
+        );
+
+        final newest = find.text('the-newest-word', findRichText: true);
+        expect(newest, findsOneWidget);
+        expect(
+          tester.getRect(newest).top,
+          lessThan(tester.getRect(pill).top),
+          reason: 'the newest turn begins above the pill, not under it',
+        );
+      });
+    }
+
+    testWidgets('and the list gets its room back when the pill goes', (
       tester,
     ) async {
-      // What the host now sends in place of 7 KB of envelope.
-      await openSession(
-        tester,
-        gatewayWith(const [
-          CompanionChatMessage(role: 'user', text: 'go on then'),
-          CompanionChatMessage(
-            role: 'tool',
-            text: 'Agent "Mobile chat scroll to latest" finished',
-          ),
-        ]),
+      await openSession(tester, gatewayWith(historyThen('the-newest-word')));
+      final listBefore = tester.getRect(find.byType(ListView));
+
+      positionOf(tester).jumpTo(30);
+      await tester.pump();
+      expect(
+        tester.getRect(find.byType(ListView)).height,
+        lessThan(listBefore.height),
       );
 
-      expect(
-        find.textContaining(
-          'Agent "Mobile chat scroll to latest" finished',
-          findRichText: true,
-        ),
-        findsOneWidget,
-      );
-      // Gutter and label say machine, not person — the point of the choice.
-      expect(find.text('TOOL'), findsOneWidget);
-      expect(find.text('YOU'), findsOneWidget);
-      expect(find.textContaining('subagent_tokens'), findsNothing);
+      await tester.tap(pill);
+      await tester.pumpAndSettle();
+
+      expect(pill, findsNothing);
+      expect(positionOf(tester).pixels, 0);
+      expect(tester.getRect(find.byType(ListView)), listBefore);
     });
   });
 }
