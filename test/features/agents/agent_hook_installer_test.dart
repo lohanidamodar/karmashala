@@ -503,6 +503,12 @@ void main() {
     expect(command, contains('curl -s '), reason: 'no error output');
     expect(command, isNot(contains('-sS')));
     expect(command, endsWith('|| true'), reason: 'no failing exit status');
+    // And the third cost, which is the one a stale entry actually charges. The
+    // port is ephemeral, so an entry outlives the app that could answer it —
+    // and these hooks are *synchronous*: the CLI waits for this command before
+    // it goes on. Unbounded, a dead port would stall the session the user is
+    // typing into, on every tool call, for ever.
+    expect(command, contains('-m 2'), reason: 'no unbounded wait');
   });
 }
 
