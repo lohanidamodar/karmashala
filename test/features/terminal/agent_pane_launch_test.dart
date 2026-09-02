@@ -22,11 +22,13 @@ String decodePowerShellCommand(String encoded) {
 
 void main() {
   group('the PTY launch', () {
-    test('a Windows-native agent goes through cmd.exe, not directly', () {
-      // flutter_pty hands the child its own executable name as its first
-      // argument and joins the rest with unquoted spaces. Launching an agent
-      // directly therefore starts a turn about "codex.exe" and splits any
-      // argument containing a space — both observed against a real binary.
+    test('a Windows-native agent goes through PowerShell, not directly', () {
+      // The owner's rule: a Windows-native session resumes in PowerShell. It
+      // still cannot be spawned directly — flutter_pty hands the child its own
+      // executable name as its first argument and joins the rest with unquoted
+      // spaces, which starts a turn about "codex.exe" and splits any argument
+      // containing a space — so the whole script rides in one `-EncodedCommand`
+      // token, which has nothing for that concatenation to split.
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: r'C:\bin\claude.exe',
@@ -34,11 +36,16 @@ void main() {
         workingDirectory: r'C:\repo',
       );
       final pty = agentPtyLaunchFor(launch);
-      expect(pty.executable, 'cmd.exe');
-      expect(pty.arguments, [
-        '/c',
-        r'C:\bin\claude.exe --permission-mode acceptEdits "say hello"',
+      expect(pty.executable, 'powershell.exe');
+      expect(pty.arguments.sublist(0, 3), [
+        '-NoLogo',
+        '-NoProfile',
+        '-EncodedCommand',
       ]);
+      expect(
+        decodePowerShellCommand(pty.arguments.last),
+        r"& 'C:\bin\claude.exe' '--permission-mode' 'acceptEdits' 'say hello'",
+      );
       expect(pty.workingDirectory, r'C:\repo');
     });
 
@@ -48,8 +55,24 @@ void main() {
         executable: r'C:\Program Files\rover\rover.exe',
       );
       expect(
-        agentPtyLaunchFor(launch).arguments.last,
-        r'"C:\Program Files\rover\rover.exe"',
+        decodePowerShellCommand(agentPtyLaunchFor(launch).arguments.last),
+        r"& 'C:\Program Files\rover\rover.exe'",
+      );
+    });
+
+    test('and a percent sign reaches the agent unsubstituted', () {
+      // The hazard `cmd.exe` carried: it expands `%NAME%` while parsing and
+      // quoting does not stop it, so a Windows-native prompt used to arrive
+      // rewritten. PowerShell has no such parse step.
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: r'C:\bin\claude.exe',
+        arguments: [r'explain %PATH% please'],
+        workingDirectory: r'C:\repo',
+      );
+      expect(
+        decodePowerShellCommand(agentPtyLaunchFor(launch).arguments.last),
+        r"& 'C:\bin\claude.exe' 'explain %PATH% please'",
       );
     });
 
@@ -189,7 +212,7 @@ void main() {
       );
     });
 
-    test('Windows host, native destination: cmd.exe /c', () {
+    test('Windows host, native destination: powershell.exe', () {
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: r'C:\bin\claude.exe',
@@ -200,8 +223,11 @@ void main() {
         launch,
         context: LaunchContext.forAgent(launch, hostIsWindows: true),
       );
-      expect(pty.executable, 'cmd.exe');
-      expect(pty.arguments, ['/c', r'C:\bin\claude.exe --resume sid']);
+      expect(pty.executable, 'powershell.exe');
+      expect(
+        decodePowerShellCommand(pty.arguments.last),
+        r"& 'C:\bin\claude.exe' '--resume' 'sid'",
+      );
       expect(pty.workingDirectory, r'C:\repo');
     });
 
@@ -422,7 +448,7 @@ void main() {
         'say hello',
       ]);
       expect(
-        agentPtyLaunchFor(launch).arguments.last,
+        decodePowerShellCommand(agentPtyLaunchFor(launch).arguments.last),
         contains('--mcp-config=/now.json'),
       );
     });
@@ -661,10 +687,10 @@ void main() {
 
     test('a prompt with spaces and quotes survives to the CLI', () {
       // The prompt stays **one** argv entry all the way down, and the quoting
-      // that keeps it one is `quoteWindowsCommandArgument`'s job — the same
+      // that keeps it one is `quotePowerShellArgument`'s job — the same
       // guarantee Claude's positional prompt has always had. Asserted through
-      // the real pane launch because that is where the two meet: the flag
-      // token must come out bare and the value quoted, not the pair joined.
+      // the real pane launch because that is where the two meet: the flag and
+      // the value stay two tokens, not one joined pair.
       const prompt = 'say "hi" to a b';
       final launch = AgentPaneLaunch(
         agentId: AgentIds.antigravity,
@@ -678,10 +704,12 @@ void main() {
       expect(launch.commandArguments, ['--prompt-interactive', prompt]);
 
       final pty = agentPtyLaunchFor(launch);
-      expect(pty.executable, 'cmd.exe');
+      expect(pty.executable, 'powershell.exe');
       expect(
-        pty.arguments.last,
-        r'agy --prompt-interactive "say \"hi\" to a b"',
+        decodePowerShellCommand(pty.arguments.last),
+        // PowerShell's literal string leaves the double quotes alone; only an
+        // apostrophe would need doubling.
+        '& \'agy\' \'--prompt-interactive\' \'say "hi" to a b\'',
       );
     });
 
