@@ -232,3 +232,146 @@ final sessionMediaProvider = StreamProvider.autoDispose
         await Future<void>.delayed(kSessionMediaPollInterval);
       }
     });
+
+// -----------------------------------------------------------------------------
+// Looking one picture up by the number the CLI printed
+// -----------------------------------------------------------------------------
+
+/// What a `[Image #6]` in a pane turned out to name.
+///
+/// Two answers and no third: a picture, or a sentence. There is deliberately no
+/// "nothing happened" case — the owner's rule for this app is that anything it
+/// cannot know for certain it says in words, and a Ctrl+click that silently did
+/// nothing would be indistinguishable from a broken link.
+sealed class SessionImageLookup {
+  const SessionImageLookup();
+}
+
+/// The picture, ready to draw.
+class SessionImageFound extends SessionImageLookup {
+  const SessionImageFound(this.item, {this.matches = 1, this.resolveHostPath});
+
+  final SessionMediaItem item;
+
+  /// How many pictures in this session carry the same number — normally one.
+  ///
+  /// More than one means the CLI restarted and began counting again, which its
+  /// own transcripts do: `…/popupbits/8a817d98-….jsonl` holds three runs, with
+  /// `#1` starting each. Within a run the numbers are unique and strictly
+  /// increasing, so [item] — the newest — is the one the process now printing
+  /// into the pane means. A line further back in the scrollback, from an
+  /// earlier run, would mean an older one, and nothing in the pane's text can
+  /// tell the two apart. So the dialog says the number was reused rather than
+  /// presenting a guess as a fact.
+  final int matches;
+
+  /// Translates a path the *agent* wrote into one this process can open, or
+  /// null when there is nothing to translate. Carried rather than applied, so
+  /// the viewer gets it on exactly the terms the media panel already uses.
+  final String? Function(String path)? resolveHostPath;
+}
+
+/// Why there is no picture, in a sentence meant to be shown to the user.
+class SessionImageUnavailable extends SessionImageLookup {
+  const SessionImageUnavailable(this.reason);
+
+  final String reason;
+}
+
+/// Finds the picture [pasteId] names inside [sessionId].
+typedef SessionImageLookupFn =
+    Future<SessionImageLookup> Function(String sessionId, int pasteId);
+
+/// The lookup behind Ctrl+clicking a `[Image #6]` in a terminal pane.
+///
+/// **On demand, never on a poll.** Unlike [sessionMediaProvider] this runs once,
+/// when somebody clicks. It goes through the same [SessionMediaStore], so a
+/// session whose panel has been open resumes from the manifest and costs a
+/// `stat()`; a session whose panel has never been opened pays one full scan,
+/// which is the panel's own first-open cost and is what makes the reference
+/// clickable without the user having to open the panel first.
+///
+/// **The newest match wins, and says when it was not the only one.** The number
+/// is a CLI *process*'s counter: within one run it is unique and climbs, and it
+/// restarts when the process does. `…/popupbits/8a817d98-….jsonl` is three runs
+/// — `#1..#1`, `#1..#7`, `#1..#6` — thirteen pastes wearing seven numbers. The
+/// text a pane is printing now came from the process running now, so the newest
+/// match is the right answer for it; a line scrolled back from an earlier run
+/// means an older picture and the pane's text cannot tell which. [matches] is
+/// therefore carried out, and the dialog says the number was reused instead of
+/// quietly presenting a guess.
+final sessionImageLookupProvider = Provider<SessionImageLookupFn>(
+  (ref) => (sessionId, pasteId) async {
+    final label = '[Image #$pasteId]';
+    final source = ref.read(sessionMediaSourceProvider(sessionId));
+    if (source == null) {
+      return SessionImageUnavailable(
+        'Karmashala has no record of this pane\'s session, so it cannot look '
+        '$label up.',
+      );
+    }
+
+    final Directory root;
+    try {
+      root = await ref.read(sessionMediaCacheRootProvider.future);
+    } catch (_) {
+      return SessionImageUnavailable(
+        'Karmashala has nowhere to keep extracted pictures, so it cannot open '
+        '$label.',
+      );
+    }
+
+    var path = source.filePath;
+    final externalId = source.externalSessionId;
+    if (path == null && externalId != null && externalId.isNotEmpty) {
+      // One attempt, not the panel's retry loop: a click is a question asked
+      // once, and "not written yet" is an answer worth giving straight away.
+      path = await ref
+          .read(sessionTranscriptLocatorProvider)
+          .locate(agentId: source.cli, externalSessionId: externalId);
+    }
+    if (path == null) {
+      return SessionImageUnavailable(
+        'Karmashala has not found this session\'s transcript yet, so it cannot '
+        'open $label.',
+      );
+    }
+
+    final SessionMediaScan scan;
+    try {
+      scan = await SessionMediaStore(root).refresh(path, source.cli);
+    } catch (_) {
+      return SessionImageUnavailable(
+        'Karmashala could not read this session\'s transcript, so it cannot '
+        'open $label.',
+      );
+    }
+
+    SessionMediaItem? match;
+    var matches = 0;
+    for (final item in scan.items) {
+      if (item.pasteId != pasteId) continue;
+      match = item;
+      matches++;
+    }
+    if (match == null) {
+      return SessionImageUnavailable(
+        '$label is not among this session\'s images. Karmashala reads them '
+        'from the transcript, so a picture that has not been sent yet — or one '
+        'from a conversation this pane resumed — is not in it.',
+      );
+    }
+    if (match.path == null) {
+      return SessionImageUnavailable(
+        match.problem ?? 'There is no picture on disk for $label.',
+      );
+    }
+    return SessionImageFound(
+      match,
+      matches: matches,
+      resolveHostPath: match.fromAgentEnvironment
+          ? ref.read(sessionMediaHostPathProvider(sessionId))
+          : null,
+    );
+  },
+);

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
@@ -49,6 +51,81 @@ void main() {
       "AND name IN ('terminal_tabs', 'terminal_panes');",
     );
     expect(tables.length, 2);
+  });
+
+  group('whether a pane was running (v26)', () {
+    /// A one-pane tab, so the row's `was_live` is the only thing in question.
+    StoredTerminalTab oneLive({required bool wasLive}) => StoredTerminalTab(
+      id: 'tab1',
+      layout: PaneLayout.single('p1'),
+      focusedPaneId: 'p1',
+      panes: [
+        StoredTerminalPane(
+          id: 'p1',
+          tabId: 'tab1',
+          profileId: 'powershell',
+          title: 'PowerShell',
+          workingDirectory: null,
+          scrollback: 'output',
+          wasLive: wasLive,
+        ),
+      ],
+    );
+
+    test('round-trips both ways', () {
+      dao.saveWorkspace([oneLive(wasLive: true)], activeTabId: 'tab1');
+      expect(dao.loadWorkspace().tabs.single.panes.single.wasLive, isTrue);
+
+      // And back down again — a pane whose process ends must stop claiming to
+      // be running, or the next launch would start what nobody left running.
+      dao.saveWorkspace([oneLive(wasLive: false)], activeTabId: 'tab1');
+      expect(dao.loadWorkspace().tabs.single.panes.single.wasLive, isFalse);
+    });
+
+    test('a row written before the column existed reads as not running', () {
+      db.execute(
+        'INSERT INTO terminal_tabs (id, ordinal, layout, focused_pane_id, '
+        'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
+        [
+          'old',
+          0,
+          jsonEncode(PaneLayout.single('p1').toJson()),
+          'p1',
+          1,
+          '2026-01-01T00:00:00.000Z',
+        ],
+      );
+      // Every column v26 did not add, exactly as an older build wrote them.
+      db.execute(
+        'INSERT INTO terminal_panes (id, tab_id, ordinal, profile_id, title, '
+        'working_directory, scrollback, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+        [
+          'p1',
+          'old',
+          0,
+          'powershell',
+          'PowerShell',
+          null,
+          'output',
+          '2026-01-01T00:00:00.000Z',
+        ],
+      );
+      expect(
+        dao.loadWorkspace().tabs.single.panes.single.wasLive,
+        isFalse,
+        reason:
+            'an upgrade must not spawn a shell per pane for rows that never '
+            'claimed anything was running',
+      );
+    });
+
+    test('the backup copy keeps it, so a recovery restores the same panes', () {
+      dao.saveWorkspace([oneLive(wasLive: true)], activeTabId: 'tab1');
+      // An empty save is what takes the copy.
+      dao.saveWorkspace([], activeTabId: null);
+      expect(dao.loadBackup().tabs.single.panes.single.wasLive, isTrue);
+    });
   });
 
   test('saves and loads a workspace', () {

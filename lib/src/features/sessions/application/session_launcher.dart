@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../agents/application/agent_installations_controller.dart';
@@ -220,6 +221,18 @@ class SessionLauncher {
 
   final Ref _ref;
 
+  /// Every launch says what it decided.
+  ///
+  /// This path had no logging at all, and four of the bugs found in it were
+  /// silent by construction: a permission mode written over the row it was
+  /// reusing, `external_session_id` never stored for one agent, a resume that
+  /// quietly started a new conversation, and a dormant pane not being reused so
+  /// one session got two terminals. None of them threw; each produced a
+  /// plausible-looking session that was wrong in a way only the command line
+  /// showed. One line per launch, naming what was chosen, is what makes the
+  /// next one of those answerable from a log instead of a repro.
+  static final _log = AppLogger.named('sessions.launch');
+
   /// The single permission-mode resolution in the app.
   ///
   /// The engine's own `PermissionMode.ask` default was dead code — every caller
@@ -284,7 +297,8 @@ class SessionLauncher {
   /// next launch rather than implying the live agent has been re-governed.
   void setPermissionMode(String sessionId, PermissionMode? mode) {
     _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
-    _bump();
+    // One row's own policy. Only the chip that draws it is watching.
+    _publish(SessionChange.reconfigured(sessionId));
   }
 
   /// The single default-installation resolution.
@@ -401,7 +415,8 @@ class SessionLauncher {
       ..focusPane(paneId);
     _ref.read(terminalVisibleProvider.notifier).set(true);
     _ref.read(selectedSessionIdProvider.notifier).select(sessionId);
-    _bump();
+    // Where this session is on screen moved; nothing was created or renamed.
+    _publish(SessionChange.moved(sessionId));
     return true;
   }
 
@@ -552,7 +567,7 @@ class SessionLauncher {
     );
     if (presence != ConversationPresence.absent) return;
     _ref.read(sessionDaoProvider).updateStatus(minted.id, SessionStatus.failed);
-    _bump();
+    _publish(SessionChange.statusChanged(minted.id));
     throw SessionConversationMissing(
       agentName: agentDisplayName(request.installation.agentId),
       conversationId: externalId,
@@ -938,6 +953,21 @@ class SessionLauncher {
         : (tabId: resumedTab, paneId: dormant!);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
     _ref.read(terminalVisibleProvider.notifier).set(true);
+    // Deliberately after the pane is claimed, so it reports what happened
+    // rather than what was intended. `resumed` is the dormant-pane reuse: when
+    // it is false for a session that has a restored pane, the user is about to
+    // be looking at two terminals for one session.
+    _log.info(
+      'Started ${session.id} in a pane: agent=${request.installation.agentId} '
+      'mode=${permissionMode.name} pane=${opened.paneId} '
+      'resumed=${resumedTab != null} '
+      'conversation=${request.resumeExternalSessionId ?? 'new'} '
+      'worktree=${request.useWorktree} '
+      // The ordinary answer is often "none" and that is not an error — but it
+      // is the answer to "why can't the agent see Karmashala's tools", which
+      // was previously only discoverable by reading the launched command line.
+      'mcp=${mcp == null ? 'none' : 'yes'}',
+    );
     return SessionLaunchResult(
       session: session.copyWith(paneId: opened.paneId),
       paneId: opened.paneId,
@@ -1160,7 +1190,12 @@ class SessionLauncher {
     return instance.terminal;
   }
 
+  /// The coarse word, for a launch: it mints a row, writes a status, claims a
+  /// pane and may learn a conversation id, all at once.
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
+
+  void _publish(SessionChange change) =>
+      _ref.read(sessionsRevisionProvider.notifier).changed(change);
 }
 
 /// The interactive command-line arguments for one agent launch.
@@ -1171,8 +1206,10 @@ class SessionLauncher {
 ///
 /// Order matters and is the order the shipped agents want: the MCP flag, then
 /// global flags, then the session-id flag, then the resume convention (which
-/// for Codex is a *subcommand* and must follow the globals), then the prompt as
-/// a positional argument.
+/// for Codex is a *subcommand* and must follow the globals), then the prompt in
+/// whichever shape the descriptor's [AgentPromptSupport] names — a trailing
+/// positional for Claude and Codex, a flag and its value for Antigravity.
+///
 /// [forkSessionId] **replaces** the resume convention rather than adding to it:
 /// Codex forks with a `fork` subcommand *instead of* `resume`, and emitting
 /// both would put two subcommands on one command line. Claude's fork is its own
@@ -1203,10 +1240,11 @@ List<String> agentPaneArguments(
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),
     if (!forking && resumeSessionId != null && resumeSessionId.isNotEmpty)
       ...?launch?.interactiveResume.argumentsFor(resumeSessionId),
-    if (trimmedPrompt != null &&
-        trimmedPrompt.isNotEmpty &&
-        (launch?.acceptsPromptArgument ?? false))
-      trimmedPrompt,
+    // Last, and spread rather than appended: the prompt is a positional for
+    // Claude and Codex but two argv entries for Antigravity, and which of those
+    // it is belongs to the descriptor rather than to this call site.
+    if (trimmedPrompt != null)
+      ...?launch?.prompt.argumentsFor(trimmedPrompt),
   ];
 }
 

@@ -49,7 +49,7 @@ branch refs/heads/feature/login
 ''';
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_workspace_tools_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_workspace_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project());

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
@@ -16,13 +15,14 @@ import 'package:path/path.dart' as p;
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
-/// The config that tells an agent where the tools are, and the identity that
-/// travels in it.
+/// The identity that travels in the URL an agent is pointed at, and the
+/// plumbing around it that was deleted rather than finished.
 ///
 /// The URL is the identity mechanism on the HTTP side, so the assertions that
 /// matter are: a session's URL names that session to the server, two sessions
 /// never get the same one, and nothing is offered at all when the endpoint
-/// could not be secured.
+/// could not be secured. The file an agent actually opens is
+/// `session_mcp_config_test.dart`'s subject.
 void main() {
   late Directory tmp;
   late AppDatabase db;
@@ -30,7 +30,7 @@ void main() {
   late LauncherControlServer server;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_mcp_config_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_mcp_config_');
     db = AppDatabase.memory();
     container = ProviderContainer(
       overrides: [
@@ -88,113 +88,19 @@ void main() {
     });
   });
 
-  group('the written config', () {
-    test('points at the HTTP endpoint when there is one', () async {
-      final path = await const LauncherMcp().ensureConfig(
-        url: urlFor('s1'),
-        directory: tmp.path,
-      );
+  test('the HTTP entry puts the credential in the URL, not in headers', () {
+    // Claude Code does not attach configured headers to a Streamable HTTP
+    // server's requests, so a token in `headers` never arrives.
+    final entry = LauncherMcp.httpServerEntry(urlFor('s1')!);
 
-      final config =
-          jsonDecode(File(path!).readAsStringSync()) as Map<String, Object?>;
-      final entry =
-          (config['mcpServers']! as Map<String, Object?>)['karmashala']!
-              as Map<String, Object?>;
-
-      expect(entry['type'], 'http');
-      expect(entry['url'], urlFor('s1'));
-      // The credential is in the URL, not in headers: Claude Code does not
-      // attach configured headers to a Streamable HTTP server's requests.
-      expect(entry.containsKey('headers'), isFalse);
-      expect(entry.containsKey('command'), isFalse);
-    });
-
-    test('a per-session file does not overwrite another session\'s', () async {
-      await const LauncherMcp().ensureConfig(
-        url: urlFor('s1'),
-        directory: tmp.path,
-        fileName: 's1.json',
-      );
-      await const LauncherMcp().ensureConfig(
-        url: urlFor('s2'),
-        directory: tmp.path,
-        fileName: 's2.json',
-      );
-
-      String urlIn(String file) {
-        final config =
-            jsonDecode(File(p.join(tmp.path, file)).readAsStringSync())
-                as Map<String, Object?>;
-        return ((config['mcpServers']! as Map<String, Object?>)['karmashala']!
-                as Map<String, Object?>)['url']!
-            as String;
-      }
-
-      expect(urlIn('s1.json'), isNot(urlIn('s2.json')));
-      expect(
-        server.callers.sessionFor(Uri.parse(urlIn('s1.json')).pathSegments.last),
-        's1',
-      );
-      expect(
-        server.callers.sessionFor(Uri.parse(urlIn('s2.json')).pathSegments.last),
-        's2',
-      );
-    });
-
-    test('offers nothing when there is no URL and no bridge', () async {
-      // A dev run: no compiled bridge beside the binary, and no URL given.
-      // Writing a config pointing at nothing would be worse than none.
-      expect(
-        await const LauncherMcp().ensureConfig(directory: tmp.path),
-        isNull,
-      );
-    });
-
-    test('Codex gets the same URL in the shape its TOML wants', () {
-      final url = urlFor('s1')!;
-      final toml = LauncherMcp.codexServerToml(url);
-
-      expect(toml, contains('[mcp_servers.karmashala]'));
-      expect(toml, contains('url = "$url"'));
-      // No bearer_token_env_var: the credential is already in the URL, so
-      // nothing has to be put on the process environment for Codex to read.
-      expect(toml, isNot(contains('bearer_token_env_var')));
-    });
-  });
-
-  group('the pre-approval lists come from the one registry', () {
-    test('every served tool is nameable', () {
-      expect(
-        LauncherMcp.allowedTools,
-        hasLength(LauncherControlServer.toolSchemas.length),
-      );
-      expect(LauncherMcp.allowedTools, contains('mcp__karmashala__list_sessions'));
-    });
-
-    test('the read-only list matches the annotations clients are served', () {
-      expect(
-        LauncherMcp.readOnlyTools,
-        contains('mcp__karmashala__list_sessions'),
-      );
-      // A tool that ends something must never be on a pre-approval list built
-      // from readOnlyHint.
-      expect(
-        LauncherMcp.readOnlyTools,
-        isNot(contains('mcp__karmashala__session_end')),
-      );
-      expect(
-        LauncherMcp.readOnlyTools,
-        isNot(contains('mcp__karmashala__terminal_run')),
-      );
-      expect(
-        LauncherMcp.readOnlyTools.length,
-        lessThan(LauncherMcp.allowedTools.length),
-      );
-    });
+    expect(entry['type'], 'http');
+    expect(entry['url'], urlFor('s1'));
+    expect(entry.containsKey('headers'), isFalse);
+    expect(entry.containsKey('command'), isFalse);
   });
 
   test('no URL is offered when the endpoint could not be secured', () async {
-    final other = Directory.systemTemp.createTempSync('chitra_mcp_closed_');
+    final other = Directory.systemTemp.createTempSync('karmashala_mcp_closed_');
     addTearDown(() {
       if (other.existsSync()) other.deleteSync(recursive: true);
     });
@@ -227,6 +133,58 @@ void main() {
       closed.mcpUrlFor('s1', environment: EnvironmentKind.windowsNative),
       isNull,
     );
+  });
+
+  group('the plumbing that was deleted stays deleted', () {
+    // Read off the source rather than the symbol table on purpose: a symbol
+    // that is gone cannot be referenced in a test, so nothing else in the
+    // suite can notice it coming back. Each name below was removed for a
+    // reason recorded at its old site, and re-adding one silently is how the
+    // reason gets lost.
+    // Comments are stripped, as `ui_token_debt_test` does: a name quoted in
+    // prose is the record of why it went, not a reference to it.
+    final sources = <String, String>{
+      for (final file
+          in Directory('lib').listSync(recursive: true).whereType<File>())
+        if (file.path.endsWith('.dart'))
+          file.path.replaceAll(r'\', '/'): file
+              .readAsStringSync()
+              .split('\n')
+              .map((line) {
+                final comment = line.indexOf('//');
+                return comment == -1 ? line : line.substring(0, comment);
+              })
+              .join('\n'),
+    };
+
+    List<String> mentioning(String name) => [
+      for (final entry in sources.entries)
+        if (entry.value.contains(name)) entry.key,
+    ];
+
+    test('nothing writes an MCP config outside SessionMcpConfigs', () {
+      // `LauncherMcp.ensureConfig` wrote one shared file for a caller — the
+      // launcher chat — that was deleted with mini mode. Per-session configs
+      // are `SessionMcpConfigs.write`'s job, because the URL inside one is
+      // what says which session is calling.
+      expect(mentioning('ensureConfig'), isEmpty);
+      expect(mentioning('bridgeServerEntry'), isEmpty);
+    });
+
+    test('no Codex TOML is formatted for a file nothing writes', () {
+      // Codex is pointed at the endpoint inline, with `-c`, because
+      // `~/.codex/config.toml` is machine-wide and cannot be per-session.
+      expect(mentioning('codexServerToml'), isEmpty);
+    });
+
+    test('no pre-approved tool list exists to be handed to an agent', () {
+      // The standing rule: nothing widens what an agent may do without the
+      // user's say-so. A list of tool names beside `--permission-mode` does
+      // exactly that, which is why neither the lists nor the launch field
+      // that would have carried them survive.
+      expect(mentioning('allowedTools'), isEmpty);
+      expect(mentioning('readOnlyTools'), isEmpty);
+    });
   });
 }
 

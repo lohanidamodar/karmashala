@@ -45,7 +45,7 @@ void main() {
   );
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_attention_tools_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_attention_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project());

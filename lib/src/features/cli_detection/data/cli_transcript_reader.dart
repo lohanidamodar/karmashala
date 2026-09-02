@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import '../../agents/domain/agent_ids.dart';
 import '../../sessions/domain/tool_activity.dart';
+import 'subagent_transcript.dart';
 
 /// A single message parsed from a CLI session transcript file, normalized to the
 /// roles our chat view renders.
@@ -11,6 +14,7 @@ class TranscriptMessage {
     required this.role,
     required this.text,
     this.tool,
+    this.subagent,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -20,15 +24,30 @@ class TranscriptMessage {
   /// The structured call behind a `tool` message: what it ran, and what it
   /// answered. Null for the other two roles.
   final ToolActivity? tool;
+
+  /// The delegated agent a `Task` call spawned — located, not read. Null for
+  /// every other row, including a `Task` whose subagent file we cannot find.
+  final SubagentRef? subagent;
 }
 
 /// Reads a CLI session's full transcript (Claude Code / Codex JSONL) into a flat
 /// list of [TranscriptMessage]s, oldest first. Best-effort: malformed lines are
 /// skipped and an unreadable file yields an empty list.
+///
+/// A Claude Code `Task` call comes back carrying the [SubagentRef] for the
+/// agent it spawned, when one is on disk — see [readSubagentIndexIn]. The
+/// delegate's own turns are **not** read here: one session on this machine has
+/// 1,485 MiB of them behind a 115 MB parent, and this runs on a two-second
+/// poll. [readSubagentTranscript] reads one, when a row is expanded.
+///
+/// [subagentsDirectory] overrides where that index is looked for. It exists for
+/// the nested case: a delegate's transcript already lives *in* the directory
+/// that indexes the delegates it spawned in turn.
 Future<List<TranscriptMessage>> readCliTranscript(
   String filePath,
-  String cli,
-) async {
+  String cli, {
+  String? subagentsDirectory,
+}) async {
   // Antigravity's own file is a SQLite database whose message columns are
   // protobuf in an unpublished schema, so there is nothing here to parse — see
   // the design note Refused by name rather than
@@ -46,6 +65,12 @@ Future<List<TranscriptMessage>> readCliTranscript(
   // file because the pair is two lines apart at best and a whole turn apart at
   // worst — and an id we never see again simply stays here, costing a string.
   final pending = <String, int>{};
+  // Where each `Task` call landed, so the subagent index can be joined on
+  // afterwards rather than before. Only `Task` ids: it is the one tool that
+  // spawns an agent, and gating on it means a session that never delegated
+  // pays nothing at all — not even the `stat` on a directory that is not
+  // there.
+  final tasks = <String, int>{};
   try {
     await for (final line
         in file
@@ -65,19 +90,60 @@ Future<List<TranscriptMessage>> readCliTranscript(
       if (cli == AgentIds.codex) {
         _parseCodexLine(decoded, messages, pending);
       } else {
-        _parseClaudeLine(decoded, messages, pending);
+        _parseClaudeLine(decoded, messages, pending, tasks);
       }
     }
   } catch (_) {
     // Truncated/locked file — return whatever parsed.
   }
+  await _attachSubagents(messages, tasks, filePath, subagentsDirectory);
   return messages;
 }
+
+/// Hangs each located subagent on the `Task` row that spawned it.
+///
+/// Runs after the parse, not before, so the directory is read only for a
+/// transcript that actually delegated. A `Task` with nothing to join keeps the
+/// row it already had, byte for byte.
+Future<void> _attachSubagents(
+  List<TranscriptMessage> messages,
+  Map<String, int> tasks,
+  String filePath,
+  String? subagentsDirectory,
+) async {
+  if (tasks.isEmpty) return;
+  final index = await readSubagentIndexIn(
+    subagentsDirectory ?? subagentsDirectoryFor(filePath),
+  );
+  if (index.isEmpty) return;
+  tasks.forEach((id, at) {
+    final reference = index[id];
+    if (reference == null || at >= messages.length) return;
+    messages[at] = TranscriptMessage(
+      role: messages[at].role,
+      text: messages[at].text,
+      tool: messages[at].tool,
+      subagent: reference,
+    );
+  });
+}
+
+/// One subagent's own turns, in the same shape as its parent's.
+///
+/// Read only when a row is expanded. The directory it sits in is also the
+/// index for anything *it* delegated, so a depth-2 agent joins the same way.
+Future<List<TranscriptMessage>> readSubagentTranscript(String filePath) =>
+    readCliTranscript(
+      filePath,
+      AgentIds.claudeCode,
+      subagentsDirectory: p.dirname(filePath),
+    );
 
 void _parseClaudeLine(
   Map<String, dynamic> json,
   List<TranscriptMessage> out,
   Map<String, int> pending,
+  Map<String, int> tasks,
 ) {
   final type = json['type'];
   if (type != 'user' && type != 'assistant') return;
@@ -103,7 +169,10 @@ void _parseClaudeLine(
           if (name is String) {
             final activity = toolActivityFor(name, part['input']);
             final id = part['id'];
-            if (id is String) pending[id] = out.length;
+            if (id is String) {
+              pending[id] = out.length;
+              if (name == 'Task') tasks[id] = out.length;
+            }
             out.add(
               TranscriptMessage(
                 role: 'tool',

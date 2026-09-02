@@ -111,6 +111,31 @@ void main() {
       );
     });
 
+    test('spelled with backslashes, as a Windows tool prints it', () {
+      // Filed as a bug — the POSIX join does leave the backslashes as ordinary
+      // filename characters — and it is not one: the WSL→Windows translation
+      // rewrites `/` to `\` and leaves `\` alone, so the spelling a Windows
+      // tool prints from a WSL pane arrives at the same place a POSIX one
+      // does. Pinned here so the join is never "fixed" into a second reading
+      // that buys nothing.
+      expect(
+        resolve(
+          r'windows\installer\out\x.exe',
+          cwd: '/mnt/c/src/app',
+          profile: wslProfile,
+        ),
+        r'C:\src\app\windows\installer\out\x.exe',
+      );
+      expect(
+        resolve(
+          r'build\out\log.txt',
+          cwd: '/home/me/proj',
+          profile: wslProfile,
+        ),
+        r'\\wsl.localhost\Ubuntu\home\me\proj\build\out\log.txt',
+      );
+    });
+
     test('joins in the flavour of the directory it is joined to', () {
       expect(
         resolve('lib/main.dart', cwd: '/home/me/proj'),

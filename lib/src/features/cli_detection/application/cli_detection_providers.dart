@@ -94,7 +94,9 @@ final sessionAdoptionServiceProvider = Provider<SessionAdoptionService>((ref) {
     },
     scanStores: () => scanCliStores(ref),
     // A row appearing in the tree is exactly what the revision counter is for.
-    onAdopted: (_) => ref.read(sessionsRevisionProvider.notifier).bump(),
+    onAdopted: (session) => ref
+        .read(sessionsRevisionProvider.notifier)
+        .changed(SessionChange.created(session.id)),
   );
 });
 
@@ -128,7 +130,11 @@ final antigravityAttributionServiceProvider =
         },
         onAttributed: (session, conversationId) {
           followSupersededHistory(ref, session.id, conversationId);
-          ref.read(sessionsRevisionProvider.notifier).bump();
+          // Which conversation this row is on — a placement. Its name did not
+          // change, so nothing that only draws names is woken.
+          ref
+              .read(sessionsRevisionProvider.notifier)
+              .changed(SessionChange.moved(session.id));
         },
       );
     });
@@ -164,8 +170,14 @@ final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) 
     sessionDao: ref.watch(sessionDaoProvider),
     agents: ref.watch(agentRegistryProvider),
     scanStores: () => ref.read(cliStoreScanPassProvider).read(),
-    // A row changing its name in the tree is what the revision counter is for.
-    onRenamed: (_, _) => ref.read(sessionsRevisionProvider.notifier).bump(),
+    // **The bump that fires on a timer.** The store sweep runs whether or not
+    // the user is doing anything, so this one narrow fact used to wake all
+    // twenty-eight watchers of the revision counter — several of them with a
+    // full `SELECT * FROM sessions` on the UI isolate. It says only what it
+    // knows: this row is called something else now.
+    onRenamed: (sessionId, _) => ref
+        .read(sessionsRevisionProvider.notifier)
+        .changed(SessionChange.renamed(sessionId)),
   );
 });
 
@@ -193,7 +205,9 @@ final launchedSessionAttributionServiceProvider =
         // selection already pointing at it.
         onAttributed: (session, conversationId) {
           followSupersededHistory(ref, session.id, conversationId);
-          ref.read(sessionsRevisionProvider.notifier).bump();
+          ref
+              .read(sessionsRevisionProvider.notifier)
+              .changed(SessionChange.moved(session.id));
         },
       );
     });

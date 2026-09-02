@@ -32,11 +32,18 @@ String bulkyBase64(int kilobytes) {
 }
 
 /// A user turn that pasted a picture into the conversation.
+///
+/// [pasteIds] is the CLI's own `imagePasteIds`, the field that carries the
+/// number it printed into the pane as `[Image #N]`. Copied from
+/// `-mnt-c-Users-dlohani-projects-games-proc-nepal/cbc07274-….jsonl` line 10,
+/// where `"imagePasteIds":[1]` sits beside a text block reading `[Image #1] see
+/// these creatures…`.
 String pastedImageLine({
   required String at,
   String? text,
   String data = tinyPngBase64,
   String mediaType = 'image/png',
+  List<int>? pasteIds,
 }) => jsonEncode({
   'type': 'user',
   'timestamp': at,
@@ -50,6 +57,36 @@ String pastedImageLine({
       },
     ],
   },
+  'imagePasteIds': ?pasteIds,
+});
+
+/// One turn that pasted **several** pictures — the shape at line 5277 of the
+/// same transcript, where `"imagePasteIds":[1,2]` answers two `image` blocks
+/// and a text block saying `[Image #1] [Image #2] check these images`.
+String multiPastedImageLine({
+  required String at,
+  String? text,
+  List<String> data = const [tinyPngBase64, tinyPngBase64],
+  List<int>? pasteIds,
+}) => jsonEncode({
+  'type': 'user',
+  'timestamp': at,
+  'message': {
+    'role': 'user',
+    'content': [
+      if (text != null) {'type': 'text', 'text': text},
+      for (final payload in data)
+        {
+          'type': 'image',
+          'source': {
+            'type': 'base64',
+            'media_type': 'image/png',
+            'data': payload,
+          },
+        },
+    ],
+  },
+  'imagePasteIds': ?pasteIds,
 });
 
 /// The *other* shape a paste arrives in, copied from
@@ -65,6 +102,7 @@ String queuedPasteLine({
   String? text,
   String data = tinyPngBase64,
   String mediaType = 'image/png',
+  List<int>? pasteIds,
 }) => jsonEncode({
   'type': 'attachment',
   'timestamp': at,
@@ -78,6 +116,9 @@ String queuedPasteLine({
       if (text != null) {'type': 'text', 'text': text},
     ],
     'commandMode': 'prompt',
+    // On an attachment line the ids hang off the attachment, not the record —
+    // `…/7977d17c-….jsonl` line 3312.
+    'imagePasteIds': ?pasteIds,
   },
 });
 

@@ -180,6 +180,11 @@ void main() {
       final client = await makeClient();
       await client.connect(transport: await lanDial());
       await client.subscribeSession('s1');
+      // Reading the history is what marks the session watched — the phone's
+      // own order, and what the poll sweep follows. Subscription alone keeps
+      // the card live and reads nothing, so that a phone subscribed to fifty
+      // sessions does not cost fifty transcript parses a tick.
+      expect((await client.transcript('s1')).messages, hasLength(1));
 
       final events = ItemQueue<CompanionEvent>(
         client.events.where((e) => e is TranscriptAppendedEvent),
@@ -194,7 +199,7 @@ void main() {
       final appended = await events.next as TranscriptAppendedEvent;
       expect([for (final m in appended.page.messages) m.text], ['two']);
 
-      // And the phone can page the history itself.
+      // And the history now carries both.
       final page = await client.transcript('s1');
       expect(page.messages, hasLength(2));
     });

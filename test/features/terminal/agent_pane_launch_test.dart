@@ -62,16 +62,16 @@ void main() {
         wslDistribution: 'Ubuntu',
       );
       final pty = agentPtyLaunchFor(launch);
-      expect(pty.executable, 'wsl.exe');
+      // Through `cmd.exe /c`, like the shell pane. Spawned directly, the
+      // duplicated leading token `flutter_pty` adds makes `wsl.exe` treat the
+      // second `wsl.exe` as the command to run *inside* the distro, so the
+      // login shell execs a Windows PE back out through `binfmt_misc` — which
+      // dies as `MZ: command not found` the moment interop is unregistered.
+      expect(pty.executable, 'cmd.exe');
       expect(pty.arguments, [
-        '-d',
-        'Ubuntu',
-        '--cd',
-        '/home/u/repo',
-        '--',
-        '/home/u/.local/bin/claude',
-        '--resume',
-        'sid',
+        '/c',
+        'wsl.exe -d Ubuntu --cd /home/u/repo -- '
+            '/home/u/.local/bin/claude --resume sid',
       ]);
       // wsl.exe sets the child's directory itself; the host process must not be
       // pointed at a Linux path it cannot resolve.
@@ -79,9 +79,9 @@ void main() {
     });
 
     test('a WSL argument with a space is quoted', () {
-      // There is no wrapper on this path to re-parse the line, so the quoting
-      // has to be in the strings — an unquoted prompt reached Claude Code as
-      // several arguments and was silently ignored.
+      // Quoted either way — an unquoted prompt reached Claude Code as several
+      // arguments and was silently ignored. Now `cmd` re-parses the line, so
+      // the quotes are what survive its parse rather than `wsl.exe`'s.
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: 'claude',
@@ -90,16 +90,27 @@ void main() {
         wslDistribution: 'Ubuntu',
       );
       expect(agentPtyLaunchFor(launch).arguments, [
-        '-d',
-        'Ubuntu',
-        '--cd',
-        '/home/u/repo',
-        '--',
-        'claude',
-        '--permission-mode',
-        'acceptEdits',
-        '"say hello there"',
+        '/c',
+        'wsl.exe -d Ubuntu --cd /home/u/repo -- claude '
+            '--permission-mode acceptEdits "say hello there"',
       ]);
+    });
+
+    test('but a prompt with a percent sign keeps the direct form', () {
+      // `cmd` substitutes `%NAME%` while parsing and quoting does not stop it,
+      // so routing this through cmd would hand the agent something other than
+      // what the user typed. Keeping the round-trip — and its dependency on
+      // interop — is the lesser harm.
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: 'claude',
+        arguments: [r'explain %PATH% please'],
+        workingDirectory: '/home/u/repo',
+        wslDistribution: 'Ubuntu',
+      );
+      final pty = agentPtyLaunchFor(launch);
+      expect(pty.executable, 'wsl.exe');
+      expect(pty.arguments.last, r'"explain %PATH% please"');
     });
 
     test('the session id reaches the agent through the environment', () {
@@ -164,18 +175,18 @@ void main() {
         wslLaunch,
         context: LaunchContext.forAgent(wslLaunch, hostIsWindows: true),
       );
-      expect(pty.executable, 'wsl.exe');
+      expect(pty.executable, 'cmd.exe');
       expect(pty.arguments, [
-        '-d',
-        'Ubuntu',
-        '--cd',
-        '/home/u/repo',
-        '--',
-        '/home/u/.local/bin/claude',
-        '--resume',
-        'sid',
+        '/c',
+        'wsl.exe -d Ubuntu --cd /home/u/repo -- '
+            '/home/u/.local/bin/claude --resume sid',
       ]);
-      expect(pty.arguments.where((a) => a.contains('wsl.exe')), isEmpty);
+      // Once, still: the point of this test is that the destination is not
+      // wrapped twice, and `cmd.exe /c` carries exactly one `wsl.exe`.
+      expect(
+        'wsl.exe'.allMatches(pty.arguments.join(' ')).length,
+        1,
+      );
     });
 
     test('Windows host, native destination: cmd.exe /c', () {
@@ -585,6 +596,93 @@ void main() {
         ),
         ['--permission-mode', 'manual', 'do the thing'],
       );
+      // Codex takes it the same way, and both lists are pinned here because
+      // widening the model to carry a *flag* must not move the two CLIs that
+      // were already right.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.codex),
+          PermissionMode.ask,
+          prompt: '  do the thing  ',
+        ),
+        ['--ask-for-approval', 'on-request', 'do the thing'],
+      );
+    });
+
+    test('Antigravity takes its opening prompt behind a flag', () {
+      // Two argv entries, not one: `agy` parses `--prompt-interactive` with
+      // Go's flag package, which reads the value as the *next* argument.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+          prompt: '  do the thing  ',
+        ),
+        ['--prompt-interactive', 'do the thing'],
+      );
+      // Beside the permission and resume flags rather than instead of them.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.acceptEdits,
+          resumeSessionId: 'c1',
+          prompt: 'carry on',
+        ),
+        [
+          '--mode',
+          'accept-edits',
+          '--conversation',
+          'c1',
+          '--prompt-interactive',
+          'carry on',
+        ],
+      );
+    });
+
+    test('an Antigravity pane with no prompt gets neither flag nor value', () {
+      // The flag is worthless without a value — `agy --prompt-interactive`
+      // with nothing after it exits on `flag needs an argument: -i`.
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+        ),
+        isEmpty,
+      );
+      expect(
+        agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+          prompt: '   ',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a prompt with spaces and quotes survives to the CLI', () {
+      // The prompt stays **one** argv entry all the way down, and the quoting
+      // that keeps it one is `quoteWindowsCommandArgument`'s job — the same
+      // guarantee Claude's positional prompt has always had. Asserted through
+      // the real pane launch because that is where the two meet: the flag
+      // token must come out bare and the value quoted, not the pair joined.
+      const prompt = 'say "hi" to a b';
+      final launch = AgentPaneLaunch(
+        agentId: AgentIds.antigravity,
+        executable: 'agy',
+        arguments: agentPaneArguments(
+          registry.byId(AgentIds.antigravity),
+          PermissionMode.ask,
+          prompt: prompt,
+        ),
+      );
+      expect(launch.commandArguments, ['--prompt-interactive', prompt]);
+
+      final pty = agentPtyLaunchFor(launch);
+      expect(pty.executable, 'cmd.exe');
+      expect(
+        pty.arguments.last,
+        r'agy --prompt-interactive "say \"hi\" to a b"',
+      );
     });
 
     test('an agent that has never been checked is launched bare', () {
@@ -592,14 +690,6 @@ void main() {
       // handed another agent's permission flag.
       expect(
         agentPaneArguments(null, PermissionMode.bypass, prompt: 'hello'),
-        isEmpty,
-      );
-      expect(
-        agentPaneArguments(
-          registry.byId(AgentIds.antigravity),
-          PermissionMode.ask,
-          prompt: 'hello',
-        ),
         isEmpty,
       );
     });

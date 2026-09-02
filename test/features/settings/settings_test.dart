@@ -60,6 +60,54 @@ void main() {
     });
   });
 
+  group('resume-running-panes setting', () {
+    test('is on by default', () {
+      // The owner asked for it: "if there were active panes on last close start
+      // all those panes on active tab".
+      expect(const Settings().restoreLivePanes, isTrue);
+    });
+
+    test('survives a JSON round-trip, off as well as on', () {
+      const off = Settings(restoreLivePanes: false);
+      expect(Settings.fromJson(off.toJson()).restoreLivePanes, isFalse);
+      expect(Settings.fromJson(off.toJson()), off);
+      expect(Settings.fromJson(const Settings().toJson()), const Settings());
+    });
+
+    test('an absent key reads back as on, not as the missing value', () {
+      // Every settings file written before this key existed, which is all of
+      // them: the upgrade has to arrive with the feature switched on.
+      expect(Settings.fromJson(const {}).restoreLivePanes, isTrue);
+    });
+
+    test('participates in equality', () {
+      expect(const Settings(restoreLivePanes: false), isNot(const Settings()));
+    });
+
+    test('the controller persists it', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRestoreLivePanes(false);
+
+      expect(
+        container.read(settingsControllerProvider).restoreLivePanes,
+        isFalse,
+      );
+      expect(
+        SettingsRepository(db).load().restoreLivePanes,
+        isFalse,
+        reason: 'the change must reach the database, not just the notifier',
+      );
+    });
+  });
+
   group('terminal theme setting', () {
     test('defaults to none, meaning the built-in theme', () {
       expect(const Settings().terminalThemeSource, isNull);

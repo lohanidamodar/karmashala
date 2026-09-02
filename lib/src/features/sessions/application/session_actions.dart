@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/antigravity_resume_providers.dart';
@@ -38,9 +39,17 @@ class SessionActions {
   SessionActions(this._ref);
   final Ref _ref;
 
+  /// Only the destructive path writes here. Renames and resumes are frequent,
+  /// reversible and already visible in the UI; a delete that also removed the
+  /// agent's own transcript is none of those things.
+  static final _log = AppLogger.named('sessions.actions');
+
   void renameNative(String id, String title) {
     _ref.read(sessionDaoProvider).updateTitle(id, title);
-    _bump();
+    // The narrowest fact the app publishes, and the most frequent: nothing but
+    // this row's name moved. See `session_signal_cost_test.dart` for what the
+    // coarse word used to cost — 108 session reads at a hundred sessions.
+    _publish(SessionChange.renamed(id));
   }
 
   Future<void> deleteNative(String id, {bool deleteFromCli = true}) async {
@@ -78,7 +87,16 @@ class SessionActions {
     if (_ref.read(selectedSessionIdProvider) == id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
-    _bump();
+    // The one destructive action in this class, and the only one that can reach
+    // outside the app: with `deleteFromCli` it removes the agent's own
+    // transcript, which nothing here can put back. Logged after the fact so the
+    // line means it happened rather than that it was attempted — the throws
+    // above all abandon the delete with the CLI store untouched.
+    _log.info(
+      'Deleted session $id (${session.title}): '
+      'fromCliStore=$deleteFromCli agent=${session.agentInstallationId}',
+    );
+    _publish(SessionChange.removed(id));
   }
 
   Future<void> renameImported(ImportedSession session, String title) async {
@@ -90,7 +108,7 @@ class SessionActions {
     } catch (_) {
       // CLI store unavailable — the workspace title is still updated.
     }
-    _bump();
+    _publish(SessionChange.renamed(session.id));
   }
 
   Future<void> deleteImported(
@@ -104,7 +122,7 @@ class SessionActions {
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
-    _bump();
+    _publish(SessionChange.removed(session.id));
   }
 
   /// Resumes an imported CLI session in place: it becomes a live native session
@@ -187,7 +205,7 @@ class SessionActions {
     if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
       _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
     }
-    _bump();
+    _publish(SessionChange.removed(session.id));
   }
 
   /// Resumes [session] and immediately sends [text] to it — the flow behind the
@@ -726,7 +744,8 @@ class SessionActions {
       _ref
           .read(sessionDaoProvider)
           .updateExternalSessionId(session.id, recovered);
-      _bump();
+      // Which conversation this row is on: a placement, not a name.
+      _publish(SessionChange.moved(session.id));
       return recovered;
     } catch (_) {
       return null;
@@ -769,7 +788,12 @@ class SessionActions {
     storeHome: session.storeHome,
   );
 
+  /// The coarse word, for the paths that genuinely move several things at
+  /// once — a resume launches a process, writes a status and claims a pane.
   void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
+
+  void _publish(SessionChange change) =>
+      _ref.read(sessionsRevisionProvider.notifier).changed(change);
 }
 
 final sessionActionsProvider = Provider<SessionActions>(

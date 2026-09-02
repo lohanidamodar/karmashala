@@ -23,7 +23,7 @@ const _prompting = AgentDescriptor(
     permissionModes: {
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
     },
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
       evidence: 'p --help',
@@ -42,7 +42,7 @@ const _flexible = AgentDescriptor(
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
       PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
     },
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
   ),
 );
 

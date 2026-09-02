@@ -134,6 +134,13 @@ class AppTheme {
           minimumSize: const Size.square(26),
           maximumSize: const Size.square(30),
           padding: const EdgeInsets.all(Insets.xs),
+          // An `IconButton` sizes its glyph from its own button style, not
+          // from the ambient `iconTheme` above — so with this unset every
+          // one of them fell back to Material's 24, inside a 30px box with
+          // 4px of padding, i.e. a glyph larger than the room it was given.
+          // Call sites had been papering over it one `size:` literal at a
+          // time; roughly half never did and drew the oversized default.
+          iconSize: Chrome.icon,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(Radii.sm),
           ),
@@ -147,6 +154,13 @@ class AppTheme {
         selectedColor: scheme.primary,
         selectedTileColor: scheme.primary.withValues(alpha: 0.10),
         iconColor: scheme.onSurfaceVariant,
+        // Material's default title is `bodyLarge` — 16px, larger than the
+        // `bodyMedium` a dialog's own content text is set in, so a tile inside
+        // a dialog shouted over the sentence explaining it. The companion's
+        // touch theme has always named these two; the desktop never did, and
+        // took the fallback instead. Same shape, one step down the ramp.
+        titleTextStyle: text.bodyMedium,
+        subtitleTextStyle: text.bodySmall,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
         ),
@@ -179,10 +193,15 @@ class AppTheme {
         labelStyle: text.labelMedium,
         padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       ),
+      // `*.icon` constructors size their leading glyph from the button style
+      // too — Material's default is 18, against a chrome whose every other
+      // glyph is `Chrome.icon`. Same fix, same reason, as `menuButtonTheme`
+      // below.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 30),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          iconSize: Chrome.icon,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -193,6 +212,7 @@ class AppTheme {
           minimumSize: const Size(0, 30),
           side: BorderSide(color: scheme.outlineVariant),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          iconSize: Chrome.icon,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -202,6 +222,7 @@ class AppTheme {
         style: TextButton.styleFrom(
           minimumSize: const Size(0, 30),
           padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+          iconSize: Chrome.icon,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
           ),
@@ -251,6 +272,17 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         menuPadding: const EdgeInsets.symmetric(vertical: 4),
         textStyle: text.bodySmall,
+        // Under Material 3 a `PopupMenuItem` reads `labelTextStyle` and
+        // ignores `textStyle` entirely — the same trap as `DropdownButton` and
+        // `dropdownMenuTheme`, in the other direction. So every plain
+        // `PopupMenuItem` in the app (the terminal's right-click menu, the
+        // side-panel context menu, the permission pickers) drew at Material's
+        // `labelLarge`/14 while a `DesktopMenuItem` in the same menu surface
+        // drew its own `bodySmall`/12. Both fields are set, to the same style,
+        // because either one can be the one that gets read.
+        labelTextStyle: WidgetStatePropertyAll(text.bodySmall),
+        iconColor: scheme.onSurfaceVariant,
+        iconSize: Chrome.icon,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.sm),
           side: BorderSide(color: scheme.outlineVariant),
@@ -372,9 +404,26 @@ class AppTheme {
     final typography = Typography.material2021(colorScheme: scheme);
     // Use light-on-dark glyph colours in dark mode (the bug that made dark text
     // unreadable was always using the `.black` set).
-    final base = scheme.brightness == Brightness.dark
+    final colours = scheme.brightness == Brightness.dark
         ? typography.white
         : typography.black;
+    // **The geometry has to be merged in here.** `typography.black`/`.white`
+    // carry colour and family and *no font sizes at all* — the sizes live in
+    // `typography.englishLike`, and `ThemeData.localize` merges them into
+    // `ThemeData.textTheme` only, at build time. Every component theme below
+    // that captures one of these styles (`popupMenuTheme.textStyle`,
+    // `dialogTheme.titleTextStyle`, `chipTheme.labelStyle`,
+    // `tooltipTheme.textStyle`, `menuButtonTheme.textStyle`,
+    // `listTileTheme.titleTextStyle`, `appBarTheme.titleTextStyle`) captured a
+    // style with a null `fontSize`, so it inherited whatever size was ambient
+    // instead of the ramp step it names: a popup menu item that says
+    // `bodySmall` was measured rendering at 14, not 12. This is the reason the
+    // chrome's own menus and dialogs never looked like the rest of the chrome.
+    //
+    // The cost is that the type scale no longer varies by script category —
+    // the app is English-only, and a menu that ignores its own theme is the
+    // worse of the two problems.
+    final base = typography.englishLike.merge(colours);
     final onSurface = scheme.onSurface;
     return base.copyWith(
       titleLarge: base.titleLarge?.copyWith(

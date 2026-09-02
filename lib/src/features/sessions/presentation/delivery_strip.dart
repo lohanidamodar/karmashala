@@ -6,6 +6,11 @@ import '../../../app/theme/design_tokens.dart';
 import '../../git/application/remote_links.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../github/domain/pull_request_snapshot.dart';
+import '../../verification/application/review_session_service.dart';
+import '../../verification/application/verification_providers.dart';
+import '../../verification/presentation/review_action.dart';
+import '../../verification/presentation/review_invitation.dart';
+import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/delivery_providers.dart';
 import '../application/session_actions.dart';
 import '../application/session_archive_service.dart';
@@ -203,10 +208,28 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     }
     const continueTooltip =
         'Move this session to another agent, or fork it. '
-        'Nothing is launched until you have seen what the next '
-        'agent will be told.';
+        '$kContinueWithPromise';
     void continueWith() =>
         ContinueWithDialog.show(context, widget.sessionId);
+
+    // In the row of controls, not in the line of facts: "facts above, controls
+    // below" is this strip's redesign, and a pressable thing among the stage
+    // and the branch would undo it. Directly under the verdict is as beside it
+    // as that separation allows.
+    final invitation = ReviewInvitation.forVerdict(
+      ref.watch(sessionVerdictProvider(widget.sessionId)).state,
+    );
+    // Hidden rather than disabled when nobody can be asked, matching the
+    // follow-up row: this strip is on *every* session, so a dead control here
+    // reads as a broken feature rather than as a machine with one agent on it.
+    // The refusal keeps its home on [ReviewAction]'s own button, where the
+    // control is the surface's subject. Short-circuited because the answer
+    // costs three row lookups a rebuild.
+    final review =
+        invitation != null &&
+            ref.watch(sessionReviewOfferProvider(widget.sessionId)).isPossible
+        ? invitation
+        : null;
 
     if (widget.hostedOnTerminal) {
       // The action row, and only the action row. Every button in it is the
@@ -225,6 +248,16 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
               onPressed: _busy || !offered.isEnabled
                   ? null
                   : () => _press(offered.action, delivery),
+            ),
+          if (review != null)
+            ReviewAction(
+              sessionId: widget.sessionId,
+              builder: (context, offer) => _BarAction(
+                icon: AppIcons.listMagnifyingGlass,
+                label: review.label,
+                tooltip: offer.tooltip,
+                onPressed: _busy ? null : offer.onPressed,
+              ),
             ),
           if (canContinue)
             _BarAction(
@@ -245,6 +278,16 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
               ? null
               : () => _press(offered.action, delivery),
         ),
+      if (review != null)
+        ReviewAction(
+          sessionId: widget.sessionId,
+          builder: (context, offer) => ActionChip(
+            avatar: const Icon(AppIcons.listMagnifyingGlass, size: 14),
+            label: Text(review.label),
+            tooltip: offer.tooltip,
+            onPressed: _busy ? null : offer.onPressed,
+          ),
+        ),
       if (canContinue)
         ActionChip(
           avatar: const Icon(AppIcons.arrowBendDownRight, size: 14),
@@ -259,7 +302,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Divider(height: 1),
-        if (delivery != null) _DeliveryState(delivery: delivery),
+        if (delivery != null)
+          _DeliveryState(delivery: delivery, sessionId: widget.sessionId),
         Padding(
           // Padded on all four sides since Loop 85: the strip is hosted under
           // the terminal as well as above the composer, and there it is the
@@ -278,9 +322,13 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
 
 /// The state line: how far the work has got, and the numbers behind that.
 class _DeliveryState extends StatelessWidget {
-  const _DeliveryState({required this.delivery});
+  const _DeliveryState({required this.delivery, required this.sessionId});
 
   final SessionDelivery delivery;
+
+  /// Carried through only for the verification verdict, which is the one fact
+  /// in the line that is not a property of [SessionDelivery].
+  final String sessionId;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -289,7 +337,7 @@ class _DeliveryState extends StatelessWidget {
       spacing: Insets.sm,
       runSpacing: Insets.xs,
       crossAxisAlignment: WrapCrossAlignment.center,
-      children: _deliveryFacts(context, delivery),
+      children: _deliveryFacts(context, delivery, sessionId),
     ),
   );
 }
@@ -326,7 +374,7 @@ class DeliveryStateLine extends ConsumerWidget {
         spacing: Insets.sm,
         runSpacing: Insets.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
-        children: _deliveryFacts(context, delivery),
+        children: _deliveryFacts(context, delivery, sessionId),
       ),
     );
   }
@@ -337,7 +385,11 @@ class DeliveryStateLine extends ConsumerWidget {
 /// A list rather than a widget because both hosts wrap them in a [Wrap] of
 /// their own: nested, the whole state would break to a run of its own long
 /// before it had run out of room.
-List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
+List<Widget> _deliveryFacts(
+  BuildContext context,
+  SessionDelivery delivery,
+  String sessionId,
+) {
   final theme = Theme.of(context);
   final semantic = SemanticColors.of(context);
   final label = theme.textTheme.labelSmall;
@@ -363,6 +415,12 @@ List<Widget> _deliveryFacts(BuildContext context, SessionDelivery delivery) {
         Text(stage.label, style: label?.copyWith(color: colour)),
       ],
     ),
+    // Beside the stage, because the two answer the neighbouring halves of the
+    // same question: how far the work got, and whether anything checked it.
+    // It draws in every state — "no check recorded" included — since a fact
+    // that vanishes when the answer is "nothing" reads as a clean bill of
+    // health to anyone scanning the line.
+    SessionVerdictMark(sessionId: sessionId),
     if (delivery.branch case final branch?)
       Row(
         mainAxisSize: MainAxisSize.min,

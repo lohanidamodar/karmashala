@@ -17,6 +17,12 @@ class WslInvocation {
 /// Pure and side-effect free so it can be unit-tested without a real WSL. Uses
 /// `--cd` to set the working directory (a WSL path) and `--` to separate WSL's
 /// own flags from the target command and its arguments.
+///
+/// `request.runInShell` is deliberately not carried over. It exists to let the
+/// *Windows* shell resolve an app-execution alias, and the executable started
+/// here is always `wsl.exe`; the request's own executable is an argument that
+/// the distribution resolves on its own PATH. Wrapping this in `cmd.exe` would
+/// change which machine did the resolving, not fix anything.
 WslInvocation buildWslInvocation(String distribution, CommandRequest request) {
   final args = <String>['-d', distribution];
   final cwd = request.workingDirectory;

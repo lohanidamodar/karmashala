@@ -10,7 +10,7 @@ import '../../git/domain/file_change.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/domain/handoff_packet.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_launch.dart';
@@ -459,6 +459,8 @@ final reviewSessionServiceProvider = Provider<ReviewSessionService>(
 final sessionReviewOfferProvider = Provider.autoDispose
     .family<ReviewOffer, String>((ref, sessionId) {
       // The session's row and the installed agents both move under this.
-      ref.watch(sessionsRevisionProvider);
+      // Narrowed to the row, for the reason `sessionContinuationProvider`
+      // gives: an untargeted bump still reaches it.
+      ref.watchSession(sessionId);
       return ref.watch(reviewSessionServiceProvider).offerFor(sessionId);
     });

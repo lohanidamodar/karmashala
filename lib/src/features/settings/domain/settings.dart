@@ -78,6 +78,7 @@ class Settings {
     this.pinnedProjectIds = const [],
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
+    this.restoreLivePanes = true,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
     this.remoteAccessEnabled = false,
@@ -211,6 +212,21 @@ class Settings {
   /// is a much worse outcome than a missing feature, so this stays opt-in.
   final bool shellIntegrationEnabled;
 
+  /// Give a process back, at launch, to the panes that were running when the
+  /// app last closed.
+  ///
+  /// The owner's report, twice: *"why when app restart the active pane doesn't
+  /// automatically resume the session? why must i tap start again"*, and *"if
+  /// there were active panes on last close start all those panes on active
+  /// tab"*. So this is **on** by default; someone who wants a quiet launch
+  /// turns it off and every pane comes back as replayed history with a Start
+  /// button, exactly as it did before.
+  ///
+  /// Deliberately not [autoStart], which is "launch the app when the user logs
+  /// in" and has nothing to do with panes. What it does and does not cover is
+  /// in `shouldRestartOnLaunch` — in particular it never starts an agent pane.
+  final bool restoreLivePanes;
+
   /// The imported terminal colour theme, as `<format>:<path>` (for example
   /// `warp:C:\\Users\\a\\...\\nord.yaml`), or `null` for the built-in theme.
   ///
@@ -304,6 +320,7 @@ class Settings {
     List<String>? pinnedProjectIds,
     List<String>? pinnedSessionIds,
     bool? shellIntegrationEnabled,
+    bool? restoreLivePanes,
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
@@ -351,6 +368,7 @@ class Settings {
     pinnedSessionIds: pinnedSessionIds ?? this.pinnedSessionIds,
     shellIntegrationEnabled:
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
+    restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
     terminalChordOverrides:
         terminalChordOverrides ?? this.terminalChordOverrides,
     terminalThemeSource: clearTerminalThemeSource
@@ -401,6 +419,7 @@ class Settings {
     'pinnedProjectIds': pinnedProjectIds,
     'pinnedSessionIds': pinnedSessionIds,
     'shellIntegrationEnabled': shellIntegrationEnabled,
+    'restoreLivePanes': restoreLivePanes,
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
@@ -496,6 +515,10 @@ class Settings {
           ? (json['pinnedSessionIds'] as List).whereType<String>().toList()
           : const [],
       shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
+      // `!= false` rather than `== true`: this defaults **on**, so a settings
+      // file written before the key existed has to read as on rather than as
+      // the absent value's `false`.
+      restoreLivePanes: json['restoreLivePanes'] != false,
       terminalChordOverrides: {
         if (json['terminalChordOverrides'] is Map)
           for (final entry in (json['terminalChordOverrides'] as Map).entries)
@@ -569,6 +592,7 @@ class Settings {
       other.launcherHotkeyJson == launcherHotkeyJson &&
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
+      other.restoreLivePanes == restoreLivePanes &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
       other.remoteAccessEnabled == remoteAccessEnabled &&
@@ -612,6 +636,7 @@ class Settings {
       launcherHotkeyEnabled,
       defaultAgentInstallationId,
       shellIntegrationEnabled,
+      restoreLivePanes,
       terminalThemeSource,
       remoteAccessEnabled,
       remoteRelayUrl,

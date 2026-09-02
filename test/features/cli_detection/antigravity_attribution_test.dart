@@ -45,7 +45,7 @@ void main() {
   final launchedAt = testTime;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_agy_attr_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_agy_attr_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());

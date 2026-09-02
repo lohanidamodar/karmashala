@@ -271,6 +271,7 @@ class RemoteTranscriptPage {
     required this.sessionId,
     required this.messages,
     required this.cursor,
+    this.omitted = 0,
   });
 
   final String sessionId;
@@ -279,10 +280,22 @@ class RemoteTranscriptPage {
   /// Position after the last message here — pass as `after` to resume.
   final int cursor;
 
+  /// How many messages before [messages] the host did not send.
+  ///
+  /// A conversation is opened at its end, and a long one cannot be carried in
+  /// a single frame: this session's own transcript is 53 MB of JSONL, and
+  /// sending every message of it produced a frame the phone never finished
+  /// receiving. So the host sends the tail and says how much it kept back,
+  /// rather than silently showing a conversation that appears to begin in the
+  /// middle. Defaults to zero, so a page from an older host reads as complete
+  /// — which is what it was.
+  final int omitted;
+
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'messages': [for (final m in messages) m.toJson()],
     'cursor': cursor,
+    if (omitted > 0) 'omitted': omitted,
   };
 
   static RemoteTranscriptPage fromJson(Map<String, Object?> json) {
@@ -292,7 +305,9 @@ class RemoteTranscriptPage {
     if (sessionId is! String || messages is! List || cursor is! int) {
       throw const ProtocolException('bad transcript page');
     }
+    final omitted = json['omitted'];
     return RemoteTranscriptPage(
+      omitted: omitted is int && omitted > 0 ? omitted : 0,
       sessionId: sessionId,
       messages: [
         for (final m in messages)

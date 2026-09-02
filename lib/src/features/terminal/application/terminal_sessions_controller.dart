@@ -20,8 +20,11 @@ import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
+import '../domain/persistence_telemetry.dart';
+import '../domain/pane_restart.dart';
 import '../domain/pane_title.dart';
 import '../domain/terminal_profile.dart';
+import 'pane_exit_signal.dart';
 import 'scrollback_autosave.dart';
 
 /// Whether new panes get OSC 133 shell integration.
@@ -31,6 +34,15 @@ import 'scrollback_autosave.dart';
 /// the same seam `terminalInstanceFactoryProvider` already provides.
 final shellIntegrationEnabledProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).shellIntegrationEnabled,
+);
+
+/// Whether a restore puts a process back into the panes that had one.
+///
+/// The same seam and the same reason as [shellIntegrationEnabledProvider]: the
+/// restore runs in `build`, and reading the setting directly would make every
+/// terminal test stand up a settings store to open a pane.
+final restoreLivePanesProvider = Provider<bool>(
+  (ref) => ref.watch(settingsControllerProvider).restoreLivePanes,
 );
 
 /// The production factory: each pane is backed by a real ConPTY.
@@ -91,6 +103,7 @@ class TerminalSessionsState {
     this.activeTabId,
     this.detached = const [],
     this.liveness = const {},
+    this.workingDirectories = const {},
   });
 
   final List<TerminalTab> tabs;
@@ -103,12 +116,25 @@ class TerminalSessionsState {
   /// died while its tab was in the background still repaints as dead.
   final Map<String, PaneLiveness> liveness;
 
+  /// Per-pane working directory, republished whenever a shell reports a `cd`
+  /// (OSC 7) — so the tab label, and anything else naming a pane by where it
+  /// is, follows the shell instead of the directory it was launched in.
+  ///
+  /// Its own projection rather than a flag on the tab list, for the same reason
+  /// [liveness] is one: a `cd` in a background pane must not rebuild the tab
+  /// strip.
+  final Map<String, String?> workingDirectories;
+
   bool get isEmpty => tabs.isEmpty;
 
   /// Liveness of [paneId]. An unknown pane is treated as not running: the
   /// safe answer, since the only way to be live is to be tracked.
   PaneLiveness livenessOf(String paneId) =>
       liveness[paneId] ?? PaneLiveness.exited;
+
+  /// Where pane [paneId] is now, or null for an unknown pane and for one whose
+  /// directory was never recorded.
+  String? directoryOf(String paneId) => workingDirectories[paneId];
 
   TerminalTab? get activeTab {
     for (final tab in tabs) {
@@ -132,7 +158,8 @@ class TerminalSessionsState {
           identical(other.tabs, tabs) &&
           other.activeTabId == activeTabId &&
           identical(other.detached, detached) &&
-          identical(other.liveness, liveness);
+          identical(other.liveness, liveness) &&
+          identical(other.workingDirectories, workingDirectories);
 
   @override
   int get hashCode => Object.hash(
@@ -140,6 +167,7 @@ class TerminalSessionsState {
     activeTabId,
     identityHashCode(detached),
     identityHashCode(liveness),
+    identityHashCode(workingDirectories),
   );
 }
 
@@ -170,11 +198,27 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   List<TerminalTab>? _tabsView;
   List<DetachedSession>? _detachedView;
   Map<String, PaneLiveness>? _livenessView;
+  Map<String, String?>? _directoriesView;
   Map<String, int>? _tabIndexById;
   Map<String, String>? _tabIdByPane;
 
   /// Panes whose buffer changed since their last snapshot.
   final Set<String> _dirty = {};
+
+  /// When each dirty pane *became* dirty, on [_uptime]'s monotonic scale.
+  ///
+  /// Written only on the clean→dirty transition, which `Set.add`'s return value
+  /// already reports for free: `markDirty` runs on every terminal notification
+  /// of every pane, so reading a clock there would be a per-frame,
+  /// per-pane cost for a number nobody reads more than once a second.
+  final Map<String, Duration> _dirtySince = {};
+
+  /// Monotonic, so an unsaved age cannot be distorted by the wall clock moving.
+  final Stopwatch _uptime = Stopwatch()..start();
+
+  /// What the last completed scrollback write cost and covered. Null until one
+  /// has run — reported as "not recorded" rather than as zero.
+  ScrollbackWrite? _lastWrite;
 
   /// The last encoding written for each pane.
   ///
@@ -192,6 +236,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// Per-pane liveness listeners, kept for the same reason.
   final Map<String, void Function()> _livenessListeners = {};
+
+  /// Per-pane working-directory listeners, kept for the same reason.
+  final Map<String, void Function()> _directoryListeners = {};
 
   /// Titles panes have set for themselves with OSC 0/2, by pane id.
   ///
@@ -298,6 +345,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       for (final entry in _instances.entries)
         entry.key: entry.value.liveness.value,
     }),
+    workingDirectories: _directoriesView ??= Map.unmodifiable({
+      for (final entry in _instances.entries)
+        entry.key: entry.value.workingDirectory,
+    }),
   );
 
   void _publish() {
@@ -323,6 +374,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Drops the liveness projection — a pane was adopted, released, or its
   /// process changed state.
   void _livenessMutated() => _livenessView = null;
+
+  /// Drops the directory projection — a pane was adopted, released, or its
+  /// shell said it moved. Exactly as narrow as [_livenessMutated]: a `cd`
+  /// leaves the tab list, the detached list and every pane's liveness alone.
+  void _directoriesMutated() => _directoriesView = null;
 
   Map<String, int> get _tabIndex =>
       _tabIndexById ??= {for (var i = 0; i < _tabs.length; i++) _tabs[i].id: i};
@@ -383,7 +439,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _instances.clear();
     _dirtyListeners.clear();
     _livenessListeners.clear();
+    _directoryListeners.clear();
     _dirty.clear();
+    _dirtySince.clear();
     _encoded.clear();
     _tabs.clear();
     _detached.clear();
@@ -391,6 +449,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _tabsMutated();
     _detachedMutated();
     _livenessMutated();
+    _directoriesMutated();
     return reaping;
   }
 
@@ -1075,10 +1134,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Starts a process in [paneId], replaying whatever is already in its buffer
   /// above the new one.
   ///
-  /// This is the *only* way a restored pane gets a process: nothing runs at
-  /// launch, so restarting the app can never re-execute a build or an agent
-  /// behind the user's back. Also the retry path for a pane whose process
-  /// exited or failed to spawn.
+  /// This is the only way a pane the launch declined to restart gets a process
+  /// — an agent pane, a background tab, a pane whose process had already
+  /// exited, or any pane at all when the setting is off — so restarting the app
+  /// can still never re-execute a build or an agent behind the user's back.
+  /// Also the retry path for a pane whose process exited or failed to spawn.
+  ///
+  /// What a launch *does* start, and why those cases are different, is
+  /// `shouldRestartOnLaunch`; it builds the pane live rather than coming
+  /// through here.
   ///
   /// Does nothing for a pane that is already live.
   void startPane(String paneId) {
@@ -1300,6 +1364,38 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// rather than its idle one.
   bool get hasDirtyScrollback => _dirty.isNotEmpty;
 
+  /// Forgets a pane's debt in both places at once.
+  void _markClean(String paneId) {
+    _dirty.remove(paneId);
+    _dirtySince.remove(paneId);
+  }
+
+  /// What persistence currently owes, and what the last write cost.
+  ///
+  /// Read by Settings → Diagnostics. Built on demand rather than published,
+  /// because a value that changed whenever a pane's buffer moved would rebuild
+  /// a settings page from the terminal's hot path.
+  ///
+  /// The one question it exists to answer is whether the autosave is keeping
+  /// up: a dirty count that does not fall, or an oldest-unsaved age that keeps
+  /// climbing, is the shape of "my work is not being written" — which is the
+  /// class of problem that was previously invisible until a workspace came
+  /// back missing output.
+  PersistenceTelemetry get persistenceTelemetry {
+    final now = _uptime.elapsed;
+    Duration? oldest;
+    for (final since in _dirtySince.values) {
+      final age = now - since;
+      if (oldest == null || age > oldest) oldest = age;
+    }
+    return PersistenceTelemetry(
+      dirtyPanes: _dirty.length,
+      livePanes: _instances.length,
+      oldestUnsaved: oldest,
+      lastWrite: _lastWrite,
+    );
+  }
+
   /// Re-encodes the panes whose buffers changed, **for at most [budget] of
   /// main-isolate time**, returning the pane ids written.
   ///
@@ -1324,18 +1420,26 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final written = <String>[];
     final spent = Stopwatch()..start();
     try {
+      final started = _uptime.elapsed;
       for (final paneId in _dirty.toList()) {
         final instance = _instances[paneId];
         if (instance == null) {
           // A pane that has gone owes nothing; drop it rather than retrying it
           // on every tick from here to shutdown.
-          _dirty.remove(paneId);
+          _markClean(paneId);
           continue;
         }
         dao.saveScrollback(paneId, _scrollbackOf(paneId, instance));
         written.add(paneId);
         if (spent.elapsed >= budget) break;
       }
+      // Recorded even for a run that hit its budget: a write that keeps being
+      // cut off is exactly what the diagnostics page is for.
+      _lastWrite = ScrollbackWrite(
+        panes: written.length,
+        took: spent.elapsed,
+        at: started,
+      );
     } catch (error, stack) {
       _log.warning('Could not autosave terminal scrollback.', error, stack);
     }
@@ -1368,7 +1472,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final held = _heldScrollbackOf(instance);
     if (held != null) {
       _encoded[paneId] = held;
-      _dirty.remove(paneId);
+      _markClean(paneId);
       return held;
     }
     if (!refresh || !_dirty.contains(paneId)) {
@@ -1380,7 +1484,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // Written, so no longer owed a write. Clearing per pane rather than in bulk
     // means a pane that was somehow not persisted keeps its flag, which is the
     // safe direction to be wrong in.
-    _dirty.remove(paneId);
+    _markClean(paneId);
     return encoded;
   }
 
@@ -1408,6 +1512,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   /// A tab as a stored row.
   ///
+  /// The directory stored is where the pane **ended up**, not where it was
+  /// launched: `TerminalInstance.workingDirectory` follows the shell's OSC 7.
+  /// That is the right one on every count — the scrollback that comes back with
+  /// it was produced there, so a relative path in it resolves against the
+  /// directory it was printed in; the tab comes back with the label it had; and
+  /// the launch directory is an artefact of how the pane happened to be opened,
+  /// which the user has since moved away from on purpose. It cannot start
+  /// anything either: a restored pane is a record, and this only decides where
+  /// a shell would spawn *if* the user presses Start — never whether one does,
+  /// and never a command re-run.
+  ///
   /// An **empty region** has no instance, so it stores no pane — and restore's
   /// `withoutMissing` drops the leaf that named it. That is deliberate: a
   /// region is room the user cleared for something, and a reboot has already
@@ -1429,6 +1544,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
               workingDirectory: instance.workingDirectory,
               scrollback: _scrollbackOf(paneId, instance, refresh: refresh),
               agentLaunch: instance.agentLaunch,
+              wasLive: instance.liveness.value.isLive,
             ),
       ],
     );
@@ -1458,19 +1574,30 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           workingDirectory: instance.workingDirectory,
           scrollback: _scrollbackOf(session.paneId, instance, refresh: refresh),
           agentLaunch: instance.agentLaunch,
+          wasLive: instance.liveness.value.isLive,
         ),
       ],
     );
   }
 
   /// Recreates the stored workspace: the tabs, the splits inside them, and each
-  /// pane's scrollback replayed into a **dormant** buffer.
+  /// pane's scrollback — as a **dormant** buffer, except for the panes of the
+  /// active tab that were running when the app closed, which get a process back.
   ///
-  /// No process is started. A reboot ends every process regardless, so a stored
-  /// pane is a record, not a session — and spawning something for each one at
-  /// launch would both re-execute work the user never asked to repeat and make
-  /// week-old history indistinguishable from a live shell. Each pane instead
-  /// comes back marked as restored, with an explicit start.
+  /// The owner, twice: *"why when app restart the active pane doesn't
+  /// automatically resume the session? why must i tap start again"*, and then
+  /// *"if there were active panes on last close start all those panes on active
+  /// tab"*. `shouldRestartOnLaunch` holds the whole of which panes those are and
+  /// why the others are still records; the ones it refuses come back exactly as
+  /// they always did, marked restored with an explicit Start.
+  ///
+  /// A restarted pane is built **here**, in place of the dormant one, rather
+  /// than started afterwards through [startPane]. Three things follow from that
+  /// and all three are the point: nothing publishes state during `build` (which
+  /// Riverpod forbids), the first frame already shows a live terminal instead of
+  /// a "Session ended" bar that vanishes, and the stored scrollback is parsed
+  /// once — where starting afterwards would build the dormant pane's buffer and
+  /// then throw it away.
   ///
   /// Defensive at every step: a layout that will not parse, a pane whose profile
   /// no longer exists, a tab left with nothing in it — each is dropped rather
@@ -1486,11 +1613,22 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
     try {
       final stored = dao.loadWorkspace();
+      // Which tab counts as "the active tab" has to be decided before any pane
+      // is built, and the same way the fallback below decides it: a workspace
+      // stored with no active row activates its last tab. Resolved against the
+      // *stored* list rather than the rebuilt one, so a last tab that turns out
+      // to be unrebuildable starts nothing rather than promoting another tab's
+      // panes into a decision the user never made.
+      final activeTabId =
+          stored.activeTabId ??
+          (stored.tabs.isEmpty ? null : stored.tabs.last.id);
       for (final storedTab in stored.tabs) {
         final rebuilt = <String>{};
         for (final pane in storedTab.panes) {
           if (!storedTab.layout.contains(pane.id)) continue;
-          if (_adoptDormant(pane)) rebuilt.add(pane.id);
+          if (_adoptRestored(pane, inActiveTab: storedTab.id == activeTabId)) {
+            rebuilt.add(pane.id);
+          }
         }
 
         final layout = storedTab.layout.withoutMissing(rebuilt);
@@ -1513,9 +1651,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
       // Sessions that had no tab last time stay tab-less: they come back in the
       // background list, where the user reopens the ones still worth having.
+      // They are in no tab, so they are never in the *active* one, and a
+      // detached session is precisely the thing the user already closed the
+      // view of — starting one would spawn a process with nowhere to show it.
       for (final storedTab in stored.detached) {
         for (final pane in storedTab.panes) {
-          if (!_adoptDormant(pane)) continue;
+          if (!_adoptRestored(pane, inActiveTab: false)) continue;
           _detached.add(
             DetachedSession(
               paneId: pane.id,
@@ -1534,17 +1675,28 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     }
   }
 
-  /// Rebuilds [pane] as a process-free buffer holding its stored scrollback.
+  /// Rebuilds [pane]: with a process when it earned one, and as a process-free
+  /// buffer holding its stored scrollback when it did not.
   ///
   /// Returns false when the pane's profile no longer resolves — a WSL distro
   /// that has been removed, say — since there would be nothing to start it with.
-  bool _adoptDormant(StoredTerminalPane pane) {
+  bool _adoptRestored(StoredTerminalPane pane, {required bool inActiveTab}) {
     // An agent pane carries its own command, so it does not need — and never
     // had — a resolvable shell profile.
-    if (pane.agentLaunch == null &&
-        terminalProfileFromId(pane.profileId) == null) {
-      return false;
+    final profile = terminalProfileFromId(pane.profileId);
+    if (pane.agentLaunch == null && profile == null) return false;
+
+    if (profile != null &&
+        shouldRestartOnLaunch(
+          enabled: _restoreLivePanes,
+          wasLive: pane.wasLive,
+          inActiveTab: inActiveTab,
+          isAgentPane: pane.agentLaunch != null,
+        ) &&
+        _adoptRestarted(pane, profile)) {
+      return true;
     }
+
     _adopt(
       pane.id,
       DormantTerminalInstance(
@@ -1556,6 +1708,44 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         agentLaunch: pane.agentLaunch,
       ),
     );
+    return true;
+  }
+
+  /// Gives [pane] a process again, replaying its stored scrollback above it.
+  ///
+  /// The same factory every other pane comes from, so a shell that will not
+  /// spawn degrades exactly as it does anywhere else: to an
+  /// [ErrorTerminalInstance] holding the reason above the history, reported as
+  /// [PaneLiveness.exited] with a Restart on it. A pane that cannot start says
+  /// so; it never comes back as a blank buffer pretending to be a shell.
+  ///
+  /// Returns false — and the caller falls back to the dormant pane — if the
+  /// factory *throws* rather than degrading. Nothing in production does that,
+  /// and this runs inside the restore: a workspace must not be lost because one
+  /// pane could not be started.
+  bool _adoptRestarted(StoredTerminalPane pane, TerminalProfile profile) {
+    final TerminalInstance instance;
+    // Only the build is guarded, so a refusal is always a pane that was never
+    // adopted — there is no half-adopted state for the dormant fallback to be
+    // laid over.
+    try {
+      instance = ref.read(terminalInstanceFactoryProvider)(
+        id: pane.id,
+        profile: profile,
+        workingDirectory: pane.workingDirectory,
+        restoredScrollback: pane.scrollback,
+        shellIntegration: _shellIntegrationEnabled,
+      );
+    } catch (error, stack) {
+      _log.warning(
+        'Could not restart pane ${pane.id} on launch; it comes back as '
+        'restored history instead.',
+        error,
+        stack,
+      );
+      return false;
+    }
+    _adopt(pane.id, instance);
     return true;
   }
 
@@ -1578,6 +1768,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// panes only and never restarts a running shell underneath the user.
   bool get _shellIntegrationEnabled =>
       ref.read(shellIntegrationEnabledProvider);
+
+  /// Read at restore time rather than watched, for the same reason: this
+  /// decides what a *launch* does, and toggling it must never reach into panes
+  /// that are already open.
+  bool get _restoreLivePanes => ref.read(restoreLivePanesProvider);
 
   String _createPane(
     TerminalProfile profile, {
@@ -1606,11 +1801,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void _adopt(String paneId, TerminalInstance instance) {
     _instances[paneId] = instance;
     _livenessMutated();
+    _directoriesMutated();
     // A dormant pane is replayed history with nothing running behind it, so its
     // buffer cannot change and there is nothing to track — and reaching for
     // `terminal` here would build the very buffer the restore is avoiding.
     if (instance is! DormantTerminalInstance) {
-      void markDirty() => _dirty.add(paneId);
+      // `add` answers whether this is the transition, so the clock is read once
+      // per dirty spell rather than once per notification.
+      void markDirty() {
+        if (_dirty.add(paneId)) _dirtySince[paneId] = _uptime.elapsed;
+      }
       _dirtyListeners[paneId] = markDirty;
       instance.terminal.addListener(markDirty);
     }
@@ -1619,6 +1819,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // process death — not per frame — so this costs nothing.
     void onLiveness() {
       _livenessMutated();
+      if (instance.liveness.value == PaneLiveness.exited) {
+        _announceExit(paneId, instance);
+      }
       if (instance.liveness.value == PaneLiveness.exited &&
           _shouldCollapse(paneId, instance)) {
         // Not inline: this runs from inside the notifier's own callback, and
@@ -1643,6 +1846,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
     _livenessListeners[paneId] = onLiveness;
     instance.liveness.addListener(onLiveness);
+    // Republish when the shell says it changed directory, so the tab label and
+    // the region header follow a `cd`. One rebuild per `cd` — the instance's
+    // notifier drops a report of the directory it already holds, which is what
+    // keeps a shell that emits OSC 7 on every prompt redraw free.
+    void onDirectory() {
+      _directoriesMutated();
+      _publish();
+    }
+
+    _directoryListeners[paneId] = onDirectory;
+    instance.directory.addListener(onDirectory);
     // Nothing else claims `onTitleChange`, so the controller owns it: the tab
     // label is the controller's to derive, and the pane has no idea it is one.
     //
@@ -1652,36 +1866,51 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (instance is! DormantTerminalInstance) {
       // Resolved once per pane and captured, not per title: a TUI that repaints
       // its title every frame must not rebuild a launch every frame.
-      final launcher = _launcherExecutable(instance);
+      final launchers = _launcherNames(instance);
       instance.terminal.onTitleChange = (title) =>
-          _onPaneTitle(paneId, title, launcher);
+          _onPaneTitle(paneId, title, launchers);
     }
   }
 
-  /// The executable this pane's process was started *through*, or `null` when
-  /// nothing was put in front of it.
+  /// Every executable this pane's process was started *through*, lowercased and
+  /// without its directory. Empty when nothing was put in front of it.
   ///
   /// Asked of `ptyLaunchFor` — the same builder that produced the launch — so
-  /// the name refused as a title cannot drift from the name actually spawned.
+  /// the names refused as titles cannot drift from the names actually spawned.
   /// Taken in the Windows reading of the profile on purpose: an image path
   /// arriving as a window title is a ConPTY behaviour, and on a POSIX host
   /// there is no wrapper for a pane to be named after.
-  String? _launcherExecutable(TerminalInstance instance) {
+  ///
+  /// **Every name, not just the first.** A WSL pane is now spawned as
+  /// `cmd.exe /c wsl.exe -d <distro> …`, so the image that announces itself is
+  /// no longer the executable — and a filter that knew only the first name let
+  /// `C:\Windows\System32\wsl.exe` through as a tab label. The arguments are
+  /// searched rather than compared, because `throughCommandPrompt` joins the
+  /// whole line into one `/c` argument: the `.exe` is a token inside it, not
+  /// the end of it.
+  Set<String> _launcherNames(TerminalInstance instance) {
     // An agent pane never consults OSC at all — see [_titleForPane].
-    if (instance.agentLaunch != null) return null;
+    if (instance.agentLaunch != null) return const {};
     final profile = terminalProfileFromId(instance.profileId);
-    return profile == null ? null : ptyLaunchFor(profile).executable;
+    if (profile == null) return const {};
+    final launch = ptyLaunchFor(profile);
+    return {
+      _basename(launch.executable).toLowerCase(),
+      for (final argument in launch.arguments)
+        for (final match in _executableToken.allMatches(argument))
+          _basename(match.group(0)!).toLowerCase(),
+    };
   }
 
   /// A pane named its own window (OSC 0 or 2).
-  void _onPaneTitle(String paneId, String title, String? launcher) {
+  void _onPaneTitle(String paneId, String title, Set<String> launchers) {
     final trimmed = title.trim();
     final current = _oscTitles[paneId];
     if (trimmed.isEmpty ? current == null : current == trimmed) return;
     // Dropped on the way in rather than filtered on the way out: a title that
     // says nothing leaves the pane called whatever it was called before, and
     // costs no publish at all.
-    if (_namesLauncher(trimmed, launcher)) return;
+    if (_namesLauncher(trimmed, launchers)) return;
     if (trimmed.isEmpty) {
       _oscTitles.remove(paneId);
     } else {
@@ -1690,6 +1919,30 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // Only when it actually changed: a TUI that repaints its title every frame
     // must not republish the whole workspace every frame.
     _publish();
+  }
+
+  /// Says out loud that this pane's process stopped **by itself**.
+  ///
+  /// The one seam out of this feature, and it publishes a fact rather than a
+  /// conclusion: nothing here knows who reads [paneExitProvider] or what they
+  /// do with it. See [PaneExit].
+  ///
+  /// Reached only from a pane's own liveness change, which is what makes it the
+  /// narrow signal it is: closing a pane, ending a session and quitting the app
+  /// each dispose the instance, and [_unlisten] runs first in all three — so
+  /// the `exited` a disposal writes for anyone still attached is announced to
+  /// nobody. None of those three is an agent finishing its work, and a notice
+  /// for them would fire every time somebody closes a terminal.
+  void _announceExit(String paneId, TerminalInstance instance) {
+    ref
+        .read(paneExitProvider.notifier)
+        .record(
+          PaneExit(
+            paneId: paneId,
+            sessionId: instance.agentLaunch?.sessionId,
+            exitCode: instance.exitCode,
+          ),
+        );
   }
 
   /// Whether the pane that just exited should take itself off the screen.
@@ -1802,8 +2055,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     final instance = _instances.remove(paneId);
     if (instance == null) return;
     _livenessMutated();
+    _directoriesMutated();
     _unlisten(paneId, instance);
-    _dirty.remove(paneId);
+    // Both halves of the debt. Dropping only the flag left the pane's
+    // *unsaved age* behind for the life of the container — one entry per pane
+    // closed while dirty, and Diagnostics reporting an ever-growing "oldest
+    // unsaved" beside zero dirty panes, which is exactly the "my work is not
+    // being written" signal it exists to give.
+    _markClean(paneId);
     _encoded.remove(paneId);
     instance.dispose();
   }
@@ -1819,6 +2078,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (dirty != null) instance.terminal.removeListener(dirty);
     final liveness = _livenessListeners.remove(paneId);
     if (liveness != null) instance.liveness.removeListener(liveness);
+    final directory = _directoryListeners.remove(paneId);
+    if (directory != null) instance.directory.removeListener(directory);
   }
 
   TerminalTab? _tabById(String? id) {
@@ -1953,9 +2214,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 /// it names has to be [launcher] itself, so a pane naming some other path is
 /// still believed. Compared case-insensitively, because the path comes from
 /// Windows and its casing is not ours to predict.
-bool _namesLauncher(String title, String? launcher) {
-  if (launcher == null || !_isAbsolutePath(title)) return false;
-  return _basename(title).toLowerCase() == _basename(launcher).toLowerCase();
+/// An image name inside a command line — `wsl.exe`, `C:\\…\\powershell.exe`.
+/// Quotes and whitespace end a token, which is what keeps a quoted path with a
+/// space in it from swallowing the flag after it.
+final RegExp _executableToken = RegExp(r'[^\s"]+\.exe', caseSensitive: false);
+
+bool _namesLauncher(String title, Set<String> launchers) {
+  if (launchers.isEmpty || !_isAbsolutePath(title)) return false;
+  return launchers.contains(_basename(title).toLowerCase());
 }
 
 /// Whether [path] is rooted — a drive (`C:\…`), a UNC share (`\\…`) or POSIX

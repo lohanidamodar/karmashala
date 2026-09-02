@@ -131,7 +131,7 @@ void main() {
   });
 
   test('the control server runs one for its own registry', () async {
-    final tmp = Directory.systemTemp.createTempSync('chitra_token_reaper_');
+    final tmp = Directory.systemTemp.createTempSync('karmashala_token_reaper_');
     addTearDown(() {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);
     });

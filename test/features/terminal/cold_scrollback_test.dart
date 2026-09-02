@@ -150,17 +150,20 @@ void main() {
     addTearDown(database.close);
 
     final app = open(database: database);
-    app.controller.openTab(TerminalProfile.powerShell);
-    final tabs = app.container.read(terminalSessionsControllerProvider).tabs;
-    fill(app.controller.instanceFor(tabs.single.layout.panes.single)!, 200);
+    // Two tabs, and the interesting one is the tab that is *not* in front: a
+    // launch now puts the active tab's panes back to work, and this is the
+    // property that keeps the other ninety-nine free — see
+    // `pane_restart_on_launch_test.dart`.
+    final background = app.controller.openTab(TerminalProfile.powerShell);
+    app.controller.openTab(TerminalProfile.commandPrompt);
+    final backgroundPane = onlyPaneOf(app.container, background);
+    fill(app.controller.instanceFor(backgroundPane)!, 200);
     app.controller.persistWorkspace();
     app.container.dispose();
 
     final next = open(database: database);
-    final restored = next.container.read(terminalSessionsControllerProvider);
-    final paneId = restored.tabs.single.layout.panes.single;
     final dormant =
-        next.controller.instanceFor(paneId)! as DormantTerminalInstance;
+        next.controller.instanceFor(backgroundPane)! as DormantTerminalInstance;
 
     expect(
       dormant.bufferBuilt,
@@ -267,6 +270,52 @@ void main() {
           'unpark clears the buffer so only one of them survives',
     );
     expect(text, contains('output line 199'), reason: 'history came back too');
+  });
+
+  test('a full-screen pane stays current and comes back once, not twice', () {
+    final app = open();
+    final first = app.controller.openTab(TerminalProfile.powerShell);
+    app.controller.openTab(TerminalProfile.commandPrompt);
+    final paneId = onlyPaneOf(app.container, first);
+    final instance =
+        app.controller.instanceFor(paneId)! as FakeTerminalInstance;
+    fill(instance, 200);
+    // The agent CLI case. A full-screen program takes the display, so the park
+    // declines the pane: there is no writing a snapshot back underneath one.
+    instance.terminal.write('\x1b[?1049h');
+    for (var i = 0; i < 10; i++) {
+      instance.terminal.write('the frame it was detached on $i\r\n');
+    }
+
+    app.controller.closeTab(first);
+    expect(instance.ingestTier, IngestTier.cold);
+    expect(instance.parkedScrollback, isNull, reason: 'the park declined it');
+
+    instance.receive('\x1b[2J\x1b[HDo you want to proceed?\r\n');
+    expect(
+      terminalTailLines(instance.terminal).join('\n'),
+      contains('Do you want to proceed?'),
+      reason:
+          'an agent drawing its own UI is the pane an approval prompt matters '
+          'most in, and it was the one that froze',
+    );
+
+    app.controller.reattachSession(paneId);
+
+    expect(
+      'Do you want to proceed?'
+          .allMatches(instance.terminal.buffer.getText())
+          .length,
+      1,
+      reason:
+          'nothing was cleared at reattach, so what the refresh drew stands '
+          'and a spool replay over the top would be a second copy of it',
+    );
+    expect(
+      instance.terminal.mainBuffer.getText(),
+      contains('output line 199'),
+      reason: 'and the history the park could not take was never touched',
+    );
   });
 
   test('a pane promoted and demoted a hundred times holds nothing extra', () {

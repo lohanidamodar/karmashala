@@ -90,7 +90,7 @@ void main() {
   late ProviderContainer container;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_agy_resume_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_agy_resume_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());

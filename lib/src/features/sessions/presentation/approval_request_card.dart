@@ -214,7 +214,7 @@ class _Evidence extends StatelessWidget {
               child: SelectableText(
                 report.evidence.join('\n'),
                 style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
+                  fontFamily: kMonoFamily,
                   fontFamilyFallback: const ['Consolas', 'Courier New'],
                 ),
               ),

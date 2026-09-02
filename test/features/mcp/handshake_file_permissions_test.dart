@@ -26,7 +26,7 @@ void main() {
   /// of this file, and `icacls` is what the code under test uses anyway.
   Future<String> sddlOf(String path) async {
     final out = File(
-      '${Directory.systemTemp.path}\\chitra_sddl_'
+      '${Directory.systemTemp.path}\\karmashala_sddl_'
       '${DateTime.now().microsecondsSinceEpoch}.acl',
     );
     final result = await Process.run('icacls', [path, '/save', out.path, '/q']);
@@ -47,7 +47,7 @@ void main() {
   group('restrictHandshakeFileToCurrentUser', () {
     late Directory tmp;
 
-    setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_acl_'));
+    setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_acl_'));
     tearDown(() => tmp.deleteSync(recursive: true));
 
     test('locks a file to the current user and stops inheriting', () async {
@@ -95,7 +95,7 @@ void main() {
     late String path;
 
     setUp(() async {
-      tmp = Directory.systemTemp.createTempSync('chitra_handshake_');
+      tmp = Directory.systemTemp.createTempSync('karmashala_handshake_');
       path = p.join(tmp.path, 'mcp_bridge.json');
       container = ProviderContainer();
       server = LauncherControlServer(container);

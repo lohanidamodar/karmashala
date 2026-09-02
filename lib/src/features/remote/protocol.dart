@@ -493,3 +493,11 @@ bool _bytesEqual(Uint8List a, Uint8List b) {
   }
   return true;
 }
+
+/// The most messages one `transcript.get` will carry.
+///
+/// A conversation is opened at its end, so the tail is what a reader wants, and
+/// a whole transcript is not something a frame can hold: the largest in this
+/// repo is 53 MB of JSONL and produced a result the phone never finished
+/// receiving. A caller that wants an earlier window asks for it with `after`.
+const int kRemoteTranscriptPageMax = 300;

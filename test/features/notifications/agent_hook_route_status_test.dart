@@ -41,7 +41,7 @@ void main() {
   late List<WatchedSession> watched;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_hook_status_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_hook_status_');
     clock = FixedClock(testTime);
     reports = AgentHookReports();
     watched = const [

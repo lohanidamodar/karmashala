@@ -38,7 +38,7 @@ void main() {
   late LauncherControlServer server;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_decision_tools_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_decision_tools_');
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project());

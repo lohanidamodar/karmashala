@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:karmashala/src/features/terminal/data/command_block_recorder.dart';
+import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
@@ -19,8 +20,14 @@ class _TickingClock {
   DateTime call() => DateTime.utc(2026, 8, 30, 12, 0, _tick++);
 }
 
-CommandBlockRecorder _recorderOver(Terminal terminal) =>
-    CommandBlockRecorder(terminal, clock: _TickingClock().call)..attach();
+/// The recorder wired the way a pane wires it: through the router that owns
+/// xterm's single OSC slot, not by taking the slot itself.
+CommandBlockRecorder _recorderOver(Terminal terminal) {
+  final router = OscRouter();
+  terminal.onPrivateOSC = router.dispatch;
+  return CommandBlockRecorder(terminal, clock: _TickingClock().call)
+    ..attach(router);
+}
 
 void main() {
   test('OSC 133 reaches the app through xterm with no vendored change', () {

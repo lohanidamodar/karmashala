@@ -9,6 +9,17 @@ import '../../settings/domain/permission_mode.dart';
 import '../application/session_handoff_service.dart';
 import '../domain/session_fork.dart';
 
+/// What offering "Continue with…" promises, wherever it is offered from.
+///
+/// One sentence in one place, because three surfaces now open this dialog — the
+/// Explorer's menu, the delivery strip and the attention inbox's follow-up row
+/// — and the promise is the only thing that makes putting it on a row
+/// defensible at all. The row is a shorter path *to* a confirmation, never a
+/// way past one; a surface that quietly dropped this clause would be offering
+/// something different from what it opens.
+const String kContinueWithPromise =
+    'Nothing is launched until you have seen what the next agent will be told.';
+
 /// "Continue with…" — move a session to another agent, or branch it.
 ///
 /// The dialog exists to make one thing true: **nothing is launched until the
@@ -305,7 +316,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                     child: SelectableText(
                       _preview!,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
+                        fontFamily: kMonoFamily,
                       ),
                     ),
                   ),

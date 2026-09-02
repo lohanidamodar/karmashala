@@ -256,6 +256,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setRestoreLivePanes(bool value) {
+    state = state.copyWith(restoreLivePanes: value);
+    _save();
+  }
+
   /// Sets, or with `null` clears, the imported terminal colour theme.
   void setTerminalThemeSource(String? id) {
     state = state.copyWith(

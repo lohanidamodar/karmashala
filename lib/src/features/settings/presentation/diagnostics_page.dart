@@ -9,6 +9,7 @@ import '../../../core/logging/diagnostics_providers.dart';
 import '../../../core/logging/log_buffer.dart';
 import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/settings_controller.dart';
 import '../domain/diagnostics_settings.dart';
 import 'settings_row.dart';
@@ -119,10 +120,93 @@ class DiagnosticsPage extends ConsumerWidget {
             ],
           ),
         ),
+        const _PersistenceSection(),
         // Last because it is the one section that reads rather than sets. See
         // [WatchSetSection] for what it is answering.
         const WatchSetSection(),
       ],
+    );
+  }
+}
+
+/// Whether terminal scrollback is being written as fast as it is produced.
+///
+/// Reads rather than sets, like [WatchSetSection]. It exists because "the app
+/// feels like it is falling behind" was a report nobody could answer: the
+/// autosave's cadence, its 8 ms budget and the dirty set were all internal, so
+/// whether writes were keeping up was invisible until a workspace came back
+/// missing text.
+///
+/// Sampled on build rather than watched. The dirty set moves on the terminal's
+/// hot path — every notification of every pane — and a settings page that
+/// rebuilt with it would put a repaint behind each one. Reopening the section,
+/// or any other rebuild of the page, takes a fresh reading; that is enough for
+/// a number whose whole use is "is this falling?".
+class _PersistenceSection extends ConsumerWidget {
+  const _PersistenceSection();
+
+  static String _age(Duration d) => d.inSeconds >= 1
+      ? '${d.inSeconds}s'
+      : '${d.inMilliseconds}ms';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Never *creates* the controller: on a machine where the terminal has not
+    // been opened, building it here would restore a whole workspace to answer
+    // a diagnostics question.
+    final container = ProviderScope.containerOf(context, listen: false);
+    if (!container.exists(terminalSessionsControllerProvider)) {
+      return const SettingsSection(
+        title: 'SCROLLBACK PERSISTENCE',
+        child: Text('The terminal has not been opened this run.'),
+      );
+    }
+    final telemetry = container
+        .read(terminalSessionsControllerProvider.notifier)
+        .persistenceTelemetry;
+    final write = telemetry.lastWrite;
+
+    return SettingsSection(
+      title: 'SCROLLBACK PERSISTENCE',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsRow(
+            label: 'Panes owing a write',
+            help:
+                'Counted against the panes that have a process behind them. A '
+                'number that rises and falls is the autosave doing its job; one '
+                'that does not fall is work not being written.',
+            control: Text(
+              '${telemetry.dirtyPanes} of ${telemetry.livePanes}',
+              style: MonoStyles.body,
+            ),
+          ),
+          SettingsRow(
+            label: 'Longest wait',
+            help: 'How long the pane waiting longest has owed a write.',
+            control: Text(
+              telemetry.oldestUnsaved == null
+                  ? 'nothing owed'
+                  : _age(telemetry.oldestUnsaved!),
+              style: MonoStyles.body,
+            ),
+          ),
+          SettingsRow(
+            label: 'Last write',
+            help:
+                'Fewer panes than were owed means the pass hit its 8 ms budget '
+                'and will carry on next tick — by design, and worth watching if '
+                'it keeps happening.',
+            control: Text(
+              write == null
+                  ? 'not recorded'
+                  : '${write.panes} pane(s) in ${_age(write.took)}',
+              style: MonoStyles.body,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

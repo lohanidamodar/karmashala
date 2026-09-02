@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/detach_policy.dart';
 import 'package:karmashala/src/features/terminal/domain/ingest_tier.dart';
+import 'package:karmashala/src/features/terminal/domain/osc_router.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -35,18 +36,24 @@ class FakeTerminalInstance
     required this.id,
     required this.title,
     required this.profileId,
-    this.workingDirectory,
+    String? workingDirectory,
     this.restored,
     this.agentLaunch,
     Terminal? adoptTerminal,
     bool shellIntegration = false,
-  }) : adopted = adoptTerminal {
+  }) : adopted = adoptTerminal,
+       _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
+    // Wired exactly as a real pane wires it: the pane owns xterm's single OSC
+    // slot and fans it out, so a test can write OSC 7 and OSC 133 at the same
+    // buffer and have both land.
+    terminal.onPrivateOSC = _osc.dispatch;
+    _osc.add(_cwd.handleOsc);
     // Attached on the same condition a real pane attaches it, so a test can
     // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —
     // by writing the markers a shell would emit.
     if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach();
+      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
     if (adoptTerminal == null && restored != null && restored!.isNotEmpty) {
       terminal.write(restored!);
@@ -63,8 +70,18 @@ class FakeTerminalInstance
   final String title;
   @override
   final String profileId;
+
+  /// The launch directory until a test writes an OSC 7, exactly as a real
+  /// pane's is.
+  final WorkingDirectoryTracker _cwd;
+  final OscRouter _osc = OscRouter();
+
   @override
-  final String? workingDirectory;
+  String? get workingDirectory => _cwd.value;
+
+  @override
+  ValueListenable<String?> get directory => _cwd.listenable;
+
   @override
   final AgentPaneLaunch? agentLaunch;
 
@@ -113,26 +130,27 @@ class FakeTerminalInstance
   final tierHistory = <IngestTier>[];
 
   /// Storage, though, is real: the fake parks, spools and refreshes its screen
-  /// through the same [ScrollbackPark], [ScrollbackSpool] and [ColdScreen] a
-  /// PTY pane does, so the tiering is exercised by every controller test and by
-  /// the scale benchmark rather than only by a pane nothing can construct
-  /// without spawning a shell.
-  late final ScrollbackPark park = ScrollbackPark(terminal);
-  final ScrollbackSpool spool = ScrollbackSpool();
-
+  /// through the same [ColdIngest] a PTY pane does — the same detach, the same
+  /// reattach — so the tiering is exercised by every controller test and by the
+  /// scale benchmark rather than only by a pane nothing can construct without
+  /// spawning a shell.
+  ///
   /// Its own budget, and no throttle: a fake pane's output arrives one `receive`
   /// at a time because a test said so, so rationing it would only make tests
   /// wait. What the interval and the shared pool actually do is pinned by
   /// `cold_screen_test.dart`.
-  late final ColdScreen coldScreen = ColdScreen(
+  late final ColdIngest cold = ColdIngest(
     terminal: terminal,
-    park: park,
     budget: TerminalIngestBudget(),
     refreshInterval: Duration.zero,
   );
 
+  ScrollbackPark get park => cold.park;
+  ScrollbackSpool get spool => cold.spool;
+  ColdScreen get coldScreen => cold.screen;
+
   @override
-  String? get parkedScrollback => park.parked;
+  String? get parkedScrollback => cold.parkedScrollback;
 
   /// The same rule [PtyTerminalInstance] applies: a pane that has stopped and
   /// still has its buffer can hand it over; a parked one cannot, because it
@@ -145,9 +163,7 @@ class FakeTerminalInstance
   /// tiering a real pane's bytes go through.
   void receive(String text) {
     if (ingestTier == IngestTier.cold) {
-      final bytes = const Utf8Encoder().convert(text);
-      spool.add(bytes);
-      coldScreen.add(bytes);
+      cold.add(const Utf8Encoder().convert(text));
       return;
     }
     terminal.write(text);
@@ -160,15 +176,9 @@ class FakeTerminalInstance
     ingestTier = tier;
     tierHistory.add(tier);
     if (tier == IngestTier.cold) {
-      park.park();
+      cold.detach(Uint8List(0));
     } else if (wasCold) {
-      coldScreen.reset();
-      park.unpark();
-      final replay = spool.drain();
-      spool.reset();
-      if (replay.isNotEmpty) {
-        terminal.write(const Utf8Decoder(allowMalformed: true).convert(replay));
-      }
+      cold.reattach();
     }
   }
 
@@ -178,6 +188,7 @@ class FakeTerminalInstance
     disposed = true;
     livenessNotifier.value = PaneLiveness.exited;
     livenessNotifier.dispose();
+    _cwd.dispose();
     focusNode.dispose();
     scrollController.dispose();
   }
@@ -218,8 +229,15 @@ void giveShellHistory(TerminalInstance instance) {
 
 /// A container whose terminals are fakes, optionally over a real in-memory
 /// database so persistence can be exercised.
-ProviderContainer fakeTerminalContainer({AppDatabase? database}) =>
-    ProviderContainer(overrides: fakeTerminalOverrides(database: database));
+ProviderContainer fakeTerminalContainer({
+  AppDatabase? database,
+  bool restoreLivePanes = true,
+}) => ProviderContainer(
+  overrides: fakeTerminalOverrides(
+    database: database,
+    restoreLivePanes: restoreLivePanes,
+  ),
+);
 
 /// The overrides behind [fakeTerminalContainer], so a test that needs more of
 /// them can spread this list rather than reproduce a second, friendlier fake.
@@ -231,6 +249,7 @@ fakeTerminalOverrides({
   AppDatabase? database,
   TerminalInstanceFactory? instanceFactory,
   bool shellIntegration = false,
+  bool restoreLivePanes = true,
 }) {
   return [
     if (database != null) databaseProvider.overrideWithValue(database),
@@ -253,6 +272,11 @@ fakeTerminalOverrides({
       TerminalProfile.powerShell,
       TerminalProfile.commandPrompt,
     ]),
+    // Defaulted to what production ships, so the whole suite exercises the real
+    // restore: a pane that was running when the app closed comes back running.
+    // Same seam and same reason as the line above — reading the setting would
+    // drag a database into every terminal test.
+    restoreLivePanesProvider.overrideWithValue(restoreLivePanes),
     // The delivery strip polls `gh` on a periodic timer, which would outlive
     // the widget tree and trip the pending-timer check in every test that
     // renders a session. Same reason as the autosave above; tests that care

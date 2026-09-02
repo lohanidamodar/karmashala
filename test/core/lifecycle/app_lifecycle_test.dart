@@ -54,7 +54,7 @@ void main() {
   late ProviderContainer container;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_lifecycle_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_lifecycle_');
     db = AppDatabase.memory();
     container = ProviderContainer(
       overrides: [databaseProvider.overrideWithValue(db)],

@@ -11,32 +11,42 @@ import '../domain/session.dart';
 import '../domain/session_event.dart';
 import 'session_engine_provider.dart';
 import 'session_providers.dart';
+import 'session_signals.dart';
 
-/// Bumped to force the session list to re-read after a create/stop.
-class SessionsRevisionController extends Notifier<int> {
-  @override
-  int build() => 0;
-  void bump() => state++;
-}
-
-final sessionsRevisionProvider =
-    NotifierProvider<SessionsRevisionController, int>(
-      SessionsRevisionController.new,
-    );
+/// `sessionsRevisionProvider` moved to `session_signals.dart` when it gained a
+/// narrow half; re-exported so the twenty-odd files that import it from here
+/// keep working.
+export 'session_signals.dart';
 
 /// Sessions belonging to the currently selected repository.
+///
+/// Draws names and statuses, so it says so. It is *not* woken by a permission
+/// mode being set on a row, nor by a project rescan that touched no session.
 final sessionsForSelectedRepositoryProvider =
     Provider.autoDispose<List<Session>>((ref) {
-      ref.watch(sessionsRevisionProvider);
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.title,
+        SessionChangeKind.status,
+        SessionChangeKind.placement,
+      });
       final repoId = ref.watch(selectedRepositoryIdProvider);
       if (repoId == null) return const [];
       return ref.read(sessionDaoProvider).getByRepository(repoId);
     });
 
 /// Imported CLI sessions belonging to the selected repository.
+///
+/// Placement is on the list because a *native* row learning its conversation
+/// id hides the imported record for that conversation (`ImportedSessionDao`),
+/// so this list shortens on a fact that is nothing to do with its own rows.
 final importedSessionsForSelectedRepositoryProvider =
     Provider.autoDispose<List<ImportedSession>>((ref) {
-      ref.watch(sessionsRevisionProvider);
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.title,
+        SessionChangeKind.placement,
+      });
       final repoId = ref.watch(selectedRepositoryIdProvider);
       if (repoId == null) return const [];
       return ref.read(importedSessionDaoProvider).getByRepository(repoId);
@@ -104,13 +114,14 @@ final selectedImportedSessionIdProvider =
       SelectedImportedSessionController.new,
     );
 
-/// Repositories the selected session spans (primary first). Refreshes on a
-/// revision bump (after attach/detach).
+/// Repositories the selected session spans (primary first). Refreshes when
+/// *that* session's checkouts are attached or detached — not when any other
+/// session moves.
 final selectedSessionRepositoriesProvider =
     Provider.autoDispose<List<Repository>>((ref) {
-      ref.watch(sessionsRevisionProvider);
       final id = ref.watch(selectedSessionIdProvider);
       if (id == null) return const [];
+      ref.watchSession(id);
       return ref.read(sessionRepositoriesServiceProvider).forSession(id);
     });
 
@@ -118,14 +129,15 @@ final selectedSessionRepositoriesProvider =
 /// refreshed whenever the engine appends a new event to an active session.
 final sessionTranscriptProvider =
     StreamProvider.autoDispose<List<SessionEvent>>((ref) async* {
-      // Re-subscribe when a session is (re)started so a freshly relaunched
-      // agent's live stream is picked up.
-      ref.watch(sessionsRevisionProvider);
       final id = ref.watch(selectedSessionIdProvider);
       if (id == null) {
         yield const [];
         return;
       }
+      // Re-subscribe when *this* session is (re)started, so a freshly
+      // relaunched agent's live stream is picked up. Another session starting
+      // used to tear this stream down and rebuild it from the event log.
+      ref.watchSession(id);
       final eventDao = ref.read(sessionEventDaoProvider);
       final engine = ref.read(sessionEngineProvider);
 

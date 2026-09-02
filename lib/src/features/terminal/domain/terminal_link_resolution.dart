@@ -76,6 +76,14 @@ String? hostPathForTerminalTarget(
   // needs exactly the translation an absolute POSIX path already got: without
   // it the join was handed to a Windows `stat`, which found nothing, so
   // absolute paths were clickable and relative ones silently were not.
+  //
+  // A Windows-shaped relative path — `windows\installer\out\x.exe`, which is
+  // what a Windows tool prints when `binfmt_misc` runs it from a WSL pane —
+  // needs nothing special here, though it looks as though it should. The join
+  // does leave those backslashes in place as ordinary characters, but the
+  // translation below rewrites `/` to `\` and leaves `\` alone, so the two
+  // readings arrive at the same host path. Measured, not assumed: this was
+  // filed as a bug and the probe showed both spellings resolving identically.
   return _hostPathForPosix(
     p.posix.join(base, raw),
     profileId: profileId,

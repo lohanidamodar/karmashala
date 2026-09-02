@@ -77,7 +77,7 @@ void main() async {
   }
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_session_mcp_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_session_mcp_');
     addTearDown(() {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);
     });

@@ -239,4 +239,41 @@ void main() {
 
     expect(find.text('Opening terminal…'), findsOneWidget);
   });
+
+  testWidgets('but once the user closes the last tab it offers a way back', (
+    tester,
+  ) async {
+    // The reported bug: the panel sat on "Opening terminal…" for ever. That
+    // message is a promise the panel only keeps once — the automatic open runs
+    // when it mounts and never again — so after a close it described something
+    // that was not happening, beside no control that would make it happen.
+    final container = panelContainer();
+    await pumpPanel(tester, container);
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    final opened = container.read(terminalSessionsControllerProvider).tabs;
+    expect(opened, hasLength(1), reason: 'the automatic open has run');
+
+    controller.closeTab(opened.single.id);
+    await tester.pump();
+
+    expect(find.text('Opening terminal…'), findsNothing);
+    expect(find.text('No terminal open'), findsOneWidget);
+
+    final button = find.ancestor(
+      of: find.textContaining('New terminal'),
+      matching: find.byType(FilledButton),
+    );
+    expect(button, findsOneWidget);
+    await tester.tap(button);
+    await tester.pump();
+
+    expect(
+      container.read(terminalSessionsControllerProvider).tabs,
+      hasLength(1),
+      reason: 'the button is the way back, not decoration',
+    );
+    expect(find.text('No terminal open'), findsNothing);
+  });
 }

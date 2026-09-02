@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../core/logging/build_identity.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_log_screen.dart';
 import 'connections_section.dart';
 
 /// The companion's settings: who this phone is paired with, whether the link
@@ -161,6 +163,8 @@ class CompanionSettingsScreen extends ConsumerWidget {
         const SizedBox(height: Insets.lg),
         const _PairingRelayField(),
         const SizedBox(height: Insets.lg),
+        const _DiagnosticsRow(),
+        const SizedBox(height: Insets.lg),
         Text(
           'Karmashala companion — a remote view of the sessions your '
           'desktop holds. The desktop is the source of truth; revoking this '
@@ -256,6 +260,40 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
                 'Leave empty for the default.',
             helperMaxLines: 3,
             errorText: _error,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The way into the phone's own log.
+///
+/// Here rather than behind a gesture because the moment it is wanted is the
+/// moment the link is not working, and this screen is where someone already
+/// goes to find out why. It says the build's version too: on a phone that can
+/// be several releases behind the desktop it is talking to, that is the first
+/// thing a mismatch shows up as.
+class _DiagnosticsRow extends StatelessWidget {
+  const _DiagnosticsRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('DIAGNOSTICS', style: theme.textTheme.labelSmall),
+        const SizedBox(height: Insets.sm),
+        Text(buildIdentity(), style: density.muted(theme)),
+        const SizedBox(height: Insets.sm),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () => CompanionLogScreen.show(context),
+            icon: const Icon(AppIcons.article),
+            label: const Text('View log'),
           ),
         ),
       ],

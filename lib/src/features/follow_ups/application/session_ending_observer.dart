@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../sessions/domain/session_status.dart';
+import '../../terminal/application/pane_exit_signal.dart';
 import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';
 
-/// Turns "a session ended" into a call on [FollowUpService], from the two
+/// Turns "a session ended" into a call on [FollowUpService], from the three
 /// signals the app actually has.
 ///
 /// **The durable one is the row.** Every session-revision bump re-reads the
@@ -30,6 +31,14 @@ import 'follow_up_providers.dart';
 /// [endingOfTransition] is what keeps that second signal honest — a first
 /// observation is not a change, and a turn ending is not a session ending.
 ///
+/// **The third is the pane's own process stopping.** Neither of the other two
+/// can say [SessionEnding.completed] for a pane-hosted session, so an agent
+/// that simply *finished* — including one that walked away from a verification
+/// run — ended in silence, which is the whole thing follow-ups are for.
+/// `paneExitProvider` is a read-only fact published by the terminal, and
+/// [endingOfPaneExit] is what keeps it honest: most pane exits are not a
+/// session ending.
+///
 /// **It has to be watched, not read.** Riverpod 3 *pauses* a provider's own
 /// subscriptions while nothing is listening to that provider, so an observer
 /// nobody watches sees no status changes at all — silently, which is the worst
@@ -48,13 +57,35 @@ class SessionEndingObserver extends Notifier<int> {
 
   @override
   int build() {
-    // Re-read whenever the workspace changes, so a session started after this
-    // was built is watched too.
-    ref.watch(sessionsRevisionProvider);
+    // Re-read when a session appears, goes away or ends — a full table scan
+    // and one `ref.listen` per running row, so it must not run for anything
+    // else. A rename in particular says nothing this sweep can act on.
+    ref.watchSessionKinds(const {
+      SessionChangeKind.membership,
+      SessionChangeKind.status,
+    });
 
     final sessions = ref.read(sessionDaoProvider).getAll();
     final service = ref.read(followUpServiceProvider);
     if (service.sweep(sessions)) _revision++;
+
+    // **The clean finish**, which neither of the other two signals carries: the
+    // row never says `completed` for a pane-hosted session and the status
+    // pipeline never settles on it. Not filtered by the session list above —
+    // this is one subscription for the whole app, and the session it names is
+    // looked up when it arrives rather than when this ran.
+    ref.listen(paneExitProvider, (_, exit) {
+      if (exit == null) return;
+      // No session id is a plain shell tab, or an agent started outside the
+      // session list: there is no row for a follow-up to be about.
+      final sessionId = exit.sessionId;
+      if (sessionId == null) return;
+      final ending = endingOfPaneExit(exit.exitCode);
+      if (ending == null) return;
+      if (service.notice(sessionId: sessionId, ending: ending) != null) {
+        state = ++_revision;
+      }
+    });
 
     for (final session in sessions) {
       // Only sessions the row still believes are live. An ended one has already

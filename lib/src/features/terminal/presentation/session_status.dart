@@ -131,6 +131,21 @@ class BackgroundSessionsDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text('Background sessions'),
       contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
+      // Once the list is long enough to scroll, Tab could not reach the rows
+      // below the fold: the matrix saw 15 of 18 stops at 1440x900 and 9 at
+      // 720x560 before traversal doubled back, so those sessions had no
+      // keyboard route to their Attach and End buttons at all. Two rows always
+      // passed, which is why it survived until a test built a list long enough
+      // to overflow.
+      //
+      // It takes **both** lines below, measured one at a time. `scrollable`
+      // alone changed nothing. The group alone got all 18 stops but still would
+      // not close the ring at the small sizes, because the actions sit outside
+      // the group and traversal wrapped back into it rather than to the start.
+      // `scrollable: true` — Material's own answer to long dialog content —
+      // puts the content and the actions in one scroll view, so there is a
+      // single ring for the group to close over.
+      scrollable: true,
       content: SizedBox(
         width: 520,
         child: sessions.isEmpty
@@ -142,17 +157,19 @@ class BackgroundSessionsDialog extends StatelessWidget {
                   style: theme.textTheme.bodySmall,
                 ),
               )
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final session in sessions)
-                    _SessionRow(
-                      session: session,
-                      liveness: livenessOf(session.paneId),
-                      onAttach: () => onAttach(session.paneId),
-                      onEnd: () => onEnd(session.paneId),
-                    ),
-                ],
+            : FocusTraversalGroup(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final session in sessions)
+                      _SessionRow(
+                        session: session,
+                        liveness: livenessOf(session.paneId),
+                        onAttach: () => onAttach(session.paneId),
+                        onEnd: () => onEnd(session.paneId),
+                      ),
+                  ],
+                ),
               ),
       ),
       actions: [

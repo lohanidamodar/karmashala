@@ -10,7 +10,7 @@ import 'package:path/path.dart' as p;
 
 void main() {
   late Directory tmp;
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_mut_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_mut_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   const mutator = CliSessionMutator();

@@ -10,6 +10,20 @@ import '../../theme/design_tokens.dart';
 /// has already built is a list that jumps.
 const double quickOpenRowHeight = 42.0;
 
+/// [quickOpenRowHeight] at the reader's text size.
+///
+/// The constant is the height at 1.0. A row holds a title over a subtitle, so
+/// at Windows' "make text bigger" the two lines outgrew the fixed box and every
+/// visible row overflowed by 5px — nine identical complaints in one frame. The
+/// row height has to scale for the same reason the text does; what must stay
+/// constant is that every row is the *same* height, which is what lets the
+/// scroll math above address a row it has never built.
+///
+/// Every user of the constant goes through here, so a list and the arithmetic
+/// that scrolls it can never disagree about how tall a row is.
+double quickOpenRowHeightOf(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(quickOpenRowHeight);
+
 /// The offset a scroll view must move to so the band starting at [leading] and
 /// [extent] long is inside the viewport, or `null` when it already is.
 ///
@@ -110,7 +124,7 @@ class QuickOpenRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          height: quickOpenRowHeight,
+          height: quickOpenRowHeightOf(context),
           // Selection is a wash plus a rule, not a filled bar: the row has to
           // stay readable and the accent is the only colour in the palette.
           decoration: BoxDecoration(

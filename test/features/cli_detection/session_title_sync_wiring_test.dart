@@ -37,7 +37,7 @@ void main() {
   const conversation = 'df3c0708-1111-4222-8333-444455556666';
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_agy_wiring_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_agy_wiring_');
     storeHome = p.join(tmp.path, '.gemini', 'antigravity-cli');
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());

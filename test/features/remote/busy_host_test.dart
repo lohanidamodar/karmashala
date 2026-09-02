@@ -147,8 +147,12 @@ void main() {
     final client = await connectedPhone();
 
     // Exactly what the phone does on every connect: subscribe to every session
-    // the desktop listed. That is what makes each sweep expensive, and it is
-    // not something the phone can be asked to stop doing.
+    // the desktop listed, because subscription is also what keeps the cards
+    // live — and it is not something the phone can be asked to stop doing.
+    // It used to make every sweep read every one of those transcripts; the
+    // host now reads only the session whose history the phone has asked for,
+    // so this loop is the cheap case rather than the expensive one. The
+    // deadline below is what stops that regressing.
     fake.transcriptCost = _transcriptCost;
     for (var i = 0; i < _sessionCount; i++) {
       await client.subscribeSession('s$i');
@@ -182,6 +186,10 @@ void main() {
     final client = await connectedPhone();
     for (var i = 0; i < _sessionCount; i++) {
       await client.subscribeSession('s$i');
+      // And read each one's history, which is what makes the host poll it:
+      // subscription alone only keeps the card live, because the phone
+      // subscribes to every session it lists.
+      await client.transcript('s$i');
     }
     fake.transcriptCost = _transcriptCost;
     fake.transcriptReads = 0;
@@ -239,5 +247,39 @@ void main() {
     expect(DateTime.now().difference(asked), lessThan(
       const Duration(seconds: 2),
     ));
+  });
+
+  test('subscribing to every session costs no transcript reads at all',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
+    // The cause behind the symptom this file was written about, reproduced on
+    // the owner's phone on 2026-09-02: opening a project made it subscribe to
+    // ~25 sessions, the host parsed a transcript before answering each, two
+    // timed out, and the phone concluded the link was dead and tore it down —
+    // which is the same report as "the connection keeps dropping".
+    //
+    // Counted rather than timed, per the house rule: the property is that a
+    // subscribe reads nothing, so it cannot be slow for a big store.
+    await startService(pollInterval: Duration.zero);
+    final client = await connectedPhone();
+    fake.transcriptReads = 0;
+
+    for (var i = 0; i < _sessionCount; i++) {
+      await client.subscribeSession('s$i');
+    }
+
+    expect(
+      fake.transcriptReads,
+      0,
+      reason: 'a subscribe is bookkeeping — the phone asks for history itself',
+    );
+
+    // And the sweep follows what the phone actually reads, not what it
+    // subscribed to, so one open session costs one read however many are
+    // subscribed.
+    await client.transcript('s3');
+    fake.transcriptReads = 0;
+    await service!.pollTranscriptsNow();
+
+    expect(fake.transcriptReads, 1, reason: 'only the session being read');
   });
 }

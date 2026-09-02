@@ -137,7 +137,12 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       terminals
         ..reattachSession(paneId)
         ..focusPane(paneId);
-      ref.read(sessionsRevisionProvider.notifier).bump();
+      // Which pane a session is showing in moved. The pane is what is known
+      // here, not the row, so this names no session — which
+      // [SessionSignals.forSession] reads as "all of them", the safe answer.
+      ref.publishSessionChange(
+        const SessionChange(kinds: {SessionChangeKind.placement}),
+      );
     }
     ref.read(terminalVisibleProvider.notifier).set(true);
   }
@@ -240,7 +245,17 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.listen(terminalSessionsControllerProvider, (_, _) {
       _followSessionPane();
     });
-    ref.listen(sessionsRevisionProvider, (_, _) => _followSessionPane());
+    // Only where sessions live. A row being renamed cannot move the pane the
+    // workbench is following, and used to re-run this on every title sync.
+    ref.listen(
+      sessionSignalsProvider.select(
+        (signals) => signals.forKinds(const {
+          SessionChangeKind.membership,
+          SessionChangeKind.placement,
+        }),
+      ),
+      (_, _) => _followSessionPane(),
+    );
     // The side panel describes the session you are in. Driven by the pane on
     // screen rather than by the selection, so activating another terminal tab
     // moves the changes, worktree and GitHub surfaces with it; a tab with no
@@ -323,7 +338,13 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// conversation would fight the surface the user is already on. Nothing here
   /// writes anything.
   _WorkbenchSession? _selectedSession() {
-    ref.watch(sessionsRevisionProvider);
+    // The strip draws the selected session's name and offers the toggle its
+    // pane decides. Statuses and permission modes are drawn elsewhere.
+    ref.watchSessionKinds(const {
+      SessionChangeKind.membership,
+      SessionChangeKind.title,
+      SessionChangeKind.placement,
+    });
     // A pane appearing or ending changes whether this session has a terminal at
     // all, which is what decides whether the strip offers the toggle. Watched
     // rather than read so the strip cannot keep offering a surface that is
@@ -895,7 +916,10 @@ bool _showingPanes(WidgetRef ref) {
   // cannot change which panes exist, and this is read from the tab strip on
   // every build.
   ref.watch(terminalTabsProvider);
-  ref.watch(sessionsRevisionProvider);
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.placement,
+  });
   final imported = ref.watch(selectedImportedSessionIdProvider);
   // The same fallback the workbench itself makes: with nothing selected it
   // still follows the pane on screen to its session, and that session has a
@@ -966,10 +990,23 @@ void _releaseHijackedSelection(WidgetRef ref) {
 List<TabEntry> terminalTabEntries(WidgetRef ref) {
   final terminals = ref.watch(terminalSessionsControllerProvider);
   final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-  // Adopting a pane, or launching into one, rewrites `pane_id` on the row.
-  ref.watch(sessionsRevisionProvider);
+  // Adopting a pane, or launching into one, rewrites `pane_id` on the row; a
+  // rename changes what a tab is called.
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.title,
+    SessionChangeKind.placement,
+  });
+  // The panes that exist, not every session ever opened. The pane index makes
+  // this proportional to the tabs on screen — the same narrowing
+  // `activePaneSessionIdProvider` already made, and for the same reason: this
+  // was a full table scan run to label a strip of a dozen tabs.
   final titles = <String, String>{
-    for (final record in ref.read(sessionDaoProvider).getAll())
+    for (final record in ref
+        .read(sessionDaoProvider)
+        .getByPaneIds([
+          for (final tab in terminals.tabs) ...tab.layout.panes,
+        ]))
       if (record.paneId != null) record.paneId!: record.title,
   };
   final onPanes = _showingPanes(ref);

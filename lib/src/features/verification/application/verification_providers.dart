@@ -7,8 +7,12 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/database/database_providers.dart';
 import '../../browser/application/browser_providers.dart';
 import '../../devices/application/device_providers.dart';
+import '../../follow_ups/domain/session_ending.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../data/verification_artifact_store.dart';
 import '../data/verification_dao.dart';
+import '../domain/session_verdict.dart';
 import '../domain/verification_run.dart';
 import 'verification_service.dart';
 
@@ -87,6 +91,37 @@ final verificationRunProvider = Provider.family<VerificationRun?, String>((
 ) {
   ref.watch(verificationRevisionProvider);
   return ref.watch(verificationServiceProvider).get(id);
+});
+
+/// What one session's verification record amounts to, in one word.
+///
+/// Reads the two DAOs and nothing else — deliberately **not**
+/// [verificationServiceProvider], which builds an artifact store and therefore
+/// needs [verificationRootProvider] resolved. This answer is drawn on the
+/// delivery strip, which every session view hosts, and a strip that threw
+/// because bootstrap had not reached the filesystem yet would take the whole
+/// session pane with it.
+///
+/// [verificationRevisionProvider] is watched for its *notifications* rather
+/// than its value, so a run that starts or finishes redraws the strip. It is
+/// read as an `AsyncValue`, which is what makes the paragraph above hold: a
+/// container with no artifact root gets an error state and no live updates
+/// instead of an exception.
+final sessionVerdictProvider = Provider.family<SessionVerdict, String>((
+  ref,
+  sessionId,
+) {
+  ref.watch(verificationRevisionProvider);
+  // The row's own status decides whether an open run is being recorded or was
+  // abandoned, so a status change has to reach this. Narrowed to the row: a
+  // rename elsewhere in the workspace says nothing about this answer.
+  ref.watchSession(sessionId);
+  final session = ref.watch(sessionDaoProvider).getById(sessionId);
+  return SessionVerdict.of(
+    ref.watch(verificationDaoProvider).listRuns(sessionId: sessionId),
+    // A session that has gone is one nothing will finish a run for either.
+    sessionHasEnded: session == null || endingOfStatus(session.status) != null,
+  );
 });
 
 /// Which run the pane has open.

@@ -105,3 +105,30 @@ SessionEnding? endingOfTransition({
     AgentActivityStatus.awaitingApproval => null,
   };
 }
+
+/// The ending a pane's own process exit amounts to, or null when it amounts to
+/// nothing.
+///
+/// **The third signal, and the only one that ever says `completed`.** The row
+/// is written by `SessionEngine`, which no in-app session uses, and the status
+/// pipeline settles on `failed` or on nothing — so before this an agent that
+/// simply finished ended in silence, which is the case follow-ups exist for.
+///
+/// Only exit **0**, and the exclusions are the point:
+///
+/// * **A non-zero status is not read as a failure here.** It covers a crash, a
+///   Ctrl-C (130, or 0xC000013A on Windows), and a wrapper — `wsl.exe`,
+///   `cmd.exe /c` — that fell over before the agent ran, and the number alone
+///   cannot tell them apart. [SessionEnding.failed] already arrives from the
+///   status pipeline, which reads what the agent actually printed; guessing
+///   from the code as well would put "ended in error" on every interrupt.
+/// * **A status we never learned is not a clean one**, which is the direction
+///   `shouldCollapseOnExit` errs in for the same observation.
+///
+/// What this cannot see is as important as what it can. Closing a pane, ending
+/// a session and quitting the app all *also* leave a process exited, and none
+/// of them is an agent finishing its work — they never reach here at all,
+/// because the controller stops listening to a pane before it disposes it. See
+/// `PaneExitSignal`.
+SessionEnding? endingOfPaneExit(int? exitCode) =>
+    exitCode == 0 ? SessionEnding.completed : null;

@@ -307,8 +307,15 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final focused =
         ref.watch(shellControllerProvider).focusedPane == ShellPane.explorer;
     final allProjects = ref.watch(sortedProjectsProvider);
-    // Re-read sessions whenever the workspace mutates.
-    ref.watch(sessionsRevisionProvider);
+    // Re-read sessions whenever the workspace mutates. Not on a permission
+    // mode: the panel draws none, and its children each narrow further.
+    ref.watchSessionKinds(const {
+      SessionChangeKind.membership,
+      SessionChangeKind.title,
+      SessionChangeKind.status,
+      SessionChangeKind.placement,
+      SessionChangeKind.workspace,
+    });
 
     final query = _query.trim().toLowerCase();
     final projects = query.isEmpty

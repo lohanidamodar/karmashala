@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
@@ -26,6 +28,13 @@ final _t0 = DateTime.utc(2026, 8, 30, 12);
 /// it either. So the fixtures are written with the DAO (whose SQL is sync) and
 /// `writeAsStringSync`, and the service's own behaviour is covered by
 /// `verification_service_test.dart`, which is a plain `test()` and can await.
+///
+/// That constraint is also why the pane reads evidence through
+/// [VerificationEvidenceReader] rather than through bare `dart:io`. The pane
+/// used to `existsSync()` beside every screenshot and `readAsStringSync()` a
+/// whole artifact on the UI thread; moving both off the frame needed a seam
+/// this file could override, and [_SyncEvidenceReader] below is that override —
+/// the same files, off the same disk, on a future the fake clock can settle.
 void main() {
   late VerificationHarness h;
 
@@ -110,12 +119,16 @@ void main() {
     at: _t0.add(Duration(seconds: ordinal)),
   );
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    VerificationEvidenceReader reader = const _SyncEvidenceReader(),
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(h.db),
           verificationRootProvider.overrideWithValue(h.root),
+          verificationEvidenceReaderProvider.overrideWithValue(reader),
           // Without this the pane waits on path_provider, which has no
           // platform channel in a widget test.
           verificationRootReadyProvider.overrideWith((ref) async => h.root),
@@ -269,6 +282,43 @@ void main() {
     );
   });
 
+  testWidgets('an evidence file is read off the frame, not during a build', (
+    tester,
+  ) async {
+    seed(
+      id: 'run-006b',
+      title: 'a slow page',
+      verdict: VerificationVerdict.fail,
+      files: {'console.txt': '[error] TypeError: save is not a function'},
+    );
+    final reader = _ManualEvidenceReader();
+
+    await pump(tester, reader: reader);
+    await tapAndSettle(tester, find.text('a slow page'));
+    expect(
+      reader.pending,
+      isEmpty,
+      reason: 'listing a run must not read the evidence in it',
+    );
+
+    await tester.tap(find.textContaining('1 console error'));
+    await tester.pump();
+
+    // The tile is open and the file has *not* been read: the old version
+    // answered `readAsStringSync()` inside the tap, which is the whole file on
+    // the UI thread before this frame could be built.
+    expect(find.textContaining('Reading console.txt'), findsOneWidget);
+    expect(reader.pending, hasLength(1));
+
+    reader.pending.single.complete('[error] TypeError: save is not a function');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('TypeError: save is not a function'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a screenshot whose file has gone says so, and does not throw', (
     tester,
   ) async {
@@ -383,4 +433,39 @@ void main() {
       expect(find.textContaining('nobody said who graded'), findsOneWidget);
     });
   });
+}
+
+/// The real reader's answers, reached synchronously.
+///
+/// Not a fake of the *behaviour* — it hits the same files the fixtures wrote —
+/// only of the wait, which this zone cannot perform. See the note at the top.
+class _SyncEvidenceReader implements VerificationEvidenceReader {
+  const _SyncEvidenceReader();
+
+  @override
+  Future<bool> exists(String path) => Future.value(File(path).existsSync());
+
+  @override
+  Future<String?> read(String path) {
+    final file = File(path);
+    return Future.value(
+      file.existsSync() ? file.readAsStringSync() : null,
+    );
+  }
+}
+
+/// A reader nothing answers until the test says so, for proving that a read
+/// happens *after* the frame rather than inside it.
+class _ManualEvidenceReader implements VerificationEvidenceReader {
+  final List<Completer<String?>> pending = [];
+
+  @override
+  Future<bool> exists(String path) => Future.value(true);
+
+  @override
+  Future<String?> read(String path) {
+    final completer = Completer<String?>();
+    pending.add(completer);
+    return completer.future;
+  }
 }

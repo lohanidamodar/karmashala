@@ -7,14 +7,19 @@ import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import 'checkout.dart';
 import 'checkout_default.dart';
 import 'picked_checkouts.dart';
 
 /// The checkout the repository-scoped surfaces are currently describing.
+///
+/// Reads a **repository** row, so it watches the workspace and nothing about
+/// sessions. It watched the session revision because that counter was where
+/// the projects controller published a rescan; renaming a session used to
+/// re-read this row for no reason at all.
 final selectedCheckoutProvider = Provider<Repository?>((ref) {
-  ref.watch(sessionsRevisionProvider);
+  ref.watchSessionKinds(const {SessionChangeKind.workspace});
   final id = ref.watch(selectedRepositoryIdProvider);
   if (id == null) return null;
   return ref.read(repositoryDaoProvider).getById(id);
@@ -35,9 +40,11 @@ final selectedCheckoutProvider = Provider<Repository?>((ref) {
 /// the order is recomputed when the workspace or the followed session moves,
 /// which is when the user has reason to expect it to.
 final sessionCheckoutsProvider = Provider<List<Repository>>((ref) {
-  ref.watch(sessionsRevisionProvider);
   final sessionId = ref.watch(followedSessionProvider);
   if (sessionId == null) return const [];
+  // Only the followed session's own row, plus whatever names no session — a
+  // rescan can retire the checkout this is describing.
+  ref.watchSession(sessionId);
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return const [];
   return sessionCheckouts(ref, session);
@@ -76,7 +83,7 @@ final sessionCheckoutsProvider = Provider<List<Repository>>((ref) {
 /// *adds* repositories leaves the projects and the selection equal, so the
 /// picker would keep listing yesterday's clones.
 final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
-  ref.watch(sessionsRevisionProvider);
+  ref.watchSessionKinds(const {SessionChangeKind.workspace});
   final selected = ref.watch(selectedCheckoutProvider);
   if (selected == null) return const [];
 
@@ -139,7 +146,11 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
 /// same as git having failed, which surfaces as an error on the `AsyncValue`.
 final selectedCheckoutWorktreesProvider =
     FutureProvider.autoDispose<List<GitWorktree>>((ref) async {
-      ref.watch(sessionsRevisionProvider);
+      // **One `git worktree list` per bump.** Watching the whole session
+      // revision meant a session being renamed — on a timer, by the CLI store
+      // sweep — started a git subprocess against a `\\wsl.localhost` path.
+      // `session_signal_cost_test.dart` counts it.
+      ref.watchSessionKinds(const {SessionChangeKind.workspace});
       final selected = ref.watch(selectedCheckoutProvider);
       if (selected == null) return const [];
       final listed = await ref

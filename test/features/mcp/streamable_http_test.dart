@@ -30,7 +30,7 @@ void main() {
   late LauncherControlServer server;
 
   setUp(() async {
-    tmp = Directory.systemTemp.createTempSync('chitra_mcp_http_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_mcp_http_');
     final db = AppDatabase.memory();
     addTearDown(db.close);
     container = ProviderContainer(
@@ -490,7 +490,7 @@ void main() {
 
   group('fail closed', () {
     test('no MCP credential is published when hardening fails', () async {
-      final other = Directory.systemTemp.createTempSync('chitra_mcp_closed_');
+      final other = Directory.systemTemp.createTempSync('karmashala_mcp_closed_');
       addTearDown(() {
         if (other.existsSync()) other.deleteSync(recursive: true);
       });

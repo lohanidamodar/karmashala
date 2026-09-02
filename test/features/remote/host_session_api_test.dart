@@ -3,6 +3,8 @@
 /// and frames out.
 library;
 
+import 'dart:async';
+
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/host_session_api.dart';
 import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
@@ -42,6 +44,20 @@ class Harness {
   /// the host really gets into: the link the phone last used is closed and
   /// nothing else could carry the frame.
   bool delivers = true;
+
+  /// What the phone does when it opens a session: subscribe, then ask for the
+  /// history. `_reloadTranscript` in the gateway is exactly these two calls in
+  /// this order, and it is the second one that makes the session *watched* —
+  /// the host reads a transcript for the poll sweep only once it has served
+  /// one, because subscription alone means "keep this card live" and the phone
+  /// subscribes to every session it lists.
+  Future<void> watch(String sessionId) async {
+    await request(
+      FrameType.sessionSubscribe,
+      payload: {'sessionId': sessionId},
+    );
+    await request(FrameType.transcriptGet, payload: {'sessionId': sessionId});
+  }
 
   /// Frames the transport refused, so a test can name what was lost.
   final List<SentFrame> dropped = [];
@@ -329,10 +345,7 @@ void main() {
       harness.fake.transcripts['s1'] = [
         const RemoteTranscriptMessage(role: 'user', text: 'one'),
       ];
-      await harness.request(
-        FrameType.sessionSubscribe,
-        payload: const {'sessionId': 's1'},
-      );
+      await harness.watch('s1');
 
       await harness.api.pollTranscripts();
       final before = harness.sent.length;
@@ -444,10 +457,7 @@ void main() {
       harness.fake.transcripts['s1'] = [
         const RemoteTranscriptMessage(role: 'user', text: 'one'),
       ];
-      await harness.request(
-        FrameType.sessionSubscribe,
-        payload: const {'sessionId': 's1'},
-      );
+      await harness.watch('s1');
       await harness.api.pollTranscripts();
 
       harness.fake.transcripts['s1']!.add(
@@ -468,6 +478,253 @@ void main() {
       final page = RemoteTranscriptPage.fromJson(harness.last.payload);
       expect([for (final m in page.messages) m.text], ['two', 'three']);
       expect(page.cursor, 3);
+    });
+  });
+
+  group('subscribing does not wait on the transcript', () {
+    // The owner's report, reproduced on a real phone: "connection is fine,
+    // sessions are listed, but opening a session fails". The link was up and
+    // `sessions.list` answered; `session.subscribe` timed out every time, and
+    // the desktop later logged a result frame it could no longer deliver.
+    //
+    // The cause was here: subscribe parsed the whole transcript to learn a
+    // *count* before replying. On a 115 MB store that is far past the phone's
+    // request timeout — and because a device's frames are handled on one
+    // serial chain, every request queued behind it timed out too.
+
+    test('the result arrives without reading the transcript at all', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        for (var i = 0; i < 50; i++)
+          RemoteTranscriptMessage(role: 'user', text: 'line $i'),
+      ];
+
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+
+      expect(
+        harness.fake.transcriptReads,
+        0,
+        reason: 'a subscribe is bookkeeping; the phone asks for history itself',
+      );
+      expect(
+        harness.sent.any((f) => f.type == FrameType.result),
+        isTrue,
+      );
+    });
+
+    test('and answers even while a transcript read would never finish', () async {
+      final harness = Harness();
+      // A read that never completes is the limit of a read that is merely far
+      // too slow, and it is the honest shape of the bug: the phone gave up
+      // first every time.
+      harness.fake.transcriptGate = Completer<void>();
+      addTearDown(() => harness.fake.transcriptGate!.complete());
+
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      ).timeout(const Duration(seconds: 5));
+
+      expect(harness.sent.any((f) => f.type == FrameType.result), isTrue);
+    });
+
+    test('a subscribed session nobody is reading is never polled', () async {
+      // The other half of the same bug, and the larger one. The phone
+      // subscribes to *every* session it lists, because subscription is what
+      // keeps the cards live — so polling on subscription alone meant a full
+      // transcript parse per listed session, every tick.
+      final harness = Harness()..fake.addSession('s2');
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's2'},
+      );
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+      final afterHistory = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscripts();
+
+      expect(
+        harness.fake.transcriptReads - afterHistory,
+        1,
+        reason: 'only the session whose history was asked for',
+      );
+    });
+
+    test('and the one being read still gets its delta', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'before'),
+      ];
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'assistant', text: 'after'),
+      );
+      await harness.api.pollTranscript('s1');
+
+      final appended = harness.sent.firstWhere(
+        (f) => f.type == FrameType.transcriptAppended,
+      );
+      final messages = appended.payload['messages']! as List;
+      expect(messages, hasLength(1));
+      expect((messages.single as Map)['text'], 'after');
+    });
+  });
+
+  group('a long transcript is sent as its tail', () {
+    // Reproduced on the device: opening this repo's own session — 53 MB of
+    // JSONL, 25,421 lines — returned every message in one sealed frame. The
+    // phone sat on a spinner and the desktop logged "no transport could carry
+    // a result frame" three times, because by the time the frame was built the
+    // phone had given up and redialled.
+
+    List<RemoteTranscriptMessage> conversation(int count) => [
+      for (var i = 0; i < count; i++)
+        RemoteTranscriptMessage(role: i.isEven ? 'user' : 'agent', text: 'm$i'),
+    ];
+
+    test('a short one is sent whole, and says nothing was held back', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(12);
+
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(page.messages, hasLength(12));
+      expect(page.omitted, 0);
+      expect(page.cursor, 12);
+    });
+
+    test('a long one is cut to the end, and says how much', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(kRemoteTranscriptPageMax * 3);
+
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(page.messages, hasLength(kRemoteTranscriptPageMax));
+      expect(page.omitted, kRemoteTranscriptPageMax * 2);
+      // The end, not the beginning: a conversation is opened where it is now.
+      expect(page.messages.last.text, 'm${kRemoteTranscriptPageMax * 3 - 1}');
+      // And the cursor still counts the whole thing, so the appended stream
+      // lines up with what the phone was actually given.
+      expect(page.cursor, kRemoteTranscriptPageMax * 3);
+    });
+
+    test('an explicit `after` still pages from where it says', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(20);
+
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1', 'after': 5},
+      );
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(page.messages.first.text, 'm5');
+      expect(page.omitted, 5);
+    });
+
+    test('and the delta after a cut page is still only the new messages',
+        () async {
+      // The cursor is the whole count, not the page length, so growth after a
+      // truncated read must not resend the tail it already sent.
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(kRemoteTranscriptPageMax * 2);
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      await harness.api.pollTranscript('s1');
+
+      final appended = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(appended.messages, hasLength(1));
+      expect(appended.messages.single.text, 'brand new');
+    });
+  });
+
+  group('an expensive transcript is polled less often', () {
+    test('a cheap one is polled every time it is asked', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      final before = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads - before, 3);
+    });
+
+    test('but one that takes real time is not read again immediately',
+        () async {
+      // The device case: a 53 MB transcript read on every two-second sweep,
+      // on the one chain the phone's own requests are queued behind. The read
+      // has to happen; happening *continuously* is what left nothing for the
+      // link.
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      harness.fake.transcriptCost = const Duration(milliseconds: 40);
+      final before = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+      // Straight after: inside the backoff the last read earned.
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+
+      expect(
+        harness.fake.transcriptReads - before,
+        1,
+        reason: 'one read, then a wait proportional to what it cost',
+      );
+    });
+
+    test('and unsubscribing forgets the backoff with everything else',
+        () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      harness.fake.transcriptCost = const Duration(milliseconds: 40);
+      await harness.api.pollTranscript('s1');
+
+      await harness.request(
+        FrameType.sessionUnsubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.transcriptCost = Duration.zero;
+      await harness.watch('s1');
+      final before = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads - before, 1);
     });
   });
 }

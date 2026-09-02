@@ -18,7 +18,7 @@ void main() {
   late AgentStatusService service;
 
   setUp(() {
-    tmp = Directory.systemTemp.createTempSync('chitra_svc_');
+    tmp = Directory.systemTemp.createTempSync('karmashala_svc_');
     reports = AgentHookReports();
     service = AgentStatusService(
       registry: AgentRegistry.builtIn,

@@ -4,12 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../application/file_explorer_providers.dart';
 import '../data/file_listing_service.dart';
+
+/// How far in a row at [depth] starts. One expression, used by the rows and by
+/// the "Empty"/"Loading…" placeholders alike, because the two drifting apart is
+/// exactly what a reader sees as a ragged tree.
+double _indentFor(int depth) => Insets.md + depth * Chrome.treeIndent;
+
+/// A tree row is tighter than [Insets.xs]: at [Chrome.row] density the padding
+/// is what stops two file names touching, not what separates sections.
+const double _rowPadY = 3;
 
 /// A lazy file/folder tree for the selected repository. Folders expand in place;
 /// tapping a file opens it in the configured code editor. Listing runs on the
@@ -44,13 +54,17 @@ class FileExplorerView extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          padding: const EdgeInsets.fromLTRB(
+            Insets.md,
+            Insets.sm,
+            Insets.xs,
+            Insets.sm,
+          ),
           child: Row(
             children: [
               Expanded(child: Text('Files', style: theme.textTheme.titleSmall)),
               IconButton(
                 tooltip: 'Refresh',
-                iconSize: 16,
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(AppIcons.arrowsClockwise),
                 onPressed: () =>
@@ -97,7 +111,11 @@ class _DirChildren extends ConsumerWidget {
   }
 
   static Widget _leaf(int depth, String text, ThemeData theme) => Padding(
-    padding: EdgeInsets.only(left: 12.0 + depth * 14 + 22, top: 3, bottom: 3),
+    padding: EdgeInsets.only(
+      left: _indentFor(depth) + Chrome.treeGutter,
+      top: _rowPadY,
+      bottom: _rowPadY,
+    ),
     child: Text(
       text,
       style: theme.textTheme.bodySmall?.copyWith(
@@ -213,10 +231,10 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
           : _openInEditor,
       child: Padding(
         padding: EdgeInsets.only(
-          left: 12.0 + widget.depth * 14,
-          top: 3,
-          bottom: 3,
-          right: 8,
+          left: _indentFor(widget.depth),
+          top: _rowPadY,
+          bottom: _rowPadY,
+          right: Insets.sm,
         ),
         child: Row(
           children: [

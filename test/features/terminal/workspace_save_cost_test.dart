@@ -294,6 +294,55 @@ void main() {
       );
     });
 
+    /// Filled by the quit cases below.
+    final quitEncodes = <int, int>{};
+
+    for (final n in [1, 10, 50]) {
+      test('quitting with $n busy panes re-encodes exactly the dirty ones', () {
+        final panes = busyWorkspace(n);
+        final before = encodesAcross(panes);
+
+        // The quit path, not a structural one: `persistWorkspace` is the last
+        // write before the process ends, so unlike a structural save it must
+        // refresh rather than reuse — anything it leaves behind is gone.
+        controller.persistWorkspace();
+
+        quitEncodes[n] = encodesAcross(panes) - before;
+        expect(
+          quitEncodes[n],
+          n,
+          reason: 'one encode per dirty pane, and no more',
+        );
+        expect(controller.hasDirtyScrollback, isFalse);
+      });
+    }
+
+    test('and a second quit-time save re-encodes nothing at all', () {
+      // The property that makes the first number safe: cost tracks what
+      // changed, not what is open. A workspace nobody has typed into costs
+      // nothing to write however many panes it holds.
+      final panes = busyWorkspace(50);
+      controller.persistWorkspace();
+      final after = encodesAcross(panes);
+
+      controller.persistWorkspace();
+
+      expect(encodesAcross(panes), after);
+    });
+
+    test('so quit cost is bounded by what changed, not by the workspace', () {
+      // Deliberately *not* the same shape as the structural assertion above,
+      // which pins a constant. Quitting has to write every pane that moved, so
+      // its cost is linear in dirty panes by design — a budget here would drop
+      // the user's scrollback on the way out, which is the one thing this path
+      // exists to prevent. What is asserted is that the constant is 1: no pane
+      // is encoded twice, and no clean pane is encoded at all.
+      expect(quitEncodes.keys, containsAll([1, 10, 50]));
+      for (final entry in quitEncodes.entries) {
+        expect(entry.value, entry.key, reason: 'quit encodes: $quitEncodes');
+      }
+    });
+
     test('leaves those panes still owing the autosave a write', () {
       final panes = busyWorkspace(4);
       controller.openInSlot(
@@ -415,6 +464,13 @@ class _CountingInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// Never moves: nothing runs here to report a `cd`.
+  @override
+  late final ValueListenable<String?> directory = UnchangingValue(
+    workingDirectory,
+  );
+
   @override
   final AgentPaneLaunch? agentLaunch = null;
 

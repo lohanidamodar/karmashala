@@ -1,4 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/logging/diagnostics.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -20,6 +22,7 @@ import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -49,7 +52,7 @@ const _talkative = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
     permissionModes: {
       PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
     },
@@ -761,5 +764,50 @@ void main() {
         elsewhere,
       );
     });
+  });
+
+  test('a launch says what it decided, in one line', () async {
+    // This path had no logging, and four of its bugs were silent by
+    // construction — a permission mode written over the row being reused, an
+    // external session id never stored, a resume that quietly started a new
+    // conversation, a dormant pane not reused so one session got two
+    // terminals. None threw. The line is asserted rather than merely written
+    // so the facts that distinguish those outcomes cannot be dropped later.
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+
+    final previous = Diagnostics.instance;
+    final records = <LogRecord>[];
+    Diagnostics.instance = Diagnostics(echoToConsole: false);
+    AppLogger.initialize(onRecord: records.add);
+    addTearDown(() {
+      Diagnostics.instance = previous;
+      AppLogger.initialize();
+    });
+
+    final result = await h.container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(agentId: 'roverCli'),
+            title: 'Rover run',
+            purpose: SessionPurpose.newSession,
+          ),
+        );
+
+    final line = records
+        .where((r) => r.loggerName == 'sessions.launch')
+        .map((r) => r.message)
+        .join('\n');
+    expect(line, contains(result.session.id));
+    expect(line, contains('agent=roverCli'));
+    expect(line, contains('pane=${result.paneId}'));
+    // The four facts whose absence made the bugs invisible.
+    expect(line, contains('mode='));
+    expect(line, contains('resumed='));
+    expect(line, contains('conversation='));
+    expect(line, contains('mcp='));
   });
 }

@@ -81,8 +81,9 @@ const _claudeCode = AgentDescriptor(
     // both — which is what makes a PTY-hosted Claude session's transcript
     // locatable at launch instead of guessed at afterwards.
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
-    // `claude [prompt]` — verified against v2.1.251.
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(
+      evidence: 'claude --help (2.1.251): "Usage: claude [options] [prompt]"',
+    ),
     // Verified, not assumed: two panes were given `--resume` on the same
     // session id with the first still live (`integration_test/
     // resume_conflict_test.dart`). The second opened on the same conversation,
@@ -284,8 +285,9 @@ const _codex = AgentDescriptor(
     resume: AgentResume.flag('--resume'),
     // Interactively Codex resumes with a subcommand, not a flag.
     interactiveResume: AgentResume.subcommand('resume'),
-    // `codex [OPTIONS] [PROMPT]` — verified against 0.146.
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(
+      evidence: 'codex --help (0.146): "Usage: codex [OPTIONS] [PROMPT]"',
+    ),
     // Left at the default (false): Codex enforces **one writer per thread**.
     // The lock is real and inspectable — a live Codex holds an flock on
     // `~/.codex/thread-writer-locks/<thread-id>.lock` — and a second resume of
@@ -470,7 +472,7 @@ const _antigravity = AgentDescriptor(
     // the headless and interactive resumes are the same flag.
     //
     // Interactive resume is the entry that was missing rather than wrong.
-    // `interactiveResume` drives `interactiveAgentArguments`, and left at the
+    // `interactiveResume` is what `agentPaneArguments` reads, and left at the
     // default it meant a pane could never continue an Antigravity conversation
     // at all, whatever the rest of the registry said.
     resume: AgentResume.flag('--conversation'),
@@ -521,15 +523,25 @@ const _antigravity = AgentDescriptor(
           '{directory: conversation id} map store.Manager.GetLastConversation '
           'resolves it through',
     ),
-    // Left false, and this one is a real distinction rather than caution. The
-    // CLI does take an opening prompt, but as `-i` / `--prompt-interactive
-    // <prompt>` — a flag with a value, not the trailing positional this field
-    // means. Declaring it true would append the message as a bare argument,
-    // which is not how this CLI reads it. Delivering a first message to an
-    // Antigravity pane needs the descriptor to be able to express a
-    // prompt-carrying *flag*; see the follow-up in
-    // the design note
-    acceptsPromptArgument: false,
+    // The long form, not `-i`, for the reason `--continue` is preferred over
+    // its own `-c` alias above: this line is echoed into panes and copied into
+    // external terminals, where a reader has to recognise it.
+    //
+    // Two argv entries. `agy` parses with Go's `flag` package, and passing the
+    // pair joined is what the descriptor could not previously express at all —
+    // the whole of this backlog item. Re-checked live rather than inherited:
+    // 1.1.23's `--help` names the flag, and `agy --prompt-interactive` with no
+    // value exits on `flag needs an argument: -prompt-interactive`, which is
+    // what proves it carries one.
+    prompt: AgentPromptSupport.flag(
+      '--prompt-interactive',
+      evidence:
+          'agy 1.1.23 --help: "--prompt-interactive  Run an initial prompt '
+          'interactively and continue the session" / "-i  Short alias for '
+          '--prompt-interactive"; value-carrying confirmed by '
+          '`agy --prompt-interactive` exiting on '
+          '"flag needs an argument: -prompt-interactive"',
+    ),
     // Left false, and now with the CLI's own words behind it rather than the
     // default. `agy` does *not* refuse a second opener — it warns, and carries
     // on: "When you opened this conversation it was already open in another CLI

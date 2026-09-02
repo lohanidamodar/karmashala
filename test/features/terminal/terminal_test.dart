@@ -58,8 +58,11 @@ void main() {
         ),
         workingDirectory: '/home/me/app',
       );
-      expect(launch.executable, 'wsl.exe');
-      expect(launch.arguments, ['-d', 'Ubuntu', '--cd', '/home/me/app']);
+      expect(launch.executable, 'cmd.exe');
+      expect(launch.arguments, [
+        '/c',
+        'wsl.exe -d Ubuntu --cd /home/me/app',
+      ]);
       expect(launch.workingDirectory, isNull);
     });
   });

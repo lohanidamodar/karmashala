@@ -6,7 +6,6 @@ import 'package:karmashala/src/features/cli_detection/domain/agent_command_line.
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
-import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What Karmashala is allowed to claim about Antigravity.
@@ -111,25 +110,28 @@ void main() {
         'c1',
       ]);
     });
+  });
 
-    test('a pane resumes with the permission flags beside it', () {
-      // What `interactiveAgentArguments` actually builds — the path a terminal
-      // session takes, as opposed to the adapter's.
-      expect(
-        interactiveAgentArguments(
-          descriptor,
-          PermissionMode.acceptEdits,
-          resumeSessionId: 'c1',
-        ),
-        ['--mode', 'accept-edits', '--conversation', 'c1'],
-      );
+  group('the opening prompt is a flag, not a positional', () {
+    test('the descriptor says how the prompt is passed, not just whether', () {
+      // The distinction the old bool could not hold: `agy` does take an opening
+      // prompt, just not as the trailing positional that bool meant.
+      final prompt = descriptor.launch.prompt;
+      expect(prompt.style, AgentPromptStyle.flag);
+      expect(prompt.token, '--prompt-interactive');
+      expect(prompt.argumentsFor('do the thing'), [
+        '--prompt-interactive',
+        'do the thing',
+      ]);
+      // The "whether" question every refusal gate asks still answers, and now
+      // in the affirmative: a handoff packet can reach this CLI after all.
+      expect(descriptor.launch.acceptsPromptArgument, isTrue);
     });
 
-    test('a new session under the safe mode is launched bare', () {
-      expect(
-        interactiveAgentArguments(descriptor, PermissionMode.ask),
-        isEmpty,
-      );
+    test('the flag is never emitted without a value to carry', () {
+      // `agy --prompt-interactive` with nothing after it exits on
+      // `flag needs an argument: -prompt-interactive`.
+      expect(descriptor.launch.prompt.argumentsFor(''), isEmpty);
     });
   });
 
@@ -174,13 +176,6 @@ void main() {
       // describe a version nobody runs — and pressing a guessed key into a TUI
       // is the one failure worse than sending the user to the terminal.
       expect(descriptor.approval.isEmpty, isTrue);
-    });
-
-    test('no opening prompt is passed as a positional argument', () {
-      // A real distinction rather than caution: the CLI takes an opening prompt
-      // as `-i` / `--prompt-interactive <prompt>`, a flag with a value, not the
-      // trailing positional this field means.
-      expect(descriptor.launch.acceptsPromptArgument, isFalse);
     });
 
     test('concurrent resume is not claimed', () {
@@ -228,6 +223,7 @@ void main() {
     test('every claim carries where it was read', () {
       expect(descriptor.launch.sessionIdAnnouncement.evidence, isNotEmpty);
       expect(descriptor.launch.continueLatest.evidence, isNotEmpty);
+      expect(descriptor.launch.prompt.evidence, isNotEmpty);
     });
   });
 

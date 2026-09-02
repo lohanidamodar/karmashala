@@ -10,6 +10,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../application/evidence_reader.dart';
 import '../application/verification_providers.dart';
 import '../application/verification_service.dart';
 import '../domain/verification_artifact.dart';
@@ -512,16 +513,45 @@ class _StepTile extends StatelessWidget {
   }
 }
 
-class _ScreenshotTile extends StatelessWidget {
+class _ScreenshotTile extends ConsumerStatefulWidget {
   const _ScreenshotTile({required this.run, required this.artifact});
 
   final VerificationRun run;
   final VerificationArtifact artifact;
 
   @override
+  ConsumerState<_ScreenshotTile> createState() => _ScreenshotTileState();
+}
+
+class _ScreenshotTileState extends ConsumerState<_ScreenshotTile> {
+  /// Asked once per tile, not once per build: the pane rebuilds on scroll and
+  /// on every session signal, and a stat per rebuild per screenshot is exactly
+  /// the cost this was moved off the frame to avoid.
+  late Future<bool> _present;
+
+  String get _path =>
+      p.join(widget.run.artifactDirectory, widget.artifact.relativePath);
+
+  @override
+  void initState() {
+    super.initState();
+    _present = ref.read(verificationEvidenceReaderProvider).exists(_path);
+  }
+
+  @override
+  void didUpdateWidget(_ScreenshotTile old) {
+    super.didUpdateWidget(old);
+    if (old.run.artifactDirectory != widget.run.artifactDirectory ||
+        old.artifact.relativePath != widget.artifact.relativePath) {
+      _present = ref.read(verificationEvidenceReaderProvider).exists(_path);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final file = File(p.join(run.artifactDirectory, artifact.relativePath));
+    final artifact = widget.artifact;
+    final file = File(_path);
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.md),
       child: Column(
@@ -536,16 +566,26 @@ class _ScreenshotTile extends StatelessWidget {
           const SizedBox(height: Insets.xs),
           ClipRRect(
             borderRadius: BorderRadius.circular(Radii.sm),
-            child: file.existsSync()
-                ? Image.file(
-                    file,
-                    fit: BoxFit.contain,
-                    // A run's evidence is not worth an exception: a corrupt or
-                    // half-written PNG shows as a note, not a red box.
-                    errorBuilder: (context, _, _) =>
-                        _MissingFile(path: artifact.relativePath),
-                  )
-                : _MissingFile(path: artifact.relativePath),
+            child: FutureBuilder<bool>(
+              future: _present,
+              builder: (context, snapshot) {
+                // Nothing until the answer arrives — a tile that guessed
+                // "missing" for a frame would flash the cleaned-up note over
+                // evidence that is perfectly present.
+                if (!snapshot.hasData) return const SizedBox.shrink();
+                if (!snapshot.data!) {
+                  return _MissingFile(path: artifact.relativePath);
+                }
+                return Image.file(
+                  file,
+                  fit: BoxFit.contain,
+                  // A run's evidence is not worth an exception: a corrupt or
+                  // half-written PNG shows as a note, not a red box.
+                  errorBuilder: (context, _, _) =>
+                      _MissingFile(path: artifact.relativePath),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -572,17 +612,17 @@ class _MissingFile extends StatelessWidget {
   }
 }
 
-class _FileTile extends StatefulWidget {
+class _FileTile extends ConsumerStatefulWidget {
   const _FileTile({required this.run, required this.artifact});
 
   final VerificationRun run;
   final VerificationArtifact artifact;
 
   @override
-  State<_FileTile> createState() => _FileTileState();
+  ConsumerState<_FileTile> createState() => _FileTileState();
 }
 
-class _FileTileState extends State<_FileTile> {
+class _FileTileState extends ConsumerState<_FileTile> {
   /// How much of a file is shown inline. A logcat slice is capped at 400 lines
   /// when it is captured, so this is a backstop rather than the usual case.
   static const _maxCharacters = 200 * 1024;
@@ -590,23 +630,40 @@ class _FileTileState extends State<_FileTile> {
   bool _open = false;
   String? _text;
 
-  /// Read synchronously, on purpose: this is a local file of at most a few
-  /// hundred kilobytes, opened because the user asked to see it, and the async
-  /// version buys a frame's latency in exchange for a state machine.
-  void _toggle() {
+  /// Which open this text belongs to, so a slow read that lands after the user
+  /// has closed the tile — or opened it again — cannot overwrite the newer one.
+  int _generation = 0;
+
+  /// **Read off the frame.** This used to be `existsSync()` plus
+  /// `readAsStringSync()`, on the UI isolate, for a whole artifact file — the
+  /// comment defending it argued a few hundred kilobytes was cheap, which is
+  /// true of the bytes and false of the wait: an artifact directory can be a
+  /// `\\wsl.localhost` share, where the synchronous pair costs 1.19 ms against
+  /// 0.07 ms locally before the file is even read, and a 200 KB read on top of
+  /// it is several frames of a frozen window. The state machine it was trading
+  /// away is the three lines below.
+  Future<void> _toggle() async {
     if (_open) {
       setState(() => _open = false);
       return;
     }
-    final file = File(
-      p.join(widget.run.artifactDirectory, widget.artifact.relativePath),
+    final generation = ++_generation;
+    setState(() {
+      _open = true;
+      _text = null;
+    });
+    final path = p.join(
+      widget.run.artifactDirectory,
+      widget.artifact.relativePath,
     );
     String body;
     try {
-      if (!file.existsSync()) {
+      final whole = await ref
+          .read(verificationEvidenceReaderProvider)
+          .read(path);
+      if (whole == null) {
         body = '${widget.artifact.relativePath} is not on disk any more.';
       } else {
-        final whole = file.readAsStringSync();
         body = whole.length <= _maxCharacters
             ? whole
             : '${whole.substring(0, _maxCharacters)}\n\n… truncated; the whole '
@@ -615,10 +672,8 @@ class _FileTileState extends State<_FileTile> {
     } on Object catch (error) {
       body = 'Could not read it: $error';
     }
-    setState(() {
-      _text = body;
-      _open = true;
-    });
+    if (!mounted || generation != _generation) return;
+    setState(() => _text = body);
   }
 
   @override
@@ -664,9 +719,9 @@ class _FileTileState extends State<_FileTile> {
             padding: const EdgeInsets.all(Insets.sm),
             color: theme.colorScheme.surfaceContainerHigh,
             child: SelectableText(
-              _text ?? '',
+              _text ?? 'Reading ${widget.artifact.relativePath}…',
               style: theme.textTheme.labelSmall?.copyWith(
-                fontFamily: 'monospace',
+                fontFamily: kMonoFamily,
                 fontFamilyFallback: const ['Consolas', 'Menlo', 'monospace'],
               ),
             ),

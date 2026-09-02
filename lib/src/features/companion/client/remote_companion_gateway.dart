@@ -31,6 +31,19 @@ const String _kNotPaired = 'This phone is not paired with a host.';
 const String _kUnreachable =
     'The host is unreachable right now, so nothing was sent.';
 
+/// A request that went out and was not answered in time.
+///
+/// Deliberately *not* [_kUnreachable]. The owner's report was exactly this
+/// sentence being wrong: "this did not work host is unreachable now. which is
+/// not the case host is here this session is running on the host" — said while
+/// the status bar beside it read "Working · running here". Both halves of that
+/// sentence are false for a timeout: the host is demonstrably reachable, since
+/// the link is carrying frames, and the request *was* sent. Only the answer is
+/// missing, and the honest reason is usually that the desktop is busy.
+const String _kUnanswered =
+    'The desktop did not answer in time. The link is up, so it is busy with '
+    'something else.';
+
 /// How long a beacon host that refused a direct dial is left alone by the LAN
 /// *upgrade* — the one that spends a working link on the attempt.
 ///
@@ -1949,6 +1962,16 @@ class RemoteCompanionGateway implements CompanionGateway {
     final page = await _mapRefusals(() => client.transcript(sessionId));
     final state = _transcriptOf(sessionId);
     state.messages = List.unmodifiable([
+      // Said, not hidden. The host sends the tail of a long conversation
+      // because the whole of one does not fit in a frame, and a view that
+      // simply began in the middle would read as a transcript that had lost
+      // its start rather than one showing its end.
+      if (page.omitted > 0)
+        CompanionChatMessage(
+          role: 'tool',
+          text: '${page.omitted} earlier messages are not shown here. '
+              'The desktop has the whole conversation.',
+        ),
       for (final message in page.messages)
         CompanionChatMessage(role: message.role, text: message.text),
     ]);
@@ -2007,7 +2030,7 @@ class RemoteCompanionGateway implements CompanionGateway {
       // host has left — alone at the rendezvous, still reported "connected" —
       // and never dials again.
       _declareDead();
-      throw const GatewayException(_kUnreachable);
+      throw GatewayException(_unusableLink);
     }
     return client;
   }
@@ -2023,7 +2046,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     } on RemoteApiException catch (error) {
       if (error.code == null) {
         _noteUnanswered();
-        throw const GatewayException(_kUnreachable);
+        throw const GatewayException(_kUnanswered);
       }
       // A refusal is an ANSWER: the desktop read the frame and said no, which
       // is the strongest possible evidence the link works.
@@ -2033,7 +2056,9 @@ class RemoteCompanionGateway implements CompanionGateway {
       _declareDead();
       throw const GatewayException(_kUnreachable);
     } on StateError {
-      throw const GatewayException(_kUnreachable);
+      // "Not connected" — the link went away under the request. Which sentence
+      // that deserves depends on why it went away.
+      throw GatewayException(_unusableLink);
     }
   }
 
@@ -2081,6 +2106,16 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// like. Never "connected", and never "check your connection": the socket is
   /// up, the relay is fine, and the list on screen is real — it is simply the
   /// last thing the desktop sent rather than anything it is saying now.
+  /// The sentence for a link that cannot be used right now.
+  ///
+  /// "Unreachable" is only true when the phone cannot get to the desktop at
+  /// all. When the link was torn down *because* the desktop stopped answering,
+  /// that word contradicts the banner directly above it — which says the
+  /// desktop is holding the connection open and not answering — and the owner
+  /// saw both sentences on one screen at once.
+  String get _unusableLink =>
+      _trouble.value == _kHostSilentTrouble ? _kUnanswered : _kUnreachable;
+
   static const String _kHostSilentTrouble =
       'Your desktop is keeping this connection open but not answering it. '
       'What you can see here is what it last sent.';

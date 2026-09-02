@@ -52,7 +52,7 @@ void main() {
   setUp(() {
     db = AppDatabase.memory();
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
-    claudeHome = Directory.systemTemp.createTempSync('chitra_hooksvc_');
+    claudeHome = Directory.systemTemp.createTempSync('karmashala_hooksvc_');
   });
   tearDown(() {
     db.close();
@@ -434,7 +434,7 @@ void main() {
     // Two stores, and the first cannot be read. The walk has to finish, the
     // reachable store has to be written, and the broken file has to be left
     // exactly as it was — it is somebody's real settings.json.
-    final broken = Directory.systemTemp.createTempSync('chitra_hooksvc_bad_');
+    final broken = Directory.systemTemp.createTempSync('karmashala_hooksvc_bad_');
     addTearDown(() => broken.deleteSync(recursive: true));
     final brokenConfig = File(p.join(broken.path, 'settings.json'));
     brokenConfig.writeAsStringSync('{ not json');

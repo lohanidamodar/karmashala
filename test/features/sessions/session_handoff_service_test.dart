@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
+import 'package:karmashala/src/core/logging/diagnostics.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -30,6 +32,7 @@ import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:logging/logging.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -49,7 +52,7 @@ const _forker = AgentDescriptor(
     },
     interactiveResume: AgentResume.flag('--resume'),
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
-    acceptsPromptArgument: true,
+    prompt: AgentPromptSupport.positional(),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
       extraArguments: ['--fork-session'],
@@ -1017,5 +1020,49 @@ void main() {
 
       expect(packet.workingDirectory, subdirectory);
     });
+  });
+
+  test('a handoff says what it handed over, and how big it was', () async {
+    // A handoff is the one action here that turns one session into two, so
+    // when it goes wrong there are two rows and, until now, no record of the
+    // decision that joined them. The packet's length is on the line because it
+    // is typed into the pane and Claude Code collapses any paste over 800
+    // characters into `[Pasted text #N]` — the difference between the next
+    // agent reading the brief and reading a placeholder.
+    final path = writeTranscript([('user', 'hello')]);
+    final h = harness(transcriptPath: path);
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    seedSession(h.db);
+
+    final previous = Diagnostics.instance;
+    final records = <LogRecord>[];
+    Diagnostics.instance = Diagnostics(echoToConsole: false);
+    AppLogger.initialize(onRecord: records.add);
+    addTearDown(() {
+      Diagnostics.instance = previous;
+      AppLogger.initialize();
+    });
+
+    await h.container
+        .read(sessionHandoffServiceProvider)
+        .handoffTo(
+          sessionId: 'src',
+          targetInstallationId: 'a1',
+          instruction: 'Take it from here.',
+        );
+
+    final line = records
+        .where((r) => r.loggerName == 'sessions.handoff')
+        .map((r) => r.message)
+        .join('\n');
+    expect(line, contains('Handoff from src'));
+    expect(line, contains('packet='));
+    expect(line, contains('worktree='));
+    expect(line, contains('mode='));
+    // A real packet, not an empty one — the number has to mean something.
+    final size = RegExp(r'packet=(\d+) chars').firstMatch(line);
+    expect(size, isNotNull);
+    expect(int.parse(size!.group(1)!), greaterThan(0));
   });
 }

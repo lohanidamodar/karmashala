@@ -8,7 +8,7 @@ import 'package:path/path.dart' as p;
 
 void main() {
   late Directory tmp;
-  setUp(() => tmp = Directory.systemTemp.createTempSync('chitra_cli_'));
+  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_cli_'));
   tearDown(() => tmp.deleteSync(recursive: true));
 
   void write(String path, List<String> lines) {

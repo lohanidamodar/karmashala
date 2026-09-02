@@ -12,17 +12,17 @@ import '../domain/enter_key_encoding.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/launch_context.dart';
 import '../domain/mouse_wheel_reporter.dart';
+import '../domain/osc_router.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
 import '../domain/shell_integration.dart';
 import '../domain/terminal_profile.dart';
+import '../domain/working_directory_osc.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
-import 'scrollback_park.dart';
 import 'pty_output_coalescer.dart';
-import 'scrollback_spool.dart';
 import 'terminal_ingest_budget.dart';
 
 /// One open terminal: a stable [id]/[title] and the xterm [Terminal] buffer the
@@ -33,10 +33,25 @@ abstract class TerminalInstance {
   String get title;
   Terminal get terminal;
 
-  /// The [TerminalProfile] id this pane was launched from, and the directory it
-  /// started in — kept so the pane can be recreated after a restart.
+  /// The [TerminalProfile] id this pane was launched from — kept so the pane
+  /// can be recreated after a restart.
   String get profileId;
+
+  /// The directory the pane is in **now**: where it was launched until the
+  /// shell says it has moved (OSC 7), and where it has moved to after that.
+  ///
+  /// Live rather than fixed because everything that reads it wants the current
+  /// answer, not the launch one: relative-path link resolution joins onto it,
+  /// the tab label is derived from it, the workspace record a pane is restored
+  /// from stores it, and the MCP terminal tools report it.
   String? get workingDirectory;
+
+  /// [workingDirectory] as something to listen to.
+  ///
+  /// Listenable for exactly the reason [liveness] is — so the tab label follows
+  /// a `cd` without anything polling for one. Notifies once per *change*: a
+  /// shell that re-emits OSC 7 on every prompt redraw says nothing new.
+  ValueListenable<String?> get directory;
 
   /// The agent CLI this pane runs, or `null` for a plain shell.
   ///
@@ -156,6 +171,73 @@ abstract interface class AdoptableTerminalInstance {
   Terminal? get adoptableBuffer;
 }
 
+/// A [ValueListenable] that holds one value and never notifies.
+///
+/// What [TerminalInstance.directory] is for a pane whose shell can never report
+/// one: an error pane never started a process, and a dormant pane is replayed
+/// history. Allocated once per instance rather than per read, so adding and
+/// removing a listener reach the same object.
+class UnchangingValue<T> implements ValueListenable<T> {
+  const UnchangingValue(this.value);
+
+  @override
+  final T value;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+/// A pane's working directory: the one it launched in, then whatever the shell
+/// reports with OSC 7.
+///
+/// A [ValueNotifier] on purpose — it drops a write of the value it already
+/// holds, which is the whole of the "one republish per `cd`" rule. A shell that
+/// emits OSC 7 from its prompt function emits it on every redraw, and that must
+/// cost nothing.
+class WorkingDirectoryTracker {
+  WorkingDirectoryTracker(String? launchedIn, {String? hostname})
+    : _hostname = hostname ?? localHostname,
+      _directory = ValueNotifier(launchedIn);
+
+  /// This machine's name, read once: a syscall, and it cannot change while the
+  /// app runs. Null when the host will not say, which makes every named host
+  /// foreign — see [workingDirectoryFromOsc].
+  static final String? localHostname = () {
+    try {
+      return Platform.localHostname;
+    } catch (_) {
+      return null;
+    }
+  }();
+
+  final ValueNotifier<String?> _directory;
+  final String? _hostname;
+  bool _disposed = false;
+
+  ValueListenable<String?> get listenable => _directory;
+
+  String? get value => _directory.value;
+
+  /// One OSC from the pane's [OscRouter].
+  ///
+  /// A sequence we cannot read leaves the directory alone: `null` from the
+  /// parser means *no answer*, never *the pane has no directory*.
+  void handleOsc(String code, List<String> args) {
+    if (_disposed) return;
+    final reported = workingDirectoryFromOsc(code, args, hostname: _hostname);
+    if (reported != null) _directory.value = reported;
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _directory.dispose();
+  }
+}
+
 /// Signature for creating a [TerminalInstance] — injected so tests can supply a
 /// process-free fake (a real [Pty] would try to spawn a shell).
 typedef TerminalInstanceFactory =
@@ -188,13 +270,13 @@ class PtyTerminalInstance
     required this.title,
     required this.profileId,
     required PtyLaunch launch,
-    this.workingDirectory,
+    String? workingDirectory,
     this.agentLaunch,
     String? restoredScrollback,
     bool shellIntegration = false,
     TerminalIngestBudget? ingestBudget,
     Terminal? adoptTerminal,
-  }) {
+  }) : _cwd = WorkingDirectoryTracker(workingDirectory) {
     // The buffer the pane this one replaces was already holding, when there is
     // one. Handlers are set either way rather than only on the fresh path: the
     // two are the same values, and a branch here is a branch that can drift.
@@ -204,11 +286,18 @@ class PtyTerminalInstance
       ..mouseHandler = const KarmashalaMouseHandler()
       // ...and encodes every modified Enter as a bare CR, so Shift+Enter is
       // indistinguishable from submit.
-      ..inputHandler = const KarmashalaInputHandler();
-    // Attach before the process starts so no marker can be missed. When the
-    // shell is not integrated this stays null and nothing else changes.
+      ..inputHandler = const KarmashalaInputHandler()
+      // The pane owns xterm's single OSC slot for its whole life and fans it
+      // out, because two unrelated things read it — OSC 133 command blocks,
+      // which exist only with shell integration on, and the OSC 7 working
+      // directory, which must work either way.
+      ..onPrivateOSC = _osc.dispatch;
+    // Registered before the process starts, so no sequence can be missed. The
+    // directory listens unconditionally: plenty of shells emit OSC 7 with no
+    // help from us, and integration is about OSC 133.
+    _osc.add(_cwd.handleOsc);
     if (shellIntegration) {
-      commandBlocks = CommandBlockRecorder(terminal)..attach();
+      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
     }
     // Replay the previous session's scrollback *before* the shell starts, so
     // restored history sits above the new process's first output. An adopted
@@ -223,7 +312,7 @@ class PtyTerminalInstance
     // the host environment so Windows shells get SystemRoot/WINDIR/etc. (without
     // them powershell.exe/cmd.exe and wsl.exe fail to start) — sanitized so a
     // POSIX env leaked from launching via WSL doesn't break wsl.exe.
-    final workingDirectory =
+    final startIn =
         (launch.workingDirectory != null &&
             Directory(launch.workingDirectory!).existsSync())
         ? launch.workingDirectory
@@ -232,7 +321,7 @@ class PtyTerminalInstance
       launch.executable,
       arguments: launch.arguments,
       environment: _ptyEnvironment(launch.environment),
-      workingDirectory: workingDirectory,
+      workingDirectory: startIn,
     );
 
     // Buffer the raw PTY bytes and hand them to the terminal once per frame.
@@ -243,11 +332,7 @@ class PtyTerminalInstance
       onData: terminal.write,
       budget: ingestBudget,
     );
-    _coldScreen = ColdScreen(
-      terminal: terminal,
-      park: _park,
-      budget: ingestBudget,
-    );
+    _cold = ColdIngest(terminal: terminal, budget: ingestBudget);
     _outputSubscription = _pty.output.listen(_onPtyBytes);
 
     // Captured while the process is certainly alive: `pid` is only safe to act
@@ -286,8 +371,21 @@ class PtyTerminalInstance
   final String title;
   @override
   final String profileId;
+
+  /// Seeded with the directory the pane launched in, then kept current by the
+  /// shell's own OSC 7.
+  final WorkingDirectoryTracker _cwd;
+
   @override
-  final String? workingDirectory;
+  String? get workingDirectory => _cwd.value;
+
+  @override
+  ValueListenable<String?> get directory => _cwd.listenable;
+
+  /// Owns `terminal.onPrivateOSC` for this pane's whole life and fans it out —
+  /// see the constructor.
+  final OscRouter _osc = OscRouter();
+
   @override
   final AgentPaneLaunch? agentLaunch;
   @override
@@ -318,23 +416,17 @@ class PtyTerminalInstance
   bool _exited = false;
   Future<void>? _reap;
 
-  /// Where a cold pane's output goes instead of into the parser.
-  final ScrollbackSpool _spool = ScrollbackSpool();
-
   IngestTier _tier = IngestTier.hot;
 
-  /// The scrollback this pane gives up while it is cold.
-  late final ScrollbackPark _park = ScrollbackPark(terminal);
-
-  /// What keeps the pane's *screen* current while its scrollback is parked, so
-  /// a detached session does not go dark for the status sources.
-  late final ColdScreen _coldScreen;
+  /// Where this pane's output goes, and what redraws its screen, while nobody
+  /// can see it. Also what decides whether it parks at all.
+  late final ColdIngest _cold;
 
   @override
   IngestTier get ingestTier => _tier;
 
   @override
-  String? get parkedScrollback => _park.parked;
+  String? get parkedScrollback => _cold.parkedScrollback;
 
   /// This pane's buffer, once its process has gone and while the buffer really
   /// is the history.
@@ -349,24 +441,21 @@ class PtyTerminalInstance
   /// a stale TUI frame.
   @override
   Terminal? get adoptableBuffer =>
-      _exited && !_park.isParked && !terminal.isUsingAltBuffer ? terminal : null;
+      _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
 
-  /// Bytes the spool discarded while this pane was cold. Diagnostics, and what
-  /// the replay reads to decide whether to admit to a gap.
+  /// Bytes this pane is holding for a replay. Diagnostics, and what the
+  /// ingest-tier tests assert on.
   @visibleForTesting
-  int get spooledBytes => _spool.length;
+  int get spooledBytes => _cold.spooledBytes;
 
-  /// Reads the pipe. A pane nobody can see does not parse: its bytes go
-  /// straight into a bounded spool, undecoded, and are replayed only if the
-  /// session comes back. Something still has to *read* the pipe, or the child
-  /// blocks on a full OS buffer.
+  /// Reads the pipe. A pane nobody can see does not parse its output stream:
+  /// its bytes go to [ColdIngest], which keeps only the screen readable and
+  /// holds the rest undecoded. Something still has to *read* the pipe, or the
+  /// child blocks on a full OS buffer.
   void _onPtyBytes(Uint8List bytes) {
     if (_disposed) return;
     if (_tier == IngestTier.cold) {
-      _spool.add(bytes);
-      // The spool is what the pane replays when it comes back; this is what
-      // anyone reading the grid meanwhile sees.
-      _coldScreen.add(bytes);
+      _cold.add(bytes);
       return;
     }
     _coalescer.add(bytes);
@@ -379,10 +468,9 @@ class PtyTerminalInstance
     _tier = tier;
     _coalescer.tier = tier;
     if (tier == IngestTier.cold) {
-      // Take what is already queued with us rather than parsing it on the way
-      // out: going cold must not cost a flush.
-      _spool.add(_coalescer.takePending());
-      if (_park.park()) {
+      // Hand over what is already queued rather than parsing it on the way out:
+      // going cold must not cost a flush of the coalescer.
+      if (_cold.detach(_coalescer.takePending())) {
         // The blocks whose prompt line just went are what held those lines
         // alive, through their anchors; dropping them is what actually releases
         // the memory. A replayed window carries no OSC 133 markers anyway, so
@@ -390,52 +478,18 @@ class PtyTerminalInstance
         commandBlocks?.tracker.pruneEvicted();
       }
     } else if (wasCold) {
-      // Before the replay, not after: what the screen refresh drew is about to
-      // be written again, in order, from the spool.
-      _coldScreen.reset();
-      _park.unpark();
-      _replaySpool();
+      _cold.reattach();
     }
   }
 
-  /// Writes text the app generated wherever this pane's output is going.
-  ///
-  /// A cold pane is not parsing, so its notice belongs in the spool among the
-  /// process output it arrived with — writing it into a parked buffer would put
-  /// it above history that came before it.
+  /// Writes text the app generated wherever this pane's output is going — the
+  /// buffer while it is visible, and [ColdIngest] while it is not.
   void _emit(String text) {
     if (_tier == IngestTier.cold) {
-      _spool.add(const Utf8Encoder().convert(text));
-      // "[process exited]" is the one notice that cannot wait for an interval:
-      // nothing further is ever going to arrive to carry it.
-      _coldScreen.write(text);
+      _cold.emit(text);
       return;
     }
     terminal.write(text);
-  }
-
-  /// Writes what arrived while this pane was cold into its buffer.
-  ///
-  /// One write, bounded by the spool's own cap, so bringing a session back is
-  /// a single parse of at most a few hundred screens rather than however much
-  /// the process produced while it was away.
-  void _replaySpool() {
-    final dropped = _spool.droppedBytes;
-    final bytes = _spool.drain();
-    _spool.reset();
-    if (bytes.isEmpty && dropped == 0) return;
-    if (dropped > 0) {
-      // Bytes below a kibibyte rather than a rounded-down "0 KiB", which reads
-      // as a bug in the notice rather than as a small gap in the output.
-      final lost = dropped >= 1024 ? '${dropped ~/ 1024} KiB' : '$dropped bytes';
-      terminal.write(
-        '\r\n\x1b[90m[\u2026 $lost of output while detached was '
-        'dropped]\x1b[0m\r\n',
-      );
-    }
-    if (bytes.isNotEmpty) {
-      terminal.write(const Utf8Decoder(allowMalformed: true).convert(bytes));
-    }
   }
 
   @override
@@ -449,6 +503,9 @@ class PtyTerminalInstance
     // and a ValueNotifier throws if written to after disposal.
     _liveness.value = PaneLiveness.exited;
     _liveness.dispose();
+    // After this the tracker ignores OSC rather than writing to a disposed
+    // notifier — the parser can still flush a sequence it was part-way through.
+    _cwd.dispose();
     unawaited(_outputSubscription.cancel());
     _coalescer.dispose();
     focusNode.dispose();
@@ -569,6 +626,13 @@ class ErrorTerminalInstance implements TerminalInstance {
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// An error pane never started a shell, so nothing can ever report a `cd`.
+  @override
+  late final ValueListenable<String?> directory = UnchangingValue(
+    workingDirectory,
+  );
+
   @override
   final AgentPaneLaunch? agentLaunch;
   @override
@@ -629,6 +693,12 @@ class _Constant<T> implements ValueListenable<T> {
 /// terminal, and — once a pane records a launch command rather than just a
 /// profile — would re-execute it. A dormant pane re-executes nothing; the user
 /// starts it, or does not.
+///
+/// A launch does restart *some* panes now — the shells of the active tab that
+/// were running when the app closed. Those are built as live panes instead of
+/// this one, so nothing here changed: the argument above is still the reason
+/// every other stored pane arrives dormant. `shouldRestartOnLaunch` is where
+/// the line is drawn.
 class DormantTerminalInstance
     implements TerminalInstance, AdoptableTerminalInstance {
   DormantTerminalInstance({
@@ -648,6 +718,14 @@ class DormantTerminalInstance
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// Replayed history with nothing running behind it: the directory it holds is
+  /// the one the pane was last observed in, and nothing here can move it.
+  @override
+  late final ValueListenable<String?> directory = UnchangingValue(
+    workingDirectory,
+  );
+
   @override
   final AgentPaneLaunch? agentLaunch;
 
@@ -818,7 +896,7 @@ TerminalInstance createPtyTerminalInstance({
       adoptTerminal: adoptTerminal,
     );
   } catch (e) {
-    final args = launch.arguments.join(' ');
+    final args = describeLaunchArguments(launch.arguments);
     return ErrorTerminalInstance(
       id: id,
       title: title,
@@ -833,3 +911,26 @@ TerminalInstance createPtyTerminalInstance({
     );
   }
 }
+
+/// The longest an argument may be before it is summarised rather than printed.
+///
+/// Generous enough that an ordinary path, flag or prompt fragment survives
+/// whole: what this is for is the outliers.
+const int _maxArgumentInMessage = 120;
+
+/// [arguments] as one line, with anything unreadably long summarised.
+///
+/// A shell-integrated PowerShell pane is launched with `-EncodedCommand` and a
+/// base64 blob that runs to ~4,600 characters. Printed verbatim into a pane
+/// that failed to start, it pushed the one sentence that explains the failure —
+/// the exception, at the end — off the visible buffer, so the error message
+/// hid its own error message. The length is kept because "it was 4,612
+/// characters" is occasionally the diagnosis, and the flag before it is kept
+/// because that is what says which argument got elided.
+String describeLaunchArguments(List<String> arguments) => [
+  for (final argument in arguments)
+    if (argument.length <= _maxArgumentInMessage)
+      argument
+    else
+      '<${argument.length} characters elided>',
+].join(' ');

@@ -432,7 +432,7 @@ void main() {
     // real control server, a real config file written to disk by a real
     // launch, the URL read back out of that file, a real HTTP request to it,
     // and a tool that answers about the caller without being told who it is.
-    final tmp = Directory.systemTemp.createTempSync('chitra_mcp_e2e_');
+    final tmp = Directory.systemTemp.createTempSync('karmashala_mcp_e2e_');
     addTearDown(() {
       if (tmp.existsSync()) tmp.deleteSync(recursive: true);
     });

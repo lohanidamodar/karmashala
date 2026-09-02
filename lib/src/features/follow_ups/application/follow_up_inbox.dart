@@ -5,7 +5,7 @@ import '../../notifications/domain/agent_session_key.dart';
 import '../../notifications/domain/inbox_item.dart';
 import '../../notifications/domain/watched_session.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../domain/follow_up.dart';
 import 'follow_up_providers.dart';
 
@@ -29,13 +29,24 @@ import 'follow_up_providers.dart';
 /// no read at all.
 final openFollowUpsProvider = Provider<List<InboxItem>>((ref) {
   ref.watch(sessionEndingObserverProvider);
-  ref.watch(sessionsRevisionProvider);
+  // It draws each session's name, so a rename does have to reach it. What no
+  // longer reaches it is a permission mode, a pane move or a project rescan.
+  ref.watchSessionKinds(const {
+    SessionChangeKind.membership,
+    SessionChangeKind.title,
+    SessionChangeKind.status,
+  });
 
   final open = ref.read(followUpDaoProvider).open();
   if (open.isEmpty) return const [];
 
+  // Only the rows this list is about. It used to scan the whole table to build
+  // a lookup for at most a couple of hundred follow-ups — the cost the user
+  // paid was every session they had ever opened, on every rename.
   final sessions = {
-    for (final session in ref.read(sessionDaoProvider).getAll())
+    for (final session in ref
+        .read(sessionDaoProvider)
+        .getByIds(open.map((followUp) => followUp.sessionId)))
       session.id: session,
   };
   final agentIdByInstallation = {

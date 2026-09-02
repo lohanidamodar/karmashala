@@ -13,6 +13,7 @@ import 'src/core/database/app_database.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/logging/app_logger.dart';
+import 'src/core/logging/build_identity.dart';
 import 'src/core/logging/diagnostics.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/process/local_command_runner.dart';
@@ -54,7 +55,11 @@ Future<void> main() async {
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');
 
-  logger.info('Starting Karmashala.');
+  // Which build, on what OS — the first line of the buffer, so it is the first
+  // line of the file and of anything copied out of the panel. A log that does
+  // not say which version wrote it cannot answer whether the fix under
+  // discussion was even present.
+  logger.info('Starting ${buildIdentity()}');
   // Opening the file needs `path_provider`, which is hundreds of milliseconds
   // into the launch — so it backfills the buffer rather than starting blank,
   // and the launch does not wait for it.

@@ -31,6 +31,16 @@ class ChatMessage {
 /// note records as where it came from.
 typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
 
+/// An extra widget to hang under one message's body, given the message and its
+/// index in the whole transcript. Null — the answer for almost every row —
+/// leaves that row exactly as it was.
+///
+/// The one caller is the subagent a `Task` call spawned. It is a builder rather
+/// than a field on [ChatMessage] because what hangs there is a *widget* with
+/// its own state and its own reads, and the transcript's message type is shared
+/// with the remote and companion payloads, which have no widgets at all.
+typedef MessageDetailBuilder = Widget? Function(ChatMessage message, int ordinal);
+
 /// A CLI-style conversation list: user turns, agent replies and tool lines,
 /// rendered close to how Claude Code / Codex print them. Long transcripts start
 /// anchored at the newest message and load earlier turns on demand (a header
@@ -42,6 +52,7 @@ class ChatTranscriptView extends StatefulWidget {
     this.emptyHint = 'No messages yet.',
     this.onSaveNote,
     this.resolveHostPath,
+    this.detailBuilder,
     super.key,
   });
 
@@ -62,6 +73,9 @@ class ChatTranscriptView extends StatefulWidget {
   /// knows nothing about the Notes feature or the setting behind it, only
   /// whether it was given somewhere to send one.
   final SaveNoteCallback? onSaveNote;
+
+  /// What, if anything, hangs under a given row — see [MessageDetailBuilder].
+  final MessageDetailBuilder? detailBuilder;
 
   @override
   State<ChatTranscriptView> createState() => _ChatTranscriptViewState();
@@ -160,6 +174,10 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                     return _ChatMessageTile(
                       message: message,
                       resolveHostPath: widget.resolveHostPath,
+                      detail: widget.detailBuilder?.call(
+                        message,
+                        start + offset,
+                      ),
                       onSaveNote: widget.onSaveNote == null
                           ? null
                           : () => widget.onSaveNote!(message, start + offset),
@@ -178,10 +196,14 @@ class _ChatMessageTile extends StatelessWidget {
     required this.message,
     this.onSaveNote,
     this.resolveHostPath,
+    this.detail,
   });
   final ChatMessage message;
   final VoidCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
+
+  /// Hung under the body, indented with it: the subagent this row spawned.
+  final Widget? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -249,6 +271,7 @@ class _ChatMessageTile extends StatelessWidget {
                       height: 1.35,
                     ),
                   ),
+                ?detail,
               ],
             ),
           ),

@@ -90,6 +90,12 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // an unchanged directory changes nothing the first run did not.
       'project_rescan': McpToolAnnotations(idempotent: true),
       'select_checkout': McpToolAnnotations(idempotent: true),
+      // Makes a directory and a branch. Not idempotent: the second call finds
+      // its own first call in the way and is refused.
+      'worktree_create': McpToolAnnotations(),
+      // Deletes a working tree. The one tool here that can take a directory
+      // away, which is why it refuses on anything it cannot read.
+      'worktree_remove': McpToolAnnotations(destructive: true),
 
       // Sessions.
       'list_sessions': McpToolAnnotations.read,
