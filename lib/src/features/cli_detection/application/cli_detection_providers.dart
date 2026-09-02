@@ -384,7 +384,7 @@ final conversationPresenceProvider = Provider<ConversationPresenceProbe>((ref) {
 });
 
 final cliSessionMutatorProvider = Provider<CliSessionMutator>(
-  (ref) => const CliSessionMutator(),
+  (ref) => CliSessionMutator(),
 );
 
 /// Detects projects/sessions from the Claude Code and Codex CLI stores, merges

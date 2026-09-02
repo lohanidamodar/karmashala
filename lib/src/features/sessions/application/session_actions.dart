@@ -11,6 +11,7 @@ import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/detected_project_merger.dart';
+import '../../cli_detection/data/cli_session_mutator.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/detected_session.dart';
 import '../../cli_detection/domain/imported_session.dart';
@@ -112,6 +113,33 @@ class SessionActions {
       // CLI store unavailable — the workspace title is still updated.
     }
     _publish(SessionChange.renamed(session.id));
+  }
+
+  /// Removes [sessions] from their agents' own stores as **one batch**.
+  ///
+  /// Workspace rows are not touched: the caller that has a cascade — deleting a
+  /// whole project — has already dropped them, and this is the half that
+  /// reaches outside the app. Never throws; what could not be removed comes
+  /// back in the report so a locked file is *told to the user* rather than
+  /// swallowed by the `catch (_)` this replaces.
+  ///
+  /// Logged after the fact, like [deleteNative], so the line means the
+  /// transcripts are gone rather than that we tried.
+  Future<CliDeleteReport> purgeFromCliStore(
+    List<ImportedSession> sessions,
+  ) async {
+    if (sessions.isEmpty) return CliDeleteReport.empty;
+    // Resolved before the first await: this may outlive the container that
+    // started it, and a provider read afterwards would throw.
+    final mutator = _ref.read(cliSessionMutatorProvider);
+    final report = await mutator.deleteAll(sessions.map(_toDetected));
+    if (report.deleted > 0) {
+      _log.info(
+        'Deleted ${report.deleted} session file(s) from the CLI store '
+        '(${report.failures.length} left behind).',
+      );
+    }
+    return report;
   }
 
   Future<void> deleteImported(
@@ -789,6 +817,11 @@ class SessionActions {
     cwd: EnvironmentPath(environmentId: session.environmentId, path: ''),
     filePath: session.filePath,
     storeHome: session.storeHome,
+    // Carried so a failure can be reported in the session's own name. Without
+    // them `displayTitle` falls back to "(empty session)", which is what a
+    // "could not be deleted" notification would otherwise have called it.
+    title: session.title,
+    preview: session.preview,
   );
 
   /// The coarse word, for the paths that genuinely move several things at
