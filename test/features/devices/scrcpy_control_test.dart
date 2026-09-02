@@ -238,4 +238,23 @@ void _keyboardWire() {
       expect(chunks.join(), 'é' * 200);
     });
   });
+
+  group('RESET_VIDEO', () {
+    test('is type 17, read out of the jar this app deploys', () {
+      // Not from documentation, and not from the internet: the numbering has
+      // moved between scrcpy releases, and a wrong byte here is a *valid*
+      // message meaning something else. In `assets/scrcpy/scrcpy-server`'s
+      // `classes.dex`, `com.genymobile.scrcpy.control.ControlMessage` declares
+      // `TYPE_RESET_VIDEO` = 17.
+      expect(ScrcpyControlType.resetVideo, 17);
+    });
+
+    test('is exactly one byte', () {
+      // `ControlMessageReader.read`'s packed-switch routes key 17 to
+      // `ControlMessage.createEmpty(type)` — the arm shared by every message
+      // with no payload. Anything sent after the type byte would be read as
+      // the next message's type and desynchronise the socket permanently.
+      expect(encodeResetVideo(), [17]);
+    });
+  });
 }

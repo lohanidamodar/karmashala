@@ -57,15 +57,19 @@ class FakeScrcpyDevice {
   FakeScrcpyDevice._(this._server) {
     _server.listen((socket) {
       _sockets.add(socket);
+      final isVideo = _sockets.length.isOdd;
       socket.listen(
-        (_) {},
+        (data) {
+          // Only the control socket ever carries client→server bytes.
+          if (!isVideo) controlBytes.addAll(data);
+        },
         onDone: () => _closedByHost += 1,
         onError: (Object _) => _closedByHost += 1,
       );
       // Each session opens video first and control second, so every odd
       // arrival is a video socket — and a restart's new session must be fed
       // too, or it never sees the bytes that prove the stream is up.
-      if (_sockets.length.isOdd) {
+      if (isVideo) {
         _videoSockets.add(socket);
         socket.add(scrcpyOpeningBytes());
       }
@@ -82,6 +86,9 @@ class FakeScrcpyDevice {
 
   /// Every scrcpy server process the app asked this device to start.
   final List<FakeProcessHandle> handles = [];
+
+  /// Everything the app has written down the control socket, in order.
+  final List<int> controlBytes = [];
 
   /// The scids of servers the device believes are still running: started and
   /// not yet `pkill`ed. This is the leak, stated from the device's side.

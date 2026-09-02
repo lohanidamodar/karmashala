@@ -385,6 +385,22 @@ class DeviceStreamSession {
   /// [StreamClocks.watching].
   void setWatched(bool value) => mark.watching = value;
 
+  /// Asks the device to restart video capture, over the control socket.
+  ///
+  /// The cheapest recovery there is: the server drops its encoder and brings a
+  /// new one up on the same sockets, so a fresh codec config and keyframe
+  /// arrive within a frame or two. Nothing is torn down — not the process, not
+  /// the forward, not the sockets, not the player — so the picture does not
+  /// blink and no port churns.
+  ///
+  /// Returns false when there is no control socket to ask down, which is the
+  /// caller's cue that only the destructive steps are available.
+  bool requestVideoReset() {
+    final connection = control;
+    if (connection == null) return false;
+    return connection.send(encodeResetVideo());
+  }
+
   Future<void> stop() => onStop();
 }
 

@@ -197,6 +197,49 @@ void main() {
       expect(seen.last.needsRestart, isTrue);
     });
 
+    test('a frozen picture can be repaired without tearing anything down',
+        () async {
+      // The cheapest rung of the ladder, end to end: one byte down the control
+      // socket the app already holds. The server answers it by restarting
+      // video capture — a fresh config and keyframe — with the process, the
+      // forward, both sockets and the player left exactly as they are.
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final runner = device.runner();
+      final session = await fakeStreamService(runner).start('F6IZLV6LMFT4U4ZT');
+      addTearDown(session.stop);
+
+      expect(session.requestVideoReset(), isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(
+        device.controlBytes,
+        [17],
+        reason: 'TYPE_RESET_VIDEO, and nothing after it: the server reads one '
+            'byte, so a payload would be read as the next message type',
+      );
+      // Nothing was torn down to do it.
+      expect(device.runningScids, hasLength(1));
+      expect(device.socketsClosedByHost, 0);
+      expect(runner.startRequests, hasLength(1));
+    });
+
+    test('a session with no control socket says the rung is unavailable',
+        () async {
+      // Not an error: `adb shell input` still drives the device. But the cheap
+      // recovery is gone, which is what the caller needs to know.
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT', useControlSocket: false);
+      addTearDown(session.stop);
+
+      expect(session.control, isNull);
+      expect(session.requestVideoReset(), isFalse);
+      expect(device.controlBytes, isEmpty);
+    });
+
     test('a closed socket is ended, and that is a fault', () async {
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);

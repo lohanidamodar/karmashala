@@ -31,7 +31,32 @@ abstract final class ScrcpyControlType {
   static const int injectTouchEvent = 2;
   static const int injectScrollEvent = 3;
   static const int backOrScreenOn = 4;
+
+  /// Restart video capture: a fresh codec config and a fresh keyframe, with
+  /// nothing torn down.
+  ///
+  /// **17, read out of the jar this app deploys**, not from documentation: the
+  /// numbering has moved between scrcpy releases, and a wrong byte here is a
+  /// *valid* message meaning something else — 17 is `TYPE_START_APP` in some
+  /// versions and `TYPE_UHID_INPUT` in others. In
+  /// `assets/scrcpy/scrcpy-server`'s `classes.dex`,
+  /// `com.genymobile.scrcpy.control.ControlMessage` declares
+  /// `TYPE_RESET_VIDEO` with value 17, and `ControlMessageReader.read`'s
+  /// packed-switch (23 arms, first key 0) routes key 17 to
+  /// `ControlMessage.createEmpty(type)` — the arm shared by every message that
+  /// carries **no payload**. The server answers it in `Controller.resetVideo`:
+  /// `Ln.i("Video capture reset")` then
+  /// `surfaceCapture.getCaptureControl().reset(RESET_REASON_CLIENT_RESET /* 4 */)`.
+  static const int resetVideo = 17;
 }
+
+/// The whole `RESET_VIDEO` message: the type byte and nothing else.
+///
+/// One byte because the server's reader consumes one — see
+/// [ScrcpyControlType.resetVideo]. Sending a payload after it would be read as
+/// the *next* message's type and desynchronise the control socket for good.
+Uint8List encodeResetVideo() =>
+    Uint8List.fromList(const [ScrcpyControlType.resetVideo]);
 
 /// The `MotionEvent.ACTION_*` values a touch message may carry.
 ///
