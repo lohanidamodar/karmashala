@@ -262,4 +262,52 @@ void main() {
       expect(status.lanHint, announced.lanHint);
     });
   });
+
+  group("an approval request's wait kind is additive too", () {
+    test('an old host names none, and the phone assumes nothing', () {
+      // The bug this field exists for: that host sent approve/deny keys for
+      // any session that had stopped for the user, including one merely
+      // sitting at its own prompt. A new phone can only read what it is told,
+      // and what it is told here is nothing.
+      final request = RemoteApprovalRequest.fromJson(const {
+        'sessionId': 's1',
+        'evidence': ['Run the tests?'],
+        'approve': 'Approve',
+      });
+
+      expect(request.waiting, RemoteWaitKind.unrecorded);
+      expect(request.approveLabel, 'Approve');
+    });
+
+    test('a word this build has never heard reads as unrecorded', () {
+      final request = RemoteApprovalRequest.fromJson(const {
+        'sessionId': 's1',
+        'waiting': 'elicitation',
+      });
+
+      expect(request.waiting, RemoteWaitKind.unrecorded);
+    });
+
+    test('each kind round-trips through the envelope', () {
+      for (final kind in RemoteWaitKind.values) {
+        final decoded = Envelope.fromBytes(
+          Envelope.of(
+            FrameType.approvalRequested,
+            seq: 11,
+            payload: RemoteApprovalRequest(
+              sessionId: 's1',
+              evidence: const ['Run the tests?'],
+              waiting: kind,
+              approveLabel: kind == RemoteWaitKind.approval ? 'Approve' : null,
+            ).toJson(),
+          ).toBytes(),
+        );
+
+        final request = RemoteApprovalRequest.fromJson(decoded.payload);
+
+        expect(request.waiting, kind, reason: kind.wire);
+        expect(request.evidence, ['Run the tests?']);
+      }
+    });
+  });
 }

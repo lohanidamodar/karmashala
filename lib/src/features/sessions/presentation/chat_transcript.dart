@@ -53,6 +53,7 @@ class ChatTranscriptView extends StatefulWidget {
     this.emptyHint = 'No messages yet.',
     this.onSaveNote,
     this.resolveHostPath,
+    this.onPathTap,
     this.detailBuilder,
     super.key,
   });
@@ -69,6 +70,11 @@ class ChatTranscriptView extends StatefulWidget {
   /// which is the rule the whole codebase follows (`PathTranslator`,
   /// `EditorActions.windowsPathFor`).
   final String? Function(String path)? resolveHostPath;
+
+  /// Where a file path a reader clicked goes — see [MarkdownMessage.onPathTap].
+  /// Null leaves every path as plain text, which is what a caller with no
+  /// session to resolve against should do.
+  final PathLinkCallback? onPathTap;
 
   /// Keeps a message as a note. Null hides the affordance entirely — the view
   /// knows nothing about the Notes feature or the setting behind it, only
@@ -175,6 +181,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                     return _ChatMessageTile(
                       message: message,
                       resolveHostPath: widget.resolveHostPath,
+                      onPathTap: widget.onPathTap,
                       detail: widget.detailBuilder?.call(
                         message,
                         start + offset,
@@ -197,11 +204,13 @@ class _ChatMessageTile extends StatelessWidget {
     required this.message,
     this.onSaveNote,
     this.resolveHostPath,
+    this.onPathTap,
     this.detail,
   });
   final ChatMessage message;
   final VoidCallback? onSaveNote;
   final String? Function(String path)? resolveHostPath;
+  final PathLinkCallback? onPathTap;
 
   /// Hung under the body, indented with it: the subagent this row spawned.
   final Widget? detail;
@@ -261,9 +270,10 @@ class _ChatMessageTile extends StatelessWidget {
                   ToolActivityBody(
                     activity: activity,
                     resolveHostPath: resolveHostPath,
+                    onPathTap: onPathTap,
                   )
                 else if (prose)
-                  MarkdownMessage(message.text)
+                  MarkdownMessage(message.text, onPathTap: onPathTap)
                 else
                   SelectableText(
                     message.text,

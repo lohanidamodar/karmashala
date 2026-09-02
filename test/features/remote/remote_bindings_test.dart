@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -23,6 +24,7 @@ import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala/src/features/remote/domain/remote_payloads.dart';
 import 'package:karmashala/src/features/remote/protocol.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/repositories/domain/repository.dart';
@@ -365,6 +367,198 @@ void main() {
         ),
       ),
     );
+  });
+
+  // --- Keys are offered for an open prompt, and for nothing else ------------
+  //
+  // `awaitingApproval` answers "is this session holding the user up" — the
+  // question the badge, the tray and the phone's attention row all ask. It
+  // does NOT answer "is a prompt open": Claude Code fires the same
+  // notification for a permission request and for the 60-second nudge after a
+  // turn ends, and a *worker's* prompt stops the session at a screen this
+  // session's Enter never reaches. The desktop card learned to tell them
+  // apart; the phone was still shown Approve and Deny for all three, and
+  // approve types Enter — which at an idle prompt submits whatever is in the
+  // composer.
+  group('the phone is offered keys only for a prompt a source could see', () {
+    ProviderContainer withReport(AgentStatusReport? report) {
+      final built = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          remoteDeliveryStageProvider.overrideWithValue(
+            (sessionId) async => 'working',
+          ),
+          remoteApprovalEvidenceProvider.overrideWithValue(
+            (sessionId) async => report,
+          ),
+          remoteSessionPresenceProvider.overrideWithValue(
+            (sessionId) => (note: null, lastSeen: null),
+          ),
+        ],
+      );
+      addTearDown(built.dispose);
+      return built;
+    }
+
+    /// A session on an agent that HAS named its keys, so a missing label can
+    /// only mean this code withheld it.
+    void seedClaudeSession(String id) {
+      AgentInstallationDao(db).insert(
+        AgentInstallation(
+          id: 'i2',
+          agentId: 'claudeCode',
+          executable: path(r'C:\bin\claude.exe'),
+          createdAt: now,
+        ),
+      );
+      SessionDao(db).insert(
+        Session(
+          id: id,
+          repositoryId: 'r1',
+          agentInstallationId: 'i2',
+          title: 'Fix the build',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: now,
+          surface: SessionSurface.external,
+        ),
+      );
+    }
+
+    AgentStatusReport stopped(AgentWaitKind waiting) => AgentStatusReport(
+      agentId: 'claudeCode',
+      sessionId: 'ext1',
+      status: AgentActivityStatus.awaitingApproval,
+      observedAt: now,
+      source: AgentStatusSource.hook,
+      evidence: const ['Claude needs your permission to use Bash'],
+      waiting: waiting,
+    );
+
+    test('an open prompt is sent with both of the keys the agent named',
+        () async {
+      seedWorkspace();
+      seedClaudeSession('c1');
+      final bindings = withReport(
+        stopped(AgentWaitKind.approval),
+      ).read(remoteHostBindingsProvider);
+
+      final request = await bindings.approvalEvidenceFor('c1');
+
+      expect(request.waiting, RemoteWaitKind.approval);
+      expect(request.approveLabel, 'Approve');
+      expect(request.denyLabel, 'Deny');
+      expect(request.evidence, [
+        'Claude needs your permission to use Bash',
+      ]);
+    });
+
+    test('a session at its own prompt is sent its words and no keys', () async {
+      seedWorkspace();
+      seedClaudeSession('c1');
+      final bindings = withReport(
+        stopped(AgentWaitKind.input),
+      ).read(remoteHostBindingsProvider);
+
+      final request = await bindings.approvalEvidenceFor('c1');
+
+      expect(request.waiting, RemoteWaitKind.input);
+      expect(request.approveLabel, isNull);
+      expect(request.denyLabel, isNull);
+      // The evidence still travels: the phone shows what the agent said, it
+      // just has nothing to press.
+      expect(request.evidence, [
+        'Claude needs your permission to use Bash',
+      ]);
+    });
+
+    test('a wait no source could name is sent no keys either', () async {
+      // `worker_permission_prompt` is the real one: a prompt drawn somewhere
+      // this session's Enter does not land.
+      seedWorkspace();
+      seedClaudeSession('c1');
+      final bindings = withReport(
+        stopped(AgentWaitKind.unrecorded),
+      ).read(remoteHostBindingsProvider);
+
+      final request = await bindings.approvalEvidenceFor('c1');
+
+      expect(request.waiting, RemoteWaitKind.unrecorded);
+      expect(request.approveLabel, isNull);
+      expect(request.denyLabel, isNull);
+    });
+
+    test('a session that is not stopped at all carries nothing', () async {
+      seedWorkspace();
+      seedClaudeSession('c1');
+      final bindings = withReport(
+        AgentStatusReport(
+          agentId: 'claudeCode',
+          sessionId: 'ext1',
+          status: AgentActivityStatus.working,
+          observedAt: now,
+          source: AgentStatusSource.hook,
+          evidence: const ['still going'],
+          // A stale wait kind from an earlier report must not resurrect keys
+          // for a session that is working.
+          waiting: AgentWaitKind.approval,
+        ),
+      ).read(remoteHostBindingsProvider);
+
+      final request = await bindings.approvalEvidenceFor('c1');
+
+      expect(request.waiting, RemoteWaitKind.unrecorded);
+      expect(request.evidence, isEmpty);
+      expect(request.approveLabel, isNull);
+      expect(request.denyLabel, isNull);
+    });
+
+    test('and the key is refused at the press, not only withheld from the '
+        'card', () async {
+      // The other half of the same rule: a phone holding a stale card, or an
+      // older build that was handed labels it should not have been, must not
+      // be able to type Enter into a session that merely finished its turn.
+      seedWorkspace();
+      seedClaudeSession('c1');
+      final bindings = withReport(
+        stopped(AgentWaitKind.input),
+      ).read(remoteHostBindingsProvider);
+
+      await expectLater(
+        bindings.answerApproval('c1', 'approve'),
+        throwsA(
+          isA<RemoteApiRefusal>()
+              .having((r) => r.code, 'code', ErrorCode.badRequest)
+              .having(
+                (r) => r.message,
+                'message',
+                contains('no prompt open'),
+              ),
+        ),
+      );
+    });
+
+    test('an open prompt gets past that guard and stops on the terminal',
+        () async {
+      seedWorkspace();
+      seedClaudeSession('c1');
+      final bindings = withReport(
+        stopped(AgentWaitKind.approval),
+      ).read(remoteHostBindingsProvider);
+
+      // No live pane in this container, so the press itself has nowhere to
+      // land — which is the refusal that proves the wait-kind guard passed.
+      await expectLater(
+        bindings.answerApproval('c1', 'approve'),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('no live terminal'),
+          ),
+        ),
+      );
+    });
   });
 
   // --- A conversation the desktop has reconciled ----------------------------

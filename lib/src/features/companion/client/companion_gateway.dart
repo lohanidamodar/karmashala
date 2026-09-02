@@ -312,6 +312,7 @@ class CompanionApproval {
     required this.sessionId,
     required this.agentName,
     this.evidence = const [],
+    this.waiting = RemoteWaitKind.unrecorded,
     this.approveLabel,
     this.approveEffect,
     this.denyLabel,
@@ -321,6 +322,11 @@ class CompanionApproval {
   final String id;
   final String sessionId;
   final String agentName;
+
+  /// What the host says the session is waiting on. [RemoteWaitKind.input] is
+  /// a notice, never an approval — the agent is at its own prompt and the
+  /// answer is a message, not a key.
+  final RemoteWaitKind waiting;
 
   /// Rendered terminal rows or the hook's message, exactly as received. Empty
   /// means "we can tell it is asking, but not what".

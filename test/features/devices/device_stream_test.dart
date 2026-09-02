@@ -232,7 +232,16 @@ void main() {
       expect(ended.isHealthy, isFalse);
     });
 
-    test('only the live state is healthy', () {
+    test('a device with nothing new to show is healthy, and stays up', () {
+      // The distinction the restart loop turned on: frame silence is what an
+      // untouched device looks like, so it is neither unhealthy nor a reason
+      // to tear a working stream down.
+      const idle = DeviceStreamHealth(
+        state: DeviceStreamState.idle,
+        detail: 'No screen changes for 20s.',
+      );
+      expect(idle.isHealthy, isTrue);
+      expect(idle.needsRestart, isFalse);
       expect(
         const DeviceStreamHealth(
           state: DeviceStreamState.live,
@@ -240,6 +249,17 @@ void main() {
         ).isHealthy,
         isTrue,
       );
+    });
+
+    test('only a broken pipeline is worth a restart', () {
+      for (final state in DeviceStreamState.values) {
+        expect(
+          DeviceStreamHealth(state: state, detail: '').needsRestart,
+          state == DeviceStreamState.stalled ||
+              state == DeviceStreamState.ended,
+          reason: '$state',
+        );
+      }
     });
   });
 }

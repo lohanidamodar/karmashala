@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
@@ -96,3 +99,120 @@ final directoryListingProvider = FutureProvider.autoDispose
       ref.watch(fileListingRefreshProvider);
       return ref.read(fileListingServiceProvider).list(windowsDir);
     });
+
+/// What a host path is. Asked **once per click**, never while rendering.
+///
+/// A seam, because that is the claim this feature has to keep: the transcript
+/// decides what to underline on shape alone, and the only `stat` in the whole
+/// path happens here, after the reader has asked for something.
+typedef HostPathProbe = FileSystemEntityType Function(String hostPath);
+
+final hostPathProbeProvider = Provider<HostPathProbe>(
+  (ref) => (path) {
+    try {
+      return FileSystemEntity.typeSync(path, followLinks: true);
+    } on FileSystemException {
+      // A path this platform rejects, or a share that went away. Not there is
+      // the honest answer, and it is the one the caller can say out loud.
+      return FileSystemEntityType.notFound;
+    }
+  },
+);
+
+/// A path the Files panel should open down to and select.
+@immutable
+class FileRevealTarget {
+  const FileRevealTarget({required this.hostPath, required this.isDirectory});
+
+  /// The host path, spelled the way [DirEntry.windowsPath] spells one — the
+  /// listing runs on the host through `dart:io`, so the tree and the target
+  /// have to agree on that.
+  final String hostPath;
+
+  /// A file is selected; a folder is only opened. Nothing is *opened in an
+  /// editor* either way — the pane already does that when a row is tapped, and
+  /// a second, deliberate click is where that belongs.
+  final bool isDirectory;
+
+  @override
+  bool operator ==(Object other) =>
+      other is FileRevealTarget &&
+      other.hostPath == hostPath &&
+      other.isDirectory == isDirectory;
+
+  @override
+  int get hashCode => Object.hash(hostPath, isDirectory);
+}
+
+/// What one row has to do about the current [FileRevealTarget].
+enum FileRevealRole {
+  /// Nothing. The answer for every row but the handful on the way down.
+  none,
+
+  /// An ancestor of the target: open, so the next one down can be listed.
+  onTheWay,
+
+  /// The target itself: select it, and scroll it into view.
+  target,
+}
+
+/// Where the Files panel has been asked to go, or null.
+///
+/// Held rather than fired as an event because it is *selection*, not an
+/// action: the row stays highlighted after the tree has finished opening, and
+/// a target that arrives while the panel is closed is still there when it
+/// opens. The panel drives itself down to it — see [FileRevealRole].
+class FileRevealController extends Notifier<FileRevealTarget?> {
+  @override
+  FileRevealTarget? build() => null;
+
+  void reveal(FileRevealTarget target) => state = target;
+
+  void clear() => state = null;
+}
+
+final fileRevealTargetProvider =
+    NotifierProvider<FileRevealController, FileRevealTarget?>(
+      FileRevealController.new,
+    );
+
+/// One host path, in the form two of them can be compared in.
+///
+/// Case-folded because the two hosts this app is used on — Windows and macOS —
+/// have case-insensitive filesystems, and a target that came from a transcript
+/// is spelled by an agent rather than by the listing. On Linux this can in
+/// principle match the wrong one of two files differing only in case; the cost
+/// is selecting the neighbour, and the alternative is failing to select
+/// anything on the two platforms that matter most.
+String fileTreeKey(String path) {
+  var normalized = path.replaceAll(r'\', '/').toLowerCase();
+  while (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.substring(0, normalized.length - 1);
+  }
+  return normalized;
+}
+
+/// Whether [path] is [root] or lives under it.
+bool isUnderFileTreeRoot(String root, String path) {
+  final rootKey = fileTreeKey(root);
+  final key = fileTreeKey(path);
+  return key == rootKey || key.startsWith('$rootKey/');
+}
+
+/// What [entryPath] has to do about [target].
+///
+/// A pure function so a row can ask it inside a `select`: every row runs this
+/// on every change of the target, but only the handful whose answer *changed*
+/// is rebuilt.
+FileRevealRole fileRevealRoleFor(
+  FileRevealTarget? target,
+  String entryPath, {
+  required bool isDirectory,
+}) {
+  if (target == null) return FileRevealRole.none;
+  final wanted = fileTreeKey(target.hostPath);
+  final here = fileTreeKey(entryPath);
+  if (wanted == here) return FileRevealRole.target;
+  if (isDirectory && wanted.startsWith('$here/')) return FileRevealRole.onTheWay;
+  return FileRevealRole.none;
+}

@@ -128,18 +128,28 @@ class AgentStateFileStatusSource {
       return (AgentActivityStatus.awaitingApproval, approval);
     }
 
-    final idle = _firstMatch(rules.idle, record);
-    if (idle != null) return (AgentActivityStatus.idle, idle);
-
+    // **Working before idle**, matching `TerminalGridStatusSource`'s order and
+    // for the same reason: one record can satisfy both, and only the working
+    // rule is looking at something specific. A Claude Code tool call is an
+    // assistant record — the idle shape — that also carries an unanswered
+    // `tool_use` block, and claiming idle there is what tells a user their work
+    // is finished while a subagent is still running.
     final working = _firstMatch(rules.working, record);
     if (working != null) {
       // An in-progress record only means "working" while the file is still
       // being written; otherwise the CLI exited mid-turn and we cannot say.
+      //
+      // A long tool call ages into `unknown` here rather than into `idle`,
+      // which is the point: `unknown` is not news and cannot fire a completion.
       final since = now.difference(modified);
       return since <= rules.activityWindow
           ? (AgentActivityStatus.working, working)
           : (AgentActivityStatus.unknown, 'stale: $working');
     }
+
+    final idle = _firstMatch(rules.idle, record);
+    if (idle != null) return (AgentActivityStatus.idle, idle);
+
     return (AgentActivityStatus.unknown, null);
   }
 

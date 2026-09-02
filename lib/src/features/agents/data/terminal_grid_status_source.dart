@@ -15,8 +15,25 @@ import '../domain/agent_status.dart';
 /// The input is already narrowed to the last handful of rows (see
 /// `terminalTailLines`), which is what keeps a phrase that scrolled past from
 /// being read as a live prompt. Within that window the order is
-/// failed → awaitingApproval → working → idle, so a prompt drawn over a spinner
-/// reads as waiting for the user rather than as busy.
+/// failed → awaitingApproval → working → idle.
+///
+/// **An approval is only claimed when the agent's own composer footer is not on
+/// the same screen.** The matchers are plain substrings of an agent's UI, so
+/// anything that puts those words on screen matches them — Claude Code's
+/// rate-limit banner (`Usage limit reached · continuing automatically at 5pm ·
+/// esc to cancel`, read off the shipped binary's own strings) sits above the
+/// composer and then continues by itself, and an agent that merely *writes*
+/// `Esc to cancel` in a message matches too. Both used to be reported as
+/// approvals, and Approve types Enter, which at a composer submits whatever is
+/// in it rather than confirming anything.
+///
+/// The corroborating fact comes from a real capture
+/// (`test/features/agents/fixtures/claude-code-permission-modal.raw`): a modal
+/// **replaces** the composer, so the footer that says `esc to interrupt` or
+/// `shift+tab to cycle` is missing for exactly as long as a prompt is open.
+/// Seeing that footer is therefore positive evidence that nothing is open over
+/// it, which is what the wait-kind comment below already claimed and the
+/// ordering did not honour.
 ///
 /// **It matches rendered characters, never the byte stream.** Both shipped
 /// agents position words with cursor-movement escapes rather than spaces, so
@@ -38,6 +55,12 @@ class TerminalGridStatusSource {
     final rules = descriptor.grid;
     if (rules.isEmpty || tailLines.isEmpty) return null;
 
+    // The agent's own composer footer, if it is drawn. Its presence is what
+    // disqualifies the approval bucket below — see the class doc.
+    final composer =
+        _firstMatch(rules.working, tailLines) ??
+        _firstMatch(rules.idle, tailLines);
+
     // The wait kind travels with the bucket that matched, because only this
     // source can see the difference: an approval matcher fires on a drawn modal
     // with options, and an idle matcher fires on the agent's own "I am at my
@@ -52,6 +75,9 @@ class TerminalGridStatusSource {
       (AgentActivityStatus.working, AgentWaitKind.unrecorded, rules.working),
       (AgentActivityStatus.idle, AgentWaitKind.input, rules.idle),
     ]) {
+      if (status == AgentActivityStatus.awaitingApproval && composer != null) {
+        continue;
+      }
       final hit = _firstMatch(matchers, tailLines);
       if (hit == null) continue;
       return AgentStatusReport(

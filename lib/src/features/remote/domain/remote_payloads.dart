@@ -332,12 +332,49 @@ class RemoteTranscriptPage {
   }
 }
 
+/// What a session that has stopped for the user is actually waiting on — the
+/// wire's copy of the desktop's `AgentWaitKind`.
+///
+/// "This session is holding you up" and "a prompt is open" are different
+/// facts, and only the second one may be answered with a keystroke: Claude
+/// Code fires the same notification when it wants permission and when it has
+/// merely finished a turn, and the approve key types Enter, which at an idle
+/// prompt submits whatever is in the composer. The host names [approval] only
+/// for a wait a status source could identify as one.
+enum RemoteWaitKind {
+  /// A prompt with options is open. Only here may a key be pressed for the
+  /// user, and only here does the host name answers.
+  approval('approval'),
+
+  /// The agent is at its own input with nothing to confirm — reply to it, do
+  /// not answer it.
+  input('input'),
+
+  /// No source could tell, or the host is older than this field. Treated like
+  /// [input] wherever a key would be pressed.
+  unrecorded('unrecorded');
+
+  const RemoteWaitKind(this.wire);
+
+  final String wire;
+
+  /// An absent or unknown word reads as [unrecorded]: the fail-safe direction
+  /// is always "we cannot tell whether a prompt is open".
+  static RemoteWaitKind parse(Object? wire) =>
+      _byWire[wire] ?? RemoteWaitKind.unrecorded;
+
+  static final Map<Object?, RemoteWaitKind> _byWire = {
+    for (final k in RemoteWaitKind.values) k.wire: k,
+  };
+}
+
 /// What `approval.requested` carries: the agent's own words, verbatim, or
 /// nothing — never a summary this code wrote.
 class RemoteApprovalRequest {
   const RemoteApprovalRequest({
     required this.sessionId,
     this.evidence = const [],
+    this.waiting = RemoteWaitKind.unrecorded,
     this.approveLabel,
     this.denyLabel,
   });
@@ -345,14 +382,20 @@ class RemoteApprovalRequest {
   final String sessionId;
   final List<String> evidence;
 
-  /// The answers the agent itself names. A missing label means that answer
-  /// does not exist for this agent, not that the phone should invent one.
+  /// What the host can tell the session is waiting on. Sent for every request
+  /// so the phone can word the card without guessing.
+  final RemoteWaitKind waiting;
+
+  /// The answers the agent itself names, and **only** for a prompt the host
+  /// can see ([RemoteWaitKind.approval]). A missing label means that answer
+  /// does not exist here, not that the phone should invent one.
   final String? approveLabel;
   final String? denyLabel;
 
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'evidence': evidence,
+    'waiting': waiting.wire,
     if (approveLabel != null) 'approve': approveLabel,
     if (denyLabel != null) 'deny': denyLabel,
   };
@@ -370,6 +413,7 @@ class RemoteApprovalRequest {
           for (final line in evidence)
             if (line is String) line,
       ],
+      waiting: RemoteWaitKind.parse(json['waiting']),
       approveLabel: json['approve'] is String
           ? json['approve']! as String
           : null,

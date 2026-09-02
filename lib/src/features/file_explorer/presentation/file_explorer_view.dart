@@ -22,6 +22,13 @@ double _indentFor(int depth) => Insets.md + depth * Chrome.treeIndent;
 /// is what stops two file names touching, not what separates sections.
 const double _rowPadY = 3;
 
+/// How many rows have been drawn. Test-only, and the only way to pin the claim
+/// that a reveal target rebuilds the rows *on the way to it* and no others: the
+/// panel routinely holds hundreds of rows, and rebuilding all of them because
+/// one is selected is the cost this feature must not add.
+@visibleForTesting
+int debugFileRowBuilds = 0;
+
 /// A lazy file/folder tree for the selected repository. Folders expand in place;
 /// tapping a file opens it in the configured code editor. Listing runs on the
 /// Windows host (WSL folders via their `\\wsl.localhost\…` form).
@@ -123,6 +130,10 @@ class _EntryRow extends ConsumerStatefulWidget {
 class _EntryRowState extends ConsumerState<_EntryRow> {
   bool _expanded = false;
 
+  /// Whether this row has already put itself on screen for the target it is.
+  /// Scrolling once is a reveal; scrolling on every rebuild fights the reader.
+  bool _scrolled = false;
+
   /// The row's path as the rest of the app spells one.
   ///
   /// `DirEntry.windowsPath` is already a host path — the listing runs on the
@@ -204,16 +215,66 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
     }
   }
 
+  /// Opens on the way down, and puts the target on screen once it exists.
+  ///
+  /// After the frame rather than during it, and deliberately without any
+  /// sequencing of its own: expanding mounts a `_DirChildren` whose listing is
+  /// async, and the rows that listing produces ask this same question in turn.
+  /// The tree therefore walks itself down one listing at a time, whether the
+  /// target arrived while the panel was open, closed, or halfway expanded.
+  void _followReveal(FileRevealRole role) {
+    if (role == FileRevealRole.none) {
+      _scrolled = false;
+      return;
+    }
+    // A folder is opened whether it is on the way down or the target itself:
+    // revealing a directory means showing what is in it.
+    if (widget.entry.isDirectory && !_expanded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _expanded = true);
+      });
+    }
+    if (role == FileRevealRole.target && !_scrolled) {
+      _scrolled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            alignment: 0.5,
+            duration: const Duration(milliseconds: 150),
+          );
+        }
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    debugFileRowBuilds++;
     final theme = Theme.of(context);
     final entry = widget.entry;
     final isDir = entry.isDirectory;
+    // `select` rather than a plain watch: every row re-runs this when a target
+    // arrives, but only the rows whose answer *changed* are rebuilt.
+    final role = ref.watch(
+      fileRevealTargetProvider.select(
+        (target) => fileRevealRoleFor(
+          target,
+          entry.windowsPath,
+          isDirectory: entry.isDirectory,
+        ),
+      ),
+    );
+    _followReveal(role);
+    final selected = role == FileRevealRole.target;
     final row = InkWell(
       onTap: isDir
           ? () => setState(() => _expanded = !_expanded)
           : _openInEditor,
-      child: Padding(
+      child: Container(
+        color: selected
+            ? theme.colorScheme.primary.withValues(alpha: 0.14)
+            : null,
         padding: EdgeInsets.only(
           left: _indentFor(widget.depth),
           top: _rowPadY,
@@ -253,10 +314,13 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
         ),
       ),
     );
-    final menu = ContextMenuRegion(
-      menuItems: _menuItems(),
-      onSelected: _onMenu,
-      child: row,
+    final menu = Semantics(
+      selected: selected,
+      child: ContextMenuRegion(
+        menuItems: _menuItems(),
+        onSelected: _onMenu,
+        child: row,
+      ),
     );
     if (!isDir || !_expanded) return menu;
     return Column(

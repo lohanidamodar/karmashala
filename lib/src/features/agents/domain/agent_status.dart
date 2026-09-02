@@ -147,10 +147,31 @@ class AgentStatusQuery {
 /// Matches one decoded state-file record by walking [path] into it and
 /// comparing the value's string form to [equals].
 class StateRecordMatcher {
-  const StateRecordMatcher(this.path, this.equals);
+  const StateRecordMatcher(this.path, this.equals) : elementField = null;
+
+  /// Matches when the **list** at [path] holds an object whose [elementField]
+  /// equals [equals].
+  ///
+  /// A record's `type` is not always enough to classify it. A Claude Code
+  /// transcript writes a tool call as an *assistant* record whose
+  /// `message.content` holds a `tool_use` block, and the matching `tool_result`
+  /// only arrives in a later user record — so the record that means "a turn is
+  /// in flight" and the record that means "the turn ended" have the same
+  /// `type`, and only the blocks inside tell them apart. Without this the
+  /// classifier reported a session waiting on a ten-minute subagent as
+  /// finished.
+  const StateRecordMatcher.anyIn(
+    this.path,
+    String this.elementField,
+    this.equals,
+  );
 
   final List<String> path;
   final String equals;
+
+  /// The field to compare inside each element of the list at [path], or `null`
+  /// for the plain form that compares the value at [path] itself.
+  final String? elementField;
 
   bool matches(Map<String, Object?> record) {
     Object? value = record;
@@ -158,11 +179,19 @@ class StateRecordMatcher {
       if (value is! Map) return false;
       value = value[segment];
     }
-    return value is String && value == equals;
+    final field = elementField;
+    if (field == null) return value is String && value == equals;
+    if (value is! List) return false;
+    for (final element in value) {
+      if (element is Map && element[field] == equals) return true;
+    }
+    return false;
   }
 
   @override
-  String toString() => '${path.join('.')}=$equals';
+  String toString() => elementField == null
+      ? '${path.join('.')}=$equals'
+      : '${path.join('.')}[].$elementField=$equals';
 }
 
 /// How to classify an agent's state file. All matcher lists are evaluated
@@ -203,6 +232,26 @@ enum AgentHookEntryStyle {
   flat,
 }
 
+/// What one of an agent's own event subtypes means, when its payload carries
+/// one.
+///
+/// Two facts rather than one because they answer different questions and the
+/// wrong pairing is what shipped: [status] decides whether the session is shown
+/// as holding the user up, [waiting] decides whether a key may be sent on the
+/// user's behalf.
+class AgentHookMeaning {
+  const AgentHookMeaning(
+    this.status, {
+    this.waiting = AgentWaitKind.unrecorded,
+  });
+
+  final AgentActivityStatus status;
+  final AgentWaitKind waiting;
+
+  @override
+  String toString() => 'AgentHookMeaning(${status.name}, ${waiting.name})';
+}
+
 /// How to install callbacks into an agent's own hook configuration, and what
 /// each callback means.
 class AgentHookSpec {
@@ -214,6 +263,8 @@ class AgentHookSpec {
     this.cwdPath = const ['cwd'],
     this.messagePath = const [],
     this.messageWaiting = const {},
+    this.eventKindPath = const [],
+    this.eventKindMeaning = const {},
     required this.eventStatus,
   });
 
@@ -274,6 +325,30 @@ class AgentHookSpec {
   /// prompt costs us an Approve button, which is the direction that cannot send
   /// a keystroke into a session with no prompt open.
   final Map<String, AgentWaitKind> messageWaiting;
+
+  /// Where the agent's **own** subtype for an event sits in the payload, or
+  /// empty when its hooks carry none.
+  ///
+  /// An event name is not always a status. Claude Code fires one `Notification`
+  /// for ten unrelated things — a permission request, a finished turn, a
+  /// successful login, an MCP elicitation result, "Claude is done using your
+  /// computer" — and its payload says which in `notification_type`. Matching
+  /// prose in [messageWaiting] was a guess at that field; this is the field.
+  final List<String> eventKindPath;
+
+  /// Subtype at [eventKindPath] → what that event actually means.
+  ///
+  /// Consulted **before** [eventStatus], and only when the payload carries the
+  /// field at all: an event whose payload has no subtype (every event but
+  /// `Notification`, and any older CLI that predates the field) still falls
+  /// back to [eventStatus].
+  ///
+  /// A subtype that *is* present and is not declared here resolves to
+  /// [AgentActivityStatus.unknown], which is not recorded and so leaves the
+  /// session saying whatever it last said. That is the deliberate direction: an
+  /// unrecognised notice must not be able to raise "this session needs you",
+  /// because that badge is what puts a key-sending button in front of a user.
+  final Map<String, AgentHookMeaning> eventKindMeaning;
 }
 
 /// One answer we can send to an agent's approval prompt, and what it does.

@@ -201,14 +201,50 @@ const _claudeCode = AgentDescriptor(
     // it wants. It was decoded for the session id and dropped, which is why the
     // app could say an approval was pending and never what for.
     messagePath: ['message'],
-    // `Notification` is fired for two unrelated things — "Claude needs your
-    // permission to use Bash", and the 60-second nudge "Claude is waiting for
-    // your input" after a turn ends. Both used to arrive as `awaitingApproval`
-    // with an Approve button that types Enter, which at an idle prompt submits
-    // the composer instead of confirming anything.
+    // The prose fallback, kept only for a CLI whose payload carries no
+    // `notification_type` — see [eventKindMeaning], which is the field this was
+    // guessing at.
     messageWaiting: {
       'needs your permission': AgentWaitKind.approval,
       'waiting for your input': AgentWaitKind.input,
+    },
+    // **`Notification` is not a status.** Claude Code 2.1.258 fires it for ten
+    // unrelated things and says which in a required `notification_type` field.
+    // Read off the shipped binary's own `notificationType:` call sites:
+    //
+    //   permission_prompt         "Claude needs your permission to use ${tool}"
+    //   worker_permission_prompt  "${worker} needs permission for ${tool}"
+    //   idle_prompt               "Claude is waiting for your input"
+    //   agent_needs_input         "${label} needs your input"      (fleet)
+    //   agent_completed           "${label} finished" / "failed"   (fleet)
+    //   auth_success              "Claude Code login successful"
+    //   elicitation_complete      "MCP server "X" confirmed elicitation …"
+    //   elicitation_response      "Elicitation response for server "X": accept"
+    //   computer_use_exit         "Claude is done using your computer"
+    //   push_notification         whatever a remote sent
+    //
+    // Every one of them used to arrive as `awaitingApproval`. The last five say
+    // nothing about whether this session is waiting, and the two `agent_*` ones
+    // are about a *different* session in the roster, so none is declared and
+    // all resolve to `unknown` — which is not recorded, and therefore leaves
+    // the session saying whatever it last said.
+    eventKindPath: ['notification_type'],
+    eventKindMeaning: {
+      'permission_prompt': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.approval,
+      ),
+      // A *worker's* prompt, drawn somewhere this session's Enter does not
+      // land, so it stops the session without offering a key for it.
+      'worker_permission_prompt': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+      ),
+      // The 60-second nudge after a turn ends. Still holding the user up —
+      // that is what `awaitingApproval` answers — but with nothing to confirm.
+      'idle_prompt': AgentHookMeaning(
+        AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+      ),
     },
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
@@ -221,12 +257,21 @@ const _claudeCode = AgentDescriptor(
   ),
   // A transcript ending in an assistant record is a finished turn; one ending
   // in a user record (a prompt or a tool result) means the agent is mid-turn.
+  //
+  // **Unless that assistant record is a tool call.** Claude Code writes one as
+  // an assistant record whose `message.content` holds a `tool_use` block, and
+  // the `tool_result` answering it only arrives in a later user record — so
+  // while a `Task` subagent, a long `Bash`, or an `AskUserQuestion` is
+  // outstanding, the file's last record has the shape of a finished turn.
+  // Replaying the owner's own transcript found 6,291 such points, 18 hours of
+  // wall time reported as idle, the longest window 25 minutes.
   stateFile: AgentStateFileRules(
     idle: [
       StateRecordMatcher(['type'], 'assistant'),
     ],
     working: [
       StateRecordMatcher(['type'], 'user'),
+      StateRecordMatcher.anyIn(['message', 'content'], 'type', 'tool_use'),
     ],
   ),
   // Read off Claude Code v2.1.251's own footer, captured from a real PTY run
@@ -236,8 +281,19 @@ const _claudeCode = AgentDescriptor(
   // there.
   grid: AgentGridRules(
     awaitingApproval: [
-      // The trust and permission modals both end in this pair.
+      // The workspace-trust modal's footer, captured whole in
+      // `claude-code-trust-prompt.raw`: `Enter to confirm · Esc to cancel`.
       GridMatcher('Enter to confirm'),
+      // The **tool**-permission modal names no confirm key at all. v2.1.258's
+      // ends `Esc to cancel · Tab to amend` (captured in
+      // `claude-code-permission-modal.raw`), and the amend half is conditional,
+      // so `Esc to cancel` on its own is the only thing left to match — which
+      // is why these two are an either/or and not a pair.
+      //
+      // On its own that phrase is far too loose: the CLI also prints it on its
+      // rate-limit banner, its login screens and its menus, and an agent can
+      // simply write it in a message. What keeps it honest is the composer
+      // check in `TerminalGridStatusSource`, not this list.
       GridMatcher('Esc to cancel'),
     ],
     working: [GridMatcher('esc to interrupt')],

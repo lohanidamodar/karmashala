@@ -80,7 +80,18 @@ enum DeviceStreamState {
   /// Connected; frames are arriving.
   live,
 
-  /// Nothing has decoded for a while. The picture on screen is stale.
+  /// Connected, and the device is simply not drawing anything new.
+  ///
+  /// **Not a fault, and the whole point of this value.** scrcpy encodes on
+  /// change: a phone left on a home screen sends no frames at all — it asks the
+  /// encoder for `repeat-previous-frame-after`, which the platform honours for
+  /// a short burst and then stops. Treating that silence as a stall is what
+  /// restarted the owner's live view every eleven seconds for nine minutes on
+  /// F6IZLV6LMFT4U4ZT, with no socket closing and no server exiting in the log.
+  idle,
+
+  /// Bytes are arriving and nothing is decoding out of them. The picture on
+  /// screen is stale and the pipeline, not the device, is the reason.
   stalled,
 
   /// The socket closed or the server exited. Nothing more will arrive.
@@ -89,12 +100,18 @@ enum DeviceStreamState {
 
 /// A health report for one live view.
 ///
-/// [bytesArriving] is the field worth reading first when something is wrong:
-/// "no bytes at all" (the server died, or its tunnel is stale) and "bytes but
-/// no frames" (the stream is alive and we are failing to decode or present it)
-/// look identical on screen — a frozen picture — and have completely different
-/// causes. Loop 36 found the first, on a physical device whose scrcpy server had
-/// exited while its `adb forward` entry stayed registered.
+/// Three things look identical on screen — a picture that does not move — and
+/// only one of them is a fault, which is why [state] separates them rather
+/// than lumping them together as "stalled":
+///
+/// - no bytes and no frames: a device with nothing new to show, or a dead
+///   connection. [DeviceStreamState.idle] until the server is found gone.
+/// - bytes but no frames ([bytesArriving]): the stream is alive and we are
+///   failing to decode or present it, which is ours to fix.
+/// - the socket closed or the server exited: nothing more is coming.
+///
+/// Loop 36 found the dead-but-quiet case on a physical device whose scrcpy
+/// server had exited while its `adb forward` entry stayed registered.
 class DeviceStreamHealth {
   const DeviceStreamHealth({
     required this.state,
@@ -115,7 +132,17 @@ class DeviceStreamHealth {
   /// usually says why, and that message is otherwise thrown away.
   final List<String> serverLog;
 
-  bool get isHealthy => state == DeviceStreamState.live;
+  /// Whether the live view is working. An idle device counts: nothing is
+  /// wrong with a stream whose device has nothing new to show.
+  bool get isHealthy =>
+      state == DeviceStreamState.live || state == DeviceStreamState.idle;
+
+  /// Whether this is worth tearing the stream down for.
+  ///
+  /// Only the two states that mean the pipeline is broken — never mere frame
+  /// silence, which is what the device does when nobody is touching it.
+  bool get needsRestart =>
+      state == DeviceStreamState.stalled || state == DeviceStreamState.ended;
 
   @override
   String toString() => 'DeviceStreamHealth($state, $detail)';
@@ -212,6 +239,7 @@ class DeviceStreamService {
     required this.serverBytes,
     this.stallTimeout = const Duration(seconds: 6),
     this.watchdogInterval = const Duration(seconds: 1),
+    this.livenessProbeInterval = const Duration(seconds: 20),
     this.socketAttempts = 20,
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('device-stream');
@@ -220,14 +248,24 @@ class DeviceStreamService {
   final CommandRunner runner;
   final ScrcpyServerBytes serverBytes;
 
-  /// How long the picture may stand still before the stream is called stalled.
+  /// How long the picture may stand still before the stream says so.
   ///
-  /// Long enough that a device sitting on a static screen is not accused of
-  /// dying — scrcpy still sends frames then, but slowly — and short enough that
-  /// a user does not stare at a dead picture wondering.
+  /// It decides what is *reported*, never what is torn down. The comment that
+  /// used to be here claimed a static screen "still sends frames, but slowly";
+  /// it does not send any, which is why this timeout used to end a working
+  /// stream every few seconds.
   final Duration stallTimeout;
 
   final Duration watchdogInterval;
+
+  /// How long frame silence may run before the device is asked whether this
+  /// session's server is still alive.
+  ///
+  /// Silence is normal, so it is not evidence — but it is the moment worth
+  /// spending one `ps` on, because the one failure that produces silence *and*
+  /// no socket event is a server that died leaving its `adb forward` and the
+  /// host-side socket up (Loop 36, on a physical device).
+  final Duration livenessProbeInterval;
 
   /// How many times one tunnel attempt probes for a streaming socket, at 300 ms
   /// apiece. Injectable so a test does not spend six seconds per attempt
@@ -565,8 +603,18 @@ class DeviceStreamService {
           .catchError((Object _) {}),
     );
 
-    // The watchdog. A frozen picture is otherwise indistinguishable from a
-    // device sitting on a static screen.
+    // The watchdog. It reports what the picture is doing; it does not decide
+    // that the stream is broken, because frame silence is what a device with a
+    // static screen looks like and tearing the stream down for it is the
+    // restart loop this state machine now exists to end.
+    //
+    // The two clocks split the cases. Bytes arriving with no frame out of them
+    // is ours to fix, so it stays a fault. Neither bytes nor frames is either
+    // an idle device or a dead one, and the only honest way to tell them apart
+    // is to go and look — [_serverStillRunning], once the silence has run long
+    // enough to be worth an adb round trip.
+    var probeInFlight = false;
+    var lastProbeUs = DateTime.now().microsecondsSinceEpoch;
     final watchdog = Timer.periodic(watchdogInterval, (_) {
       final now = DateTime.now().microsecondsSinceEpoch;
       final sinceFrame = now - mark.arrivalUs;
@@ -574,14 +622,42 @@ class DeviceStreamService {
         if (mark.frames > 0) report(DeviceStreamState.live, 'Streaming.');
         return;
       }
-      final bytesRecent = now - lastByteUs < stallTimeout.inMicroseconds;
-      report(
-        DeviceStreamState.stalled,
-        bytesRecent
-            ? 'The stream is still sending data but no frame has decoded for '
-                  '${(sinceFrame / 1000000).round()}s.'
-            : 'No data from the device for '
-                  '${(sinceFrame / 1000000).round()}s.',
+      final seconds = (sinceFrame / 1000000).round();
+      if (now - lastByteUs < stallTimeout.inMicroseconds) {
+        report(
+          DeviceStreamState.stalled,
+          'The stream is still sending data but no frame has decoded for '
+          '${seconds}s.',
+        );
+        return;
+      }
+      report(DeviceStreamState.idle, 'No screen changes for ${seconds}s.');
+
+      if (probeInFlight ||
+          sinceFrame < livenessProbeInterval.inMicroseconds ||
+          now - lastProbeUs < livenessProbeInterval.inMicroseconds) {
+        return;
+      }
+      probeInFlight = true;
+      lastProbeUs = now;
+      unawaited(
+        _serverStillRunning(serial, scid)
+            .then((alive) {
+              probeInFlight = false;
+              // Only a definite "gone" counts. See [_serverStillRunning].
+              if (stopped || alive != false) return;
+              _logger.warning(
+                'Device $serial: scrcpy-server $scid is no longer running.',
+              );
+              report(
+                DeviceStreamState.ended,
+                'scrcpy-server is no longer running on the device.'
+                '${serverLog.isEmpty ? '' : ' ${serverLog.last}'}',
+              );
+            })
+            .catchError((Object _) {
+              probeInFlight = false;
+            }),
       );
     });
 
@@ -793,6 +869,21 @@ class DeviceStreamService {
     // is still there — 700 KB of /data/local/tmp per failed attempt otherwise.
     await _removeDeviceJar(serial, devicePath);
     return null;
+  }
+
+  /// Whether this session's server is still in the device's process table.
+  ///
+  /// Three answers, not two. `null` is "adb could not tell us", and it is the
+  /// reason this is not a bool: a probe that read an empty process table as
+  /// "the server is gone" would restart the live view every time adb hiccupped
+  /// — the same fault as the stall watchdog, in a new place.
+  Future<bool?> _serverStillRunning(String serial, String scid) async {
+    final table = await adb.processList(serial);
+    if (table.trim().isEmpty) return null;
+    return parseOwnedScrcpyPids(
+      table,
+      jarPath: scrcpyJarPathFor(scid),
+    ).isNotEmpty;
   }
 
   /// Best-effort removal of one attempt's jar. Failure is not worth reporting:

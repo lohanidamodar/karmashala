@@ -113,9 +113,12 @@ void main() {
     });
 
     test('a permission prompt still says an approval is open', () {
-      // A tool-permission modal, which ends in the same pair the workspace
-      // trust modal does. Both are real prompts with a highlighted option, and
-      // both must keep reaching the buttons that answer them.
+      // A tool-permission modal. Both it and the workspace-trust modal are real
+      // prompts with a highlighted option, and both must keep reaching the
+      // buttons that answer them.
+      //
+      // The footer here is the one v2.1.251 drew; v2.1.258's is
+      // `Esc to cancel · Tab to amend` — see the captured fixture below.
       final report = const TerminalGridStatusSource().read(
         AgentRegistry.builtIn.byId(AgentIds.claudeCode)!,
         const [
@@ -144,9 +147,109 @@ void main() {
       }
     });
 
-    test('a prompt drawn over a spinner reads as waiting, not working', () {
-      // Ordering, not patterns, is what makes this right: the footer that says
-      // `shift+tab to cycle` is on screen while working too.
+    test('a real permission modal is still an approval', () {
+      // Captured from a real PTY run of Claude Code v2.1.258 answering
+      // "create a file called note.txt containing the word hello" under
+      // `--permission-mode manual`
+      // (`test/features/agents/fixtures/claude-code-permission-modal.raw`).
+      //
+      // The reason this fixture had to exist: **the tool-permission modal
+      // names no "confirm" key at all.** Its footer is
+      // `Esc to cancel · Tab to amend`, which is why the bare `Esc to cancel`
+      // matcher cannot be dropped however loose it is on its own.
+      final report = classify('claude-code-permission-modal', 1.0);
+      expect(report?.status, AgentActivityStatus.awaitingApproval);
+      expect(report?.waiting, AgentWaitKind.approval);
+      expect(
+        report!.evidence.join('\n'),
+        contains('Do you want to create note.txt?'),
+      );
+    });
+
+    test('the composer is gone while that modal is up', () {
+      // The fact the whole corroboration rule rests on. At 0.9 the turn is
+      // still running and the composer footer is drawn; at 1.0 the modal has
+      // replaced it and no footer of Claude Code's own is left on screen.
+      final terminal = Terminal(maxLines: 10000)..resize(120, 30);
+      final bytes = File(
+        'test/features/agents/fixtures/claude-code-permission-modal.raw',
+      ).readAsStringSync();
+      terminal.write(bytes);
+      final screen = terminalTailLines(terminal, lines: 12).join('\n');
+
+      expect(screen, contains('Esc to cancel'));
+      expect(screen, isNot(contains('esc to interrupt')));
+      expect(screen, isNot(contains('shift+tab to cycle')));
+      expect(screen, isNot(contains('bypass permissions on')));
+    });
+
+    test('the rate-limit banner is not an approval', () {
+      // Claude Code 2.1.258 draws this over its own composer while it waits
+      // out a usage limit and then continues **by itself**. Read off the
+      // shipped binary\'s own strings:
+      //
+      //   `Usage limit reached ` + ` continuing automatically at ` + ` esc to cancel`
+      //
+      // Nothing is open, nothing is highlighted, and Enter here does not
+      // confirm anything — it submits whatever is in the composer, which is
+      // the exact keystroke the Approve button sends.
+      final report = const TerminalGridStatusSource().read(
+        AgentRegistry.builtIn.byId(AgentIds.claudeCode)!,
+        const [
+          '● I have finished the analysis and written it up above.',
+          '',
+          '  \u23f8 Usage limit reached \u00b7 continuing automatically at 5pm '
+              '\u00b7 esc to cancel',
+          '',
+          '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+          '\u276f',
+          '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+          '  \u23f5\u23f5 accept edits on (shift+tab to cycle) \u00b7 \u2190 for agents',
+        ],
+        DateTime.utc(2026, 8, 30),
+        sessionId: 's',
+      );
+
+      expect(report?.status, AgentActivityStatus.idle);
+      expect(report?.waiting, AgentWaitKind.input);
+    });
+
+    test('the agent quoting the footer in a message is not an approval', () {
+      // Real rows, from the owner\'s own pane scrollback: this bug report was
+      // written *in* Karmashala, and Claude Code printed the matcher strings
+      // into its answer while sitting idle at its prompt. The screen matched
+      // and an Approve button appeared over a session with nothing open.
+      final report = const TerminalGridStatusSource().read(
+        AgentRegistry.builtIn.byId(AgentIds.claudeCode)!,
+        const [
+          '● The grid matchers can fire on ordinary output. Approval is '
+              'detected by Enter to confirm + Esc to cancel appearing on the',
+          '  rendered screen.',
+          '',
+          '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+          '\u276f',
+          '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+          '  bypass permissions on \u00b7 1 shell \u00b7 \u2190 for agents',
+        ],
+        DateTime.utc(2026, 8, 30),
+        sessionId: 's',
+      );
+
+      expect(report?.status, AgentActivityStatus.idle);
+      expect(report?.waiting, AgentWaitKind.input);
+    });
+
+    test('a prompt drawn over a composer is not a prompt at all', () {
+      // This screen used to be asserted the other way round, from a
+      // hand-written pair of rows and the assumption that a modal can sit over
+      // the composer. The capture says otherwise: a modal replaces it, so a
+      // screen showing both is a screen where those words are text.
+      //
+      // **What this now cannot detect**: a real modal an agent draws *without*
+      // taking its composer footer down. Nothing captured does that, and the
+      // cost of being wrong runs the other way — the terminal still shows the
+      // prompt and the user answers it there, whereas an Approve button offered
+      // over a live composer types Enter into it.
       final descriptor = AgentRegistry.builtIn.byId(AgentIds.claudeCode)!;
       final report = const TerminalGridStatusSource().read(
         descriptor,
@@ -157,7 +260,8 @@ void main() {
         DateTime.utc(2026, 8, 30),
         sessionId: 's',
       );
-      expect(report?.status, AgentActivityStatus.awaitingApproval);
+      expect(report?.status, AgentActivityStatus.working);
+      expect(report?.waiting, AgentWaitKind.unrecorded);
     });
   });
 

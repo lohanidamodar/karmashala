@@ -740,6 +740,16 @@ Future<String> _answerApproval(
       'this agent names no way to $decision from outside its terminal',
     );
   }
+  // The desktop card's rule, enforced where the key is actually pressed: a
+  // phone holding a stale card — or an older build that was handed labels it
+  // should not have been — must not type Enter into a session that has merely
+  // finished its turn.
+  if (!_hasOpenPrompt(await ref.read(remoteApprovalEvidenceProvider)(sessionId))) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this session has no prompt open to answer',
+    );
+  }
   if (!ref.read(sessionLauncherProvider).answerPrompt(sessionId, key.keys)) {
     throw const RemoteApiRefusal(
       ErrorCode.notFound,
@@ -764,15 +774,33 @@ Future<RemoteApprovalRequest> _approvalEvidenceFor(
       ? null
       : ref.read(agentRegistryProvider).byId(agentId)?.approval;
   final report = await ref.read(remoteApprovalEvidenceProvider)(sessionId);
+  final asking = report?.status == AgentActivityStatus.awaitingApproval;
+  final answerable = _hasOpenPrompt(report);
   return RemoteApprovalRequest(
     sessionId: sessionId,
-    evidence: report?.status == AgentActivityStatus.awaitingApproval
-        ? report!.evidence
-        : const [],
-    approveLabel: rules?.approve?.label,
-    denyLabel: rules?.deny?.label,
+    evidence: asking ? report!.evidence : const [],
+    waiting: asking ? _wireWait(report!.waiting) : RemoteWaitKind.unrecorded,
+    // Keys only for a prompt a source could actually see. `awaitingApproval`
+    // alone says the session stopped for the user, which is also true of an
+    // agent sitting at its own input — and approve types Enter there.
+    approveLabel: answerable ? rules?.approve?.label : null,
+    denyLabel: answerable ? rules?.deny?.label : null,
   );
 }
+
+/// The one rule both halves of the remote approval path turn on, and the same
+/// one `ApprovalRequestCard` draws its buttons from: a key may be offered, and
+/// pressed, only for a wait a status source identified as an approval.
+bool _hasOpenPrompt(AgentStatusReport? report) =>
+    report != null &&
+    report.status == AgentActivityStatus.awaitingApproval &&
+    report.waiting == AgentWaitKind.approval;
+
+RemoteWaitKind _wireWait(AgentWaitKind kind) => switch (kind) {
+  AgentWaitKind.approval => RemoteWaitKind.approval,
+  AgentWaitKind.input => RemoteWaitKind.input,
+  AgentWaitKind.unrecorded => RemoteWaitKind.unrecorded,
+};
 
 /// Starts a session the phone asked for, through [SessionLauncher.launch] and
 /// nothing else.

@@ -122,6 +122,37 @@ void main() {
     });
   });
 
+  group('StreamIdleBadge', () {
+    testWidgets('says the picture is standing still, and stops there', (
+      tester,
+    ) async {
+      // A phone on a desk sends no frames at all. Saying so is useful; dimming
+      // the picture and offering to restart is what turned an untouched device
+      // into nine minutes of reconnecting.
+      await _pump(tester, const StreamIdleBadge(detail: 'No screen changes for 20s.'));
+      expect(find.text('No screen changes for 20s.'), findsOneWidget);
+      expect(find.text('Restart live view'), findsNothing);
+      expect(find.text('Live view frozen'), findsNothing);
+    });
+  });
+
+  group('StreamReconnectingOverlay', () {
+    testWidgets('a held frame is never allowed to look live', (tester) async {
+      // The frame underneath is the last one the device sent, kept so a restart
+      // does not blink the picture out. It is also, by definition, out of date.
+      await _pump(tester, const StreamReconnectingOverlay(deviceLabel: 'Pixel'));
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.textContaining('last frame received'), findsOneWidget);
+      expect(find.textContaining('not a live picture'), findsOneWidget);
+      expect(find.textContaining('Pixel'), findsOneWidget);
+    });
+
+    testWidgets('still says it with no device to name', (tester) async {
+      await _pump(tester, const StreamReconnectingOverlay(deviceLabel: null));
+      expect(find.textContaining('not a live picture'), findsOneWidget);
+    });
+  });
+
   group('TransportBanner', () {
     testWidgets('names the control socket and how to pinch', (tester) async {
       await _pump(

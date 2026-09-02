@@ -1,8 +1,11 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../domain/tool_activity.dart';
+import '../domain/transcript_path_link.dart';
+import 'markdown_message.dart';
 import 'transcript_image_preview.dart';
 
 /// The body of a transcript row that is a tool call.
@@ -27,6 +30,7 @@ class ToolActivityBody extends StatefulWidget {
   const ToolActivityBody({
     required this.activity,
     this.resolveHostPath,
+    this.onPathTap,
     super.key,
   });
 
@@ -35,6 +39,12 @@ class ToolActivityBody extends StatefulWidget {
   /// Translates a path the agent wrote into one this process can open. See
   /// [TranscriptImagePreview.resolveHostPath].
   final String? Function(String path)? resolveHostPath;
+
+  /// Where a file path in the subject goes when it is clicked. The subject is
+  /// where most paths in a transcript actually are — the file a `Read` touched,
+  /// the directory a `Bash` ran in — so it is linkified on the same rule the
+  /// prose is. Null leaves it plain text.
+  final PathLinkCallback? onPathTap;
 
   @override
   State<ToolActivityBody> createState() => _ToolActivityBodyState();
@@ -82,21 +92,15 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: showWhole
-                    ? SelectableText(
-                        subject,
-                        style: MonoStyles.body.copyWith(
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      )
-                    : Text(
-                        lines.first,
-                        style: MonoStyles.body.copyWith(
-                          color: theme.colorScheme.onSurface,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                child: _PathLinkText(
+                  showWhole ? subject : lines.first,
+                  style: MonoStyles.body.copyWith(
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  onPathTap: widget.onPathTap,
+                  selectable: showWhole,
+                  maxLines: showWhole ? null : 1,
+                ),
               ),
               if (hidden > 0)
                 _MoreToggle(
@@ -297,5 +301,121 @@ class _MoreToggle extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// A tool subject with the file paths in it made clickable.
+///
+/// Spans rather than a rewritten string: a subject is a command or a file name,
+/// not markdown, so there is no parser to hang links on — and rewriting it
+/// would change the text the reader copies. Detection is
+/// [kTranscriptPathPattern] and nothing else, so a row costs one regex pass
+/// over one line and never a `stat`.
+class _PathLinkText extends StatefulWidget {
+  const _PathLinkText(
+    this.text, {
+    required this.style,
+    required this.selectable,
+    this.onPathTap,
+    this.maxLines,
+  });
+
+  final String text;
+  final TextStyle style;
+
+  /// The expanded form stays selectable, as it was before there were links; the
+  /// collapsed single line ellipsises instead, which `SelectableText` will not.
+  final bool selectable;
+
+  final PathLinkCallback? onPathTap;
+  final int? maxLines;
+
+  @override
+  State<_PathLinkText> createState() => _PathLinkTextState();
+}
+
+class _PathLinkTextState extends State<_PathLinkText> {
+  /// The matched ranges and the recognizer each one taps through. Built when
+  /// the text changes, never in `build`: a recognizer allocated per frame is a
+  /// recognizer leaked per frame, on a list that redraws every two seconds.
+  var _links = <(int, int, TapGestureRecognizer)>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _findLinks();
+  }
+
+  @override
+  void didUpdateWidget(_PathLinkText old) {
+    super.didUpdateWidget(old);
+    if (old.text != widget.text || old.onPathTap != widget.onPathTap) {
+      _findLinks();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeLinks();
+    super.dispose();
+  }
+
+  void _disposeLinks() {
+    for (final (_, _, recognizer) in _links) {
+      recognizer.dispose();
+    }
+    _links = const [];
+  }
+
+  void _findLinks() {
+    _disposeLinks();
+    final onTap = widget.onPathTap;
+    if (onTap == null) return;
+    _links = [
+      for (final match in kTranscriptPathPattern.allMatches(widget.text))
+        (
+          match.start,
+          match.end,
+          TapGestureRecognizer()..onTap = () => onTap(match[0]!),
+        ),
+    ];
+  }
+
+  TextSpan _span(BuildContext context) {
+    if (_links.isEmpty) return TextSpan(text: widget.text, style: widget.style);
+    final linkStyle = widget.style.merge(
+      pathLinkStyle(Theme.of(context).colorScheme),
+    );
+    final children = <TextSpan>[];
+    var cursor = 0;
+    for (final (start, end, recognizer) in _links) {
+      if (start > cursor) {
+        children.add(TextSpan(text: widget.text.substring(cursor, start)));
+      }
+      children.add(
+        TextSpan(
+          text: widget.text.substring(start, end),
+          style: linkStyle,
+          recognizer: recognizer,
+        ),
+      );
+      cursor = end;
+    }
+    if (cursor < widget.text.length) {
+      children.add(TextSpan(text: widget.text.substring(cursor)));
+    }
+    return TextSpan(style: widget.style, children: children);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final span = _span(context);
+    return widget.selectable
+        ? SelectableText.rich(span, maxLines: widget.maxLines)
+        : Text.rich(
+            span,
+            maxLines: widget.maxLines,
+            overflow: TextOverflow.ellipsis,
+          );
   }
 }
