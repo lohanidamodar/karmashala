@@ -93,35 +93,13 @@ class _Running extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final screen = view.screen;
     final backend = ref.watch(simulatorBackendProvider);
-    final name = ref
-        .watch(iosSimulatorsProvider)
-        .asData
-        ?.value
-        .where((s) => s.udid == view.udid)
-        .map((s) => s.displayName)
-        .firstOrNull;
-
+    // No name and no Stop here: the toolbar above already carries both, and
+    // showing them twice put two "iPhone 16 Pro · iOS 18.2" rows and two Stop
+    // buttons on screen, one under the other. The pane is the picture; the
+    // device it is a picture *of* is the toolbar's job, the same way the
+    // Android live view leaves it there.
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, 4, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name ?? view.udid,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-              ),
-              TextButton(
-                key: const Key('stop-simulator-live-view'),
-                onPressed: ref.read(simulatorLiveViewProvider.notifier).stop,
-                child: const Text('Stop'),
-              ),
-            ],
-          ),
-        ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(Insets.sm),

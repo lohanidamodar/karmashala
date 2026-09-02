@@ -109,6 +109,10 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
         }
       });
 
+      // Whatever the picture is of is what the picker should name, however the
+      // view was started — the row's own Live view button does not go through
+      // the picker at all.
+      ref.read(selectedSimulatorUdidProvider.notifier).select(udid);
       _set(
         SimulatorLiveViewRunning(
           SimulatorLiveView(

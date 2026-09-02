@@ -215,6 +215,12 @@ class SimulatorTransitions extends Notifier<Set<String>> {
   Future<void> boot(String udid) => _run(udid, (simctl) async {
     await _slim(udid);
     await simctl.bootAndWait(udid);
+    // The picker names what the pane is about, so starting a simulator has to
+    // move it — otherwise the device you just started is running while the
+    // control above it still says "No device selected", and the only way to
+    // point the pane at it is to pick it again by hand. The Android side gets
+    // this for free by selecting the serial it booted.
+    ref.read(selectedSimulatorUdidProvider.notifier).select(udid);
     // Only when the user asked for a window. `simctl boot` opens none, so this
     // is the step that *adds* one — the mirror image of the emulator's
     // `-no-window`, which takes one away. The pane mirrors the device either

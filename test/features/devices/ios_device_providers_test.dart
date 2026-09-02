@@ -324,6 +324,21 @@ void _headlessTests() {
     return container;
   }
 
+  test('starting a simulator points the picker at it', () async {
+    // The picker names what the pane is about. Without this the device you
+    // just started is running while the control above it still reads "No
+    // device selected", and the only way to aim the pane at it is to pick it
+    // again by hand — which the Android side never asks for, because it
+    // selects the serial it booted.
+    final simctl = _RecordingSimctl();
+    final container = containerWith(headless: true, simctl: simctl);
+    expect(container.read(selectedSimulatorUdidProvider), isNull);
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(container.read(selectedSimulatorUdidProvider), 'UDID');
+  });
+
   test('headless boots the device and opens no window', () async {
     final simctl = _RecordingSimctl();
     final container = containerWith(headless: true, simctl: simctl);
