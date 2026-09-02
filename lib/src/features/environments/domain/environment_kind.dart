@@ -1,3 +1,5 @@
+import 'package:path/path.dart' as p;
+
 /// The kind of execution environment a command or path belongs to.
 ///
 /// Used to keep Windows-native, WSL and remote paths from being treated as
@@ -55,3 +57,26 @@ bool isLocalHost(EnvironmentKind kind) =>
 /// incidental equality test.
 bool usesWindowsPaths(EnvironmentKind kind) =>
     kind == EnvironmentKind.windowsNative;
+
+
+/// The path context for a **store home this host can reach** in [kind].
+///
+/// Deliberately not [usesWindowsPaths], which answers a different question.
+/// Paths *inside* WSL are POSIX, so `usesWindowsPaths(wsl)` is false — but the
+/// store home `CliStoreLocator` hands back for a WSL distribution is the
+/// `\\wsl.localhost\…` UNC form, which is a Windows path. Joining onto it with
+/// the POSIX context would be a quiet behaviour change for every WSL user.
+///
+/// So: POSIX for a local Mac or Linux host and for SSH, whose stores really are
+/// POSIX paths; Windows for a Windows host, for WSL's UNC form, and for an
+/// unknown kind, which keeps the default the callers had.
+///
+/// It lives here because getting it wrong is silent and looks like being
+/// logged out: three callers each hard-coded `p.windows`, which on a Mac turned
+/// `/Users/me/.codex` into `/Users/me\auth.json` — a file that cannot exist —
+/// so a signed-in account reported itself signed out and usage could never be
+/// read.
+p.Context storePathContextFor(EnvironmentKind? kind) => switch (kind) {
+  EnvironmentKind.localPosix || EnvironmentKind.ssh => p.posix,
+  _ => p.windows,
+};

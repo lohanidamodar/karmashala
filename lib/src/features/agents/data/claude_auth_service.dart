@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock.dart';
@@ -84,7 +83,7 @@ class ClaudeAuthLocator {
       // Windows context unconditionally turned `/Users/me/.claude` into
       // `/Users/me\.claude.json` — a file that cannot exist, so the config read
       // came back null and every Mac account reported itself signed out.
-      final ctx = kind == null || usesWindowsPaths(kind) ? p.windows : p.posix;
+      final ctx = storePathContextFor(kind);
       return ClaudeAuthPaths(
         environmentId: store.environmentId,
         credentialsFile: ctx.join(claudeHome, '.credentials.json'),
@@ -128,28 +127,8 @@ class ClaudeAuthService {
   /// The service name Claude Code files its OAuth blob under.
   static const keychainService = 'Claude Code-credentials';
 
-  /// `security find-generic-password -w` prints just the secret.
-  ///
-  /// Run directly rather than through a [CommandRunner]: this is always the
-  /// local Mac's own Keychain, never an environment the runner could route to,
-  /// and the value is a credential that must not travel further than it has to.
-  /// It is never logged.
-  static Future<String?> _securityFindGenericPassword() async {
-    if (!Platform.isMacOS) return null;
-    try {
-      final result = await Process.run('security', [
-        'find-generic-password',
-        '-s',
-        keychainService,
-        '-w',
-      ]);
-      if (result.exitCode != 0) return null;
-      final out = (result.stdout as String).trim();
-      return out.isEmpty ? null : out;
-    } on Object {
-      return null;
-    }
-  }
+  static Future<String?> _securityFindGenericPassword() =>
+      readClaudeKeychainCredentials();
 
   static const _backupSuffix = '.karmashala.bak';
   static const _tmpSuffix = '.karmashala.tmp';
@@ -327,6 +306,32 @@ class ClaudeAuthService {
     final tmp = File('$path$_tmpSuffix');
     await tmp.writeAsString(content, flush: true);
     await tmp.rename(path);
+  }
+}
+
+/// The raw credentials JSON out of the macOS login Keychain, or null.
+///
+/// `security find-generic-password -w` prints just the secret. Run directly
+/// rather than through a [CommandRunner]: this is always the local Mac's own
+/// Keychain, never an environment the runner could route to, and the value is a
+/// credential that must not travel further than it has to. It is never logged.
+///
+/// Shared, because both account detection and the usage endpoint need the same
+/// token and macOS keeps only one copy of it.
+Future<String?> readClaudeKeychainCredentials() async {
+  if (!Platform.isMacOS) return null;
+  try {
+    final result = await Process.run('security', [
+      'find-generic-password',
+      '-s',
+      ClaudeAuthService.keychainService,
+      '-w',
+    ]);
+    if (result.exitCode != 0) return null;
+    final out = (result.stdout as String).trim();
+    return out.isEmpty ? null : out;
+  } on Object {
+    return null;
   }
 }
 

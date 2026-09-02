@@ -21,12 +21,12 @@ void main() {
     required void Function(String) onData,
     required int maxPendingBytes,
   }) {
-    void Function()? frame;
     final coalescer = PtyOutputCoalescer(
       onData: onData,
       budget: TerminalIngestBudget(),
       tier: IngestTier.hot,
-      scheduleFrameCallback: (callback) => frame = callback,
+      // Flushes are driven explicitly here, so the frame callback is dropped.
+      scheduleFrameCallback: (_) {},
       scheduleWatchdog: (_, _) => Object(),
       cancelWatchdog: (_) {},
       maxPendingBytes: maxPendingBytes,
@@ -35,7 +35,6 @@ void main() {
       monotonicClock: () => Duration.zero,
       idleThreshold: const Duration(days: 1),
     );
-    addTearDown(() => frame = null);
     return coalescer;
   }
 

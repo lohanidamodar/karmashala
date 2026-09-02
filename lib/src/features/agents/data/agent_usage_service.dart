@@ -5,11 +5,13 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/util/clock.dart';
 import '../../cli_detection/application/cli_detection_service.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_ids.dart';
 import '../domain/agent_registry.dart';
 import '../domain/agent_usage.dart';
+import 'claude_auth_service.dart';
 
 /// Raised when a usage lookup cannot complete.
 class UsageException implements Exception {
@@ -78,15 +80,35 @@ class AgentUsageService {
       );
     }
 
+    // The separator has to match the paths the store locator produced, which
+    // it picks from the environment's kind. Joining with the Windows context
+    // whatever the host turned `/Users/me/.codex` into `/Users/me/.codex\auth.json`
+    // — a file that cannot exist — so a signed-in account reported itself
+    // signed out and usage could never be read on a Mac.
+    final kind = environments
+        .where((e) => e.id == store!.environmentId)
+        .map((e) => e.kind)
+        .firstOrNull;
+    final ctx = storePathContextFor(kind);
+    final localMac = Platform.isMacOS && kind != null && isLocalHost(kind);
+
     return agentId == AgentIds.claudeCode
-        ? _fetchClaude(store)
-        : _fetchCodex(store);
+        ? _fetchClaude(store, ctx, keychain: localMac)
+        : _fetchCodex(store, ctx);
   }
 
-  Future<AgentUsage> _fetchClaude(CliStore store) async {
+  Future<AgentUsage> _fetchClaude(
+    CliStore store,
+    p.Context ctx, {
+    required bool keychain,
+  }) async {
     final home = store.claudeHome;
     if (home == null) throw UsageException('No Claude store for this install.');
-    final creds = await _readJson(p.windows.join(home, '.credentials.json'));
+    // On macOS there is no credentials file: Claude Code keeps `claudeAiOauth`
+    // in the login Keychain. Same object, different cupboard.
+    final creds = keychain
+        ? _decode(await readClaudeKeychainCredentials())
+        : await _readJson(ctx.join(home, '.credentials.json'));
     final oauth = creds?['claudeAiOauth'];
     final token = oauth is Map<String, dynamic>
         ? oauth['accessToken'] as String?
@@ -101,10 +123,10 @@ class AgentUsageService {
     return parseClaudeUsage(json, clock.nowUtc());
   }
 
-  Future<AgentUsage> _fetchCodex(CliStore store) async {
+  Future<AgentUsage> _fetchCodex(CliStore store, p.Context ctx) async {
     final home = store.codexHome;
     if (home == null) throw UsageException('No Codex store for this install.');
-    final auth = await _readJson(p.windows.join(home, 'auth.json'));
+    final auth = await _readJson(ctx.join(home, 'auth.json'));
     final tokens = auth?['tokens'];
     final token = tokens is Map<String, dynamic>
         ? tokens['access_token'] as String?
@@ -116,6 +138,18 @@ class AgentUsageService {
       'Authorization': 'Bearer $token',
     });
     return parseCodexUsage(json, clock.nowUtc());
+  }
+
+  /// Decodes a credentials blob that did not come from a file.
+  Map<String, dynamic>? _decode(String? raw) {
+    if (raw == null) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on FormatException {
+      // Never log `raw`: it is the credential.
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>?> _readJson(String path) async {
