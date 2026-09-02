@@ -221,7 +221,7 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('the panel toggle keeps the right edge to itself', (
+  testWidgets('the state group and the toggle both ride the right edge', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
@@ -248,13 +248,16 @@ void main() {
       lessThan(24),
       reason: 'the panel toggle is the last item on the row',
     );
-    // And the running-state group is a zone of its own rather than a queue
-    // pushed up against the toggle: with one spacer the tab count sat against
-    // it and shifted every time a chip appeared or a label grew.
+    // And the state group rides the right edge with it rather than drifting
+    // into the middle of the row: everything from the tab count rightwards is
+    // one block, and the row's left half is where you are, not what is running.
+    // And nothing is parked between the state group and the toggle: they are
+    // one block riding the right edge. A second spacer centred the group, which
+    // opened a gap here and read as drift rather than as a zone.
     expect(
       toggle.left - chip.right,
-      greaterThan(24),
-      reason: 'the middle group is not pinned to the right edge',
+      lessThan(24),
+      reason: 'the quota chip sits directly against the panel toggle',
     );
     await quiesce(tester, container);
   });

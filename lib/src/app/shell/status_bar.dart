@@ -133,14 +133,11 @@ class ShellStatusBar extends ConsumerWidget {
             // than pushing the panel toggle off the window.
             const Flexible(child: FocusedModelChip()),
             const UsageChip(),
-            // The second of two equal spacers, which is what gives this row
-            // three zones instead of two: where you are on the left, what is
-            // running in the middle, and the panel toggle alone on the right.
-            // With one spacer the middle group was pinned to the right edge, so
-            // the tab count sat against the panel toggle and moved every time a
-            // chip appeared or a label grew — and when both chips drew nothing,
-            // "2 tabs" ended up looking like part of the toggle.
-            const Spacer(),
+            // One spacer, not two: the running-state group stays hard against
+            // the right, in the order tabs → background → attention → model →
+            // quota, with the panel toggle last. A second spacer centred the
+            // group, which reads as drift rather than as a zone — this row's
+            // right edge is where the eye goes for state.
             _Item(
               icon: AppIcons.sidebarSimple,
               label: panel?.label ?? 'Panel closed',

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/util/clock.dart';
 import 'package:karmashala/src/features/agents/data/agent_usage_service.dart';
 import 'package:karmashala/src/features/agents/data/claude_auth_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
