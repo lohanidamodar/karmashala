@@ -237,6 +237,28 @@ void main() {
       expect(find.byType(Checkbox), findsNothing);
     });
 
+    testWidgets('Delete is dead until something is ticked', (tester) async {
+      addNative('n0', title: 'One');
+      await pump(tester);
+      await enterSelection(tester);
+
+      final delete = find.widgetWithText(TextButton, 'Delete');
+      expect(tester.widget<TextButton>(delete).onPressed, isNull);
+      // And it does not wear the destructive red while it does nothing: the
+      // style has to resolve per state, not be pinned to one colour.
+      final theme = Theme.of(tester.element(delete));
+      expect(
+        tester.widget<TextButton>(delete).style?.foregroundColor?.resolve({
+          WidgetState.disabled,
+        }),
+        isNot(theme.colorScheme.error),
+      );
+
+      await tester.tap(find.text('One'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextButton>(delete).onPressed, isNotNull);
+    });
+
     testWidgets('Done on the strip leaves too', (tester) async {
       addNative('n0', title: 'One');
       final container = await pump(tester);

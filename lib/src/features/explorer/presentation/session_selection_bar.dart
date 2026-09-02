@@ -39,7 +39,8 @@ class SessionSelectionBar extends ConsumerWidget {
     // Two verbs and a count in a pane that clamps to 200px: at Material's
     // default 16px of button padding they want nine pixels more than the row
     // has. The strip is chrome at [Chrome.control] height, not a form.
-    final verb = TextButton.styleFrom(
+    ButtonStyle verb([Color? foreground]) => TextButton.styleFrom(
+      foregroundColor: foreground,
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       minimumSize: const Size(0, Chrome.control),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -81,15 +82,14 @@ class SessionSelectionBar extends ConsumerWidget {
               ),
               TextButton(
                 onPressed: count == 0 ? null : delete,
-                style: verb.copyWith(
-                  foregroundColor: WidgetStatePropertyAll(
-                    theme.colorScheme.error,
-                  ),
-                ),
+                // Through `styleFrom`, not a `copyWith` of one: a flat
+                // `WidgetStatePropertyAll` would keep the destructive red on
+                // the button while it is disabled at nothing selected.
+                style: verb(theme.colorScheme.error),
                 child: const Text('Delete'),
               ),
               TextButton(
-                style: verb,
+                style: verb(),
                 onPressed: () =>
                     ref.read(sessionSelectionProvider.notifier).leave(),
                 child: const Text('Done'),
