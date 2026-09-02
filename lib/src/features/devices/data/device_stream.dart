@@ -100,12 +100,18 @@ enum DeviceStreamState {
 
 /// A health report for one live view.
 ///
-/// [bytesArriving] is the field worth reading first when something is wrong:
-/// "no bytes at all" (the server died, or its tunnel is stale) and "bytes but
-/// no frames" (the stream is alive and we are failing to decode or present it)
-/// look identical on screen — a frozen picture — and have completely different
-/// causes. Loop 36 found the first, on a physical device whose scrcpy server had
-/// exited while its `adb forward` entry stayed registered.
+/// Three things look identical on screen — a picture that does not move — and
+/// only one of them is a fault, which is why [state] separates them rather
+/// than lumping them together as "stalled":
+///
+/// - no bytes and no frames: a device with nothing new to show, or a dead
+///   connection. [DeviceStreamState.idle] until the server is found gone.
+/// - bytes but no frames ([bytesArriving]): the stream is alive and we are
+///   failing to decode or present it, which is ours to fix.
+/// - the socket closed or the server exited: nothing more is coming.
+///
+/// Loop 36 found the dead-but-quiet case on a physical device whose scrcpy
+/// server had exited while its `adb forward` entry stayed registered.
 class DeviceStreamHealth {
   const DeviceStreamHealth({
     required this.state,
