@@ -6,11 +6,50 @@ import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../domain/session_launch.dart';
 import 'session_providers.dart';
 
 /// How often a live session's transcript file is re-read.
 const Duration kChatTranscriptPollInterval = Duration(seconds: 2);
+
+/// The interval actually in effect — the seam a test uses to drive the poll
+/// without waiting two seconds a tick.
+///
+/// The same seam, for the same reason, as `deliveryPollIntervalProvider`,
+/// `usageRefreshIntervalProvider` and `scrollbackAutosaveFactoryProvider`.
+/// Nothing in the app ever sets it.
+final chatTranscriptPollIntervalProvider = Provider<Duration>(
+  (ref) => kChatTranscriptPollInterval,
+);
+
+/// **Whether a mounted conversation is the surface the user is looking at**,
+/// and therefore whether its transcript is worth re-reading at all.
+///
+/// A conversation that has been asked for stays *mounted* behind the terminal
+/// — that is what the `IndexedStack` in `WorkbenchView` is for, and it is what
+/// keeps its scroll position across the toggle. What it must not do is stay
+/// *working*: [sessionChatTranscriptProvider] is a two-second poll and each
+/// tick whose file has moved reads and JSON-decodes that session's **whole**
+/// transcript on the UI isolate.
+///
+/// Measured against the owner's own store: the largest Claude Code transcript
+/// there is **43.8 MB over 11 637 lines**, and one tick's `openRead` + `utf8` +
+/// `LineSplitter` + `jsonDecode`-per-line takes **888 ms**. On a two-second
+/// poll, against a file the agent being typed to is still writing, that is
+/// nearly half of every second spent parsing a surface nobody can see — which
+/// is what "typing lags" was. `test/app/shell/keystroke_cost_test.dart`
+/// measures the terminal and the conversation *together*, which is the case
+/// each feature's own cost test could not see.
+///
+/// One global bool rather than one per session, because the workbench shows one
+/// surface at a time: `onTerminal` is `terminalVisibleProvider`, and while the
+/// terminal is in front no session's conversation is on screen. The only
+/// watchers of the transcript are that conversation and the activity strip
+/// inside it, so there is nobody else this can starve.
+final chatTranscriptPollingProvider = Provider<bool>(
+  (ref) => !ref.watch(terminalVisibleProvider),
+);
 
 /// How long to keep looking for a transcript the agent has not written yet.
 ///
@@ -103,6 +142,15 @@ final sessionTranscriptLocatorProvider = Provider<SessionTranscriptLocator>(
 /// always there.
 final sessionChatTranscriptProvider = StreamProvider.autoDispose
     .family<List<TranscriptMessage>, String>((ref, sessionId) async* {
+      // Both loops below sleep and then read a provider, and a `Ref` disposed
+      // under a pending delay throws when read — the same reason
+      // `UsageRefreshController` keeps a `_disposed` flag.
+      var alive = true;
+      ref.onDispose(() => alive = false);
+      bool polling() => alive && ref.read(chatTranscriptPollingProvider);
+      Duration interval() =>
+          alive ? ref.read(chatTranscriptPollIntervalProvider) : Duration.zero;
+
       final session = ref.read(sessionDaoProvider).getById(sessionId);
       final externalId = session?.externalSessionId;
       if (session == null || externalId == null || externalId.isEmpty) {
@@ -123,10 +171,21 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
 
       // The store scan is expensive, so it runs only until the file is found and
       // never again: from then on this polls one file's timestamp.
+      //
+      // Gated by [chatTranscriptPollingProvider] like the read loop below, and
+      // for a sharper reason: a session whose file has not appeared yet retries
+      // the *whole store walk* every three seconds — 540 files on the owner's
+      // machine — and a conversation mounted behind the terminal would run it
+      // for a surface nobody can see.
       String? path;
       final locator = ref.read(sessionTranscriptLocatorProvider);
       yield const [];
       while (path == null) {
+        if (!alive) return;
+        if (!polling()) {
+          await Future<void>.delayed(interval());
+          continue;
+        }
         path = await locator.locate(
           agentId: agentId,
           externalSessionId: externalId,
@@ -140,6 +199,19 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
       DateTime? lastModified;
       var first = true;
       while (true) {
+        // **Paused while the terminal is the surface in front.** Not stopped:
+        // the loop keeps its cadence and its `lastModified`, so the first tick
+        // after the user switches back sees the file has moved and re-reads it
+        // — the conversation is at most one interval stale when it reappears,
+        // which is exactly how stale it already is while visible. Skipping the
+        // `stat` as well as the read is deliberate: on a
+        // `\\wsl.localhost\...` share a `stat` is ~1.2 ms, and there is no
+        // question it can answer for a surface nobody is looking at.
+        if (!alive) return;
+        if (!polling()) {
+          await Future<void>.delayed(interval());
+          continue;
+        }
         DateTime? modified;
         try {
           // `stat()` rather than `existsSync()` + `lastModifiedSync()`: this
@@ -160,6 +232,6 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
           lastModified = modified;
           yield await readCliTranscript(path, agentId);
         }
-        await Future<void>.delayed(kChatTranscriptPollInterval);
+        await Future<void>.delayed(interval());
       }
     });

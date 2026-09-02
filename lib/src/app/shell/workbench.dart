@@ -115,6 +115,19 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// back keeps its scroll position. Only the never-asked-for case is dropped —
   /// and a switch to another session is exactly that case, because a different
   /// session's transcript has no scroll position to keep.
+  ///
+  /// **Mounted is not the same as working**, and the difference is the second
+  /// half of this design. A conversation kept alive behind the terminal went on
+  /// polling: `sessionChatTranscriptProvider` re-reads and JSON-decodes that
+  /// session's *whole* transcript every two seconds whenever the file has moved
+  /// — 43.8 MB over 11 637 lines on the owner's machine, 888 ms a tick, moving
+  /// constantly, because the agent writing it is the one being typed to. So
+  /// the poll is gated on which
+  /// surface is in front (`chatTranscriptPollingProvider`, keyed off
+  /// [terminalVisibleProvider]): the view keeps its scroll position and its
+  /// place in the tree, and stops doing megabytes of work on the UI isolate
+  /// under every keystroke. Measured in
+  /// `test/app/shell/keystroke_cost_test.dart`.
   String? _conversationFor;
 
   @override

@@ -69,6 +69,19 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
 
   @override
   Widget build(BuildContext context) {
+    // **Nothing ticks for a surface nobody can see.** `WorkbenchView` keeps a
+    // conversation that has been asked for mounted behind the terminal so the
+    // toggle preserves its scroll position — and the strip went on calling
+    // `setState` once a second underneath it, rebuilding and laying itself out
+    // under every keystroke the user typed into the terminal in front of it.
+    //
+    // `Visibility.of`, not `TickerMode.of`: an `IndexedStack` wraps its
+    // unselected children in a `_VisibilityScope` and an `ExcludeFocus` and
+    // nothing else — painting and hit-testing are the render object's job — so
+    // the ticker is still enabled down here and only this asks the question
+    // that was actually answered. Counted in
+    // `test/app/shell/keystroke_cost_test.dart`.
+    final visible = Visibility.of(context);
     final now = ref.read(clockProvider).nowUtc();
     final running = ref
         .watch(sessionOutstandingCallsProvider(widget.sessionId))
@@ -77,7 +90,13 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
       _stopTicking();
       return const SizedBox.shrink();
     }
-    _startTicking();
+    // Still drawn while hidden, so it is already the right size when the
+    // surface comes back — it simply stops counting.
+    if (visible) {
+      _startTicking();
+    } else {
+      _stopTicking();
+    }
 
     final theme = Theme.of(context);
     final colour = SemanticColors.of(context).working;
