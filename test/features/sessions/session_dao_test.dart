@@ -92,6 +92,25 @@ void main() {
     expect(dao.getById('s1')!.status, SessionStatus.running);
   });
 
+  test('a session with no chosen model reads back null, not a default', () {
+    // Schema v28. Null is the value every pre-v28 row is truthfully in, and
+    // the state "let the agent choose" writes back — a fabricated model id
+    // here would be a claim about what a session ran on.
+    dao.insert(session());
+    expect(dao.getById('s1')!.modelId, isNull);
+
+    dao.updateModel('s1', 'opus');
+    expect(dao.getById('s1')!.modelId, 'opus');
+
+    // Cleared and never set must read back identically, or the chip would
+    // have two spellings of one state and pass an empty `--model`.
+    dao.updateModel('s1', '');
+    expect(dao.getById('s1')!.modelId, isNull);
+    dao.updateModel('s1', 'sonnet');
+    dao.updateModel('s1', null);
+    expect(dao.getById('s1')!.modelId, isNull);
+  });
+
   test('persists the CLI session id used for external resume', () {
     dao.insert(session());
     dao.updateExternalSessionId('s1', 'cli-thread-42');
