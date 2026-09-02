@@ -39,11 +39,25 @@ class AgentUsageService {
     required this.storeLocator,
     required this.clock,
     HttpClient Function()? httpClientFactory,
-  }) : _newClient = httpClientFactory ?? HttpClient.new;
+    ClaudeKeychainCache? keychain,
+    bool? hostIsMacOS,
+  }) : _newClient = httpClientFactory ?? HttpClient.new,
+       _keychain = keychain ?? claudeKeychain,
+       _hostIsMacOS = hostIsMacOS ?? Platform.isMacOS;
 
   final CliStoreLocator storeLocator;
   final Clock clock;
   final HttpClient Function() _newClient;
+
+  /// The memo in front of `security find-generic-password`. Injectable so a
+  /// test can count the spawns this service causes.
+  final ClaudeKeychainCache _keychain;
+
+  /// Whether this machine keeps Claude's credential in a Keychain rather than a
+  /// file. Injected for the reason `CliStoreLocator.environment` is: the branch
+  /// it selects has to be testable from the platform that does not have one, or
+  /// it is only ever exercised on the owner's own machine.
+  final bool _hostIsMacOS;
 
   static final _claudeUsageUrl = Uri.parse(
     'https://api.anthropic.com/api/oauth/usage',
@@ -90,7 +104,7 @@ class AgentUsageService {
         .map((e) => e.kind)
         .firstOrNull;
     final ctx = storePathContextFor(kind);
-    final localMac = Platform.isMacOS && kind != null && isLocalHost(kind);
+    final localMac = _hostIsMacOS && kind != null && isLocalHost(kind);
 
     return agentId == AgentIds.claudeCode
         ? _fetchClaude(store, ctx, keychain: localMac)
@@ -106,13 +120,46 @@ class AgentUsageService {
     if (home == null) throw UsageException('No Claude store for this install.');
     // On macOS there is no credentials file: Claude Code keeps `claudeAiOauth`
     // in the login Keychain. Same object, different cupboard.
-    final creds = keychain
-        ? _decode(await readClaudeKeychainCredentials())
-        : await _readJson(ctx.join(home, '.credentials.json'));
-    final oauth = creds?['claudeAiOauth'];
-    final token = oauth is Map<String, dynamic>
+    if (!keychain) {
+      final creds = await _readJson(ctx.join(home, '.credentials.json'));
+      return _claudeUsage(_tokenIn(creds));
+    }
+
+    final read = await _keychain.read();
+    // A refusal is not a signed-out user, and saying so sent people to log in
+    // again over a credential that was sitting right there. macOS was asked and
+    // said no — usually *Deny* on the access prompt, sometimes a locked login
+    // Keychain — and only the user can undo that.
+    if (read.outcome == ClaudeKeychainOutcome.refused) {
+      final detail = read.detail;
+      throw UsageException(
+        'macOS would not release the Claude credential from the Keychain'
+        '${detail == null ? '' : ' ($detail)'}. Allow Karmashala access to '
+        '"${ClaudeAuthService.keychainService}" in Keychain Access.',
+      );
+    }
+    try {
+      return await _claudeUsage(_tokenIn(_decode(read.secret)));
+    } on UsageException {
+      // The copy being held was rejected, so it is wrong whatever the memo's
+      // clock says. Dropping it here is what keeps the memo from turning a
+      // refreshed token into ten minutes of "access token expired": the next
+      // poll asks macOS again. The failure still stands — this fetch had no
+      // good token, and saying otherwise would need a second request nobody
+      // asked for.
+      _keychain.forget();
+      rethrow;
+    }
+  }
+
+  String? _tokenIn(Map<String, dynamic>? credentials) {
+    final oauth = credentials?['claudeAiOauth'];
+    return oauth is Map<String, dynamic>
         ? oauth['accessToken'] as String?
         : null;
+  }
+
+  Future<AgentUsage> _claudeUsage(String? token) async {
     if (token == null) {
       throw UsageException('Not signed in to Claude in this environment.');
     }
