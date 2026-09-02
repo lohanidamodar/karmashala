@@ -1962,6 +1962,16 @@ class RemoteCompanionGateway implements CompanionGateway {
     final page = await _mapRefusals(() => client.transcript(sessionId));
     final state = _transcriptOf(sessionId);
     state.messages = List.unmodifiable([
+      // Said, not hidden. The host sends the tail of a long conversation
+      // because the whole of one does not fit in a frame, and a view that
+      // simply began in the middle would read as a transcript that had lost
+      // its start rather than one showing its end.
+      if (page.omitted > 0)
+        CompanionChatMessage(
+          role: 'tool',
+          text: '${page.omitted} earlier messages are not shown here. '
+              'The desktop has the whole conversation.',
+        ),
       for (final message in page.messages)
         CompanionChatMessage(role: message.role, text: message.text),
     ]);

@@ -581,4 +581,150 @@ void main() {
       expect((messages.single as Map)['text'], 'after');
     });
   });
+
+  group('a long transcript is sent as its tail', () {
+    // Reproduced on the device: opening this repo's own session — 53 MB of
+    // JSONL, 25,421 lines — returned every message in one sealed frame. The
+    // phone sat on a spinner and the desktop logged "no transport could carry
+    // a result frame" three times, because by the time the frame was built the
+    // phone had given up and redialled.
+
+    List<RemoteTranscriptMessage> conversation(int count) => [
+      for (var i = 0; i < count; i++)
+        RemoteTranscriptMessage(role: i.isEven ? 'user' : 'agent', text: 'm$i'),
+    ];
+
+    test('a short one is sent whole, and says nothing was held back', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(12);
+
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(page.messages, hasLength(12));
+      expect(page.omitted, 0);
+      expect(page.cursor, 12);
+    });
+
+    test('a long one is cut to the end, and says how much', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(kRemoteTranscriptPageMax * 3);
+
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(page.messages, hasLength(kRemoteTranscriptPageMax));
+      expect(page.omitted, kRemoteTranscriptPageMax * 2);
+      // The end, not the beginning: a conversation is opened where it is now.
+      expect(page.messages.last.text, 'm${kRemoteTranscriptPageMax * 3 - 1}');
+      // And the cursor still counts the whole thing, so the appended stream
+      // lines up with what the phone was actually given.
+      expect(page.cursor, kRemoteTranscriptPageMax * 3);
+    });
+
+    test('an explicit `after` still pages from where it says', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(20);
+
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1', 'after': 5},
+      );
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(page.messages.first.text, 'm5');
+      expect(page.omitted, 5);
+    });
+
+    test('and the delta after a cut page is still only the new messages',
+        () async {
+      // The cursor is the whole count, not the page length, so growth after a
+      // truncated read must not resend the tail it already sent.
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = conversation(kRemoteTranscriptPageMax * 2);
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      await harness.api.pollTranscript('s1');
+
+      final appended = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(appended.messages, hasLength(1));
+      expect(appended.messages.single.text, 'brand new');
+    });
+  });
+
+  group('an expensive transcript is polled less often', () {
+    test('a cheap one is polled every time it is asked', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      final before = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads - before, 3);
+    });
+
+    test('but one that takes real time is not read again immediately',
+        () async {
+      // The device case: a 53 MB transcript read on every two-second sweep,
+      // on the one chain the phone's own requests are queued behind. The read
+      // has to happen; happening *continuously* is what left nothing for the
+      // link.
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      harness.fake.transcriptCost = const Duration(milliseconds: 40);
+      final before = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+      // Straight after: inside the backoff the last read earned.
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+
+      expect(
+        harness.fake.transcriptReads - before,
+        1,
+        reason: 'one read, then a wait proportional to what it cost',
+      );
+    });
+
+    test('and unsubscribing forgets the backoff with everything else',
+        () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = const [
+        RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      harness.fake.transcriptCost = const Duration(milliseconds: 40);
+      await harness.api.pollTranscript('s1');
+
+      await harness.request(
+        FrameType.sessionUnsubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.transcriptCost = Duration.zero;
+      await harness.watch('s1');
+      final before = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads - before, 1);
+    });
+  });
 }
