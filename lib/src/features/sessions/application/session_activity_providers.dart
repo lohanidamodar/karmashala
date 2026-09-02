@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../agents/domain/agent_status.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../domain/session_event_types.dart';
+import '../domain/session_launch.dart';
 import '../domain/session_status.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';
@@ -155,24 +156,33 @@ List<OutstandingCall> outstandingCallsIn(List<TranscriptMessage> messages) {
 /// the strip share one subscription, one poll and one parse. Nothing here adds
 /// a read.
 ///
-/// Three gates, and all three have to hold:
+/// Four gates, and all four have to hold:
 ///
-/// 1. **The row is not over.** A session the user stopped is `cancelled` the
+/// 1. **The session runs in a pane**, so its record is the agent's own
+///    transcript. This is not tidiness: the engine's event log emits
+///    `tool.call` and never `tool.result` — nothing emits one — so every call
+///    in a pre-PTY session's log is unanswered by construction and would read
+///    as running forever. It also keeps this from subscribing a native session
+///    to a CLI store scan the conversation itself never asks for.
+/// 2. **The row is not over.** A session the user stopped is `cancelled` the
 ///    moment `SessionEngine.stop` returns, which is well before any status
 ///    source notices. Watched through the `status` concern alone — a title sync
 ///    runs on the CLI store sweep's own timer and says nothing about this.
-/// 2. **The agent is working**, as the app already decides it: the
+/// 3. **The agent is working**, as the app already decides it: the
 ///    `AgentActivityStatus` the badge, the tray and the notifications all read.
 ///    `unknown` is not working — an agent we cannot see is one we must not
 ///    narrate — and neither is `awaitingApproval`, which the approval card
 ///    above already speaks for.
-/// 3. **The call is young enough** — applied by the reader of this value at
+/// 4. **The call is young enough** — applied by the reader of this value at
 ///    render time, see [SessionActivity.runningAt].
 final sessionOutstandingCallsProvider = Provider.autoDispose
     .family<SessionActivity, String>((ref, sessionId) {
       ref.watchSessionKinds(const {SessionChangeKind.status});
       final row = ref.read(sessionDaoProvider).getById(sessionId);
-      if (row == null || _isOver(row.status)) return SessionActivity.none;
+      if (row == null || row.surface != SessionSurface.pane) {
+        return SessionActivity.none;
+      }
+      if (_isOver(row.status)) return SessionActivity.none;
 
       final working = ref.watch(
         agentSessionStatusProvider(sessionId).select(

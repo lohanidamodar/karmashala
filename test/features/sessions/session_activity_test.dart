@@ -54,6 +54,7 @@ void main() {
     required List<TranscriptMessage> messages,
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
+    SessionSurface surface = SessionSurface.pane,
   }) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -70,7 +71,7 @@ void main() {
         useWorktree: false,
         status: rowStatus,
         createdAt: testTime,
-        surface: SessionSurface.pane,
+        surface: surface,
         externalSessionId: 'ext-1',
       ),
     );
@@ -102,11 +103,13 @@ void main() {
     required List<TranscriptMessage> messages,
     AgentActivityStatus status = AgentActivityStatus.working,
     SessionStatus rowStatus = SessionStatus.running,
+    SessionSurface surface = SessionSurface.pane,
   }) async {
     final container = containerFor(
       messages: messages,
       status: status,
       rowStatus: rowStatus,
+      surface: surface,
     );
     final subscription = container.listen(
       sessionOutstandingCallsProvider('s1'),
@@ -180,6 +183,18 @@ void main() {
     final activity = await activityFor(
       messages: [call(id: 't1')],
       rowStatus: SessionStatus.cancelled,
+    );
+
+    expect(activity.calls, isEmpty);
+  });
+
+  // A session outside our panes renders from the engine's event log, which
+  // emits `tool.call` and never `tool.result` — nothing emits one — so every
+  // call in it is unanswered by construction and would read as running forever.
+  test('a session not hosted in one of our panes is left alone', () async {
+    final activity = await activityFor(
+      messages: [call(id: 't1')],
+      surface: SessionSurface.external,
     );
 
     expect(activity.calls, isEmpty);
