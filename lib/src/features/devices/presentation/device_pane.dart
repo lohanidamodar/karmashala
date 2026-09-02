@@ -280,19 +280,44 @@ class _DevicePaneState extends ConsumerState<DevicePane>
   void _onHealth(DeviceStreamHealth health) {
     if (!mounted) return;
     setState(() => _health = health);
-    if (_reconnectTimer != null) return;
-    final delay = _restarts.onHealth(health, DateTime.now());
-    if (delay == null) return;
-    // Said out loud, because the log of the restart loop recorded only that
-    // the stream had stopped — never why, which is what made it a mystery.
-    _log.warning(
-      'Restarting the live view on $_liveSerial in ${delay.inSeconds}s '
-      '(attempt ${_restarts.attempt}): ${health.detail}',
+    if (_reconnectTimer != null || _starting) return;
+    final session = _session;
+    final step = _restarts.onHealth(
+      health,
+      DateTime.now(),
+      canResetVideo: session?.control != null,
     );
-    _reconnectTimer = Timer(delay, () {
-      _reconnectTimer = null;
-      if (mounted) _restartStream(manual: false);
-    });
+    switch (step.action) {
+      case StreamRecovery.none:
+        return;
+      case StreamRecovery.resetVideo:
+        // The cheapest rung: the device is asked for a fresh keyframe over the
+        // control socket we already know is healthy. Nothing is torn down, so
+        // there is nothing for the user to see except the picture resuming.
+        final sent = session?.requestVideoReset() ?? false;
+        _log.info(
+          sent
+              ? 'Asked $_liveSerial for a video reset: ${health.detail}'
+              : 'No control socket to ask $_liveSerial for a video reset.',
+        );
+      case StreamRecovery.reattachPlayer:
+        _log.warning(
+          'Re-attaching the live view player on $_liveSerial: ${health.detail}',
+        );
+        unawaited(_reattachPlayer());
+      case StreamRecovery.restart:
+        // Said out loud, because the log of the restart loop recorded only that
+        // the stream had stopped — never why, which is what made it a mystery.
+        _log.warning(
+          'Restarting the live view on $_liveSerial in '
+          '${step.delay.inSeconds}s (attempt ${_restarts.attempt}): '
+          '${health.detail}',
+        );
+        _reconnectTimer = Timer(step.delay, () {
+          _reconnectTimer = null;
+          if (mounted) _restartStream(manual: false);
+        });
+    }
   }
 
   Future<void> _startStream(AndroidDevice device) async {
@@ -329,44 +354,9 @@ class _DevicePaneState extends ConsumerState<DevicePane>
         await session.stop();
         return;
       }
-      final player = Player(
-        configuration: const PlayerConfiguration(
-          // A live view wants the newest frame, not a smooth buffer.
-          bufferSize: 256 * 1024,
-          logLevel: MPVLogLevel.error,
-          protocolWhitelist: ['file', 'tcp', 'http'],
-        ),
-      );
-      final native = player.platform as NativePlayer;
-      // libmpv defaults to buffering for smooth playback; these make it behave
-      // like a monitor. `setProperty` swallows libmpv's return code, so these
-      // were verified by reading them back: `profile=low-latency` really is
-      // applied (`cache-pause=no`, `video-latency-hacks=yes` and
-      // `stream-buffer-size=4096` are the profile's values, not the defaults).
-      for (final entry in const {
-        'profile': 'low-latency',
-        'cache': 'no',
-        'demuxer-readahead-secs': '0',
-        'demuxer-lavf-analyzeduration': '0',
-        // Setting this replaces the whole list, and media_kit's protocol
-        // whitelist lives in it — so its entries are repeated here.
-        // `flush_packets` was dropped: it is a muxer flag and did nothing.
-        'demuxer-lavf-o':
-            'fflags=+nobuffer,seg_max_retry=5,strict=experimental,'
-            'allowed_extensions=ALL,protocol_whitelist=[file,tcp,http]',
-        // The stream ends the moment the session it is reading from stops, and
-        // without this mpv clears the video output there — which would make the
-        // held frame a black rectangle. Paused on the last frame is the whole
-        // point of holding it.
-        'keep-open': 'yes',
-        'untimed': 'yes',
-        'vd-lavc-threads': '1',
-        'audio': 'no',
-      }.entries) {
-        await native.setProperty(entry.key, entry.value);
-      }
-      final controller = VideoController(player);
-      await player.open(Media(session.url.toString()));
+      final opened = await _openPlayer(session.url);
+      final player = opened.player;
+      final controller = opened.controller;
       if (!mounted || token != _startToken) {
         await session.stop();
         await player.dispose();
@@ -405,6 +395,101 @@ class _DevicePaneState extends ConsumerState<DevicePane>
         _liveSerial = null;
         _streamError = '$error';
       });
+    }
+  }
+
+  /// Builds a player pointed at [url] and waits for it to open.
+  ///
+  /// Extracted because re-attaching the player is a recovery step of its own:
+  /// the same player, the same properties, a second time, against a stream that
+  /// never went away.
+  Future<({Player player, VideoController controller})> _openPlayer(
+    Uri url,
+  ) async {
+    final player = Player(
+      configuration: const PlayerConfiguration(
+        // A live view wants the newest frame, not a smooth buffer.
+        bufferSize: 256 * 1024,
+        logLevel: MPVLogLevel.error,
+        protocolWhitelist: ['file', 'tcp', 'http'],
+      ),
+    );
+    final native = player.platform as NativePlayer;
+    // libmpv defaults to buffering for smooth playback; these make it behave
+    // like a monitor. `setProperty` swallows libmpv's return code, so these
+    // were verified by reading them back: `profile=low-latency` really is
+    // applied (`cache-pause=no`, `video-latency-hacks=yes` and
+    // `stream-buffer-size=4096` are the profile's values, not the defaults).
+    for (final entry in const {
+      'profile': 'low-latency',
+      'cache': 'no',
+      'demuxer-readahead-secs': '0',
+      'demuxer-lavf-analyzeduration': '0',
+      // Setting this replaces the whole list, and media_kit's protocol
+      // whitelist lives in it — so its entries are repeated here.
+      // `flush_packets` was dropped: it is a muxer flag and did nothing.
+      'demuxer-lavf-o':
+          'fflags=+nobuffer,seg_max_retry=5,strict=experimental,'
+          'allowed_extensions=ALL,protocol_whitelist=[file,tcp,http]',
+      // The stream ends the moment the session it is reading from stops, and
+      // without this mpv clears the video output there — which would make the
+      // held frame a black rectangle. Paused on the last frame is the whole
+      // point of holding it.
+      'keep-open': 'yes',
+      'untimed': 'yes',
+      'vd-lavc-threads': '1',
+      'audio': 'no',
+    }.entries) {
+      await native.setProperty(entry.key, entry.value);
+    }
+    final controller = VideoController(player);
+    await player.open(Media(url.toString()));
+    return (player: player, controller: controller);
+  }
+
+  /// Rebuilds the player against the stream it is already reading.
+  ///
+  /// The middle rung of the recovery ladder, and the one that fixes a wedged
+  /// player without costing anything: the scrcpy server, the tunnel, the
+  /// sockets and the session all stay exactly as they are, and the media server
+  /// hands the new viewer a fresh muxer, fresh tables and the cached keyframe.
+  /// The old picture stays on screen — behind [HeldPicture] — until the new one
+  /// has opened, so the pane never goes blank for it.
+  Future<void> _reattachPlayer() async {
+    final session = _session;
+    if (session == null || _starting) return;
+    final token = ++_startToken;
+    await _releaseHeldPicture();
+    if (!mounted || token != _startToken) return;
+    setState(() {
+      _heldPlayer = _player;
+      _heldVideo = _video;
+      _player = null;
+      _video = null;
+      _starting = true;
+      _holdingPicture = _heldVideo != null;
+    });
+    try {
+      final opened = await _openPlayer(session.url);
+      if (!mounted || token != _startToken || _session != session) {
+        await opened.player.dispose();
+        return;
+      }
+      setState(() {
+        _player = opened.player;
+        _video = opened.controller;
+        _starting = false;
+        _holdingPicture = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_releaseHeldPicture()),
+      );
+    } catch (error) {
+      _log.warning('Re-attaching the live view player failed: $error');
+      if (!mounted || token != _startToken) return;
+      // Leave the held frame up and let the ladder move on to a full restart;
+      // a failed re-attach is not a reason to blank the pane.
+      setState(() => _starting = false);
     }
   }
 
