@@ -145,7 +145,14 @@ class AgentStatusQuery {
 }
 
 /// Matches one decoded state-file record by walking [path] into it and
-/// comparing the value's string form to [equals].
+/// comparing the value there to [equals].
+///
+/// [equals] is `Object` rather than `String` because the field that means "this
+/// turn ended in an error" is not always a string. Claude Code marks a failed
+/// turn with the **boolean** `isApiErrorMessage: true` and nothing else
+/// distinguishes it from a finished one — same `type`, same content shape — so
+/// while this compared string values only, the record that says a session broke
+/// matched the idle rule and the app announced it as finished.
 class StateRecordMatcher {
   const StateRecordMatcher(this.path, this.equals) : elementField = null;
 
@@ -167,7 +174,10 @@ class StateRecordMatcher {
   );
 
   final List<String> path;
-  final String equals;
+
+  /// The value the field must hold. Compared with `==`, so a `String` matcher
+  /// still only ever matches a string.
+  final Object equals;
 
   /// The field to compare inside each element of the list at [path], or `null`
   /// for the plain form that compares the value at [path] itself.
@@ -180,7 +190,7 @@ class StateRecordMatcher {
       value = value[segment];
     }
     final field = elementField;
-    if (field == null) return value is String && value == equals;
+    if (field == null) return value == equals;
     if (value is! List) return false;
     for (final element in value) {
       if (element is Map && element[field] == equals) return true;

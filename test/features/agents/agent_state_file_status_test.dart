@@ -126,6 +126,68 @@ void main() {
     },
   );
 
+  test('a broken Claude turn is failed, not finished', () async {
+    // The exact last record of
+    // `~/.claude/projects/G--dev-godot-proc-nepal/bbde0f77-9a6e-445e-b13d-
+    // db7e3e92b95b/subagents/agent-a4772db3a758e9504.jsonl` (Claude Code
+    // 2.1.197), trimmed to the fields that classify it. Its `type` is
+    // `assistant` and its content is one `text` block, so the idle rule matched
+    // it exactly and the app announced a session that broke as finished.
+    final path = write('api-error.jsonl', [
+      '{"type":"user","message":{"content":"go"}}',
+      '{"type":"assistant","error":"server_error","isApiErrorMessage":true,'
+          '"message":{"model":"<synthetic>","role":"assistant","content":'
+          '[{"type":"text","text":"API Error: Unable to connect to API '
+          '(FailedToOpenSocket)"}]}}',
+    ]);
+
+    final report = (await source.read(claude, path, stale(path)))!;
+
+    expect(report.status, AgentActivityStatus.failed);
+    expect(report.detail, 'isApiErrorMessage=true');
+  });
+
+  test('an OAuth failure is failed however long ago it happened', () async {
+    // The other message the owner's store carries, three times, and the one
+    // that made this worth fixing first: a session whose credentials expired
+    // reported "finished". Staleness must not soften it — a failure that has
+    // sat for hours is still a failure, unlike a `working` record.
+    final path = write('oauth.jsonl', [
+      '{"type":"assistant","error":"authentication_failed",'
+          '"isApiErrorMessage":true,"message":{"model":"<synthetic>",'
+          '"role":"assistant","content":[{"type":"text","text":'
+          '"Failed to authenticate: OAuth session expired and could not be '
+          'refreshed"}]}}',
+    ]);
+
+    expect(
+      (await source.read(claude, path, stale(path)))!.status,
+      AgentActivityStatus.failed,
+    );
+    expect(
+      (await source.read(claude, path, fresh(path)))!.status,
+      AgentActivityStatus.failed,
+    );
+  });
+
+  test('a synthetic record that is not an error is still idle', () async {
+    // Why the boolean is the key and `message.model` is not.
+    // `"model":"<synthetic>"` is also how the CLI writes its "No response
+    // requested." placeholder — 35 of them in the owner's store, all
+    // `isApiErrorMessage: false`. Matching the model would have called every
+    // one of those a failure.
+    final path = write('synthetic-ok.jsonl', [
+      '{"type":"assistant","isApiErrorMessage":false,"message":'
+          '{"model":"<synthetic>","role":"assistant","content":'
+          '[{"type":"text","text":"No response requested."}]}}',
+    ]);
+
+    expect(
+      (await source.read(claude, path, stale(path)))!.status,
+      AgentActivityStatus.idle,
+    );
+  });
+
   test('a Codex rollout ending in an assistant message is idle', () async {
     final path = write('d.jsonl', [
       '{"type":"response_item","payload":{"type":"message","role":"user",'

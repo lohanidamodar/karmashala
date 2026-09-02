@@ -265,6 +265,37 @@ const _claudeCode = AgentDescriptor(
   // outstanding, the file's last record has the shape of a finished turn.
   // Replaying the owner's own transcript found 6,291 such points, 18 hours of
   // wall time reported as idle, the longest window 25 minutes.
+  //
+  // **And unless the turn ended in an API error.** Claude Code writes a broken
+  // turn as an *assistant* record too — same `type`, one `text` block — marked
+  // only by the boolean `isApiErrorMessage: true` and a top-level `error`
+  // naming the reason. Read off the owner's own store, e.g.
+  // `~/.claude/projects/G--dev-godot-proc-nepal/bbde0f77-…/subagents/
+  // agent-a4772db3a758e9504.jsonl`, whose last record is:
+  //
+  //   {"type":"assistant","error":"server_error","isApiErrorMessage":true,
+  //    "message":{"model":"<synthetic>","content":[{"type":"text",
+  //    "text":"API Error: Unable to connect to API (FailedToOpenSocket)"}]}}
+  //
+  // and, three times in another session, `"error":"authentication_failed"` /
+  // "Failed to authenticate: OAuth session expired and could not be refreshed".
+  // Ten transcripts across the owner's two stores end on one of these, and
+  // every one of them read `idle` — which is what fires the *finished*
+  // notification. An authentication failure telling the user their work is done
+  // is the worst answer this pipeline can give, and it is the same family of
+  // bug as claiming a completion we cannot see.
+  //
+  // `isApiErrorMessage` rather than `message.model == '<synthetic>'`: the
+  // synthetic model is also how the CLI writes its 35 "No response requested."
+  // placeholders, which carry `isApiErrorMessage: false` and are not failures.
+  // The boolean is the field that means only this, which is why
+  // `StateRecordMatcher` now compares values other than strings.
+  //
+  // Terminal, not transient: of the 45 such records in the owner's store, every
+  // one is followed by a `system`/`turn_duration` record, by a fresh user turn,
+  // or by nothing at all — never by the turn continuing. The separate
+  // `{"type":"system","subtype":"api_error","retryAttempt":n}` record is the
+  // retry, and it is deliberately not matched here.
   stateFile: AgentStateFileRules(
     idle: [
       StateRecordMatcher(['type'], 'assistant'),
@@ -272,6 +303,9 @@ const _claudeCode = AgentDescriptor(
     working: [
       StateRecordMatcher(['type'], 'user'),
       StateRecordMatcher.anyIn(['message', 'content'], 'type', 'tool_use'),
+    ],
+    failed: [
+      StateRecordMatcher(['isApiErrorMessage'], true),
     ],
   ),
   // Read off Claude Code v2.1.251's own footer, captured from a real PTY run
