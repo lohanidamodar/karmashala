@@ -40,6 +40,16 @@ class SessionViewScreen extends ConsumerWidget {
         .asData
         ?.value;
     final link = ref.watch(companionLinkProvider).asData?.value;
+    // A card that simply vanishes reads as a dropped request, so the reason
+    // is said out loud. Events-only, so nothing is announced to a screen that
+    // opened after the fact.
+    ref.listen(companionApprovalResolutionProvider(sessionId), (_, next) {
+      final resolution = next.asData?.value;
+      if (resolution == null) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(resolution.outcome.sentence)));
+    });
     final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
     final canApprove = gateway.capabilities.has(Capability.approve);
 

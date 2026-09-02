@@ -32,12 +32,14 @@ import '../domain/session_depth.dart';
 import '../domain/session_launch.dart';
 import '../domain/session_lineage.dart';
 import '../domain/session_naming.dart';
+import '../domain/session_model.dart';
 import '../domain/session_permission.dart';
 import '../domain/session_resume.dart';
 import '../domain/session_status.dart';
 import 'decision_recorder.dart';
 import 'session_mcp_arguments.dart';
 import 'session_providers.dart';
+import 'session_status_providers.dart';
 import 'session_ui_providers.dart';
 import 'session_working_directory.dart';
 
@@ -196,6 +198,30 @@ class SessionConversationMissing implements Exception {
   }
 }
 
+/// Why a model change could not reach the session running now.
+///
+/// Four reasons rather than a bool, because the chip has to say which one and
+/// they are not interchangeable: "the agent is mid-turn" is a *wait a moment*,
+/// "this CLI takes its model from the command line" is a *never*, and telling a
+/// user the second when the first is true would send them looking for a setting
+/// that does not exist.
+enum ModelDeferral {
+  /// Nothing of ours is running this session.
+  notRunning,
+
+  /// The agent is mid-turn, holding a prompt, or in a state no source can
+  /// vouch for. A line typed into any of those lands in the user's own input.
+  busy,
+
+  /// The agent has no in-session command that takes a model name. Codex's
+  /// `/model` opens a picker, which is not the same thing.
+  noCommand,
+
+  /// Nothing to switch *to*: the session was handed back to a default that
+  /// names no model, so the agent's own default applies from the next launch.
+  noModel,
+}
+
 /// **The** way a session comes into existence.
 ///
 /// Loop 33's audit (§6) found nine entry points reaching four mechanisms, only
@@ -307,6 +333,142 @@ class SessionLauncher {
     _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
     // One row's own policy. Only the chip that draws it is watching.
     _publish(SessionChange.reconfigured(sessionId));
+  }
+
+  /// The default model for [agentId], for a session that has not chosen one.
+  ///
+  /// **Null today, and deliberately not a model name.** There is no per-agent
+  /// model preference in Settings yet, and inventing one here would be the
+  /// failure `PermissionModeMapping` documents in the other direction: a claim
+  /// that a session is running on a particular model when nothing was ever
+  /// passed to the agent to make that true. Null means no model flag, which is
+  /// what every session in the database is actually in.
+  ///
+  /// It is a method rather than an inline null so a Settings preference has one
+  /// place to be wired into, reached by both the chip and the launch path — the
+  /// property that kept permission-mode resolution from splitting into eight.
+  String? defaultModelFor(String agentId) => null;
+
+  /// The model [sessionId] will run on at its next launch or resume, and the
+  /// agent it will be handed to.
+  ///
+  /// [effectivePermissionFor]'s twin, and it exists for the same reason: what
+  /// the chip shows and what the launcher passes come from one call rather than
+  /// two call sites that agree today. `inherited` is
+  /// [SessionModel.followsDefault] — the session made no choice and tracks the
+  /// per-agent default live.
+  ///
+  /// A null `modelId` is an answer, not a gap: no model is named anywhere, so
+  /// no model flag is passed and the agent starts on whatever it is configured
+  /// to use.
+  ({String? modelId, AgentDescriptor? descriptor, bool inherited})?
+  effectiveModelFor(String sessionId) {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) return null;
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (installation == null) return null;
+    final resolved = resolveSessionModel(
+      sessionModelId: session.modelId,
+      defaultModelId: defaultModelFor(installation.agentId),
+    );
+    return (
+      modelId: resolved.modelId,
+      descriptor: _ref.read(agentRegistryProvider).byId(installation.agentId),
+      inherited: resolved.followsDefault,
+    );
+  }
+
+  /// Why a model change would **not** reach the session running now, or null
+  /// when it would.
+  ///
+  /// Asked twice from two places and answered once: the menu asks it as it
+  /// opens, to badge each row `now` or `next launch`, and [setModel] asks it
+  /// after the row is written to say what actually happened. Two copies of this
+  /// rule would be a control whose promise and whose outcome could disagree,
+  /// which is the one failure this design cannot have.
+  ///
+  /// It deliberately says nothing about *which* model: whether a session can be
+  /// moved in place is a property of the agent and the moment, not of the
+  /// destination. The one target-dependent answer — there is no model to switch
+  /// to — belongs to [setModel], which knows what was picked.
+  ModelDeferral? liveModelSwitchBlockerFor(String sessionId) {
+    final support = effectiveModelFor(sessionId)?.descriptor?.launch.model;
+    if (support == null || !support.switchesLive) {
+      return ModelDeferral.noCommand;
+    }
+    if (livePaneFor(sessionId) == null) return ModelDeferral.notRunning;
+    return _ref.read(sessionActivityLookupProvider)(sessionId) ==
+            AgentActivityStatus.idle
+        ? null
+        : ModelDeferral.busy;
+  }
+
+  /// Records the model [sessionId] should run on — or with a null [modelId]
+  /// that it follows the per-agent default again — and, **where and only where
+  /// that is safe**, moves the session running now as well.
+  ///
+  /// The one place in the app that decides between the two, and the order of
+  /// the gates is the design:
+  ///
+  /// 1. **The row is written first, always.** Whichever way the rest goes, the
+  ///    next launch runs on what the user picked; a live switch that did not
+  ///    persist would be undone by the next restart, and a user who moved to
+  ///    Opus and came back to Sonnet would have no way to know why.
+  /// 2. **The target is resolved after the write**, so "follow the default"
+  ///    switches the running session to whatever the default names rather than
+  ///    leaving it where it was. A default that names nothing has nothing to
+  ///    switch *to*, which is [ModelDeferral.noModel] and not a failure.
+  /// 3. **The agent must have an in-session command**, read off its descriptor
+  ///    and never off its name — Codex's `/model` is a picker and takes no
+  ///    argument, so Codex is [ModelDeferral.noCommand]. See
+  ///    `built_in_agents.dart`.
+  /// 4. **The session must be running**, and
+  /// 5. **it must be idle.** Typing into a pane that is mid-turn or holding a
+  ///    prompt is not a harmless no-op: the line lands in whatever is reading
+  ///    input, which is the user's own conversation. `unknown` counts as busy
+  ///    for the reason [AgentWaitKind] gives about keystrokes — a state we
+  ///    cannot vouch for is not one to type into.
+  ///
+  /// Returns which of the two happened so the caller can *say so*. A control
+  /// that silently means two different things depending on which pane you are
+  /// in is the whole risk of doing this at all.
+  ({bool switchedNow, String? command, ModelDeferral? deferral}) setModel(
+    String sessionId,
+    String? modelId,
+  ) {
+    _ref.read(sessionDaoProvider).updateModel(sessionId, modelId);
+    // One row's own policy, exactly as a permission change publishes it.
+    _publish(SessionChange.reconfigured(sessionId));
+
+    final effective = effectiveModelFor(sessionId);
+    final target = effective?.modelId;
+    if (target == null) {
+      return (
+        switchedNow: false,
+        command: null,
+        deferral: ModelDeferral.noModel,
+      );
+    }
+    final blocker = liveModelSwitchBlockerFor(sessionId);
+    if (blocker != null) {
+      return (switchedNow: false, command: null, deferral: blocker);
+    }
+    final command = effective?.descriptor?.launch.model.commandFor(target);
+    // Through [sendTo] rather than a second write path: a slash command is a
+    // line typed at the agent's prompt, and it must be submitted exactly the
+    // way a message is — `\r`, because a PTY line discipline reads a bare
+    // newline as text and leaves the command sitting in the composer.
+    if (command == null || !sendTo(sessionId, command)) {
+      return (
+        switchedNow: false,
+        command: null,
+        deferral: ModelDeferral.notRunning,
+      );
+    }
+    _log.info('Switched $sessionId to $target in place with "$command"');
+    return (switchedNow: true, command: command, deferral: null);
   }
 
   /// Ends the agent [sessionId] is running now and starts a new one on the same
@@ -776,6 +938,15 @@ class SessionLauncher {
       sessionMode: chosenMode,
     );
 
+    // The same shape one line down, and the same rule: a caller's decision, or
+    // the row's own, or — resolved live — the per-agent default. Null all the
+    // way down means no model flag at all, which is what every session did
+    // before there was a model chip and is still the honest answer.
+    final modelId = resolveSessionModel(
+      sessionModelId: request.modelOverride ?? reused?.modelId,
+      defaultModelId: defaultModelFor(request.installation.agentId),
+    ).modelId;
+
     final id = reused?.id ?? _ref.read(idGeneratorProvider).newId();
 
     if (request.useWorktree && request.existingWorktree != null) {
@@ -873,6 +1044,7 @@ class SessionLauncher {
           // the point: a resume must not overwrite a choice, and must not
           // freeze a session that never made one.
           permissionMode: request.permissionOverride,
+          modelId: request.modelOverride,
           workingDirectory: recordDirectory ? workingDirectory : null,
         ) ??
         Session(
@@ -911,6 +1083,10 @@ class SessionLauncher {
           // [resolveSessionPermission] of this row and the live setting, which
           // is the same answer the chip and the next launch compute.
           permissionMode: request.permissionOverride,
+          // Only what was **chosen**, for the reason above: a launch that
+          // stamped the resolved model here would freeze this session on
+          // whichever model Settings named today.
+          modelId: request.modelOverride,
         );
     final dao = _ref.read(sessionDaoProvider);
     if (reused == null) {
@@ -923,6 +1099,9 @@ class SessionLauncher {
       // deliberately following one.
       if (request.permissionOverride != null) {
         dao.updatePermissionMode(id, request.permissionOverride);
+      }
+      if (request.modelOverride != null) {
+        dao.updateModel(id, request.modelOverride);
       }
       if (recordDirectory) dao.updateWorkingDirectory(id, workingDirectory);
     }
@@ -939,6 +1118,7 @@ class SessionLauncher {
           request,
           descriptor,
           permissionMode,
+          modelId,
           workingDirectory,
           assignsOwnId,
           firstMessage,
@@ -949,6 +1129,7 @@ class SessionLauncher {
           request,
           descriptor,
           permissionMode,
+          modelId,
           workingDirectory,
           assignsOwnId,
           firstMessage,
@@ -1004,7 +1185,8 @@ class SessionLauncher {
       // conversation id — which is what hides the imported record for it.
       SessionChangeKind.placement,
       // Only a launch that carried a decision wrote a per-session policy.
-      if (request.permissionOverride != null) SessionChangeKind.settings,
+      if (request.permissionOverride != null || request.modelOverride != null)
+        SessionChangeKind.settings,
       // A created worktree is a checkout the picker has to start offering,
       // and the picker watches nothing else.
       if (request.useWorktree) SessionChangeKind.workspace,
@@ -1055,6 +1237,7 @@ class SessionLauncher {
     SessionLaunchRequest request,
     AgentDescriptor? descriptor,
     PermissionMode permissionMode,
+    String? modelId,
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
     String? firstMessage,
@@ -1077,6 +1260,7 @@ class SessionLauncher {
       arguments: agentPaneArguments(
         descriptor,
         permissionMode,
+        modelId: modelId,
         sessionId: assignsOwnId ? session.id : null,
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
@@ -1117,7 +1301,8 @@ class SessionLauncher {
     // be looking at two terminals for one session.
     _log.info(
       'Started ${session.id} in a pane: agent=${request.installation.agentId} '
-      'mode=${permissionMode.name} pane=${opened.paneId} '
+      'mode=${permissionMode.name} model=${modelId ?? 'agent default'} '
+      'pane=${opened.paneId} '
       'resumed=${resumedTab != null} '
       'conversation=${request.resumeExternalSessionId ?? 'new'} '
       'worktree=${request.useWorktree} '
@@ -1139,6 +1324,7 @@ class SessionLauncher {
     SessionLaunchRequest request,
     AgentDescriptor? descriptor,
     PermissionMode permissionMode,
+    String? modelId,
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
     String? firstMessage,
@@ -1162,6 +1348,7 @@ class SessionLauncher {
       ...agentPaneArguments(
         descriptor,
         permissionMode,
+        modelId: modelId,
         sessionId: assignsOwnId ? session.id : null,
         resumeSessionId: request.resumeExternalSessionId,
         forkSessionId: request.forkExternalSessionId,
@@ -1372,6 +1559,7 @@ class SessionLauncher {
 List<String> agentPaneArguments(
   AgentDescriptor? descriptor,
   PermissionMode permissionMode, {
+  String? modelId,
   String? sessionId,
   String? resumeSessionId,
   String? forkSessionId,
@@ -1389,6 +1577,10 @@ List<String> agentPaneArguments(
     // `--flag=value` token — so nothing downstream can be swallowed.
     ...agentMcpArguments(descriptor, url: mcpUrl, configPath: mcpConfigPath),
     ...?launch?.permissionArgumentsFor(permissionMode),
+    // Beside the permission flags and for the same reason: a global option, so
+    // it has to be left of Codex's `resume`/`fork` subcommand. Nothing is
+    // emitted for a null model or an agent that takes none.
+    ...?launch?.modelArgumentsFor(modelId),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),

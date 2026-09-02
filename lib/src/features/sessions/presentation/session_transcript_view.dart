@@ -26,6 +26,7 @@ import '../domain/session_event.dart';
 import '../domain/tool_activity.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
+import 'activity_strip.dart';
 import 'agent_status_badge.dart';
 import 'approval_request_card.dart';
 import 'chat_transcript.dart';
@@ -33,6 +34,7 @@ import 'delivery_strip.dart';
 import 'message_composer.dart';
 import 'permission_mode_chip.dart';
 import 'session_repositories_bar.dart';
+import 'session_stats_dialog.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -248,12 +250,22 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   // read until the agent's prompt is answered.
                   ApprovalRequestCard(sessionId: widget.sessionId),
                   DeliveryStrip(sessionId: widget.sessionId),
+                  // Directly above the box, because "what is it doing right
+                  // now" was only answerable by scrolling to the end of the
+                  // transcript and noticing a tool row with no result under
+                  // it. Draws nothing when nothing is outstanding.
+                  ActivityStrip(sessionId: widget.sessionId),
                   MessageComposer(
                     controller: _composer,
                     // MonoCode's chip row: the session's own safety policy,
                     // where the message is written rather than buried in
-                    // Settings under the agent's name.
-                    chips: [PermissionModeChip(sessionId: widget.sessionId)],
+                    // Settings under the agent's name — and what the session
+                    // has cost so far, which is a question about this session
+                    // and belongs beside it rather than in the global chrome.
+                    chips: [
+                      PermissionModeChip(sessionId: widget.sessionId),
+                      SessionStatsButton(sessionId: widget.sessionId),
+                    ],
                     hintText: active
                         ? 'Message the agent…  (attach an image with 🖼)'
                         : 'Type to continue this session…',

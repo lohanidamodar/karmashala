@@ -177,6 +177,93 @@ void main() {
     expect(messages.single.tool?.output, 'total 0');
   });
 
+  // Everything the live-activity strip stands on is read here: a call is
+  // outstanding because the reader says so, and it can be aged out because the
+  // line carried its own instant. Both shipped CLIs write `timestamp` on every
+  // line, verified against real transcripts on this machine.
+  group('what is still outstanding', () {
+    test('a Claude call keeps the instant it was issued', () async {
+      final file = write('claude.jsonl', [
+        '{"type":"assistant","timestamp":"2026-09-02T10:15:30.500Z",'
+            '"message":{"content":[{"type":"tool_use",'
+            '"id":"t1","name":"Bash","input":{"command":"git status"}}]}}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+      expect(messages.single.at, DateTime.utc(2026, 9, 2, 10, 15, 30, 500));
+      expect(messages.single.at?.isUtc, isTrue);
+    });
+
+    test('a Codex call keeps it too, off the same key', () async {
+      final file = write('rollout.jsonl', [
+        '{"type":"response_item","timestamp":"2026-09-02T10:15:30.000Z",'
+            '"payload":{"type":"function_call","name":"shell","call_id":"c1",'
+            '"arguments":"{\\"command\\":[\\"ls\\"]}"}}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.codex);
+
+      expect(messages.single.at, DateTime.utc(2026, 9, 2, 10, 15, 30));
+      expect(messages.single.pendingToolUseId, 'c1');
+    });
+
+    test('a line with no timestamp says so rather than guessing', () async {
+      final file = write('claude.jsonl', [
+        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+            '"id":"t1","name":"Bash","input":{"command":"git status"}}]}}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+      expect(messages.single.at, isNull);
+    });
+
+    test('an unanswered call keeps its id; an answered one drops it', () async {
+      final file = write('claude.jsonl', [
+        '{"type":"assistant","timestamp":"2026-09-02T10:00:00.000Z",'
+            '"message":{"content":[{"type":"tool_use",'
+            '"id":"t1","name":"Bash","input":{"command":"git status"}}]}}',
+        '{"type":"user","timestamp":"2026-09-02T10:00:02.000Z",'
+            '"message":{"role":"user","content":[{"type":"tool_result",'
+            '"tool_use_id":"t1","content":"clean"}]}}',
+        '{"type":"assistant","timestamp":"2026-09-02T10:00:03.000Z",'
+            '"message":{"content":[{"type":"tool_use",'
+            '"id":"t2","name":"Bash","input":{"command":"flutter test"}}]}}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+      expect(messages.map((m) => m.pendingToolUseId), [null, 't2']);
+      // The answered row kept the instant it was issued at, not the instant it
+      // was answered — elapsed is measured from the call.
+      expect(messages.first.at, DateTime.utc(2026, 9, 2, 10));
+    });
+
+    // The trap inside the trap: `tool.output` is null for a call that answered
+    // with nothing at all, so reading *that* as "still running" would leave a
+    // finished call on screen forever.
+    test('a call answered with nothing is still answered', () async {
+      final file = write('claude.jsonl', [
+        '{"type":"assistant","timestamp":"2026-09-02T10:00:00.000Z",'
+            '"message":{"content":[{"type":"tool_use",'
+            '"id":"t1","name":"Bash","input":{"command":"true"}}]}}',
+        '{"type":"user","timestamp":"2026-09-02T10:00:01.000Z",'
+            '"message":{"role":"user","content":[{"type":"tool_result",'
+            '"tool_use_id":"t1","content":""}]}}',
+      ]);
+
+      final messages = await readCliTranscript(file.path, AgentIds.claudeCode);
+
+      expect(messages.single.tool?.output, isNull);
+      expect(
+        messages.single.pendingToolUseId,
+        isNull,
+        reason: 'an empty answer is an answer',
+      );
+    });
+  });
+
   test('returns empty for a missing file', () async {
     final messages = await readCliTranscript(
       '${dir.path}/nope.jsonl',

@@ -150,9 +150,16 @@ class AdbService {
   /// Use [bootAvdAndWait] when you need to know it is actually usable —
   /// headless there is nothing to watch, so "it appeared in `adb devices`" is
   /// not the same as "it has booted".
+  ///
+  /// [extraArguments] are appended verbatim — the emulator slimming flags come
+  /// through here (`launchArguments` in `domain/android_slimming.dart`). This
+  /// service deliberately knows nothing about what they mean: the argv is the
+  /// caller's policy, and building it here would put a settings decision inside
+  /// the process layer.
   Future<ProcessHandle> bootAvd(
     String name, {
     bool headless = true,
+    List<String> extraArguments = const [],
     void Function(String line)? onLog,
   }) async {
     final emulator = sdk.emulator;
@@ -171,6 +178,7 @@ class AdbService {
           if (headless) '-no-window',
           // Nothing watches the boot animation, headless least of all.
           '-no-boot-anim',
+          ...extraArguments,
         ],
       ),
     );
@@ -232,6 +240,7 @@ class AdbService {
   Future<String> bootAvdAndWait(
     String name, {
     bool headless = true,
+    List<String> extraArguments = const [],
     Duration timeout = const Duration(minutes: 3),
     Duration pollInterval = const Duration(seconds: 2),
   }) async {
@@ -239,6 +248,7 @@ class AdbService {
     await bootAvd(
       name,
       headless: headless,
+      extraArguments: extraArguments,
       onLog: (line) {
         // Its last words, for the failure message. The emulator normally
         // explains why it would not start.

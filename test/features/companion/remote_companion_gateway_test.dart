@@ -291,6 +291,55 @@ void main() {
     await awaitLink(gateway, CompanionLinkState.disconnected);
   });
 
+  test('an approval answered on the desktop stops offering itself on the '
+      'phone', timeout: const Timeout(Duration(minutes: 2)), () async {
+    // Seen on the owner's phone, 2026-09-02: the card below the chat kept
+    // offering approve and deny for a decision the desktop had already made.
+    // The protocol said when a request appeared and never when it went away.
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+    await gateway.listSessions();
+
+    final approvals = ItemQueue(gateway.pendingApproval('s1'));
+    expect(await approvals.next, isNull);
+    final resolutions = ItemQueue(gateway.approvalResolutions);
+
+    fake.approvals['s1'] = const RemoteApprovalRequest(
+      sessionId: 's1',
+      evidence: ['Run the tests?', '[y/n]'],
+      approveLabel: 'Yes (enter)',
+    );
+    fake.setAwaitingApproval('s1');
+    await service!.notifyApprovalRequested('s1');
+    expect((await approvals.next)!.approveLabel, 'Yes (enter)');
+
+    // Answered somewhere this phone cannot see — the desktop's own card, or a
+    // second paired phone. All the host knows is that the session stopped
+    // asking, which is exactly what it says.
+    fake.setAwaitingApproval('s1', waiting: false);
+    await service!.notifySessionsChanged();
+
+    expect(await approvals.next, isNull);
+    final resolution = await resolutions.next;
+    expect(resolution.sessionId, 's1');
+    expect(resolution.outcome, CompanionApprovalOutcome.elsewhere);
+
+    // And the host is the arbiter: an answer this phone sends afterwards is
+    // refused rather than typed into whatever prompt is there now.
+    await expectLater(
+      gateway.answerApproval('s1', 'a1', CompanionApprovalDecision.approve),
+      throwsA(
+        isA<GatewayException>().having(
+          (e) => e.message,
+          'message',
+          contains('already been answered'),
+        ),
+      ),
+    );
+    expect(fake.approvalAnswers, isEmpty);
+  });
+
   test('a transcript too long for one frame arrives with its top named',
       timeout: const Timeout(Duration(minutes: 2)), () async {
     // The host answers with the tail and says how much it kept back; the

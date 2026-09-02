@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:karmashala/src/features/remote/application/host_bindings.dart';
 import 'package:karmashala/src/features/remote/application/host_session_api.dart';
@@ -226,6 +227,7 @@ void main() {
 
     test('a bindings refusal carries its own code', () async {
       final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
       harness.fake.approvalRefusal = const RemoteApiRefusal(
         ErrorCode.notFound,
         'no live terminal',
@@ -266,6 +268,7 @@ void main() {
 
     test('approval.answer reports the key that was pressed', () async {
       final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
 
       await harness.request(
         FrameType.approvalAnswer,
@@ -725,6 +728,380 @@ void main() {
       await harness.api.pollTranscript('s1');
 
       expect(harness.fake.transcriptReads - before, 1);
+    });
+  });
+
+  group('a task-notification envelope is folded down before it crosses', () {
+    // Seen on the phone, 2026-09-02: a subagent completion landed as a turn
+    // whose text was the raw payload, so the chat read
+    // `</result><usage><subagent_tokens>295802</subagent_tokens>…` as
+    // conversation and it was most of the screen. This session's own store
+    // holds 199 of them.
+    String envelope({
+      String? summary,
+      String status = 'completed',
+      String body = 'Done.\n\nThe gate is green.',
+    }) =>
+        '<task-notification>\n'
+        '<task-id>afe13d031b3d72daa</task-id>\n'
+        '<tool-use-id>toolu_01ARtzQPvBn3KUMhfkUE2AoL</tool-use-id>\n'
+        '<status>$status</status>\n'
+        '${summary == null ? '' : '<summary>$summary</summary>\n'}'
+        '<result>$body</result>\n'
+        '<usage><subagent_tokens>295802</subagent_tokens>'
+        '<tool_uses>165</tool_uses><duration_ms>2614397</duration_ms></usage>\n'
+        '</task-notification>';
+
+    Future<RemoteTranscriptPage> pageOf(List<RemoteTranscriptMessage> stored) async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = stored;
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+      return RemoteTranscriptPage.fromJson(harness.last.payload);
+    }
+
+    test('it becomes the one line it already carries', () async {
+      final page = await pageOf([
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(summary: 'Agent "Mobile chat scroll to latest" finished'),
+        ),
+      ]);
+
+      expect(page.messages, hasLength(2));
+      expect(page.messages.first.text, 'go on then');
+      // The envelope's own words, not ours — and a `tool` row, so nobody
+      // reads it as something a person said.
+      expect(
+        page.messages.last,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'Agent "Mobile chat scroll to latest" finished',
+        ),
+      );
+    });
+
+    test('and the frame it sends is a fraction of the bytes', () async {
+      // Counted, not timed. Measured against this session's own store: 199
+      // envelopes, 691,852 bytes of them, folding to 27,305 — and the real
+      // 300-message tail page holds five, which is 189,609 bytes before and
+      // 128,805 after. This pins the shape of that with one worst-case
+      // envelope (the largest real one is 32,708 bytes, folding to 75).
+      final raw = envelope(
+        summary: 'Agent "Mobile chat scroll to latest" finished',
+        body: List.filled(1200, 'a paragraph of the report').join('\n'),
+      );
+      final stored = [
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+        RemoteTranscriptMessage(role: 'user', text: raw),
+      ];
+      final before = jsonEncode(
+        RemoteTranscriptPage(
+          sessionId: 's1',
+          messages: stored,
+          cursor: stored.length,
+        ).toJson(),
+      ).length;
+
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = stored;
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+      final after = jsonEncode(harness.last.payload).length;
+
+      expect(after * 20, lessThan(before));
+    });
+
+    test('and a store written with CRLF folds the same way', () async {
+      // The host runs on Windows, macOS and Linux. A transcript line's own
+      // content can carry \r\n, and a trailing \r would otherwise leave the
+      // envelope unrecognised — and the summary carrying one.
+      final page = await pageOf([
+        RemoteTranscriptMessage(
+          role: 'user',
+          text:
+              '${envelope(summary: 'Agent "Windows host" finished').replaceAll('\n', '\r\n')}\r\n',
+        ),
+      ]);
+
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'Agent "Windows host" finished',
+        ),
+      );
+    });
+
+    test('an envelope that names no summary claims no outcome', () async {
+      final page = await pageOf([
+        RemoteTranscriptMessage(role: 'user', text: envelope(status: 'failed')),
+      ]);
+
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'A background task reported back.',
+        ),
+      );
+    });
+
+    test('a person who quotes the tag keeps their whole message', () async {
+      const quoted =
+          'the phone showed me `</task-notification>` as a message — see '
+          '<task-notification> in the backlog for what that is';
+      final page = await pageOf(const [
+        RemoteTranscriptMessage(role: 'user', text: quoted),
+      ]);
+
+      // Not folded, not re-roled, not shortened: it is theirs.
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(role: 'user', text: quoted),
+      );
+    });
+
+    test('a live one is folded too, on the way through the poll', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+      ];
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      // What the owner actually hit: the subagent finished while the phone
+      // was already watching, so the envelope came through `transcript
+      // .appended` rather than the opening read.
+      harness.fake.transcripts['s1']!.add(
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(summary: 'Agent "Host transcript hygiene" finished'),
+        ),
+      );
+      await harness.api.pollTranscript('s1');
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'Agent "Host transcript hygiene" finished',
+        ),
+      );
+    });
+
+    test('one turn in, one turn out, so the cursor still lines up', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        RemoteTranscriptMessage(role: 'user', text: envelope(summary: 'one')),
+        RemoteTranscriptMessage(role: 'user', text: envelope(summary: 'two')),
+        const RemoteTranscriptMessage(role: 'agent', text: 'and on we go'),
+      ];
+      await harness.watch('s1');
+      final opened = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(opened.messages, hasLength(3));
+      expect(opened.cursor, 3);
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      await harness.api.pollTranscript('s1');
+
+      // A dropped turn here would have shifted the delta and resent history.
+      final appended = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(appended.messages, hasLength(1));
+      expect(appended.messages.single.text, 'brand new');
+    });
+
+    test('the wire carries the store\'s own bytes, entities and all', () async {
+      // The phone's `&lt;explicit paths&gt;` was written that way by the agent
+      // CLI, inside a task-notification body — nothing here escapes, and
+      // nothing here unescapes either, because a message may genuinely be
+      // quoting an entity.
+      const literal = 'a README badge with `?style=flat&amp;color=08C` in it';
+      const angled = 'git commit -F msg -- <explicit paths>';
+      final page = await pageOf(const [
+        RemoteTranscriptMessage(role: 'user', text: literal),
+        RemoteTranscriptMessage(role: 'agent', text: angled),
+      ]);
+
+      expect(page.messages.first.text, literal);
+      expect(page.messages.last.text, angled);
+    });
+  });
+
+  group('an approval that stops waiting is said so', () {
+    // Seen on the phone, 2026-09-02: a card below the chat still offering
+    // approve and deny for a decision the desktop had already made. The
+    // protocol told the phone when a request appeared and never when it went
+    // away, so answering it anywhere else left the card orphaned.
+
+    Future<Harness> waiting() async {
+      final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
+      harness.fake.approvals['s1'] = const RemoteApprovalRequest(
+        sessionId: 's1',
+        evidence: ['Allow Bash? (y/n)'],
+        approveLabel: 'Yes',
+      );
+      await harness.api.pushApprovalRequested('s1');
+      return harness;
+    }
+
+    List<SentFrame> resolutions(Harness harness) => [
+      for (final frame in harness.sent)
+        if (frame.type == FrameType.approvalResolved) frame,
+    ];
+
+    test('answered on the desktop, the phone is told on the next sweep',
+        () async {
+      final harness = await waiting();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      expect(resolutions(harness), isEmpty, reason: 'still waiting');
+
+      // The desktop's own card was pressed: the session stops asking. That is
+      // the whole signal — the host cannot see which button, and does not say.
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+      await harness.api.pushSessionsChanged();
+
+      final resolved = RemoteApprovalResolved.fromJson(
+        resolutions(harness).single.payload,
+      );
+      expect(resolved.sessionId, 's1');
+      expect(resolved.outcome, RemoteApprovalOutcome.elsewhere);
+    });
+
+    test('and said once, not on every sweep after it', () async {
+      final harness = await waiting();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      await harness.api.pushSessionsChanged();
+      await harness.api.pushSessionsChanged();
+      await harness.api.pushSessionsChanged();
+
+      expect(resolutions(harness), hasLength(1));
+    });
+
+    test('a phone that was away is told when it subscribes again', () async {
+      final harness = await waiting();
+      // Off the link for the whole of it: the answer happens, and the frame
+      // that would have carried it has nowhere to go.
+      harness.delivers = false;
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+      await harness.api.pushSessionsChanged();
+      expect(resolutions(harness), isEmpty);
+
+      harness.delivers = true;
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+
+      expect(resolutions(harness), hasLength(1));
+    });
+
+    test('a dropped resolution is repeated, never written off', () async {
+      final harness = await waiting();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      harness.delivers = false;
+      await harness.api.pushSessionsChanged();
+      expect(
+        harness.dropped.where((f) => f.type == FrameType.approvalResolved),
+        hasLength(1),
+      );
+
+      harness.delivers = true;
+      await harness.api.pushSessionsChanged();
+      expect(resolutions(harness), hasLength(1));
+    });
+
+    test('the phone that answers is told which way it went', () async {
+      final harness = await waiting();
+
+      await harness.request(
+        FrameType.approvalAnswer,
+        payload: const {'sessionId': 's1', 'decision': 'deny'},
+      );
+
+      final resolved = RemoteApprovalResolved.fromJson(
+        resolutions(harness).single.payload,
+      );
+      // Stated, because this host pressed the key and knows.
+      expect(resolved.outcome, RemoteApprovalOutcome.denied);
+      expect(harness.last.type, FrameType.result);
+    });
+
+    test('a second answer to a settled approval is refused, not applied',
+        () async {
+      final harness = await waiting();
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      await harness.request(
+        FrameType.approvalAnswer,
+        payload: const {'sessionId': 's1', 'decision': 'approve'},
+      );
+
+      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+      expect(
+        harness.last.payload['message'],
+        'this approval has already been answered',
+      );
+      // The point of refusing: nothing was typed into whatever prompt is
+      // there now.
+      expect(harness.fake.approvalAnswers, isEmpty);
+    });
+
+    test('a device that cannot approve hears neither half', () async {
+      final viewer = Harness(
+        capabilities: CapabilitySet.of(const [Capability.viewSessions]),
+      );
+      viewer.fake.setAwaitingApproval('s1');
+      await viewer.api.pushApprovalRequested('s1');
+      await viewer.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      viewer.fake.setAwaitingApproval('s1', waiting: false);
+      await viewer.api.pushSessionsChanged();
+
+      expect(
+        viewer.sent.where(
+          (f) =>
+              f.type == FrameType.approvalRequested ||
+              f.type == FrameType.approvalResolved,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a session that was never asking says nothing', () async {
+      final harness = Harness();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.api.pushSessionsChanged();
+
+      expect(resolutions(harness), isEmpty);
     });
   });
 }

@@ -448,12 +448,31 @@ class Chrome {
   /// reads as that folder's content and not as a sibling of it.
   static const treeGutter = 22.0;
 
+  /// The height of a control that has to sit inside a [titleBar] row — a menu
+  /// button, the quick-open box, a window action. Short enough to leave a
+  /// gutter above and below in a 30px row, tall enough to still be a target.
+  static const control = 26.0;
+
+  /// The diameter of a status dot. Read at a glance and never on its own:
+  /// `StatusDot` requires a label, because a colour is not a state.
+  static const dot = 7.0;
+
   /// Icon sizes: [icon] in toolbars, [iconSmall] inline with text,
   /// [iconTitle] in a dialog's title row, where it sits against `titleMedium`
   /// rather than body text and a toolbar glyph reads as an afterthought.
   static const icon = 16.0;
   static const iconSmall = 13.0;
   static const iconTitle = 18.0;
+
+  /// The glyph on an action inside a dense row — dismiss, copy, trash, expand.
+  /// Between [iconSmall] (a glyph set in a line of text) and [icon] (a glyph in
+  /// a toolbar, where there is room), because a row's actions are neither.
+  static const iconAction = 14.0;
+
+  /// The glyph in an empty state: the one picture on a surface with nothing on
+  /// it. Big enough to read as an illustration rather than as chrome, small
+  /// enough to still fit the side panel at its 240px minimum.
+  static const iconHero = 28.0;
 
   /// The label on a tab chip — the workbench strip's, and a region header's.
   ///

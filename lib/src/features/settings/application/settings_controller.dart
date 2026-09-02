@@ -94,6 +94,23 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setAndroidSlimming(bool value) {
+    state = state.copyWith(androidSlimming: value);
+    _save();
+  }
+
+  /// Records which Android categories to apply. Takes the full set each time
+  /// rather than a toggle, so the caller cannot get the two out of step.
+  void setAndroidSlimmingEnabled(List<String> ids) {
+    state = state.copyWith(androidSlimmingEnabled: ids);
+    _save();
+  }
+
+  void setAndroidEmulatorGpu(String modeId) {
+    state = state.copyWith(androidEmulatorGpu: modeId);
+    _save();
+  }
+
   void setAutoStart(bool value) {
     state = state.copyWith(autoStart: value);
     _save();

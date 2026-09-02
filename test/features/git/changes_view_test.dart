@@ -126,7 +126,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpAndSettle();
-    expect(find.text('Changes'), findsOneWidget);
+    expect(find.text('CHANGES'), findsOneWidget);
   });
 }
 

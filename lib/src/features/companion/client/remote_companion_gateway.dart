@@ -216,6 +216,8 @@ class RemoteCompanionGateway implements CompanionGateway {
   final _lastAttention = <String, String?>{};
   final _transcripts = <String, _TranscriptState>{};
   final _approvals = <String, _Watched<CompanionApproval?>>{};
+  final _approvalResolutions =
+      StreamController<CompanionApprovalResolution>.broadcast();
   int _nextApprovalId = 1;
 
   bool _loopRunning = false;
@@ -1004,6 +1006,10 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   @override
+  Stream<CompanionApprovalResolution> get approvalResolutions =>
+      _approvalResolutions.stream;
+
+  @override
   Stream<CompanionAttentionEvent> get attentionEvents => _attention.stream;
 
   /// Stops everything. For tests and the provider container's dispose — a
@@ -1028,6 +1034,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     _link.value = CompanionLinkState.disconnected;
     await _sessionChanges.close();
     await _attention.close();
+    await _approvalResolutions.close();
     await _progress.close();
   }
 
@@ -1756,6 +1763,17 @@ class RemoteCompanionGateway implements CompanionGateway {
         _applyAppended(page);
       case ApprovalRequestedEvent(:final request):
         _applyApproval(request);
+      case ApprovalResolvedEvent(:final resolution):
+        _retireApproval(
+          resolution.sessionId,
+          switch (resolution.outcome) {
+            RemoteApprovalOutcome.approved =>
+              CompanionApprovalOutcome.approved,
+            RemoteApprovalOutcome.denied => CompanionApprovalOutcome.denied,
+            RemoteApprovalOutcome.elsewhere =>
+              CompanionApprovalOutcome.elsewhere,
+          },
+        );
       case PairingRevokedEvent():
         // The one case where silence would have been read as a busy desktop.
         // Now it is a fact, so the link stops claiming anything else.
@@ -1837,6 +1855,14 @@ class RemoteCompanionGateway implements CompanionGateway {
       next.insert(_placeFor(next, summary), summary);
     }
     _setSessions(next);
+    // Re-derived, never accumulated. The event above is the live path, and
+    // this is what covers a phone that was asleep for it: every snapshot —
+    // including the one `session.subscribe` pushes on reconnect — carries
+    // whether the session is still asking, so a card the phone kept through a
+    // dead link is retired the moment it hears the truth again.
+    if (snapshot.attention != kAttentionNeedsApproval) {
+      _retireApproval(snapshot.sessionId, CompanionApprovalOutcome.elsewhere);
+    }
     _noteAttention(snapshot.sessionId, snapshot.attention, snapshot.title);
     if (!found) {
       final client = _client;
@@ -1905,6 +1931,22 @@ class RemoteCompanionGateway implements CompanionGateway {
       summary?.title ?? request.sessionId,
     );
     _stampAttention(request.sessionId, CompanionAttentionKind.needsYou);
+  }
+
+  /// Takes a card off the screen and says why.
+  ///
+  /// The nothing-to-do case is deliberately silent: a `session.changed` for a
+  /// session that was never asking must not announce a resolution the reader
+  /// never saw a request for.
+  void _retireApproval(String sessionId, CompanionApprovalOutcome outcome) {
+    final pending = _approvalOf(sessionId);
+    if (pending.value == null) return;
+    pending.value = null;
+    if (!_approvalResolutions.isClosed) {
+      _approvalResolutions.add(
+        CompanionApprovalResolution(sessionId: sessionId, outcome: outcome),
+      );
+    }
   }
 
   void _noteAttention(String sessionId, String? attention, String title) {

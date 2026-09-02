@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
@@ -250,6 +251,7 @@ fakeTerminalOverrides({
   TerminalInstanceFactory? instanceFactory,
   bool shellIntegration = false,
   bool restoreLivePanes = true,
+  Duration usageRefreshInterval = Duration.zero,
 }) {
   return [
     if (database != null) databaseProvider.overrideWithValue(database),
@@ -282,6 +284,11 @@ fakeTerminalOverrides({
     // renders a session. Same reason as the autosave above; tests that care
     // about polling drive it explicitly.
     deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
+    // The status bar's usage chip has its own periodic timer, and the same
+    // problem: it is drawn by every test that renders the shell, and a live
+    // tick would be pending when the test ends. Zero means no timer;
+    // `status_bar_usage_test.dart` hands back a real interval.
+    usageRefreshIntervalProvider.overrideWithValue(usageRefreshInterval),
     // [instanceFactory] replaces the default rather than adding a second
     // override: Riverpod refuses the same provider twice in one container, so a
     // test that needs a pane to fail has to substitute here.

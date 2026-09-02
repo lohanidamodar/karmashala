@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
+import '../widgets/status_dot.dart';
 import 'logs_panel.dart';
+import 'pane_scaffold.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_context.dart';
@@ -183,7 +185,7 @@ class _RailButton extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Container(
-            height: 30,
+            height: Chrome.tabStrip,
             margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
             decoration: BoxDecoration(
               color: selected
@@ -206,17 +208,12 @@ class _RailButton extends StatelessWidget {
                   Positioned(
                     top: 1,
                     right: 0,
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: semantic.attention,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: scheme.surfaceContainerLow,
-                          width: 1,
-                        ),
-                      ),
+                    // No tooltip of its own: the button already carries one,
+                    // and it says the count.
+                    child: StatusDot(
+                      color: semantic.attention,
+                      label: '$badge waiting',
+                      ring: scheme.surfaceContainerLow,
                     ),
                   ),
               ],
@@ -275,10 +272,8 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (!widget.surface.drawsOwnHeader) ...[
+                    if (!widget.surface.drawsOwnHeader)
                       _SidePanelHeader(surface: widget.surface),
-                      const Divider(height: 1),
-                    ],
                     if (widget.surface.scopedToRepository) ...[
                       const SidePanelContextLine(),
                       const SidePanelWorktrees(),
@@ -322,34 +317,15 @@ class _SidePanelHeader extends ConsumerWidget {
   final SidePanelSurface surface;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return Container(
-      height: Chrome.tabStrip,
-      color: theme.colorScheme.surfaceContainerLow,
-      padding: const EdgeInsets.only(left: Insets.md, right: 2),
-      child: Row(
-        children: [
-          Icon(
-            SidePanel.iconFor(surface),
-            size: Chrome.iconSmall,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Text(
-              surface.label.toUpperCase(),
-              style: theme.textTheme.labelSmall,
-            ),
-          ),
-          IconButton(
-            tooltip:
-                'Close panel  ·  ${shellChordLabel<ToggleSidePanelIntent>()}',
-            icon: const Icon(AppIcons.x, size: 14),
-            onPressed: () => ref.read(sidePanelProvider.notifier).collapse(),
-          ),
-        ],
+  Widget build(BuildContext context, WidgetRef ref) => PaneHeader(
+    icon: SidePanel.iconFor(surface),
+    title: surface.label,
+    actions: [
+      IconButton(
+        tooltip: 'Close panel  ·  ${shellChordLabel<ToggleSidePanelIntent>()}',
+        icon: const Icon(AppIcons.x, size: Chrome.iconAction),
+        onPressed: () => ref.read(sidePanelProvider.notifier).collapse(),
       ),
-    );
-  }
+    ],
+  );
 }

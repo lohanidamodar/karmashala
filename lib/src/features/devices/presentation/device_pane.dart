@@ -16,6 +16,7 @@ import '../application/ios_device_providers.dart';
 import '../domain/android_device.dart';
 import '../domain/ios_simulator.dart';
 import '../domain/device_input.dart';
+import 'android_slimming_dialog.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_stream_status.dart';
@@ -415,7 +416,12 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       serial = await adb.bootAvdAndWait(
         name,
         headless: ref.read(headlessDeviceProvider),
+        extraArguments: ref.read(androidEmulatorArgumentsProvider),
       );
+      // After the wait, never before: `settings put` and `pm disable-user` both
+      // need a running package manager. Failure inside is logged and swallowed
+      // — an emulator that started is worth more than one that was slimmed.
+      await ref.read(androidSlimmingProvider.notifier).applyAfterBoot(serial);
     } catch (error) {
       failure = '$error';
     }
@@ -1395,7 +1401,18 @@ class _DeviceList extends ConsumerWidget {
         ],
         if (idle.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text('Emulators', style: theme.textTheme.labelLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Emulators', style: theme.textTheme.labelLarge),
+              ),
+              TextButton(
+                key: const Key('android-slimming-open'),
+                onPressed: () => AndroidSlimmingDialog.show(context),
+                child: const Text('Slimming'),
+              ),
+            ],
+          ),
           for (final avd in idle)
             _DeviceRow(
               title: avd.name,

@@ -99,6 +99,16 @@ final companionApprovalProvider = StreamProvider.autoDispose
           ref.watch(companionGatewayProvider).pendingApproval(sessionId),
     );
 
+/// One session's approvals going away, and why. Events-only, so a screen that
+/// opens after the fact stays quiet rather than announcing old news.
+final companionApprovalResolutionProvider = StreamProvider.autoDispose
+    .family<CompanionApprovalResolution, String>(
+      (ref, sessionId) => ref
+          .watch(companionGatewayProvider)
+          .approvalResolutions
+          .where((resolution) => resolution.sessionId == sessionId),
+    );
+
 /// The phone's inbox: sessions currently claiming attention, newest first.
 final companionInboxProvider = Provider<List<CompanionSessionSummary>>((ref) {
   final sessions =

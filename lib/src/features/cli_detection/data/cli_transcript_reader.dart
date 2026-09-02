@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../agents/domain/agent_ids.dart';
+import '../../sessions/domain/session_event_types.dart';
 import '../../sessions/domain/tool_activity.dart';
 import 'subagent_transcript.dart';
 
@@ -15,6 +16,8 @@ class TranscriptMessage {
     required this.text,
     this.tool,
     this.subagent,
+    this.at,
+    this.pendingToolUseId,
   });
 
   /// `user`, `agent`, or `tool`.
@@ -28,6 +31,24 @@ class TranscriptMessage {
   /// The delegated agent a `Task` call spawned — located, not read. Null for
   /// every other row, including a `Task` whose subagent file we cannot find.
   final SubagentRef? subagent;
+
+  /// When the agent wrote this turn, read from the line's own `timestamp`.
+  ///
+  /// Both shipped CLIs put an ISO-8601 UTC instant on **every** line — Claude
+  /// Code at the top level beside `message`, Codex beside `payload` — so a tool
+  /// row's [at] is when the call was actually issued, not when we noticed it.
+  /// Null for a line that carried none, which is the only honest answer and the
+  /// reason nothing downstream may assume an age exists.
+  final DateTime? at;
+
+  /// The protocol's own id for a tool call **that has not been answered yet**.
+  ///
+  /// Set when the `tool_use` is parsed and cleared the moment its `tool_result`
+  /// arrives, so this — not `tool.output == null` — is how a caller tells "still
+  /// running" from "finished". They are not the same question: a call that
+  /// answered with nothing at all lands as a null [ToolActivity.output] too, and
+  /// reading that as in-flight would leave it on screen forever.
+  final String? pendingToolUseId;
 }
 
 /// Reads a CLI session's full transcript (Claude Code / Codex JSONL) into a flat
@@ -85,12 +106,15 @@ Future<List<TranscriptMessage>> readCliTranscript(
         continue;
       }
       if (decoded is! Map<String, dynamic>) continue;
+      // Read once per line and handed down: both CLIs carry it in the same
+      // place, and every message the line produces was written at that instant.
+      final at = _lineTimestamp(decoded);
       // Claude's shape is the default: it is the least-wrong guess for an
       // agent we have no reader for.
       if (cli == AgentIds.codex) {
-        _parseCodexLine(decoded, messages, pending);
+        _parseCodexLine(decoded, messages, pending, at);
       } else {
-        _parseClaudeLine(decoded, messages, pending, tasks);
+        _parseClaudeLine(decoded, messages, pending, tasks, at);
       }
     }
   } catch (_) {
@@ -116,16 +140,29 @@ Future<void> _attachSubagents(
     subagentsDirectory ?? subagentsDirectoryFor(filePath),
   );
   if (index.isEmpty) return;
-  tasks.forEach((id, at) {
+  tasks.forEach((id, position) {
     final reference = index[id];
-    if (reference == null || at >= messages.length) return;
-    messages[at] = TranscriptMessage(
-      role: messages[at].role,
-      text: messages[at].text,
-      tool: messages[at].tool,
+    if (reference == null || position >= messages.length) return;
+    final row = messages[position];
+    messages[position] = TranscriptMessage(
+      role: row.role,
+      text: row.text,
+      tool: row.tool,
       subagent: reference,
+      at: row.at,
+      pendingToolUseId: row.pendingToolUseId,
     );
   });
+}
+
+/// The instant a transcript line was written, or null when it carried none.
+///
+/// The same key in both formats. `toUtc()` because a `Z`-suffixed instant
+/// already is one and anything else would compare against a UTC clock wrongly.
+DateTime? _lineTimestamp(Map<String, dynamic> json) {
+  final raw = json['timestamp'];
+  if (raw is! String) return null;
+  return DateTime.tryParse(raw)?.toUtc();
 }
 
 /// One subagent's own turns, in the same shape as its parent's.
@@ -144,6 +181,7 @@ void _parseClaudeLine(
   List<TranscriptMessage> out,
   Map<String, int> pending,
   Map<String, int> tasks,
+  DateTime? at,
 ) {
   final type = json['type'];
   if (type != 'user' && type != 'assistant') return;
@@ -153,17 +191,17 @@ void _parseClaudeLine(
   final role = type == 'user' ? 'user' : 'agent';
 
   if (content is String) {
-    _add(out, role, content);
+    _add(out, role, content, at);
     return;
   }
   if (content is! List) return;
   for (final part in content) {
     if (part is String) {
-      _add(out, role, part);
+      _add(out, role, part, at);
     } else if (part is Map) {
       switch (part['type']) {
         case 'text':
-          _add(out, role, part['text']);
+          _add(out, role, part['text'], at);
         case 'tool_use':
           final name = part['name'];
           if (name is String) {
@@ -171,13 +209,15 @@ void _parseClaudeLine(
             final id = part['id'];
             if (id is String) {
               pending[id] = out.length;
-              if (name == 'Task') tasks[id] = out.length;
+              if (name == kSubagentToolName) tasks[id] = out.length;
             }
             out.add(
               TranscriptMessage(
                 role: 'tool',
                 text: activity.summary,
                 tool: activity,
+                at: at,
+                pendingToolUseId: id is String ? id : null,
               ),
             );
           }
@@ -216,12 +256,13 @@ void _parseCodexLine(
   Map<String, dynamic> json,
   List<TranscriptMessage> out,
   Map<String, int> pending,
+  DateTime? at,
 ) {
   final payload = json['payload'];
   if (payload is! Map) return;
   switch (payload['type']) {
     case 'message':
-      _parseCodexMessage(payload, out);
+      _parseCodexMessage(payload, out, at);
     // Codex names its shell differently depending on the tool surface —
     // `function_call` for the classic `shell`, `custom_tool_call` for the
     // `exec` sandbox — but both carry a name, a `call_id` and an answer.
@@ -240,6 +281,8 @@ void _parseCodexLine(
           role: 'tool',
           text: activity.summary,
           tool: activity,
+          at: at,
+          pendingToolUseId: callId is String ? callId : null,
         ),
       );
     case 'function_call_output':
@@ -254,11 +297,15 @@ void _parseCodexLine(
   }
 }
 
-void _parseCodexMessage(Map<dynamic, dynamic> payload, List<TranscriptMessage> out) {
+void _parseCodexMessage(
+  Map<dynamic, dynamic> payload,
+  List<TranscriptMessage> out,
+  DateTime? at,
+) {
   final role = payload['role'] == 'user' ? 'user' : 'agent';
   final content = payload['content'];
   if (content is String) {
-    _add(out, role, content);
+    _add(out, role, content, at);
     return;
   }
   if (content is! List) return;
@@ -266,7 +313,7 @@ void _parseCodexMessage(Map<dynamic, dynamic> payload, List<TranscriptMessage> o
     if (block is! Map) continue;
     final t = block['type'];
     if (t == 'input_text' || t == 'output_text' || t == 'text') {
-      _add(out, role, block['text']);
+      _add(out, role, block['text'], at);
     }
   }
 }
@@ -328,20 +375,27 @@ void _attachResult(
   if (call == null) return;
   final trimmed = output.trimRight();
   final (bounded, truncated) = boundedToolOutput(trimmed);
+  final row = out[index];
   out[index] = TranscriptMessage(
-    role: out[index].role,
-    text: out[index].text,
+    role: row.role,
+    text: row.text,
     tool: call.withResult(
       output: bounded.isEmpty ? null : bounded,
       outputTruncated: truncated,
       isError: isError,
     ),
+    subagent: row.subagent,
+    // Answered, so it is no longer outstanding — and this is the only place
+    // that may say so. A result whose text was empty leaves `output` null, so
+    // dropping the id here is what keeps the call from looking in-flight
+    // forever.
+    at: row.at,
   );
 }
 
-void _add(List<TranscriptMessage> out, String role, Object? text) {
+void _add(List<TranscriptMessage> out, String role, Object? text, DateTime? at) {
   if (text is! String) return;
   final trimmed = text.trim();
   if (trimmed.isEmpty) return;
-  out.add(TranscriptMessage(role: role, text: trimmed));
+  out.add(TranscriptMessage(role: role, text: trimmed, at: at));
 }

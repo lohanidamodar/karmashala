@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
@@ -34,49 +35,32 @@ class FileExplorerView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final root = ref.watch(selectedRepoWindowsRootProvider);
     if (root == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            "Select a repository to browse its files.",
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
+      return const PanePlaceholder(
+        message: 'Select a repository to browse its files.',
+        icon: AppIcons.folder,
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.md,
-            Insets.sm,
-            Insets.xs,
-            Insets.sm,
-          ),
-          child: Row(
-            children: [
-              Expanded(child: Text('Files', style: theme.textTheme.titleSmall)),
-              IconButton(
-                tooltip: 'Refresh',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(AppIcons.arrowsClockwise),
-                onPressed: () =>
-                    ref.read(fileListingRefreshProvider.notifier).refresh(),
-              ),
-            ],
-          ),
+        PaneHeader(
+          icon: AppIcons.folder,
+          title: 'Files',
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(AppIcons.arrowsClockwise),
+              onPressed: () =>
+                  ref.read(fileListingRefreshProvider.notifier).refresh(),
+            ),
+          ],
         ),
-        const Divider(height: 1),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(vertical: Insets.xs),
             child: _DirChildren(dir: root, depth: 0),
           ),
         ),
@@ -241,11 +225,11 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
             if (isDir)
               Icon(
                 _expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                size: 14,
+                size: Chrome.iconAction,
                 color: theme.colorScheme.onSurfaceVariant,
               )
             else
-              const SizedBox(width: 14),
+              const SizedBox(width: Chrome.iconAction),
             const SizedBox(width: 2),
             Icon(
               isDir

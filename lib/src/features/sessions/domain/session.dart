@@ -29,6 +29,7 @@ class Session {
     this.surface = SessionSurface.pane,
     this.view = SessionView.terminal,
     this.permissionMode,
+    this.modelId,
     this.archivedAt,
     this.titleByUser = false,
   });
@@ -124,6 +125,20 @@ class Session {
   /// should be overridable in each session. but settings is taking precedence."
   final PermissionMode? permissionMode;
 
+  /// The model **chosen for this session**, as the CLI's own id, or null when
+  /// nobody ever chose one.
+  ///
+  /// Nullable for exactly [permissionMode]'s reason, and the reason is worth
+  /// restating because the two defaults differ: null here means "follow the
+  /// per-agent default in Settings", and when *that* is unset it means "pass no
+  /// model flag and let the agent start on whatever it is configured to use".
+  /// Both are real states and neither is `sonnet`.
+  ///
+  /// A launch deliberately does not stamp the resolved default here. Doing so
+  /// would freeze every session on whichever model Settings named the day it
+  /// started, which is the bug `permissionMode` above documents having had.
+  final String? modelId;
+
   /// When this session's worktree was archived away, if it was.
   ///
   /// Archiving removes the worktree directory and nothing else — the
@@ -160,6 +175,7 @@ class Session {
     SessionSurface? surface,
     SessionView? view,
     PermissionMode? permissionMode,
+    String? modelId,
     DateTime? archivedAt,
     bool? titleByUser,
   }) => Session(
@@ -179,6 +195,7 @@ class Session {
     surface: surface ?? this.surface,
     view: view ?? this.view,
     permissionMode: permissionMode ?? this.permissionMode,
+    modelId: modelId ?? this.modelId,
     archivedAt: archivedAt ?? this.archivedAt,
     titleByUser: titleByUser ?? this.titleByUser,
   );
@@ -202,6 +219,7 @@ class Session {
       other.surface == surface &&
       other.view == view &&
       other.permissionMode == permissionMode &&
+      other.modelId == modelId &&
       other.archivedAt == archivedAt &&
       other.titleByUser == titleByUser;
 
@@ -223,6 +241,7 @@ class Session {
     surface,
     view,
     permissionMode,
+    modelId,
     archivedAt,
     titleByUser,
   );

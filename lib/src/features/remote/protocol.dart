@@ -234,6 +234,19 @@ enum FrameType {
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),
   approvalRequested('approval.requested', origin: FrameOrigin.host),
+
+  /// That approval is no longer waiting — for whatever reason.
+  ///
+  /// The other half of [approvalRequested], and missing until the owner hit
+  /// what its absence costs: a card on the phone offering approve and deny
+  /// for a decision the desktop had already made. The phone was told when a
+  /// request appeared and never told when it went away, so answering it
+  /// anywhere else left the card orphaned and actionable.
+  ///
+  /// Same principle [pairingRevoked] states: the phone cannot work this out
+  /// for itself, and silence reads exactly like a desktop that is merely
+  /// busy. Saying it outright turns a guess into a fact.
+  approvalResolved('approval.resolved', origin: FrameOrigin.host),
   hostStatus('host.status', origin: FrameOrigin.host),
 
   /// The host has revoked this pairing; nothing more will be answered.

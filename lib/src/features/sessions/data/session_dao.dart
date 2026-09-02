@@ -21,8 +21,8 @@ class SessionDao {
       'working_directory_environment_id, working_directory_path, '
       'status, created_at, '
       'external_session_id, parent_session_id, parent_link_kind, pane_id, '
-      'surface, view, permission_mode, archived_at, title_by_user) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'surface, view, permission_mode, model_id, archived_at, title_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -42,6 +42,7 @@ class SessionDao {
         session.surface.name,
         session.view.name,
         session.permissionMode?.name,
+        session.modelId,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
         intFromBool(session.titleByUser),
       ],
@@ -139,6 +140,19 @@ class SessionDao {
   void updatePermissionMode(String id, PermissionMode? mode) {
     _db.execute('UPDATE sessions SET permission_mode = ? WHERE id = ?;', [
       mode?.name,
+      id,
+    ]);
+  }
+
+  /// Records the model chosen for this session, or with `null` that no model is
+  /// chosen for it and it follows the default.
+  ///
+  /// Its own statement for [updatePermissionMode]'s reason, and the empty
+  /// string is normalised to null on the way in: "" and null would be two
+  /// spellings of "nobody chose", and only one of them reads back as one.
+  void updateModel(String id, String? modelId) {
+    _db.execute('UPDATE sessions SET model_id = ? WHERE id = ?;', [
+      modelId == null || modelId.isEmpty ? null : modelId,
       id,
     ]);
   }
@@ -324,6 +338,7 @@ class SessionDao {
       surface: _surfaceFrom(row['surface'] as String?),
       view: _viewFrom(row['view'] as String?),
       permissionMode: _permissionFrom(row['permission_mode'] as String?),
+      modelId: row['model_id'] as String?,
       archivedAt: row['archived_at'] == null
           ? null
           : dateFromIso(row['archived_at']),

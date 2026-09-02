@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
@@ -24,7 +25,6 @@ class AttentionInboxView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final inbox = ref.watch(attentionInboxProvider);
     final controller = ref.read(attentionInboxProvider.notifier);
     final now = ref.read(clockProvider).nowUtc();
@@ -32,44 +32,34 @@ class AttentionInboxView extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          height: Chrome.tabStrip,
-          color: scheme.surfaceContainerLow,
-          padding: const EdgeInsets.only(left: Insets.md, right: 2),
-          child: Row(
-            children: [
-              Icon(
-                AppIcons.warningCircle,
-                size: Chrome.iconSmall,
-                color: scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Text(
-                  inbox.unseen == 0 ? 'INBOX' : 'INBOX  ·  ${inbox.unseen} NEW',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall,
+        PaneHeader(
+          icon: AppIcons.warningCircle,
+          title: inbox.unseen == 0
+              ? 'Inbox'
+              : 'Inbox  ·  ${inbox.unseen} new',
+          actions: [
+            if (!inbox.isEmpty)
+              TextButton(
+                onPressed: controller.markAllSeen,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  textStyle: theme.textTheme.labelSmall,
                 ),
+                child: const Text('Mark all read'),
               ),
-              if (!inbox.isEmpty)
-                TextButton(
-                  onPressed: controller.markAllSeen,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: theme.textTheme.labelSmall,
-                  ),
-                  child: const Text('Mark all read'),
-                ),
-            ],
-          ),
+          ],
         ),
-        const Divider(height: 1),
         Expanded(
           child: inbox.isEmpty
-              ? _Empty()
+              ? PanePlaceholder(
+                  message: 'Nothing needs you.',
+                  icon: AppIcons.checkCircle,
+                  // The one empty state whose glyph means something: green is
+                  // the answer, not decoration.
+                  iconColor: SemanticColors.of(context).idle,
+                )
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: Insets.xs),
                   itemCount: inbox.items.length,
@@ -85,36 +75,6 @@ class AttentionInboxView extends ConsumerWidget {
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.checkCircle,
-              size: 22,
-              color: SemanticColors.of(context).idle,
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              'Nothing needs you.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -152,7 +112,7 @@ class _ContinueAction extends ConsumerWidget {
       // "button" — the tooltip is the only place this control can make it.
       tooltip: 'Continue with… — hand this session to another agent, or fork '
           'it. $kContinueWithPromise',
-      iconSize: 14,
+      iconSize: Chrome.iconAction,
       visualDensity: VisualDensity.compact,
       icon: const Icon(AppIcons.arrowBendDownRight),
       onPressed: () => ContinueWithDialog.show(context, sessionId),
@@ -263,7 +223,7 @@ class _InboxRow extends StatelessWidget {
               _ContinueAction(sessionId: item.session.openId),
             IconButton(
               tooltip: 'Dismiss',
-              iconSize: 14,
+              iconSize: Chrome.iconAction,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.x),
               onPressed: onDismiss,

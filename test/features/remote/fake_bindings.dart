@@ -14,6 +14,10 @@ class FakeRemoteBindings {
   final Map<String, String?> stages = {};
   final Map<String, RemoteApprovalRequest> approvals = {};
   final List<({String sessionId, String text})> prompts = [];
+
+  /// Every answer that actually reached the terminal. A refused one must not
+  /// appear here — that is the whole point of refusing it.
+  final List<({String sessionId, String decision})> approvalAnswers = [];
   final List<({String deviceId, String token, String platform})> pushes = [];
 
   /// When set, [RemoteHostBindings.answerApproval] throws this.
@@ -103,6 +107,7 @@ class FakeRemoteBindings {
     answerApproval: (sessionId, decision) async {
       final refusal = approvalRefusal;
       if (refusal != null) throw refusal;
+      approvalAnswers.add((sessionId: sessionId, decision: decision));
       return decision == 'approve' ? 'Yes (enter)' : 'No (esc)';
     },
     approvalEvidenceFor: (sessionId) async =>
@@ -187,6 +192,7 @@ class FakeRemoteBindings {
     String? whereabouts,
     String? lastActivityAt,
     bool imported = false,
+    String? attention,
   }) {
     sessions[id] = RemoteSessionSnapshot(
       sessionId: id,
@@ -196,6 +202,19 @@ class FakeRemoteBindings {
       whereabouts: whereabouts,
       lastActivityAt: lastActivityAt,
       imported: imported,
+      attention: attention,
+    );
+  }
+
+  /// The desktop's own state while a prompt is up, and after it is answered.
+  /// The host reads exactly this to decide whether there is anything left to
+  /// answer, so a test moves it rather than scripting a separate flag.
+  void setAwaitingApproval(String id, {bool waiting = true}) {
+    final session = sessions[id];
+    if (session == null) return;
+    sessions[id] = session.copyWith(
+      attention: waiting ? kAttentionNeedsApproval : null,
+      clearAttention: !waiting,
     );
   }
 }

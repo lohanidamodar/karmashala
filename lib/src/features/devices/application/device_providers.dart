@@ -1,14 +1,18 @@
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
+import '../../settings/application/settings_controller.dart';
 import '../data/adb_service.dart';
 import '../data/android_sdk_discovery.dart';
+import '../data/android_slimming_service.dart';
 import '../data/device_stream.dart';
 import '../domain/android_device.dart';
+import '../domain/android_slimming.dart';
 import '../domain/device_input.dart';
 
 /// The environment whose Android SDK the pane uses.
@@ -133,6 +137,121 @@ class HeadlessDevice extends Notifier<bool> {
 
   void update(bool headless) => state = headless;
 }
+
+/// Applies the durable slimming layers, or `null` when no SDK was found.
+final androidSlimmingServiceProvider = Provider<AndroidSlimmingService?>((ref) {
+  final sdk = ref.watch(androidSdkProvider).asData?.value;
+  if (sdk == null) return null;
+  final environment = ref.watch(deviceEnvironmentProvider);
+  return AndroidSlimmingService(
+    runner: ref.watch(commandRunnerFactoryProvider).forEnvironment(environment),
+    sdk: sdk,
+  );
+});
+
+/// Whether starting an emulator slims it at all — the master switch.
+final androidSlimmingOnStartProvider = Provider<bool>(
+  (ref) => ref.watch(settingsControllerProvider.select((s) => s.androidSlimming)),
+);
+
+/// The categories to apply, or empty when slimming is off.
+///
+/// Ids that no longer name a category are dropped rather than erroring: a
+/// category removed in a later release must not make a saved preference
+/// unreadable.
+final androidSlimmingCategoriesProvider =
+    Provider<Set<AndroidSlimmingCategory>>((ref) {
+      if (!ref.watch(androidSlimmingOnStartProvider)) return const {};
+      return categoriesFromIds(
+        ref.watch(
+          settingsControllerProvider.select((s) => s.androidSlimmingEnabled),
+        ),
+      );
+    });
+
+/// The renderer the emulator is started with.
+final androidEmulatorGpuProvider = Provider<AndroidGpuMode>(
+  (ref) => AndroidGpuMode.byId(
+    ref.watch(settingsControllerProvider.select((s) => s.androidEmulatorGpu)),
+  ),
+);
+
+/// The extra `emulator` argv a Start should use.
+///
+/// The GPU mode is here even when slimming is off: it is a rendering choice
+/// about this pane's preview, not an optimisation, and switching slimming off
+/// must not silently swap the renderer back.
+final androidEmulatorArgumentsProvider = Provider<List<String>>(
+  (ref) => launchArguments(
+    enabled: ref.watch(androidSlimmingCategoriesProvider),
+    gpu: ref.watch(androidEmulatorGpuProvider),
+  ),
+);
+
+/// Runs the two durable layers against a booted emulator, and remembers which
+/// serials are mid-flight so a button can say so.
+///
+/// Both methods swallow failure. Slimming is an optimisation, and refusing to
+/// hand over an emulator because its animations could not be zeroed would turn
+/// a saving into an outage — the rule `ios_device_providers.dart` states for
+/// the iOS side, and the reason it is repeated here rather than inherited.
+class AndroidSlimming extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  bool isBusy(String serial) => state.contains(serial);
+
+  /// Applies the selected categories to a freshly booted [serial].
+  ///
+  /// Called after `bootAvdAndWait`, which already waited for
+  /// `sys.boot_completed` — the service waits again anyway, because a caller
+  /// that used plain `bootAvd` would otherwise be writing settings into a
+  /// half-booted system.
+  Future<AndroidSlimmingReport?> applyAfterBoot(String serial) =>
+      _run(serial, (service) async {
+        final enabled = ref.read(androidSlimmingCategoriesProvider);
+        if (enabled.isEmpty) return null;
+        return service.apply(serial, enabled: enabled);
+      });
+
+  /// Puts everything this build manages back on [serial].
+  ///
+  /// Deliberately ignores the master switch: an emulator that was slimmed while
+  /// the setting was on still needs restoring after it is turned off, and that
+  /// is precisely the case a user cannot otherwise get out of.
+  Future<AndroidSlimmingReport?> restore(String serial) =>
+      _run(serial, (service) => service.restore(serial));
+
+  Future<AndroidSlimmingReport?> _run(
+    String serial,
+    Future<AndroidSlimmingReport?> Function(AndroidSlimmingService service)
+    action,
+  ) async {
+    final service = ref.read(androidSlimmingServiceProvider);
+    if (service == null || isBusy(serial)) return null;
+    state = {...state, serial};
+    try {
+      final report = await action(service);
+      if (report != null && !report.ok) {
+        _log.warning(
+          'Slimming $serial left ${report.failed.length} step(s) undone '
+          '${report.failed}',
+        );
+      }
+      return report;
+    } on Object catch (error) {
+      _log.warning('Slimming $serial did not run reason=$error');
+      return null;
+    } finally {
+      state = {...state}..remove(serial);
+    }
+  }
+
+  static final _log = AppLogger.named('android-slimming');
+}
+
+final androidSlimmingProvider =
+    NotifierProvider<AndroidSlimming, Set<String>>(AndroidSlimming.new);
 
 /// Streaming service for the live view.
 final deviceStreamServiceProvider = Provider<DeviceStreamService?>((ref) {

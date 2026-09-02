@@ -167,6 +167,8 @@ class FakeCompanionGateway implements CompanionGateway {
   final _attention = StreamController<CompanionAttentionEvent>.broadcast(
     sync: true,
   );
+  final _approvalResolutions =
+      StreamController<CompanionApprovalResolution>.broadcast(sync: true);
 
   /// Every prompt the UI sent, in order.
   final sentPrompts = <({String sessionId, String text})>[];
@@ -590,8 +592,23 @@ class FakeCompanionGateway implements CompanionGateway {
       approvalId: approvalId,
       decision: decision,
     ));
-    _approvalOf(sessionId).value = null;
+    final pending = _approvalOf(sessionId);
+    if (pending.value != null) {
+      pending.value = null;
+      _approvalResolutions.add(
+        CompanionApprovalResolution(
+          sessionId: sessionId,
+          outcome: decision == CompanionApprovalDecision.approve
+              ? CompanionApprovalOutcome.approved
+              : CompanionApprovalOutcome.denied,
+        ),
+      );
+    }
   }
+
+  @override
+  Stream<CompanionApprovalResolution> get approvalResolutions =>
+      _approvalResolutions.stream;
 
   @override
   Stream<CompanionAttentionEvent> get attentionEvents => _attention.stream;
@@ -639,6 +656,19 @@ class FakeCompanionGateway implements CompanionGateway {
       _approvalOf(approval.sessionId).value = approval;
 
   void clearApproval(String sessionId) => _approvalOf(sessionId).value = null;
+
+  /// The host answering it somewhere else: the card goes, and says why.
+  void resolveApproval(
+    String sessionId, {
+    CompanionApprovalOutcome outcome = CompanionApprovalOutcome.elsewhere,
+  }) {
+    final pending = _approvalOf(sessionId);
+    if (pending.value == null) return;
+    pending.value = null;
+    _approvalResolutions.add(
+      CompanionApprovalResolution(sessionId: sessionId, outcome: outcome),
+    );
+  }
 
   /// Emits the event and stamps the matching session's [CompanionAttention],
   /// the way a real host's `session.changed` would.

@@ -340,6 +340,52 @@ class CompanionApproval {
 /// The two answers `approval.answer` can carry.
 enum CompanionApprovalDecision { approve, deny }
 
+/// Why a pending approval stopped being pending.
+///
+/// The host states [approved] and [denied] only for an answer it applied for
+/// this phone; anything else — the desktop's own card, a second paired phone,
+/// an agent that gave up — is [elsewhere], because the host observes that the
+/// request is gone and not what was chosen.
+enum CompanionApprovalOutcome {
+  approved,
+  denied,
+  elsewhere;
+
+  /// One line for the reader whose card just disappeared. A card that simply
+  /// vanishes reads as a dropped request, which is the failure this whole
+  /// event exists to prevent.
+  String get sentence => switch (this) {
+    CompanionApprovalOutcome.approved => 'Approved.',
+    CompanionApprovalOutcome.denied => 'Declined.',
+    CompanionApprovalOutcome.elsewhere =>
+      'That request was already answered on the desktop.',
+  };
+}
+
+/// One approval going away, as it happens — what the session screen says out
+/// loud so the card does not simply vanish.
+class CompanionApprovalResolution {
+  const CompanionApprovalResolution({
+    required this.sessionId,
+    required this.outcome,
+  });
+
+  final String sessionId;
+  final CompanionApprovalOutcome outcome;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CompanionApprovalResolution &&
+      other.sessionId == sessionId &&
+      other.outcome == outcome;
+
+  @override
+  int get hashCode => Object.hash(sessionId, outcome);
+
+  @override
+  String toString() => 'CompanionApprovalResolution($sessionId, $outcome)';
+}
+
 /// An attention event as it happens — what a local notification is made from.
 class CompanionAttentionEvent {
   const CompanionAttentionEvent({
@@ -470,7 +516,16 @@ abstract interface class CompanionGateway {
   Stream<List<CompanionChatMessage>> transcript(String sessionId);
 
   /// The pending approval for one session, or null when nothing is waiting.
+  ///
+  /// Re-derived from the host rather than accumulated: an approval answered
+  /// anywhere — the desktop, another paired phone, the agent giving up —
+  /// clears here, including one resolved while this phone was off the link.
   Stream<CompanionApproval?> pendingApproval(String sessionId);
+
+  /// Approvals going away, and why. Events-only, like [attentionEvents]: a
+  /// screen subscribes to say what happened, and a screen that was not open
+  /// has nothing to say.
+  Stream<CompanionApprovalResolution> get approvalResolutions;
 
   /// `workspace.list` — the desktop's projects, their checkouts and the agents
   /// installed where each checkout lives.

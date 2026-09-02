@@ -139,6 +139,56 @@ const _claudeCode = AgentDescriptor(
           'the init message above listing our server alongside the four '
           'already configured',
     ),
+    // **Both halves verified against 2.1.258, and they are different claims.**
+    //
+    // The launch flag is the easy one: `--model <model>  Model for the current
+    // session. Provide an alias for the latest model (e.g. 'fable', 'opus', or
+    // 'sonnet') or a model's full name (e.g. 'claude-fable-5').`
+    //
+    // The in-session command is the half worth writing down, because a slash
+    // command that opens a *picker* and one that takes an argument look alike
+    // from outside and only the second can be sent by a program. This one takes
+    // an argument, and the bundle says so in its own dispatch:
+    //
+    //   if(Ne==="/model"||Ne.startsWith("/model ")){ … m.getSnapshot()
+    //     .query.trim().slice(6) … }
+    //
+    // — matched with and without a trailing argument, and the argument read off
+    // the query. The CLI's own onboarding names the four: "Run /model to switch
+    // models. Fable for the hardest problems, Opus for complex work, Sonnet for
+    // most tasks, Haiku for quick questions."
+    //
+    // The ids are aliases rather than dated model names on purpose. The same
+    // bundle carries the allowlist `["sonnet","opus","haiku","fable","best",
+    // "sonnet[1m]","opus[1m]","fable[1m]","opusplan"]` and resolves each to the
+    // latest build of that family, so an alias cannot go stale the way
+    // `claude-opus-4-1` does — and a stale id is a session that comes up on a
+    // model the chip is not naming.
+    model: AgentModelSupport.liveAndAtLaunch(
+      flag: '--model',
+      slashCommand: '/model',
+      models: [
+        AgentModel(
+          id: 'fable',
+          label: 'Fable',
+          summary: 'The hardest problems. Slowest, and the most capable.',
+        ),
+        AgentModel(id: 'opus', label: 'Opus', summary: 'Complex work.'),
+        AgentModel(id: 'sonnet', label: 'Sonnet', summary: 'Most tasks.'),
+        AgentModel(
+          id: 'haiku',
+          label: 'Haiku',
+          summary: 'Quick questions. Fastest, and the least capable.',
+        ),
+      ],
+      evidence:
+          'claude 2.1.258 --help: "--model <model>  Model for the current '
+          'session. Provide an alias for the latest model (e.g. \'fable\', '
+          '\'opus\', or \'sonnet\')"; the in-session form from the same '
+          'bundle\'s dispatch — `Ne==="/model"||Ne.startsWith("/model ")` with '
+          'the argument read off the query; alias list from that bundle\'s '
+          '["sonnet","opus","haiku","fable","best",…] allowlist',
+    ),
   ),
   store: AgentStoreSpec(
     homeDirectoryName: '.claude',
@@ -357,6 +407,71 @@ const _codex = AgentDescriptor(
           '`~/.codex/config.toml`"; `codex mcp add --url` documents `url` as '
           'the streamable-HTTP key, and `codex mcp list -c '
           'mcp_servers.karmashala.url=…` lists it beside the user\'s own',
+    ),
+    // **Codex takes a model at launch and cannot be moved mid-session**, which
+    // is the opposite of the assumption this feature was designed under and the
+    // whole reason the capability is declared per agent rather than assumed.
+    //
+    // The launch half is ordinary: `-m, --model <MODEL>  Model the agent should
+    // use`. The in-session half is simply not there. 0.151.0's slash-command
+    // list describes `/model` as "choose what model and reasoning effort to
+    // use", and it is drawn by `tui/src/chatwidget/model_popups.rs` — a
+    // **picker**. No `/model <arg>` form appears anywhere in the binary, and
+    // the commands that do take an argument advertise it in their own
+    // description ("let sandbox read a directory: /sandbox-add-read-dir
+    // <absolute_path>", "list configured MCP tools; use /mcp verbose for
+    // details"). So typing `/model gpt-5.6-sol` into a live Codex would open a
+    // popup and drop the name — the silent no-op the model control exists to
+    // avoid — and Codex is declared launch-only instead.
+    //
+    // The slugs are **this machine's** `$CODEX_HOME/models_cache.json`, which
+    // `app-server/src/models_refresh_worker.rs` keeps per account, read on
+    // 2026-09-02; the two entries it marks `"visibility":"hide"`
+    // (`gpt-reserve`, `codex-auto-review`) are left out. That file is the
+    // refresh instruction as much as the source: another account's list will
+    // differ, and an id this list does not carry is still passed to the CLI
+    // rather than dropped — see [AgentModelSupport.argumentsFor].
+    model: AgentModelSupport.atLaunchOnly(
+      flag: '--model',
+      models: [
+        AgentModel(
+          id: 'gpt-5.6-sol',
+          label: 'GPT-5.6-Sol',
+          summary: 'Latest frontier agentic coding model.',
+        ),
+        AgentModel(
+          id: 'gpt-5.6-terra',
+          label: 'GPT-5.6-Terra',
+          summary: 'Sibling of Sol in the 5.6 family.',
+        ),
+        AgentModel(
+          id: 'gpt-5.6-luna',
+          label: 'GPT-5.6-Luna',
+          summary: 'Sibling of Sol in the 5.6 family.',
+        ),
+        AgentModel(
+          id: 'gpt-5.5',
+          label: 'GPT-5.5',
+          summary: 'The previous generation.',
+        ),
+        AgentModel(
+          id: 'gpt-5.4',
+          label: 'GPT-5.4',
+          summary: 'Older, and still listed by the account.',
+        ),
+        AgentModel(
+          id: 'gpt-5.4-mini',
+          label: 'GPT-5.4-Mini',
+          summary: 'Smallest and fastest of the listed models.',
+        ),
+      ],
+      evidence:
+          'codex-cli 0.151.0 --help: "-m, --model <MODEL>  Model the agent '
+          'should use"; no in-session form declared because that build\'s '
+          '/model is a picker ("choose what model and reasoning effort to '
+          'use", drawn by tui/src/chatwidget/model_popups.rs) with no argument '
+          'form anywhere in the binary; slugs read from '
+          '\$CODEX_HOME/models_cache.json on 2026-09-02',
     ),
   ),
   store: AgentStoreSpec(
@@ -594,6 +709,100 @@ const _antigravity = AgentDescriptor(
     // ruled `config.toml` out for Codex. So Antigravity is launched exactly as
     // it is today — a flag invented here is how this descriptor was wrong for
     // months.
+    // **Antigravity does take an in-session `/model <name>`**, and the note
+    // above about `/fork` is why that has to be said explicitly: a slash
+    // command the CLI has is not automatically one a program can send, and this
+    // one is. The CLI's own changelog, embedded in the 1.1.23 binary, is where
+    // it is stated:
+    //
+    //   ## 1.1.22
+    //   - Added a `/model <name>` argument that switches to a model by name,
+    //     slug or label and saves it as your default in one step … `/model` on
+    //     its own still opens the picker, and an unrecognized name prints the
+    //     valid ones.
+    //
+    // Corroborated by the command registry inside the same binary, where
+    // `commands/model.go` declares a `CompleteArg` — the argument-completion
+    // hook, which a picker-only command has no use for.
+    //
+    // Two properties of that sentence are load-bearing here. It "saves it as
+    // your default", so a live switch and the next launch agree even before
+    // this app writes the row; and an unrecognized name *prints the valid ones*
+    // rather than silently doing nothing, which is the failure mode a curated
+    // list has to be able to survive.
+    //
+    // The slugs are `agy models` ("List available models") on 2026-09-02 — the
+    // one shipped agent with a first-party listing command, and the way to
+    // refresh this list. They are account-specific, so an id this list does not
+    // carry is still passed through rather than dropped.
+    model: AgentModelSupport.liveAndAtLaunch(
+      flag: '--model',
+      slashCommand: '/model',
+      models: [
+        AgentModel(
+          id: 'gemini-3.1-pro-high',
+          label: 'Gemini 3.1 Pro (High)',
+          summary: 'The most capable Gemini listed, at the most reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-3.1-pro-low',
+          label: 'Gemini 3.1 Pro (Low)',
+          summary: 'The same model with reasoning turned down.',
+        ),
+        AgentModel(
+          id: 'gemini-3.7-flash-high',
+          label: 'Gemini 3.7 Flash (High)',
+          summary: 'Newest Flash, at the most reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-3.7-flash-medium',
+          label: 'Gemini 3.7 Flash (Medium)',
+          summary: 'Newest Flash, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-3.7-flash-low',
+          label: 'Gemini 3.7 Flash (Low)',
+          summary: 'Newest Flash, fastest.',
+        ),
+        AgentModel(
+          id: 'gemini-3.6-flash-high',
+          label: 'Gemini 3.6 Flash (High)',
+          summary: 'Previous Flash, at the most reasoning.',
+        ),
+        AgentModel(
+          id: 'gemini-3.6-flash-medium',
+          label: 'Gemini 3.6 Flash (Medium)',
+          summary: 'Previous Flash, balanced.',
+        ),
+        AgentModel(
+          id: 'gemini-3.6-flash-low',
+          label: 'Gemini 3.6 Flash (Low)',
+          summary: 'Previous Flash, fastest.',
+        ),
+        AgentModel(
+          id: 'claude-opus-4-6-thinking',
+          label: 'Claude Opus 4.6 (Thinking)',
+          summary: 'Anthropic\'s model, served through Antigravity.',
+        ),
+        AgentModel(
+          id: 'claude-sonnet-4-6',
+          label: 'Claude Sonnet 4.6 (Thinking)',
+          summary: 'Anthropic\'s model, served through Antigravity.',
+        ),
+        AgentModel(
+          id: 'gpt-oss-120b-medium',
+          label: 'GPT-OSS 120B (Medium)',
+          summary: 'The open-weights option.',
+        ),
+      ],
+      evidence:
+          'agy 1.1.23 --help: "--model  Model for the current CLI session"; '
+          'the in-session form from the changelog inside that binary (1.1.22: '
+          '"Added a `/model <name>` argument that switches to a model by name, '
+          'slug or label … `/model` on its own still opens the picker"), '
+          'corroborated by commands/model.go declaring a CompleteArg; slugs '
+          'from `agy models` on 2026-09-02',
+    ),
   ),
   // Where the CLI keeps its data, confirmed against a live install on both
   // sides of this machine. It is **not** `.antigravity`, which is the IDE's

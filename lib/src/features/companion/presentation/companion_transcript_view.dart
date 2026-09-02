@@ -101,49 +101,57 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                     ),
                   ),
                 )
-              : Stack(
-                  children: [
-                    ListView.builder(
-                      controller: _scroll,
-                      reverse: true,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: Insets.md,
-                        vertical: Insets.sm,
-                      ),
-                      itemCount: total,
-                      // Keyed by position in the whole window so a message
-                      // that only moved because a newer one arrived keeps its
-                      // element — the sliver then corrects its own offsets
-                      // instead of redrawing different text under a reader.
-                      findChildIndexCallback: (key) {
-                        if (key is! ValueKey<int>) return null;
-                        final index = total - 1 - key.value;
-                        return index >= 0 && index < total ? index : null;
-                      },
-                      itemBuilder: (context, index) {
-                        final ordinal = total - 1 - index;
-                        final message = widget.messages[ordinal];
-                        return message.role == kCompanionNoticeRole
-                            ? _WindowTopNotice(
-                                key: ValueKey<int>(ordinal),
-                                text: message.text,
-                              )
-                            : _MessageTile(
-                                key: ValueKey<int>(ordinal),
-                                message: message,
-                              );
-                      },
-                    ),
-                    if (!_atLatest)
-                      Positioned(
-                        left: Insets.md,
-                        right: Insets.md,
-                        bottom: Insets.md,
-                        child: Center(child: _JumpToLatest(onPressed: _toLatest)),
-                      ),
-                  ],
+              : ListView.builder(
+                  controller: _scroll,
+                  reverse: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Insets.md,
+                    vertical: Insets.sm,
+                  ),
+                  itemCount: total,
+                  // Keyed by position in the whole window so a message that
+                  // only moved because a newer one arrived keeps its element
+                  // — the sliver then corrects its own offsets instead of
+                  // redrawing different text under a reader.
+                  findChildIndexCallback: (key) {
+                    if (key is! ValueKey<int>) return null;
+                    final index = total - 1 - key.value;
+                    return index >= 0 && index < total ? index : null;
+                  },
+                  itemBuilder: (context, index) {
+                    final ordinal = total - 1 - index;
+                    final message = widget.messages[ordinal];
+                    return message.role == kCompanionNoticeRole
+                        ? _WindowTopNotice(
+                            key: ValueKey<int>(ordinal),
+                            text: message.text,
+                          )
+                        : _MessageTile(
+                            key: ValueKey<int>(ordinal),
+                            message: message,
+                          );
+                  },
                 ),
         ),
+        // Above the composer, not floating in the list. Centred over the
+        // viewport it sat on the newest turn — the text the reader is
+        // scrolling back *towards* — and reserving list padding instead would
+        // mean hard-coding the pill's height, which moves with the text scale.
+        // Out here it cannot overlap anything at any scale.
+        //
+        // Appearing and vanishing costs the list one relayout each, at the
+        // single frame `_atLatest` flips; deliberately not animated, because a
+        // sized transition would relayout the viewport on every frame of it.
+        if (total > 0 && !_atLatest)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Insets.md,
+              Insets.xs,
+              Insets.md,
+              Insets.xs,
+            ),
+            child: Center(child: _JumpToLatest(onPressed: _toLatest)),
+          ),
         if (widget.footer != null) widget.footer!,
       ],
     );

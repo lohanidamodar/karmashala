@@ -538,6 +538,26 @@ void main() {
       ]);
     });
 
+    test('appends the slimming flags after our own', () async {
+      // The argv is the caller's policy: `AdbService` knows nothing about what
+      // these mean, which is what keeps a settings decision out of the process
+      // layer.
+      final runner = FakeCommandRunner();
+      await AdbService(runner: runner, sdk: _sdk()).bootAvd(
+        'Pixel_8_Pro',
+        extraArguments: const ['-no-audio', '-gpu', 'host'],
+      );
+      expect(runner.startRequests.single.arguments, [
+        '-avd',
+        'Pixel_8_Pro',
+        '-no-window',
+        '-no-boot-anim',
+        '-no-audio',
+        '-gpu',
+        'host',
+      ]);
+    });
+
     test(
       'drains the emulator output, which is what stops a boot wedging',
       () async {

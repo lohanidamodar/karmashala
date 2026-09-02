@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
@@ -22,8 +23,6 @@ class NotesView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final notes = ref.watch(notesProvider);
     // Watched, not read: the fallback target for a note with no session of its
     // own moves when the user changes session, and the button says which one.
@@ -32,37 +31,19 @@ class NotesView extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          height: Chrome.tabStrip,
-          color: scheme.surfaceContainerLow,
-          padding: const EdgeInsets.only(left: Insets.md, right: 2),
-          child: Row(
-            children: [
-              Icon(
-                AppIcons.note,
-                size: Chrome.iconSmall,
-                color: scheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Text(
-                  notes.isEmpty ? 'NOTES' : 'NOTES  ·  ${notes.length}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall,
-                ),
-              ),
-              IconButton(
-                tooltip: 'New note',
-                iconSize: Chrome.icon,
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(AppIcons.plus),
-                onPressed: () => _newNote(context, ref),
-              ),
-            ],
-          ),
+        PaneHeader(
+          icon: AppIcons.note,
+          title: notes.isEmpty ? 'Notes' : 'Notes  ·  ${notes.length}',
+          actions: [
+            IconButton(
+              tooltip: 'New note',
+              iconSize: Chrome.icon,
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(AppIcons.plus),
+              onPressed: () => _newNote(context, ref),
+            ),
+          ],
         ),
-        const Divider(height: 1),
         Expanded(
           child: notes.isEmpty
               ? const _EmptyNotes()

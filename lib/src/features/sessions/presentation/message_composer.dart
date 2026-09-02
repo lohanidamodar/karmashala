@@ -242,13 +242,14 @@ class _MessageComposerState extends State<MessageComposer> {
         if (widget.chips.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            child: Row(
-              children: [
-                for (final chip in widget.chips) ...[
-                  chip,
-                  const SizedBox(width: Insets.sm),
-                ],
-              ],
+            // Wraps rather than a `Row`: this slot now holds more than one
+            // control, and a pane narrowed to a third of a 720px window at
+            // Windows' largest text step has no room for them side by side. A
+            // second line is the right answer there; an overflow stripe is not.
+            child: Wrap(
+              spacing: Insets.sm,
+              runSpacing: Insets.xs,
+              children: widget.chips,
             ),
           ),
         if (_attachments.isNotEmpty)
