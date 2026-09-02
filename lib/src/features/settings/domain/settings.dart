@@ -1,4 +1,5 @@
 import '../../../core/logging/log_buffer.dart';
+import '../../devices/domain/android_slimming.dart';
 import '../../devices/domain/simulator_slimming.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
@@ -64,6 +65,9 @@ class Settings {
     this.autoStart = false,
     this.simulatorSlimming = true,
     this.simulatorSlimmingKept = kDefaultSlimmingKept,
+    this.androidSlimming = true,
+    this.androidSlimmingEnabled = kDefaultAndroidSlimming,
+    this.androidEmulatorGpu = 'auto',
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
@@ -149,6 +153,27 @@ class Settings {
   /// in a later release is slimmed by default rather than silently spared by
   /// everyone's saved preference.
   final List<String> simulatorSlimmingKept;
+
+  /// Slim an Android emulator when starting one from the device pane.
+  ///
+  /// On by default, but only the two harmless layers are on with it — see
+  /// [androidSlimmingEnabled]. Inert on a machine with no Android SDK.
+  final bool androidSlimming;
+
+  /// The [AndroidSlimmingCategory] ids to apply, by id.
+  ///
+  /// Stored as the *selection*, which is the opposite of
+  /// [simulatorSlimmingKept] and deliberately so: a category added in a later
+  /// release must do nothing until somebody ticks it, because the ones that
+  /// could be added are package groups and an app update has no business
+  /// disabling Play services on an emulator by itself.
+  final List<String> androidSlimmingEnabled;
+
+  /// [AndroidGpuMode.id] for the renderer emulators start with.
+  ///
+  /// A string rather than the enum so the stored value survives a mode this
+  /// build does not know; [AndroidGpuMode.byId] falls back to automatic.
+  final String androidEmulatorGpu;
 
   /// Persisted width of the Explorer pane and the detail sidebar.
   final double explorerPaneWidth;
@@ -306,6 +331,9 @@ class Settings {
     bool? autoStart,
     bool? simulatorSlimming,
     List<String>? simulatorSlimmingKept,
+    bool? androidSlimming,
+    List<String>? androidSlimmingEnabled,
+    String? androidEmulatorGpu,
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
@@ -352,6 +380,10 @@ class Settings {
     autoStart: autoStart ?? this.autoStart,
     simulatorSlimming: simulatorSlimming ?? this.simulatorSlimming,
     simulatorSlimmingKept: simulatorSlimmingKept ?? this.simulatorSlimmingKept,
+    androidSlimming: androidSlimming ?? this.androidSlimming,
+    androidSlimmingEnabled:
+        androidSlimmingEnabled ?? this.androidSlimmingEnabled,
+    androidEmulatorGpu: androidEmulatorGpu ?? this.androidEmulatorGpu,
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
@@ -404,6 +436,9 @@ class Settings {
     'autoStart': autoStart,
     'simulatorSlimming': simulatorSlimming,
     'simulatorSlimmingKept': simulatorSlimmingKept,
+    'androidSlimming': androidSlimming,
+    'androidSlimmingEnabled': androidSlimmingEnabled,
+    'androidEmulatorGpu': androidEmulatorGpu,
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
@@ -483,6 +518,17 @@ class Settings {
                 .whereType<String>()
                 .toList()
           : kDefaultSlimmingKept,
+      // Absent means a file written before this existed, and the default is on
+      // — the same reasoning as `simulatorSlimming` above.
+      androidSlimming: json['androidSlimming'] != false,
+      androidSlimmingEnabled: json['androidSlimmingEnabled'] is List
+          ? (json['androidSlimmingEnabled'] as List)
+                .whereType<String>()
+                .toList()
+          : kDefaultAndroidSlimming,
+      androidEmulatorGpu: json['androidEmulatorGpu'] is String
+          ? json['androidEmulatorGpu'] as String
+          : 'auto',
       explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
       compactDensity: json['compactDensity'] is bool
@@ -580,6 +626,9 @@ class Settings {
       other.autoStart == autoStart &&
       other.simulatorSlimming == simulatorSlimming &&
       _listEquals(other.simulatorSlimmingKept, simulatorSlimmingKept) &&
+      other.androidSlimming == androidSlimming &&
+      _listEquals(other.androidSlimmingEnabled, androidSlimmingEnabled) &&
+      other.androidEmulatorGpu == androidEmulatorGpu &&
       other.explorerPaneWidth == explorerPaneWidth &&
       other.detailSidebarWidth == detailSidebarWidth &&
       other.compactDensity == compactDensity &&
@@ -649,6 +698,13 @@ class Settings {
       logVerbosity,
       logToFile,
       logBufferSize,
+      // Folded in here rather than added to the outer call, which was already
+      // at `Object.hash`'s limit of 20 arguments.
+      Object.hash(
+        androidSlimming,
+        Object.hashAll(androidSlimmingEnabled),
+        androidEmulatorGpu,
+      ),
     ),
     Object.hashAllUnordered(
       permissions.entries.map((e) => Object.hash(e.key, e.value)),
