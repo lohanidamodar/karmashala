@@ -25,7 +25,7 @@ void main() {
         '{"type":"custom-title","sessionId":"abc","customTitle":"My Title"}',
       ]);
 
-      final sessions = await const ClaudeStoreReader().read(
+      final sessions = await ClaudeStoreReader().read(
         p.join(tmp.path, '.claude'),
         'windows',
       );
@@ -44,7 +44,7 @@ void main() {
         '{"type":"user","cwd":"/x","entrypoint":"sdk-cli",'
             '"message":{"content":[{"type":"text","text":"hi"}]}}',
       ]);
-      final s = (await const ClaudeStoreReader().read(
+      final s = (await ClaudeStoreReader().read(
         p.join(tmp.path, '.claude'),
         'windows',
       )).single;

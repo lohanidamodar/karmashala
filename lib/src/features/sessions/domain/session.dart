@@ -30,6 +30,7 @@ class Session {
     this.view = SessionView.terminal,
     this.permissionMode,
     this.archivedAt,
+    this.titleByUser = false,
   });
 
   final String id;
@@ -131,6 +132,15 @@ class Session {
   /// what was tidied afterwards.
   final DateTime? archivedAt;
 
+  /// Whether the user typed this title in the app.
+  ///
+  /// The one thing that makes a title theirs rather than the CLI's, and the
+  /// only reason the rename sync leaves a row alone. It is recorded rather than
+  /// remembered because the sync used to keep it in memory: after a restart
+  /// every title looked user-set, so a `/rename` in the CLI was never copied in
+  /// again — the owner's report.
+  final bool titleByUser;
+
   bool get isArchived => archivedAt != null;
 
   Session copyWith({
@@ -151,6 +161,7 @@ class Session {
     SessionView? view,
     PermissionMode? permissionMode,
     DateTime? archivedAt,
+    bool? titleByUser,
   }) => Session(
     id: id ?? this.id,
     repositoryId: repositoryId ?? this.repositoryId,
@@ -169,6 +180,7 @@ class Session {
     view: view ?? this.view,
     permissionMode: permissionMode ?? this.permissionMode,
     archivedAt: archivedAt ?? this.archivedAt,
+    titleByUser: titleByUser ?? this.titleByUser,
   );
 
   @override
@@ -190,7 +202,8 @@ class Session {
       other.surface == surface &&
       other.view == view &&
       other.permissionMode == permissionMode &&
-      other.archivedAt == archivedAt;
+      other.archivedAt == archivedAt &&
+      other.titleByUser == titleByUser;
 
   @override
   int get hashCode => Object.hash(
@@ -211,6 +224,7 @@ class Session {
     view,
     permissionMode,
     archivedAt,
+    titleByUser,
   );
 
   @override

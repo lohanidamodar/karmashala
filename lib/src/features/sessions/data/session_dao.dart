@@ -21,8 +21,8 @@ class SessionDao {
       'working_directory_environment_id, working_directory_path, '
       'status, created_at, '
       'external_session_id, parent_session_id, parent_link_kind, pane_id, '
-      'surface, view, permission_mode, archived_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'surface, view, permission_mode, archived_at, title_by_user) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
       [
         session.id,
         session.repositoryId,
@@ -43,6 +43,7 @@ class SessionDao {
         session.view.name,
         session.permissionMode?.name,
         session.archivedAt == null ? null : isoFromDate(session.archivedAt!),
+        intFromBool(session.titleByUser),
       ],
     );
   }
@@ -80,8 +81,16 @@ class SessionDao {
   }
 
   /// Updates only the [title] of session [id].
-  void updateTitle(String id, String title) {
-    _db.execute('UPDATE sessions SET title = ? WHERE id = ?;', [title, id]);
+  /// Renames session [id].
+  ///
+  /// [byUser] records that the *user* chose this name, which is what stops the
+  /// CLI rename sync ever replacing it. The sync itself passes false: a title it
+  /// copied in stays the CLI's to change, so a second `/rename` still lands.
+  void updateTitle(String id, String title, {bool byUser = false}) {
+    _db.execute(
+      'UPDATE sessions SET title = ?, title_by_user = ? WHERE id = ?;',
+      [title, intFromBool(byUser), id],
+    );
   }
 
   /// Updates only the [status] of session [id].
@@ -318,6 +327,7 @@ class SessionDao {
       archivedAt: row['archived_at'] == null
           ? null
           : dateFromIso(row['archived_at']),
+      titleByUser: boolFromInt(row['title_by_user']),
     );
   }
 }

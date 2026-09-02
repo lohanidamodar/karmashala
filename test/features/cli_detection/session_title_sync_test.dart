@@ -49,6 +49,7 @@ void main() {
     String title = 'New session',
     String? externalId = 'c1',
     SessionStatus status = SessionStatus.running,
+    bool titleByUser = false,
   }) => Session(
     id: id,
     repositoryId: 'r1',
@@ -58,6 +59,7 @@ void main() {
     status: status,
     createdAt: testTime,
     externalSessionId: externalId,
+    titleByUser: titleByUser,
   );
 
   DetectedSession found({
@@ -133,7 +135,10 @@ void main() {
 
   group('what it refuses to overwrite', () {
     test('a title the user typed in the app', () async {
-      dao.insert(row(title: 'Ledger rewrite'));
+      // `titleByUser` is what `SessionActions.renameNative` records, and it is
+      // the only thing that stops the sync. It is on the row rather than in
+      // memory precisely so it survives a restart — see the test below.
+      dao.insert(row(title: 'Ledger rewrite', titleByUser: true));
       final sync = service(() => [found(title: 'test me now')]);
 
       expect(await sync.sync(), 0);
@@ -204,8 +209,10 @@ void main() {
       final sync = service(() => [found(title: title)]);
 
       expect(await sync.sync(), 1);
-      // What `SessionActions.renameNative` does.
-      dao.updateTitle('s1', 'Ledger rewrite');
+      // What `SessionActions.renameNative` does — including recording that the
+      // name is the user's, which is what settles the row rather than the
+      // in-memory note the service used to keep.
+      dao.updateTitle('s1', 'Ledger rewrite', byUser: true);
       title = 'final answer';
 
       expect(sync.wantsStoreSweep, isFalse);
@@ -239,5 +246,43 @@ void main() {
 
     expect(sync.wantsStoreSweep, isFalse);
     expect(await sync.sync(), 0);
+  });
+
+  group('and a rename in the CLI still lands after the app restarts', () {
+    test('the reported case: a second /rename, on a new run of the app',
+        () async {
+      // The bug: which titles the app had written was remembered **in memory**,
+      // so on the next start every row's title looked like the user's and no
+      // further `/rename` was ever copied in. The owner renamed in the CLI, the
+      // store recorded it, and the sidebar went on showing the old name.
+      //
+      // A fresh service with a row already carrying a CLI name is exactly what
+      // a restart looks like: nothing in memory, everything on the row.
+      dao.insert(row(title: 'chitragupta'));
+      final sync = service(() => [found(title: 'karmashala')]);
+
+      expect(sync.wantsStoreSweep, isTrue, reason: 'the row is still the CLIs');
+      expect(await sync.sync(), 1);
+      expect(dao.getById('s1')!.title, 'karmashala');
+    });
+
+    test('but not once the user has renamed it in the app', () async {
+      dao.insert(row(title: 'chitragupta', titleByUser: true));
+      final sync = service(() => [found(title: 'karmashala')]);
+
+      expect(await sync.sync(), 0);
+      expect(dao.getById('s1')!.title, 'chitragupta');
+      expect(sync.scans, 0, reason: 'and it does not even read the disk');
+    });
+
+    test('and a stopped session is left alone, restart or not', () async {
+      // No CLI to be renamed in, and leaving it waiting would buy a store scan
+      // on every slow slot for the rest of the run.
+      dao.insert(row(title: 'chitragupta', status: SessionStatus.completed));
+      final sync = service(() => [found(title: 'karmashala')]);
+
+      expect(sync.wantsStoreSweep, isFalse);
+      expect(await sync.sync(), 0);
+    });
   });
 }

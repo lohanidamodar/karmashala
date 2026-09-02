@@ -45,7 +45,10 @@ class SessionActions {
   static final _log = AppLogger.named('sessions.actions');
 
   void renameNative(String id, String title) {
-    _ref.read(sessionDaoProvider).updateTitle(id, title);
+    // `byUser`: this is the one event that makes a title the user's, and
+    // recording it is what stops the CLI rename sync taking it back — for the
+    // life of the row, not just this run of the app.
+    _ref.read(sessionDaoProvider).updateTitle(id, title, byUser: true);
     // The narrowest fact the app publishes, and the most frequent: nothing but
     // this row's name moved. See `session_signal_cost_test.dart` for what the
     // coarse word used to cost — 108 session reads at a hundred sessions.
