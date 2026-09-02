@@ -212,6 +212,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final workspaces = ref.watch(workspacesControllerProvider);
 
     return AlertDialog(
+      // Material's own answer to a column that has outgrown the window: the
+      // context picker is one field more than this dialog used to hold, and at
+      // 720x560 with text at 1.3x that field was the 29px that did not fit.
+      scrollable: true,
       title: const DesktopDialogTitle(
         icon: AppIcons.folderPlus,
         title: 'New project',
