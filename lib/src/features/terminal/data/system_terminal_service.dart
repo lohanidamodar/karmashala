@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/process/command_runner.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
@@ -462,17 +463,27 @@ String? resumeRefusalFor(
       'instead, where the agent is launched from its own registry entry.';
 }
 
-/// A single shell-pasteable command: `cd <cwd> && <agent> <flags> [resume]`.
+/// A single shell-pasteable command, **spelled for the shell [environment]
+/// actually opens**: PowerShell for a Windows-native session, POSIX `sh` for
+/// WSL, SSH and a local Mac or Linux host.
 ///
 /// Used by the "copy command" buttons — the user pastes it into whichever shell
 /// the session lives in (so it is NOT wsl-wrapped). When [externalId] is null it
 /// is a fresh-session command. [permissionMode] adds the per-agent flags.
+///
+/// [environment] is required rather than defaulted, because one syntax for every
+/// environment is exactly the defect it closes: this used to return
+/// `cd <cwd> && <parts>` for all of them, and **Windows PowerShell 5.1 rejects
+/// `&&` outright** — it is not an operator there until PowerShell 7. A Windows
+/// session's copied line was therefore broken on the shell most Windows
+/// machines open by default, and looked like a WSL command besides.
 String shellCommandLine({
   required String agentExecutable,
   required String cli,
   String? externalId,
   required PermissionMode permissionMode,
   required String cwd,
+  required EnvironmentKind environment,
   AgentRegistry registry = AgentRegistry.builtIn,
 }) {
   final parts = [
@@ -480,11 +491,24 @@ String shellCommandLine({
     ...permissionArgsFor(cli, permissionMode, registry: registry),
     ...resumeArgsFor(cli, externalId, registry: registry),
   ];
-  return 'cd ${_shQuote(cwd)} && ${parts.map(_shQuote).join(' ')}';
+  if (isPosixShell(environment)) {
+    return 'cd ${_shQuote(cwd)} && ${parts.map(_shQuote).join(' ')}';
+  }
+  // `;` separates statements in every PowerShell version where `&&` does not,
+  // and `&` is what runs an executable named by a quoted path. `-LiteralPath`
+  // keeps a `[` or `]` in a directory name from being read as a wildcard, the
+  // same way the PowerShell external-terminal launch above spells it.
+  return 'Set-Location -LiteralPath ${quotePowerShellArgument(cwd)}; '
+      '& ${parts.map(quotePowerShellArgument).join(' ')}';
 }
 
+/// Quotes one argument for a POSIX shell.
+///
+/// A backslash is **not** in the safe set: it escapes the next character in an
+/// unquoted `sh` word, so a value carrying one has to be quoted even though it
+/// looks inert.
 String _shQuote(String value) =>
-    RegExp(r'^[A-Za-z0-9_@%+=:,./\\-]+$').hasMatch(value)
+    RegExp(r'^[A-Za-z0-9_@%+=:,./-]+$').hasMatch(value)
     ? value
     : "'${value.replaceAll("'", r"'\''")}'";
 

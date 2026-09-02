@@ -1,5 +1,6 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -232,8 +233,10 @@ void main() {
           externalId: 'conv-1',
           permissionMode: PermissionMode.ask,
           cwd: r'C:\ws\app',
+          environment: EnvironmentKind.windowsNative,
         ),
-        r'cd C:\ws\app && agy --conversation conv-1',
+        r"Set-Location -LiteralPath 'C:\ws\app'; "
+        r"& 'agy' '--conversation' 'conv-1'",
       );
     });
 
@@ -253,19 +256,21 @@ void main() {
       );
     });
 
-    test('Claude Code and Codex keep the exact command lines they had', () {
+    test('Claude Code and Codex keep the exact arguments they had', () {
       // Pinned: the point of reading the registry is that these two do not
       // move. Claude's flag comes before the id, Codex's is a subcommand, and
-      // both sit after the permission flags.
+      // both sit after the permission flags. Only the *shell* around them
+      // changed.
       expect(
         shellCommandLine(
           agentExecutable: 'claude',
           cli: 'claudeCode',
           externalId: 'abc',
           permissionMode: PermissionMode.ask,
-          cwd: r'C:\ws\app',
+          cwd: '/home/me/app',
+          environment: EnvironmentKind.wsl,
         ),
-        r'cd C:\ws\app && claude --permission-mode manual --resume abc',
+        'cd /home/me/app && claude --permission-mode manual --resume abc',
       );
       expect(
         shellCommandLine(
@@ -273,9 +278,10 @@ void main() {
           cli: 'codex',
           externalId: 'sid',
           permissionMode: PermissionMode.bypass,
-          cwd: r'C:\ws\app',
+          cwd: '/home/me/app',
+          environment: EnvironmentKind.wsl,
         ),
-        r'cd C:\ws\app && codex '
+        'cd /home/me/app && codex '
         '--dangerously-bypass-approvals-and-sandbox resume sid',
       );
     });
@@ -287,8 +293,100 @@ void main() {
           cli: 'antigravity',
           permissionMode: PermissionMode.ask,
           cwd: r'C:\ws\app',
+          environment: EnvironmentKind.windowsNative,
         ),
-        r'cd C:\ws\app && agy',
+        r"Set-Location -LiteralPath 'C:\ws\app'; & 'agy'",
+      );
+    });
+  });
+
+  group('the copied command is spelled for its own shell', () {
+    // The owner's report: resuming a Windows-native Codex session offered a
+    // command that "looks like a WSL command". It did — `shellCommandLine` had
+    // no environment parameter at all and emitted `cd <cwd> && <parts>` for
+    // every session in the app, Windows ones included.
+    //
+    // `&&` is not a PowerShell operator until PowerShell 7. Windows PowerShell
+    // 5.1 — the shell a Windows box opens by default, and now the shell a
+    // Windows-native pane launches — rejects the line outright, so the copied
+    // command was broken for exactly the sessions it named Windows paths for.
+    String lineFor(EnvironmentKind environment, String cwd) => shellCommandLine(
+      agentExecutable: cwd.startsWith('/') ? 'codex' : r'C:\bin\codex.exe',
+      cli: 'codex',
+      externalId: 'sid',
+      permissionMode: PermissionMode.bypass,
+      cwd: cwd,
+      environment: environment,
+    );
+
+    test('a Windows-native session gets PowerShell, not `cd … &&`', () {
+      final line = lineFor(
+        EnvironmentKind.windowsNative,
+        r'C:\Users\me\projects\personal\field-report',
+      );
+      expect(
+        line,
+        r"Set-Location -LiteralPath 'C:\Users\me\projects\personal\field-report'; "
+        r"& 'C:\bin\codex.exe' "
+        r"'--dangerously-bypass-approvals-and-sandbox' 'resume' 'sid'",
+      );
+      // The two halves of the defect, asserted separately so a regression names
+      // itself: no `&&` (5.1 rejects it) and no bare `cd` (it is `Set-Location`
+      // that takes `-LiteralPath`).
+      expect(line, isNot(contains('&&')));
+      expect(line, isNot(startsWith('cd ')));
+    });
+
+    test('WSL, SSH and a local POSIX host keep the sh form', () {
+      for (final kind in [
+        EnvironmentKind.wsl,
+        EnvironmentKind.ssh,
+        EnvironmentKind.localPosix,
+      ]) {
+        final line = lineFor(kind, '/home/me/app');
+        expect(
+          line,
+          'cd /home/me/app && codex '
+          '--dangerously-bypass-approvals-and-sandbox resume sid',
+          reason: kind.name,
+        );
+        expect(line, isNot(contains('Set-Location')), reason: kind.name);
+      }
+    });
+
+    test('a PowerShell path survives a space, an apostrophe and a \$', () {
+      // Single quotes are PowerShell's literal string: nothing inside them
+      // expands, so `$dev` stays text, and an embedded apostrophe is doubled
+      // rather than escaped with a backslash. `mysteryAgent` is deliberate —
+      // an agent the registry never heard of contributes no flags, so this
+      // asserts quoting and nothing else.
+      expect(
+        shellCommandLine(
+          agentExecutable: r"C:\Program Files\o'brien\codex.exe",
+          cli: 'mysteryAgent',
+          permissionMode: PermissionMode.ask,
+          cwd: r"C:\Users\me\$dev\it's here",
+          environment: EnvironmentKind.windowsNative,
+        ),
+        r"Set-Location -LiteralPath 'C:\Users\me\$dev\it''s here'; "
+        r"& 'C:\Program Files\o''brien\codex.exe'",
+      );
+    });
+
+    test('a POSIX path with a backslash is quoted, not left bare', () {
+      // A backslash escapes the next character in an unquoted `sh` word, so
+      // leaving it bare would silently change the path. It used to be in the
+      // "safe" set purely so Windows paths came out unquoted — which is how the
+      // Windows line ended up looking like a WSL one in the first place.
+      expect(
+        shellCommandLine(
+          agentExecutable: 'agent',
+          cli: 'mysteryAgent',
+          permissionMode: PermissionMode.ask,
+          cwd: r'/home/me/odd\dir',
+          environment: EnvironmentKind.wsl,
+        ),
+        r"cd '/home/me/odd\dir' && agent",
       );
     });
   });

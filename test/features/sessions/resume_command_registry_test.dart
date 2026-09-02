@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:karmashala/src/features/cli_detection/domain/imported_session.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
@@ -172,7 +173,9 @@ void main() {
         h.container
             .read(sessionActionsProvider)
             .resumeShellCommand(_imported(_conversational)),
-        contains('--conversation ext-1'),
+        // Quoted per token: these harness sessions live in the `windows`
+        // environment, whose copied command is PowerShell.
+        contains("'--conversation' 'ext-1'"),
       );
     });
 
@@ -183,8 +186,40 @@ void main() {
 
       expect(
         h.container.read(sessionActionsProvider).nativeResumeShellCommand('n1'),
-        contains('--conversation ext-1'),
+        contains("'--conversation' 'ext-1'"),
       );
+    });
+
+    test('and a session recorded in another environment gets that shell', () {
+      // The repository is Windows; this session actually runs in a worktree
+      // inside a WSL distribution. The copied line has to be spelled for the
+      // shell that opens *in the working directory* — naming a POSIX path in a
+      // PowerShell `Set-Location` would be as wrong as the reverse, which is
+      // the bug that started this: one syntax was emitted for every
+      // environment in the app.
+      final h = harness(_conversational);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+
+      ExecutionEnvironmentDao(h.db).upsert(wslEnv());
+      SessionDao(h.db).insert(
+        session(
+          id: 'n2',
+          title: 'Worktree work',
+          workingDirectory: const EnvironmentPath(
+            environmentId: 'wsl:Ubuntu',
+            path: '/home/me/wt',
+          ),
+        ),
+      );
+      SessionDao(h.db).updateExternalSessionId('n2', 'ext-2');
+
+      final line = h.container
+          .read(sessionActionsProvider)
+          .nativeResumeShellCommand('n2');
+      expect(line, startsWith('cd /home/me/wt && '));
+      expect(line, contains('--conversation ext-2'));
+      expect(line, isNot(contains('Set-Location')));
     });
 
     test('and so does the external-terminal open', () async {

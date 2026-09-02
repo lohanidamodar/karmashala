@@ -16,6 +16,7 @@ import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/domain/detected_session.dart';
 import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
@@ -411,8 +412,22 @@ class SessionActions {
           .read(sessionLauncherProvider)
           .permissionFor(session.cli, SessionPurpose.existingSession),
       cwd: repo.path.path,
+      environment: _shellKindOf(session.environmentId),
       registry: _ref.read(agentRegistryProvider),
     );
+  }
+
+  /// The shell family a copied command has to be spelled for: the one belonging
+  /// to the directory the command `cd`s into, never the host's. A Windows
+  /// session gets PowerShell even when the row was adopted from a WSL store.
+  EnvironmentKind _shellKindOf(String environmentId) {
+    final environment = _ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(environmentId);
+    if (environment == null) {
+      throw StateError('The environment "$environmentId" is not configured.');
+    }
+    return environment.kind;
   }
 
   /// A shell command (cd + resume, with permission flags) for native [sessionId].
@@ -430,6 +445,7 @@ class SessionActions {
       throw StateError('The agent for this session is not installed.');
     }
     _refuseWhatCannotResume(installation.agentId, session.externalSessionId);
+    final workingDirectory = sessionWorkingDirectoryOf(_ref, session) ?? repo.path;
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
@@ -447,7 +463,10 @@ class SessionActions {
       // No existence check: nothing is being started, and a command the user
       // copies for later should name the directory the conversation belongs
       // to even if that folder is not mounted at this moment.
-      cwd: (sessionWorkingDirectoryOf(_ref, session) ?? repo.path).path,
+      cwd: workingDirectory.path,
+      // The *working directory's* environment, not the installation's: the
+      // shell that has to understand this line is the one that shell opens in.
+      environment: _shellKindOf(workingDirectory.environmentId),
       registry: _ref.read(agentRegistryProvider),
     );
   }
@@ -485,6 +504,7 @@ class SessionActions {
           .read(sessionLauncherProvider)
           .permissionFor(installation.agentId, SessionPurpose.newSession),
       cwd: repo.path.path,
+      environment: _shellKindOf(repo.path.environmentId),
       registry: _ref.read(agentRegistryProvider),
     );
   }
