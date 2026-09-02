@@ -304,14 +304,20 @@ class AppLifecycle {
       cap: _kHookStepBudget,
     );
 
-    // 1b. Take our hooks back out of the agents' config files (Loop 68, B2):
-    //     the endpoint they point at dies with this process, and a stale
-    //     curl in someone's settings.json is exactly what the owner would
-    //     notice next week.
-    await _step('agent hook uninstall', watch, () async {
+    // 1b. Retire the callback endpoint (Loop 68, B2; narrowed in Loop 71).
+    //     What dies with this process is the port and the token, and those now
+    //     live in one generated file per agent rather than inline in the
+    //     agent's own config — so this deletes those files and leaves the
+    //     config entries alone. Taking the entries out here and putting
+    //     byte-identical ones back on the next start is what gave the race in
+    //     `AgentHookInstaller` two chances a launch to strip us out of somebody
+    //     else's settings.json. With the endpoint file gone the installed
+    //     script costs the agent an `if not exist` and exits zero, which is
+    //     cheaper than the `curl -m 2` a stale entry used to cost.
+    await _step('agent hook endpoint retirement', watch, () async {
       await _container
           .read(agentHookInstallationServiceProvider)
-          .uninstallAll();
+          .retireEndpoints();
     }, cap: _kHookStepBudget);
 
     // 2. Watchers, so nothing new arrives while the rest closes.

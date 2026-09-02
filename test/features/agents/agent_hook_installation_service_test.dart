@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_reachability.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
@@ -14,6 +15,7 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -84,6 +86,8 @@ void main() {
   });
 
   File settings() => File(p.join(claudeHome.path, 'settings.json'));
+  File endpointFile() =>
+      File(p.join(claudeHome.path, '$agentHookMarker.endpoint'));
 
   /// The container the service runs in, with the door answering by default.
   ///
@@ -263,9 +267,12 @@ void main() {
       final claude = results.singleWhere((r) => r.environmentId == wsl.id);
       expect(claude.installed, isTrue);
       expect(claude.skippedBecause, isNull);
-      final raw = settings().readAsStringSync();
-      expect(raw, contains('172.18.240.1:4242/agent-hook'));
-      expect(raw, isNot(contains('127.0.0.1')));
+      // The config names a script; the switch address is in the endpoint file
+      // beside it, which is the only thing a relaunch rewrites.
+      expect(settings().readAsStringSync(), contains(agentHookMarker));
+      final endpointText = endpointFile().readAsStringSync();
+      expect(endpointText, contains('172.18.240.1:4242/agent-hook'));
+      expect(endpointText, isNot(contains('127.0.0.1')));
     });
 
     test('is skipped when the switch address is bound but dead', () async {
@@ -480,7 +487,8 @@ void main() {
         locator,
       ).read(agentHookInstallationServiceProvider);
       await service.installAll(reachable);
-      expect(settings().readAsStringSync(), contains('172.18.240.1'));
+      final entry = settings().readAsStringSync();
+      expect(endpointFile().readAsStringSync(), contains('172.18.240.1'));
 
       await service.installAll(
         const AgentHookEndpoint(
@@ -489,14 +497,15 @@ void main() {
           wslHost: '172.30.16.1',
         ),
       );
-      expect(settings().readAsStringSync(), contains('172.30.16.1'));
+      // The address moved and the config did not: only the endpoint file did.
+      expect(settings().readAsStringSync(), entry);
+      expect(endpointFile().readAsStringSync(), contains('172.30.16.1'));
+      expect(endpointFile().readAsStringSync(), isNot(contains('172.18.240.1')));
 
       await service.uninstallAll();
 
-      final after = settings().readAsStringSync();
-      expect(after, isNot(contains(agentHookMarker)));
-      expect(after, isNot(contains('172.18.240.1')));
-      expect(after, isNot(contains('172.30.16.1')));
+      expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
+      expect(endpointFile().existsSync(), isFalse);
     });
 
     test('uninstall sweeps it when the switch address has gone', () async {
@@ -555,10 +564,120 @@ void main() {
                 hook['command'],
         ];
         expect(ours, hasLength(1), reason: '${entry.key}');
-        expect(ours.single, contains(':40009/agent-hook'));
+        // **The headline property.** Ten launches on ten ports and ten tokens
+        // wrote one command, and it is the same command every time — so the
+        // config was written once and left alone nine times. Every one of those
+        // nine writes used to be another chance for the CLI that owns this file
+        // to rewrite it from its own start-up copy and take our entry with it.
+        expect(ours.single, isNot(contains('4000')));
+        expect(ours.single, isNot(contains('tok')));
       }
       expect(settings().readAsStringSync(), contains('mine.sh'));
+      // The tenth launch's address is where it belongs, and nowhere else.
+      expect(endpointFile().readAsStringSync(), contains(':40009/agent-hook'));
+      expect(endpointFile().readAsStringSync(), contains('token=tok9'));
     });
+
+    test('the config is written once across ten launches', () async {
+      final (locator, _) = wslStore();
+      final service = containerWith(
+        locator,
+      ).read(agentHookInstallationServiceProvider);
+      await service.installAll(reachable);
+      final afterFirst = settings().readAsStringSync();
+
+      for (var launch = 1; launch < 10; launch++) {
+        await service.installAll(
+          AgentHookEndpoint(
+            port: 40000 + launch,
+            token: 'tok$launch',
+            wslHost: '172.18.240.1',
+          ),
+        );
+      }
+
+      expect(
+        settings().readAsStringSync(),
+        afterFirst,
+        reason:
+            'byte-for-byte: nine relaunches on nine ports rewrote nobody '
+            "else's config file",
+      );
+    });
+
+    test('retiring the endpoint leaves the entry where it is', () async {
+      // The exit path. What dies with the process is the address and the
+      // token, and only they are taken out — the entry is a constant with
+      // nothing stale in it, and a config we do not rewrite is a config we
+      // cannot lose the race for.
+      final (locator, _) = wslStore();
+      final service = containerWith(
+        locator,
+      ).read(agentHookInstallationServiceProvider);
+      await service.installAll(reachable);
+      final entry = settings().readAsStringSync();
+      expect(endpointFile().existsSync(), isTrue);
+
+      final retired = await service.retireEndpoints();
+
+      expect(retired.where((r) => r.installed), isNotEmpty);
+      expect(endpointFile().existsSync(), isFalse);
+      expect(settings().readAsStringSync(), entry);
+      expect(
+        File(p.join(claudeHome.path, '$agentHookMarker.sh')).existsSync(),
+        isTrue,
+        reason: 'the script is a constant too, and stays',
+      );
+    });
+  });
+
+  test('no token reaches a log line', () async {
+    // The sweep logs an agent id, an environment id and a reason, and it has to
+    // keep doing exactly that. The **address** is deliberately in there — the
+    // skip reason has to name the door that did not answer, and a test above
+    // asserts it — but the token never may be, and the token is now the only
+    // thing this feature holds that a diagnostic could not honestly print.
+    //
+    // The unreachable branch is the one exercised on purpose: it is the path
+    // that builds a message out of the endpoint, so it is where a future
+    // `'$endpoint'` would land first.
+    final records = <LogRecord>[];
+    AppLogger.initialize(level: Level.ALL, onRecord: records.add);
+    addTearDown(AppLogger.initialize);
+    const secret = AgentHookEndpoint(
+      port: 4242,
+      token: 'S3CRET-hook-token',
+      wslHost: '172.18.240.1',
+    );
+    final wsl = wslEnv();
+    ExecutionEnvironmentDao(db).upsert(wsl);
+    final service = containerWith(
+      _StubLocator([
+        CliStore(
+          environmentId: wsl.id,
+          homesByAgentId: {'claudeCode': claudeHome.path},
+        ),
+      ]),
+      doorAnswers: false,
+    ).read(agentHookInstallationServiceProvider);
+
+    await service.installAll(secret);
+    await service.retireEndpoints();
+    await service.uninstallAll();
+
+    expect(records, isNotEmpty, reason: 'otherwise this proves nothing');
+    expect(
+      records.map((r) => r.message),
+      contains(contains('172.18.240.1:4242')),
+      reason: 'the address is the part that has to be said out loud',
+    );
+    for (final record in records) {
+      expect(
+        '${record.message} ${record.error}',
+        isNot(contains(secret.token)),
+        reason: record.message,
+      );
+    }
   });
 
   test('one unparseable config does not stop or corrupt the others', () async {
@@ -590,7 +709,10 @@ void main() {
     expect(
       broken.listSync().map((e) => p.basename(e.path)).toList(),
       ['settings.json'],
-      reason: 'nothing staged beside a config we could not read',
+      reason:
+          'nothing written beside a config we could not read — not a staged '
+          'temporary, and not a bearer token in an endpoint file for a store '
+          'whose settings.json we never opened',
     );
     final failed = results.singleWhere((r) => r.environmentId == wsl.id);
     expect(failed.installed, isFalse);

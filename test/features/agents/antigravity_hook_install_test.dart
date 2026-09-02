@@ -35,6 +35,9 @@ void main() {
 
   String storeHome() => p.join(home.path, '.gemini', 'antigravity-cli');
   File hooksFile() => File(p.join(home.path, '.gemini', 'config', 'hooks.json'));
+  File windowsScript() => File(p.join(storeHome(), '$agentHookMarker.cmd'));
+  File endpointFile() =>
+      File(p.join(storeHome(), '$agentHookMarker.endpoint'));
 
   Map<String, Object?> ours() {
     final root = jsonDecode(hooksFile().readAsStringSync()) as Map;
@@ -112,12 +115,30 @@ void main() {
       // That wrapper is only for the tool events, which we do not install.
       final stop = (ours()['Stop']! as List).single as Map;
       expect(stop['type'], 'command');
-      expect(stop['command'], contains('127.0.0.1:4242/agent-hook'));
-      expect(stop['command'], contains('agent=antigravity'));
-      expect(stop['command'], contains('event=Stop'));
-      expect(stop['command'], contains(agentHookMarker));
+      // A constant, exactly as Codex's is. Antigravity used to be given the
+      // inline `curl` because the script was written only for an agent that
+      // hashes its command — and this is the file the owner's machine had
+      // emptied to `{}`, so it is the one that most needed to stop changing.
+      expect(
+        stop['command'],
+        'cmd.exe /c "%USERPROFILE%\\.gemini\\antigravity-cli\\'
+            '$agentHookMarker.cmd" Stop',
+      );
+      expect(stop['command'], isNot(contains('4242')));
+      expect(stop['command'], isNot(contains('tok')));
       expect(stop.containsKey('hooks'), isFalse);
       expect(stop.containsKey('matcher'), isFalse);
+
+      // The store home, not the config directory: `agy` keeps its data in
+      // `~/.gemini/antigravity-cli` and reads `~/.gemini/config/hooks.json`,
+      // and an earlier version of the installer refused to write a script at
+      // all when those two differed.
+      expect(windowsScript().existsSync(), isTrue);
+      expect(
+        endpointFile().readAsStringSync(),
+        contains('url=http://127.0.0.1:4242/agent-hook'),
+      );
+      expect(endpointFile().readAsStringSync(), contains('token=tok'));
     });
 
     test('leaves another tool\'s named hook alone', () async {
@@ -163,6 +184,8 @@ void main() {
       final raw = hooksFile().readAsStringSync();
       expect(raw, isNot(contains(agentHookMarker)));
       expect(raw, contains('./lint.sh'));
+      expect(windowsScript().existsSync(), isFalse);
+      expect(endpointFile().existsSync(), isFalse);
     });
 
     test('an install that does not land is reported as such', () async {

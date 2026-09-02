@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
+import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -21,6 +22,13 @@ void main() {
   tearDown(() => home.deleteSync(recursive: true));
 
   File configFile() => File(p.join(home.path, 'settings.json'));
+  File endpointFile() => File(p.join(home.path, '$agentHookMarker.endpoint'));
+  File windowsScript() => File(p.join(home.path, '$agentHookMarker.cmd'));
+
+  /// What the config entry spells for a Windows-native Claude Code store — a
+  /// constant, with no port and no token anywhere in it.
+  const windowsCommand =
+      'cmd.exe /c "%USERPROFILE%\\.claude\\$agentHookMarker.cmd"';
 
   Map<String, dynamic> hooks() {
     final json = jsonDecode(configFile().readAsStringSync()) as Map;
@@ -45,11 +53,19 @@ void main() {
     expect(hooks().keys.toSet(), claude.hooks!.eventStatus.keys.toSet());
     final stop = commandsFor('Stop').single;
     expect(stop['type'], 'command');
-    expect(stop['command'], contains('127.0.0.1:4242/agent-hook'));
-    expect(stop['command'], contains('agent=claudeCode'));
-    expect(stop['command'], contains('event=Stop'));
-    expect(stop['command'], contains('Bearer tok'));
+    expect(stop['command'], '$windowsCommand Stop');
     expect(stop['command'], contains(agentHookMarker));
+    // Neither the port nor the token is in the agent's config any more. That
+    // is the whole change: the entry is a constant, and the two things that
+    // differ between launches are in the endpoint file the script reads when
+    // the hook fires.
+    expect(stop['command'], isNot(contains('4242')));
+    expect(stop['command'], isNot(contains('tok')));
+
+    final endpointText = endpointFile().readAsStringSync();
+    expect(endpointText, contains('url=http://127.0.0.1:4242/agent-hook'));
+    expect(endpointText, contains('agent=claudeCode'));
+    expect(endpointText, contains('token=tok'));
   });
 
   test('leaves sibling keys byte-for-byte intact', () async {
@@ -115,8 +131,12 @@ void main() {
 
     final commands = commandsFor('Stop');
     expect(commands, hasLength(1));
-    // The rewritten command points at the new (ephemeral) port.
-    expect(commands.single['command'], contains('127.0.0.1:5555'));
+    // The command is a constant, so the second launch found its own entry
+    // already there and rewrote nothing. The new port went into the endpoint
+    // file instead.
+    expect(commands.single['command'], '$windowsCommand Stop');
+    expect(endpointFile().readAsStringSync(), contains('127.0.0.1:5555'));
+    expect(endpointFile().readAsStringSync(), contains('token=tok2'));
   });
 
   test('uninstall removes only our entries', () async {
@@ -244,6 +264,42 @@ void main() {
     expect(home.listSync(), isEmpty);
   });
 
+  test('an agent with hooks and no store gets no command', () async {
+    // There is nowhere to keep the script and the endpoint file, so there is
+    // no way to give this agent a command that does not change between
+    // launches — and the inline form that used to fill that gap is the bug.
+    // A refusal is the honest answer; every shipped agent declares a store.
+    const homeless = AgentDescriptor(
+      id: 'homeless',
+      displayName: 'Homeless',
+      binaries: AgentBinaries(windows: ['nope'], posix: ['nope']),
+      hooks: AgentHookSpec(
+        configFileName: 'settings.json',
+        eventStatus: {'Stop': AgentActivityStatus.idle},
+      ),
+    );
+
+    expect(
+      installer.hookCommand(
+        descriptor: homeless,
+        event: 'Stop',
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      ),
+      isNull,
+    );
+    expect(
+      await installer.install(
+        descriptor: homeless,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      ),
+      isFalse,
+    );
+    expect(home.listSync(), isEmpty);
+  });
+
   test('a malformed config is refused and left untouched', () async {
     configFile().writeAsStringSync('{ not json');
 
@@ -287,10 +343,14 @@ void main() {
       );
 
       expect(installed, isTrue);
+      // The command names a path, not an address — so the switch address is
+      // asserted where it now lives, in the endpoint file the script reads.
       final command = commandsFor('Stop').single['command'] as String;
-      expect(command, contains('172.18.240.1:4242/agent-hook'));
+      expect(command, 'sh "\$HOME/.claude/$agentHookMarker.sh" Stop');
+      final endpointText = endpointFile().readAsStringSync();
+      expect(endpointText, contains('172.18.240.1:4242/agent-hook'));
       expect(
-        command,
+        endpointText,
         isNot(contains('127.0.0.1')),
         reason:
             "127.0.0.1 inside a distribution is the distribution's own "
@@ -349,20 +409,15 @@ void main() {
         environment: EnvironmentKind.wsl,
       )!;
 
-      expect(command, contains('"Authorization: Bearer Ab-_9="'));
-      expect(
-        command,
-        contains(
-          '"http://172.18.240.1:4242/agent-hook?agent=claudeCode&event=Stop'
-          '&marker=$agentHookMarker"',
-        ),
-      );
-      // `&` unquoted would background the curl; `$` and a backtick would
-      // substitute. None of them may appear outside the two quoted spans.
-      expect(command.split('"')[0], isNot(contains(RegExp(r'[&$`]'))));
-      expect(command, isNot(contains(r'$')));
+      expect(command, 'sh "\$HOME/.claude/$agentHookMarker.sh" Stop');
+      // `&` unquoted would background the command and a backtick would
+      // substitute; neither appears at all now that no URL is in it.
+      expect(command, isNot(contains('&')));
       expect(command, isNot(contains('`')));
-      // It names no path of its own, so nothing in it has to be translated
+      // The one `\$` is `\$HOME`, inside the quoted span the shell must expand
+      // — the app reaches that store over a UNC name the distro cannot open.
+      expect(command.split('"')[0], isNot(contains(RegExp(r'[&$`]'))));
+      // It names no *Windows* path, so nothing in it has to be translated
       // between the Windows and the distribution filesystem.
       expect(command, isNot(contains(RegExp(r'[A-Za-z]:\\'))));
     });
@@ -380,8 +435,13 @@ void main() {
       );
 
       expect(
-        home.listSync().map((e) => p.basename(e.path)).toList(),
-        ['settings.json'],
+        home.listSync().map((e) => p.basename(e.path)).toSet(),
+        {
+          'settings.json',
+          '$agentHookMarker.cmd',
+          '$agentHookMarker.endpoint',
+        },
+        reason: 'the two generated files, and no staged temporary beside them',
       );
     });
 
@@ -406,8 +466,8 @@ void main() {
       expect(configFile().readAsStringSync(), original);
       expect(jsonDecode(configFile().readAsStringSync()), isA<Map>());
       expect(
-        home.listSync().map((e) => p.basename(e.path)).toList(),
-        ['settings.json'],
+        home.listSync().where((e) => e.path.endsWith('.karmashala-tmp')),
+        isEmpty,
         reason: 'the staged file is cleaned up even when the move fails',
       );
     });
@@ -497,28 +557,33 @@ void main() {
     });
   });
 
-  test('a hook that cannot deliver costs the agent nothing', () {
+  test('a hook that cannot deliver costs the agent nothing', () async {
     // The owner watched `curl: (52) Empty reply from server` print into a live
     // Claude session, and the shell exit non-zero, because the app happened
     // not to be answering on the WSL interface. A status callback is this
     // app's business: it may lose an update, but it may not put a message in
-    // someone else's terminal or fail their command.
-    final command = AgentHookInstaller().hookCommand(
+    // someone else's terminal or fail their command. Those properties moved
+    // into the generated script when the command stopped being a curl; they
+    // did not stop being the point.
+    await installer.install(
       descriptor: claude,
-      event: 'Stop',
+      storeHome: home.path,
       endpoint: const AgentHookEndpoint(port: 4321, token: 'tok'),
       environment: EnvironmentKind.windowsNative,
-    )!;
+    );
+    final script = windowsScript().readAsStringSync();
 
-    expect(command, contains('curl -s '), reason: 'no error output');
-    expect(command, isNot(contains('-sS')));
-    expect(command, endsWith('|| true'), reason: 'no failing exit status');
-    // And the third cost, which is the one a stale entry actually charges. The
-    // port is ephemeral, so an entry outlives the app that could answer it —
-    // and these hooks are *synchronous*: the CLI waits for this command before
-    // it goes on. Unbounded, a dead port would stall the session the user is
-    // typing into, on every tool call, for ever.
-    expect(command, contains('-m 2'), reason: 'no unbounded wait');
+    expect(script, contains('curl -s '), reason: 'no error output');
+    expect(script, isNot(contains('-sS')));
+    expect(script.trimRight(), endsWith('exit /b 0'), reason: 'never fails');
+    // These hooks are *synchronous*: the CLI waits for this before it goes on.
+    // Unbounded, a dead port would stall the session the user is typing into,
+    // on every tool call.
+    expect(script, contains('-m 2'), reason: 'no unbounded wait');
+    // And the cost a stale install now charges, which is the one that changed.
+    // With the endpoint file retired on the way out there is no dial at all —
+    // one `if not exist` and the script is done.
+    expect(script, contains('if not exist "%KS_ENDPOINT%" exit /b 0'));
   });
 }
 

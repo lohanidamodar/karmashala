@@ -34,6 +34,14 @@ import '../../support/fixtures.dart';
 /// own `~/.claude`), reads back the command the installer wrote, runs that exact
 /// string through the distro's `sh`, and asserts the report arrived.
 ///
+/// Since Loop 71 that string names a generated script rather than spelling a
+/// `curl`, so this now covers three files crossing the `\\wsl.localhost` share
+/// instead of one — the entry, the script, and the endpoint file the script
+/// reads at fire time — and the script's `401` probe as well as its callback.
+/// `HOME` is set to the scratch home for the run, because the command names
+/// `$HOME/.claude/…` and the whole point of naming it that way is that the app
+/// and the agent disagree about how to spell the same directory.
+///
 /// Skips itself where there is no WSL or no `curl` inside it — the same shape
 /// as `live_ssh_test.dart`. It does **not** skip itself when the switch address
 /// is missing or dead: that is the failure it exists to catch, and skipping it
@@ -70,10 +78,15 @@ void main() {
       bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
       socketDirectory: p.join(tmp.path, 'ipc'),
     );
-    // A store home of our own, so nothing here can touch the user's real
-    // agent configuration.
+    // A `$HOME` of our own, so nothing here can touch the user's real agent
+    // configuration — and it has to be a *home*, not just a directory, now
+    // that the installed command names `$HOME/.claude/…` rather than spelling
+    // an address inline. The store home is `.claude` inside it, exactly as
+    // `CliStoreLocator` would build it, and the command below is run with
+    // `HOME` pointed here so the path it expands is this one.
     wslHome = await _wsl(['mktemp', '-d', '-t', 'karmashala-hook-XXXXXX']);
-    uncHome = await _wsl(['wslpath', '-w', wslHome]);
+    await _wsl(['mkdir', '-p', '$wslHome/.claude']);
+    uncHome = await _wsl(['wslpath', '-w', '$wslHome/.claude']);
   });
 
   tearDown(() async {
@@ -116,27 +129,47 @@ void main() {
                     as List)
                 .single
             as Map;
-    expect(command['command'], contains(endpoint.wslHost!));
+    // The entry is a constant now, so the address is asserted where it lives:
+    // the endpoint file the generated script reads when the hook fires. Both
+    // of those are written across the `\\wsl.localhost` share and read from
+    // inside the distribution, which is the link this suite exists to test.
+    expect(command['command'], contains(agentHookMarker));
+    expect(command['command'], isNot(contains(endpoint.wslHost!)));
+    expect(
+      File(p.join(uncHome, '$agentHookMarker.endpoint')).readAsStringSync(),
+      contains(endpoint.wslHost!),
+    );
 
-    const payload = r'{"session_id":"live-wsl","cwd":"/tmp"}';
+    // `HOME` is the scratch home, so `$HOME/.claude/…` in the command names
+    // the store this test installed into and never the owner's own.
+    final payload = r'{"session_id":"live-wsl","cwd":"/tmp"}';
     final hook = command['command']! as String;
-    final output = await _wsl(['sh', '-c', "printf %s '$payload' | $hook"]);
+    final output = await _wsl([
+      'sh',
+      '-c',
+      "printf %s '$payload' | HOME=$wslHome $hook",
+    ]);
+
+    // The script discards the endpoint's reply on purpose — a hook that can
+    // decide something reads its own stdout for that decision — so the arrival
+    // is asserted on the registry and not on what came back.
+    expect(output, isEmpty);
 
     // The installed command is written to cost the agent nothing when it cannot
     // deliver — `-s` swallows the diagnostic and `|| true` the exit code — so
-    // its silence carries no diagnosis of its own. Ask the same question with
-    // the muzzle off, and let the exit code say which side is broken.
-    if (!output.contains('"ok":true')) {
+    // its silence carries no diagnosis of its own. If nothing arrived, ask the
+    // same question with the muzzle off and let the exit code say which side is
+    // broken.
+    if (reports.latest('claudeCode', 'live-wsl') == null) {
       final diagnosis = await _wslRaw([
         'sh',
         '-c',
-        "printf %s '$payload' | "
+        "printf %s '$payload' | HOME=$wslHome "
             "${hook.replaceAll('curl -s ', 'curl -sS ').replaceAll(' || true', '')}"
             '; echo "exit=\$?"',
       ]);
       fail(_verdict(diagnosis, endpoint.wslHost!));
     }
-
     expect(
       reports.latest('claudeCode', 'live-wsl')?.status,
       AgentActivityStatus.idle,
