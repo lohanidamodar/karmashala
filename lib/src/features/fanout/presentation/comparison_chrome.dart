@@ -14,9 +14,16 @@ import '../domain/comparison.dart';
 /// the ramp carries the chrome and the only colour is [SemanticColors] — diff
 /// add/remove, a failed launch, a verdict. Nothing here is branded.
 
-/// A 7px dot in the colour of a candidate's state.
-class CandidateDot extends StatelessWidget {
-  const CandidateDot({
+/// What state a candidate is in — as a glyph and a word, then a colour.
+///
+/// This was a bare 7px coloured circle carrying all four states: no glyph, no
+/// tooltip, nothing in the semantics tree, so "did not start" and "winner"
+/// differed by hue alone and a screen reader was told nothing at all. The agent
+/// id sitting beside it names the agent, not the state. [SessionVerdictMark],
+/// two files away, states the rule this broke: *a glyph as well as a colour …
+/// state is never carried by colour alone.*
+class CandidateStateMark extends StatelessWidget {
+  const CandidateStateMark({
     required this.candidate,
     this.isWinner = false,
     super.key,
@@ -25,21 +32,80 @@ class CandidateDot extends StatelessWidget {
   final ComparisonCandidate candidate;
   final bool isWinner;
 
+  /// Decided in this order, and the order is the point: a candidate that never
+  /// ran has nothing else worth saying about it, and a winner's worktree is
+  /// usually gone by the time it is one — "winner" is the more useful of those
+  /// two facts.
+  CandidateState get state {
+    if (!candidate.started) return CandidateState.didNotStart;
+    if (isWinner) return CandidateState.winner;
+    if (candidate.worktreeRemoved) return CandidateState.worktreeRemoved;
+    return CandidateState.started;
+  }
+
+  static IconData _glyphOf(CandidateState state) => switch (state) {
+    CandidateState.didNotStart => AppIcons.warningCircle,
+    // The same glyph the "Winner" action carries, so pressing it and reading
+    // the result are the same picture.
+    CandidateState.winner => AppIcons.star,
+    CandidateState.worktreeRemoved => AppIcons.minusCircle,
+    CandidateState.started => AppIcons.circleHalf,
+  };
+
+  static Color _colourOf(SemanticColors semantic, CandidateState state) =>
+      switch (state) {
+        CandidateState.didNotStart => semantic.failure,
+        CandidateState.winner => semantic.idle,
+        CandidateState.worktreeRemoved => semantic.neutral,
+        CandidateState.started => semantic.working,
+      };
+
+  String get _tooltip {
+    final failure = candidate.failure?.trim();
+    return switch (state) {
+      CandidateState.didNotStart =>
+        failure == null || failure.isEmpty
+            ? 'Did not start — this agent never got a worktree.'
+            : 'Did not start. $failure',
+      CandidateState.winner =>
+        'Winner — the candidate this comparison settled on.',
+      CandidateState.worktreeRemoved =>
+        'Worktree removed. The record stays; there is nothing left to diff.',
+      CandidateState.started => 'Started, and its worktree is still on disk.',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
-    final semantic = SemanticColors.of(context);
-    final color = switch (candidate) {
-      _ when !candidate.started => semantic.failure,
-      _ when isWinner => semantic.idle,
-      _ when candidate.worktreeRemoved => semantic.neutral,
-      _ => semantic.working,
-    };
-    return Container(
-      width: 7,
-      height: 7,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    final current = state;
+    return Tooltip(
+      message: _tooltip,
+      child: Icon(
+        _glyphOf(current),
+        size: Chrome.iconSmall,
+        color: _colourOf(SemanticColors.of(context), current),
+        semanticLabel: current.label,
+      ),
     );
   }
+}
+
+/// The four things a candidate can be, in the words a reader sees.
+///
+/// Chosen rather than borrowed from the enum underneath: "did not start" rather
+/// than "failed", because a launch that never happened is not a run that went
+/// wrong; "started" rather than "running", because nothing on this surface can
+/// see whether the session is still going, and a mark that says "running" about
+/// a finished agent is worse than one that says less.
+enum CandidateState {
+  didNotStart('Did not start'),
+  winner('Winner'),
+  worktreeRemoved('Worktree removed'),
+  started('Started');
+
+  const CandidateState(this.label);
+
+  final String label;
 }
 
 /// `3 files +42 −7 · 2 commits`, with the two numbers that mean something

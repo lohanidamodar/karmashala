@@ -382,7 +382,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               // click means "tick" while the mode is on.
               tooltip: selecting ? 'Leave selection' : 'Select sessions',
               isSelected: selecting,
-              icon: Icon(selecting ? AppIcons.x : AppIcons.check, size: 18),
+              icon: Icon(selecting ? AppIcons.x : AppIcons.check),
               onPressed: () =>
                   ref.read(sessionSelectionProvider.notifier).toggleMode(),
             ),
@@ -392,21 +392,21 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               // the collision and left it here). Finding conversations an agent
               // already wrote is history, and the imported cards use this glyph for
               // exactly that.
-              icon: const Icon(AppIcons.clockCounterClockwise, size: 18),
+              icon: const Icon(AppIcons.clockCounterClockwise),
               onPressed: _showDetected,
             ),
             IconButton(
               tooltip: selectedRepoId == null
                   ? 'Select a repository first'
                   : 'New session',
-              icon: const Icon(AppIcons.chatCircleDots, size: 18),
+              icon: const Icon(AppIcons.chatCircleDots),
               onPressed: selectedRepoId == null
                   ? null
                   : () => NewSessionDialog.show(context),
             ),
             IconButton(
               tooltip: 'New project',
-              icon: const Icon(AppIcons.folderPlus, size: 18),
+              icon: const Icon(AppIcons.folderPlus),
               onPressed: () => NewProjectDialog.show(context),
             ),
           ],
@@ -427,7 +427,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               child: TextField(
                 decoration: const InputDecoration(
                   isDense: true,
-                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: 18),
+                  prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
                   hintText: 'Search projects',
                   border: OutlineInputBorder(),
                 ),

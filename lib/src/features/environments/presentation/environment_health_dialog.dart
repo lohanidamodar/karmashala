@@ -19,7 +19,7 @@ class EnvironmentHealthDialog extends ConsumerWidget {
     return AlertDialog(
       title: const Row(
         children: [
-          Icon(AppIcons.checkCircle, size: 20),
+          Icon(AppIcons.checkCircle, size: Chrome.iconTitle),
           SizedBox(width: Insets.sm),
           Text('Environment health'),
         ],
@@ -70,7 +70,7 @@ class EnvironmentHealthDialog extends ConsumerWidget {
       actions: [
         TextButton.icon(
           onPressed: () => ref.invalidate(environmentHealthProvider),
-          icon: const Icon(AppIcons.arrowsClockwise, size: 16),
+          icon: const Icon(AppIcons.arrowsClockwise),
           label: const Text('Check again'),
         ),
         FilledButton(

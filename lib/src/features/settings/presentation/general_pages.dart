@@ -212,7 +212,10 @@ class LauncherHotkeySection extends ConsumerWidget {
                           }
                         }
                       : null,
-                  icon: const Icon(AppIcons.pencilSimple, size: 15),
+                  icon: const Icon(
+                    AppIcons.pencilSimple,
+                    size: Chrome.iconAction,
+                  ),
                   label: const Text('Change'),
                 ),
               ],

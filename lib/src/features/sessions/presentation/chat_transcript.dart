@@ -168,7 +168,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                           onPressed: () => setState(
                             () => _shown = math.min(_shown + _page, total),
                           ),
-                          icon: const Icon(AppIcons.caretUp, size: 16),
+                          icon: const Icon(AppIcons.caretUp),
                           label: Text(
                             'Load $start earlier message'
                             '${start == 1 ? '' : 's'}',
@@ -314,7 +314,7 @@ class _SaveNoteButtonState extends State<_SaveNoteButton> {
     return IconButton(
       tooltip: _saved ? 'Saved to Notes' : 'Save as note',
       visualDensity: VisualDensity.compact,
-      iconSize: 13,
+      iconSize: Chrome.iconSmall,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       padding: EdgeInsets.zero,
       color: _saved ? SemanticColors.of(context).idle : scheme.onSurfaceVariant,
@@ -348,7 +348,7 @@ class _CopyButtonState extends State<_CopyButton> {
     return IconButton(
       tooltip: _copied ? 'Copied' : 'Copy message',
       visualDensity: VisualDensity.compact,
-      iconSize: 13,
+      iconSize: Chrome.iconSmall,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       padding: EdgeInsets.zero,
       color: _copied

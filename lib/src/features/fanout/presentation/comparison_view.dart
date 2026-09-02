@@ -415,7 +415,6 @@ class _CandidateColumn extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
     final isWinner = comparison.winnerCandidateId == candidate.id;
     final evidence = evidenceShownFor(
       candidate,
@@ -429,7 +428,7 @@ class _CandidateColumn extends ConsumerWidget {
         children: [
           Row(
             children: [
-              CandidateDot(candidate: candidate, isWinner: isWinner),
+              CandidateStateMark(candidate: candidate, isWinner: isWinner),
               const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
@@ -438,12 +437,6 @@ class _CandidateColumn extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (isWinner)
-                Icon(
-                  AppIcons.star,
-                  size: Chrome.iconSmall,
-                  color: semantic.idle,
-                ),
               IconButton(
                 tooltip: 'Re-read the diff',
                 visualDensity: VisualDensity.compact,

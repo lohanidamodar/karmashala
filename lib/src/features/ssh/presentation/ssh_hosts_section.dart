@@ -28,7 +28,7 @@ class SshHostsSection extends ConsumerWidget {
       title: 'SSH HOSTS',
       trailing: TextButton.icon(
         onPressed: () => SshHostDialog.show(context),
-        icon: const Icon(AppIcons.plus, size: 16),
+        icon: const Icon(AppIcons.plus),
         label: const Text('Add host'),
       ),
       child: hosts.isEmpty
@@ -64,7 +64,7 @@ class _HostCard extends ConsumerWidget {
               children: [
                 Icon(
                   AppIcons.globe,
-                  size: 18,
+                  size: Chrome.iconTitle,
                   color: theme.colorScheme.tertiary,
                 ),
                 const SizedBox(width: Insets.sm),
@@ -98,17 +98,17 @@ class _HostCard extends ConsumerWidget {
                 TextButton.icon(
                   onPressed: () =>
                       RemoteFileBrowserDialog.show(context, host: host),
-                  icon: const Icon(AppIcons.folderOpen, size: 16),
+                  icon: const Icon(AppIcons.folderOpen),
                   label: const Text('Browse files'),
                 ),
                 TextButton.icon(
                   onPressed: () => SshHostDialog.show(context, existing: host),
-                  icon: const Icon(AppIcons.pencilSimple, size: 16),
+                  icon: const Icon(AppIcons.pencilSimple),
                   label: const Text('Edit'),
                 ),
                 TextButton.icon(
                   onPressed: () => _remove(context, ref),
-                  icon: const Icon(AppIcons.trash, size: 16),
+                  icon: const Icon(AppIcons.trash),
                   label: const Text('Remove'),
                   style: TextButton.styleFrom(
                     foregroundColor: theme.colorScheme.error,

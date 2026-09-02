@@ -87,7 +87,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
               children: [
                 Icon(
                   warning ? AppIcons.warningCircle : AppIcons.info,
-                  size: 13,
+                  size: Chrome.iconSmall,
                   color: accent,
                 ),
                 const SizedBox(width: Insets.sm),
@@ -129,7 +129,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                 ],
                 IconButton(
                   tooltip: 'Dismiss',
-                  icon: const Icon(AppIcons.x, size: 12),
+                  icon: const Icon(AppIcons.x, size: Chrome.iconAction),
                   visualDensity: VisualDensity.compact,
                   constraints: const BoxConstraints(
                     minWidth: 24,

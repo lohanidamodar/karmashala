@@ -310,7 +310,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               if (active)
                 IconButton(
                   tooltip: 'Stop session',
-                  icon: const Icon(AppIcons.stopCircle, size: 18),
+                  icon: const Icon(AppIcons.stopCircle),
                   onPressed: _stop,
                 ),
               const SizedBox(width: Insets.xs),
@@ -536,7 +536,7 @@ class _OpenInTerminalButton extends ConsumerWidget {
           ? const SizedBox.shrink()
           : PopupMenuButton<SystemTerminal>(
               tooltip: 'Open in system terminal',
-              icon: const Icon(AppIcons.arrowSquareOut, size: 18),
+              icon: const Icon(AppIcons.arrowSquareOut),
               onSelected: (terminal) async {
                 final messenger = ScaffoldMessenger.of(context);
                 try {

@@ -544,7 +544,11 @@ class _NoPaneForSession extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(AppIcons.terminal, size: 32, color: scheme.onSurfaceVariant),
+              Icon(
+                AppIcons.terminal,
+                size: Chrome.iconHero,
+                color: scheme.onSurfaceVariant,
+              ),
               const SizedBox(height: Insets.md),
               Text(
                 session.title,
@@ -575,7 +579,7 @@ class _NoPaneForSession extends ConsumerWidget {
                   if (canResume)
                     FilledButton.tonalIcon(
                       onPressed: () => _resume(ref),
-                      icon: const Icon(AppIcons.playCircle, size: 16),
+                      icon: const Icon(AppIcons.playCircle),
                       label: const Text('Resume in a terminal'),
                     ),
                   TextButton(

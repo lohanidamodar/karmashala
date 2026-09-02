@@ -54,14 +54,14 @@ class DetectedProjectsView extends ConsumerWidget {
                       ),
                     );
                   },
-                  icon: const Icon(AppIcons.downloadSimple, size: 18),
+                  icon: const Icon(AppIcons.downloadSimple),
                   label: const Text('Import all'),
                 ),
                 const SizedBox(width: Insets.sm),
               ],
               FilledButton.tonalIcon(
                 onPressed: () => controller.detect(),
-                icon: const Icon(AppIcons.arrowsClockwise, size: 18),
+                icon: const Icon(AppIcons.arrowsClockwise),
                 label: const Text('Detect'),
               ),
             ],
@@ -133,7 +133,7 @@ class _ProjectTile extends StatelessWidget {
         for (final session in project.sessions) _SessionTile(session: session),
         if (project.subagentSessions.isNotEmpty)
           ExpansionTile(
-            leading: const Icon(AppIcons.treeStructure, size: 18),
+            leading: const Icon(AppIcons.treeStructure),
             title: Text('Subagents (${project.subagentSessions.length})'),
             childrenPadding: const EdgeInsets.only(left: 16),
             children: [
@@ -159,12 +159,11 @@ class _SessionTile extends ConsumerWidget {
     return ListTile(
       dense: true,
       leading: subagent
-          ? const Icon(AppIcons.arrowBendDownRight, size: 16)
+          ? const Icon(AppIcons.arrowBendDownRight)
           : Icon(
               session.cli == AgentIds.codex
                   ? AppIcons.terminal
                   : AppIcons.robot,
-              size: 16,
             ),
       title: Text(
         session.displayTitle,

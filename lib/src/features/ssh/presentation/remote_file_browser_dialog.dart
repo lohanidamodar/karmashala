@@ -134,7 +134,7 @@ class _RemoteFileBrowserDialogState
                 IconButton(
                   tooltip: 'Up one level',
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(AppIcons.arrowUp, size: 16),
+                  icon: const Icon(AppIcons.arrowUp),
                   onPressed: parent == null || _busy
                       ? null
                       : () => _listDirectory(
@@ -155,13 +155,13 @@ class _RemoteFileBrowserDialogState
                   tooltip: _showHidden ? 'Hide dotfiles' : 'Show dotfiles',
                   isSelected: _showHidden,
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(AppIcons.circleHalf, size: 16),
+                  icon: const Icon(AppIcons.circleHalf),
                   onPressed: () => setState(() => _showHidden = !_showHidden),
                 ),
                 IconButton(
                   tooltip: 'Refresh',
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(AppIcons.arrowsClockwise, size: 16),
+                  icon: const Icon(AppIcons.arrowsClockwise),
                   onPressed: directory == null || _busy
                       ? null
                       : () => _listDirectory(directory),
@@ -197,7 +197,6 @@ class _RemoteFileBrowserDialogState
                               entry.isDirectory
                                   ? AppIcons.folder
                                   : AppIcons.article,
-                              size: 16,
                             ),
                             title: Text(
                               entry.name,

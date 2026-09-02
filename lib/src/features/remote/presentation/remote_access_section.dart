@@ -123,7 +123,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
               contentPadding: EdgeInsets.zero,
               value: prefs.localEnabled,
               onChanged: _setLocalEnabled,
-              secondary: const Icon(AppIcons.terminalWindow, size: 16),
+              secondary: const Icon(AppIcons.terminalWindow),
               title: const Text('Local relay (this computer)'),
               subtitle: const Text(
                 'Runs on this computer for phones on the same network. No '
@@ -155,7 +155,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
               contentPadding: EdgeInsets.zero,
               value: prefs.hostedEnabled,
               onChanged: _setHostedEnabled,
-              secondary: const Icon(AppIcons.globe, size: 16),
+              secondary: const Icon(AppIcons.globe),
               title: const Text('Hosted relay (internet)'),
               subtitle: const Text(
                 'Reaches a phone anywhere. The relay only forwards sealed '
@@ -185,7 +185,6 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
                   children: [
                     Icon(
                       AppIcons.warningCircle,
-                      size: 16,
                       color: theme.colorScheme.error,
                     ),
                     const SizedBox(width: Insets.xs),
@@ -285,7 +284,7 @@ class _LocalRelayStatusRow extends ConsumerWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 16, color: color),
+            Icon(icon, color: color),
             const SizedBox(width: Insets.xs),
             Expanded(child: Text(message, style: theme.textTheme.bodySmall)),
             if (status.state == LocalRelayState.error)

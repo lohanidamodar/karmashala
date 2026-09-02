@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../application/session_providers.dart';
@@ -44,8 +45,8 @@ class SessionRepositoriesBar extends ConsumerWidget {
             InputChip(
               label: Text(repo.name),
               avatar: repo.id == primary.id
-                  ? const Icon(AppIcons.star, size: 14)
-                  : const Icon(AppIcons.gitBranch, size: 14),
+                  ? const Icon(AppIcons.star, size: Chrome.iconAction)
+                  : const Icon(AppIcons.gitBranch, size: Chrome.iconAction),
               onDeleted: repo.id == primary.id
                   ? null
                   : () {
@@ -75,7 +76,7 @@ class SessionRepositoriesBar extends ConsumerWidget {
                   ),
               ],
               child: const Chip(
-                avatar: Icon(AppIcons.plus, size: 14),
+                avatar: Icon(AppIcons.plus, size: Chrome.iconAction),
                 label: Text('Add repo'),
               ),
             ),

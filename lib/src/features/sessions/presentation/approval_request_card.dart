@@ -91,7 +91,7 @@ class ApprovalRequestCard extends ConsumerWidget {
                 waiting == AgentWaitKind.approval
                     ? AppIcons.warningCircle
                     : AppIcons.chatCircleDots,
-                size: 14,
+                size: Chrome.iconAction,
                 color: scheme.tertiary,
               ),
               const SizedBox(width: Insets.xs),
@@ -241,7 +241,7 @@ class _NothingToAnswer extends ConsumerWidget {
         const SizedBox(height: Insets.xs),
         TextButton.icon(
           onPressed: () => _openTerminal(ref, sessionId),
-          icon: const Icon(AppIcons.terminal, size: 13),
+          icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
           label: const Text('Terminal view'),
         ),
       ],
@@ -297,7 +297,7 @@ class _Answers extends ConsumerWidget {
               ),
             TextButton.icon(
               onPressed: () => _openTerminal(ref, sessionId),
-              icon: const Icon(AppIcons.terminal, size: 13),
+              icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
               label: const Text('Terminal view'),
             ),
           ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
@@ -213,12 +214,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               segments: const [
                 ButtonSegment(
                   value: false,
-                  icon: Icon(AppIcons.chat, size: 15),
+                  icon: Icon(AppIcons.chat, size: Chrome.iconAction),
                   label: Text('In-app'),
                 ),
                 ButtonSegment(
                   value: true,
-                  icon: Icon(AppIcons.arrowSquareOut, size: 15),
+                  icon: Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
                   label: Text('External terminal'),
                 ),
               ],

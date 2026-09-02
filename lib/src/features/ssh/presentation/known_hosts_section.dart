@@ -34,7 +34,7 @@ class KnownHostsSection extends ConsumerWidget {
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(AppIcons.checkCircle, size: 18),
+                    leading: const Icon(AppIcons.checkCircle),
                     title: Text('${key.host}:${key.port}'),
                     subtitle: Text(
                       '${key.keyType} · ${key.fingerprint}\n'

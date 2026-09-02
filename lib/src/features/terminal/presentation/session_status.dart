@@ -43,7 +43,7 @@ class PaneStatusBar extends StatelessWidget {
             children: [
               Icon(
                 restored ? AppIcons.clockCounterClockwise : AppIcons.stopCircle,
-                size: 14,
+                size: Chrome.iconAction,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               const SizedBox(width: Insets.sm),
@@ -60,7 +60,7 @@ class PaneStatusBar extends StatelessWidget {
               const Spacer(),
               TextButton.icon(
                 onPressed: onStart,
-                icon: const Icon(AppIcons.play, size: 14),
+                icon: const Icon(AppIcons.play, size: Chrome.iconAction),
                 label: Text(restored ? 'Start' : 'Restart'),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
@@ -93,6 +93,8 @@ class TabLivenessDot extends StatelessWidget {
       padding: const EdgeInsets.only(right: Insets.xs),
       child: Tooltip(
         message: message,
+        // Under Chrome.iconSmall on purpose: this shares a Chrome.tabStrip row
+        // with a Chrome.tabLabel title and must not crowd it.
         child: Icon(
           restored ? AppIcons.clockCounterClockwise : AppIcons.circle,
           size: 11,
@@ -215,7 +217,6 @@ class _SessionRow extends StatelessWidget {
       dense: true,
       leading: Icon(
         live ? AppIcons.terminal : AppIcons.clockCounterClockwise,
-        size: 16,
         color: live
             ? theme.colorScheme.tertiary
             : theme.colorScheme.onSurfaceVariant,
@@ -238,7 +239,7 @@ class _SessionRow extends StatelessWidget {
           ),
           IconButton(
             tooltip: live ? 'End session' : 'Discard',
-            icon: const Icon(AppIcons.trash, size: 15),
+            icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
             onPressed: onEnd,
           ),
         ],

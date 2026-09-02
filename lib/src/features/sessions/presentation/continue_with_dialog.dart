@@ -213,12 +213,15 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                   ButtonSegment(
                     value: _Mode.handoff,
                     label: Text('Another agent'),
-                    icon: Icon(AppIcons.arrowBendDownRight, size: 14),
+                    icon: Icon(
+                      AppIcons.arrowBendDownRight,
+                      size: Chrome.iconAction,
+                    ),
                   ),
                   ButtonSegment(
                     value: _Mode.fork,
                     label: Text('Fork this one'),
-                    icon: Icon(AppIcons.gitBranch, size: 14),
+                    icon: Icon(AppIcons.gitBranch, size: Chrome.iconAction),
                   ),
                 ],
                 selected: {_mode},
@@ -393,7 +396,6 @@ class _TargetPicker extends StatelessWidget {
               target.installation.id == selected?.installation.id
                   ? AppIcons.checkCircle
                   : AppIcons.circle,
-              size: 16,
               color: target.canReceive
                   ? theme.colorScheme.primary
                   : theme.colorScheme.outlineVariant,
@@ -519,7 +521,7 @@ class _PlanNote extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: colour),
+        Icon(icon, size: Chrome.iconAction, color: colour),
         const SizedBox(width: Insets.sm),
         Expanded(
           child: Text(plan.explanation, style: theme.textTheme.bodySmall),

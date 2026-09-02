@@ -140,6 +140,31 @@ void main() {
     }
   });
 
+  test('no icon size literal equal to the theme default', () {
+    // `app_theme.dart` sets `iconButtonTheme.iconSize`, `iconTheme.size` and
+    // every `*ButtonTheme` glyph to `Chrome.icon`, so a call site writing
+    // `size: 16` is asking for what it already has. 31 `IconButton`s did, in
+    // six different sizes, which is how the toolbars drifted apart in the
+    // first place: the fix for a glyph that is the wrong size is a token, and
+    // the fix for one that is the right size is nothing at all.
+    //
+    // The exclusion is the touch tree, not a debt list: the companion runs
+    // under `UiDensity.touch`, whose theme puts every glyph at `Touch.icon`,
+    // so 16 there is a real (if questionable) override rather than a no-op.
+    final pattern = RegExp(
+      r'(?<![A-Za-z])(?:size|iconSize):\s*16(?:\.0)?(?![0-9.])',
+    );
+    expect(
+      hits(
+        pattern,
+        skip: (path) => path.startsWith('lib/src/features/companion/'),
+      ),
+      isEmpty,
+      reason: 'the theme already draws this glyph at Chrome.icon — drop the '
+          'override rather than restating it',
+    );
+  });
+
   test('the guard can actually fail', () {
     // The assertion framework arriving self-tested, per the review's (D)12.
     final source = 'Icon(Icons.refresh), Colors.teal, x.shade700';
@@ -163,5 +188,20 @@ void main() {
       RegExp(r'fontSize:\s*[0-9]').hasMatch('fontSize: settings.textScale'),
       isFalse,
     );
+    // The icon-default sweep has no in-repo positive to prove itself against —
+    // the theme layer names `16.0` as a constant, not as a `size:` — so its
+    // liveness is asserted here instead.
+    final iconDefault = RegExp(
+      r'(?<![A-Za-z])(?:size|iconSize):\s*16(?:\.0)?(?![0-9.])',
+    );
+    expect(iconDefault.hasMatch('Icon(AppIcons.x, size: 16)'), isTrue);
+    expect(iconDefault.hasMatch('IconButton(iconSize: 16.0)'), isTrue);
+    expect(
+      iconDefault.hasMatch('Icon(AppIcons.x, size: Chrome.icon)'),
+      isFalse,
+    );
+    expect(iconDefault.hasMatch('const SizedBox(width: 16)'), isFalse);
+    expect(iconDefault.hasMatch('TextStyle(fontSize: 16)'), isFalse);
+    expect(iconDefault.hasMatch('Icon(AppIcons.x, size: 160)'), isFalse);
   });
 }

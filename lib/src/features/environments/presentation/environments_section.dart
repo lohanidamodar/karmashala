@@ -42,7 +42,7 @@ class EnvironmentsSection extends ConsumerWidget {
         onPressed: () => ref
             .read(environmentsControllerProvider.notifier)
             .discoverAndPersist(),
-        icon: const Icon(AppIcons.magnifyingGlass, size: 16),
+        icon: const Icon(AppIcons.magnifyingGlass),
         label: const Text('Find local'),
       ),
       child: environments.isEmpty
@@ -106,7 +106,7 @@ class _EnvironmentCard extends ConsumerWidget {
               children: [
                 Icon(
                   _iconFor(environment.kind),
-                  size: 18,
+                  size: Chrome.iconTitle,
                   color: theme.colorScheme.tertiary,
                 ),
                 const SizedBox(width: Insets.sm),
@@ -149,7 +149,7 @@ class _EnvironmentCard extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: 2),
                   child: Row(
                     children: [
-                      const Icon(AppIcons.robot, size: 14),
+                      const Icon(AppIcons.robot, size: Chrome.iconAction),
                       const SizedBox(width: Insets.sm),
                       Text(
                         AgentRegistry.builtIn.displayNameFor(
@@ -189,7 +189,7 @@ class _EnvironmentCard extends ConsumerWidget {
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(AppIcons.magnifyingGlass, size: 16),
+                    : const Icon(AppIcons.magnifyingGlass),
                 label: Text(isSsh ? 'Connect and find agents' : 'Find agents'),
               ),
             ),

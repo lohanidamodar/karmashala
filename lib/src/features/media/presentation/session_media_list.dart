@@ -218,7 +218,7 @@ class _NoMedia extends StatelessWidget {
           children: [
             Icon(
               AppIcons.image,
-              size: 28,
+              size: Chrome.iconHero,
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
             ),
             const SizedBox(height: Insets.sm),

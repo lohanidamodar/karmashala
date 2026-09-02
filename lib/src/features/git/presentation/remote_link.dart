@@ -60,6 +60,8 @@ class RemoteLink extends ConsumerWidget {
             ),
             if (icon) ...[
               const SizedBox(width: 2),
+              // Subordinate to the link it follows: at Chrome.iconSmall this
+              // mark competes with the text instead of qualifying it.
               Icon(
                 AppIcons.arrowSquareOut,
                 size: 11,

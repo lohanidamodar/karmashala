@@ -201,7 +201,7 @@ class _MessageComposerState extends State<MessageComposer> {
               IconButton(
                 tooltip: 'Attach image (or paste with Ctrl+V)',
                 onPressed: canType ? _attach : null,
-                icon: const Icon(AppIcons.image, size: 20),
+                icon: const Icon(AppIcons.image),
               ),
               Expanded(
                 child: TextField(
@@ -234,7 +234,7 @@ class _MessageComposerState extends State<MessageComposer> {
                         height: 16,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(AppIcons.paperPlaneRight, size: 18),
+                    : const Icon(AppIcons.paperPlaneRight),
               ),
             ],
           ),
@@ -288,7 +288,7 @@ class _Thumbnail extends StatelessWidget {
           right: -6,
           child: IconButton(
             tooltip: 'Remove',
-            iconSize: 14,
+            iconSize: Chrome.iconAction,
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
             padding: EdgeInsets.zero,

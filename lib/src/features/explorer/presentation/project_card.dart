@@ -223,6 +223,8 @@ class ProjectCard extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // A bullet in front of the count, not a glyph: at Chrome.iconSmall it
+        // reads as an icon the count belongs to rather than as a dot.
         Icon(AppIcons.circle, size: 8, color: semantic.working),
         const SizedBox(width: 3),
         Text(
