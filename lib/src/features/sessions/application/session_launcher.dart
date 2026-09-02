@@ -1589,8 +1589,7 @@ List<String> agentPaneArguments(
     // Last, and spread rather than appended: the prompt is a positional for
     // Claude and Codex but two argv entries for Antigravity, and which of those
     // it is belongs to the descriptor rather than to this call site.
-    if (trimmedPrompt != null)
-      ...?launch?.prompt.argumentsFor(trimmedPrompt),
+    if (trimmedPrompt != null) ...?launch?.prompt.argumentsFor(trimmedPrompt),
   ];
 }
 

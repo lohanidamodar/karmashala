@@ -7,6 +7,7 @@ import '../../explorer/application/checkout.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/domain/remote_repo.dart';
 import '../../github/application/github_providers.dart';
+import '../../github/data/github_service.dart';
 import '../../github/domain/pull_request_snapshot.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/delivery_attention.dart';
@@ -225,6 +226,37 @@ final checkoutPullRequestProvider = FutureProvider.autoDispose
       );
     });
 
+/// The repository's merge settings and the open review conversations on its
+/// pull request, for one checkout.
+///
+/// **The second `gh` process, and the only one in this file that is not paid by
+/// every visible row.** It is watched by [sessionDeliveryProvider] alone — the
+/// strip, which exists for one session at a time — and never by
+/// [sessionLocalDeliveryProvider], which the Explorer draws per row. Twenty
+/// rows in a repository would otherwise be twenty GraphQL queries for facts
+/// nineteen of them do not draw.
+///
+/// It short-circuits before the process whenever there is no open pull request
+/// to ask about, so a session that has not proposed anything yet costs nothing,
+/// and it chains off [checkoutPullRequestProvider] rather than re-reading the
+/// branch: the number it queries has to be the number the strip is showing.
+///
+/// A failure is [kUnknownForgePolicy], not an error. Everything downstream of
+/// it treats "could not tell" as "offer what you would have offered anyway",
+/// so a repository whose settings the token cannot read behaves exactly as it
+/// did before this provider existed.
+final checkoutForgePolicyProvider = FutureProvider.autoDispose
+    .family<ForgePolicy, Checkout>((ref, checkout) async {
+      final pr = await ref.watch(checkoutPullRequestProvider(checkout).future);
+      if (pr == null || !pr.isOpen) return kUnknownForgePolicy;
+      return await _orNull(
+            () => ref
+                .read(gitHubReviewServiceProvider)
+                .forgePolicyFor(checkout.path, number: pr.number),
+          ) ??
+          kUnknownForgePolicy;
+    });
+
 /// The **local** delivery state of the place one session works: its branch, its
 /// change count, `+N −M`, and how far it stands from its base. No `gh`.
 ///
@@ -289,9 +321,20 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
       final pullRequest = ref.watch(
         checkoutPullRequestProvider(Checkout(directory)).future,
       );
+      // Watched here, before the first await, and awaited below: the policy
+      // provider already chains off the pull request one, so starting it now
+      // costs nothing extra and its process overlaps the local git.
+      final policy = ref.watch(
+        checkoutForgePolicyProvider(Checkout(directory)).future,
+      );
 
+      final snapshot = await pullRequest;
+      final forge = await policy;
       final delivery = (await local).copyWith(
-        pullRequest: await pullRequest,
+        pullRequest: snapshot?.withUnresolvedReviewThreads(
+          forge.unresolvedReviewThreads,
+        ),
+        mergeStrategies: forge.strategies,
         agentRunning:
             ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
       );
@@ -348,8 +391,9 @@ final repositoryRemoteProvider = Provider.autoDispose
 /// app had never known anything.
 final sessionDeliveryActionsProvider = Provider.autoDispose
     .family<List<OfferedAction>, String>(
-      (ref, sessionId) =>
-          deliveryActionsFor(ref.watch(sessionDeliveryProvider(sessionId)).value),
+      (ref, sessionId) => deliveryActionsFor(
+        ref.watch(sessionDeliveryProvider(sessionId)).value,
+      ),
     );
 
 /// `origin/main` → `main`. What `gh repo view` would call the default branch,

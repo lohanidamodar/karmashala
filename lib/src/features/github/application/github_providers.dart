@@ -49,6 +49,21 @@ class GitHubReviewService {
     required String branch,
   }) => _ghFor(repo).pullRequestFor(repo, branch: branch);
 
+  /// The repository's merge settings and the pull request's open review
+  /// conversations. One extra process, and only the session strip pays it —
+  /// see `checkoutForgePolicyProvider`.
+  Future<ForgePolicy> forgePolicyFor(
+    EnvironmentPath repo, {
+    required int number,
+  }) => _ghFor(repo).forgePolicyFor(repo, number: number);
+
+  /// Takes pull request [number] out of draft. The app's own operation; see
+  /// `DeliveryAction.markReady` for why it is not a prompt.
+  Future<void> markPullRequestReady(
+    EnvironmentPath repo, {
+    required int number,
+  }) => _ghFor(repo).markPullRequestReady(repo, number: number);
+
   Future<String> createPullRequest(
     EnvironmentPath repo, {
     required String title,

@@ -462,8 +462,7 @@ class _PermissionRow extends StatelessWidget {
   /// "Carried from this session" would be the wrong sentence — it presents a
   /// default as a decision, and hides that the new session keeps following the
   /// setting and moves when it does.
-  String get _explanation =>
-      followsDefault && !permission.wasChosen
+  String get _explanation => followsDefault && !permission.wasChosen
       ? 'Following the $agentName default in Settings, as this session does. '
             'It changes when that setting does. ${permission.carried.summary}'
       : permission.explanation;

@@ -178,8 +178,7 @@ class SessionSignals {
   ///
   /// Includes [broadcasts] so that a change naming no row — the coarse
   /// `bump()`, a project rescan — still wakes it.
-  int forSession(String sessionId) =>
-      broadcasts + (bySession[sessionId] ?? 0);
+  int forSession(String sessionId) => broadcasts + (bySession[sessionId] ?? 0);
 
   SessionSignals after(SessionChange change) {
     final kinds = Map<SessionChangeKind, int>.of(byKind);

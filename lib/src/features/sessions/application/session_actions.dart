@@ -669,10 +669,9 @@ class SessionActions {
     // Recorded, exactly as `_recoverExternalSessionId` records what it finds:
     // the session is about to be continued as that conversation, so the row
     // should say so before anything else asks.
-    _ref.read(sessionDaoProvider).updateExternalSessionId(
-      session.id,
-      conversationId,
-    );
+    _ref
+        .read(sessionDaoProvider)
+        .updateExternalSessionId(session.id, conversationId);
     return conversationId;
   }
 

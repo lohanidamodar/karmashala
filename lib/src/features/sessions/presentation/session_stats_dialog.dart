@@ -154,7 +154,11 @@ class _SessionSection extends StatelessWidget {
         // its output count and there is no honest number to print.
         if (tokens.reasoning != null)
           _StatRow('of which reasoning', formatStatCount(tokens.reasoning)),
-        _StatRow('Total tokens', formatStatCount(tokens.total), emphasise: true),
+        _StatRow(
+          'Total tokens',
+          formatStatCount(tokens.total),
+          emphasise: true,
+        ),
         if (stats.contextWindow != null)
           _StatRow('Context window', formatStatCount(stats.contextWindow)),
         _StatRow('First activity', formatStatMoment(stats.firstActivityAt)),
@@ -260,10 +264,7 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.only(
-        top: first ? 0 : Insets.lg,
-        bottom: Insets.xs,
-      ),
+      padding: EdgeInsets.only(top: first ? 0 : Insets.lg, bottom: Insets.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -350,7 +351,8 @@ class SessionStatsButton extends ConsumerWidget {
     final scheme = theme.colorScheme;
 
     return Tooltip(
-      message: 'Turns, tokens and tool calls for this session, counted from '
+      message:
+          'Turns, tokens and tool calls for this session, counted from '
           'the agent\u2019s own record',
       child: InkWell(
         onTap: () => SessionStatsDialog.show(context, sessionId),
@@ -399,7 +401,9 @@ class SessionStatsButton extends ConsumerWidget {
         .getById(session.agentInstallationId)
         ?.agentId;
     if (agentId == null) return false;
-    return agentStoreRecordsStats(ref.read(agentRegistryProvider).byId(agentId));
+    return agentStoreRecordsStats(
+      ref.read(agentRegistryProvider).byId(agentId),
+    );
   }
 }
 
@@ -414,8 +418,9 @@ String sessionStatsProvenance(SessionStatsView view) {
   final agent = view.agentName.isEmpty ? 'the agent' : view.agentName;
   if (view.unavailable != null) return 'Nothing to count';
   return switch (view.stats!.source) {
-    SessionStatsSource.localStore => 'Computed from $agent\u2019s own record '
-        'on this machine',
+    SessionStatsSource.localStore =>
+      'Computed from $agent\u2019s own record '
+          'on this machine',
     SessionStatsSource.agentOutput => 'Asked $agent directly',
   };
 }

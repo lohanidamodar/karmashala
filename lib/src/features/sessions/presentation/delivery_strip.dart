@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../environments/domain/environment_path.dart';
+import '../../explorer/application/checkout.dart';
 import '../../git/application/remote_links.dart';
+import '../../github/application/github_providers.dart';
 import '../../git/presentation/remote_link.dart';
 import '../../github/domain/pull_request_snapshot.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../../verification/application/review_session_service.dart';
 import '../../verification/application/verification_providers.dart';
 import '../../verification/presentation/review_action.dart';
@@ -13,6 +17,7 @@ import '../../verification/presentation/review_invitation.dart';
 import '../../verification/presentation/session_verdict_mark.dart';
 import '../application/delivery_providers.dart';
 import '../application/session_actions.dart';
+import '../application/delivery_update_service.dart';
 import '../application/session_archive_service.dart';
 import '../application/session_handoff_service.dart';
 import '../application/session_providers.dart';
@@ -32,9 +37,13 @@ import 'continue_with_dialog.dart';
 /// reported in the transcript by the thing that knows what happened.
 ///
 /// What the app does itself is drawn no differently but behaves differently:
-/// opening the pull request or its checks hands a URL to the browser, and
-/// archiving the worktree is a destructive local operation that asks first and
-/// reports what it did.
+/// opening the pull request or its checks hands a URL to the browser, updating
+/// from the base branch and taking a pull request out of draft are single
+/// operations with nothing to compose, and archiving the worktree is a
+/// destructive local operation that asks first. All of them report what they
+/// did in a snackbar, because they have no transcript to report into — that is
+/// the price of owning an action rather than delegating it, and it is why the
+/// strip owns as few as it can.
 class DeliveryStrip extends ConsumerStatefulWidget {
   const DeliveryStrip({
     required this.sessionId,
@@ -80,12 +89,16 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     }
   }
 
-  Future<void> _send(DeliveryAction action) => _run(() async {
+  /// Sends [offered]'s sentence, which is not always its action's own: `Merge`
+  /// names the strategy the repository allows. Reading it off [OfferedAction]
+  /// rather than off [DeliveryAction] is what keeps the sentence sent and the
+  /// sentence shown on the tooltip identical.
+  Future<void> _send(OfferedAction offered) => _run(() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref
           .read(sessionActionsProvider)
-          .continueSession(widget.sessionId, action.prompt!);
+          .continueSession(widget.sessionId, offered.prompt!);
     } catch (e) {
       // The one failure that means the prompt never left the app at all.
       messenger.showSnackBar(
@@ -102,6 +115,71 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
       messenger.showSnackBar(SnackBar(content: Text('Could not open $url')));
     }
   });
+
+  /// Merges the base branch in, and re-reads everything afterwards.
+  ///
+  /// No confirmation. Unlike archiving, every outcome of this is recoverable —
+  /// the worst case is a merge commit and `git reset --hard HEAD^` — and the
+  /// service refuses outright in exactly the situations where it would not be
+  /// (a live agent, an uncommitted edit, a conflict). A dialog in front of an
+  /// operation that cannot destroy anything trains people to dismiss dialogs.
+  Future<void> _update() => _run(() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final outcome = await ref
+        .read(deliveryUpdateServiceProvider)
+        .updateFromBase(widget.sessionId);
+    if (outcome.isUpdated) _reread();
+    messenger.showSnackBar(SnackBar(content: Text(outcome.message)));
+  });
+
+  /// Takes the pull request out of draft.
+  ///
+  /// Inline rather than behind a service of its own: there is no precondition
+  /// to check that the offer did not already check, no local state to protect,
+  /// and one failure mode — `gh` said no — which is reported exactly as `gh`
+  /// worded it. A service wrapping a single command with no rules in it would
+  /// be a file to keep in step for nothing.
+  Future<void> _markReady(SessionDelivery? delivery) => _run(() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final number = delivery?.pullRequest?.number;
+    final directory = _directory();
+    if (number == null || directory == null) return;
+    try {
+      await ref
+          .read(gitHubReviewServiceProvider)
+          .markPullRequestReady(directory, number: number);
+      _reread();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Pull request #$number is ready for review.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    }
+  });
+
+  /// Where this session's git lives — its worktree, or the repository itself.
+  EnvironmentPath? _directory() {
+    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    if (session == null) return null;
+    return session.worktree ??
+        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+  }
+
+  /// Re-reads the delivery state after one of the app's own writes.
+  ///
+  /// The poll is two minutes wide and neither of these writes goes through the
+  /// session-revision signal the local provider watches, so without this the
+  /// strip would keep offering `Update` on a branch that is no longer behind
+  /// for up to two minutes — which reads as the button having done nothing.
+  /// Both keys are invalidated because the two halves answer different
+  /// questions and either write can move either half: an update moves the
+  /// local counts, and `gh pr ready` moves the pull request.
+  void _reread() {
+    final directory = _directory();
+    if (directory == null) return;
+    ref.invalidate(checkoutDeliveryProvider(Checkout(directory)));
+    ref.invalidate(checkoutPullRequestProvider(Checkout(directory)));
+  }
 
   Future<void> _archive() => _run(() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -177,17 +255,21 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     );
   }
 
-  void _press(DeliveryAction action, SessionDelivery? delivery) {
+  void _press(OfferedAction offered, SessionDelivery? delivery) {
     final pr = delivery?.pullRequest;
-    switch (action) {
+    switch (offered.action) {
       case DeliveryAction.viewPullRequest:
         _open(pr?.url);
       case DeliveryAction.viewChecks:
         _open(pr?.url == null ? null : '${pr!.url}/checks');
+      case DeliveryAction.updateFromBase:
+        _update();
+      case DeliveryAction.markReady:
+        _markReady(delivery);
       case DeliveryAction.archive:
         _archive();
       default:
-        _send(action);
+        _send(offered);
     }
   }
 
@@ -209,8 +291,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
     const continueTooltip =
         'Move this session to another agent, or fork it. '
         '$kContinueWithPromise';
-    void continueWith() =>
-        ContinueWithDialog.show(context, widget.sessionId);
+    void continueWith() => ContinueWithDialog.show(context, widget.sessionId);
 
     // In the row of controls, not in the line of facts: "facts above, controls
     // below" is this strip's redesign, and a pressable thing among the stage
@@ -247,7 +328,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
               primary: offered.isPrimary,
               onPressed: _busy || !offered.isEnabled
                   ? null
-                  : () => _press(offered.action, delivery),
+                  : () => _press(offered, delivery),
             ),
           if (review != null)
             ReviewAction(
@@ -276,7 +357,7 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
           offered: offered,
           onPressed: _busy || !offered.isEnabled
               ? null
-              : () => _press(offered.action, delivery),
+              : () => _press(offered, delivery),
         ),
       if (review != null)
         ReviewAction(
@@ -449,6 +530,27 @@ List<Widget> _deliveryFacts(
         '${delivery.aheadOfBase} ahead of ${delivery.baseBranch}',
         style: muted,
       ),
+    // Beside "ahead", because they are the two halves of one answer and a line
+    // that says only how far ahead a branch is reads as "up to date" to anyone
+    // scanning it. Drawn in the attention colour rather than muted: unlike the
+    // counts around it, this one is a thing to do something about.
+    //
+    // The count is omitted when it is zero, because that is the case where
+    // GitHub told us the branch is behind and the local ref has not been
+    // fetched since — "behind main" with no number is exactly as much as is
+    // known, and printing "0 behind main" would be a contradiction.
+    if (delivery.isBehindBase && delivery.baseBranch != null)
+      Text(
+        (delivery.behindBase ?? 0) > 0
+            ? '${delivery.behindBase} behind ${delivery.baseBranch}'
+            : 'behind ${delivery.baseBranch}',
+        style: label?.copyWith(color: semantic.attention),
+      ),
+    // A fact, not a button: `Resolve conflicts` is already the primary action
+    // in this state, and the line's job is to say what is true so the row of
+    // controls below does not have to carry the explanation on a tooltip.
+    if (delivery.hasConflict)
+      Text('conflicts', style: label?.copyWith(color: semantic.failure)),
     if (pr != null)
       RemoteLink(
         text: '#${pr.number}',
@@ -614,15 +716,22 @@ class _BarAction extends StatelessWidget {
 /// What a delivery action says on hover: why it cannot be pressed, or what
 /// pressing it does. One answer, so the two hosts cannot describe an action
 /// differently.
-String _actionTooltip(OfferedAction offered) =>
-    offered.disabledReason ??
-    (offered.action.isPrompt
-        ? 'Sends “${offered.action.prompt}”'
-        : _appActionTooltip(offered.action));
+String _actionTooltip(OfferedAction offered) {
+  final reason = offered.disabledReason;
+  if (reason != null) return reason;
+  final prompt = offered.prompt;
+  return prompt == null
+      ? _appActionTooltip(offered.action)
+      : 'Sends “$prompt”';
+}
 
 String _appActionTooltip(DeliveryAction action) => switch (action) {
   DeliveryAction.viewPullRequest => 'Opens the pull request in your browser',
   DeliveryAction.viewChecks => 'Opens the checks in your browser',
+  DeliveryAction.updateFromBase =>
+    'Merges the base branch into this one. Refuses if the tree is dirty, an '
+        'agent is running, or the merge would conflict.',
+  DeliveryAction.markReady => 'Takes the pull request out of draft',
   DeliveryAction.archive =>
     'Removes the worktree directory. The transcript, review notes and '
         'checkpoints are kept.',
@@ -635,6 +744,11 @@ IconData _actionIcon(DeliveryAction action) => switch (action) {
   DeliveryAction.openPullRequest => AppIcons.gitMerge,
   DeliveryAction.viewPullRequest => AppIcons.arrowSquareOut,
   DeliveryAction.viewChecks => AppIcons.checkCircle,
+  DeliveryAction.resolveConflicts => AppIcons.warningCircle,
+  DeliveryAction.updateFromBase => AppIcons.arrowsClockwise,
+  DeliveryAction.addressRequestedChanges => AppIcons.listMagnifyingGlass,
+  DeliveryAction.resolveReviewComments => AppIcons.listMagnifyingGlass,
+  DeliveryAction.markReady => AppIcons.arrowSquareOut,
   DeliveryAction.merge => AppIcons.gitMerge,
   DeliveryAction.runTests => AppIcons.play,
   DeliveryAction.archive => AppIcons.trash,

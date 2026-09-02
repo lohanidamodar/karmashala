@@ -39,7 +39,8 @@ typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
 /// than a field on [ChatMessage] because what hangs there is a *widget* with
 /// its own state and its own reads, and the transcript's message type is shared
 /// with the remote and companion payloads, which have no widgets at all.
-typedef MessageDetailBuilder = Widget? Function(ChatMessage message, int ordinal);
+typedef MessageDetailBuilder =
+    Widget? Function(ChatMessage message, int ordinal);
 
 /// A CLI-style conversation list: user turns, agent replies and tool lines,
 /// rendered close to how Claude Code / Codex print them. Long transcripts start
@@ -250,7 +251,8 @@ class _ChatMessageTile extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    if (onSaveNote != null) _SaveNoteButton(onSave: onSaveNote!),
+                    if (onSaveNote != null)
+                      _SaveNoteButton(onSave: onSaveNote!),
                     _CopyButton(text: message.text),
                   ],
                 ),
@@ -305,9 +307,7 @@ class _SaveNoteButtonState extends State<_SaveNoteButton> {
       iconSize: 13,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       padding: EdgeInsets.zero,
-      color: _saved
-          ? SemanticColors.of(context).idle
-          : scheme.onSurfaceVariant,
+      color: _saved ? SemanticColors.of(context).idle : scheme.onSurfaceVariant,
       icon: Icon(_saved ? AppIcons.check : AppIcons.notePencil),
       onPressed: () async {
         widget.onSave();

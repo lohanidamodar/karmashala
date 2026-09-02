@@ -139,8 +139,15 @@ class HandoffDecision {
       other.recordedAt == recordedAt;
 
   @override
-  int get hashCode =>
-      Object.hash(kind, summary, detail, decidedBy, origin, originId, recordedAt);
+  int get hashCode => Object.hash(
+    kind,
+    summary,
+    detail,
+    decidedBy,
+    origin,
+    originId,
+    recordedAt,
+  );
 }
 
 /// Everything the receiving agent is told, and the renderer that says it.
@@ -384,7 +391,9 @@ class HandoffPacket {
   /// constraint an agent invented for itself gets mistaken for one the user
   /// imposed.
   String _attribution(HandoffDecision decision) {
-    final parts = <String>['decided by ${decision.decidedBy ?? 'not recorded'}'];
+    final parts = <String>[
+      'decided by ${decision.decidedBy ?? 'not recorded'}',
+    ];
     final at = decision.recordedAt;
     parts.add(at == null ? 'time not recorded' : _stamp(at));
     final origin = decision.origin;
