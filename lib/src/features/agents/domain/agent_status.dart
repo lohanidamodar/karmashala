@@ -205,7 +205,8 @@ class StateRecordMatcher {
 }
 
 /// How to classify an agent's state file. All matcher lists are evaluated
-/// against the file's **last** decodable record.
+/// against the file's **last** decodable record, or — for an agent that sets
+/// [looksPastUnclassifiedRecords] — the last one that matches anything.
 class AgentStateFileRules {
   const AgentStateFileRules({
     this.idle = const [],
@@ -213,6 +214,7 @@ class AgentStateFileRules {
     this.awaitingApproval = const [],
     this.failed = const [],
     this.activityWindow = const Duration(minutes: 2),
+    this.looksPastUnclassifiedRecords = false,
   });
 
   final List<StateRecordMatcher> idle;
@@ -223,6 +225,26 @@ class AgentStateFileRules {
   /// How recently the file must have changed for a `working` record to still
   /// mean "working" rather than "the CLI exited mid-turn".
   final Duration activityWindow;
+
+  /// Whether a last record that matches nothing may be walked past, back to the
+  /// most recent record that does.
+  ///
+  /// **Off by default, and it should stay off for most agents.** The last
+  /// record is the strongest evidence a transcript has, and stepping back from
+  /// it trades that for a guess about which older record still describes the
+  /// session.
+  ///
+  /// Codex turns it on because its rollout interleaves bookkeeping that says
+  /// nothing about activity — `token_count` is the single most frequent record
+  /// in the owner's store, 9,650 of roughly 46,000, and lands *between* the
+  /// records that do classify, so a live session flapped to `unknown` every
+  /// time a rate-limit record arrived last. Claude Code deliberately does not:
+  /// walking back would reclassify 52 of the owner's 559 transcripts from
+  /// `unknown` to `idle`, and `idle` is what fires a completion notification.
+  ///
+  /// A record that *matches* and is merely stale — a `working` record nothing
+  /// has written to since — ends the walk. Aging out is an answer, not a miss.
+  final bool looksPastUnclassifiedRecords;
 }
 
 /// How one agent writes a hook handler for an event.

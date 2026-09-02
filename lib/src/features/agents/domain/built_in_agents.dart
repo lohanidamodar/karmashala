@@ -595,17 +595,67 @@ const _codex = AgentDescriptor(
   // Codex configures notifications through TOML, not a JSON hook file, so its
   // best available source today is the rollout file.
   statusStrategy: AgentStatusStrategy.stateFile,
+  //
+  // **Rewritten against the owner's own 52 rollouts** (`~/.codex/sessions`,
+  // 2025 and 2026, ~46,000 records). The rules before this matched neither of
+  // the two records that bracket a turn, so replaying them gave 39 `unknown`,
+  // 13 `idle` and — for a set of matchers three quarters of which claim
+  // `working` — not one `working`. The most common terminal record in the whole
+  // store was the one that means *the turn finished, here is how long it took*:
+  //
+  //   {"type":"event_msg","payload":{"type":"task_complete",
+  //    "turn_id":"019ca351-…","last_agent_message":"Third pass completed…",
+  //    "started_at":…,"completed_at":…,"duration_ms":35968}}
+  //
+  // 27 of 52 files end on one, and every one of them read `unknown` — so most
+  // Codex turns raised no "finished" notification at all.
+  //
+  // **What this cannot buy, at any quality of matcher.** Codex's own
+  // `should_persist_event_msg` drops `Error`, `ExecApprovalRequest`,
+  // `ApplyPatchApprovalRequest`, `RequestPermissions` and `StreamError` from the
+  // rollout as "transient, non-durable events"
+  // (codex-rs/rollout/src/policy.rs), and `TurnAbortReason` has no failure
+  // variant at all — only `{Interrupted, Replaced, ReviewEnded, BudgetLimited}`
+  // (codex-rs/protocol/src/protocol.rs). `awaitingApproval` and `failed` are
+  // therefore *structurally* absent from this format, not merely unmatched, and
+  // no rule below should be added in the hope of finding them.
   stateFile: AgentStateFileRules(
     idle: [
+      // The turn's closing bracket, and the single most common last record in
+      // the store (27 of 52 files).
+      StateRecordMatcher(['payload', 'type'], 'task_complete'),
       StateRecordMatcher(['payload', 'role'], 'assistant'),
+      // A turn the user stopped. `TurnAbortReason` has no failure variant, and
+      // the user who pressed Esc is already looking at the session — so this is
+      // an ending, not a failure. 4 files end here.
+      StateRecordMatcher(['payload', 'type'], 'turn_aborted'),
+      // The 2025 envelope, before rollouts wrapped everything in `payload`:
+      // `{"type":"message","role":"assistant","content":[…]}`. 4 archived files
+      // end on one; no record in the current format carries a top-level `role`.
+      StateRecordMatcher(['role'], 'assistant'),
     ],
     working: [
+      // The turn's opening bracket, carrying `turn_id` and `started_at`.
+      StateRecordMatcher(['payload', 'type'], 'task_started'),
       StateRecordMatcher(['payload', 'role'], 'user'),
-      // Best-effort: a non-message payload mid-rollout means work in progress.
+      // A tool call, its result, or the model thinking — 6,202 / 6,202 / 6,491
+      // records here, plus 1,700 apiece of the custom-tool pair and 462 web
+      // searches. All mean the same thing: a turn is in flight.
       StateRecordMatcher(['payload', 'type'], 'function_call'),
       StateRecordMatcher(['payload', 'type'], 'function_call_output'),
+      StateRecordMatcher(['payload', 'type'], 'custom_tool_call'),
+      StateRecordMatcher(['payload', 'type'], 'custom_tool_call_output'),
+      StateRecordMatcher(['payload', 'type'], 'web_search_call'),
       StateRecordMatcher(['payload', 'type'], 'reasoning'),
+      StateRecordMatcher(['payload', 'type'], 'agent_reasoning'),
     ],
+    // **`token_count` is why.** 9,650 of them, more than any other record type,
+    // written between the records above whenever a rate-limit update arrives —
+    // including as the very last record of two stored sessions. Enumerating
+    // every bookkeeping record Codex will ever write is the game this avoids;
+    // the walk is bounded to eight records so it stays a step past noise rather
+    // than a search for any older record that says something.
+    looksPastUnclassifiedRecords: true,
   ),
   // Codex 0.145's own screen, read off real PTY runs. `working` comes from its
   // status line (`• Working (3s • esc to interrupt)`, captured in

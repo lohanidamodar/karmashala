@@ -20,6 +20,23 @@ class AgentStateFileStatusSource {
   /// How much of the file's end to read when looking for the last record.
   final int tailBytes;
 
+  /// How many records before the last one to keep, for an agent whose rules
+  /// walk past bookkeeping (`AgentStateFileRules.looksPastUnclassifiedRecords`).
+  ///
+  /// Eight, from measurement rather than taste: replaying the owner's 52 Codex
+  /// rollouts, 48 need no walk at all and the rest need three or four. Double
+  /// the observed worst is enough, and a cap is what keeps a walk from turning
+  /// into a search back through the file for any record that says something.
+  static const int earlierRecordsKept = 8;
+
+  /// How much of those records' text to keep, in bytes.
+  ///
+  /// A snapshot is cached for the life of a tracked session, so this is memory
+  /// held per session and it has to be flat. They are kept as **raw lines** and
+  /// decoded only if the last record says nothing, which is the rare case — so
+  /// the usual cost of the walk is this many bytes and no CPU at all.
+  static const int earlierBytesKept = 8192;
+
   /// Reads [filePath] and classifies it, or returns `null` when there is
   /// nothing to say (no rules for this agent, or no readable record).
   Future<AgentStatusReport?> read(
@@ -63,6 +80,7 @@ class AgentStateFileStatusSource {
         modified: modified,
         size: stat.size,
         record: lastJsonRecord(tail),
+        earlierLines: earlierJsonLines(tail),
       );
     } on FileSystemException {
       return null;
@@ -86,7 +104,10 @@ class AgentStateFileStatusSource {
     final record = snapshot.record;
     if (record == null) return null;
 
-    final (status, detail) = _classify(rules, record, snapshot.modified, now);
+    final matched =
+        _classify(rules, record, snapshot.modified, now) ??
+        _classifyEarlier(rules, snapshot, now);
+    final (status, detail) = matched ?? (AgentActivityStatus.unknown, null);
     return AgentStatusReport(
       agentId: descriptor.id,
       sessionId: sessionId,
@@ -98,6 +119,26 @@ class AgentStateFileStatusSource {
       sourceModifiedAt: snapshot.modified,
       detail: detail,
     );
+  }
+
+  /// The first of [snapshot]'s earlier records that any rule matches.
+  ///
+  /// Only for an agent that asked for it. Decoding happens here rather than in
+  /// [probe] so a session whose last record classifies — nearly all of them —
+  /// never pays for it.
+  (AgentActivityStatus, String?)? _classifyEarlier(
+    AgentStateFileRules rules,
+    StateFileSnapshot snapshot,
+    DateTime now,
+  ) {
+    if (!rules.looksPastUnclassifiedRecords) return null;
+    for (final line in snapshot.earlierLines) {
+      final record = _decodeObject(line);
+      if (record == null) continue;
+      final matched = _classify(rules, record, snapshot.modified, now);
+      if (matched != null) return matched;
+    }
+    return null;
   }
 
   Future<String> _readTail(File file, int size) async {
@@ -114,7 +155,12 @@ class AgentStateFileStatusSource {
     }
   }
 
-  (AgentActivityStatus, String?) _classify(
+  /// What [record] says, or `null` when no rule matched it at all.
+  ///
+  /// The distinction matters to the backwards walk: a stale `working` record
+  /// resolves to `unknown` and is still a **match**, so the walk stops there
+  /// rather than stepping back to an older record that would say `idle`.
+  (AgentActivityStatus, String?)? _classify(
     AgentStateFileRules rules,
     Map<String, Object?> record,
     DateTime modified,
@@ -150,7 +196,7 @@ class AgentStateFileStatusSource {
     final idle = _firstMatch(rules.idle, record);
     if (idle != null) return (AgentActivityStatus.idle, idle);
 
-    return (AgentActivityStatus.unknown, null);
+    return null;
   }
 
   String? _firstMatch(
@@ -171,6 +217,7 @@ class StateFileSnapshot {
     required this.modified,
     required this.size,
     required this.record,
+    this.earlierLines = const [],
   });
 
   final DateTime modified;
@@ -178,6 +225,13 @@ class StateFileSnapshot {
 
   /// The last decodable record, or `null` when the file held none.
   final Map<String, Object?>? record;
+
+  /// The raw lines immediately before [record], newest first and bounded.
+  ///
+  /// Text rather than decoded records, because this is held for the life of a
+  /// tracked session and only read when [record] classifies as nothing. Empty
+  /// is the normal state for an agent whose rules never walk back.
+  final List<String> earlierLines;
 }
 
 /// The last line of [tail] that decodes to a JSON object, or `null`.
@@ -189,12 +243,46 @@ Map<String, Object?>? lastJsonRecord(String tail) {
   for (var i = lines.length - 1; i >= 0; i--) {
     final line = lines[i].trim();
     if (line.isEmpty) continue;
-    try {
-      final decoded = jsonDecode(line);
-      if (decoded is Map<String, Object?>) return decoded;
-    } on FormatException {
-      continue;
-    }
+    final decoded = _decodeObject(line);
+    if (decoded != null) return decoded;
   }
   return null;
+}
+
+/// The lines of [tail] before the one [lastJsonRecord] returned, newest first.
+///
+/// Bounded by both count and bytes (see
+/// [AgentStateFileStatusSource.earlierRecordsKept] and
+/// [AgentStateFileStatusSource.earlierBytesKept]) because the result is cached
+/// per tracked session. A line too long for the remaining budget ends the list
+/// rather than being kept: running out means the walk stops early and the
+/// session reads `unknown`, which is the safe direction.
+List<String> earlierJsonLines(String tail) {
+  final lines = tail.split('\n');
+  final kept = <String>[];
+  var budget = AgentStateFileStatusSource.earlierBytesKept;
+  var foundLast = false;
+  for (var i = lines.length - 1; i >= 0; i--) {
+    final line = lines[i].trim();
+    if (line.isEmpty) continue;
+    if (!foundLast) {
+      foundLast = _decodeObject(line) != null;
+      continue;
+    }
+    if (kept.length >= AgentStateFileStatusSource.earlierRecordsKept) break;
+    if (line.length > budget) break;
+    budget -= line.length;
+    kept.add(line);
+  }
+  return kept;
+}
+
+/// [line] decoded as a JSON object, or `null` if it is neither.
+Map<String, Object?>? _decodeObject(String line) {
+  try {
+    final decoded = jsonDecode(line);
+    return decoded is Map<String, Object?> ? decoded : null;
+  } on FormatException {
+    return null;
+  }
 }
