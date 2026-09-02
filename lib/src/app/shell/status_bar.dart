@@ -5,6 +5,7 @@ import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import 'side_panel_state.dart';
 
+import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/projects/application/projects_controller.dart';
@@ -18,6 +19,11 @@ import '../../features/terminal/application/terminal_sessions_controller.dart';
 /// then have to go and find is half a control.
 class ShellStatusBar extends ConsumerWidget {
   const ShellStatusBar({super.key});
+
+  /// Builds of this row's own items, counted so a cost test can prove that a
+  /// usage change repaints the chip and leaves the rest of the row alone.
+  @visibleForTesting
+  static int debugItemBuildCount = 0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,20 +64,31 @@ class ShellStatusBar extends ConsumerWidget {
         style: style,
         child: Row(
           children: [
+            // Flexible, so the row yields the left-hand names rather than
+            // overflowing: a long repository or branch is the elastic part, and
+            // the counts on the right are not. It costs nothing while there is
+            // room, and it is what keeps the row intact at 720px and on a host
+            // whose system font is wider than this one's.
             if (repo != null) ...[
-              _Item(icon: AppIcons.bookBookmark, label: repo.name),
-              _Item(
-                icon: AppIcons.gitBranch,
-                label: switch (branch) {
-                  AsyncData(:final value) => value ?? 'detached',
-                  AsyncError() => 'no git',
-                  _ => '…',
-                },
+              Flexible(
+                child: _Item(icon: AppIcons.bookBookmark, label: repo.name),
+              ),
+              Flexible(
+                child: _Item(
+                  icon: AppIcons.gitBranch,
+                  label: switch (branch) {
+                    AsyncData(:final value) => value ?? 'detached',
+                    AsyncError() => 'no git',
+                    _ => '…',
+                  },
+                ),
               ),
             ] else
-              _Item(
-                icon: AppIcons.bookBookmark,
-                label: 'No repository selected',
+              Flexible(
+                child: _Item(
+                  icon: AppIcons.bookBookmark,
+                  label: 'No repository selected',
+                ),
               ),
             const Spacer(),
             _Item(
@@ -99,6 +116,10 @@ class ShellStatusBar extends ConsumerWidget {
                     .read(sidePanelProvider.notifier)
                     .select(SidePanelSurface.inbox),
               ),
+            // `const`, so a rebuild of this row cannot rebuild the chip and a
+            // usage change cannot rebuild the row — the subscription is the
+            // chip's own, and it is the only thing that repaints for it.
+            const UsageChip(),
             _Item(
               icon: AppIcons.sidebarSimple,
               label: panel?.label ?? 'Panel closed',
@@ -129,6 +150,7 @@ class _Item extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    ShellStatusBar.debugItemBuildCount++;
     final scheme = Theme.of(context).colorScheme;
     final colour = emphasised ? scheme.primary : scheme.onSurfaceVariant;
     final content = Padding(
@@ -138,13 +160,15 @@ class _Item extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: colour),
           const SizedBox(width: 5),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: colour),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: colour),
+              ),
             ),
           ),
         ],
