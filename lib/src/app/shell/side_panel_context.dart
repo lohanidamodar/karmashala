@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
+import '../widgets/desktop_menu.dart';
 
 import '../../features/explorer/application/checkout.dart';
 import '../../features/explorer/application/checkout_picker.dart';
@@ -104,9 +105,8 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
       },
       itemBuilder: (context) => [
         for (final checkout in checkouts)
-          PopupMenuItem<Object>(
+          DesktopMenuDetailItem<Object>.live(
             value: checkout,
-            height: 44,
             child: _CheckoutMenuRow(
               repository: checkout,
               within: project == null
@@ -115,25 +115,14 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
               selected: checkout.id == repository.id,
             ),
           ),
-        const PopupMenuDivider(),
-        PopupMenuItem<Object>(
+        const DesktopMenuDivider(),
+        // Says what it is for, because the reason to reach for it is a checkout
+        // that is missing rather than one that is wrong.
+        DesktopMenuItem<Object>(
           value: const _RescanChoice(),
           enabled: !_rescanning,
-          height: 36,
-          child: Row(
-            children: [
-              const Icon(AppIcons.arrowsClockwise, size: Chrome.iconSmall),
-              const SizedBox(width: Insets.sm),
-              // Says what it is for, because the reason to reach for it is a
-              // checkout that is missing rather than one that is wrong.
-              Expanded(
-                child: Text(
-                  _rescanResult ?? 'Rescan for checkouts',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
+          label: _rescanResult ?? 'Rescan for checkouts',
+          icon: AppIcons.arrowsClockwise,
         ),
       ],
       child: line,
@@ -221,54 +210,21 @@ class _CheckoutMenuRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final label = ref
         .watch(checkoutLabelsProvider(repository.projectId))
         .asData
         ?.value[repository.id];
     final branch = label?.branch;
-    final detail = [
-      if (label?.isWorktree ?? false) 'worktree',
-      ?branch,
-      within ?? 'project root',
-    ].join('  ·  ');
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 380),
-      child: Row(
-        children: [
-          Icon(
-            selected ? AppIcons.check : AppIcons.bookBookmark,
-            size: Chrome.iconSmall,
-            color: selected ? scheme.primary : scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  repository.name,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: selected ? FontWeight.w600 : null,
-                    color: selected ? scheme.primary : null,
-                  ),
-                ),
-                Text(
-                  detail,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return DesktopMenuDetailRow(
+      label: repository.name,
+      detail: [
+        if (label?.isWorktree ?? false) 'worktree',
+        ?branch,
+        within ?? 'project root',
+      ].join('  ·  '),
+      detailMaxLines: 1,
+      icon: AppIcons.bookBookmark,
+      selected: selected,
     );
   }
 }
