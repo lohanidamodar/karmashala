@@ -39,6 +39,34 @@ const String kScrcpyJarPathPrefix = '/data/local/tmp/karmashala-scrcpy-server';
 /// "Aborted", exit 134.
 String scrcpyJarPathFor(String scid) => '$kScrcpyJarPathPrefix-$scid.jar';
 
+/// What a **host-side** staged jar is called, before it is pushed.
+///
+/// The name carries a token that is unique per start, for the same reason the
+/// device path does — but here the hazard is worse. This used to be one fixed
+/// file, `karmashala-scrcpy-server-<version>.jar` in the system temp directory,
+/// shared by every start on the machine *and by the tests*, which write four
+/// dummy bytes to it. A test run overlapping a live stream restart therefore
+/// handed a real phone a 4-byte jar, and `app_process` aborted with
+/// `ClassNotFoundException` on a device nobody was testing against.
+///
+/// [kScrcpyHostJarPrefix] deliberately omits the version so [
+/// DeviceStreamService.sweepStagedJars] also collects the old fixed-path file
+/// this replaces.
+const String kScrcpyHostJarPrefix = 'karmashala-scrcpy-server-';
+
+String scrcpyHostJarName(String token) =>
+    '$kScrcpyHostJarPrefix$kScrcpyVersion-$token.jar';
+
+/// How long a staged jar may sit in the staging directory before a later start
+/// treats it as debris.
+///
+/// Age rather than ownership, because a process cannot tell which of these
+/// files another process still needs. A staged jar is read by the `adb push`
+/// of the start that wrote it and deleted immediately after, so it lives for
+/// seconds; an hour is beyond anything a live start could still be holding and
+/// well inside "left behind by a crash".
+const Duration kStagedJarLifetime = Duration(hours: 1);
+
 /// Supplies the scrcpy server jar bytes (the Flutter asset in the app, a
 /// fixture in tests).
 typedef ScrcpyServerBytes = Future<Uint8List> Function();
@@ -454,8 +482,10 @@ class DeviceStreamService {
     this.livenessProbeInterval = const Duration(seconds: 20),
     this.inputAnswerGrace = kInputAnswerGrace,
     this.socketAttempts = 20,
+    Directory? stagingDirectory,
     AppLogger? logger,
-  }) : _logger = logger ?? AppLogger.named('device-stream');
+  }) : stagingDirectory = stagingDirectory ?? Directory.systemTemp,
+       _logger = logger ?? AppLogger.named('device-stream');
 
   final AdbService adb;
   final CommandRunner runner;
@@ -489,7 +519,17 @@ class DeviceStreamService {
   /// waiting for a port nothing will ever answer on.
   final int socketAttempts;
 
+  /// Where the server jar is staged on the host before it is pushed. The
+  /// system temp directory in the app; a per-test directory in tests, so a
+  /// test can neither see nor be seen by a live session's staging.
+  final Directory stagingDirectory;
+
   final AppLogger _logger;
+
+  /// Distinguishes concurrent starts inside one process; [pid] distinguishes
+  /// processes. Together they make [scrcpyHostJarName] collision-free without
+  /// a lock.
+  static int _stageSequence = 0;
 
   /// Kills scrcpy servers and removes `adb forward` entries left behind by an
   /// earlier run on [serial].
@@ -526,6 +566,67 @@ class DeviceStreamService {
       reaped += 1;
     }
     return reaped;
+  }
+
+  /// Writes the server jar to a path only this start uses, and clears out
+  /// whatever earlier starts left behind.
+  ///
+  /// See [kScrcpyHostJarPrefix] for why the path cannot be a fixed one.
+  Future<File> _stageServerJar() async {
+    await sweepStagedJars();
+    final token =
+        '${pid.toRadixString(16)}-${(_stageSequence++).toRadixString(16)}';
+    final file = File(
+      '${stagingDirectory.path}${Platform.pathSeparator}'
+      '${scrcpyHostJarName(token)}',
+    );
+    await file.writeAsBytes(await serverBytes(), flush: true);
+    return file;
+  }
+
+  Future<void> _discardStagedJar(File jar) async {
+    try {
+      if (jar.existsSync()) await jar.delete();
+    } on FileSystemException catch (error) {
+      // A jar that cannot be deleted is one more file for the next sweep, not
+      // a reason to fail a stream that is already running.
+      _logger.warning('Could not remove staged jar ${jar.path}: $error');
+    }
+  }
+
+  /// Deletes staged jars older than [kStagedJarLifetime].
+  ///
+  /// Without this the per-start paths would be strictly worse than the fixed
+  /// one they replace: a start that is killed before its `finally` runs — the
+  /// app quitting mid-start, a crash — leaves 700 KB behind, and the fixed path
+  /// at least overwrote itself. Also collects the fixed-path file previous
+  /// builds left in the temp directory; see [kScrcpyHostJarPrefix].
+  Future<int> sweepStagedJars() async {
+    var swept = 0;
+    final now = DateTime.now();
+    try {
+      await for (final entity in stagingDirectory.list(followLinks: false)) {
+        if (entity is! File) continue;
+        if (!entity.uri.pathSegments.last.startsWith(kScrcpyHostJarPrefix)) {
+          continue;
+        }
+        try {
+          if (now.difference((await entity.stat()).modified) <
+              kStagedJarLifetime) {
+            continue;
+          }
+          await entity.delete();
+          swept += 1;
+        } on FileSystemException {
+          // Another process staging or deleting the same file at the same
+          // moment. Its own sweep will get it.
+        }
+      }
+    } on FileSystemException catch (error) {
+      _logger.warning('Could not sweep staged scrcpy jars: $error');
+    }
+    if (swept > 0) _logger.info('Removed $swept stale staged scrcpy jar(s).');
+    return swept;
   }
 
   /// Connects the tunnel's sockets, retrying until the server is really
@@ -658,14 +759,10 @@ class DeviceStreamService {
     // 0. Clear anything a previous run left running or registered.
     await reapOrphans(serial);
 
-    // 1. Stage the jar on the host once. Putting it on the *device* is
-    //    [_openTunnel]'s job, per attempt — see [scrcpyJarPathFor].
-    final jar = await serverBytes();
-    final hostJar = File(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}'
-      'karmashala-scrcpy-server-$kScrcpyVersion.jar',
-    );
-    await hostJar.writeAsBytes(jar, flush: true);
+    // 1. Stage the jar on the host, at a path only this start knows. Putting it
+    //    on the *device* is [_openTunnel]'s job, per attempt — see
+    //    [scrcpyJarPathFor].
+    final hostJar = await _stageServerJar();
 
     // 2–4. Tunnel, server, sockets. Attempted with the control socket first and
     // then without it, because enabling control changes the *video* handshake:
@@ -676,17 +773,23 @@ class DeviceStreamService {
     // keeps exactly the Loop 27 behaviour, with `adb shell input` for gestures.
     _Tunnel? tunnel;
     var attemptedWithoutControl = false;
-    for (final wantControl
-        in useControlSocket ? const [true, false] : const [false]) {
-      tunnel = await _openTunnel(
-        serial: serial,
-        hostJarPath: hostJar.path,
-        captureSize: captureSize,
-        captureFps: captureFps,
-        withControl: wantControl,
-      );
-      if (tunnel != null) break;
-      attemptedWithoutControl = !wantControl;
+    try {
+      for (final wantControl
+          in useControlSocket ? const [true, false] : const [false]) {
+        tunnel = await _openTunnel(
+          serial: serial,
+          hostJarPath: hostJar.path,
+          captureSize: captureSize,
+          captureFps: captureFps,
+          withControl: wantControl,
+        );
+        if (tunnel != null) break;
+        attemptedWithoutControl = !wantControl;
+      }
+    } finally {
+      // Nothing reads it after the last push, so it goes now rather than
+      // waiting for a later start's sweep to notice it.
+      await _discardStagedJar(hostJar);
     }
     if (tunnel == null) {
       throw StateError(

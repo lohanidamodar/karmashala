@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/core/process/command_runner.dart';
@@ -16,6 +17,48 @@ AndroidSdk _sdk() => const AndroidSdk(
     path: r'C:\sdk\platform-tools\adb.exe',
   ),
 );
+
+/// A staging directory of this test's own.
+///
+/// The whole point of the host-side change: a test writing four dummy bytes
+/// must not be able to reach the file a live session is about to push to a
+/// phone.
+Directory _staging() {
+  final dir = Directory.systemTemp.createTempSync('cg_scrcpy_stage');
+  addTearDown(() {
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  });
+  return dir;
+}
+
+/// Names in [directory] that a start staged or left behind.
+List<String> _stagedNames(Directory directory) => [
+  for (final entity in directory.listSync())
+    if (entity.uri.pathSegments.last.startsWith(kScrcpyHostJarPrefix))
+      entity.uri.pathSegments.last,
+];
+
+/// A runner whose `forward tcp:0` answers with a port nothing is listening on,
+/// so both attempts run to exhaustion and `start` gives up — and which records
+/// the size of the file each `adb push` was actually handed, read at the moment
+/// of the push rather than afterwards.
+FakeCommandRunner _pushRecorder(List<({String path, int length})> pushes) =>
+    FakeCommandRunner(
+      responder: (request) {
+        if (request.arguments.contains('push')) {
+          final file = File(request.arguments[3]);
+          pushes.add((
+            path: file.path,
+            length: file.existsSync() ? file.lengthSync() : -1,
+          ));
+        }
+        if (request.arguments.contains('forward') &&
+            request.arguments.contains('tcp:0')) {
+          return const CommandResult(exitCode: 0, stdout: '1\n', stderr: '');
+        }
+        return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+      },
+    );
 
 void main() {
   group('parseForwardedPort', () {
@@ -147,6 +190,7 @@ void main() {
         runner: runner,
         serverBytes: () async => Uint8List(4),
         socketAttempts: 1,
+        stagingDirectory: _staging(),
       );
 
       await expectLater(
@@ -184,6 +228,7 @@ void main() {
         runner: runner,
         serverBytes: () async => Uint8List(4),
         socketAttempts: 1,
+        stagingDirectory: _staging(),
       );
       await expectLater(
         service.start('emulator-5554'),
@@ -200,6 +245,127 @@ void main() {
       for (final path in removed) {
         expect(path, startsWith(kScrcpyJarPathPrefix));
       }
+    });
+  });
+
+  group('host-side staging', () {
+    // The hazard this group exists for: `start` used to write the jar to ONE
+    // fixed path in the system temp directory, `karmashala-scrcpy-server-4.1
+    // .jar`, shared by every start on the machine and by the tests — which
+    // stage four dummy bytes there. A test run overlapping a live stream
+    // restart handed a real phone a 4-byte jar, and `app_process` aborted with
+    // `ClassNotFoundException` on a device nobody was testing against.
+    test('two concurrent starts cannot reach each other\'s jar', () async {
+      final staging = _staging();
+      final live = <({String path, int length})>[];
+      final dummy = <({String path, int length})>[];
+      final liveRunner = _pushRecorder(live);
+      final dummyRunner = _pushRecorder(dummy);
+
+      DeviceStreamService serviceOver(FakeCommandRunner runner, int bytes) =>
+          DeviceStreamService(
+            adb: AdbService(runner: runner, sdk: _sdk()),
+            runner: runner,
+            serverBytes: () async => Uint8List(bytes),
+            socketAttempts: 1,
+            stagingDirectory: staging,
+          );
+
+      // A live session staging the real jar, and a test staging its dummy —
+      // interleaved, which is exactly what a test run during a stream restart
+      // does. The live session pushes twice, and its second push happens after
+      // the other has written its own file.
+      await Future.wait([
+        expectLater(
+          serviceOver(liveRunner, 700).start('F6IZLV6LMFT4U4ZT'),
+          throwsA(isA<StateError>()),
+        ),
+        expectLater(
+          serviceOver(dummyRunner, 4).start('emulator-5554'),
+          throwsA(isA<StateError>()),
+        ),
+      ]);
+
+      expect(live.map((p) => p.path).toSet(), hasLength(1));
+      expect(dummy.map((p) => p.path).toSet(), hasLength(1));
+      expect(
+        live.first.path,
+        isNot(dummy.first.path),
+        reason: 'one path per start, never one for the machine',
+      );
+      // The bytes are the actual assertion: with the fixed path the live
+      // session's second push carried the 4 dummy bytes.
+      expect(live.map((p) => p.length), everyElement(700));
+      expect(dummy.map((p) => p.length), everyElement(4));
+    });
+
+    test('the staged jar does not outlive the start that wrote it', () async {
+      final staging = _staging();
+      final pushes = <({String path, int length})>[];
+      final runner = _pushRecorder(pushes);
+      final service = DeviceStreamService(
+        adb: AdbService(runner: runner, sdk: _sdk()),
+        runner: runner,
+        serverBytes: () async => Uint8List(700),
+        socketAttempts: 1,
+        stagingDirectory: staging,
+      );
+
+      await expectLater(
+        service.start('emulator-5554'),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(pushes, hasLength(2), reason: 'it was staged and used');
+      expect(_stagedNames(staging), isEmpty, reason: 'and then taken away');
+    });
+
+    test('stale staged jars are swept rather than accumulating', () async {
+      final staging = _staging();
+      File aged(String name) => File(
+        '${staging.path}${Platform.pathSeparator}$name',
+      )
+        ..writeAsBytesSync(Uint8List(700))
+        ..setLastModifiedSync(DateTime.now().subtract(const Duration(days: 2)));
+
+      // A start killed before its cleanup ran — the app quitting mid-start, a
+      // crash — leaves one of these behind every time.
+      final crashed = aged('karmashala-scrcpy-server-4.1-1a2b-0.jar');
+      // What every build before this one left in the temp directory, once.
+      final fixedPath = aged('karmashala-scrcpy-server-4.1.jar');
+      final unrelated = aged('someone-elses-cache.jar');
+      // Another start, still using its jar right now.
+      final inFlight =
+          File(
+            '${staging.path}${Platform.pathSeparator}'
+            'karmashala-scrcpy-server-4.1-inflight-0.jar',
+          )..writeAsBytesSync(Uint8List(700));
+
+      final pushes = <({String path, int length})>[];
+      final runner = _pushRecorder(pushes);
+      await expectLater(
+        DeviceStreamService(
+          adb: AdbService(runner: runner, sdk: _sdk()),
+          runner: runner,
+          serverBytes: () async => Uint8List(700),
+          socketAttempts: 1,
+          stagingDirectory: staging,
+        ).start('emulator-5554'),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(crashed.existsSync(), isFalse);
+      expect(fixedPath.existsSync(), isFalse, reason: 'the path this replaces');
+      expect(
+        unrelated.existsSync(),
+        isTrue,
+        reason: 'the sweep owns one prefix and nothing else in the temp dir',
+      );
+      expect(
+        inFlight.existsSync(),
+        isTrue,
+        reason: 'age, not ownership: a live start\'s jar is seconds old',
+      );
     });
   });
 

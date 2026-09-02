@@ -9,6 +9,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/features/devices/data/adb_service.dart';
 import 'package:karmashala/src/features/devices/data/device_stream.dart';
@@ -178,13 +179,23 @@ DeviceStreamService fakeStreamService(
   Duration watchdogInterval = const Duration(milliseconds: 25),
   Duration livenessProbeInterval = const Duration(seconds: 30),
   Duration inputAnswerGrace = const Duration(milliseconds: 200),
-}) => DeviceStreamService(
-  adb: AdbService(runner: runner, sdk: kFakeSdk),
-  runner: runner,
-  serverBytes: () async => Uint8List(4),
-  stallTimeout: stallTimeout,
-  watchdogInterval: watchdogInterval,
-  livenessProbeInterval: livenessProbeInterval,
-  inputAnswerGrace: inputAnswerGrace,
-  socketAttempts: 10,
-);
+}) {
+  // A staging directory of this test's own. The four dummy bytes below are the
+  // exact payload that must never reach the jar a live session is pushing to a
+  // phone, so they are not written where a live session stages.
+  final staging = Directory.systemTemp.createTempSync('cg_scrcpy_fake');
+  addTearDown(() {
+    if (staging.existsSync()) staging.deleteSync(recursive: true);
+  });
+  return DeviceStreamService(
+    adb: AdbService(runner: runner, sdk: kFakeSdk),
+    runner: runner,
+    serverBytes: () async => Uint8List(4),
+    stallTimeout: stallTimeout,
+    watchdogInterval: watchdogInterval,
+    livenessProbeInterval: livenessProbeInterval,
+    inputAnswerGrace: inputAnswerGrace,
+    socketAttempts: 10,
+    stagingDirectory: staging,
+  );
+}
