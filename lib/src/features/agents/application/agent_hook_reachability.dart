@@ -34,6 +34,10 @@ import '../domain/agent_hook_endpoint.dart';
 /// the installer is about to write into somebody's config. It sends **no
 /// token**: any HTTP status line coming back proves the door, and a `401`
 /// proves it as well as a `200` does, so the probe carries no credential.
+///
+/// It wakes nothing that was asleep: `CliStoreLocator` has already run
+/// `bash -lc` in each distribution to find the store this is about to install
+/// into, and a login shell costs more than this does.
 class AgentHookReachability {
   const AgentHookReachability({
     required this.runners,
