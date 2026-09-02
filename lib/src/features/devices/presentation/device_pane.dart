@@ -118,19 +118,11 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// control socket is unavailable or dies mid-session.
   DeviceGestureSink? _sink;
 
-  /// Where keystrokes go while [_keyboardForwarding] is on. Same story as
-  /// [_sink]: the control socket when there is one, `adb shell input` when
-  /// there is not.
+  /// Where keystrokes go while the live view has focus. Same story as [_sink]:
+  /// the control socket when there is one, `adb shell input` when there is not.
+  /// Whether they are *going* is [DeviceKeyboardSurface]'s to know — it is a
+  /// question about focus, and focus lives down there.
   DeviceKeyboardSink? _keyboardSink;
-
-  /// Whether the desktop keyboard is driving the device.
-  ///
-  /// **Off by default, and reset to off whenever the session goes away.** While
-  /// it is on the pane swallows Karmashala's own shortcuts, so leaving it armed
-  /// across a stop or a device switch would be exactly the "silently drives a
-  /// device the user thinks is disconnected" failure the hardware-key row was
-  /// already careful about — with a keyboard instead of three buttons.
-  bool _keyboardForwarding = false;
 
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
@@ -164,7 +156,6 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     _video = null;
     _sink = null;
     _keyboardSink = null;
-    _keyboardForwarding = false;
     _health = null;
     await health?.cancel();
     await session?.stop();
@@ -319,7 +310,6 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         // either transport — a gesture has to wait for `wm size`, a keystroke
         // does not.
         _keyboardSink = _keyboardSinkFor(session);
-        _keyboardForwarding = false;
       });
       // No control socket: the adb fallback needs the device's screen size,
       // which is a round trip. Fetched off the start path so a slow `wm size`
@@ -596,9 +586,6 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                   starting: _starting,
                   sink: _sink,
                   keyboard: _keyboardSink,
-                  forwardingKeyboard: _keyboardForwarding,
-                  onForwardingChanged: (value) =>
-                      setState(() => _keyboardForwarding = value),
                   health: _health,
                   exhausted:
                       _reconnectAttempt >= kStreamReconnectBackoff.length &&
@@ -910,8 +897,6 @@ class _LiveView extends ConsumerWidget {
     required this.starting,
     required this.sink,
     required this.keyboard,
-    required this.forwardingKeyboard,
-    required this.onForwardingChanged,
     required this.health,
     required this.exhausted,
     required this.onRestart,
@@ -929,11 +914,9 @@ class _LiveView extends ConsumerWidget {
   final bool starting;
   final DeviceGestureSink? sink;
 
-  /// Where keystrokes go, and whether they are going. `null` when neither the
-  /// control socket nor adb can carry them.
+  /// Where keystrokes go. `null` when neither the control socket nor adb can
+  /// carry them, which is the one case the surface cannot be armed at all.
   final DeviceKeyboardSink? keyboard;
-  final bool forwardingKeyboard;
-  final ValueChanged<bool> onForwardingChanged;
 
   final DeviceStreamHealth? health;
 
@@ -983,8 +966,6 @@ class _LiveView extends ConsumerWidget {
           // it draws underneath has to say so where the user is looking.
           child: DeviceKeyboardSurface(
             sink: keyboard,
-            forwarding: forwardingKeyboard,
-            onForwardingChanged: onForwardingChanged,
             deviceLabel: currentDevice.displayName,
             child: Center(
               child: AspectRatio(

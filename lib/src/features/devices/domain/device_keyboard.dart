@@ -1,8 +1,22 @@
-// Turning the desktop's keyboard into something an Android device understands.
+// Turning the desktop's keyboard into something a mirrored device understands.
 //
 // The owner's request was "scrcpy can also send keyboard events right, can we
 // send keyboard events in live when actively focused there? with a option to
 // stop sending keyboard?" — so: type into the mirror, and be able to stop.
+//
+// **Two devices, one translation.** This file was written for Android alone and
+// now also serves an iOS simulator, so it is worth being exact about what is
+// shared and what is not. The *split* below — printable text one way, named keys
+// the other — is shared, because it follows from how desktop keyboards report
+// characters rather than from anything Android does. The *vocabulary* is not:
+// Android takes `KEYCODE_*` integers and a meta-state bitmask, while
+// WebDriverAgent takes a string it feeds to `XCUIElement.typeText`, and there is
+// no honest correspondence between an int and a private-use code point. So
+// [DeviceKeycodeIntent] carries the originating [LogicalKeyboardKey] alongside
+// the Android keycode, and [simulatorKeyFor] maps that key — not the keycode — onto
+// what iOS understands. Round-tripping desktop → Android → iOS would make the
+// second device's behaviour depend on the first device's numbering, which is
+// exactly the kind of coupling that is invisible until it is wrong.
 //
 // **The split, and why.** Every key arriving here goes one of two ways:
 //
@@ -30,6 +44,8 @@
 // fallback behaves the same way rather than differently.
 
 import 'package:flutter/services.dart';
+
+import 'simulator_backend.dart';
 
 /// Android `KeyEvent.ACTION_*`.
 abstract final class AndroidKeyAction {
@@ -172,6 +188,7 @@ final class DeviceKeycodeIntent extends DeviceKeyIntent {
   const DeviceKeycodeIntent({
     required this.action,
     required this.keyCode,
+    this.logicalKey,
     this.repeat = 0,
     this.metaState = AndroidMetaState.none,
   });
@@ -180,6 +197,15 @@ final class DeviceKeycodeIntent extends DeviceKeyIntent {
   final int keyCode;
   final int repeat;
   final int metaState;
+
+  /// The desktop key this came from, kept so a sink that does not speak Android
+  /// can still say which key was pressed.
+  ///
+  /// Nullable rather than required because the intent is also constructed
+  /// straight from a keycode in tests and in [DeviceKeyTranslator.releaseAll]'s
+  /// older callers; a sink that needs it treats `null` as "no equivalent" and
+  /// refuses, which is the same answer it gives for a key it cannot map.
+  final LogicalKeyboardKey? logicalKey;
 
   /// Whether this needs a modifier the transport may not be able to carry.
   ///
@@ -322,6 +348,60 @@ int? androidKeyCodeFor(LogicalKeyboardKey key) {
   return null;
 }
 
+/// Desktop keys that exist on an iOS keyboard too.
+///
+/// Deliberately shorter than [_keyCodes], and the gaps are the point rather
+/// than an unfinished table:
+///
+/// * **Back, Menu, Search, Volume** are Android hardware keys. iOS draws its own
+///   back button inside the app and has no system one, so pressing a
+///   best-effort substitute would silently do the wrong thing — the same
+///   reasoning that makes `SimulatorButton.forDeviceKey` partial.
+/// * **Punctuation** is absent because it is only ever reached here under a
+///   modifier, and a modifier cannot be held across a key press through this
+///   transport at all (see [SimulatorKey]). Unmodified punctuation is a
+///   character, and characters go down the text path.
+///
+/// Anything missing is refused out loud by the sink rather than approximated.
+final Map<LogicalKeyboardKey, SimulatorKey> _simulatorKeys = {
+  LogicalKeyboardKey.backspace: SimulatorKey.backspace,
+  LogicalKeyboardKey.delete: SimulatorKey.forwardDelete,
+  LogicalKeyboardKey.enter: SimulatorKey.returnKey,
+  LogicalKeyboardKey.numpadEnter: SimulatorKey.returnKey,
+  LogicalKeyboardKey.tab: SimulatorKey.tab,
+  LogicalKeyboardKey.escape: SimulatorKey.escape,
+  LogicalKeyboardKey.insert: SimulatorKey.insert,
+  LogicalKeyboardKey.capsLock: SimulatorKey.capsLock,
+  LogicalKeyboardKey.arrowUp: SimulatorKey.arrowUp,
+  LogicalKeyboardKey.arrowDown: SimulatorKey.arrowDown,
+  LogicalKeyboardKey.arrowLeft: SimulatorKey.arrowLeft,
+  LogicalKeyboardKey.arrowRight: SimulatorKey.arrowRight,
+  LogicalKeyboardKey.home: SimulatorKey.home,
+  LogicalKeyboardKey.end: SimulatorKey.end,
+  LogicalKeyboardKey.pageUp: SimulatorKey.pageUp,
+  LogicalKeyboardKey.pageDown: SimulatorKey.pageDown,
+  LogicalKeyboardKey.f1: SimulatorKey.f1,
+  LogicalKeyboardKey.f2: SimulatorKey.f2,
+  LogicalKeyboardKey.f3: SimulatorKey.f3,
+  LogicalKeyboardKey.f4: SimulatorKey.f4,
+  LogicalKeyboardKey.f5: SimulatorKey.f5,
+  LogicalKeyboardKey.f6: SimulatorKey.f6,
+  LogicalKeyboardKey.f7: SimulatorKey.f7,
+  LogicalKeyboardKey.f8: SimulatorKey.f8,
+  LogicalKeyboardKey.f9: SimulatorKey.f9,
+  LogicalKeyboardKey.f10: SimulatorKey.f10,
+  LogicalKeyboardKey.f11: SimulatorKey.f11,
+  LogicalKeyboardKey.f12: SimulatorKey.f12,
+};
+
+/// The iOS key for [key], or `null` if iOS has no such key.
+///
+/// Note there is no letter or digit fallback, unlike [androidKeyCodeFor]. On
+/// Android those exist so a *chord* can name its trigger — `KEYCODE_A` for
+/// Ctrl+A — and this transport cannot send a chord, so a letter arriving here
+/// would only ever be a letter, which the text path already types.
+SimulatorKey? simulatorKeyFor(LogicalKeyboardKey key) => _simulatorKeys[key];
+
 /// Translates one desktop keyboard into one Android keyboard.
 ///
 /// Stateful for two reasons, both of which are bugs if they are skipped:
@@ -334,7 +414,16 @@ int? androidKeyCodeFor(LogicalKeyboardKey key) {
 ///   left down scrolls a list to the bottom on its own.
 class DeviceKeyTranslator {
   /// Physical keys currently down *as a keycode*, and their repeat counters.
-  final Map<PhysicalKeyboardKey, ({int keyCode, int repeat})> _down = {};
+  ///
+  /// The logical key is kept beside the keycode so [releaseAll] can build a
+  /// complete intent: a release goes out with no key event in hand, and a sink
+  /// that maps by logical key would otherwise be handed a keycode it cannot
+  /// read and refuse to lift a key the device thinks is held.
+  final Map<
+    PhysicalKeyboardKey,
+    ({int keyCode, int repeat, LogicalKeyboardKey logicalKey})
+  >
+  _down = {};
 
   /// The event's Android form, or `null` when nothing should be sent.
   DeviceKeyIntent? translate(KeyEvent event, DesktopModifiers modifiers) {
@@ -350,6 +439,7 @@ class DeviceKeyTranslator {
       return DeviceKeycodeIntent(
         action: AndroidKeyAction.up,
         keyCode: held.keyCode,
+        logicalKey: held.logicalKey,
         metaState: modifiers.androidMetaState,
       );
     }
@@ -367,10 +457,15 @@ class DeviceKeyTranslator {
 
     final previous = _down[event.physicalKey];
     final repeat = event is KeyRepeatEvent ? (previous?.repeat ?? 0) + 1 : 0;
-    _down[event.physicalKey] = (keyCode: keyCode, repeat: repeat);
+    _down[event.physicalKey] = (
+      keyCode: keyCode,
+      repeat: repeat,
+      logicalKey: event.logicalKey,
+    );
     return DeviceKeycodeIntent(
       action: AndroidKeyAction.down,
       keyCode: keyCode,
+      logicalKey: event.logicalKey,
       repeat: repeat,
       metaState: modifiers.androidMetaState,
     );
@@ -384,6 +479,7 @@ class DeviceKeyTranslator {
         DeviceKeycodeIntent(
           action: AndroidKeyAction.up,
           keyCode: held.keyCode,
+          logicalKey: held.logicalKey,
         ),
     ];
     _down.clear();

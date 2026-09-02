@@ -385,6 +385,123 @@ class AdbService {
     throw error;
   }
 
+  /// Installs an APK, replacing any build of the same package already there.
+  ///
+  /// `-r` rather than a clean install: an agent's loop is build, install, look,
+  /// and wiping the app's data between iterations would throw away the state
+  /// it just spent five taps setting up. `-t` allows an APK whose manifest is
+  /// marked `testOnly`, which is what `flutter build apk --debug` and every
+  /// `assembleDebug` produce — without it the ordinary output of a debug build
+  /// is refused with `INSTALL_FAILED_TEST_ONLY`, and the message does not say
+  /// that a flag would have fixed it.
+  ///
+  /// The decision is made on the output as well as the exit status. adb has
+  /// returned 0 for `Failure [INSTALL_FAILED_*]` on and off across releases —
+  /// it is the same trap [launchPackage] documents below — and an install that
+  /// reported success without installing anything sends the caller on to a
+  /// launch that fails for a reason that looks unrelated.
+  Future<void> installApk(String serial, String apkPath) async {
+    const verb = 'install';
+    final summary = 'Installed $apkPath';
+    final result = await runner.run(
+      _forDevice(serial, ['install', '-r', '-t', apkPath]),
+    );
+    final output = '${result.stdout}\n${result.stderr}';
+    if (!result.ok || output.contains('Failure [')) {
+      final error = StateError(
+        'adb install failed on $serial: '
+        '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}',
+      );
+      _report(
+        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+      );
+      throw error;
+    }
+    _report(DeviceAction(verb: verb, serial: serial, summary: summary));
+  }
+
+  /// Removes an app and its data.
+  Future<void> uninstallPackage(String serial, String packageName) async {
+    const verb = 'uninstall';
+    final summary = 'Uninstalled $packageName';
+    final result = await runner.run(
+      _forDevice(serial, ['uninstall', packageName]),
+    );
+    final output = '${result.stdout}\n${result.stderr}';
+    if (!result.ok || output.contains('Failure [')) {
+      final error = StateError(
+        'adb uninstall failed on $serial: '
+        '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}',
+      );
+      _report(
+        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+      );
+      throw error;
+    }
+    _report(DeviceAction(verb: verb, serial: serial, summary: summary));
+  }
+
+  /// Starts one named activity: `am start -n <package>/<activity>`.
+  ///
+  /// The explicit counterpart of [launchPackage], for the cases where the
+  /// launcher activity is the wrong entry point — a deep-linked screen, or one
+  /// of several activities in a test harness. `.MainActivity` is accepted as
+  /// well as a fully-qualified class, because that is the shorthand every
+  /// AndroidManifest is written in and `am` expands it against the package.
+  ///
+  /// `am start` **exits 0 when the activity does not exist** and says so only
+  /// on stdout (`Error: Activity class {…} does not exist.`), so the exit code
+  /// alone would report a successful launch of nothing.
+  Future<void> startActivity(
+    String serial,
+    String packageName,
+    String activity,
+  ) async {
+    const verb = 'launch';
+    final component =
+        '$packageName/${activity.contains('.') ? activity : '.$activity'}';
+    final summary = 'Launched $component';
+    final result = await runner.run(
+      _forDevice(serial, ['shell', 'am', 'start', '-n', component]),
+    );
+    final output = '${result.stdout}\n${result.stderr}';
+    if (!result.ok || output.contains('Error:')) {
+      final error = StateError(
+        'Could not start $component on $serial: '
+        '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}',
+      );
+      _report(
+        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+      );
+      throw error;
+    }
+    _report(DeviceAction(verb: verb, serial: serial, summary: summary));
+  }
+
+  /// Stops every process of [packageName].
+  ///
+  /// `am force-stop` is silent and exits 0 whether the app was running or not,
+  /// which is the behaviour a caller wants: asking for a state the app is
+  /// already in is not a failure — the same rule `SimctlService.terminateApp`
+  /// follows. Nothing is asserted about the output because there is none.
+  Future<void> forceStopPackage(String serial, String packageName) async {
+    final result = await runner.run(
+      _forDevice(serial, ['shell', 'am', 'force-stop', packageName]),
+    );
+    const verb = 'terminate';
+    final summary = 'Stopped $packageName';
+    if (!result.ok) {
+      final error = StateError(
+        'am force-stop failed on $serial: ${result.stderr.trim()}',
+      );
+      _report(
+        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+      );
+      throw error;
+    }
+    _report(DeviceAction(verb: verb, serial: serial, summary: summary));
+  }
+
   /// Launches [packageName]'s launcher activity.
   ///
   /// Goes through `monkey`, which resolves the launcher activity itself, so the

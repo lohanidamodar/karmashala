@@ -99,6 +99,66 @@ enum SimulatorButton {
   };
 }
 
+/// A key on the keyboard iOS believes is plugged into the device.
+///
+/// **Why this exists rather than reusing [inputText].** `inputText` types a
+/// string, and typing is not pressing: measured against WebDriverAgent 16.11.4
+/// on an iOS 18.2 simulator, posting the XCUIKeyboardKey escape for Left Arrow
+/// (`U+F702`) to `/wda/keys` does not move the caret — it inserts the
+/// private-use code point *as a character*: "hell" became "hell" with an
+/// invisible `U+F702` appended. The same held for every arrow,
+/// forward-delete, Home, End, Page Up/Down and F1. Escape was swallowed with
+/// neither an error nor an effect. Only ordinary characters, backspace
+/// (`U+0008`) and return (`U+000D`) came out the far side as the key that was
+/// pressed.
+///
+/// Silently writing an invisible private-use character into the user's text
+/// field is worse than doing nothing, so named keys do not go that way at all.
+///
+/// [hidUsage] is the key's usage on the **USB HID keyboard page (`0x07`)** —
+/// the standard's number, not an invention of whatever backend is behind this
+/// interface, which is why it can sit in the domain. The same probe confirmed
+/// this route delivers real key events: Left Arrow moved the caret (a following
+/// "*" landed as "abc*d"), Backspace deleted, Escape dismissed the field's edit,
+/// Return submitted. Keys the focused control has no use for — Home in a
+/// single-line field, F1 anywhere — did nothing *and typed nothing*, which is
+/// the same bargain the Android side makes: the transport delivers the press,
+/// and what the app does with it is the app's business.
+enum SimulatorKey {
+  returnKey(0x28),
+  escape(0x29),
+  backspace(0x2A),
+  tab(0x2B),
+  capsLock(0x39),
+  f1(0x3A),
+  f2(0x3B),
+  f3(0x3C),
+  f4(0x3D),
+  f5(0x3E),
+  f6(0x3F),
+  f7(0x40),
+  f8(0x41),
+  f9(0x42),
+  f10(0x43),
+  f11(0x44),
+  f12(0x45),
+  insert(0x49),
+  home(0x4A),
+  pageUp(0x4B),
+  forwardDelete(0x4C),
+  end(0x4D),
+  pageDown(0x4E),
+  arrowRight(0x4F),
+  arrowLeft(0x50),
+  arrowDown(0x51),
+  arrowUp(0x52);
+
+  const SimulatorKey(this.hidUsage);
+
+  /// The usage on HID keyboard page `0x07`.
+  final int hidUsage;
+}
+
 /// Everything a live, interactive simulator view needs that `simctl` cannot do.
 ///
 /// **This interface exists so the thing behind it can be replaced.** Today it
@@ -158,6 +218,20 @@ abstract interface class SimulatorBackend {
   Future<void> inputText(String udid, String text);
 
   Future<void> pressButton(String udid, SimulatorButton button);
+
+  /// Presses one key on the device's keyboard, down and up.
+  ///
+  /// Separate from [inputText] because typing is not pressing — see
+  /// [SimulatorKey] for the measurements that forced the distinction.
+  ///
+  /// Whole presses only, with no held state, which is why there is no
+  /// `releaseKey` beside it. That is a property of the mechanism rather than a
+  /// simplification: the press is one request that returns after the key is
+  /// back up, so nothing can be left down when the pane loses focus. It also
+  /// means a **modifier cannot be held across another key** — Cmd+A would need
+  /// two overlapping presses — so a chord is refused by the caller rather than
+  /// sent stripped of the modifier that gave it its meaning.
+  Future<void> pressKey(String udid, SimulatorKey key);
 
   /// Whether the device is showing its lock screen.
   Future<bool> isLocked(String udid);

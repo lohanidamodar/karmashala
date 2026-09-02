@@ -8,8 +8,10 @@ import '../../../app/theme/design_tokens.dart';
 import '../application/ios_device_providers.dart';
 import '../application/simulator_live_view.dart';
 import '../data/device_gesture_sink.dart';
+import '../data/device_keyboard_sink.dart';
 import '../domain/simulator_backend.dart';
 import 'device_controls.dart';
+import 'device_keyboard_surface.dart';
 import 'device_touch_surface.dart';
 
 /// The simulator's picture, when there is one.
@@ -93,42 +95,69 @@ class _Running extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final screen = view.screen;
     final backend = ref.watch(simulatorBackendProvider);
-    // No name and no Stop here: the toolbar above already carries both, and
-    // showing them twice put two "iPhone 16 Pro · iOS 18.2" rows and two Stop
-    // buttons on screen, one under the other. The pane is the picture; the
-    // device it is a picture *of* is the toolbar's job, the same way the
-    // Android live view leaves it there.
+    // The pane draws no name and no Stop of its own: the toolbar above carries
+    // both, and showing them twice put two "iPhone 16 Pro · iOS 18.2" rows and
+    // two Stop buttons on screen, one under the other. The device it is a
+    // picture *of* is the toolbar's job, the same way the Android live view
+    // leaves it there.
+    //
+    // The name is still read, because the keyboard surface says whose keyboard
+    // it has taken — "Sending keys to iPhone 16 Pro" is the whole point of that
+    // line, and a udid there would tell the user nothing.
+    final name = ref
+        .watch(iosSimulatorsProvider)
+        .asData
+        ?.value
+        .where((s) => s.udid == view.udid)
+        .map((s) => s.displayName)
+        .firstOrNull;
     return Column(
       children: [
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(Insets.sm),
-            child: screen == null
-                ? _video(view)
-                : AspectRatio(
-                    // The touch surface treats its box **as** the picture — it
-                    // maps a widget point to a 0..1 fraction of it — so the box
-                    // has to be exactly the picture and not the letterboxed
-                    // area around it. `BoxFit.fill` inside a correctly-shaped
-                    // box is the same image as `contain` in a loose one, and it
-                    // is the only version a tap can be mapped through.
-                    aspectRatio: screen.points.width / screen.points.height,
-                    child: DeviceTouchSurface(
-                      sink: SimulatorGestureSink(
-                        backend: backend!,
-                        udid: view.udid,
-                        screen: screen.points,
-                        onError: (error) => ref
-                            .read(simulatorInputErrorProvider.notifier)
-                            .report('$error'),
-                      ),
-                      // iOS has no pinch through this transport: WebDriverAgent
-                      // takes one action sequence per gesture, and the Ctrl-drag
-                      // mirror trick is scrcpy's.
-                      pinchWithModifier: false,
-                      child: _video(view),
-                    ),
+          // The same surface the Android pane uses, given a different sink.
+          // Focus, arming, the escape chord and the wording all live in there,
+          // which is what stops the two platforms drifting apart: the only
+          // thing this side chooses is what a keystroke means on the wire.
+          child: DeviceKeyboardSurface(
+            sink: backend == null
+                ? null
+                : SimulatorKeyboardSink(
+                    backend: backend,
+                    udid: view.udid,
+                    onError: (error) => ref
+                        .read(simulatorInputErrorProvider.notifier)
+                        .report('$error'),
                   ),
+            deviceLabel: name ?? view.udid,
+            child: Padding(
+              padding: const EdgeInsets.all(Insets.sm),
+              child: screen == null
+                  ? _video(view)
+                  : AspectRatio(
+                      // The touch surface treats its box **as** the picture — it
+                      // maps a widget point to a 0..1 fraction of it — so the box
+                      // has to be exactly the picture and not the letterboxed
+                      // area around it. `BoxFit.fill` inside a correctly-shaped
+                      // box is the same image as `contain` in a loose one, and it
+                      // is the only version a tap can be mapped through.
+                      aspectRatio: screen.points.width / screen.points.height,
+                      child: DeviceTouchSurface(
+                        sink: SimulatorGestureSink(
+                          backend: backend!,
+                          udid: view.udid,
+                          screen: screen.points,
+                          onError: (error) => ref
+                              .read(simulatorInputErrorProvider.notifier)
+                              .report('$error'),
+                        ),
+                        // iOS has no pinch through this transport: WebDriverAgent
+                        // takes one action sequence per gesture, and the Ctrl-drag
+                        // mirror trick is scrcpy's.
+                        pinchWithModifier: false,
+                        child: _video(view),
+                      ),
+                    ),
+            ),
           ),
         ),
         _SimulatorControls(udid: view.udid),
