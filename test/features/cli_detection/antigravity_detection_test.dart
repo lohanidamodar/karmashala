@@ -125,7 +125,7 @@ void main() {
       writeAnnotation(id, 'test me now');
       writeSummaries([(id, 'wHAT ?')]);
 
-      final sessions = await const CliDetectionService().readStores([store()]);
+      final sessions = await CliDetectionService().readStores([store()]);
 
       expect(sessions.length, 1);
       final session = sessions.single;
@@ -149,13 +149,13 @@ void main() {
       writeConversation(orphan);
       writeLastConversations({'/home/me/proj': placed});
 
-      final sessions = await const CliDetectionService().readStores([store()]);
+      final sessions = await CliDetectionService().readStores([store()]);
 
       expect(sessions.map((s) => s.sessionId), [placed]);
     });
 
     test('a store that is not there is not an error', () async {
-      final sessions = await const CliDetectionService().readStores([
+      final sessions = await CliDetectionService().readStores([
         CliStore(
           environmentId: 'windows',
           homesByAgentId: {

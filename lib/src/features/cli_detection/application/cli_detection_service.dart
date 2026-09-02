@@ -152,13 +152,15 @@ class CliStoreLocator {
 
 /// Reads CLI stores and merges their sessions into projects.
 class CliDetectionService {
-  const CliDetectionService({
-    this.claudeReader = const ClaudeStoreReader(),
+  CliDetectionService({
+    ClaudeStoreReader? claudeReader,
     this.codexReader = const CodexStoreReader(),
     this.antigravityReader = const AntigravityStoreSessions(),
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
-  });
+    // Not const any more: the Claude reader carries the cache that keeps a
+    // scan proportional to what changed rather than to the whole store.
+  }) : claudeReader = claudeReader ?? ClaudeStoreReader();
 
   final ClaudeStoreReader claudeReader;
   final CodexStoreReader codexReader;

@@ -67,9 +67,9 @@ class SessionTitleSyncService {
   /// Called with each row this renamed, so the workspace can redraw.
   final void Function(String sessionId, String title)? onRenamed;
 
-  /// sessionId → the CLI title this service last wrote there. In memory for the
-  /// app's run only: on the next start the row already carries that title, and
-  /// a row whose title we cannot prove we wrote is treated as the user's.
+  /// sessionId → the CLI title this service last wrote there, for this run.
+  /// Diagnostics now rather than policy: whether a title is the user's is
+  /// recorded on the row itself, so it survives a restart.
   final Map<String, String> _written = {};
 
   /// Store scans actually run — the cost claim.
@@ -127,16 +127,22 @@ class SessionTitleSyncService {
   ];
 
   bool _waitingForAName(Session row) {
+    // The user typed this one. The only thing that ever stops the sync, and
+    // now the *recorded* one: this used to be inferred from [_written], which
+    // lives only as long as the app does — so after a restart every title
+    // looked user-set and a second `/rename` was never copied in again. That
+    // was the owner's report, with the new name sitting in the store unread.
+    if (row.titleByUser) return false;
     final title = row.title.trim();
     if (title.isEmpty) return true;
     if (kAppGeneratedSessionTitles.contains(title)) return true;
     for (final descriptor in agents.descriptors) {
       if (title == descriptor.displayName) return true;
     }
-    // A name this service wrote is still the CLI's to change — but only while
-    // the session is running. A stopped session has no CLI to be renamed in,
-    // and leaving it waiting would buy a store scan on every slow slot for the
-    // rest of the app's run; resuming it makes it running again.
-    return row.status == SessionStatus.running && _written[row.id] == row.title;
+    // Otherwise the name came from the CLI, so it stays the CLI's to change —
+    // but only while the session is running. A stopped session has no CLI to be
+    // renamed in, and leaving it waiting would buy a store scan on every slow
+    // slot for the rest of the app's run; resuming it makes it running again.
+    return row.status == SessionStatus.running;
   }
 }

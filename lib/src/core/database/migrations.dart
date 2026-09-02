@@ -78,6 +78,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   24: _migrateToV24,
   25: _migrateToV25,
   26: _migrateToV26,
+  27: _migrateToV27,
 };
 
 /// Was this pane running when its row was written?
@@ -1055,4 +1056,24 @@ void _migrateToV17(Database db) {
   // the record of how the work finished in order to record that its directory
   // was tidied.
   db.execute('ALTER TABLE sessions ADD COLUMN archived_at TEXT;');
+}
+
+/// A session's title is the user's only once they have typed one.
+///
+/// The rename sync could not tell a CLI-set title from a user-set one after a
+/// restart: it remembered what it had written **in memory only**, so on the next
+/// start every row's title looked like the user's and no further `/rename` was
+/// ever copied in. The owner hit exactly that — `/rename` landed in the store
+/// (1,034 title records in that one file, the last of them the new name) and
+/// the sidebar went on showing the old one.
+///
+/// Recording the one event that makes a title the user's is what survives a
+/// restart. `DEFAULT 0` deliberately hands existing rows back to their CLI: the
+/// column cannot say what happened before it existed, and the failure it fixes
+/// is the one the owner is actually having. A row the user renames in the app
+/// is marked from that moment and never taken again.
+void _migrateToV27(Database db) {
+  db.execute(
+    'ALTER TABLE sessions ADD COLUMN title_by_user INTEGER NOT NULL DEFAULT 0;',
+  );
 }
