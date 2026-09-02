@@ -355,7 +355,13 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     final muted = UiDensity.of(context).muted(theme);
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: Insets.xl),
+      // Capped at a phone's measure past the compact breakpoint: these rows
+      // are a form, and a form set across a tablet is a form nobody can read
+      // in one glance (CLAUDE.md §6).
+      padding: companionListInsets(
+        context,
+        const EdgeInsets.only(bottom: Insets.xl),
+      ),
       children: [
         _Row(
           icon: AppIcons.folder,

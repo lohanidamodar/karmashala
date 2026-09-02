@@ -1,5 +1,5 @@
 /// The companion's shared chrome: one app bar, one bottom sheet, one section
-/// header.
+/// header, one readable width.
 ///
 /// Each of these was written out by hand in three to five places, and each had
 /// drifted in a way a user could see. Four app bars took Material's fixed 56px
@@ -15,6 +15,12 @@
 /// [UiDensity], never from [Chrome], because a pointer's 30px row is not a
 /// target. Where a companion widget can also be hosted at pointer density —
 /// a fold-out, a landscape tablet — the density is asked rather than assumed.
+///
+/// Width is the same kind of decision, taken here for the same reason: past
+/// the compact breakpoint every companion list would otherwise run its rows
+/// the full width of a tablet. [companionReadableWidth] is the one answer, and
+/// [companionListInsets] and [CompanionReadable] are the two shapes of content
+/// that need it.
 library;
 
 import 'package:flutter/material.dart';
@@ -29,6 +35,61 @@ import '../../../app/theme/design_tokens.dart';
 /// last project's row sat behind the button offering to start another session
 /// in it.
 const double companionFabGutter = Touch.target + Insets.xl;
+
+/// The widest a column of companion content is ever drawn.
+///
+/// Exactly [UiDensity.compactWidth] — the widest phone this app was designed
+/// for — because past that point the extra pixels are gutter, not measure. A
+/// session title, a checkout path or a paragraph of settings prose set across
+/// 1280px of tablet is a line the eye has to track back along, and CLAUDE.md
+/// §6 forbids stretching narrow list content over a wide screen. Tying the
+/// cap to the breakpoint rather than picking a second number also means the
+/// column below 600 is untouched: the gutter is zero on every phone.
+const double companionReadableWidth = UiDensity.compactWidth;
+
+/// The room left either side of that column on this surface, or zero on a
+/// phone.
+///
+/// Measured from the viewport, the same question [UiDensity.wrap] asks when it
+/// decides the density — one notion of "how wide is this surface", not two.
+double companionGutterOf(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  return width <= companionReadableWidth
+      ? 0
+      : (width - companionReadableWidth) / 2;
+}
+
+/// [base] widened by that gutter — what a companion list passes as its own
+/// `padding`.
+///
+/// Padding rather than a [ConstrainedBox] wrapped round the list, so a tablet's
+/// empty margin still takes a fling: the content narrows, the scrollable does
+/// not.
+EdgeInsets companionListInsets(BuildContext context, EdgeInsets base) {
+  final gutter = companionGutterOf(context);
+  return gutter == 0
+      ? base
+      : base.copyWith(left: base.left + gutter, right: base.right + gutter);
+}
+
+/// The same cap for content that does not scroll — a header strip, a status
+/// row, a transcript with its composer pinned under it.
+class CompanionReadable extends StatelessWidget {
+  const CompanionReadable({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final gutter = companionGutterOf(context);
+    return gutter == 0
+        ? child
+        : Padding(
+            padding: EdgeInsets.symmetric(horizontal: gutter),
+            child: child,
+          );
+  }
+}
 
 /// The height of a companion app bar: [Touch.appBar] grown with the ambient
 /// text scale, or the desktop's title-bar row when this is not a touch surface.

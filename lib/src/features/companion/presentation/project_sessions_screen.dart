@@ -138,8 +138,17 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Facts(group: group),
-          Divider(height: 1, color: scheme.outlineVariant),
+          // The strip and its rule take the same gutter the list below takes,
+          // so a tablet does not draw a full-width rule under a capped column.
+          CompanionReadable(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Facts(group: group),
+                Divider(height: 1, color: scheme.outlineVariant),
+              ],
+            ),
+          ),
           Expanded(child: CompanionSessionList(sessions: group.sessions)),
         ],
       );

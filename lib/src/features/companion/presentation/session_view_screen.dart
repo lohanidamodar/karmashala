@@ -54,6 +54,69 @@ class SessionViewScreen extends ConsumerWidget {
     final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
     final canApprove = gateway.capabilities.has(Capability.approve);
 
+    // Hoisted out of the tree so the readable-width wrapper below reads as
+    // one line rather than another level of nesting.
+    final pane = companionAsync(
+      transcript,
+      loading: () => link == CompanionLinkState.connected
+          ? const Center(child: CircularProgressIndicator())
+          // Nothing is on its way, because there is no link to carry it. A
+          // skeleton here is a promise the phone cannot keep.
+          : CompanionNotice(
+              icon: AppIcons.linkBreak,
+              title: 'Waiting for your desktop',
+              body:
+                  "This session's messages arrive as soon as the link is "
+                  'back.',
+              tone: NoticeTone.attention,
+              actionLabel: 'Try again',
+              onAction: () {
+                gateway.reconnect();
+                ref.invalidate(companionTranscriptProvider(sessionId));
+              },
+            ),
+      error: (e) => CompanionNotice.failure(
+        error: e,
+        onRetry: () {
+          gateway.reconnect();
+          ref.invalidate(companionTranscriptProvider(sessionId));
+        },
+      ),
+      data: (messages) => CompanionTranscriptView(
+        messages: messages,
+        // Two different nothings the phone cannot tell apart: an agent that
+        // keeps no readable transcript (its terminal IS the session, as the
+        // desktop says) and a session that has not spoken yet. Claiming
+        // either one would be a guess.
+        emptyHint:
+            'No transcript to show. Some agents keep none we can read — '
+            'their terminal is the session — and a session that has just '
+            'started has nothing in it yet.',
+        footer: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Above the composer, because it blocks the session: nothing
+            // typed is read until the prompt is answered.
+            if (approval != null)
+              CompanionApprovalCard(
+                approval: approval,
+                canAnswer: canApprove,
+                onAnswer: (decision) =>
+                    gateway.answerApproval(sessionId, approval.id, decision),
+              ),
+            CompanionComposer(
+              enabled: canPrompt,
+              hintText: canPrompt
+                  ? 'Message the agent…'
+                  : 'This phone was not granted prompt rights.',
+              onSend: (text) => gateway.sendPrompt(sessionId, text),
+            ),
+          ],
+        ),
+      ),
+    );
+
     return Scaffold(
       appBar: companionAppBar(
         context,
@@ -69,112 +132,56 @@ class SessionViewScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Full-bleed above the column, the way the shell draws it: an
+            // outage is chrome, not content.
             const LinkBanner(),
-            // What only this session can answer: its status, and where it is.
-            Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: density.padX,
-                vertical: density.isTouch ? Insets.sm : Insets.xs,
-              ),
-              child: Row(
-                children: [
-                  if (session != null)
-                    CompanionStatusBadge(
-                      status: session.status,
-                      showLabel: true,
-                    ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      [
-                        if (session?.agentLabel != null) session!.agentLabel,
-                        if (session?.whereabouts != null) session!.whereabouts!,
-                        if (session?.deliveryStage != null)
-                          _stageLabel(session!.deliveryStage!),
-                      ].join('  ·  '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: density.muted(theme),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              // NOT `AsyncValue.when`: Riverpod 3 retries a provider that
-              // failed and reports `AsyncLoading` *carrying* the error, so
-              // `when` takes its loading branch and this screen sat on a
-              // spinner for ever — the "I opened a session and it keeps
-              // loading" report. `companionAsync` asks the questions in the
-              // order a user cares about.
-              child: companionAsync(
-                transcript,
-                loading: () => link == CompanionLinkState.connected
-                    ? const Center(child: CircularProgressIndicator())
-                    // Nothing is on its way, because there is no link to carry
-                    // it. A skeleton here is a promise the phone cannot keep.
-                    : CompanionNotice(
-                        icon: AppIcons.linkBreak,
-                        title: 'Waiting for your desktop',
-                        body:
-                            "This session's messages arrive as soon as the "
-                            'link is back.',
-                        tone: NoticeTone.attention,
-                        actionLabel: 'Try again',
-                        onAction: () {
-                          gateway.reconnect();
-                          ref.invalidate(
-                            companionTranscriptProvider(sessionId),
-                          );
-                        },
-                      ),
-                error: (e) => CompanionNotice.failure(
-                  error: e,
-                  onRetry: () {
-                    gateway.reconnect();
-                    ref.invalidate(companionTranscriptProvider(sessionId));
-                  },
+            // Everything below is content, and past the compact breakpoint it
+            // keeps a phone's measure — a transcript, a status line and a
+            // composer set across a tablet are three lines nobody can read
+            // together (CLAUDE.md §6).
+            CompanionReadable(
+              child: Padding(
+                // What only this session can answer: its status, and where
+                // it is.
+                padding: EdgeInsets.symmetric(
+                  horizontal: density.padX,
+                  vertical: density.isTouch ? Insets.sm : Insets.xs,
                 ),
-                data: (messages) => CompanionTranscriptView(
-                  messages: messages,
-                  // Two different nothings the phone cannot tell apart: an
-                  // agent that keeps no readable transcript (its terminal IS
-                  // the session, as the desktop says) and a session that has
-                  // not spoken yet. Claiming either one would be a guess.
-                  emptyHint:
-                      'No transcript to show. Some agents keep none we can '
-                      'read — their terminal is the session — and a session '
-                      'that has just started has nothing in it yet.',
-                  footer: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Above the composer, because it blocks the session:
-                      // nothing typed is read until the prompt is answered.
-                      if (approval != null)
-                        CompanionApprovalCard(
-                          approval: approval,
-                          canAnswer: canApprove,
-                          onAnswer: (decision) => gateway.answerApproval(
-                            sessionId,
-                            approval.id,
-                            decision,
-                          ),
-                        ),
-                      CompanionComposer(
-                        enabled: canPrompt,
-                        hintText: canPrompt
-                            ? 'Message the agent…'
-                            : 'This phone was not granted prompt rights.',
-                        onSend: (text) => gateway.sendPrompt(sessionId, text),
+                child: Row(
+                  children: [
+                    if (session != null)
+                      CompanionStatusBadge(
+                        status: session.status,
+                        showLabel: true,
                       ),
-                    ],
-                  ),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: Text(
+                        [
+                          if (session?.agentLabel != null) session!.agentLabel,
+                          if (session?.whereabouts != null)
+                            session!.whereabouts!,
+                          if (session?.deliveryStage != null)
+                            _stageLabel(session!.deliveryStage!),
+                        ].join('  ·  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: density.muted(theme),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+            const CompanionReadable(child: Divider(height: 1)),
+            // NOT `AsyncValue.when`: Riverpod 3 retries a provider that
+            // failed and reports `AsyncLoading` *carrying* the error, so
+            // `when` takes its loading branch and this screen sat on a
+            // spinner for ever — the "I opened a session and it keeps
+            // loading" report. `companionAsync` asks the questions in the
+            // order a user cares about.
+            Expanded(child: CompanionReadable(child: pane)),
           ],
         ),
       ),

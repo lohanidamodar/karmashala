@@ -85,9 +85,12 @@ class HostSwitcherBar extends ConsumerWidget {
           constraints: density.isTouch
               ? const BoxConstraints(minHeight: Touch.target)
               : null,
-          padding: EdgeInsets.symmetric(
-            horizontal: density.padX,
-            vertical: density.padY,
+          padding: companionListInsets(
+            context,
+            EdgeInsets.symmetric(
+              horizontal: density.padX,
+              vertical: density.padY,
+            ),
           ),
           child: Row(
             children: [

@@ -7,6 +7,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../sessions/domain/session_resume.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 import 'session_view_screen.dart';
@@ -46,7 +47,10 @@ class InboxScreen extends ConsumerWidget {
                   'collect here.',
             )
           : ListView.separated(
-              padding: const EdgeInsets.only(bottom: Insets.xl),
+              padding: companionListInsets(
+                context,
+                const EdgeInsets.only(bottom: Insets.xl),
+              ),
               itemCount: waiting.length,
               separatorBuilder: (context, index) => Divider(
                 height: 1,

@@ -91,8 +91,12 @@ class SessionListScreen extends ConsumerWidget {
         }
         return ListView.separated(
           // Clear of the floating action button, which hovers over this list
-          // and covered the last project's row at Insets.xl.
-          padding: const EdgeInsets.only(bottom: companionFabGutter),
+          // and covered the last project's row at Insets.xl; and no wider
+          // than a phone, whatever the tablet under it is doing.
+          padding: companionListInsets(
+            context,
+            const EdgeInsets.only(bottom: companionFabGutter),
+          ),
           itemCount: groups.length,
           separatorBuilder: (context, index) => Divider(
             height: 1,

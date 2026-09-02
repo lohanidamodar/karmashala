@@ -29,16 +29,24 @@ Widget buildPhoneApp({
   ),
 );
 
-/// Pumps [home] at the phone size named in CLAUDE.md §11 (390×844). The extra
-/// pump lets the gateway's seeded streams deliver their first value.
+/// The phone size named in CLAUDE.md §11 — the compact width class.
+const Size kPhoneSize = Size(390, 844);
+
+/// A tablet in portrait, comfortably past the 600px compact breakpoint: the
+/// width class where the companion must stop stretching its lists.
+const Size kTabletSize = Size(834, 1112);
+
+/// Pumps [home] at [size] — [kPhoneSize] unless a test says otherwise. The
+/// extra pump lets the gateway's seeded streams deliver their first value.
 Future<void> pumpPhone(
   WidgetTester tester, {
   required CompanionGateway gateway,
   required Widget home,
   Brightness brightness = Brightness.light,
   double textScale = 1.0,
+  Size size = kPhoneSize,
 }) async {
-  tester.view.physicalSize = const Size(390, 844);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -53,6 +61,21 @@ Future<void> pumpPhone(
   await tester.pump();
   await tester.pump();
 }
+
+/// [pumpPhone] at [kTabletSize] — the expanded-width case every adaptive
+/// companion screen owes CLAUDE.md §6.
+Future<void> pumpTablet(
+  WidgetTester tester, {
+  required CompanionGateway gateway,
+  required Widget home,
+  double textScale = 1.0,
+}) => pumpPhone(
+  tester,
+  gateway: gateway,
+  home: home,
+  textScale: textScale,
+  size: kTabletSize,
+);
 
 /// A session summary with test-friendly defaults.
 CompanionSessionSummary summary(

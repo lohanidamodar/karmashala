@@ -99,7 +99,10 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
-          padding: EdgeInsets.all(density.padX),
+          padding: companionListInsets(
+            context,
+            EdgeInsets.all(density.padX),
+          ),
           children: [
             SelectableText(buildIdentity(), style: MonoStyles.label),
             if (dropped > 0)

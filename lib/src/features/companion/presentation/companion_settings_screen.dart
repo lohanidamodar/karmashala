@@ -34,7 +34,10 @@ class CompanionSettingsScreen extends ConsumerWidget {
       // only reachable in the moment after an unpair — exactly when a relay
       // may need changing before typing the next code.
       return ListView(
-        padding: EdgeInsets.all(density.padX),
+        padding: companionListInsets(
+          context,
+          EdgeInsets.all(density.padX),
+        ),
         children: [
           Text('Not paired.', style: density.muted(theme)),
           const SizedBox(height: Insets.lg),
@@ -70,7 +73,9 @@ class CompanionSettingsScreen extends ConsumerWidget {
     };
 
     return ListView(
-      padding: EdgeInsets.all(density.padX),
+      // Capped at a phone's measure past the compact breakpoint: a tablet
+      // stretched these cards and this paragraph edge to edge (CLAUDE.md §6).
+      padding: companionListInsets(context, EdgeInsets.all(density.padX)),
       children: [
         // The saved desktops first: which one this phone is on is the fact
         // every other row here is about.

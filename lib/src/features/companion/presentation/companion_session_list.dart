@@ -45,7 +45,10 @@ class CompanionSessionList extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final offset = header == null ? 0 : 1;
     return ListView.separated(
-      padding: EdgeInsets.only(bottom: bottomInset),
+      padding: companionListInsets(
+        context,
+        EdgeInsets.only(bottom: bottomInset),
+      ),
       itemCount: sessions.length + offset,
       separatorBuilder: (context, index) => Divider(
         height: 1,
