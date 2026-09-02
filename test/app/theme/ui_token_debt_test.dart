@@ -109,11 +109,6 @@ void main() {
       'lib/src/features/sessions/presentation/chat_transcript.dart',
       'lib/src/features/sessions/presentation/markdown_message.dart',
       'lib/src/features/sessions/presentation/message_composer.dart',
-      'lib/src/features/ssh/presentation/host_key_changed_alert.dart',
-      'lib/src/features/ssh/presentation/host_key_dialog.dart',
-      'lib/src/features/ssh/presentation/known_hosts_section.dart',
-      'lib/src/features/ssh/presentation/remote_file_browser_dialog.dart',
-      'lib/src/features/ssh/presentation/ssh_hosts_section.dart',
     };
     // A literal size only: `fontSize: someVariable` is a value that came from
     // somewhere accountable (a setting, a theme style) and is allowed.

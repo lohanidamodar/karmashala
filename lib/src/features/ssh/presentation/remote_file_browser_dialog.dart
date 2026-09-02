@@ -148,10 +148,7 @@ class _RemoteFileBrowserDialogState
                   child: SelectableText(
                     directory?.path ?? '…',
                     maxLines: 1,
-                    style: const TextStyle(
-                      fontFamily: kMonoFamily,
-                      fontSize: 12,
-                    ),
+                    style: MonoStyles.body,
                   ),
                 ),
                 IconButton(
@@ -204,10 +201,7 @@ class _RemoteFileBrowserDialogState
                             ),
                             title: Text(
                               entry.name,
-                              style: const TextStyle(
-                                fontFamily: kMonoFamily,
-                                fontSize: 12,
-                              ),
+                              style: MonoStyles.body,
                             ),
                             subtitle: entry.isDirectory
                                 ? null

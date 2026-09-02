@@ -77,7 +77,7 @@ class _HostCard extends ConsumerWidget {
             const SizedBox(height: Insets.xs),
             Text(
               host.address,
-              style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+              style: MonoStyles.body,
             ),
             const SizedBox(height: Insets.xs),
             Text(

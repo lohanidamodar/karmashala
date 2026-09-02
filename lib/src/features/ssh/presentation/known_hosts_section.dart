@@ -39,10 +39,7 @@ class KnownHostsSection extends ConsumerWidget {
                     subtitle: Text(
                       '${key.keyType} · ${key.fingerprint}\n'
                       'trusted ${key.trustedAt.toLocal()}',
-                      style: const TextStyle(
-                        fontFamily: kMonoFamily,
-                        fontSize: 11,
-                      ),
+                      style: MonoStyles.small,
                     ),
                     isThreeLine: true,
                     trailing: TextButton(
