@@ -59,8 +59,12 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
-          availableSystemTerminalsProvider.overrideWith((ref) async => terminals),
-          importedTranscriptProvider.overrideWith((ref, id) => Stream.value([])),
+          availableSystemTerminalsProvider.overrideWith(
+            (ref) async => terminals,
+          ),
+          importedTranscriptProvider.overrideWith(
+            (ref, id) => Stream.value([]),
+          ),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ImportedSessionView(sessionId: 'i1')),
