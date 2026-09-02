@@ -105,7 +105,7 @@ void main() {
     );
     await tester.pump();
 
-    // The guest is still a workspace tab; drag its chip into the left region.
+    // The guest is still a tab; drag its chip into the left region.
     final guestChip = find.byType(TerminalTabChip).at(1);
     final gesture = await tester.startGesture(tester.getCenter(guestChip));
     await tester.pump();
@@ -153,7 +153,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final state = container.read(terminalSessionsControllerProvider);
-    expect(state.tabs, hasLength(2), reason: 'it is a workspace tab again');
+    expect(state.tabs, hasLength(2), reason: 'it is a tab again');
     expect(state.activeTab!.layout.panes, [right]);
     expect(
       state.tabs.firstWhere((t) => t.layout.contains(left)).layout.panes,

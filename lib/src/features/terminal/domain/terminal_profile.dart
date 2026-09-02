@@ -137,7 +137,7 @@ List<TerminalProfile> terminalProfilesFor(
 /// Rebuilds a profile from a stored [id] alone, or `null` when the id is not one
 /// this app writes.
 ///
-/// Restoring a workspace deliberately does *not* consult the discovered
+/// Restoring a layout deliberately does *not* consult the discovered
 /// environments: a WSL distro that has since been removed should come back as a
 /// pane that fails to launch and says so, not silently as PowerShell.
 TerminalProfile? terminalProfileFromId(String id) {

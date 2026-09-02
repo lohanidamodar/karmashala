@@ -48,26 +48,26 @@ void main() {
   /// gets a split beside it that is then closed, has its own tab closed while
   /// it is still running (so it detaches rather than dying), is reopened from
   /// the background list, and is finally ended for good.
-  void cycle(ScaleLayout workspace) {
-    final controller = workspace.controller;
-    final pane = workspace.openPane();
-    workspace.fill(pane, lines: 60);
+  void cycle(ScaleLayout layout) {
+    final controller = layout.controller;
+    final pane = layout.openPane();
+    layout.fill(pane, lines: 60);
 
     // A split beside it, used and then closed — the pane lifetime that never
     // touches the detached list.
     final slot = controller.splitPane(SplitAxis.horizontal)!;
     final beside = controller.openInSlot(slot, TerminalProfile.commandPrompt)!;
-    workspace.fill(beside, lines: 20);
+    layout.fill(beside, lines: 20);
     controller.closePane(beside, detach: false);
 
     // Closed with output on screen, so the detach policy keeps it: this is the
     // session that survives its tab.
-    final tab = workspace.state.tabs
+    final tab = layout.state.tabs
         .firstWhere((tab) => tab.layout.panes.contains(pane))
         .id;
     controller.closeTab(tab, detach: true);
     expect(
-      workspace.state.detached.map((session) => session.paneId),
+      layout.state.detached.map((session) => session.paneId),
       contains(pane),
       reason: 'a busy shell must detach, or this cycle is testing nothing',
     );
@@ -77,20 +77,20 @@ void main() {
   }
 
   /// Everything this gate watches, in one reading.
-  Map<String, Object?> retained(ScaleLayout workspace) {
-    final telemetry = workspace.controller.persistenceTelemetry;
+  Map<String, Object?> retained(ScaleLayout layout) {
+    final telemetry = layout.controller.persistenceTelemetry;
     return {
-      'undisposedPanes': workspace.undisposedPanes,
-      'terminalListeners': workspace.liveTerminalListeners,
-      'tabs': workspace.state.tabs.length,
-      'detached': workspace.state.detached.length,
+      'undisposedPanes': layout.undisposedPanes,
+      'terminalListeners': layout.liveTerminalListeners,
+      'tabs': layout.state.tabs.length,
+      'detached': layout.state.detached.length,
       'livePanes': telemetry.livePanes,
       'dirtyPanes': telemetry.dirtyPanes,
       'unsavedAgeReported': telemetry.oldestUnsaved != null,
-      'storedTabRows': workspace.storedTabRows,
-      'storedPaneRows': workspace.storedPaneRows,
-      'backupTabRows': workspace.backupTabRows,
-      'backupPaneRows': workspace.backupPaneRows,
+      'storedTabRows': layout.storedTabRows,
+      'storedPaneRows': layout.storedPaneRows,
+      'backupTabRows': layout.backupTabRows,
+      'backupPaneRows': layout.backupPaneRows,
     };
   }
 
@@ -100,20 +100,20 @@ void main() {
 
     for (final cycles in scale) {
       test('$cycles times leaves nothing behind', () {
-        final workspace = ScaleLayout();
-        addTearDown(workspace.dispose);
+        final layout = ScaleLayout();
+        addTearDown(layout.dispose);
 
         for (var i = 0; i < cycles; i++) {
-          cycle(workspace);
+          cycle(layout);
         }
 
-        final reading = retained(workspace);
+        final reading = retained(layout);
         readings[cycles] = reading;
         // ignore: avoid_print
         print('CHURN-LEAK cycles=$cycles $reading');
 
         expect(
-          workspace.instancesByPane,
+          layout.instancesByPane,
           hasLength(cycles * 2),
           reason: 'two panes per cycle were built, or the cycle changed',
         );
@@ -163,7 +163,7 @@ void main() {
     });
   });
 
-  group('churning a workspace that is never emptied', () {
+  group('churning a layout that is never emptied', () {
     /// The other shape, and the one a long day actually looks like: a floor of
     /// sessions the user keeps, with work coming and going around it. A leak
     /// that only shows up once everything is closed would be missed by the
@@ -172,18 +172,18 @@ void main() {
 
     for (final cycles in scale) {
       test('$cycles times returns to the floor it started from', () {
-        final workspace = ScaleLayout();
-        addTearDown(workspace.dispose);
-        final floor = workspace.openPanes(5, linesPerPane: 60);
-        workspace.settle();
-        final before = retained(workspace);
+        final layout = ScaleLayout();
+        addTearDown(layout.dispose);
+        final floor = layout.openPanes(5, linesPerPane: 60);
+        layout.settle();
+        final before = retained(layout);
 
         for (var i = 0; i < cycles; i++) {
-          cycle(workspace);
+          cycle(layout);
         }
-        workspace.settle();
+        layout.settle();
 
-        final reading = retained(workspace);
+        final reading = retained(layout);
         readings[cycles] = reading;
         // ignore: avoid_print
         print('CHURN-LEAK-FLOOR cycles=$cycles $reading');
@@ -191,15 +191,15 @@ void main() {
         expect(
           reading,
           before,
-          reason: 'the workspace must come back to exactly what it was',
+          reason: 'the layout must come back to exactly what it was',
         );
         for (final pane in floor) {
           expect(
-            workspace.controller.instanceFor(pane),
+            layout.controller.instanceFor(pane),
             isNotNull,
             reason: 'the sessions the user kept are still there',
           );
-          expect(workspace.storedScrollback(pane), isNotEmpty);
+          expect(layout.storedScrollback(pane), isNotEmpty);
         }
       });
     }

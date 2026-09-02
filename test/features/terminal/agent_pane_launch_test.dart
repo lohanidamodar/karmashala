@@ -428,7 +428,7 @@ void main() {
     });
 
     test('a record written before the fix is stripped on the way in', () {
-      // The owner's saved workspace holds rows in exactly this shape. Reading
+      // The owner's saved layout holds rows in exactly this shape. Reading
       // one back has to drop the flag rather than replay it, or installing the
       // fix leaves every pane they already had just as broken.
       final back = AgentPaneLaunch.fromJson({

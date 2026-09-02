@@ -42,7 +42,7 @@ abstract class TerminalInstance {
   ///
   /// Live rather than fixed because everything that reads it wants the current
   /// answer, not the launch one: relative-path link resolution joins onto it,
-  /// the tab label is derived from it, the workspace record a pane is restored
+  /// the tab label is derived from it, the layout record a pane is restored
   /// from stores it, and the MCP terminal tools report it.
   String? get workingDirectory;
 
@@ -122,7 +122,7 @@ abstract interface class ReapableTerminalInstance {
 /// pipe behind it has a tier worth setting.
 ///
 /// The controller sets this from the only thing that decides it — where the
-/// pane is in the workspace. A pane never chooses its own tier.
+/// pane is in the layout. A pane never chooses its own tier.
 abstract interface class TieredTerminalInstance {
   /// How visible this pane is now.
   void setIngestTier(IngestTier tier);
@@ -746,7 +746,7 @@ class DormantTerminalInstance
 
   /// Parsed only when something asks to see it.
   ///
-  /// A restored workspace can hold a hundred of these, and every one used to
+  /// A restored layout can hold a hundred of these, and every one used to
   /// parse its stored scrollback into a 10 000-line `Terminal` during startup,
   /// for tabs the user may never open. `late final` makes that the first
   /// reader's cost instead — and since [restoredScrollback] is what the
@@ -758,7 +758,7 @@ class DormantTerminalInstance
   /// Whether anything has asked to see this pane yet.
   ///
   /// The restore path's own measurement: the point of the laziness is that most
-  /// panes of a restored workspace are never looked at, and `late final` cannot
+  /// panes of a restored layout are never looked at, and `late final` cannot
   /// be asked whether it has run.
   @visibleForTesting
   bool get bufferBuilt => _bufferBuilt;

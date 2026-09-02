@@ -11,7 +11,7 @@ import 'fake_instance.dart';
 /// What persistence owes, reported so it can be watched.
 ///
 /// The numbers are diagnostics — nothing behaves differently because of them —
-/// so what these tests pin is that they are *true*: a clean workspace owes
+/// so what these tests pin is that they are *true*: a clean layout owes
 /// nothing, output creates a debt, a write clears it, and a write that has not
 /// happened is reported as unrecorded rather than as a zero that reads like a
 /// measurement.
@@ -40,7 +40,7 @@ void main() {
     )!;
   }
 
-  test('a workspace nobody has typed into owes nothing', () {
+  test('a layout nobody has typed into owes nothing', () {
     openSecondPane();
     controller.saveDirtyScrollback();
 
@@ -68,7 +68,7 @@ void main() {
   test('a write that has not happened is not recorded, not zero', () {
     openSecondPane();
 
-    // A restored workspace writes nothing until something asks it to, and a
+    // A restored layout writes nothing until something asks it to, and a
     // "0 panes in 0ms" would read as a measurement of a write that never ran.
     expect(controller.persistenceTelemetry.lastWrite, isNull);
   });

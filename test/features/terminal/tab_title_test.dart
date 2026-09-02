@@ -309,7 +309,7 @@ void main() {
       expect(
         container.read(terminalSessionsControllerProvider),
         same(before),
-        reason: 'a title nothing acts on must not rebuild the workspace',
+        reason: 'a title nothing acts on must not rebuild the layout',
       );
     });
 

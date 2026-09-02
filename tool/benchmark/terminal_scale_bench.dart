@@ -123,7 +123,7 @@ void main() {
       final focused = controller.instanceFor(focusedPane)!.terminal;
       var listenerCalls = 0;
       // Every pane's terminal carries the controller's dirty-tracking listener;
-      // count the fan-out one output chunk causes across the whole workspace.
+      // count the fan-out one output chunk causes across the whole layout.
       void countOne() => listenerCalls++;
       focused.addListener(countOne);
 
@@ -158,7 +158,7 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 20)));
 
   test('detached memory curve at N = 1, 10, 100 panes', () {
-    // T7: what a workspace holds in *parsed* form once its background sessions
+    // T7: what a layout holds in *parsed* form once its background sessions
     // have no tab. A detached pane kept the same `Terminal` — up to
     // kLiveScrollbackMaxLines of `BufferLine`s, each one a `Uint32List` of four
     // words per cell — for a pane with no view and nothing reading it.
@@ -290,7 +290,7 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 20)));
 
   test('publication cost curve at N = 1, 10, 100 tabs', () {
-    // T8: what one change to one pane costs the rest of the workspace.
+    // T8: what one change to one pane costs the rest of the layout.
     //
     // Every `_publish()` copied all tabs, all detached sessions and the
     // liveness of every instance, and every lookup that answers "which tab

@@ -332,9 +332,9 @@ void main() {
       ]);
     });
 
-    test('a workspace saved before the fix loses the flag it baked in',
+    test('a layout saved before the fix loses the flag it baked in',
         () async {
-      // The owner will restore an existing workspace, whose rows still carry
+      // The owner will restore an existing layout, whose rows still carry
       // the MCP flag inside `arguments`. Installing the fix has to repair
       // those, not merely stop writing new ones.
       final db = seededDatabase();

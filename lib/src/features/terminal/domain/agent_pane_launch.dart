@@ -135,7 +135,7 @@ class AgentPaneLaunch {
         if (argument is String) argument,
     ];
     // A record written before the MCP flags were understood to be volatile has
-    // them inside `arguments`, and the owner's saved workspace is full of
+    // them inside `arguments`, and the owner's saved layout is full of
     // those. See [AgentMcpSupport.withoutArgumentsIn].
     final mcp =
         AgentRegistry.builtIn.byId(agentId)?.launch.mcp ??

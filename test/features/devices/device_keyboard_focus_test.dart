@@ -12,7 +12,7 @@
 // A real `TerminalView` is used rather than a stand-in `Focus`, because the
 // half of the bug worth pinning is that the terminal *accepts* the keystroke
 // once it holds focus — a bare `FocusNode` would prove only that focus moved.
-// The controller itself is not driven: it needs a PTY, a workspace DAO and a
+// The controller itself is not driven: it needs a PTY, a layout DAO and a
 // session tree, and none of that is what broke. What is exercised is the exact
 // guard it now calls, at the exact call shape it calls it in.
 

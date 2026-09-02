@@ -628,7 +628,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   /// Quits the application.
   ///
-  /// The workspace snapshot goes first and synchronously, then the lifecycle
+  /// The layout snapshot goes first and synchronously, then the lifecycle
   /// owner gets its ordered shutdown, then the window is destroyed, and the
   /// process ends. The one graceful exit, shared by the tray's Quit, the menu
   /// bar's, and Cmd+Q. Runs at most once per launch.
@@ -657,18 +657,18 @@ class SystemIntegrationService with TrayListener, WindowListener {
     _endProcess();
   }
 
-  /// Snapshots the terminal workspace on the way out.
+  /// Snapshots the terminal layout on the way out.
   ///
   /// First, and synchronously, before anything else in the quit sequence gets a
   /// chance to fail or time out. Loop 38 and Loop 53 both landed here: without
   /// this call the last thing the user did before quitting is the one thing
   /// that does not come back. The lifecycle owner does now dispose the
   /// container, which would run the controller's own teardown — but that
-  /// happens inside a bounded budget, several steps later, and the workspace is
+  /// happens inside a bounded budget, several steps later, and the layout is
   /// not something to leave to a step that is allowed to be abandoned.
   ///
   /// Guarded by [ProviderContainer.exists] so quitting never *creates* the
-  /// terminal controller: building it would restore a workspace only to write
+  /// terminal controller: building it would restore a layout only to write
   /// it straight back.
   void _saveTerminalLayout() {
     try {
@@ -681,7 +681,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
           .persistLayout();
     } on Object catch (error) {
       // Never block quitting on persistence.
-      _logger.warning('system: persisting the workspace failed reason=$error');
+      _logger.warning('system: persisting the layout failed reason=$error');
     }
   }
 

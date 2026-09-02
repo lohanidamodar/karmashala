@@ -55,7 +55,7 @@ class ManualSearchSchedule {
   }
 }
 
-/// A workspace of [panes] tabs, each holding one pane whose terminal carries
+/// A layout of [panes] tabs, each holding one pane whose terminal carries
 /// [linesPerPane] lines of history.
 ///
 /// Panes are their own tabs rather than splits so every pane is addressable and

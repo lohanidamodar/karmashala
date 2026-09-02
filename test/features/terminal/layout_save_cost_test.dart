@@ -15,7 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
-/// What a workspace save costs.
+/// What a layout save costs.
 ///
 /// A save runs on every structural change — open, split, close, detach, end,
 /// start — and again on quit, and it used to re-encode **every** open pane each
@@ -248,7 +248,7 @@ void main() {
         panes.fold(0, (sum, id) => sum + instance(id).encodes);
 
     /// [n] live panes, all stored, and then all of them busy — the state a
-    /// workspace is in whenever anything is actually running in it.
+    /// layout is in whenever anything is actually running in it.
     List<String> busyLayout(int n) {
       controller.openTab(TerminalProfile.powerShell);
       grow(n - 1);
@@ -285,7 +285,7 @@ void main() {
       });
     }
 
-    test('so its encode cost does not grow with the workspace', () {
+    test('so its encode cost does not grow with the layout', () {
       expect(encodes.keys, containsAll([1, 10, 50]));
       expect(
         encodes.values.toSet(),
@@ -319,7 +319,7 @@ void main() {
 
     test('and a second quit-time save re-encodes nothing at all', () {
       // The property that makes the first number safe: cost tracks what
-      // changed, not what is open. A workspace nobody has typed into costs
+      // changed, not what is open. A layout nobody has typed into costs
       // nothing to write however many panes it holds.
       final panes = busyLayout(50);
       controller.persistLayout();
@@ -330,7 +330,7 @@ void main() {
       expect(encodesAcross(panes), after);
     });
 
-    test('so quit cost is bounded by what changed, not by the workspace', () {
+    test('so quit cost is bounded by what changed, not by the layout', () {
       // Deliberately *not* the same shape as the structural assertion above,
       // which pins a constant. Quitting has to write every pane that moved, so
       // its cost is linear in dirty panes by design — a budget here would drop

@@ -11,8 +11,8 @@ import '../features/terminal/fake_instance.dart';
 /// What clearing the deck is allowed to cost.
 ///
 /// The bulk closes could have been a loop over `closeTab`, and that loop would
-/// have been correct and unbearable: every tab republishing the whole workspace
-/// to every consumer and writing the whole workspace to disk. Closing twenty
+/// have been correct and unbearable: every tab republishing the whole layout
+/// to every consumer and writing the whole layout to disk. Closing twenty
 /// tabs is one act, so it is one publish and one save — and these count them,
 /// because a cost test counts work rather than timing it.
 void main() {
@@ -127,7 +127,7 @@ void main() {
   });
 }
 
-/// The workspace dao, counting the writes the controller asks it for.
+/// The layout dao, counting the writes the controller asks it for.
 class _CountingLayoutDao extends TerminalLayoutDao {
   _CountingLayoutDao(super.db);
 

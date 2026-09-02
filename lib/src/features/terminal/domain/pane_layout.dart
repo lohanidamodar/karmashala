@@ -589,7 +589,7 @@ PaneNode? _fromJson(Object? json) {
   switch (json['t']) {
     // Written before regions existed: one leaf was one pane, and its id was
     // the pane's. Read as a region of one rather than dropped, so upgrading
-    // does not throw a workspace away.
+    // does not throw a layout away.
     case 'leaf':
       return PaneGroup.of(id);
     case 'group':

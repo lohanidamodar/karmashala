@@ -247,7 +247,7 @@ void main() {
     test('a pane cycled between tiers keeps one watchdog, not a hundred', () {
       // Switching tabs re-arms the watchdog so an activated pane does not wait
       // out a hidden pane's cadence. Re-arming without cancelling is how that
-      // becomes a timer leak, and a workspace switched between two tabs all day
+      // becomes a timer leak, and a layout switched between two tabs all day
       // is the shape that would find it.
       var armed = 0;
       var cancelled = 0;

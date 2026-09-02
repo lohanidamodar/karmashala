@@ -74,7 +74,7 @@ void main() {
   /// An hour of quiet, at the autosave's idle cadence.
   const soakTicks = 180;
 
-  group('an idle terminal workspace', () {
+  group('an idle terminal layout', () {
     /// Filled by the cases below so the *shape* can be asserted across them
     /// rather than inside any one of them.
     final statements = <int, int>{};
@@ -82,37 +82,37 @@ void main() {
 
     for (final panes in scale) {
       test('of $panes panes costs nothing over an hour', () {
-        final workspace = ScaleLayout();
-        addTearDown(workspace.dispose);
-        workspace.openPanes(panes);
-        workspace.settle();
+        final layout = ScaleLayout();
+        addTearDown(layout.dispose);
+        layout.openPanes(panes);
+        layout.settle();
         expect(
-          workspace.controller.hasDirtyScrollback,
+          layout.controller.hasDirtyScrollback,
           isFalse,
-          reason: 'a workspace nobody is typing into owes no writes',
+          reason: 'a layout nobody is typing into owes no writes',
         );
 
-        final published = workspace.state;
-        workspace.counting.reset();
-        workspace.schedule.delays.clear();
-        for (final terminal in workspace.terminalsByPane.values) {
+        final published = layout.state;
+        layout.counting.reset();
+        layout.schedule.delays.clear();
+        for (final terminal in layout.terminalsByPane.values) {
           terminal.bufferReads = 0;
         }
-        final armed = workspace.schedule.pending;
+        final armed = layout.schedule.pending;
 
-        final ticks = workspace.schedule.fireTimes(soakTicks);
+        final ticks = layout.schedule.fireTimes(soakTicks);
 
-        final reads = workspace.terminalsByPane.values.fold(
+        final reads = layout.terminalsByPane.values.fold(
           0,
           (sum, terminal) => sum + terminal.bufferReads,
         );
-        statements[panes] = workspace.counting.count;
+        statements[panes] = layout.counting.count;
         timers[panes] = armed;
         // ignore: avoid_print
         print(
           'QUIET-SOAK panes=$panes ticks=$ticks '
-          'statements=${workspace.counting.count} bufferReads=$reads '
-          'timers=$armed republished=${!identical(workspace.state, published)}',
+          'statements=${layout.counting.count} bufferReads=$reads '
+          'timers=$armed republished=${!identical(layout.state, published)}',
         );
 
         expect(
@@ -121,25 +121,25 @@ void main() {
           reason: 'the autosave stopped re-arming, so this was not an hour',
         );
         expect(
-          workspace.schedule.delays,
+          layout.schedule.delays,
           everyElement(kScrollbackAutosaveInterval),
           reason: 'an idle tick must never ask for the catch-up cadence',
         );
         expect(
-          workspace.counting.statements,
+          layout.counting.statements,
           isEmpty,
           reason:
               'an hour of quiet must not touch the disk: '
-              '${workspace.counting.statements}',
+              '${layout.counting.statements}',
         );
         expect(reads, 0, reason: 'nothing changed, so nothing may be encoded');
         expect(
-          identical(workspace.state, published),
+          identical(layout.state, published),
           isTrue,
           reason: 'a quiet hour must not rebuild the tab strip once',
         );
         expect(
-          workspace.schedule.pending,
+          layout.schedule.pending,
           armed,
           reason: 'the app must end the hour holding the timers it started it '
               'with',
@@ -158,7 +158,7 @@ void main() {
       );
     });
 
-    test('so idle cost does not grow with the workspace', () {
+    test('so idle cost does not grow with the layout', () {
       expect(statements.keys, containsAll(scale));
       expect(
         statements.values.toSet(),
@@ -176,40 +176,40 @@ void main() {
 
     for (final panes in scale) {
       test('over $panes panes reads no database', () {
-        final workspace = ScaleLayout();
-        addTearDown(workspace.dispose);
-        workspace.openPanes(panes);
-        workspace.settle();
+        final layout = ScaleLayout();
+        addTearDown(layout.dispose);
+        layout.openPanes(panes);
+        layout.settle();
 
-        final published = workspace.state;
-        workspace.counting.reset();
+        final published = layout.state;
+        layout.counting.reset();
 
         // What the tab strip and every region header actually ask for, once
         // per frame. `_titles` is cleared on every publish, so this is only
         // free while nothing republishes — which is the claim.
         for (var frame = 0; frame < frames; frame++) {
-          for (final tab in workspace.state.tabs) {
-            workspace.controller.titleForTab(tab.id);
+          for (final tab in layout.state.tabs) {
+            layout.controller.titleForTab(tab.id);
             for (final paneId in tab.layout.panes) {
-              workspace.controller.titleForPane(paneId);
+              layout.controller.titleForPane(paneId);
             }
           }
         }
 
-        statements[panes] = workspace.counting.count;
+        statements[panes] = layout.counting.count;
         // ignore: avoid_print
         print(
           'QUIET-FRAMES panes=$panes frames=$frames '
-          'statements=${workspace.counting.count}',
+          'statements=${layout.counting.count}',
         );
         expect(
-          workspace.counting.statements,
+          layout.counting.statements,
           isEmpty,
           reason:
               'naming a tab must not cost a query on a screen that has not '
-              'changed: ${workspace.counting.statements}',
+              'changed: ${layout.counting.statements}',
         );
-        expect(identical(workspace.state, published), isTrue);
+        expect(identical(layout.state, published), isTrue);
       });
     }
 
@@ -220,7 +220,7 @@ void main() {
   });
 
   group('an idle session list', () {
-    /// The workspace `session_signal_cost_test` seeds, at the sizes this file
+    /// The layout `session_signal_cost_test` seeds, at the sizes this file
     /// reads the curve at. `s0` ended badly, so exactly one follow-up exists
     /// and the inbox has something to keep up to date.
     CountingDatabase seed(int count) {

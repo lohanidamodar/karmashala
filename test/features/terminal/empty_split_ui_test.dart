@@ -231,7 +231,7 @@ void main() {
 
 /// Which chip in the strip belongs to [tabId].
 ///
-/// The strip draws tabs in workspace order, so the index is the tab's position
+/// The strip draws tabs in layout order, so the index is the tab's position
 /// — asked rather than assumed, so a reordering elsewhere fails loudly here
 /// instead of silently dragging the wrong tab.
 int _indexOfTab(WidgetTester tester, Finder chips, String tabId) {

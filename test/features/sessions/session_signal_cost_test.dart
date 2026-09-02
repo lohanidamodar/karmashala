@@ -42,7 +42,7 @@ import '../../support/fixtures.dart';
 /// read at all.
 ///
 /// Counted, not timed, for the reason `attention_inbox_cost_test.dart` and
-/// `workspace_write_cost_test.dart` both give: a wall-clock assertion over a
+/// `layout_write_cost_test.dart` both give: a wall-clock assertion over a
 /// few milliseconds fails whenever the machine is busy, and the unit that
 /// actually matters here — reads of the session tables — is countable directly.
 ///

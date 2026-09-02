@@ -316,7 +316,7 @@ void main() {
       );
     });
 
-    test('a factory that throws costs the pane its process, not the workspace', () {
+    test('a factory that throws costs the pane its process, not the layout', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       final paneId = _closeWith(db, (container, controller) {
@@ -338,7 +338,7 @@ void main() {
   });
 }
 
-/// Runs [body] against a fresh workspace over [db], leaves a line of history in
+/// Runs [body] against a fresh layout over [db], leaves a line of history in
 /// every pane it opened, and closes the app on it. Returns the panes of the tab
 /// that was active, in layout order.
 ///
@@ -525,7 +525,7 @@ TerminalInstance _failedSpawnFactory({
 );
 
 /// A factory that throws instead of degrading — the case nothing in production
-/// should produce, and which must still not take the workspace down.
+/// should produce, and which must still not take the layout down.
 TerminalInstance _throwingFactory({
   required String id,
   required TerminalProfile profile,

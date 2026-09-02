@@ -198,7 +198,7 @@ void main() {
   testWidgets('an evicted tab is typable the moment it comes back', (
     tester,
   ) async {
-    // The mounted set is bounded, so most tabs in a hundred-tab workspace have
+    // The mounted set is bounded, so most tabs in a hundred-tab layout have
     // no widgets at all. Focus lives on the pane's own `FocusNode`, which the
     // controller owns and the view only borrows — so coming back must land the
     // keyboard in the pane without a click, exactly as a mounted tab does.

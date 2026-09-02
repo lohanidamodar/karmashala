@@ -341,7 +341,7 @@ class TerminalPaneStack extends ConsumerStatefulWidget {
 class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   late final TerminalActions _actions = TerminalActions(ref);
 
-  /// The tabs with a mounted view. Widget-lifetime state, not workspace state:
+  /// The tabs with a mounted view. Widget-lifetime state, not layout state:
   /// which tabs happen to be built is nobody else's business, and publishing it
   /// would put a rebuild of every consumer behind every tab switch.
   final MountedTabs _mounted = MountedTabs();
@@ -365,7 +365,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         _actions.open(_actions.defaultProfile());
       }
       // Deliberately not conditional on having opened anything: what this
-      // records is that the automatic attempt is over, so a workspace that
+      // records is that the automatic attempt is over, so a layout that
       // stays empty offers the user the button instead of a false promise.
       setState(() => _autoOpenDone = true);
     });
@@ -385,7 +385,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     // Deliberately narrow: the topology and which tab is in front, not the
-    // whole workspace. A process exiting changes neither, so it no longer
+    // whole layout. A process exiting changes neither, so it no longer
     // rebuilds the stack — the pane's own status bar watches its liveness.
     final openTabs = ref.watch(terminalTabsProvider);
     final activeTabId = ref.watch(terminalActiveTabIdProvider);
@@ -800,9 +800,9 @@ class TerminalToolbar extends ConsumerWidget {
 ///
 /// A way back, rather than a status. The panel used to say "Opening terminal…"
 /// here, which is true for the one frame before the automatic open and a lie
-/// for as long as the workspace stays closed — and it left the only route back
+/// for as long as the layout stays closed — and it left the only route back
 /// to a terminal in the toolbar, which reads as chrome rather than as the
-/// answer to an empty workspace.
+/// answer to an empty layout.
 class _NoTerminalOpen extends StatelessWidget {
   const _NoTerminalOpen({required this.onNewTerminal});
 

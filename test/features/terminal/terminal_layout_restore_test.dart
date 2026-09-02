@@ -28,8 +28,8 @@ void main() {
     });
   });
 
-  group('workspace persistence', () {
-    test('a saved workspace comes back as tabs, panes and scrollback', () {
+  group('layout persistence', () {
+    test('a saved layout comes back as tabs, panes and scrollback', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
 
@@ -147,7 +147,7 @@ void main() {
       expect(container.read(terminalSessionsControllerProvider).tabs.length, 1);
     });
 
-    test('closing every tab clears the stored workspace', () {
+    test('closing every tab clears the stored layout', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
 
@@ -158,7 +158,7 @@ void main() {
       );
       final tabId = controller.openTab(TerminalProfile.powerShell);
       // A shell with history: an idle one would be released on close, and this
-      // test is about what a *detached* session does to the stored workspace.
+      // test is about what a *detached* session does to the stored layout.
       giveShellHistory(
         controller.instanceFor(
           container
@@ -181,7 +181,7 @@ void main() {
         1,
       );
 
-      // Ending it is what actually clears the workspace.
+      // Ending it is what actually clears the layout.
       controller.endAllDetached();
       expect(db.query('SELECT id FROM terminal_tabs;'), isEmpty);
     });

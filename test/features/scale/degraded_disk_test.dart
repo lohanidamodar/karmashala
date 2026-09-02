@@ -16,10 +16,10 @@ import 'scale_harness.dart';
 /// Two failures matter, and they are different failures. A **slow** write
 /// blocks the UI isolate, because `package:sqlite3` is synchronous and every
 /// save runs on it. A **failing** write throws in the middle of a transaction
-/// that was half-way through replacing the user's workspace. Against both, the
+/// that was half-way through replacing the user's layout. Against both, the
 /// app has to hold three lines:
 ///
-/// 1. **it must not lose the workspace** — not a tab, not a pane's scrollback,
+/// 1. **it must not lose the layout** — not a tab, not a pane's scrollback,
 ///    and not silently by *skipping* a write it now believes it made;
 /// 2. **it must not hang the UI** — a slow disk costs a bounded slice of
 ///    main-isolate time per tick, not a slice proportional to how much is open;
@@ -35,11 +35,11 @@ import 'scale_harness.dart';
 ///   skip a write it owed". A failed save that adopted its record would leave
 ///   the store holding old text and the dao convinced it was new: silent,
 ///   permanent loss of everything that pane printed.
-/// * the **empty-workspace refusal** in `_persist` — a save that would replace
-///   a non-empty stored workspace with an empty one, with nothing the user did
+/// * the **empty-layout refusal** in `_persist` — a save that would replace
+///   a non-empty stored layout with an empty one, with nothing the user did
 ///   to account for it, is refused. A disk that fails the *restore* read is the
 ///   cleanest way there is to reach that state, and it is the state that
-///   destroys a workspace on the way out.
+///   destroys a layout on the way out.
 ///
 /// Counted, not timed, like every other gate here — with one deliberate
 /// exception, marked at the line: the slow-disk case asserts *how many panes*
@@ -66,17 +66,17 @@ void main() {
   group('a disk that has stopped accepting writes', () {
     test('rolls the whole save back and loses nothing', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(2, linesPerPane: 40);
-      workspace.settle();
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(2, linesPerPane: 40);
+      layout.settle();
       final storedBefore = [
-        for (final pane in panes) workspace.storedScrollback(pane),
+        for (final pane in panes) layout.storedScrollback(pane),
       ];
       expect(storedBefore, everyElement(isNotEmpty));
 
       for (final pane in panes) {
-        workspace.controller.instanceFor(pane)!.terminal.write(
+        layout.controller.instanceFor(pane)!.terminal.write(
           'work the user has not finished\r\n',
         );
       }
@@ -88,18 +88,18 @@ void main() {
         ..allowBeforeFailing = 1;
       logged.clear();
 
-      workspace.controller.persistLayout();
+      layout.controller.persistLayout();
 
       expect(disk.refusals, 1);
       expect(
-        [for (final pane in panes) workspace.storedScrollback(pane)],
+        [for (final pane in panes) layout.storedScrollback(pane)],
         storedBefore,
         reason:
             'a save that threw half-way must leave the store exactly as it '
             'found it',
       );
       expect(
-        workspace.storedTabRows,
+        layout.storedTabRows,
         2,
         reason: 'and it must not take a tab with it',
       );
@@ -115,56 +115,56 @@ void main() {
       // pane whose row was rolled back must not be skipped for ever by a dao
       // that thinks it wrote it.
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(2, linesPerPane: 40);
-      workspace.settle();
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(2, linesPerPane: 40);
+      layout.settle();
 
       for (final pane in panes) {
-        workspace.controller.instanceFor(pane)!.terminal.write(
+        layout.controller.instanceFor(pane)!.terminal.write(
           'work the user has not finished\r\n',
         );
       }
       disk
         ..failing = 'INSERT INTO terminal_panes'
         ..allowBeforeFailing = 1;
-      workspace.controller.persistLayout();
+      layout.controller.persistLayout();
 
       disk.failing = null;
-      workspace.controller.persistLayout();
+      layout.controller.persistLayout();
 
       for (final pane in panes) {
         expect(
-          workspace.storedScrollback(pane),
+          layout.storedScrollback(pane),
           contains('work the user has not finished'),
           reason: 'pane $pane was written by nobody',
         );
       }
     });
 
-    test('leaves the workspace usable, and restorable', () {
+    test('leaves the layout usable, and restorable', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(3, linesPerPane: 40);
-      workspace.settle();
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(3, linesPerPane: 40);
+      layout.settle();
 
       disk.failing = 'INSERT INTO terminal_panes';
-      workspace.controller.instanceFor(panes.first)!.terminal.write('more\r\n');
-      workspace.controller.persistLayout();
+      layout.controller.instanceFor(panes.first)!.terminal.write('more\r\n');
+      layout.controller.persistLayout();
 
       // The app is still an app: nothing threw out of the save, every pane is
       // still live, and the next thing the user does still works.
-      expect(workspace.state.tabs, hasLength(3));
+      expect(layout.state.tabs, hasLength(3));
       for (final pane in panes) {
-        expect(workspace.controller.instanceFor(pane), isNotNull);
+        expect(layout.controller.instanceFor(pane), isNotNull);
       }
       disk.failing = null;
-      final added = workspace.openPane();
-      expect(workspace.controller.instanceFor(added), isNotNull);
-      expect(workspace.state.tabs, hasLength(4));
+      final added = layout.openPane();
+      expect(layout.controller.instanceFor(added), isNotNull);
+      expect(layout.state.tabs, hasLength(4));
 
-      // And what is on disk is a workspace, not a fragment of one.
+      // And what is on disk is a layout, not a fragment of one.
       final restored = TerminalLayoutDao(disk).loadLayout();
       expect(restored.tabs, hasLength(4));
       expect(
@@ -176,18 +176,18 @@ void main() {
 
     test('does not answer one refusal with a storm of retries', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(10, linesPerPane: 40);
-      workspace.settle();
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(10, linesPerPane: 40);
+      layout.settle();
       for (final pane in panes) {
-        workspace.controller.instanceFor(pane)!.terminal.write('more\r\n');
+        layout.controller.instanceFor(pane)!.terminal.write('more\r\n');
       }
 
       disk
         ..failing = 'INSERT INTO terminal_panes'
         ..reset();
-      workspace.controller.persistLayout();
+      layout.controller.persistLayout();
 
       // ignore: avoid_print
       print(
@@ -203,11 +203,11 @@ void main() {
   });
 
   group('a disk that fails the restore read', () {
-    test('must not let the quit-time save erase the workspace', () {
+    test('must not let the quit-time save erase the layout', () {
       final disk = DegradedDatabase();
       addTearDown(disk.close);
 
-      // A workspace the user has, written by a healthy app.
+      // A layout the user has, written by a healthy app.
       final first = ScaleLayout(database: disk);
       final panes = first.openPanes(3, linesPerPane: 40);
       first.settle();
@@ -215,10 +215,10 @@ void main() {
       first.container.dispose();
       expect(TerminalLayoutDao(disk).storedTabCount(), 3);
 
-      // The app restarts on a disk that will not read the workspace back.
+      // The app restarts on a disk that will not read the layout back.
       // `_restoreLayout` catches, logs, and comes up with nothing — which
       // is exactly the state the refusal exists for, and the state that used
-      // to destroy the workspace on the way out.
+      // to destroy the layout on the way out.
       disk.failing = 'FROM terminal_tabs ORDER BY ordinal';
       logged.clear();
       final second = ScaleLayout(database: disk);
@@ -237,7 +237,7 @@ void main() {
       expect(
         TerminalLayoutDao(disk).storedTabCount(),
         3,
-        reason: 'the stored workspace must outlive a restore that read nothing',
+        reason: 'the stored layout must outlive a restore that read nothing',
       );
       expect(
         [for (final pane in panes) second.storedScrollback(pane)],
@@ -268,17 +268,17 @@ void main() {
 
     test('costs one autosave tick one pane, not all of them', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(6, linesPerPane: 40);
-      expect(workspace.controller.hasDirtyScrollback, isTrue);
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(6, linesPerPane: 40);
+      expect(layout.controller.hasDirtyScrollback, isTrue);
 
       disk.writeDelay = perWrite;
       // The one number in this directory taken against a clock, and only
       // because the app's own budget is: each write blocks for 25 ms against
       // an 8 ms tick, so the tick can only ever get through one. A loaded
       // machine makes the writes slower, which is the same answer.
-      final written = workspace.controller.saveDirtyScrollback();
+      final written = layout.controller.saveDirtyScrollback();
 
       // ignore: avoid_print
       print(
@@ -293,26 +293,26 @@ void main() {
             'a slow disk must cost the UI isolate one write per tick, not one '
             'per open pane',
       );
-      expect(workspace.controller.hasDirtyScrollback, isTrue);
+      expect(layout.controller.hasDirtyScrollback, isTrue);
     });
 
     test('and the backlog drains rather than being dropped', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(6, linesPerPane: 40);
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(6, linesPerPane: 40);
       disk.writeDelay = perWrite;
 
       var ticks = 0;
-      while (workspace.controller.hasDirtyScrollback && ticks < 50) {
-        workspace.controller.saveDirtyScrollback();
+      while (layout.controller.hasDirtyScrollback && ticks < 50) {
+        layout.controller.saveDirtyScrollback();
         ticks++;
       }
 
       expect(ticks, panes.length, reason: 'one pane per tick, and no more');
-      expect(workspace.controller.hasDirtyScrollback, isFalse);
+      expect(layout.controller.hasDirtyScrollback, isFalse);
       for (final pane in panes) {
-        expect(workspace.storedScrollback(pane), isNotEmpty);
+        expect(layout.storedScrollback(pane), isNotEmpty);
       }
     });
 
@@ -322,22 +322,22 @@ void main() {
       // behind asks for the 1 s cadence rather than whatever idle tick was
       // armed.
       final disk = DegradedDatabase();
-      final workspace = ScaleLayout(database: disk);
-      addTearDown(workspace.dispose);
-      final panes = workspace.openPanes(3, linesPerPane: 40);
-      workspace.settle();
+      final layout = ScaleLayout(database: disk);
+      addTearDown(layout.dispose);
+      final panes = layout.openPanes(3, linesPerPane: 40);
+      layout.settle();
       // A tick with nothing owing re-arms at the idle cadence, so whatever the
       // save below asks for is that save's doing and not a leftover — the
       // autosave declines to bring a catch-up tick that is already armed any
       // closer.
-      workspace.schedule.fire();
+      layout.schedule.fire();
 
       disk.writeDelay = perWrite;
-      workspace.controller.instanceFor(panes.first)!.terminal.write('more\r\n');
-      workspace.schedule.delays.clear();
-      workspace.openPane();
+      layout.controller.instanceFor(panes.first)!.terminal.write('more\r\n');
+      layout.schedule.delays.clear();
+      layout.openPane();
 
-      expect(workspace.schedule.delays, contains(kScrollbackAutosaveCatchUp));
+      expect(layout.schedule.delays, contains(kScrollbackAutosaveCatchUp));
     });
   });
 }

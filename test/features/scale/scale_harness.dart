@@ -126,7 +126,7 @@ class RecordedSchedule {
   }
 }
 
-/// A workspace of process-free panes over a real database, driven through the
+/// A layout of process-free panes over a real database, driven through the
 /// production [TerminalSessionsController].
 ///
 /// One pane per tab rather than splits: every pane is then addressable, and the
@@ -259,7 +259,7 @@ class ScaleLayout {
   }
 
   /// Writes everything that is owed and leaves nothing dirty — the state a
-  /// workspace nobody is typing into settles into within a second of the last
+  /// layout nobody is typing into settles into within a second of the last
   /// keystroke.
   void settle() {
     controller.saveDirtyScrollback(budget: const Duration(minutes: 1));

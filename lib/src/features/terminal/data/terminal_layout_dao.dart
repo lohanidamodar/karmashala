@@ -90,14 +90,17 @@ class StoredTerminalLayout {
   final String? activeTabId;
 }
 
-/// The `app_metadata` key stamped when a save emptied a non-empty workspace.
+/// The `app_metadata` key stamped when a save emptied a non-empty layout.
 ///
 /// The backup rows carry their own `updated_at`, but those are the timestamps of
 /// the *save that stored them*, not of the emptying — this is when the copy was
 /// taken, which is the question anyone recovering one is actually asking.
+///
+/// The key itself still says "workspace": it is stored data, and renaming it
+/// would orphan the timestamp already on disk.
 const kTerminalLayoutBackupAtKey = 'terminal.workspace_backup_at';
 
-/// Reads and writes the terminal workspace (schema v7, backup tables v11) with
+/// Reads and writes the terminal layout (schema v7, backup tables v11) with
 /// hand-written SQL.
 ///
 /// Loading is deliberately forgiving: a row this code cannot parse is skipped
@@ -135,7 +138,7 @@ class TerminalLayoutDao {
     return (rows.first['n'] as int?) ?? 0;
   }
 
-  /// Makes the stored workspace be [tabs], by writing **only the rows that
+  /// Makes the stored layout be [tabs], by writing **only the rows that
   /// differ from what is stored**.
   ///
   /// This used to be `DELETE FROM terminal_tabs;` followed by an INSERT per tab
@@ -152,16 +155,16 @@ class TerminalLayoutDao {
   /// of the stored *structure* (never the scrollback) say which is which, so
   /// ordinals and the delete-what-vanished semantics the full replace got for
   /// free are still read from the store rather than assumed — see
-  /// [_writeChangedRows] and `workspace_write_cost_test.dart`.
+  /// [_writeChangedRows] and `layout_write_cost_test.dart`.
   ///
-  /// A copy of the outgoing workspace is taken first, inside the same
+  /// A copy of the outgoing layout is taken first, inside the same
   /// transaction, when this save **loses** something:
   ///
   /// * it empties a store that was not empty — the Loop 48 shape, whether or not
   ///   the user asked for it; or
   /// * it stores fewer tabs than were there and [userClosed] is false, so
   ///   nothing the user did accounts for the shrink. Observed for real: a
-  ///   workspace whose panes could no longer be rebuilt restored as zero tabs,
+  ///   layout whose panes could no longer be rebuilt restored as zero tabs,
   ///   the terminal opened one for the user, and that one-tab save replaced
   ///   eight stored ones. The controller's guard does not cover it because the
   ///   save is not empty — but it is still a loss, and a loss with a copy behind
@@ -349,7 +352,7 @@ class TerminalLayoutDao {
   }
 
   /// Updates one pane's scrollback in place — the autosave path, which must not
-  /// rewrite the whole workspace every tick.
+  /// rewrite the whole layout every tick.
   void saveScrollback(String paneId, String scrollback) {
     _db.execute(
       'UPDATE terminal_panes SET scrollback = ?, updated_at = ? WHERE id = ?;',
@@ -363,7 +366,7 @@ class TerminalLayoutDao {
     }
   }
 
-  /// Copies the stored workspace into the backup tables, replacing whatever was
+  /// Copies the stored layout into the backup tables, replacing whatever was
   /// there. Does nothing when there is nothing to lose.
   ///
   /// Called from inside [saveLayout]'s transaction, so a failure anywhere in
@@ -392,7 +395,7 @@ class TerminalLayoutDao {
   }
 
   StoredTerminalLayout loadLayout() {
-    final workspace = _load('terminal_tabs', 'terminal_panes');
+    final layout = _load('terminal_tabs', 'terminal_panes');
     // Reading the live tables *is* learning what the store holds, so the record
     // a save compares scrollback against costs nothing to bring up to date
     // here. It is also what makes the first save after a restore free rather
@@ -400,15 +403,15 @@ class TerminalLayoutDao {
     _writtenScrollback
       ..clear()
       ..addEntries([
-        for (final tab in [...workspace.tabs, ...workspace.detached])
+        for (final tab in [...layout.tabs, ...layout.detached])
           for (final pane in tab.panes) MapEntry(pane.id, pane.scrollback),
       ]);
-    return workspace;
+    return layout;
   }
 
-  /// The workspace as it stood immediately before the last save that emptied it.
+  /// The layout as it stood immediately before the last save that emptied it.
   ///
-  /// Empty when no save has ever emptied a non-empty workspace.
+  /// Empty when no save has ever emptied a non-empty layout.
   StoredTerminalLayout loadBackup() =>
       _load('terminal_tabs_backup', 'terminal_panes_backup');
 

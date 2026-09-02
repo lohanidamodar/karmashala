@@ -33,7 +33,7 @@ import 'fake_instance.dart';
 ///
 /// So this is the **fast tier**, and it runs on every `flutter test`. It
 /// measures the same three things the benchmark does — what the focused pane's
-/// keystroke costs, what the parse budget spends, and what a workspace holds in
+/// keystroke costs, what the parse budget spends, and what a layout holds in
 /// memory — but counts them instead of timing them, at the same three values of
 /// N, and asserts the *shape*:
 ///
@@ -171,7 +171,7 @@ void main() {
     );
   });
 
-  group('memory: a workspace holds a floor per pane, not a buffer per pane', () {
+  group('memory: a layout holds a floor per pane, not a buffer per pane', () {
     /// Deep enough that the parked window is real history rather than the
     /// screen, and that closing the tab detaches rather than releases an idle
     /// shell.

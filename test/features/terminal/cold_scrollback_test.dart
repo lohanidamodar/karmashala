@@ -173,7 +173,7 @@ void main() {
           'launch for tabs nobody has looked at',
     );
 
-    // Saving the workspace again round-trips the stored text rather than
+    // Saving the layout again round-trips the stored text rather than
     // building the buffer to re-encode it.
     next.controller.persistLayout();
     expect(dormant.bufferBuilt, isFalse);

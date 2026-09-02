@@ -30,7 +30,7 @@ import 'fake_instance.dart';
 /// the UI isolate.
 ///
 /// Measured on the Loop 26 corpora at a full durable window (~256 KiB): the
-/// replay parse cost **6-15 ms** and the workspace save that immediately
+/// replay parse cost **6-15 ms** and the layout save that immediately
 /// follows re-encoded the same buffer for another **3-10 ms** — 10-25 ms of
 /// main-isolate work per resume that 1.1.3 did not spend.
 ///
@@ -102,7 +102,7 @@ void main() {
     );
   }
 
-  /// A workspace holding one agent pane with [lines] of history, saved and
+  /// A layout holding one agent pane with [lines] of history, saved and
   /// reopened — which is how a [DormantTerminalInstance] comes to exist.
   ({
     ProviderContainer container,
@@ -271,7 +271,7 @@ void main() {
         .single;
     final pane = countingPane(app.controller, paneId);
     pane.terminal.write('${agentHistory(300)}\r\n');
-    // A second tab, so closing the first leaves a workspace to be active in.
+    // A second tab, so closing the first leaves a tab to be active in.
     app.controller.openTab(TerminalProfile.commandPrompt);
     // Detaching parks the scrollback: the buffer keeps only the screen, and the
     // history moves into the parked window.

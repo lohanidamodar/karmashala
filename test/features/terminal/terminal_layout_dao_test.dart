@@ -128,7 +128,7 @@ void main() {
     });
   });
 
-  test('saves and loads a workspace', () {
+  test('saves and loads a layout', () {
     dao.saveLayout([tab()], activeTabId: 'tab1');
 
     final loaded = dao.loadLayout();
@@ -143,13 +143,13 @@ void main() {
     expect(loaded.tabs.single.panes[1].title, 'Command Prompt');
   });
 
-  test('an empty database loads an empty workspace', () {
+  test('an empty database loads an empty layout', () {
     final loaded = dao.loadLayout();
     expect(loaded.tabs, isEmpty);
     expect(loaded.activeTabId, isNull);
   });
 
-  test('saving replaces the previous workspace rather than appending', () {
+  test('saving replaces the previous layout rather than appending', () {
     dao.saveLayout([tab()], activeTabId: 'tab1');
     dao.saveLayout([tab(id: 'tab2')], activeTabId: 'tab2');
     final loaded = dao.loadLayout();

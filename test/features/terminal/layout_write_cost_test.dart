@@ -25,7 +25,7 @@ import 'fake_instance.dart';
 /// Resuming a session adds one pane to one tab. These tests pin the rule that
 /// makes that cost what it says: **a save writes the rows that changed**, and
 /// nothing else — so the write cost of one structural change is flat in the
-/// size of the workspace, in the shape `scale_curve_test.dart` established.
+/// size of the layout, in the shape `scale_curve_test.dart` established.
 ///
 /// Counted, not timed, for the reason `attention_inbox_cost_test.dart` gives:
 /// a wall-clock assertion over a few milliseconds fails whenever the machine is
@@ -49,7 +49,7 @@ void main() {
     scrollback: scrollback,
   );
 
-  /// A one-pane tab, the ordinary shape of a restored workspace.
+  /// A one-pane tab, the ordinary shape of a restored layout.
   StoredTerminalTab tab(String id) => StoredTerminalTab(
     id: id,
     layout: PaneLayout.single('$id-p1'),
@@ -71,7 +71,7 @@ void main() {
     );
   }
 
-  List<StoredTerminalTab> workspace(int tabs) => [
+  List<StoredTerminalTab> storedLayout(int tabs) => [
     for (var i = 0; i < tabs; i++) tab('t$i'),
   ];
 
@@ -86,7 +86,7 @@ void main() {
         addTearDown(db.close);
         final dao = TerminalLayoutDao(db);
 
-        final tabs = workspace(n);
+        final tabs = storedLayout(n);
         dao.saveLayout(tabs, activeTabId: 't0');
 
         // One tab gains a pane. Everything else is byte-for-byte what was
@@ -95,9 +95,9 @@ void main() {
         db.reset();
         dao.saveLayout(grown, activeTabId: 't0');
 
-        rowsWritten[n] = db.workspaceWrites;
+        rowsWritten[n] = db.layoutWrites;
         expect(
-          db.workspaceWrites,
+          db.layoutWrites,
           2,
           reason:
               'the tab whose layout changed, and the pane that appeared — '
@@ -116,7 +116,7 @@ void main() {
       expect(
         rowsWritten.values.toSet(),
         hasLength(1),
-        reason: 'row writes must not grow with the workspace: $rowsWritten',
+        reason: 'row writes must not grow with the layout: $rowsWritten',
       );
     });
   });
@@ -126,22 +126,22 @@ void main() {
       final db = _CountingDatabase();
       addTearDown(db.close);
       final dao = TerminalLayoutDao(db);
-      final tabs = workspace(10);
+      final tabs = storedLayout(10);
       dao.saveLayout(tabs, activeTabId: 't0');
 
       db.reset();
       dao.saveLayout(tabs, activeTabId: 't0');
       dao.saveLayout(tabs, activeTabId: 't0');
 
-      expect(db.workspaceWrites, 0);
+      expect(db.layoutWrites, 0);
     });
 
     test('is still a save: the store is unchanged, not emptied', () {
       final db = _CountingDatabase();
       addTearDown(db.close);
       final dao = TerminalLayoutDao(db);
-      dao.saveLayout(workspace(3), activeTabId: 't1');
-      dao.saveLayout(workspace(3), activeTabId: 't1');
+      dao.saveLayout(storedLayout(3), activeTabId: 't1');
+      dao.saveLayout(storedLayout(3), activeTabId: 't1');
 
       final loaded = dao.loadLayout();
       expect(loaded.tabs.map((t) => t.id), ['t0', 't1', 't2']);
@@ -161,7 +161,7 @@ void main() {
     tearDown(() => db.close());
 
     test('a removed tab is really deleted, and its panes with it', () {
-      dao.saveLayout(workspace(3), activeTabId: 't0');
+      dao.saveLayout(storedLayout(3), activeTabId: 't0');
       final kept = [tab('t0'), tab('t2')];
 
       dao.saveLayout(kept, activeTabId: 't0', userClosed: true);
@@ -186,7 +186,7 @@ void main() {
     });
 
     test('ordinals survive: reordering tabs reorders them on the way back', () {
-      dao.saveLayout(workspace(4), activeTabId: 't0');
+      dao.saveLayout(storedLayout(4), activeTabId: 't0');
       dao.saveLayout([
         tab('t3'),
         tab('t0'),
@@ -203,7 +203,7 @@ void main() {
     });
 
     test('ordinals survive: closing a tab from the middle closes the gap', () {
-      dao.saveLayout(workspace(4), activeTabId: 't0');
+      dao.saveLayout(storedLayout(4), activeTabId: 't0');
       dao.saveLayout([
         tab('t0'),
         tab('t2'),
@@ -216,7 +216,7 @@ void main() {
           (r) => r['ordinal'],
         ),
         [0, 1, 2],
-        reason: 'a hole in the ordinals is a workspace that restores wrong',
+        reason: 'a hole in the ordinals is a layout that restores wrong',
       );
     });
 
@@ -274,7 +274,7 @@ void main() {
       expect(db.query('SELECT id FROM terminal_panes;'), hasLength(2));
     });
 
-    test('the whole workspace round-trips unchanged through save and load', () {
+    test('the whole layout round-trips unchanged through save and load', () {
       const launch = AgentPaneLaunch(
         agentId: 'claude',
         executable: 'claude',
@@ -302,7 +302,7 @@ void main() {
         ),
       ];
 
-      // Reached incrementally, the way the app reaches it: a workspace, then
+      // Reached incrementally, the way the app reaches it: a layout, then
       // the change.
       dao.saveLayout([tab('t0')], activeTabId: 't0');
       dao.saveLayout(rich, activeTabId: 't1');
@@ -322,7 +322,7 @@ void main() {
     test('a dao that never wrote this store still writes it correctly', () {
       // A second dao knows nothing about what the first one wrote, so it must
       // fall back to comparing against the store rather than trusting itself.
-      dao.saveLayout(workspace(3), activeTabId: 't0');
+      dao.saveLayout(storedLayout(3), activeTabId: 't0');
       final fresh = TerminalLayoutDao(db);
 
       fresh.saveLayout([
@@ -371,7 +371,7 @@ void main() {
         tab('t1'),
       ], activeTabId: 't0');
 
-      expect(db.workspaceWrites, 0);
+      expect(db.layoutWrites, 0);
       expect(
         dao.loadLayout().tabs.first.panes.single.scrollback,
         'newer output',
@@ -402,9 +402,9 @@ void main() {
     tearDown(() => db.close());
 
     test('cost nothing on a save that loses nothing', () {
-      dao.saveLayout(workspace(10), activeTabId: 't0');
+      dao.saveLayout(storedLayout(10), activeTabId: 't0');
       db.reset();
-      dao.saveLayout([...workspace(10), tab('t10')], activeTabId: 't0');
+      dao.saveLayout([...storedLayout(10), tab('t10')], activeTabId: 't0');
 
       expect(
         db.backupWrites,
@@ -416,7 +416,7 @@ void main() {
     });
 
     test('are still taken when a save empties a non-empty store', () {
-      dao.saveLayout(workspace(3), activeTabId: 't0');
+      dao.saveLayout(storedLayout(3), activeTabId: 't0');
       db.reset();
       dao.saveLayout(const []);
 
@@ -425,8 +425,8 @@ void main() {
       expect(dao.loadLayout().tabs, isEmpty);
     });
 
-    test('are still taken when a save shrinks a workspace nobody closed', () {
-      dao.saveLayout(workspace(3), activeTabId: 't0');
+    test('are still taken when a save shrinks a layout nobody closed', () {
+      dao.saveLayout(storedLayout(3), activeTabId: 't0');
       dao.saveLayout([tab('t0')], activeTabId: 't0');
 
       expect(dao.loadBackup().tabs.map((t) => t.id), ['t0', 't1', 't2']);
@@ -434,7 +434,7 @@ void main() {
   });
 
   group('through the controller', () {
-    /// Seeds [db] with a stored workspace of [tabs] tabs, then builds a
+    /// Seeds [db] with a stored layout of [tabs] tabs, then builds a
     /// controller over it — which restores them.
     ({
       _CountingDatabase db,
@@ -444,7 +444,7 @@ void main() {
     restored(int tabs) {
       final db = _CountingDatabase();
       addTearDown(db.close);
-      TerminalLayoutDao(db).saveLayout(workspace(tabs), activeTabId: 't0');
+      TerminalLayoutDao(db).saveLayout(storedLayout(tabs), activeTabId: 't0');
 
       final container = fakeTerminalContainer(database: db);
       addTearDown(container.dispose);
@@ -467,13 +467,13 @@ void main() {
 
         controller.openTab(TerminalProfile.powerShell);
 
-        rowsWritten[n] = db.workspaceWrites;
+        rowsWritten[n] = db.layoutWrites;
         // The new tab, its pane, and the tab that stopped being the active one.
-        expect(db.workspaceWrites, 3);
+        expect(db.layoutWrites, 3);
       });
     }
 
-    test('and that cost does not grow with the workspace', () {
+    test('and that cost does not grow with the layout', () {
       expect(rowsWritten.keys, containsAll(scale));
       expect(
         rowsWritten.values.toSet(),
@@ -483,17 +483,17 @@ void main() {
     });
 
     test('a save right after a restore writes nothing', () {
-      // This is the shape of the report: the workspace came back exactly as it
+      // This is the shape of the report: the layout came back exactly as it
       // was stored, so persisting it is not a change.
       final (:db, :controller, container: _) = restored(50);
       db.reset();
 
       controller.persistLayout();
 
-      expect(db.workspaceWrites, 0);
+      expect(db.layoutWrites, 0);
     });
 
-    test('the empty-workspace guard still refuses to write', () {
+    test('the empty-layout guard still refuses to write', () {
       final db = _CountingDatabase();
       addTearDown(db.close);
       final dao = TerminalLayoutDao(db);
@@ -527,7 +527,7 @@ void main() {
       db.reset();
       controller.persistLayout();
 
-      expect(db.workspaceWrites, 0);
+      expect(db.layoutWrites, 0);
       expect(dao.storedTabCount(), 1);
       expect(
         dao.loadLayout().tabs.single.panes.single.scrollback,
@@ -544,7 +544,7 @@ void main() {
       controller.closeTab(tabs.last.id, detach: false);
 
       expect(
-        db.workspaceWrites,
+        db.layoutWrites,
         1,
         reason: 'one tab row deleted; its panes cascade',
       );
@@ -553,7 +553,7 @@ void main() {
   });
 }
 
-/// An [AppDatabase] that records every statement the workspace dao issues.
+/// An [AppDatabase] that records every statement the layout dao issues.
 ///
 /// Overriding [execute] rather than reaching for `sqlite3_changes` keeps the
 /// unit honest: a statement the dao does not issue is a row it does not write,
@@ -567,8 +567,8 @@ class _CountingDatabase extends AppDatabase {
 
   void reset() => statements.clear();
 
-  /// Writes against the live workspace tables.
-  int get workspaceWrites => statements
+  /// Writes against the live layout tables.
+  int get layoutWrites => statements
       .where(
         (sql) =>
             !sql.contains('_backup') &&

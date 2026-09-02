@@ -225,7 +225,7 @@ void main() {
   testWidgets('(b) a native session with a dormant pane never shows chat', (
     tester,
   ) async {
-    // The shape a restored workspace leaves: the pane is still there and still
+    // The shape a restored layout leaves: the pane is still there and still
     // holds the session's scrollback, but nothing is running in it. `reveal`
     // refuses it (it wants `isLive`) while the workbench will happily show it,
     // so the tap both shows a terminal and resumes into another one.
