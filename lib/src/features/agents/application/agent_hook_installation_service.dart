@@ -7,8 +7,13 @@ import '../../environments/domain/environment_kind.dart';
 import '../data/agent_hook_installer.dart';
 import '../domain/agent_descriptor.dart';
 import '../domain/agent_hook_endpoint.dart';
+import 'agent_hook_reachability.dart';
 import 'agent_providers.dart';
 import 'agent_status_providers.dart';
+
+/// No address this app bound serves this kind of environment at all.
+const String _noAddressBound =
+    'no callback address this app binds is reachable from this environment';
 
 /// One agent config the installer touched, or declined to.
 class AgentHookInstallation {
@@ -53,11 +58,15 @@ class AgentHookInstallation {
 ///   reached at all.** `127.0.0.1` inside a WSL2 distribution is that
 ///   distribution's own loopback, so a loopback hook installed there would fire
 ///   on every tool call and never arrive. It is the host side of the WSL
-///   virtual switch that works, and [AgentHookEndpoint] carries it — so a WSL
-///   store is installed when this launch bound that address and skipped when it
-///   did not. An SSH host is on another machine and is always skipped. Skipped
-///   environments fall back to the state-file and terminal-grid sources, which
-///   need no callback.
+///   virtual switch that works, and [AgentHookEndpoint] carries it. **Having
+///   bound that address is not evidence that it answers**, and the two came
+///   apart on the owner's machine: the switch address reset every byte sent to
+///   it from inside the distribution, while the same process served that same
+///   distribution on the host's other addresses. So a WSL store is installed
+///   only once [AgentHookReachability] has dialled the door from inside it. An
+///   SSH host is on another machine and is always skipped. Skipped environments
+///   fall back to the state-file and terminal-grid sources, which need no
+///   callback.
 class AgentHookInstallationService {
   AgentHookInstallationService(this._ref, {AppLogger? logger})
     : _log = logger ?? AppLogger.named('agent-hooks');
@@ -132,11 +141,35 @@ class AgentHookInstallationService {
     final registry = _ref.read(agentRegistryProvider);
 
     for (final store in stores) {
-      final kind = byId[store.environmentId]?.kind;
+      final environment = byId[store.environmentId];
+      final kind = environment?.kind;
       // An environment we have no row for is treated as unreachable rather than
       // guessed at: the wrong address here is a hook in someone's config that
       // silently never arrives.
-      final reachable = kind != null && (endpoint?.reaches(kind) ?? false);
+      var reachable = kind != null && (endpoint?.reaches(kind) ?? false);
+      var unreachableBecause = _noAddressBound;
+      // Bound is not the same as reachable. `reaches` says this app bound an
+      // address for this kind of environment; only a round trip *from inside*
+      // it says an agent there can dial it, and on the owner's machine those
+      // two answers disagreed all day. See [AgentHookReachability]. Once per
+      // store, outside the descriptor loop: the door is a property of the
+      // environment, not of the agent.
+      if (reachable && skipUnreachable) {
+        reachable = await _ref
+            .read(agentHookReachabilityProvider)
+            .answersFrom(environment!, endpoint!);
+        if (!reachable) {
+          unreachableBecause =
+              'the callback address ${endpoint.hostFor(kind)} does not '
+              'answer from inside this environment';
+          _log.warning(
+            'Agent hooks for ${store.environmentId} were not installed: '
+            '$unreachableBecause. Nothing this app can bind is reachable from '
+            'there, so status falls back to disk probes and the hook-only '
+            'states (awaiting approval, failed) will not be reported.',
+          );
+        }
+      }
       for (final descriptor in registry.descriptors) {
         if (descriptor.hooks == null) continue;
         final home = store.homesByAgentId[descriptor.id];
@@ -170,11 +203,9 @@ class AgentHookInstallationService {
               environmentId: store.environmentId,
               installed: false,
               skippedBecause: removed
-                  ? 'no callback address this app binds is reachable from '
-                        'this environment; the hook left here by an earlier '
+                  ? '$unreachableBecause; the hook left here by an earlier '
                         'run was removed'
-                  : 'no callback address this app binds is reachable from '
-                        'this environment; status falls back to the state file',
+                  : '$unreachableBecause; status falls back to the state file',
             ),
           );
           continue;
