@@ -155,3 +155,87 @@ class SessionStats {
       (output == null || output!.trim().isEmpty) &&
       tokens.isUnknown;
 }
+
+/// Where an agent's lifetime totals came from.
+///
+/// The distinction is not academic: one of these is current and the other can
+/// be months old, and a dialog that showed both without saying which is which
+/// would invite exactly the comparison that produces a bug report.
+enum LifetimeStatsSource {
+  /// A file the CLI rewrites only when its own stats command is run, so it is
+  /// as old as the last time the user asked. Claude Code's `stats-cache.json`.
+  agentCache,
+
+  /// An index the CLI maintains as it goes, so it is current. Codex's thread
+  /// table in `state_<n>.sqlite`.
+  agentIndex,
+}
+
+/// Why an agent has no lifetime totals to show.
+enum LifetimeStatsUnavailable {
+  /// This agent keeps no lifetime aggregate at all.
+  agentKeepsNoAggregate,
+
+  /// It keeps one, but none could be read on this machine — never computed
+  /// here, or not readable.
+  sourceNotFound,
+}
+
+/// What an agent says it has done in total, across every session it has run.
+///
+/// **Read from the agent's own aggregate, never summed by this app.** Adding up
+/// per-session figures across a store is how the open-source monitors arrive at
+/// a number, and it is also how they arrive at a wrong one — a Codex subagent's
+/// rollout can replay its parent's usage history into its own file, which
+/// inflated one reported total by 91×. Anything that cannot be taken from the
+/// CLI's own books is left out rather than synthesised; see [note].
+class LifetimeStats {
+  const LifetimeStats({
+    required this.source,
+    this.sessions,
+    this.messages,
+    this.tokens = TokenTally.unknown,
+    this.totalTokens,
+    this.computedAt,
+    this.firstActivityAt,
+    this.lastActivityAt,
+    this.note,
+  });
+
+  final LifetimeStatsSource source;
+
+  /// Sessions, conversations or threads — whatever the agent counts.
+  final int? sessions;
+
+  /// Messages, as the agent counts them. **Not** turns: an agent's own message
+  /// count includes what it wrote and what its tools answered, which is a
+  /// different unit from the turns counted per session. [note] says so.
+  final int? messages;
+
+  final TokenTally tokens;
+
+  /// The one figure the source records when it records no breakdown.
+  ///
+  /// Separate from `tokens.total` because a source can have one without the
+  /// other, and a total assembled from buckets that were never there would be
+  /// a number this app invented.
+  final int? totalTokens;
+
+  /// When the source was last written, for a source that can be stale.
+  final DateTime? computedAt;
+
+  final DateTime? firstActivityAt;
+  final DateTime? lastActivityAt;
+
+  /// What this particular source will not tell us, and why — set by the reader,
+  /// which is the layer that knows its own quirks, and shown verbatim.
+  final String? note;
+
+  bool get isEmpty =>
+      sessions == null &&
+      messages == null &&
+      totalTokens == null &&
+      firstActivityAt == null &&
+      lastActivityAt == null &&
+      tokens.isUnknown;
+}
