@@ -110,7 +110,7 @@ void main() {
     String paneId,
     String stored,
   })
-  restoredWorkspace({int lines = 2000}) {
+  restoredLayout({int lines = 2000}) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
 
@@ -120,7 +120,7 @@ void main() {
         .instanceFor(opened.paneId)!
         .terminal
         .write('${agentHistory(lines)}\r\n');
-    first.controller.persistWorkspace();
+    first.controller.persistLayout();
     final stored = encodeScrollback(
       first.controller.instanceFor(opened.paneId)!.terminal,
     );
@@ -142,7 +142,7 @@ void main() {
 
   group('resuming a session the workbench is already showing', () {
     test('hands over the buffer instead of parsing the history again', () {
-      final app = restoredWorkspace();
+      final app = restoredLayout();
       final dormant =
           app.controller.instanceFor(app.paneId)! as DormantTerminalInstance;
       // What the workbench does the moment it draws a restored pane, and the
@@ -181,7 +181,7 @@ void main() {
     });
 
     test('the history is still on screen afterwards', () {
-      final app = restoredWorkspace(lines: 50);
+      final app = restoredLayout(lines: 50);
       // Shown, so there is a buffer to adopt.
       app.controller.instanceFor(app.paneId)!.terminal;
 
@@ -206,7 +206,7 @@ void main() {
   });
 
   test('a dormant pane nobody has looked at still replays its text', () {
-    final app = restoredWorkspace(lines: 50);
+    final app = restoredLayout(lines: 50);
     final dormant =
         app.controller.instanceFor(app.paneId)! as DormantTerminalInstance;
     expect(dormant.bufferBuilt, isFalse);

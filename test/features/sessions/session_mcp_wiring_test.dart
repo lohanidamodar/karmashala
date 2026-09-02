@@ -234,7 +234,7 @@ void main() {
       );
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       // The restart: a different port, a different credential, a config
@@ -281,7 +281,7 @@ void main() {
               .paneId!;
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       final next = containerOver(
@@ -317,7 +317,7 @@ void main() {
       final paneId = (await launchIn(first)).paneId!;
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       final next = containerOver(db, idPrefix: 't-');
@@ -344,7 +344,7 @@ void main() {
       final paneId = (await launchIn(first)).paneId!;
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       db.execute(

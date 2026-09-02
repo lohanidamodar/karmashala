@@ -4,7 +4,7 @@ import 'package:karmashala/src/features/terminal/application/scrollback_autosave
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/command_block_recorder.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
@@ -29,7 +29,7 @@ void main() {
   late AppDatabase db;
   late ProviderContainer container;
   late TerminalSessionsController controller;
-  late TerminalWorkspaceDao dao;
+  late TerminalLayoutDao dao;
 
   /// Every delay the autosave has armed a tick at, in order.
   final armed = <Duration>[];
@@ -37,7 +37,7 @@ void main() {
   setUp(() {
     armed.clear();
     db = AppDatabase.memory();
-    dao = TerminalWorkspaceDao(db);
+    dao = TerminalLayoutDao(db);
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
@@ -99,7 +99,7 @@ void main() {
   }
 
   String storedScrollbackFor(String paneId) {
-    for (final tab in dao.loadWorkspace().tabs) {
+    for (final tab in dao.loadLayout().tabs) {
       for (final pane in tab.panes) {
         if (pane.id == paneId) return pane.scrollback;
       }
@@ -112,12 +112,12 @@ void main() {
     instance(first).terminal.write('one\r\n');
     instance(second).terminal.write('two\r\n');
 
-    controller.persistWorkspace();
+    controller.persistLayout();
     final after = [instance(first).encodes, instance(second).encodes];
     expect(after, everyElement(greaterThan(0)));
 
-    controller.persistWorkspace();
-    controller.persistWorkspace();
+    controller.persistLayout();
+    controller.persistLayout();
 
     expect([instance(first).encodes, instance(second).encodes], after);
   });
@@ -126,12 +126,12 @@ void main() {
     final (first, second) = twoPanes();
     instance(first).terminal.write('one\r\n');
     instance(second).terminal.write('two\r\n');
-    controller.persistWorkspace();
+    controller.persistLayout();
     final quiet = instance(first).encodes;
     final busy = instance(second).encodes;
 
     instance(second).terminal.write('more\r\n');
-    controller.persistWorkspace();
+    controller.persistLayout();
 
     expect(instance(first).encodes, quiet, reason: 'untouched pane');
     expect(instance(second).encodes, busy + 1, reason: 'pane that wrote');
@@ -140,11 +140,11 @@ void main() {
   test('reusing an encoding never stores stale scrollback', () {
     final (_, second) = twoPanes();
     instance(second).terminal.write('first line\r\n');
-    controller.persistWorkspace();
+    controller.persistLayout();
     expect(storedScrollbackFor(second), contains('first line'));
 
     instance(second).terminal.write('second line\r\n');
-    controller.persistWorkspace();
+    controller.persistLayout();
 
     final stored = storedScrollbackFor(second);
     expect(stored, contains('first line'));
@@ -161,7 +161,7 @@ void main() {
 
     // This is the quit path: everything the autosave already wrote is a
     // cache hit, so quitting flushes only what changed since the last tick.
-    controller.persistWorkspace();
+    controller.persistLayout();
 
     expect([instance(first).encodes, instance(second).encodes], afterTick);
   });
@@ -170,7 +170,7 @@ void main() {
     'a pane that never wrote anything is still encoded once, and stored',
     () {
       final (first, _) = twoPanes();
-      controller.persistWorkspace();
+      controller.persistLayout();
       expect(instance(first).encodes, 1);
       expect(storedScrollbackFor(first), isEmpty);
     },
@@ -179,13 +179,13 @@ void main() {
   test('a closed pane does not keep its cached encoding alive', () {
     final (first, second) = twoPanes();
     instance(second).terminal.write('two\r\n');
-    controller.persistWorkspace();
+    controller.persistLayout();
 
     controller.closePane(second, detach: false);
-    controller.persistWorkspace();
+    controller.persistLayout();
 
     // The surviving pane is still saved correctly; the closed one is gone.
-    expect(dao.loadWorkspace().tabs.single.panes.map((p) => p.id), [first]);
+    expect(dao.loadLayout().tabs.single.panes.map((p) => p.id), [first]);
   });
 
   test('a tick is capped, so its cost does not grow with the number of panes', () {
@@ -249,10 +249,10 @@ void main() {
 
     /// [n] live panes, all stored, and then all of them busy — the state a
     /// workspace is in whenever anything is actually running in it.
-    List<String> busyWorkspace(int n) {
+    List<String> busyLayout(int n) {
       controller.openTab(TerminalProfile.powerShell);
       grow(n - 1);
-      controller.persistWorkspace();
+      controller.persistLayout();
       final panes = openPanes();
       expect(panes, hasLength(n));
       for (final paneId in panes) {
@@ -267,7 +267,7 @@ void main() {
 
     for (final n in [1, 10, 50]) {
       test('over $n busy panes, re-encodes only the pane it adds', () {
-        final panes = busyWorkspace(n);
+        final panes = busyLayout(n);
         final before = encodesAcross(panes);
 
         final added = controller.openInSlot(
@@ -299,13 +299,13 @@ void main() {
 
     for (final n in [1, 10, 50]) {
       test('quitting with $n busy panes re-encodes exactly the dirty ones', () {
-        final panes = busyWorkspace(n);
+        final panes = busyLayout(n);
         final before = encodesAcross(panes);
 
-        // The quit path, not a structural one: `persistWorkspace` is the last
+        // The quit path, not a structural one: `persistLayout` is the last
         // write before the process ends, so unlike a structural save it must
         // refresh rather than reuse — anything it leaves behind is gone.
-        controller.persistWorkspace();
+        controller.persistLayout();
 
         quitEncodes[n] = encodesAcross(panes) - before;
         expect(
@@ -321,11 +321,11 @@ void main() {
       // The property that makes the first number safe: cost tracks what
       // changed, not what is open. A workspace nobody has typed into costs
       // nothing to write however many panes it holds.
-      final panes = busyWorkspace(50);
-      controller.persistWorkspace();
+      final panes = busyLayout(50);
+      controller.persistLayout();
       final after = encodesAcross(panes);
 
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       expect(encodesAcross(panes), after);
     });
@@ -344,7 +344,7 @@ void main() {
     });
 
     test('leaves those panes still owing the autosave a write', () {
-      final panes = busyWorkspace(4);
+      final panes = busyLayout(4);
       controller.openInSlot(
         controller.splitPane(SplitAxis.horizontal)!,
         TerminalProfile.powerShell,
@@ -361,14 +361,14 @@ void main() {
     });
 
     test('and quitting writes what it left, without waiting for a tick', () {
-      final panes = busyWorkspace(4);
+      final panes = busyLayout(4);
       controller.openInSlot(
         controller.splitPane(SplitAxis.horizontal)!,
         TerminalProfile.powerShell,
       );
 
       // The teardown save is the one that must never defer anything.
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       expect(controller.hasDirtyScrollback, isFalse);
       for (final paneId in panes) {
@@ -391,7 +391,7 @@ void main() {
       )!;
 
       expect(instance(added).encodes, 1);
-      expect(dao.loadWorkspace().tabs.single.panes.map((p) => p.id), [
+      expect(dao.loadLayout().tabs.single.panes.map((p) => p.id), [
         first,
         added,
       ]);
@@ -402,7 +402,7 @@ void main() {
     });
 
     test('asks the autosave to come back on its catch-up cadence', () {
-      busyWorkspace(4);
+      busyLayout(4);
       armed.clear();
 
       controller.openInSlot(

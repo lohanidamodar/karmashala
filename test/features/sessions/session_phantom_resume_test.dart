@@ -166,7 +166,7 @@ void main() {
     AppDatabase db, {
     bool locatable = true,
   }) {
-    first.read(terminalSessionsControllerProvider.notifier).persistWorkspace();
+    first.read(terminalSessionsControllerProvider.notifier).persistLayout();
     first.dispose();
     final next = containerOver(db, idPrefix: 't-', locatable: locatable);
     addTearDown(next.dispose);

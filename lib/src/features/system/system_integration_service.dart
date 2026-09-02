@@ -637,7 +637,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   Future<void> _quit() async {
     if (_quitting) return;
     _quitting = true;
-    _saveTerminalWorkspace();
+    _saveTerminalLayout();
     try {
       await _onQuitRequested();
     } on Object catch (error, stack) {
@@ -670,15 +670,15 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Guarded by [ProviderContainer.exists] so quitting never *creates* the
   /// terminal controller: building it would restore a workspace only to write
   /// it straight back.
-  void _saveTerminalWorkspace() {
+  void _saveTerminalLayout() {
     try {
       if (!_container.exists(terminalSessionsControllerProvider)) return;
-      // persistWorkspace, not persistStructure: this is the last write before
+      // persistLayout, not persistStructure: this is the last write before
       // the process ends, so it has to re-encode every pane the structural
       // saves left for the autosave. It covers the autosave too.
       _container
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
     } on Object catch (error) {
       // Never block quitting on persistence.
       _logger.warning('system: persisting the workspace failed reason=$error');

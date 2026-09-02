@@ -2,19 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
 import 'fake_instance.dart';
-import 'search_workspace.dart';
+import 'search_layout.dart';
 
 /// Searching every open pane, not only the focused one.
 ///
 /// Cost lives in `terminal_search_cost_test.dart`; this is about what the user
 /// gets: which pane a hit came from, and getting there.
 void main() {
-  late SearchWorkspace workspace;
+  late SearchLayout workspace;
 
   setUp(() {
     // Small and shallow: these are behaviour assertions, and the bounds are
     // asserted where they belong.
-    workspace = SearchWorkspace(
+    workspace = SearchLayout(
       panes: 3,
       linesPerPane: 4,
       text: (pane, line) => 'pane $pane line $line',

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logging/logging.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -29,7 +29,7 @@ import 'scale_harness.dart';
 /// Two pieces of the app exist precisely for this and neither was exercised
 /// under a degraded disk before this file:
 ///
-/// * `TerminalWorkspaceDao.saveWorkspace`'s **rollback guard** — the record of
+/// * `TerminalLayoutDao.saveLayout`'s **rollback guard** — the record of
 ///   what has been written is adopted *after* the transaction commits, "because
 ///   a record claiming rows that were rolled back is the one way this dao could
 ///   skip a write it owed". A failed save that adopted its record would leave
@@ -66,7 +66,7 @@ void main() {
   group('a disk that has stopped accepting writes', () {
     test('rolls the whole save back and loses nothing', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(2, linesPerPane: 40);
       workspace.settle();
@@ -88,7 +88,7 @@ void main() {
         ..allowBeforeFailing = 1;
       logged.clear();
 
-      workspace.controller.persistWorkspace();
+      workspace.controller.persistLayout();
 
       expect(disk.refusals, 1);
       expect(
@@ -115,7 +115,7 @@ void main() {
       // pane whose row was rolled back must not be skipped for ever by a dao
       // that thinks it wrote it.
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(2, linesPerPane: 40);
       workspace.settle();
@@ -128,10 +128,10 @@ void main() {
       disk
         ..failing = 'INSERT INTO terminal_panes'
         ..allowBeforeFailing = 1;
-      workspace.controller.persistWorkspace();
+      workspace.controller.persistLayout();
 
       disk.failing = null;
-      workspace.controller.persistWorkspace();
+      workspace.controller.persistLayout();
 
       for (final pane in panes) {
         expect(
@@ -144,14 +144,14 @@ void main() {
 
     test('leaves the workspace usable, and restorable', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(3, linesPerPane: 40);
       workspace.settle();
 
       disk.failing = 'INSERT INTO terminal_panes';
       workspace.controller.instanceFor(panes.first)!.terminal.write('more\r\n');
-      workspace.controller.persistWorkspace();
+      workspace.controller.persistLayout();
 
       // The app is still an app: nothing threw out of the save, every pane is
       // still live, and the next thing the user does still works.
@@ -165,7 +165,7 @@ void main() {
       expect(workspace.state.tabs, hasLength(4));
 
       // And what is on disk is a workspace, not a fragment of one.
-      final restored = TerminalWorkspaceDao(disk).loadWorkspace();
+      final restored = TerminalLayoutDao(disk).loadLayout();
       expect(restored.tabs, hasLength(4));
       expect(
         restored.tabs.every((tab) => tab.panes.isNotEmpty),
@@ -176,7 +176,7 @@ void main() {
 
     test('does not answer one refusal with a storm of retries', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(10, linesPerPane: 40);
       workspace.settle();
@@ -187,7 +187,7 @@ void main() {
       disk
         ..failing = 'INSERT INTO terminal_panes'
         ..reset();
-      workspace.controller.persistWorkspace();
+      workspace.controller.persistLayout();
 
       // ignore: avoid_print
       print(
@@ -208,20 +208,20 @@ void main() {
       addTearDown(disk.close);
 
       // A workspace the user has, written by a healthy app.
-      final first = ScaleWorkspace(database: disk);
+      final first = ScaleLayout(database: disk);
       final panes = first.openPanes(3, linesPerPane: 40);
       first.settle();
       final stored = [for (final pane in panes) first.storedScrollback(pane)];
       first.container.dispose();
-      expect(TerminalWorkspaceDao(disk).storedTabCount(), 3);
+      expect(TerminalLayoutDao(disk).storedTabCount(), 3);
 
       // The app restarts on a disk that will not read the workspace back.
-      // `_restoreWorkspace` catches, logs, and comes up with nothing — which
+      // `_restoreLayout` catches, logs, and comes up with nothing — which
       // is exactly the state the refusal exists for, and the state that used
       // to destroy the workspace on the way out.
       disk.failing = 'FROM terminal_tabs ORDER BY ordinal';
       logged.clear();
-      final second = ScaleWorkspace(database: disk);
+      final second = ScaleLayout(database: disk);
       addTearDown(second.container.dispose);
       expect(second.state.tabs, isEmpty);
       expect(
@@ -232,10 +232,10 @@ void main() {
 
       disk.failing = null;
       logged.clear();
-      second.controller.persistWorkspace();
+      second.controller.persistLayout();
 
       expect(
-        TerminalWorkspaceDao(disk).storedTabCount(),
+        TerminalLayoutDao(disk).storedTabCount(),
         3,
         reason: 'the stored workspace must outlive a restore that read nothing',
       );
@@ -245,7 +245,7 @@ void main() {
         reason: 'and every pane keeps the text it had',
       );
       expect(
-        TerminalWorkspaceDao(disk).loadBackup().tabs,
+        TerminalLayoutDao(disk).loadBackup().tabs,
         isEmpty,
         reason:
             'nothing was written, so there was nothing to take a copy of — a '
@@ -268,7 +268,7 @@ void main() {
 
     test('costs one autosave tick one pane, not all of them', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(6, linesPerPane: 40);
       expect(workspace.controller.hasDirtyScrollback, isTrue);
@@ -298,7 +298,7 @@ void main() {
 
     test('and the backlog drains rather than being dropped', () {
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(6, linesPerPane: 40);
       disk.writeDelay = perWrite;
@@ -322,7 +322,7 @@ void main() {
       // behind asks for the 1 s cadence rather than whatever idle tick was
       // armed.
       final disk = DegradedDatabase();
-      final workspace = ScaleWorkspace(database: disk);
+      final workspace = ScaleLayout(database: disk);
       addTearDown(workspace.dispose);
       final panes = workspace.openPanes(3, linesPerPane: 40);
       workspace.settle();

@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -15,7 +15,7 @@ import 'fake_instance.dart';
 /// The owner's report against 1.1.5 was "resuming session still makes ui
 /// laggy". Resume itself had already stopped rebuilding the pane it resumes
 /// into (`resume_cost_test.dart`), so the remaining cost was the save that
-/// immediately follows: `saveWorkspace` was a destructive full replace —
+/// immediately follows: `saveLayout` was a destructive full replace —
 /// `DELETE FROM terminal_tabs;` and then one INSERT per tab and per pane,
 /// each pane carrying its whole scrollback — run on *every* structural change,
 /// through synchronous `package:sqlite3` bindings, on the UI isolate.
@@ -84,16 +84,16 @@ void main() {
       test('at $n tabs, adding a pane writes only that pane and its tab', () {
         final db = _CountingDatabase();
         addTearDown(db.close);
-        final dao = TerminalWorkspaceDao(db);
+        final dao = TerminalLayoutDao(db);
 
         final tabs = workspace(n);
-        dao.saveWorkspace(tabs, activeTabId: 't0');
+        dao.saveLayout(tabs, activeTabId: 't0');
 
         // One tab gains a pane. Everything else is byte-for-byte what was
         // already stored.
         final grown = [...tabs]..[n - 1] = splitTab('t${n - 1}');
         db.reset();
-        dao.saveWorkspace(grown, activeTabId: 't0');
+        dao.saveLayout(grown, activeTabId: 't0');
 
         rowsWritten[n] = db.workspaceWrites;
         expect(
@@ -105,7 +105,7 @@ void main() {
         );
         // The store still says exactly what it was asked to.
         expect(
-          dao.loadWorkspace().tabs.last.panes.map((p) => p.id),
+          dao.loadLayout().tabs.last.panes.map((p) => p.id),
           ['t${n - 1}-p1', 't${n - 1}-p2'],
         );
       });
@@ -125,13 +125,13 @@ void main() {
     test('writes nothing at all', () {
       final db = _CountingDatabase();
       addTearDown(db.close);
-      final dao = TerminalWorkspaceDao(db);
+      final dao = TerminalLayoutDao(db);
       final tabs = workspace(10);
-      dao.saveWorkspace(tabs, activeTabId: 't0');
+      dao.saveLayout(tabs, activeTabId: 't0');
 
       db.reset();
-      dao.saveWorkspace(tabs, activeTabId: 't0');
-      dao.saveWorkspace(tabs, activeTabId: 't0');
+      dao.saveLayout(tabs, activeTabId: 't0');
+      dao.saveLayout(tabs, activeTabId: 't0');
 
       expect(db.workspaceWrites, 0);
     });
@@ -139,11 +139,11 @@ void main() {
     test('is still a save: the store is unchanged, not emptied', () {
       final db = _CountingDatabase();
       addTearDown(db.close);
-      final dao = TerminalWorkspaceDao(db);
-      dao.saveWorkspace(workspace(3), activeTabId: 't1');
-      dao.saveWorkspace(workspace(3), activeTabId: 't1');
+      final dao = TerminalLayoutDao(db);
+      dao.saveLayout(workspace(3), activeTabId: 't1');
+      dao.saveLayout(workspace(3), activeTabId: 't1');
 
-      final loaded = dao.loadWorkspace();
+      final loaded = dao.loadLayout();
       expect(loaded.tabs.map((t) => t.id), ['t0', 't1', 't2']);
       expect(loaded.activeTabId, 't1');
       expect(loaded.tabs.first.panes.single.scrollback, 'some output');
@@ -152,21 +152,21 @@ void main() {
 
   group('what a full replace got for free', () {
     late _CountingDatabase db;
-    late TerminalWorkspaceDao dao;
+    late TerminalLayoutDao dao;
 
     setUp(() {
       db = _CountingDatabase();
-      dao = TerminalWorkspaceDao(db);
+      dao = TerminalLayoutDao(db);
     });
     tearDown(() => db.close());
 
     test('a removed tab is really deleted, and its panes with it', () {
-      dao.saveWorkspace(workspace(3), activeTabId: 't0');
+      dao.saveLayout(workspace(3), activeTabId: 't0');
       final kept = [tab('t0'), tab('t2')];
 
-      dao.saveWorkspace(kept, activeTabId: 't0', userClosed: true);
+      dao.saveLayout(kept, activeTabId: 't0', userClosed: true);
 
-      expect(dao.loadWorkspace().tabs.map((t) => t.id), ['t0', 't2']);
+      expect(dao.loadLayout().tabs.map((t) => t.id), ['t0', 't2']);
       expect(dao.storedTabCount(), 2);
       expect(
         db.query('SELECT id FROM terminal_panes ORDER BY id;').map(
@@ -178,23 +178,23 @@ void main() {
     });
 
     test('a removed pane inside a surviving tab is really deleted', () {
-      dao.saveWorkspace([splitTab('t0')], activeTabId: 't0');
-      dao.saveWorkspace([tab('t0')], activeTabId: 't0', userClosed: true);
+      dao.saveLayout([splitTab('t0')], activeTabId: 't0');
+      dao.saveLayout([tab('t0')], activeTabId: 't0', userClosed: true);
 
-      expect(dao.loadWorkspace().tabs.single.panes.map((p) => p.id), ['t0-p1']);
+      expect(dao.loadLayout().tabs.single.panes.map((p) => p.id), ['t0-p1']);
       expect(db.query('SELECT id FROM terminal_panes;'), hasLength(1));
     });
 
     test('ordinals survive: reordering tabs reorders them on the way back', () {
-      dao.saveWorkspace(workspace(4), activeTabId: 't0');
-      dao.saveWorkspace([
+      dao.saveLayout(workspace(4), activeTabId: 't0');
+      dao.saveLayout([
         tab('t3'),
         tab('t0'),
         tab('t2'),
         tab('t1'),
       ], activeTabId: 't0');
 
-      expect(dao.loadWorkspace().tabs.map((t) => t.id), [
+      expect(dao.loadLayout().tabs.map((t) => t.id), [
         't3',
         't0',
         't2',
@@ -203,14 +203,14 @@ void main() {
     });
 
     test('ordinals survive: closing a tab from the middle closes the gap', () {
-      dao.saveWorkspace(workspace(4), activeTabId: 't0');
-      dao.saveWorkspace([
+      dao.saveLayout(workspace(4), activeTabId: 't0');
+      dao.saveLayout([
         tab('t0'),
         tab('t2'),
         tab('t3'),
       ], activeTabId: 't0', userClosed: true);
 
-      expect(dao.loadWorkspace().tabs.map((t) => t.id), ['t0', 't2', 't3']);
+      expect(dao.loadLayout().tabs.map((t) => t.id), ['t0', 't2', 't3']);
       expect(
         db.query('SELECT ordinal FROM terminal_tabs ORDER BY ordinal;').map(
           (r) => r['ordinal'],
@@ -229,9 +229,9 @@ void main() {
         focusedPaneId: 'a',
         panes: [pane('t0', 'a'), pane('t0', 'b'), pane('t0', 'c')],
       );
-      dao.saveWorkspace([three], activeTabId: 't0');
+      dao.saveLayout([three], activeTabId: 't0');
 
-      dao.saveWorkspace([
+      dao.saveLayout([
         StoredTerminalTab(
           id: 't0',
           layout: PaneLayout.single('a').split('a', SplitAxis.vertical, 'c', 's2'),
@@ -240,7 +240,7 @@ void main() {
         ),
       ], activeTabId: 't0', userClosed: true);
 
-      expect(dao.loadWorkspace().tabs.single.panes.map((p) => p.id), [
+      expect(dao.loadLayout().tabs.single.panes.map((p) => p.id), [
         'a',
         'c',
       ]);
@@ -253,10 +253,10 @@ void main() {
     });
 
     test('a pane that moves between tabs moves, rather than being duplicated', () {
-      dao.saveWorkspace([splitTab('t0')], activeTabId: 't0');
+      dao.saveLayout([splitTab('t0')], activeTabId: 't0');
 
       // What detaching does: the pane keeps its id and gets a tab of its own.
-      dao.saveWorkspace([
+      dao.saveLayout([
         tab('t0'),
         StoredTerminalTab(
           id: 'detached:t0-p2',
@@ -267,7 +267,7 @@ void main() {
         ),
       ], activeTabId: 't0', userClosed: true);
 
-      final loaded = dao.loadWorkspace();
+      final loaded = dao.loadLayout();
       expect(loaded.tabs.single.panes.map((p) => p.id), ['t0-p1']);
       expect(loaded.detached.single.panes.single.id, 't0-p2');
       expect(loaded.detached.single.panes.single.scrollback, 'kept');
@@ -304,10 +304,10 @@ void main() {
 
       // Reached incrementally, the way the app reaches it: a workspace, then
       // the change.
-      dao.saveWorkspace([tab('t0')], activeTabId: 't0');
-      dao.saveWorkspace(rich, activeTabId: 't1');
+      dao.saveLayout([tab('t0')], activeTabId: 't0');
+      dao.saveLayout(rich, activeTabId: 't1');
 
-      final loaded = dao.loadWorkspace();
+      final loaded = dao.loadLayout();
       expect(loaded.activeTabId, 't1');
       expect(loaded.tabs.map((t) => t.id), ['t0', 't1']);
       expect(loaded.tabs.first.layout.panes, ['t0-p1', 't0-p2']);
@@ -322,15 +322,15 @@ void main() {
     test('a dao that never wrote this store still writes it correctly', () {
       // A second dao knows nothing about what the first one wrote, so it must
       // fall back to comparing against the store rather than trusting itself.
-      dao.saveWorkspace(workspace(3), activeTabId: 't0');
-      final fresh = TerminalWorkspaceDao(db);
+      dao.saveLayout(workspace(3), activeTabId: 't0');
+      final fresh = TerminalLayoutDao(db);
 
-      fresh.saveWorkspace([
+      fresh.saveLayout([
         tab('t0'),
         splitTab('t1'),
       ], activeTabId: 't1', userClosed: true);
 
-      final loaded = fresh.loadWorkspace();
+      final loaded = fresh.loadLayout();
       expect(loaded.tabs.map((t) => t.id), ['t0', 't1']);
       expect(loaded.tabs[1].panes.map((p) => p.id), ['t1-p1', 't1-p2']);
       expect(loaded.activeTabId, 't1');
@@ -340,28 +340,28 @@ void main() {
       // The one thing compared from memory rather than from the store is the
       // scrollback text, so the fallback has to be "write it". A dao that has
       // never written this store has no record of anything.
-      dao.saveWorkspace([tab('t0')], activeTabId: 't0');
+      dao.saveLayout([tab('t0')], activeTabId: 't0');
       db.execute(
         "UPDATE terminal_panes SET scrollback = 'stale' WHERE id = 't0-p1';",
       );
 
-      final fresh = TerminalWorkspaceDao(db);
-      fresh.saveWorkspace([tab('t0')], activeTabId: 't0');
+      final fresh = TerminalLayoutDao(db);
+      fresh.saveLayout([tab('t0')], activeTabId: 't0');
 
       expect(
-        fresh.loadWorkspace().tabs.single.panes.single.scrollback,
+        fresh.loadLayout().tabs.single.panes.single.scrollback,
         'some output',
       );
     });
 
     test('a structural save does not rewrite what the autosave just wrote', () {
-      dao.saveWorkspace([tab('t0'), tab('t1')], activeTabId: 't0');
+      dao.saveLayout([tab('t0'), tab('t1')], activeTabId: 't0');
       dao.saveScrollback('t0-p1', 'newer output');
       db.reset();
 
       // The controller carries its cached encoding into the next structural
       // save, and that is exactly what the autosave already stored.
-      dao.saveWorkspace([
+      dao.saveLayout([
         StoredTerminalTab(
           id: 't0',
           layout: PaneLayout.single('t0-p1'),
@@ -373,19 +373,19 @@ void main() {
 
       expect(db.workspaceWrites, 0);
       expect(
-        dao.loadWorkspace().tabs.first.panes.single.scrollback,
+        dao.loadLayout().tabs.first.panes.single.scrollback,
         'newer output',
       );
     });
 
     test('clear forgets what was written, so the next save rewrites it', () {
-      dao.saveWorkspace([tab('t0')], activeTabId: 't0');
+      dao.saveLayout([tab('t0')], activeTabId: 't0');
       dao.clear();
-      expect(dao.loadWorkspace().tabs, isEmpty);
+      expect(dao.loadLayout().tabs, isEmpty);
 
-      dao.saveWorkspace([tab('t0')], activeTabId: 't0');
+      dao.saveLayout([tab('t0')], activeTabId: 't0');
       expect(
-        dao.loadWorkspace().tabs.single.panes.single.scrollback,
+        dao.loadLayout().tabs.single.panes.single.scrollback,
         'some output',
       );
     });
@@ -393,18 +393,18 @@ void main() {
 
   group('the backup tables', () {
     late _CountingDatabase db;
-    late TerminalWorkspaceDao dao;
+    late TerminalLayoutDao dao;
 
     setUp(() {
       db = _CountingDatabase();
-      dao = TerminalWorkspaceDao(db);
+      dao = TerminalLayoutDao(db);
     });
     tearDown(() => db.close());
 
     test('cost nothing on a save that loses nothing', () {
-      dao.saveWorkspace(workspace(10), activeTabId: 't0');
+      dao.saveLayout(workspace(10), activeTabId: 't0');
       db.reset();
-      dao.saveWorkspace([...workspace(10), tab('t10')], activeTabId: 't0');
+      dao.saveLayout([...workspace(10), tab('t10')], activeTabId: 't0');
 
       expect(
         db.backupWrites,
@@ -416,18 +416,18 @@ void main() {
     });
 
     test('are still taken when a save empties a non-empty store', () {
-      dao.saveWorkspace(workspace(3), activeTabId: 't0');
+      dao.saveLayout(workspace(3), activeTabId: 't0');
       db.reset();
-      dao.saveWorkspace(const []);
+      dao.saveLayout(const []);
 
       expect(db.backupWrites, greaterThan(0));
       expect(dao.loadBackup().tabs.map((t) => t.id), ['t0', 't1', 't2']);
-      expect(dao.loadWorkspace().tabs, isEmpty);
+      expect(dao.loadLayout().tabs, isEmpty);
     });
 
     test('are still taken when a save shrinks a workspace nobody closed', () {
-      dao.saveWorkspace(workspace(3), activeTabId: 't0');
-      dao.saveWorkspace([tab('t0')], activeTabId: 't0');
+      dao.saveLayout(workspace(3), activeTabId: 't0');
+      dao.saveLayout([tab('t0')], activeTabId: 't0');
 
       expect(dao.loadBackup().tabs.map((t) => t.id), ['t0', 't1', 't2']);
     });
@@ -444,7 +444,7 @@ void main() {
     restored(int tabs) {
       final db = _CountingDatabase();
       addTearDown(db.close);
-      TerminalWorkspaceDao(db).saveWorkspace(workspace(tabs), activeTabId: 't0');
+      TerminalLayoutDao(db).saveLayout(workspace(tabs), activeTabId: 't0');
 
       final container = fakeTerminalContainer(database: db);
       addTearDown(container.dispose);
@@ -488,7 +488,7 @@ void main() {
       final (:db, :controller, container: _) = restored(50);
       db.reset();
 
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       expect(db.workspaceWrites, 0);
     });
@@ -496,8 +496,8 @@ void main() {
     test('the empty-workspace guard still refuses to write', () {
       final db = _CountingDatabase();
       addTearDown(db.close);
-      final dao = TerminalWorkspaceDao(db);
-      dao.saveWorkspace([
+      final dao = TerminalLayoutDao(db);
+      dao.saveLayout([
         StoredTerminalTab(
           id: 'tab-1',
           layout: PaneLayout.single('pane-1'),
@@ -525,12 +525,12 @@ void main() {
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
 
       db.reset();
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       expect(db.workspaceWrites, 0);
       expect(dao.storedTabCount(), 1);
       expect(
-        dao.loadWorkspace().tabs.single.panes.single.scrollback,
+        dao.loadLayout().tabs.single.panes.single.scrollback,
         'work the user has not finished',
       );
     });
@@ -548,7 +548,7 @@ void main() {
         1,
         reason: 'one tab row deleted; its panes cascade',
       );
-      expect(TerminalWorkspaceDao(db).loadWorkspace().tabs, hasLength(19));
+      expect(TerminalLayoutDao(db).loadLayout().tabs, hasLength(19));
     });
   });
 }

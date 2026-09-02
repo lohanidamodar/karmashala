@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_search.dart';
 
-import 'search_workspace.dart';
+import 'search_layout.dart';
 
 /// What **find** costs, counted rather than timed.
 ///
@@ -30,7 +30,7 @@ import 'search_workspace.dart';
 /// 100 panes.
 void main() {
   test('with cross-pane off, typing never leaves the pane being searched', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 12, linesPerPane: 2500);
     addTearDown(workspace.dispose);
     final focused = workspace.panes.first;
     final focusedLines = workspace.lineCount(focused);
@@ -50,7 +50,7 @@ void main() {
   });
 
   test('cross-pane does not sweep on every keystroke', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 12, linesPerPane: 2500);
     addTearDown(workspace.dispose);
     final focused = workspace.panes.first;
     final focusedLines = workspace.lineCount(focused);
@@ -76,7 +76,7 @@ void main() {
   });
 
   test('a sweep slice reads one pane, bounded by the scan window', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 12, linesPerPane: 2500);
     addTearDown(workspace.dispose);
     final focused = workspace.panes.first;
 
@@ -109,7 +109,7 @@ void main() {
   });
 
   test('the whole sweep is bounded by panes times the window', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 12, linesPerPane: 2500);
     addTearDown(workspace.dispose);
     final focused = workspace.panes.first;
     final focusedLines = workspace.lineCount(focused);
@@ -130,7 +130,7 @@ void main() {
   test('the match budget stops the sweep before it runs out of panes', () {
     // 'pane' is on every line of every pane, which is the pathological query:
     // without a budget this collects 12 x 2 500 matches and allocates them all.
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 12, linesPerPane: 2500);
     addTearDown(workspace.dispose);
     final focused = workspace.panes.first;
 
@@ -155,7 +155,7 @@ void main() {
   });
 
   test('closing the bar cancels a sweep that was still armed', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 12, linesPerPane: 2500);
     addTearDown(workspace.dispose);
 
     workspace.search
@@ -171,7 +171,7 @@ void main() {
   });
 
   test('a pane closed mid-sweep is skipped rather than thrown over', () {
-    final workspace = SearchWorkspace(panes: 4, linesPerPane: 2500);
+    final workspace = SearchLayout(panes: 4, linesPerPane: 2500);
     addTearDown(workspace.dispose);
 
     workspace.search

@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/scrollback_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
@@ -97,7 +97,7 @@ void main() {
 
   test('the SQLite half of a save', () {
     final db = AppDatabase.memory();
-    final dao = TerminalWorkspaceDao(db);
+    final dao = TerminalLayoutDao(db);
     final terminal = fill(PerfCorpus.colorizedLs);
     final encoded = encodeScrollback(terminal);
     dao.saveScrollback('missing-pane', encoded);

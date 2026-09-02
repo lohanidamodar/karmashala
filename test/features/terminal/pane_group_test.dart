@@ -413,7 +413,7 @@ void main() {
         controller.activateTab(tabId);
         controller.splitPane(SplitAxis.horizontal);
         controller.moveTabIntoSlot(guest, hostPane);
-        controller.persistWorkspace();
+        controller.persistLayout();
         container.dispose();
       }
 
@@ -459,7 +459,7 @@ void main() {
             .single;
         controller.activateTab(tabId);
         controller.moveTabIntoSlot(guest, hostPane);
-        controller.persistWorkspace();
+        controller.persistLayout();
         container.dispose();
       }
 

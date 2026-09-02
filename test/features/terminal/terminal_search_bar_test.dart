@@ -5,17 +5,17 @@ import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_search_bar.dart';
 
-import 'search_workspace.dart';
+import 'search_layout.dart';
 
 /// What the find bar actually says, which is the whole point of the two
 /// honesty rules this feature is built on: a pattern that will not compile must
 /// not read as "not found", and a pane's history vanishing behind a full-screen
 /// program must not read as "not there".
 void main() {
-  late SearchWorkspace workspace;
+  late SearchLayout workspace;
 
   setUp(() {
-    workspace = SearchWorkspace(
+    workspace = SearchLayout(
       panes: 2,
       linesPerPane: 3,
       text: (pane, line) => 'pane $pane line $line',

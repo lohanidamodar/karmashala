@@ -48,7 +48,7 @@ void main() {
   /// gets a split beside it that is then closed, has its own tab closed while
   /// it is still running (so it detaches rather than dying), is reopened from
   /// the background list, and is finally ended for good.
-  void cycle(ScaleWorkspace workspace) {
+  void cycle(ScaleLayout workspace) {
     final controller = workspace.controller;
     final pane = workspace.openPane();
     workspace.fill(pane, lines: 60);
@@ -77,7 +77,7 @@ void main() {
   }
 
   /// Everything this gate watches, in one reading.
-  Map<String, Object?> retained(ScaleWorkspace workspace) {
+  Map<String, Object?> retained(ScaleLayout workspace) {
     final telemetry = workspace.controller.persistenceTelemetry;
     return {
       'undisposedPanes': workspace.undisposedPanes,
@@ -100,7 +100,7 @@ void main() {
 
     for (final cycles in scale) {
       test('$cycles times leaves nothing behind', () {
-        final workspace = ScaleWorkspace();
+        final workspace = ScaleLayout();
         addTearDown(workspace.dispose);
 
         for (var i = 0; i < cycles; i++) {
@@ -172,7 +172,7 @@ void main() {
 
     for (final cycles in scale) {
       test('$cycles times returns to the floor it started from', () {
-        final workspace = ScaleWorkspace();
+        final workspace = ScaleLayout();
         addTearDown(workspace.dispose);
         final floor = workspace.openPanes(5, linesPerPane: 60);
         workspace.settle();

@@ -565,7 +565,7 @@ class _StartWorkspace {
       );
     }
     await container.pump();
-    controller.persistWorkspace();
+    controller.persistLayout();
     await container.pump();
   }
 

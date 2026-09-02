@@ -488,7 +488,7 @@ List<String> _closeWith(
   }
   final state = container.read(terminalSessionsControllerProvider);
   final active = state.activeTab?.layout.panes ?? const <String>[];
-  controller.persistWorkspace();
+  controller.persistLayout();
   // Disposing the container is the app quitting: the teardown save is the one
   // that has to record what was still running.
   container.dispose();

@@ -187,7 +187,7 @@ void main() {
     for (var i = 0; i < 300; i++) {
       firstController.instanceFor(paneId)!.terminal.write('claude said $i\r\n');
     }
-    firstController.persistWorkspace();
+    firstController.persistLayout();
     first.dispose();
 
     final container = fakeTerminalContainer(

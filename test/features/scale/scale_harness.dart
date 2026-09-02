@@ -131,8 +131,8 @@ class RecordedSchedule {
 ///
 /// One pane per tab rather than splits: every pane is then addressable, and the
 /// per-tab costs (a stored row, a label, a tier) are all in the measurement.
-class ScaleWorkspace {
-  ScaleWorkspace._(
+class ScaleLayout {
+  ScaleLayout._(
     this.container,
     this.controller,
     this.database,
@@ -141,7 +141,7 @@ class ScaleWorkspace {
     this.instancesByPane,
   );
 
-  factory ScaleWorkspace({AppDatabase? database}) {
+  factory ScaleLayout({AppDatabase? database}) {
     final db = database ?? CountingDatabase();
     final schedule = RecordedSchedule();
     final terminals = <String, CountingTerminal>{};
@@ -187,7 +187,7 @@ class ScaleWorkspace {
         ),
       ],
     );
-    return ScaleWorkspace._(
+    return ScaleLayout._(
       container,
       container.read(terminalSessionsControllerProvider.notifier),
       db,
@@ -263,7 +263,7 @@ class ScaleWorkspace {
   /// keystroke.
   void settle() {
     controller.saveDirtyScrollback(budget: const Duration(minutes: 1));
-    controller.persistWorkspace();
+    controller.persistLayout();
   }
 
   /// What the store currently holds for [paneId] — read back through SQL

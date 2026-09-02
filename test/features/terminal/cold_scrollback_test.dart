@@ -109,7 +109,7 @@ void main() {
 
     // Closing the tab detaches; persisting it is what the next launch reads.
     app.controller.closeTab(first);
-    app.controller.persistWorkspace();
+    app.controller.persistLayout();
     app.container.dispose();
 
     final next = open(database: database);
@@ -135,7 +135,7 @@ void main() {
       app.controller.closeTab(first);
       // Dirty it again the way the autosave tick would find it.
       app.controller.saveDirtyScrollback();
-      app.controller.persistWorkspace();
+      app.controller.persistLayout();
       app.container.dispose();
 
       final next = open(database: database);
@@ -158,7 +158,7 @@ void main() {
     app.controller.openTab(TerminalProfile.commandPrompt);
     final backgroundPane = onlyPaneOf(app.container, background);
     fill(app.controller.instanceFor(backgroundPane)!, 200);
-    app.controller.persistWorkspace();
+    app.controller.persistLayout();
     app.container.dispose();
 
     final next = open(database: database);
@@ -175,7 +175,7 @@ void main() {
 
     // Saving the workspace again round-trips the stored text rather than
     // building the buffer to re-encode it.
-    next.controller.persistWorkspace();
+    next.controller.persistLayout();
     expect(dormant.bufferBuilt, isFalse);
 
     // And it is still there when something does look.
@@ -202,7 +202,7 @@ void main() {
       ),
     );
     fill(app.controller.instanceFor(opened.paneId)!, 200);
-    app.controller.persistWorkspace();
+    app.controller.persistLayout();
     app.container.dispose();
 
     final next = open(database: database);

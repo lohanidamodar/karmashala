@@ -15,7 +15,7 @@ import '../../settings/application/settings_controller.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
-import '../data/terminal_workspace_dao.dart';
+import '../data/terminal_layout_dao.dart';
 import '../domain/agent_pane_launch.dart';
 import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
@@ -304,7 +304,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _disposed = true;
       _autosave.stop();
       if (_processesShutDown) return;
-      persistWorkspace();
+      persistLayout();
       _disposeAll();
     });
     // A rename happens in the sessions feature and never touches a terminal, so
@@ -314,7 +314,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     ref.listen(sessionsRevisionProvider, (_, _) {
       if (!_disposed) _publish();
     });
-    _restoreWorkspace();
+    _restoreLayout();
     _autosave.start();
     return _snapshot();
   }
@@ -334,7 +334,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (_processesShutDown) return;
     _processesShutDown = true;
     _autosave.stop();
-    persistWorkspace();
+    persistLayout();
     await Future.wait(_disposeAll());
   }
 
@@ -1345,7 +1345,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// [_userClosedSinceRestore]. That case is a bug by construction, and the
   /// difference between a bug and a data loss is whether the bug is allowed to
   /// write.
-  void persistWorkspace() => _persist(refreshScrollback: true);
+  void persistLayout() => _persist(refreshScrollback: true);
 
   /// Writes the workspace's **shape** — which tabs exist, in what order, split
   /// how, with which panes — without re-encoding a buffer to get text the
@@ -1365,7 +1365,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// So a structural save writes the encoding each pane *already* has and
   /// leaves the pane dirty. [saveDirtyScrollback] then refreshes it on the next
   /// tick, inside the 8 ms budget that exists for exactly this, and
-  /// [persistWorkspace] flushes the rest on the way out. A pane the store has
+  /// [persistLayout] flushes the rest on the way out. A pane the store has
   /// never seen has no encoding to reuse, so it is encoded here and its text is
   /// never merely assumed.
   ///
@@ -1399,7 +1399,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
           return;
         }
       }
-      dao.saveWorkspace(
+      dao.saveLayout(
         rows,
         activeTabId: _activeTabId,
         userClosed: _userClosedSinceRestore,
@@ -1662,7 +1662,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// than thrown on, because a corrupt row must never make the terminal
   /// unopenable. The worst case is an empty workspace, which is what a first run
   /// looks like anyway.
-  void _restoreWorkspace() {
+  void _restoreLayout() {
     // Whatever the previous life of this controller decided about closing
     // things, this one starts owing the store the workspace it just read.
     _userClosedSinceRestore = false;
@@ -1670,7 +1670,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (dao == null) return;
 
     try {
-      final stored = dao.loadWorkspace();
+      final stored = dao.loadLayout();
       // Which tab counts as "the active tab" has to be decided before any pane
       // is built, and the same way the fallback below decides it: a workspace
       // stored with no active row activates its last tab. Resolved against the
@@ -1811,9 +1811,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   }
 
   /// The workspace DAO, or `null` when no database is wired up.
-  TerminalWorkspaceDao? _dao() {
+  TerminalLayoutDao? _dao() {
     try {
-      return ref.read(terminalWorkspaceDaoProvider);
+      return ref.read(terminalLayoutDaoProvider);
     } catch (_) {
       return null;
     }

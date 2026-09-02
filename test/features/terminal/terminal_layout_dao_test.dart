@@ -1,17 +1,17 @@
 import 'dart:convert';
 
 import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late AppDatabase db;
-  late TerminalWorkspaceDao dao;
+  late TerminalLayoutDao dao;
 
   setUp(() {
     db = AppDatabase.memory();
-    dao = TerminalWorkspaceDao(db);
+    dao = TerminalLayoutDao(db);
   });
   tearDown(() => db.close());
 
@@ -73,13 +73,13 @@ void main() {
     );
 
     test('round-trips both ways', () {
-      dao.saveWorkspace([oneLive(wasLive: true)], activeTabId: 'tab1');
-      expect(dao.loadWorkspace().tabs.single.panes.single.wasLive, isTrue);
+      dao.saveLayout([oneLive(wasLive: true)], activeTabId: 'tab1');
+      expect(dao.loadLayout().tabs.single.panes.single.wasLive, isTrue);
 
       // And back down again — a pane whose process ends must stop claiming to
       // be running, or the next launch would start what nobody left running.
-      dao.saveWorkspace([oneLive(wasLive: false)], activeTabId: 'tab1');
-      expect(dao.loadWorkspace().tabs.single.panes.single.wasLive, isFalse);
+      dao.saveLayout([oneLive(wasLive: false)], activeTabId: 'tab1');
+      expect(dao.loadLayout().tabs.single.panes.single.wasLive, isFalse);
     });
 
     test('a row written before the column existed reads as not running', () {
@@ -112,7 +112,7 @@ void main() {
         ],
       );
       expect(
-        dao.loadWorkspace().tabs.single.panes.single.wasLive,
+        dao.loadLayout().tabs.single.panes.single.wasLive,
         isFalse,
         reason:
             'an upgrade must not spawn a shell per pane for rows that never '
@@ -121,17 +121,17 @@ void main() {
     });
 
     test('the backup copy keeps it, so a recovery restores the same panes', () {
-      dao.saveWorkspace([oneLive(wasLive: true)], activeTabId: 'tab1');
+      dao.saveLayout([oneLive(wasLive: true)], activeTabId: 'tab1');
       // An empty save is what takes the copy.
-      dao.saveWorkspace([], activeTabId: null);
+      dao.saveLayout([], activeTabId: null);
       expect(dao.loadBackup().tabs.single.panes.single.wasLive, isTrue);
     });
   });
 
   test('saves and loads a workspace', () {
-    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveLayout([tab()], activeTabId: 'tab1');
 
-    final loaded = dao.loadWorkspace();
+    final loaded = dao.loadLayout();
     expect(loaded.activeTabId, 'tab1');
     expect(loaded.tabs.single.id, 'tab1');
     expect(loaded.tabs.single.focusedPaneId, 'tab1-p2');
@@ -144,38 +144,38 @@ void main() {
   });
 
   test('an empty database loads an empty workspace', () {
-    final loaded = dao.loadWorkspace();
+    final loaded = dao.loadLayout();
     expect(loaded.tabs, isEmpty);
     expect(loaded.activeTabId, isNull);
   });
 
   test('saving replaces the previous workspace rather than appending', () {
-    dao.saveWorkspace([tab()], activeTabId: 'tab1');
-    dao.saveWorkspace([tab(id: 'tab2')], activeTabId: 'tab2');
-    final loaded = dao.loadWorkspace();
+    dao.saveLayout([tab()], activeTabId: 'tab1');
+    dao.saveLayout([tab(id: 'tab2')], activeTabId: 'tab2');
+    final loaded = dao.loadLayout();
     expect(loaded.tabs.map((t) => t.id), ['tab2']);
     expect(loaded.activeTabId, 'tab2');
   });
 
   test('saveScrollback updates one pane in place', () {
-    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveLayout([tab()], activeTabId: 'tab1');
     dao.saveScrollback('tab1-p1', 'updated');
-    final panes = dao.loadWorkspace().tabs.single.panes;
+    final panes = dao.loadLayout().tabs.single.panes;
     expect(panes.first.scrollback, 'updated');
     expect(panes[1].scrollback, 'two', reason: 'the other pane is untouched');
   });
 
   test('saveScrollback for an unknown pane is a no-op', () {
-    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveLayout([tab()], activeTabId: 'tab1');
     dao.saveScrollback('ghost', 'nothing');
-    expect(dao.loadWorkspace().tabs.single.panes.length, 2);
+    expect(dao.loadLayout().tabs.single.panes.length, 2);
   });
 
   test('clear removes tabs and cascades to their panes', () {
-    dao.saveWorkspace([tab()], activeTabId: 'tab1');
+    dao.saveLayout([tab()], activeTabId: 'tab1');
     dao.clear();
     expect(db.query('SELECT id FROM terminal_panes;'), isEmpty);
-    expect(dao.loadWorkspace().tabs, isEmpty);
+    expect(dao.loadLayout().tabs, isEmpty);
   });
 
   test('a tab with unparseable layout json is skipped, not thrown on', () {
@@ -184,7 +184,7 @@ void main() {
       'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
       ['bad', 0, '{not json', null, 1, '2026-01-01T00:00:00.000Z'],
     );
-    expect(dao.loadWorkspace().tabs, isEmpty);
+    expect(dao.loadLayout().tabs, isEmpty);
   });
 
   test('a tab whose layout is valid json but not a layout is skipped', () {
@@ -193,22 +193,22 @@ void main() {
       'is_active, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
       ['bad', 0, '{"t":"split"}', null, 1, '2026-01-01T00:00:00.000Z'],
     );
-    expect(dao.loadWorkspace().tabs, isEmpty);
+    expect(dao.loadLayout().tabs, isEmpty);
   });
 
   test('tabs and panes come back in the order they were saved', () {
-    dao.saveWorkspace([
+    dao.saveLayout([
       tab(id: 'a'),
       tab(id: 'b'),
       tab(id: 'c'),
     ], activeTabId: 'b');
-    final loaded = dao.loadWorkspace();
+    final loaded = dao.loadLayout();
     expect(loaded.tabs.map((t) => t.id), ['a', 'b', 'c']);
     expect(loaded.tabs.first.panes.map((p) => p.id), ['a-p1', 'a-p2']);
   });
 
   test('an active tab id that no longer exists comes back as null', () {
-    dao.saveWorkspace([tab()], activeTabId: 'gone');
-    expect(dao.loadWorkspace().activeTabId, isNull);
+    dao.saveLayout([tab()], activeTabId: 'gone');
+    expect(dao.loadLayout().activeTabId, isNull);
   });
 }

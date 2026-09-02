@@ -82,7 +82,7 @@ void main() {
 
     for (final panes in scale) {
       test('of $panes panes costs nothing over an hour', () {
-        final workspace = ScaleWorkspace();
+        final workspace = ScaleLayout();
         addTearDown(workspace.dispose);
         workspace.openPanes(panes);
         workspace.settle();
@@ -176,7 +176,7 @@ void main() {
 
     for (final panes in scale) {
       test('over $panes panes reads no database', () {
-        final workspace = ScaleWorkspace();
+        final workspace = ScaleLayout();
         addTearDown(workspace.dispose);
         workspace.openPanes(panes);
         workspace.settle();

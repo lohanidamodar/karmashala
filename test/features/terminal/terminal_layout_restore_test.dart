@@ -46,7 +46,7 @@ void main() {
         TerminalProfile.commandPrompt,
       )!;
       controller.instanceFor(second)!.terminal.write('hello from the past\r\n');
-      controller.persistWorkspace();
+      controller.persistLayout();
       first.dispose();
 
       // With the launch restart off, which is the shape this test is about:
@@ -112,7 +112,7 @@ void main() {
           SplitAxis.horizontal,
           TerminalProfile.commandPrompt,
         );
-        controller.persistWorkspace();
+        controller.persistLayout();
         first.dispose();
 
         // Corrupt one pane's profile so it cannot be rebuilt.
@@ -143,7 +143,7 @@ void main() {
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
       // Neither restoring nor persisting may throw when there is no database.
       controller.openTab(TerminalProfile.powerShell);
-      controller.persistWorkspace();
+      controller.persistLayout();
       expect(container.read(terminalSessionsControllerProvider).tabs.length, 1);
     });
 
@@ -169,13 +169,13 @@ void main() {
               .single,
         )!,
       );
-      controller.persistWorkspace();
+      controller.persistLayout();
       expect(db.query('SELECT id FROM terminal_tabs;'), isNotEmpty);
 
       // Closing the tab detaches the session, so it is still stored — as a
       // background session rather than a tab.
       controller.closeTab(tabId);
-      controller.persistWorkspace();
+      controller.persistLayout();
       expect(
         db.query('SELECT detached FROM terminal_tabs;').single['detached'],
         1,
@@ -206,7 +206,7 @@ void main() {
         SplitAxis.horizontal,
         TerminalProfile.commandPrompt,
       )!;
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       controller.instanceFor(busy)!.terminal.write('new output\r\n');
       final written = controller.saveDirtyScrollback();
