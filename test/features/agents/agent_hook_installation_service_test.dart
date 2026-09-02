@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_reachability.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
@@ -14,6 +15,7 @@ import 'package:karmashala/src/features/environments/domain/environment_kind.dar
 import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:logging/logging.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -627,6 +629,55 @@ void main() {
         reason: 'the script is a constant too, and stays',
       );
     });
+  });
+
+  test('no token reaches a log line', () async {
+    // The sweep logs an agent id, an environment id and a reason, and it has to
+    // keep doing exactly that. The **address** is deliberately in there — the
+    // skip reason has to name the door that did not answer, and a test above
+    // asserts it — but the token never may be, and the token is now the only
+    // thing this feature holds that a diagnostic could not honestly print.
+    //
+    // The unreachable branch is the one exercised on purpose: it is the path
+    // that builds a message out of the endpoint, so it is where a future
+    // `'$endpoint'` would land first.
+    final records = <LogRecord>[];
+    AppLogger.initialize(level: Level.ALL, onRecord: records.add);
+    addTearDown(AppLogger.initialize);
+    const secret = AgentHookEndpoint(
+      port: 4242,
+      token: 'S3CRET-hook-token',
+      wslHost: '172.18.240.1',
+    );
+    final wsl = wslEnv();
+    ExecutionEnvironmentDao(db).upsert(wsl);
+    final service = containerWith(
+      _StubLocator([
+        CliStore(
+          environmentId: wsl.id,
+          homesByAgentId: {'claudeCode': claudeHome.path},
+        ),
+      ]),
+      doorAnswers: false,
+    ).read(agentHookInstallationServiceProvider);
+
+    await service.installAll(secret);
+    await service.retireEndpoints();
+    await service.uninstallAll();
+
+    expect(records, isNotEmpty, reason: 'otherwise this proves nothing');
+    expect(
+      records.map((r) => r.message),
+      contains(contains('172.18.240.1:4242')),
+      reason: 'the address is the part that has to be said out loud',
+    );
+    for (final record in records) {
+      expect(
+        '${record.message} ${record.error}',
+        isNot(contains(secret.token)),
+        reason: record.message,
+      );
+    }
   });
 
   test('one unparseable config does not stop or corrupt the others', () async {
