@@ -58,6 +58,7 @@ Future<void> _pump(
   FakeCommandRunner? runner,
   List<IosSimulator> simulators = const [],
   bool simulatorBackend = false,
+  List<String> slimmingArguments = const [],
 }) async {
   tester.view
     ..physicalSize = size
@@ -72,6 +73,11 @@ Future<void> _pump(
             FakeCommandRunnerFactory(fallback: runner),
           ),
         androidSdkProvider.overrideWith((ref) async => sdk),
+        // The emulator argv and the post-boot slimming both come from saved
+        // settings, which would drag a database into a widget test. Overridden
+        // here so these cases stay about the pane.
+        androidEmulatorArgumentsProvider.overrideWithValue(slimmingArguments),
+        androidSlimmingServiceProvider.overrideWithValue(null),
         devicesProvider.overrideWith((ref) async => devices),
         avdsProvider.overrideWith((ref) async => avds),
         deviceScreenSizeProvider.overrideWith(
@@ -716,6 +722,29 @@ void main() {
         'Pixel_8_Pro',
         '-no-window',
         '-no-boot-anim',
+      ]);
+    });
+
+    testWidgets('the slimming flags reach the emulator', (tester) async {
+      final runner = bootingRunner();
+      await _pump(
+        tester,
+        sdk: _sdk(),
+        devices: const [],
+        avds: const [Avd(name: 'Pixel_8_Pro')],
+        runner: runner,
+        slimmingArguments: const ['-no-audio', '-gpu', 'host'],
+      );
+      await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
+      await settle(tester);
+      expect(runner.startRequests.single.arguments, [
+        '-avd',
+        'Pixel_8_Pro',
+        '-no-window',
+        '-no-boot-anim',
+        '-no-audio',
+        '-gpu',
+        'host',
       ]);
     });
 
