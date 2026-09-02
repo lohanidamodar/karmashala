@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
-import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/session_media_providers.dart';
 import 'session_media_list.dart';
@@ -27,8 +27,9 @@ class SessionMediaPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sessionId = ref.watch(mediaPanelSessionIdProvider);
     if (sessionId == null) {
-      return const _Note(
-        text: 'Open a session to see the pictures it has been shown.',
+      return const PanePlaceholder(
+        message: 'Open a session to see the pictures it has been shown.',
+        icon: AppIcons.image,
       );
     }
 
@@ -52,40 +53,9 @@ class SessionMediaPanel extends ConsumerWidget {
       // The stream is written not to fail, but a surface that shows a red box
       // where a list of pictures should be is worse than one that says what
       // happened.
-      error: (error, _) => _Note(text: 'Could not read this session: $error'),
-    );
-  }
-}
-
-/// A quiet line, in place of the list.
-class _Note extends StatelessWidget {
-  const _Note({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.image,
-              size: 28,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+      error: (error, _) => PanePlaceholder(
+        message: 'Could not read this session: $error',
+        icon: AppIcons.image,
       ),
     );
   }

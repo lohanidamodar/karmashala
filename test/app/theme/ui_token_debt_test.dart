@@ -101,9 +101,13 @@ void main() {
     // The debt set is a ratchet, not an amnesty: the files named here carried
     // a literal size before the rule existed, no new file may join, and one
     // that gets cleaned up must be struck off (the loop below enforces it).
-    const debt = {
-      'lib/src/features/git/presentation/changes_view.dart',
-    };
+    //
+    // It is **empty**: `changes_view.dart` was the last entry and its one
+    // `TextStyle(fontFamily: kMonoFamily, fontSize: 12)` is now
+    // `MonoStyles.body`. Empty means the sweep below covers every file under
+    // `lib/` outside the theme layer — not that it covers nothing, which the
+    // liveness check underneath proves.
+    const debt = <String>{};
     // A literal size only: `fontSize: someVariable` is a value that came from
     // somewhere accountable (a setting, a theme style) and is allowed.
     final pattern = RegExp(r'fontSize:\s*[0-9]');
@@ -115,6 +119,15 @@ void main() {
       ),
       isEmpty,
       reason: 'use a theme text style or MonoStyles instead of a literal size',
+    );
+    // The theme layer is where a size may be named, so it is also the proof
+    // that the pattern is still finding sizes at all. Without this an empty
+    // debt set and a broken matcher look identical from the outside.
+    expect(
+      hits(pattern).where((h) => h.startsWith('lib/src/app/theme/')),
+      isNotEmpty,
+      reason: 'the fontSize sweep found nothing anywhere — it has stopped '
+          'guarding rather than been satisfied',
     );
     final remaining = hits(pattern).map((h) => h.split(':').first).toSet();
     for (final path in debt) {
@@ -133,6 +146,10 @@ void main() {
     expect(RegExp(r'(?<![A-Za-z])Icons\.').hasMatch(source), isTrue);
     expect(RegExp(r'(?<![A-Za-z])Colors\.teal').hasMatch(source), isTrue);
     expect(RegExp(r'\.shade\d+').hasMatch(source), isTrue);
+    expect(
+      RegExp(r'fontSize:\s*[0-9]').hasMatch('TextStyle(fontSize: 12)'),
+      isTrue,
+    );
     // And that the exclusions really exclude.
     expect(
       RegExp(r'(?<![A-Za-z])Icons\.').hasMatch('AppIcons.refresh'),
@@ -140,6 +157,10 @@ void main() {
     );
     expect(
       RegExp(r'(?<![A-Za-z])Colors\.').hasMatch('SemanticColors.of(context)'),
+      isFalse,
+    );
+    expect(
+      RegExp(r'fontSize:\s*[0-9]').hasMatch('fontSize: settings.textScale'),
       isFalse,
     );
   });

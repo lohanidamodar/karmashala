@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_dialog.dart';
 import '../../git/presentation/remote_link.dart';
 import '../application/github_providers.dart';
 import '../domain/github_repo.dart';
@@ -14,7 +17,6 @@ class GitHubView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final repo = ref.watch(githubRepositoryProvider);
     final prs = ref.watch(githubPullRequestsProvider);
     final issues = ref.watch(githubIssuesProvider);
@@ -22,26 +24,22 @@ class GitHubView extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text('GitHub', style: theme.textTheme.titleSmall),
-              ),
-              IconButton(
-                tooltip: 'Refresh',
-                icon: const Icon(AppIcons.arrowsClockwise, size: 18),
-                onPressed: () {
-                  ref.invalidate(githubRepositoryProvider);
-                  ref.invalidate(githubPullRequestsProvider);
-                  ref.invalidate(githubIssuesProvider);
-                },
-              ),
-            ],
-          ),
+        PaneHeader(
+          icon: AppIcons.gitMerge,
+          title: 'GitHub',
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(AppIcons.arrowsClockwise),
+              onPressed: () {
+                ref.invalidate(githubRepositoryProvider);
+                ref.invalidate(githubPullRequestsProvider);
+                ref.invalidate(githubIssuesProvider);
+              },
+            ),
+          ],
         ),
-        const Divider(height: 1),
         Expanded(
           child: ListView(
             children: [
@@ -52,7 +50,7 @@ class GitHubView extends ConsumerWidget {
                 empty: 'No open pull requests.',
                 itemBuilder: (pr) => ListTile(
                   dense: true,
-                  leading: const Icon(AppIcons.gitMerge, size: 16),
+                  leading: const Icon(AppIcons.gitMerge, size: Chrome.icon),
                   // The number is the link, and `gh` gave us the URL rather
                   // than us rebuilding it: a URL the server named cannot be
                   // wrong about its own host.
@@ -75,7 +73,7 @@ class GitHubView extends ConsumerWidget {
                 empty: 'No open issues.',
                 itemBuilder: (issue) => ListTile(
                   dense: true,
-                  leading: const Icon(AppIcons.target, size: 16),
+                  leading: const Icon(AppIcons.target, size: Chrome.icon),
                   title: Text('#${issue.number} ${issue.title}'),
                   subtitle: Text(issue.state),
                 ),
@@ -105,7 +103,7 @@ class _RepoHeader extends StatelessWidget {
       if (repo.defaultBranch != null) 'default: ${repo.defaultBranch}',
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -113,10 +111,10 @@ class _RepoHeader extends StatelessWidget {
             children: [
               Icon(
                 AppIcons.gitBranch,
-                size: 15,
+                size: Chrome.icon,
                 color: theme.colorScheme.primary,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: Insets.sm),
               Expanded(
                 child: RemoteLink(
                   text: repo.nameWithOwner,
@@ -128,7 +126,7 @@ class _RepoHeader extends StatelessWidget {
             ],
           ),
           if (repo.description != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: Insets.xs),
             Text(
               repo.description!,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -158,12 +156,22 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 6),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(label, style: theme.textTheme.labelLarge),
+          Icon(icon, size: Chrome.icon, color: theme.colorScheme.primary),
+          const SizedBox(width: Insets.sm),
+          // `labelSmall`, like every other section header in the app: this one
+          // was `labelLarge` and read as a second title under the pane's own.
+          // Expanded because the pane is 240px wide and the scaler is not.
+          Expanded(
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
         ],
       ),
     );
@@ -185,21 +193,15 @@ class _AsyncList<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     return value.when(
       loading: () => const Padding(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.all(Insets.lg),
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          '$e',
-          style: TextStyle(color: Theme.of(context).colorScheme.error),
-        ),
+        padding: const EdgeInsets.all(Insets.md),
+        child: DesktopErrorBanner('$e'),
       ),
       data: (items) => items.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(empty),
-            )
+          ? PanePlaceholder(message: empty)
           : Column(children: [for (final item in items) itemBuilder(item)]),
     );
   }

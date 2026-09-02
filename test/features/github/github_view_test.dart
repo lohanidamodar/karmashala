@@ -34,8 +34,10 @@ void main() {
 
     expect(find.text('#7 Add feature'), findsOneWidget);
     expect(find.text('#3 Fix bug'), findsOneWidget);
-    expect(find.text('Pull requests'), findsOneWidget);
-    expect(find.text('Issues'), findsOneWidget);
+    // Section headers are the house eyebrow — `labelSmall`, uppercase — like
+    // the quick-open palette's, rather than a second title under the pane's.
+    expect(find.text('PULL REQUESTS'), findsOneWidget);
+    expect(find.text('ISSUES'), findsOneWidget);
   });
 
   testWidgets('surfaces a gh error', (tester) async {

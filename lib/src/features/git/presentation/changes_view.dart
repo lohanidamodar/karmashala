@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_dialog.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/diff_annotations.dart';
@@ -51,125 +53,108 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Insets.md,
-            Insets.xs,
-            4,
-            Insets.xs,
-          ),
-          child: Row(
-            children: [
-              // Every part of the header line is flexible, so a long branch
-              // name in a narrow panel ellipsises rather than overflowing —
-              // this row sits in a side panel that can be dragged to 250px.
-              Expanded(
-                child: Row(
-                  children: [
+        PaneHeader(
+          icon: AppIcons.gitDiff,
+          title: 'Changes',
+          actions: [
+            // Flexible, so a long branch name in a narrow panel ellipsises
+            // rather than overflowing — this header sits in a side panel that
+            // can be dragged down to 240px.
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (delivery?.branch case final branch?) ...[
+                    const SizedBox(width: Insets.sm),
                     Flexible(
-                      child: Text(
-                        'Changes',
+                      child: RemoteLink(
+                        text: branch,
+                        url: delivery!.remote?.branchUrl(branch),
                         style: theme.textTheme.labelSmall,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (delivery?.branch case final branch?) ...[
-                      const SizedBox(width: Insets.sm),
-                      Flexible(
-                        child: RemoteLink(
-                          text: branch,
-                          url: delivery!.remote?.branchUrl(branch),
-                          style: theme.textTheme.labelSmall,
-                        ),
-                      ),
-                    ],
-                    if (head != null) ...[
-                      const SizedBox(width: Insets.sm),
-                      Flexible(
-                        child: RemoteLink(
-                          text: shortSha(head.sha),
-                          // Drawn plainly when there is no remote — a commit
-                          // without one is still a commit.
-                          url: delivery?.remote?.commitUrl(head.sha),
-                          style: theme.textTheme.labelSmall,
-                          tooltip: head.subject,
-                        ),
-                      ),
-                    ],
-                    if (delivery?.pullRequest case final pr?) ...[
-                      const SizedBox(width: Insets.sm),
-                      Flexible(
-                        child: RemoteLink(
-                          text: '#${pr.number}',
-                          url: pr.url,
-                          style: theme.textTheme.labelSmall,
-                          tooltip: pr.title.isEmpty ? pr.url : pr.title,
-                          icon: true,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                  if (head != null) ...[
+                    const SizedBox(width: Insets.sm),
+                    Flexible(
+                      child: RemoteLink(
+                        text: shortSha(head.sha),
+                        // Drawn plainly when there is no remote — a commit
+                        // without one is still a commit.
+                        url: delivery?.remote?.commitUrl(head.sha),
+                        style: theme.textTheme.labelSmall,
+                        tooltip: head.subject,
+                      ),
+                    ),
+                  ],
+                  if (delivery?.pullRequest case final pr?) ...[
+                    const SizedBox(width: Insets.sm),
+                    Flexible(
+                      child: RemoteLink(
+                        text: '#${pr.number}',
+                        url: pr.url,
+                        style: theme.textTheme.labelSmall,
+                        tooltip: pr.title.isEmpty ? pr.url : pr.title,
+                        icon: true,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              changes.maybeWhen(
-                data: (files) => files.isEmpty
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Text(
-                          '${files.length}',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+            ),
+            changes.maybeWhen(
+              data: (files) => files.isEmpty
+                  ? const SizedBox.shrink()
+                  : Padding(
+                      padding: const EdgeInsets.only(right: Insets.xs),
+                      child: Text(
+                        '${files.length}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                orElse: () => const SizedBox.shrink(),
-              ),
+                    ),
+              orElse: () => const SizedBox.shrink(),
+            ),
+            IconButton(
+              tooltip: 'Refresh',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
+              onPressed: () => ref.invalidate(repositoryChangesProvider),
+            ),
+            if (annotations.isNotEmpty)
               IconButton(
-                tooltip: 'Refresh',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(AppIcons.arrowsClockwise, size: 16),
-                onPressed: () => ref.invalidate(repositoryChangesProvider),
-              ),
-              if (annotations.isNotEmpty)
-                IconButton(
-                  tooltip: sessionId == null
-                      ? 'Select a session to send ${annotations.length} review comments'
-                      : 'Send ${annotations.length} review comments to agent',
-                  icon: Badge(
-                    label: Text('${annotations.length}'),
-                    child: const Icon(AppIcons.chatCircleDots, size: 16),
-                  ),
-                  onPressed: sessionId == null || repositoryId == null
-                      ? null
-                      : () async {
-                          await ref
-                              .read(sessionActionsProvider)
-                              .continueSession(
-                                sessionId,
-                                buildDiffFeedbackPrompt(annotations),
-                              );
-                          ref
-                              .read(diffAnnotationsProvider.notifier)
-                              .clearRepository(repositoryId);
-                        },
+                tooltip: sessionId == null
+                    ? 'Select a session to send ${annotations.length} review comments'
+                    : 'Send ${annotations.length} review comments to agent',
+                icon: Badge(
+                  label: Text('${annotations.length}'),
+                  child: const Icon(AppIcons.chatCircleDots, size: Chrome.icon),
                 ),
-            ],
-          ),
+                onPressed: sessionId == null || repositoryId == null
+                    ? null
+                    : () async {
+                        await ref
+                            .read(sessionActionsProvider)
+                            .continueSession(
+                              sessionId,
+                              buildDiffFeedbackPrompt(annotations),
+                            );
+                        ref
+                            .read(diffAnnotationsProvider.notifier)
+                            .clearRepository(repositoryId);
+                      },
+              ),
+          ],
         ),
-        const Divider(height: 1),
         Expanded(
           child: changes.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => _ErrorBox(message: '$e'),
             data: (files) => files.isEmpty
-                ? Center(
-                    child: Text(
-                      'No working-tree changes.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                ? const PanePlaceholder(
+                    message: 'No working-tree changes.',
+                    icon: AppIcons.gitDiff,
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(vertical: Insets.xs),
@@ -225,17 +210,17 @@ class _ChangedFileSection extends ConsumerWidget {
         InkWell(
           onTap: onToggle,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+            padding: const EdgeInsets.fromLTRB(Insets.xs, 2, Insets.xs, 2),
             child: Row(
               children: [
                 Icon(
                   expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                  size: 16,
+                  size: Chrome.icon,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 Icon(
                   _iconFor(file.type),
-                  size: 14,
+                  size: Chrome.iconAction,
                   color: _colorFor(file.type, context),
                 ),
                 const SizedBox(width: Insets.xs),
@@ -244,16 +229,13 @@ class _ChangedFileSection extends ConsumerWidget {
                     file.path,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: kMonoFamily,
-                      fontSize: 12,
-                    ),
+                    style: MonoStyles.body,
                   ),
                 ),
                 IconButton(
                   tooltip: 'Open full screen',
                   visualDensity: VisualDensity.compact,
-                  iconSize: 14,
+                  iconSize: Chrome.iconAction,
                   constraints: const BoxConstraints(
                     minWidth: 26,
                     minHeight: 26,
@@ -343,7 +325,6 @@ class _DiffFullscreenDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Dialog(
-      insetPadding: const EdgeInsets.all(32),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1200, maxHeight: 900),
         child: Column(
@@ -517,24 +498,20 @@ class _DiffLineTile extends ConsumerWidget {
   }
 }
 
+/// The house error box, hung at the top of whatever pane it fills rather than
+/// stretched down it.
 class _ErrorBox extends StatelessWidget {
   const _ErrorBox({required this.message});
   final String message;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: scheme.error),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topCenter,
+    child: Padding(
+      padding: const EdgeInsets.all(Insets.md),
+      child: DesktopErrorBanner(message),
+    ),
+  );
 }
 
 IconData _iconFor(FileChangeType type) => switch (type) {
