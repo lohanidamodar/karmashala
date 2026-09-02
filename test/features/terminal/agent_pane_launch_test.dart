@@ -159,7 +159,14 @@ void main() {
       );
       final env = agentPtyLaunchFor(launch).environment;
       expect(env[kSessionIdEnvironmentVariable], 'sess-1');
-      expect(env['WSLENV'], '$kSessionIdEnvironmentVariable/u');
+      // Both stamped variables cross, and `WSLENV` names both: the wrapper
+      // builds it from whatever keys it was given, which is what makes adding
+      // the port base a one-line change rather than a plumbing job.
+      expect(
+        env['WSLENV'],
+        '$kSessionIdEnvironmentVariable/u:'
+            '$kSessionPortBaseEnvironmentVariable/u',
+      );
     });
 
     test('a session with no id sets no variables at all', () {
@@ -247,9 +254,12 @@ void main() {
         [pty.executable, ...pty.arguments].where((a) => a.contains('wsl.exe')),
         isEmpty,
       );
-      // No WSLENV either: nothing is crossing a boundary, so the variable is
+      // No WSLENV either: nothing is crossing a boundary, so the variables are
       // simply inherited.
-      expect(pty.environment, {kSessionIdEnvironmentVariable: 'sess-1'});
+      expect(pty.environment, {
+        kSessionIdEnvironmentVariable: 'sess-1',
+        kSessionPortBaseEnvironmentVariable: '${sessionPortBase('sess-1')}',
+      });
     });
 
     test('a PowerShell destination uses the PowerShell form, not cmd.exe', () {
@@ -833,6 +843,53 @@ void main() {
         ),
         ['--permission-mode', 'manual'],
       );
+    });
+  });
+
+  group('sessionPortBase', () {
+    /// cmux derives every shared resource in its own stack from one seed per
+    /// workspace — `CMUX_PORT` gives the dev port, Postgres at `+10000`, the
+    /// test database at `+30000`, the container and network names — because a
+    /// worktree isolates files and nothing else. This is the small honest
+    /// version of that, and what these tests hold it to is that it is
+    /// *deterministic* and *in range*: it is a namespace, not a lock, and
+    /// nothing here reserves anything.
+    test('is stable for one id, so a resumed session keeps its number', () {
+      expect(sessionPortBase('s-1'), sessionPortBase('s-1'));
+    });
+
+    test('is inside the window below both ephemeral ranges, and aligned', () {
+      // Linux hands out ephemeral ports from 32768, Windows from 49152. A
+      // derived port must never be one the OS may already have given away.
+      for (final id in [
+        's-1',
+        's-2',
+        '',
+        'a-very-long-session-id-0123456789abcdef',
+        '01a05160-2b15-7100-b99a-e38509bb4747',
+      ]) {
+        final base = sessionPortBase(id);
+        expect(base, greaterThanOrEqualTo(kSessionPortBaseFloor));
+        expect(base, lessThan(32768));
+        expect(base % kSessionPortsPerSession, 0);
+      }
+    });
+
+    test('spreads different ids across the slots', () {
+      // Not a promise of uniqueness — see the doc comment, which puts ten
+      // concurrent sessions at roughly a 3.5% chance of some collision. What is
+      // asserted is that the derivation is not degenerate: a hundred ids must
+      // not pile onto a handful of bases.
+      final bases = {for (var i = 0; i < 100; i++) sessionPortBase('s-$i')};
+      expect(bases.length, greaterThan(90));
+    });
+
+    test('does not depend on String.hashCode, which Dart does not promise is '
+        'stable', () {
+      // The value is written down. If the derivation ever changes, every
+      // repository script keyed to a session's port changes under it, so the
+      // change has to be deliberate enough to edit this line.
+      expect(sessionPortBase('sess-1'), 29770);
     });
   });
 }
