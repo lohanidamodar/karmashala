@@ -8,6 +8,7 @@ import '../../explorer/presentation/session_card.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
 import 'companion_chrome.dart';
+import 'companion_states.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The saved desktops, on the settings screen: which one this phone is
@@ -16,54 +17,54 @@ import 'pairing/pairing_screen.dart';
 /// It lives in Settings because that is where "which machine am I paired
 /// with" already lived; the Sessions tab gets the compact switcher instead,
 /// so choosing a desktop never costs a trip through a tab.
+///
+/// **The section's frame is drawn in every state**, and only the list slot
+/// answers. It used to collapse to nothing until the list arrived, which
+/// conflated two different situations — "this phone has no desktops" and
+/// "this phone has not looked yet" — and took "Add a desktop" away with it,
+/// so a read that never answered left the settings screen with no way to pair
+/// and nothing saying why.
+///
+/// No skeleton, and no spinner. The gateway contract seeds
+/// `connectionsStates` with the value it already holds and emits it on
+/// listen, so the unknown window is one microtask on both implementations: a
+/// skeleton would render for a frame at most and inform nobody, and a delayed
+/// indicator would be machinery for a latency the contract does not allow.
+/// What the state costs instead is a sentence — the empty one is only said
+/// once the phone knows it is true.
 class ConnectionsSection extends ConsumerWidget {
   const ConnectionsSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    final connections = ref.watch(companionConnectionsProvider).asData?.value;
+    final connections = ref.watch(companionConnectionsProvider);
     final switching = ref.watch(companionSwitchingProvider);
-
-    if (connections == null) {
-      return const SizedBox.shrink();
-    }
+    final saved = connections.asData?.value;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CompanionSectionHeader(
-          connections.length > 1 ? 'DESKTOPS' : 'PAIRED DESKTOP',
+          // The plural until the count is known: a heading is not the place
+          // to guess how many desktops this phone has.
+          (saved?.length ?? 2) > 1 ? 'DESKTOPS' : 'PAIRED DESKTOP',
         ),
-        if (connections.isEmpty)
-          Text(
-            'No desktops saved on this phone yet.',
-            style: density.muted(theme),
-          )
-        else
-          Container(
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(
-                density.isTouch ? Radii.lg : Radii.sm,
-              ),
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              children: [
-                for (final connection in connections)
-                  _ConnectionRow(
-                    connection: connection,
-                    busy: switching == connection.hostId,
-                    anyBusy: switching != null,
-                    last: connection == connections.last,
-                  ),
-              ],
-            ),
+        companionAsync(
+          connections,
+          // Silence, not a placeholder. See the class comment.
+          loading: () => const SizedBox.shrink(),
+          // The stream carries no errors today, but a section that answers
+          // "nothing" to one would be the same lie the loading state was.
+          error: (error) => Text(
+            companionErrorText(error),
+            style: density
+                .muted(theme)
+                ?.copyWith(color: theme.colorScheme.error),
           ),
+          data: (list) => _Saved(list: list, switching: switching),
+        ),
         const SizedBox(height: Insets.sm),
         Align(
           alignment: Alignment.centerLeft,
@@ -80,6 +81,51 @@ class ConnectionsSection extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The list slot once the phone knows what it has: the saved desktops, or the
+/// sentence saying there are none.
+class _Saved extends StatelessWidget {
+  const _Saved({required this.list, required this.switching});
+
+  final List<CompanionConnection> list;
+
+  /// The host id a switch is in flight for, or null.
+  final String? switching;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    if (list.isEmpty) {
+      return Text(
+        'No desktops saved on this phone yet.',
+        style: density.muted(theme),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(
+          density.isTouch ? Radii.lg : Radii.sm,
+        ),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          for (final connection in list)
+            _ConnectionRow(
+              connection: connection,
+              busy: switching == connection.hostId,
+              anyBusy: switching != null,
+              last: connection == list.last,
+            ),
+        ],
+      ),
     );
   }
 }

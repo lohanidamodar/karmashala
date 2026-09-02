@@ -32,6 +32,30 @@ class _WedgedGateway extends FakeCompanionGateway {
       throw TimeoutException('the keystore never answered');
 }
 
+/// A gateway that does **not** honour the seeding the contract asks for: its
+/// connections stream stays silent until a test says otherwise.
+///
+/// The two real gateways seed the stream and emit on listen, so the unknown
+/// window is one microtask and no user ever sees it. That is exactly why it
+/// needs a test: the section must not fill the silence with a claim, and it
+/// must not take its own action away while it waits.
+class _SilentConnections extends FakeCompanionGateway {
+  _SilentConnections()
+    : super(pairing: CompanionPairing(capabilities: CapabilitySet.all));
+
+  final _connectionsController =
+      StreamController<List<CompanionConnection>>.broadcast();
+
+  @override
+  Stream<List<CompanionConnection>> get connectionsStates =>
+      _connectionsController.stream;
+
+  void deliver(List<CompanionConnection> saved) =>
+      _connectionsController.add(saved);
+
+  void fail(Object error) => _connectionsController.addError(error);
+}
+
 void main() {
   final studio = fakeHostId(1);
   final laptop = fakeHostId(2);
@@ -411,6 +435,84 @@ void main() {
       isNull,
       reason: 'and the switch is over, so the next tap is not swallowed',
     );
+  });
+
+  group('before the phone knows what it has saved', () {
+    testWidgets('says nothing about how many, and still offers the way in', (
+      tester,
+    ) async {
+      await pumpPhone(
+        tester,
+        gateway: _SilentConnections(),
+        home: const ConnectionsSection(),
+      );
+
+      expect(
+        find.textContaining('No desktops saved'),
+        findsNothing,
+        reason: 'an unanswered read is not the same fact as an empty phone',
+      );
+      expect(
+        find.text('Add a desktop'),
+        findsOneWidget,
+        reason: 'the section used to collapse, taking its one verb with it',
+      );
+      expect(find.text('DESKTOPS'), findsOneWidget);
+    });
+
+    testWidgets('and says it the moment an empty list arrives', (tester) async {
+      final gateway = _SilentConnections();
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+      expect(find.textContaining('No desktops saved'), findsNothing);
+
+      gateway.deliver(const []);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('No desktops saved'),
+        findsOneWidget,
+        reason: 'loading and empty are two states, and this is the second',
+      );
+      expect(find.text('Add a desktop'), findsOneWidget);
+    });
+
+    testWidgets('a list that arrives fills the same slot', (tester) async {
+      final gateway = _SilentConnections();
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      gateway.deliver(twoDesktops());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Studio'), findsOneWidget);
+      expect(find.text('Laptop'), findsOneWidget);
+      expect(find.textContaining('No desktops saved'), findsNothing);
+    });
+
+    testWidgets('a read that fails says so rather than vanishing', (
+      tester,
+    ) async {
+      final gateway = _SilentConnections();
+      await pumpPhone(
+        tester,
+        gateway: gateway,
+        home: const ConnectionsSection(),
+      );
+
+      gateway.fail(const GatewayException('The keystore is locked.'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('The keystore is locked.'), findsOneWidget);
+      expect(find.textContaining('No desktops saved'), findsNothing);
+      expect(find.text('Add a desktop'), findsOneWidget);
+    });
   });
 
   group('at 200% text', () {
