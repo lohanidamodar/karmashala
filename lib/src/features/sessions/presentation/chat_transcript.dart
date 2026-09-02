@@ -144,54 +144,64 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
 
     return Column(
       children: [
+        // The scrolling conversation is its own traversal group so that its
+        // stops cannot interleave with the footer's. Reading order sorts by
+        // rect, and tabbing to a row below the fold scrolls the list under the
+        // policy's feet: every remaining row moves up past footer stops it had
+        // already handed out, and the next Tab returns one of them. The group
+        // collapses the whole list to a single sort key in the parent, so a
+        // scroll can only reorder the list against itself — which it never
+        // does, because it moves every row by the same amount.
         Expanded(
-          child: total == 0
-              ? Center(
-                  child: Text(
-                    widget.emptyHint,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scroll,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Insets.md,
-                    vertical: Insets.sm,
-                  ),
-                  itemCount: visible.length + (start > 0 ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (start > 0 && index == 0) {
-                      return Center(
-                        child: TextButton.icon(
-                          onPressed: () => setState(
-                            () => _shown = math.min(_shown + _page, total),
-                          ),
-                          icon: const Icon(AppIcons.caretUp),
-                          label: Text(
-                            'Load $start earlier message'
-                            '${start == 1 ? '' : 's'}',
-                          ),
-                        ),
-                      );
-                    }
-                    final offset = index - (start > 0 ? 1 : 0);
-                    final message = visible[offset];
-                    return _ChatMessageTile(
-                      message: message,
-                      resolveHostPath: widget.resolveHostPath,
-                      onPathTap: widget.onPathTap,
-                      detail: widget.detailBuilder?.call(
-                        message,
-                        start + offset,
+          child: FocusTraversalGroup(
+            child: total == 0
+                ? Center(
+                    child: Text(
+                      widget.emptyHint,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      onSaveNote: widget.onSaveNote == null
-                          ? null
-                          : () => widget.onSaveNote!(message, start + offset),
-                    );
-                  },
-                ),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Insets.md,
+                      vertical: Insets.sm,
+                    ),
+                    itemCount: visible.length + (start > 0 ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (start > 0 && index == 0) {
+                        return Center(
+                          child: TextButton.icon(
+                            onPressed: () => setState(
+                              () => _shown = math.min(_shown + _page, total),
+                            ),
+                            icon: const Icon(AppIcons.caretUp),
+                            label: Text(
+                              'Load $start earlier message'
+                              '${start == 1 ? '' : 's'}',
+                            ),
+                          ),
+                        );
+                      }
+                      final offset = index - (start > 0 ? 1 : 0);
+                      final message = visible[offset];
+                      return _ChatMessageTile(
+                        message: message,
+                        resolveHostPath: widget.resolveHostPath,
+                        onPathTap: widget.onPathTap,
+                        detail: widget.detailBuilder?.call(
+                          message,
+                          start + offset,
+                        ),
+                        onSaveNote: widget.onSaveNote == null
+                            ? null
+                            : () => widget.onSaveNote!(message, start + offset),
+                      );
+                    },
+                  ),
+          ),
         ),
         if (widget.footer != null) widget.footer!,
       ],

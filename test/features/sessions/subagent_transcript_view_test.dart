@@ -308,15 +308,15 @@ void main() {
     // The same two window sizes, with the conversation, the composer and the
     // delivery strip around it. **Semantics is on**: the unnamed 48x48 button
     // this originally inherited was the composer's send button, now named, so
-    // the check passes and this surface is held to it. Focus is still off — the
-    // view's Tab ring does not close at 720x560 (13 stops, then a revisit),
-    // which is a pre-existing traversal defect recorded as its own bug.
-    // Inheriting that one would make this gate say nothing about this feature.
+    // the check passes and this surface is held to it. **Focus is on too**,
+    // since Loop 91: expanding a subagent is what used to push the ring past
+    // its 13th stop and into a revisit, because growing the list below the
+    // fold made Tab scroll it mid-traversal. The transcript is its own
+    // `FocusTraversalGroup` now, so this surface is held to the ring as well.
     final ref = reference();
     await expectSurvivesWindowMatrix(
       tester,
       matrix: const [minimumWindow, desktopWindow],
-      checkFocus: false,
       build: () => build(
         messages: transcript(subagent: ref),
         turns: {ref.filePath: delegateTurns},

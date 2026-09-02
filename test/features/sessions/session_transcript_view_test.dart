@@ -30,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
 void main() {
@@ -237,6 +238,59 @@ void main() {
     expect(
       tester.getSize(find.byType(DesktopMenuItem<SystemTerminal>)).height,
       Chrome.menuRow,
+    );
+  });
+
+  testWidgets('the Tab ring closes when the conversation scrolls', (
+    tester,
+  ) async {
+    // Bug 3. The stops of the *scrolling* transcript and those of the fixed
+    // footer under it used to sort together by rect, so tabbing to a row below
+    // the fold scrolled the list under the traversal policy — every remaining
+    // row moved up past footer stops it had already handed out, and the next
+    // Tab returned one of them. Six turns is enough to overflow 720x560; each
+    // carries a "Copy message" and a "Save as note" button, which are the
+    // stops that move.
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+
+    final events = [
+      for (var i = 0; i < 6; i++)
+        SessionEvent(
+          id: i + 1,
+          sessionId: 's1',
+          seq: i,
+          type: i.isEven
+              ? SessionEventTypes.userMessage
+              : SessionEventTypes.agentMessage,
+          payload: '{"text":"turn $i"}',
+          createdAt: testTime,
+        ),
+    ];
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          sessionTranscriptProvider.overrideWith(
+            (ref) => Stream.value(events),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SessionTranscriptView(sessionId: 's1')),
+        ),
+      ),
+      // Scrolled back to the oldest turn, which is where a reader who wants
+      // the beginning of a conversation is. The view opens pinned to the
+      // bottom, and from there Tab never has to scroll forward at all.
+      warmUp: (tester) async {
+        await tester.drag(find.byType(ListView), const Offset(0, 2000));
+        await tester.pumpAndSettle();
+      },
+      because:
+          'a conversation taller than the window is the ordinary case, and '
+          'Tab has to come back to where it started in it',
     );
   });
 
