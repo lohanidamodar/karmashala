@@ -26,6 +26,11 @@ typedef WorkingTreeChanged = void Function(EnvironmentPath repo);
 /// `stageAll`/`commit`/`push` — the data layer's vocabulary is not an offer.
 /// [mergeBranch] is the exception, and it exists for the fan-out comparison,
 /// which merges a winning branch on the user's explicit instruction.
+/// [mergeRef] and [abortMerge] are the second, and they exist together: the
+/// delivery strip's `Update` brings a branch level with its base, and a merge
+/// that stops on a conflict must be undone rather than left in the working tree
+/// an agent may be about to run in. Neither is a general "let the app write to
+/// git" licence — both are one user press with one meaning.
 class ChangesService {
   ChangesService({
     required this.runnerFactory,
@@ -107,6 +112,14 @@ class ChangesService {
     bool staged = false,
   }) => _gitFor(repo).diff(repo, path: path, staged: staged);
 
+  /// The content fingerprint of each of [paths] as they stand on disk, for the
+  /// review-thread anchors. A path git could not hash is absent from the map,
+  /// which the caller must read as "cannot tell" and never as unchanged.
+  Future<Map<String, String>> blobShas(
+    EnvironmentPath repo,
+    List<String> paths,
+  ) => _gitFor(repo).hashObjects(repo, paths);
+
   /// Recent commits for [repo].
   Future<List<GitCommit>> log(EnvironmentPath repo, {int limit = 20}) =>
       _gitFor(repo).log(repo, limit: limit);
@@ -120,5 +133,27 @@ class ChangesService {
   Future<void> mergeBranch(EnvironmentPath repo, String branch) async {
     await _gitFor(repo).mergeBranch(repo, branch);
     onWorkingTreeChanged?.call(repo);
+  }
+
+  /// Brings [repo]'s checked-out branch level with [ref], fast-forwarding when
+  /// it can. See `GitService.mergeRef` for why this is not [mergeBranch].
+  ///
+  /// The index is touched on the way *out* whether or not the merge succeeded:
+  /// a merge that stopped on a conflict has already rewritten files in the
+  /// working tree, so a cached listing taken before it is stale either way.
+  Future<void> mergeRef(EnvironmentPath repo, String ref) async {
+    try {
+      await _gitFor(repo).mergeRef(repo, ref);
+    } finally {
+      onWorkingTreeChanged?.call(repo);
+    }
+  }
+
+  /// Undoes a merge that stopped with conflicts; see `GitService.abortMerge`
+  /// for why this reports rather than throws.
+  Future<bool> abortMerge(EnvironmentPath repo) async {
+    final restored = await _gitFor(repo).abortMerge(repo);
+    if (restored) onWorkingTreeChanged?.call(repo);
+    return restored;
   }
 }

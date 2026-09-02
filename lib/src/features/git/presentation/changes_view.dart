@@ -8,13 +8,14 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
-import '../application/diff_annotations.dart';
+import '../application/review_threads.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../data/git_diff_parsing.dart';
 import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import '../domain/diff_line.dart';
+import '../domain/review_thread.dart';
 import '../domain/file_change.dart';
 
 /// Read-only Git change review, desktop-style: a vertical list of changed files,
@@ -38,10 +39,12 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
     final changes = ref.watch(repositoryChangesProvider);
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
     final sessionId = ref.watch(selectedSessionIdProvider);
-    final annotations = ref
-        .watch(diffAnnotationsProvider)
-        .where((item) => item.repositoryId == repositoryId)
-        .toList();
+    // One read for the whole panel; every line tile below picks its threads
+    // out of this index rather than asking the database for its own.
+    final threads =
+        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+        ReviewThreadIndex.empty;
+    final pending = threads.pending;
 
     // What this repository's work is called on the forge, so a branch, a
     // commit or a pull request in view is one click from the page that owns it.
@@ -122,27 +125,34 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
               icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
               onPressed: () => ref.invalidate(repositoryChangesProvider),
             ),
-            if (annotations.isNotEmpty)
+            if (pending.isNotEmpty)
               IconButton(
+                // "Should fix", not "every comment": a thread nobody has
+                // triaged is a claim, and sending it would hand an agent work
+                // no human asked for.
                 tooltip: sessionId == null
-                    ? 'Select a session to send ${annotations.length} review comments'
-                    : 'Send ${annotations.length} review comments to agent',
+                    ? 'Select a session to send ${pending.length} review '
+                          'comments marked should-fix'
+                    : 'Send ${pending.length} should-fix review comments to '
+                          'the agent',
                 icon: Badge(
-                  label: Text('${annotations.length}'),
+                  label: Text('${pending.length}'),
                   child: const Icon(AppIcons.chatCircleDots, size: Chrome.icon),
                 ),
                 onPressed: sessionId == null || repositoryId == null
                     ? null
                     : () async {
+                        // Nothing is cleared, marked or resolved by sending.
+                        // The thread stays should-fix until somebody looks at
+                        // the code and decides it is done — which is the whole
+                        // reason these are rows now. See
+                        // `buildReviewThreadPrompt`.
                         await ref
                             .read(sessionActionsProvider)
                             .continueSession(
                               sessionId,
-                              buildDiffFeedbackPrompt(annotations),
+                              buildReviewThreadPrompt(pending),
                             );
-                        ref
-                            .read(diffAnnotationsProvider.notifier)
-                            .clearRepository(repositoryId);
                       },
               ),
           ],
@@ -293,16 +303,32 @@ class _InlineDiff extends ConsumerWidget {
             ),
           );
         }
+        // The one translation that makes a comment anchorable: a row of this
+        // rendering becomes a line of the file. The row index itself is what
+        // the old `DiffAnnotation.diffIndex` stored, and it is exactly as
+        // durable as the rendering — which is to say not at all.
+        final numbers = newFileLineNumbers(lines);
+        final threads =
+            ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+            ReviewThreadIndex.empty;
+        // Threads no line can carry, above the diff rather than lost inside it.
+        final unplaced = threads.unplaced(path);
         final list = ListView.builder(
           primary: false,
           padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-          itemCount: lines.length,
-          itemBuilder: (context, index) => _DiffLineTile(
-            path: path,
-            diffIndex: index,
-            line: lines[index],
-            wrap: wrap,
-          ),
+          itemCount: unplaced.length + lines.length,
+          itemBuilder: (context, index) {
+            if (index < unplaced.length) {
+              return _UnplacedThreadTile(entry: unplaced[index]);
+            }
+            final row = index - unplaced.length;
+            return _DiffLineTile(
+              path: path,
+              lineNumber: numbers[row],
+              line: lines[row],
+              wrap: wrap,
+            );
+          },
         );
         if (wrap) return list;
         // Full-screen: let long code lines scroll horizontally.
@@ -379,15 +405,24 @@ class _DiffFullscreenDialog extends StatelessWidget {
   }
 }
 
+/// One row of the diff, with whatever review threads land on it.
+///
+/// [lineNumber] is the row's line **in the file**, or null for a header, a hunk
+/// marker or a removed line — see [newFileLineNumbers]. It is what an anchor is
+/// built from, and its nullability is the reason a comment on a removed line
+/// becomes a file-level thread: there is no line of the current file that
+/// removed text sits on, and inventing one is the mis-anchoring this whole
+/// change exists to remove.
 class _DiffLineTile extends ConsumerWidget {
   const _DiffLineTile({
     required this.path,
-    required this.diffIndex,
+    required this.lineNumber,
     required this.line,
     this.wrap = false,
   });
+
   final String path;
-  final int diffIndex;
+  final int? lineNumber;
   final DiffLine line;
   final bool wrap;
 
@@ -395,15 +430,15 @@ class _DiffLineTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
-    final annotation = ref
-        .watch(diffAnnotationsProvider)
-        .where(
-          (item) =>
-              item.repositoryId == repositoryId &&
-              item.path == path &&
-              item.diffIndex == diffIndex,
-        )
-        .firstOrNull;
+    final index =
+        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+        ReviewThreadIndex.empty;
+    // Attached threads only, by construction: `atLine` will not return one
+    // whose file has moved on, because its line number no longer locates
+    // anything. Those are drawn above the diff instead.
+    final here = lineNumber == null
+        ? const <AnchoredReviewThread>[]
+        : index.atLine(path, lineNumber!);
     // The drawing lives in `DiffLineTile`, shared with the agent-edit diff in
     // the transcript; what stays here is the one thing only this panel has, the
     // review comment hung off the end of the row.
@@ -416,85 +451,383 @@ class _DiffLineTile extends ConsumerWidget {
       wrap: wrap,
       trailing: commentable
           ? IconButton(
-              tooltip: annotation == null
+              tooltip: here.isEmpty
                   ? 'Add review comment'
-                  : annotation.comment,
+                  : here.map((entry) => entry.thread.body).join('\n\n'),
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
               padding: EdgeInsets.zero,
               icon: Icon(
-                annotation == null
-                    ? AppIcons.chatCircle
-                    : AppIcons.chatCircleDots,
+                here.isEmpty ? AppIcons.chatCircle : AppIcons.chatCircleDots,
                 size: Chrome.iconSmall,
-                color: annotation == null ? null : scheme.tertiary,
+                color: here.isEmpty ? null : scheme.tertiary,
               ),
               onPressed: repositoryId == null
                   ? null
-                  : () =>
-                        _editAnnotation(context, ref, repositoryId, annotation),
+                  : () => showReviewThreadDialog(
+                      context,
+                      repositoryId: repositoryId,
+                      path: path,
+                      // Null for a removed line, which opens a file-level
+                      // thread quoting the removed text.
+                      lineNumber: lineNumber,
+                      excerpt: line.text,
+                      existing: here,
+                    ),
             )
           : null,
     );
   }
+}
 
-  Future<void> _editAnnotation(
-    BuildContext context,
-    WidgetRef ref,
-    String repositoryId,
-    DiffAnnotation? existing,
-  ) async {
-    final controller = TextEditingController(text: existing?.comment);
-    final comment = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Review comment'),
-        content: SizedBox(
-          width: 520,
-          child: TextField(
-            controller: controller,
-            autofocus: true,
-            minLines: 3,
-            maxLines: 8,
-            decoration: InputDecoration(
-              labelText: '$path · diff line ${diffIndex + 1}',
-              helperText: line.text,
+/// A thread that no line of this diff can carry: a file-level comment, or one
+/// whose file has changed since it was written.
+///
+/// It gets a row of its own above the diff rather than a marker on a line,
+/// because the honest thing to say about a detached thread is a sentence, and
+/// there is nowhere on a code line to say it.
+class _UnplacedThreadTile extends ConsumerWidget {
+  const _UnplacedThreadTile({required this.entry});
+
+  final AnchoredReviewThread entry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final detached = !entry.isAttached;
+    return InkWell(
+      onTap: repositoryId == null
+          ? null
+          : () => showReviewThreadDialog(
+              context,
+              repositoryId: repositoryId,
+              path: entry.anchor.path,
+              lineNumber: null,
+              excerpt: null,
+              existing: [entry],
             ),
-          ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.sm, 4, Insets.sm, 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              detached ? AppIcons.warningCircle : AppIcons.chatCircleDots,
+              size: Chrome.iconSmall,
+              color: detached ? scheme.error : scheme.tertiary,
+            ),
+            const SizedBox(width: Insets.xs),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    detachedThreadHeadline(entry),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: detached ? scheme.error : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    entry.thread.body,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        actions: [
-          if (existing != null)
-            TextButton(
-              onPressed: () => Navigator.pop(context, ''),
-              child: const Text('Remove'),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
-    controller.dispose();
-    if (comment == null) return;
-    final notifier = ref.read(diffAnnotationsProvider.notifier);
-    if (comment.isEmpty) {
-      notifier.remove(repositoryId, path, diffIndex);
-    } else {
-      notifier.put(
-        DiffAnnotation(
-          repositoryId: repositoryId,
-          path: path,
-          diffIndex: diffIndex,
-          line: line,
-          comment: comment,
+  }
+}
+
+/// The sentence a thread wears above the diff, in the panel and in the dialog.
+///
+/// Spelled out rather than reduced to an icon, and it names the *file*, not the
+/// line, when the line is no longer meaningful. "Was at lib/a.dart:42" is the
+/// truth; "lib/a.dart:42" alone would be read as where it is now.
+String detachedThreadHeadline(AnchoredReviewThread entry) {
+  final status = entry.thread.status.label;
+  return switch (entry.attachment) {
+    ReviewThreadAttachment.attached =>
+      '${entry.anchor.location} · $status',
+    ReviewThreadAttachment.detached =>
+      'Detached — the file changed since this was written. Was at '
+          '${entry.anchor.location} · $status',
+    ReviewThreadAttachment.unknown =>
+      'Cannot be checked — this file could not be read. Written against '
+          '${entry.anchor.location} · $status',
+  };
+}
+
+/// Opens the review threads on one anchor, and lets a new one be written.
+Future<void> showReviewThreadDialog(
+  BuildContext context, {
+  required String repositoryId,
+  required String path,
+  required int? lineNumber,
+  required String? excerpt,
+  required List<AnchoredReviewThread> existing,
+}) => showDialog<void>(
+  context: context,
+  builder: (_) => _ReviewThreadDialog(
+    repositoryId: repositoryId,
+    path: path,
+    lineNumber: lineNumber,
+    excerpt: excerpt,
+    existing: existing,
+  ),
+);
+
+class _ReviewThreadDialog extends ConsumerStatefulWidget {
+  const _ReviewThreadDialog({
+    required this.repositoryId,
+    required this.path,
+    required this.lineNumber,
+    required this.excerpt,
+    required this.existing,
+  });
+
+  final String repositoryId;
+  final String path;
+  final int? lineNumber;
+  final String? excerpt;
+  final List<AnchoredReviewThread> existing;
+
+  @override
+  ConsumerState<_ReviewThreadDialog> createState() =>
+      _ReviewThreadDialogState();
+}
+
+class _ReviewThreadDialogState extends ConsumerState<_ReviewThreadDialog> {
+  final _composer = TextEditingController();
+
+  /// Which thread the composer is answering, or null when it is opening a new
+  /// one. A reply and a new comment on the same line are different acts and the
+  /// dialog never guesses between them.
+  String? _replyingTo;
+
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _composer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Re-read rather than trusting what was passed in: a reply posted in this
+    // dialog, or one an agent posted over MCP while it was open, has to appear.
+    final index =
+        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+        ReviewThreadIndex.empty;
+    final ids = {for (final entry in widget.existing) entry.thread.id};
+    final threads = [
+      for (final entry in index.all)
+        if (ids.contains(entry.thread.id)) entry,
+    ];
+
+    return AlertDialog(
+      title: Text(
+        widget.lineNumber == null
+            ? 'Review · ${widget.path}'
+            : 'Review · ${widget.path}:${widget.lineNumber}',
+      ),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final entry in threads) ...[
+                _ThreadCard(
+                  entry: entry,
+                  onReply: () => setState(() {
+                    _replyingTo = entry.thread.id;
+                    _error = null;
+                  }),
+                  onStatus: (status) => ref
+                      .read(reviewThreadServiceProvider)
+                      .setStatus(entry.thread.id, status),
+                ),
+                const Divider(),
+              ],
+              TextField(
+                controller: _composer,
+                autofocus: true,
+                minLines: 3,
+                maxLines: 8,
+                decoration: InputDecoration(
+                  labelText: _replyingTo == null
+                      ? 'New review comment'
+                      : 'Reply',
+                  helperText: _composerHelp(),
+                  helperMaxLines: 3,
+                  errorText: _error,
+                ),
+              ),
+              if (_replyingTo != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => setState(() => _replyingTo = null),
+                    child: const Text('Write a new comment instead'),
+                  ),
+                ),
+            ],
+          ),
         ),
-      );
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: Text(_replyingTo == null ? 'Comment' : 'Reply'),
+        ),
+      ],
+    );
+  }
+
+  /// What the composer will actually do, said before it is pressed.
+  ///
+  /// The removed-line case is spelled out because it is the one place the
+  /// dialog cannot give the user what the click implied: they clicked a line,
+  /// and what they get is a comment on the file. Saying so is the alternative
+  /// to quietly anchoring onto whichever line happens to follow the deletion.
+  String _composerHelp() {
+    if (_replyingTo != null) return 'Added to the thread above.';
+    if (widget.lineNumber != null) {
+      return 'Anchored to this line and to the file\'s current contents. If '
+          'the file changes, the thread detaches and says so rather than '
+          'moving.';
     }
+    return 'This line is not in the file as it now stands, so the comment is '
+        'anchored to the file rather than to a line. The text is quoted in it.';
+  }
+
+  Future<void> _submit() async {
+    final body = _composer.text.trim();
+    if (body.isEmpty) {
+      setState(() => _error = 'Write something first.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final service = ref.read(reviewThreadServiceProvider);
+    try {
+      final replyingTo = _replyingTo;
+      if (replyingTo != null) {
+        service.reply(
+          threadId: replyingTo,
+          body: body,
+          author: 'the user',
+          authorKind: ReviewAuthorKind.user,
+        );
+      } else {
+        await service.open(
+          repositoryId: widget.repositoryId,
+          path: widget.path,
+          body: body,
+          author: 'the user',
+          authorKind: ReviewAuthorKind.user,
+          startLine: widget.lineNumber,
+          excerpt: widget.excerpt,
+          sessionId: ref.read(selectedSessionIdProvider),
+        );
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$error';
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    _composer.clear();
+    setState(() {
+      _busy = false;
+      _replyingTo = null;
+    });
+  }
+}
+
+/// One thread: what it is anchored to, everything said in it, and its status.
+class _ThreadCard extends StatelessWidget {
+  const _ThreadCard({
+    required this.entry,
+    required this.onReply,
+    required this.onStatus,
+  });
+
+  final AnchoredReviewThread entry;
+  final VoidCallback onReply;
+  final ValueChanged<ReviewThreadStatus> onStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          detachedThreadHeadline(entry),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: entry.isAttached ? scheme.onSurfaceVariant : scheme.error,
+          ),
+        ),
+        if (entry.anchor.excerpt case final excerpt?
+            when excerpt.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Text(excerpt.trim(), style: MonoStyles.body),
+          ),
+        for (final comment in entry.thread.comments)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(comment.author, style: theme.textTheme.labelSmall),
+                Text(comment.body, style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+        const SizedBox(height: Insets.xs),
+        Wrap(
+          spacing: Insets.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final status in const [
+              ReviewThreadStatus.open,
+              ReviewThreadStatus.shouldFix,
+              ReviewThreadStatus.dismissed,
+              ReviewThreadStatus.resolved,
+            ])
+              ChoiceChip(
+                label: Text(status.label),
+                selected: entry.thread.status == status,
+                onSelected: (_) => onStatus(status),
+              ),
+            TextButton(onPressed: onReply, child: const Text('Reply')),
+          ],
+        ),
+      ],
+    );
   }
 }
 

@@ -16,6 +16,7 @@ import '../agents/application/agent_usage_providers.dart';
 import '../agents/domain/agent_hook_endpoint.dart';
 import '../agents/domain/agent_installation.dart';
 import '../agents/domain/agent_ids.dart';
+import '../browser/application/browser_consent_providers.dart';
 import '../browser/application/browser_providers.dart';
 import '../browser/application/browser_tool_schemas.dart';
 import '../browser/application/browser_tools.dart';
@@ -45,9 +46,11 @@ import '../verification/application/verification_tools.dart';
 import 'attention_tools.dart';
 import 'checkpoint_tools.dart';
 import 'decision_tools.dart';
+import 'review_thread_tools.dart';
 import 'control_server_status.dart';
 import 'device_tools.dart';
 import 'handshake_file_permissions.dart';
+import 'instructions_tools.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
@@ -1093,6 +1096,14 @@ class LauncherControlServer implements SessionMcp {
           _container,
           callerSessionId: callerSessionId,
         ).call(name, args);
+      // Review comments as threads a human triages: the reviewer files
+      // findings here instead of into a transcript, and the author answers in
+      // the same place the request was made.
+      case final String name when ReviewThreadTools.handles(name):
+        return ReviewThreadTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       // Where the work is: checkouts, and what one of them owes.
       case final String name when WorkspaceControlTools.handles(name):
         return WorkspaceControlTools(
@@ -1112,12 +1123,28 @@ class LauncherControlServer implements SessionMcp {
       // so an agent's pane is a pane the user can see and take over.
       case final String name when TerminalControlTools.handles(name):
         return TerminalControlTools(_container).call(name, args);
+      // The guides. Reads a table compiled into this binary, so it needs
+      // neither the container nor the caller's identity — and answers even
+      // when everything it describes is unavailable, which is exactly when an
+      // agent is most likely to ask.
+      case final String name when InstructionsTools.handles(name):
+        return const InstructionsTools().call(name, args);
       // The browser tools live in features/browser and share the app's single
       // BrowserService with the browser pane, so an agent and the developer
       // drive the same page.
+      //
+      // The consent gate is resolved here rather than inside the feature
+      // because "which project is this call for" is a question about sessions
+      // and checkouts, and `features/browser` has no business reading those
+      // tables. Passing it per dispatch also means a grant taken back in
+      // Settings is in force on the very next call — there is nothing cached.
       case final String name when BrowserTools.handles(name):
         return BrowserTools(
           _container.read(browserServiceProvider),
+          consent: browserConsentFor(
+            _container,
+            callerSessionId: callerSessionId,
+          ),
         ).call(name, args);
       // Verification runs record what the browser and device tools above do,
       // so they share those same services rather than driving anything of their
@@ -1449,6 +1476,7 @@ class LauncherControlServer implements SessionMcp {
         'required': ['ids'],
       },
     },
+    ...instructionsToolSchemas,
     ...sessionControlToolSchemas,
     ...terminalControlToolSchemas,
     ...workspaceControlToolSchemas,
@@ -1456,6 +1484,7 @@ class LauncherControlServer implements SessionMcp {
     ...deviceControlToolSchemas,
     ...attentionControlToolSchemas,
     ...decisionControlToolSchemas,
+    ...reviewThreadToolSchemas,
     ...browserToolSchemas,
     ...verificationToolSchemas,
   ];

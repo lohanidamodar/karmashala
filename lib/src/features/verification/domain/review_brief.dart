@@ -21,10 +21,24 @@ import '../../sessions/domain/handoff_packet.dart';
 /// ## Why the verdict contract is spelled out
 ///
 /// A review that concludes in prose is a review nobody can find later. The
-/// brief names the three tool calls that turn a reading into a record, and it
-/// says that finding nothing is a *pass with a reason* rather than saying
-/// nothing at all — an unrecorded clean review is indistinguishable from a
-/// review that never happened.
+/// brief names the tool calls that turn a reading into a record, and it says
+/// that finding nothing is a *pass with a reason* rather than saying nothing at
+/// all — an unrecorded clean review is indistinguishable from a review that
+/// never happened.
+///
+/// ## Why findings become threads and not just notes
+///
+/// A verdict answers "is this change all right"; it does not answer "what do I
+/// do on Tuesday". The findings underneath it used to live only in
+/// `verification_note`s, which is to say in a transcript — anchored to nothing,
+/// triageable by nobody, and impossible to reply to. So the brief separates the
+/// two acts on purpose: a **note** is the reviewer's reasoning, including for
+/// the parts that were fine, and a **thread** (`review_thread_add`) is a thing
+/// somebody has to decide about, hung off the file and the lines it is about.
+/// The reviewer files threads as `open`, never as "should fix": a reviewer that
+/// could mark its own findings must-fix would be writing the author's task list
+/// and having it read as the user's, which is the same objection
+/// `decision_tools.dart` raises about an agent recording an approval.
 class ReviewBrief {
   const ReviewBrief({
     required this.authorAgentName,
@@ -146,7 +160,8 @@ class ReviewBrief {
       ..writeln()
       ..writeln(
         'Your verdict has to be a record, not a message in a conversation '
-        'nobody opens. Three calls:',
+        'nobody opens. Four calls, and one of them is the only one anybody '
+        'can answer:',
       )
       ..writeln()
       ..writeln(
@@ -157,14 +172,36 @@ class ReviewBrief {
         'as an independent check instead of a self-graded pass.',
       )
       ..writeln(
-        '2. `verification_note(text: "…")` for each finding as you reach it — '
-        'what you looked at, what you expected, what you saw. Nothing is '
-        'collected for you on a change run; these notes are the whole record '
-        'of your reasoning.',
+        '2. `review_thread_add(path: "…", startLine: …, comment: "…")` for '
+        'each thing you find in the code — **this is where a finding goes.** '
+        'A finding described only in your notes is a paragraph in a transcript '
+        'that the person who has to act on it will never open; a thread is '
+        'anchored to the file, sits beside the line in the Changes panel, can '
+        'be triaged, and can be replied to by whoever fixes it. Line numbers '
+        'are counted in the file as it is on disk right now, and the thread '
+        'records the file\'s content hash so that it says "detached" later '
+        'rather than quietly pointing at whatever ends up on that line. Omit '
+        'the range for a comment about the whole file. Quote the code in '
+        '`excerpt`: that is what a human reads once the file has moved on.',
       )
       ..writeln(
-        '3. `verification_finish(verdict: "pass" | "fail" | "inconclusive", '
+        '3. `verification_note(text: "…")` as you go — what you looked at, '
+        'what you expected, what you saw. This is your **reasoning**, and it '
+        'is a different thing from a finding: nothing is collected for you on '
+        'a change run, so these notes are the only record of how you reached '
+        'the verdict, including for the parts where nothing was wrong.',
+      )
+      ..writeln(
+        '4. `verification_finish(verdict: "pass" | "fail" | "inconclusive", '
         'reason: "…")`.',
+      )
+      ..writeln()
+      ..writeln(
+        'A thread you raise starts as **open** — a claim somebody still has to '
+        'triage — and only a human moves it to "should fix", which is the set '
+        'that gets sent back to the author. Do not skip the threads because '
+        'you also wrote a note: the note is why you concluded something, and '
+        'the thread is the thing that gets fixed.',
       )
       ..writeln()
       ..writeln(

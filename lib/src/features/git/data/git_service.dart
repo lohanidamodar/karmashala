@@ -288,6 +288,56 @@ class GitService {
     return result.stdout;
   }
 
+  /// The blob sha each of [paths] would have for its **current bytes on
+  /// disk** — `git hash-object`, which hashes without writing anything.
+  ///
+  /// This is what anchors a review thread (schema v30). It is used purely as a
+  /// content fingerprint: the sha is never looked up in the object store and
+  /// never compared against the `index` line of a diff, because the only
+  /// question ever asked of it is "are these still the same bytes". That is why
+  /// hashing the working-tree file is right even though the blob may never have
+  /// been written — the comparison is against another sha computed exactly the
+  /// same way.
+  ///
+  /// **One process for the whole batch**, because the caller is the diff panel
+  /// asking about every file that carries a comment, on every refresh. A path
+  /// missing from the result is a path git would not hash — deleted, unreadable
+  /// — and the caller must render that as "cannot tell", never as unchanged.
+  ///
+  /// `git hash-object` aborts the whole invocation on the first path it cannot
+  /// read, which would turn one deleted file into "cannot tell" for every other
+  /// thread in the repository. So a failed batch is retried one path at a time:
+  /// slower, but only in the case that is already unusual, and bounded by the
+  /// number of *files* with comments rather than by the number of comments.
+  Future<Map<String, String>> hashObjects(
+    EnvironmentPath repo,
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return const {};
+    final batch = await _git(repo, ['hash-object', '--', ...paths]);
+    if (batch.ok) {
+      final shas = batch.stdout
+          .split(RegExp(r'[\r\n]+'))
+          .where((line) => line.trim().isNotEmpty)
+          .toList();
+      // A count mismatch means the output is not the row-per-path contract this
+      // parse assumes, so nothing is claimed about any of them.
+      if (shas.length == paths.length) {
+        return {
+          for (var i = 0; i < paths.length; i++) paths[i]: shas[i].trim(),
+        };
+      }
+    }
+    final one = <String, String>{};
+    for (final path in paths) {
+      final result = await _git(repo, ['hash-object', '--', path]);
+      if (!result.ok) continue;
+      final sha = result.stdout.trim();
+      if (sha.isNotEmpty) one[path] = sha;
+    }
+    return one;
+  }
+
   /// Recent commits on [repo]'s current branch.
   Future<List<GitCommit>> log(EnvironmentPath repo, {int limit = 20}) async {
     final result = await _git(repo, [
@@ -332,6 +382,37 @@ class GitService {
     if (!result.ok) {
       throw GitException('git merge failed: ${result.stderr.trim()}');
     }
+  }
+
+  /// Merges [ref] into the checked-out branch, fast-forwarding when it can.
+  ///
+  /// Separate from [mergeBranch], which forces a merge commit, because the two
+  /// answer different questions. [mergeBranch] records that a fan-out's winning
+  /// branch was chosen, and the merge commit *is* the record. This one exists to
+  /// bring a branch level with its base, where a fast-forward is the honest
+  /// result: a branch with no commits of its own that took an empty merge commit
+  /// to catch up would show a history event that never happened.
+  ///
+  /// `--no-edit` because there is no terminal attached to this process and git
+  /// would otherwise open an editor for the merge message and hang.
+  Future<void> mergeRef(EnvironmentPath repo, String ref) async {
+    final result = await _git(repo, ['merge', '--no-edit', ref]);
+    if (!result.ok) {
+      throw GitException('git merge failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Undoes a merge that stopped with conflicts (`git merge --abort`).
+  ///
+  /// **Not `throw`ing is the point.** This is only ever called on the failure
+  /// path of [mergeRef], where the caller already has a real error to report,
+  /// and a repository with no merge in progress answers `git merge --abort`
+  /// with an error of its own — which would replace the diagnosis with a
+  /// meaningless one. It returns whether the tree came back clean so the caller
+  /// can tell the user which of the two situations they are in.
+  Future<bool> abortMerge(EnvironmentPath repo) async {
+    final result = await _git(repo, ['merge', '--abort']);
+    return result.ok;
   }
 
   /// Pushes the current branch (optionally to [remote], setting upstream).
