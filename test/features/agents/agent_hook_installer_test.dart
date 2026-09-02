@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
+import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
@@ -12,7 +13,6 @@ void main() {
   const installer = AgentHookInstaller();
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
   final claude = AgentRegistry.builtIn.byId('claudeCode')!;
-  final codex = AgentRegistry.builtIn.byId('codex')!;
 
   late Directory home;
   setUp(() {
@@ -223,8 +223,17 @@ void main() {
   );
 
   test('an agent with no hook spec installs nothing', () async {
+    // Every shipped agent now declares hooks, so the case is exercised with a
+    // descriptor that does not rather than dropped: an agent whose status comes
+    // from somewhere else must not have a config file created for it.
+    const hookless = AgentDescriptor(
+      id: 'hookless',
+      displayName: 'Hookless',
+      binaries: AgentBinaries(windows: ['nope'], posix: ['nope']),
+    );
+
     final installed = await installer.install(
-      descriptor: codex,
+      descriptor: hookless,
       storeHome: home.path,
       endpoint: endpoint,
       environment: EnvironmentKind.windowsNative,
@@ -232,6 +241,7 @@ void main() {
 
     expect(installed, isFalse);
     expect(configFile().existsSync(), isFalse);
+    expect(home.listSync(), isEmpty);
   });
 
   test('a malformed config is refused and left untouched', () async {

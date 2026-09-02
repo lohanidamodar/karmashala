@@ -306,6 +306,39 @@ void main() {
       );
     });
 
+    test('an unreachable Codex store gets no script either', () async {
+      // Codex is the one agent whose callback address lives in a **file we
+      // write**, not only in the command. So an environment the endpoint cannot
+      // reach has two things to stay clear of, and the sweep has to remove
+      // both: an entry an earlier run left is a hook that fires and never
+      // arrives, and a script left beside it is a bearer token in somebody's
+      // home directory answering to nobody.
+      final wsl = wslEnv();
+      ExecutionEnvironmentDao(db).upsert(wsl);
+      final codexHome = Directory(p.join(claudeHome.path, '.codex'))
+        ..createSync(recursive: true);
+      final script = File(p.join(codexHome.path, '$agentHookMarker.sh'))
+        ..writeAsStringSync('#!/bin/sh\ncurl -s "http://172.18.240.1:9999/"\n');
+
+      final results = await containerWith(
+        _StubLocator([
+          CliStore(
+            environmentId: wsl.id,
+            homesByAgentId: {'codex': codexHome.path},
+          ),
+        ]),
+      ).read(agentHookInstallationServiceProvider).installAll(endpoint);
+
+      final codex = results.singleWhere((r) => r.agentId == 'codex');
+      expect(codex.installed, isFalse);
+      expect(
+        codex.skippedBecause,
+        contains('no callback address this app binds is reachable'),
+      );
+      expect(script.existsSync(), isFalse);
+      expect(File(p.join(codexHome.path, 'hooks.json')).existsSync(), isFalse);
+    });
+
     test('an unreachable store with nothing of ours is left alone', () async {
       // The common case, and the one that must not start writing files: no
       // entry of ours means nothing to clean, and a config we never touched

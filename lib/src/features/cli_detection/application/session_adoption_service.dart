@@ -102,7 +102,7 @@ class AdoptablePane {
 ///    registry [AgentGridRules] is running that agent, which arms panes whose
 ///    shell has no OSC 133 at all. Read on the rationed slot, not every cycle.
 /// 4. **A CLI-store scan** — the disk, and the fallback. It turns an armed pane
-///    into a conversation id for an agent with no hooks (Codex has none). It
+///    into a conversation id for an agent with no hooks. It
 ///    runs on `SessionStatusRegistry`'s store slot, at most once per ten
 ///    seconds, and only while some pane is armed and unresolved.
 ///

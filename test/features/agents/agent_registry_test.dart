@@ -367,10 +367,11 @@ void main() {
       registry.byId('claudeCode')!.statusStrategy,
       AgentStatusStrategy.hooks,
     );
-    expect(
-      registry.byId('codex')!.statusStrategy,
-      AgentStatusStrategy.stateFile,
-    );
+    // Codex reads `$CODEX_HOME/hooks.json` in Claude Code's own shape. This
+    // said `stateFile` while the backlog recorded the CLI as configurable only
+    // through TOML; the rollout file is still read, but it is the fallback now
+    // and not the best source.
+    expect(registry.byId('codex')!.statusStrategy, AgentStatusStrategy.hooks);
     // Antigravity's hooks are documented only in a skill the CLI ships, never
     // in `--help`, which is why this said `none` until a live run fired them.
     expect(
