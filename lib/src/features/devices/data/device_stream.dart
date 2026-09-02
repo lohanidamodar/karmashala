@@ -72,7 +72,34 @@ class LiveFrameMark {
   /// Host clock when the newest frame was handed to the HTTP response, i.e.
   /// when it stopped being ours and became the player's problem.
   int writtenUs = 0;
+
+  /// Host clock when the user last asked the device to do something.
+  int lastInputUs = 0;
+
+  /// Interactions the device has not answered with a frame.
+  int unansweredInputs = 0;
+
+  /// Records that the user asked the device for something.
+  ///
+  /// Counts **interactions, not events**: a drag is dozens of pointer moves and
+  /// one request, so anything within [kInputBurst] of the previous event is
+  /// taken to be the same interaction still happening. Without that a single
+  /// swipe would look like fifty unanswered requests and condemn a healthy
+  /// stream on the spot.
+  void noteInput([int? nowUs]) {
+    final now = nowUs ?? DateTime.now().microsecondsSinceEpoch;
+    if (lastInputUs == 0 || now - lastInputUs > kInputBurst.inMicroseconds) {
+      unansweredInputs += 1;
+    }
+    lastInputUs = now;
+  }
+
+  /// The device answered: a frame arrived.
+  void noteAnswered() => unansweredInputs = 0;
 }
+
+/// How close together two input events have to be to count as one interaction.
+const Duration kInputBurst = Duration(milliseconds: 250);
 
 /// What the live view is doing, as far as the app can tell from outside the
 /// video player.
@@ -98,6 +125,143 @@ enum DeviceStreamState {
   ended,
 }
 
+/// What one watchdog tick can see, as ages rather than clocks.
+///
+/// Ages, so the rule that reads them is pure and can be put in a table. Three
+/// of the four are about the stream; [sinceInput] and [unansweredInputs] are
+/// about the user, and they are here because they are the only evidence that
+/// distinguishes a device with nothing to say from a live view that has stopped
+/// answering.
+class StreamClocks {
+  const StreamClocks({
+    required this.sinceFrame,
+    required this.sinceByte,
+    required this.sinceDelivery,
+    required this.sinceInput,
+    required this.unansweredInputs,
+    required this.framesSeen,
+  });
+
+  /// Since a frame was decoded out of the socket.
+  final Duration sinceFrame;
+
+  /// Since any byte arrived, decodable or not.
+  final Duration sinceByte;
+
+  /// Since a frame was handed to the video player. **`null` when none ever
+  /// has** — no viewer has connected yet, which is not evidence of anything.
+  ///
+  /// This is the clock 1.6.0 did not read, and the only one that is about what
+  /// the user can actually see. Frames arriving prove the device is drawing;
+  /// only frames *delivered* prove the picture is.
+  final Duration? sinceDelivery;
+
+  /// Since the user last asked the device to do something. `null` when they
+  /// have not.
+  final Duration? sinceInput;
+
+  /// Interactions since the last frame arrived. Interactions, not events: a
+  /// drag is one, however many pointer moves it is made of.
+  final int unansweredInputs;
+
+  /// Whether any frame has ever decoded. Before that the start path is still
+  /// reporting and the watchdog has nothing to add.
+  final bool framesSeen;
+}
+
+/// One tick's conclusion.
+class StreamVerdict {
+  const StreamVerdict(this.state, this.detail, [this.since]);
+
+  final DeviceStreamState state;
+  final String detail;
+
+  /// How long the thing this verdict is about has been true. The UI uses it to
+  /// stop claiming certainty it does not have: a picture that has not changed
+  /// for four seconds is a quiet device, and one that has not changed for four
+  /// minutes might be anything.
+  final Duration? since;
+
+  @override
+  String toString() => 'StreamVerdict($state, $detail)';
+}
+
+/// How long an interaction is given to reach the device and come back.
+///
+/// `adb shell input` alone costs a couple of hundred milliseconds, and a device
+/// under load costs more.
+const Duration kInputAnswerGrace = Duration(seconds: 3);
+
+/// How many unanswered interactions it takes to condemn a stream.
+///
+/// More than one, deliberately. Tapping somewhere that does nothing is an
+/// ordinary thing to do, and a rule that restarts a working stream over a
+/// single dead tap is the eleven-second loop wearing a new hat.
+const int kInputPatience = 3;
+
+/// Everything that can condemn a live view, decided in one pure place.
+///
+/// The order is the argument. Frames arriving is checked first because it is
+/// the strongest evidence there is — but it is not enough on its own, because
+/// frames that never reach the player leave the user looking at a picture the
+/// app believes is live. That was the 1.6.0 blind spot: every signal stopped at
+/// the socket.
+///
+/// Then the two silences, which look identical and are not: bytes without
+/// frames is ours to fix, and neither bytes nor frames is a device with nothing
+/// to draw — unless the user has been asking it for something, in which case
+/// its silence is a fault rather than its nature.
+///
+/// Returns `null` when there is nothing to say.
+StreamVerdict? judgeStream(
+  StreamClocks clocks, {
+  required Duration stallTimeout,
+  Duration inputGrace = kInputAnswerGrace,
+  int inputPatience = kInputPatience,
+}) {
+  if (!clocks.framesSeen) return null;
+  int seconds(Duration age) => (age.inMilliseconds / 1000).round();
+
+  if (clocks.sinceFrame <= stallTimeout) {
+    final delivery = clocks.sinceDelivery;
+    if (delivery != null && delivery > stallTimeout) {
+      return StreamVerdict(
+        DeviceStreamState.stalled,
+        'The device is sending frames but the picture has not updated for '
+        '${seconds(delivery)}s.',
+        delivery,
+      );
+    }
+    return const StreamVerdict(DeviceStreamState.live, 'Streaming.');
+  }
+
+  if (clocks.sinceByte < stallTimeout) {
+    return StreamVerdict(
+      DeviceStreamState.stalled,
+      'The stream is still sending data but no frame has decoded for '
+      '${seconds(clocks.sinceFrame)}s.',
+      clocks.sinceFrame,
+    );
+  }
+
+  final sinceInput = clocks.sinceInput;
+  if (sinceInput != null &&
+      sinceInput >= inputGrace &&
+      clocks.unansweredInputs >= inputPatience) {
+    return StreamVerdict(
+      DeviceStreamState.stalled,
+      'The device has not answered input for ${seconds(sinceInput)}s.',
+      sinceInput,
+    );
+  }
+
+  return StreamVerdict(
+    DeviceStreamState.idle,
+    'No screen changes for ${seconds(clocks.sinceFrame)}s.',
+    clocks.sinceFrame,
+  );
+}
+
 /// A health report for one live view.
 ///
 /// Three things look identical on screen — a picture that does not move — and
@@ -116,14 +280,20 @@ class DeviceStreamHealth {
   const DeviceStreamHealth({
     required this.state,
     required this.detail,
+    this.since,
     this.bytesArriving = false,
     this.serverLog = const [],
   });
+
+  /// How long this has been true, when the report is about a duration.
 
   final DeviceStreamState state;
 
   /// One line the user can act on.
   final String detail;
+
+  /// See the constructor: the age the verdict was about, or `null`.
+  final Duration? since;
 
   /// Whether the socket has produced any bytes recently, even unparsable ones.
   final bool bytesArriving;
@@ -189,6 +359,14 @@ class DeviceStreamSession {
   /// Tears down the socket, the scrcpy process, the tunnel and the HTTP shim.
   final Future<void> Function() onStop;
 
+  /// Tells the stream the user has asked the device for something.
+  ///
+  /// The live view is the only place that knows this, and the watchdog cannot
+  /// judge silence without it: a device nobody is touching sends no frames and
+  /// is perfectly well, while a device being tapped that sends no frames is a
+  /// live view that has stopped working.
+  void noteInput() => mark.noteInput();
+
   Future<void> stop() => onStop();
 }
 
@@ -240,6 +418,7 @@ class DeviceStreamService {
     this.stallTimeout = const Duration(seconds: 6),
     this.watchdogInterval = const Duration(seconds: 1),
     this.livenessProbeInterval = const Duration(seconds: 20),
+    this.inputAnswerGrace = kInputAnswerGrace,
     this.socketAttempts = 20,
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('device-stream');
@@ -266,6 +445,10 @@ class DeviceStreamService {
   /// no socket event is a server that died leaving its `adb forward` and the
   /// host-side socket up (Loop 36, on a physical device).
   final Duration livenessProbeInterval;
+
+  /// How long an interaction is given to be answered before the live view is
+  /// called unresponsive. See [kInputAnswerGrace].
+  final Duration inputAnswerGrace;
 
   /// How many times one tunnel attempt probes for a streaming socket, at 300 ms
   /// apiece. Injectable so a test does not spend six seconds per attempt
@@ -516,7 +699,7 @@ class DeviceStreamService {
     // switch — the exact line that read as the failure in the owner's log.
     var stopped = false;
 
-    void report(DeviceStreamState state, String detail) {
+    void report(DeviceStreamState state, String detail, [Duration? since]) {
       // The state machine only ever moves forwards. A stream that has ended
       // cannot go back to being live, and the watchdog would otherwise call it
       // healthy again for the second between the socket closing and the frame
@@ -533,6 +716,7 @@ class DeviceStreamService {
         DeviceStreamHealth(
           state: state,
           detail: detail,
+          since: since,
           bytesArriving:
               DateTime.now().microsecondsSinceEpoch - lastByteUs <
               stallTimeout.inMicroseconds,
@@ -562,7 +746,9 @@ class DeviceStreamService {
               mark
                 ..frames += 1
                 ..ptsUs = frame.ptsUs
-                ..arrivalUs = DateTime.now().microsecondsSinceEpoch;
+                ..arrivalUs = DateTime.now().microsecondsSinceEpoch
+                // Whatever the user asked for, the device has answered.
+                ..noteAnswered();
               frames.add(frame);
             }
         }
@@ -606,33 +792,36 @@ class DeviceStreamService {
     // The watchdog. It reports what the picture is doing; it does not decide
     // that the stream is broken, because frame silence is what a device with a
     // static screen looks like and tearing the stream down for it is the
-    // restart loop this state machine now exists to end.
+    // restart loop this state machine exists to end.
     //
-    // The two clocks split the cases. Bytes arriving with no frame out of them
-    // is ours to fix, so it stays a fault. Neither bytes nor frames is either
-    // an idle device or a dead one, and the only honest way to tell them apart
-    // is to go and look — [_serverStillRunning], once the silence has run long
-    // enough to be worth an adb round trip.
+    // What it may conclude lives in [judgeStream], which is pure and has the
+    // whole rule in one table. Everything here is clock-reading.
     var probeInFlight = false;
     var lastProbeUs = DateTime.now().microsecondsSinceEpoch;
     final watchdog = Timer.periodic(watchdogInterval, (_) {
       final now = DateTime.now().microsecondsSinceEpoch;
-      final sinceFrame = now - mark.arrivalUs;
-      if (mark.frames == 0 || sinceFrame <= stallTimeout.inMicroseconds) {
-        if (mark.frames > 0) report(DeviceStreamState.live, 'Streaming.');
-        return;
-      }
-      final seconds = (sinceFrame / 1000000).round();
-      if (now - lastByteUs < stallTimeout.inMicroseconds) {
-        report(
-          DeviceStreamState.stalled,
-          'The stream is still sending data but no frame has decoded for '
-          '${seconds}s.',
-        );
-        return;
-      }
-      report(DeviceStreamState.idle, 'No screen changes for ${seconds}s.');
+      Duration age(int sinceUs) => Duration(microseconds: now - sinceUs);
+      final verdict = judgeStream(
+        StreamClocks(
+          sinceFrame: age(mark.arrivalUs),
+          sinceByte: age(lastByteUs),
+          // Zero means it has never happened, which is not evidence: no viewer
+          // has connected yet.
+          sinceDelivery: mark.writtenUs == 0 ? null : age(mark.writtenUs),
+          sinceInput: mark.lastInputUs == 0 ? null : age(mark.lastInputUs),
+          unansweredInputs: mark.unansweredInputs,
+          framesSeen: mark.frames > 0,
+        ),
+        stallTimeout: stallTimeout,
+        inputGrace: inputAnswerGrace,
+      );
+      if (verdict == null) return;
+      report(verdict.state, verdict.detail, verdict.since);
 
+      // Only idleness is worth going and looking at: every other verdict has
+      // already said what is wrong.
+      if (verdict.state != DeviceStreamState.idle) return;
+      final sinceFrame = now - mark.arrivalUs;
       if (probeInFlight ||
           sinceFrame < livenessProbeInterval.inMicroseconds ||
           now - lastProbeUs < livenessProbeInterval.inMicroseconds) {

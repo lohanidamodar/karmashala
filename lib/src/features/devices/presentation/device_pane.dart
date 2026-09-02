@@ -393,12 +393,31 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   DeviceGestureSink? _controlSink(DeviceStreamSession session) {
     final control = session.control;
     if (control == null) return null;
-    return ScrcpyGestureSink(
-      connection: control,
-      videoSize: () => session.videoSize,
-      onDropped: _onControlDropped,
+    return _observed(
+      session,
+      ScrcpyGestureSink(
+        connection: control,
+        videoSize: () => session.videoSize,
+        onDropped: _onControlDropped,
+      ),
     );
   }
+
+  /// Every sink the pane hands out goes through here.
+  ///
+  /// The stream cannot tell a device with nothing to draw from one that has
+  /// stopped answering unless it knows the user is asking — and the live view
+  /// is the only place that knows. Wrapping at the one place sinks are built
+  /// means no transport can forget to say so.
+  DeviceGestureSink _observed(
+    DeviceStreamSession session,
+    DeviceGestureSink sink,
+  ) => ObservedGestureSink(sink, onInput: session.noteInput);
+
+  DeviceKeyboardSink _observedKeys(
+    DeviceStreamSession session,
+    DeviceKeyboardSink sink,
+  ) => ObservedKeyboardSink(sink, onInput: session.noteInput);
 
   /// Where keystrokes for [session] go.
   ///
@@ -409,14 +428,17 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   DeviceKeyboardSink? _keyboardSinkFor(DeviceStreamSession session) {
     final control = session.control;
     if (control != null) {
-      return ScrcpyKeyboardSink(
-        connection: control,
-        onDropped: _onControlDropped,
+      return _observedKeys(
+        session,
+        ScrcpyKeyboardSink(connection: control, onDropped: _onControlDropped),
       );
     }
     final adb = ref.read(adbServiceProvider);
     if (adb == null) return null;
-    return AdbKeyboardSink(adb: adb, serial: session.serial);
+    return _observedKeys(
+      session,
+      AdbKeyboardSink(adb: adb, serial: session.serial),
+    );
   }
 
   /// Installs the `adb shell input` gesture sink for [serial].
@@ -437,23 +459,37 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     final screen = size;
     if (screen == null || !mounted) return;
     // The stream may have moved to another device while we were asking.
-    if (_liveSerial != serial || _session?.serial != serial) return;
+    final session = _session;
+    if (_liveSerial != serial || session?.serial != serial) return;
     setState(
-      () => _sink = AdbGestureSink(adb: adb, serial: serial, screen: screen),
+      () => _sink = _observed(
+        session!,
+        AdbGestureSink(adb: adb, serial: serial, screen: screen),
+      ),
     );
   }
 
   /// The control socket went away mid-session. Fall back rather than going mute.
   void _onControlDropped() {
     final serial = _liveSerial;
-    if (!mounted || serial == null) return;
+    final session = _session;
+    if (!mounted || serial == null || session == null) return;
     final adb = ref.read(adbServiceProvider);
-    if (adb != null && _keyboardSink is! AdbKeyboardSink) {
+    // Keyed on the transport rather than the class: every sink is wrapped for
+    // input observation now, so `is AdbKeyboardSink` would never be true again
+    // and the fallback would reinstall itself on every dropped event.
+    if (adb != null &&
+        _keyboardSink?.transport != DeviceKeyboardTransport.adbInput) {
       // The keyboard falls back on its own: it does not need the screen size
       // the gesture sink is about to go and fetch.
-      setState(() => _keyboardSink = AdbKeyboardSink(adb: adb, serial: serial));
+      setState(
+        () => _keyboardSink = _observedKeys(
+          session,
+          AdbKeyboardSink(adb: adb, serial: serial),
+        ),
+      );
     }
-    if (_sink is AdbGestureSink) return;
+    if (_sink?.transport == DeviceGestureTransport.adbInput) return;
     unawaited(_useAdbSink(serial));
   }
 
@@ -1128,26 +1164,39 @@ class _LiveView extends ConsumerWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    DeviceTouchSurface(
-                      // No input against a frame that is no longer live: the
-                      // tap would land somewhere the user cannot see.
-                      sink: reconnecting ? null : sink,
-                      child: Video(
-                        controller: controller,
-                        fit: BoxFit.fill,
-                        controls: NoVideoControls,
-                      ),
-                    ),
                     if (reconnecting)
-                      StreamReconnectingOverlay(
+                      // Not a Video with an overlay next to it: the two travel
+                      // together by construction, so no later edit can leave a
+                      // held frame passing for a live one.
+                      HeldPicture(
                         deviceLabel: currentDevice.displayName,
+                        child: Video(
+                          controller: controller,
+                          fit: BoxFit.fill,
+                          controls: NoVideoControls,
+                        ),
+                      )
+                    else
+                      DeviceTouchSurface(
+                        sink: sink,
+                        child: Video(
+                          controller: controller,
+                          fit: BoxFit.fill,
+                          controls: NoVideoControls,
+                        ),
                       ),
                     // A device with nothing new to show is not a fault, so it
-                    // gets a chip rather than the scrim below.
+                    // gets a chip rather than the scrim below — with the way
+                    // out on it, because this is the one state the app cannot
+                    // be certain about.
                     if (idle)
                       Align(
                         alignment: Alignment.topCenter,
-                        child: StreamIdleBadge(detail: report!.detail),
+                        child: StreamIdleBadge(
+                          detail: report!.detail,
+                          since: report.since,
+                          onRestart: onRestart,
+                        ),
                       ),
                     // A stale picture must not pass for a live one. The frame
                     // underneath is left visible — it is still the last thing

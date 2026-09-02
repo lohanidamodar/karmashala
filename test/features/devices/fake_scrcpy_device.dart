@@ -170,6 +170,7 @@ DeviceStreamService fakeStreamService(
   Duration stallTimeout = const Duration(milliseconds: 300),
   Duration watchdogInterval = const Duration(milliseconds: 25),
   Duration livenessProbeInterval = const Duration(seconds: 30),
+  Duration inputAnswerGrace = const Duration(milliseconds: 200),
 }) => DeviceStreamService(
   adb: AdbService(runner: runner, sdk: kFakeSdk),
   runner: runner,
@@ -177,5 +178,6 @@ DeviceStreamService fakeStreamService(
   stallTimeout: stallTimeout,
   watchdogInterval: watchdogInterval,
   livenessProbeInterval: livenessProbeInterval,
+  inputAnswerGrace: inputAnswerGrace,
   socketAttempts: 10,
 );

@@ -61,6 +61,46 @@ abstract interface class DeviceGestureSink {
   void pointerCancel(int pointer);
 }
 
+/// Wraps a sink so the live view learns that the user asked for something.
+///
+/// A decorator rather than a callback on each sink: there are four sinks across
+/// two platforms and one seam, and the thing that needs telling — the stream
+/// watching for an answer — is the same for all of them.
+///
+/// [onInput] fires for the events that are a request. A cancel is not one: it
+/// is the gesture being taken away, and the device is not being asked for
+/// anything.
+class ObservedGestureSink implements DeviceGestureSink {
+  ObservedGestureSink(this.inner, {required this.onInput});
+
+  final DeviceGestureSink inner;
+  final void Function() onInput;
+
+  @override
+  DeviceGestureTransport get transport => inner.transport;
+
+  @override
+  void pointerDown(int pointer, double fx, double fy) {
+    onInput();
+    inner.pointerDown(pointer, fx, fy);
+  }
+
+  @override
+  void pointerMove(int pointer, double fx, double fy) {
+    onInput();
+    inner.pointerMove(pointer, fx, fy);
+  }
+
+  @override
+  void pointerUp(int pointer, double fx, double fy, Duration held) {
+    onInput();
+    inner.pointerUp(pointer, fx, fy, held);
+  }
+
+  @override
+  void pointerCancel(int pointer) => inner.pointerCancel(pointer);
+}
+
 /// Sends every pointer event straight down scrcpy's control socket.
 class ScrcpyGestureSink implements DeviceGestureSink {
   ScrcpyGestureSink({

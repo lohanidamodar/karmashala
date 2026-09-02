@@ -80,6 +80,28 @@ abstract interface class DeviceKeyboardSink {
   String? get refusal;
 }
 
+/// Wraps a keyboard sink so the live view learns that the user asked for
+/// something. See [ObservedGestureSink]; a keystroke is the same kind of
+/// evidence as a tap.
+class ObservedKeyboardSink implements DeviceKeyboardSink {
+  ObservedKeyboardSink(this.inner, {required this.onInput});
+
+  final DeviceKeyboardSink inner;
+  final void Function() onInput;
+
+  @override
+  DeviceKeyboardTransport get transport => inner.transport;
+
+  @override
+  bool send(DeviceKeyIntent intent) {
+    onInput();
+    return inner.send(intent);
+  }
+
+  @override
+  String? get refusal => inner.refusal;
+}
+
 /// Sends every keystroke straight down scrcpy's control socket.
 class ScrcpyKeyboardSink implements DeviceKeyboardSink {
   ScrcpyKeyboardSink({required this.connection, this.onDropped});

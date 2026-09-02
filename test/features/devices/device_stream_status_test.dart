@@ -136,6 +136,73 @@ void main() {
     });
   });
 
+  group('HeldPicture', () {
+    testWidgets('cannot be built without the overlay that explains it', (
+      tester,
+    ) async {
+      // The dangerous shape this widget exists to make impossible: a frozen
+      // frame on screen with nothing saying it is frozen. The picture and the
+      // label are one widget, so no later edit can separate them.
+      await _pump(
+        tester,
+        const SizedBox(
+          width: 300,
+          height: 500,
+          child: HeldPicture(
+            deviceLabel: 'Pixel',
+            child: ColoredBox(color: Color(0xFF00FF00)),
+          ),
+        ),
+      );
+      expect(find.byType(ColoredBox), findsWidgets);
+      expect(find.text('Reconnecting…'), findsOneWidget);
+      expect(find.textContaining('not a live picture'), findsOneWidget);
+    });
+  });
+
+  group('StreamIdleBadge', () {
+    testWidgets('offers the way out, because this is the state the app cannot '
+        'be sure about', (tester) async {
+      var restarts = 0;
+      await _pump(
+        tester,
+        StreamIdleBadge(
+          detail: 'No screen changes for 20s.',
+          since: const Duration(seconds: 20),
+          onRestart: () => restarts += 1,
+        ),
+      );
+      await tester.tap(find.text('Reconnect'));
+      await tester.pump();
+      expect(restarts, 1);
+    });
+
+    testWidgets('stops claiming certainty once it has been a while', (
+      tester,
+    ) async {
+      // A device quiet for twenty seconds is a device on a desk. One quiet for
+      // five minutes might equally be a live view that stopped working, and
+      // the app cannot tell the difference — so it says so.
+      await _pump(
+        tester,
+        const StreamIdleBadge(
+          detail: 'No screen changes for 20s.',
+          since: Duration(seconds: 20),
+        ),
+      );
+      expect(find.textContaining('may be out of date'), findsNothing);
+
+      await _pump(
+        tester,
+        const StreamIdleBadge(
+          detail: 'No screen changes for 300s.',
+          since: Duration(seconds: 300),
+        ),
+      );
+      expect(find.textContaining('may be out of date'), findsOneWidget);
+    });
+  });
+
   group('StreamReconnectingOverlay', () {
     testWidgets('a held frame is never allowed to look live', (tester) async {
       // The frame underneath is the last one the device sent, kept so a restart

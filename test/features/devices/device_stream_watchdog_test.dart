@@ -7,6 +7,8 @@
 // silence a stall, and scrcpy sends no frames at all once the picture stops
 // changing (it asks the encoder for `repeat-previous-frame-after`, which the
 // platform honours only for a bounded burst).
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/devices/data/device_stream.dart';
 
@@ -64,6 +66,135 @@ void main() {
       device.sendFrame(3000);
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(seen.last.state, DeviceStreamState.live);
+    });
+
+    test('a device that will not answer the user is a fault, not idleness',
+        () async {
+      // The 1.6.0 report, in one case: "the live view goes stale after some
+      // time and doesn't update when i interact". Silence with nobody asking is
+      // idleness; silence while the user is asking is a live view that has
+      // stopped working, and the two are the same picture on screen.
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
+      addTearDown(session.stop);
+
+      final seen = <DeviceStreamHealth>[];
+      session.health.listen(seen.add);
+      // Three interactions, far enough apart to be three rather than one.
+      for (var i = 0; i < 3; i++) {
+        session.noteInput();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+
+      expect(seen.last.state, DeviceStreamState.stalled);
+      expect(seen.last.detail, contains('has not answered'));
+      expect(seen.last.needsRestart, isTrue);
+    });
+
+    test('a drag is one unanswered request, not fifty', () async {
+      // Pointer moves arrive every few milliseconds. Counting events rather
+      // than interactions would condemn a healthy stream inside one swipe.
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
+      addTearDown(session.stop);
+
+      final seen = <DeviceStreamHealth>[];
+      session.health.listen(seen.add);
+      for (var i = 0; i < 50; i++) {
+        session.noteInput();
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+
+      expect(session.mark.unansweredInputs, 1);
+      expect(
+        seen.map((h) => h.state),
+        isNot(contains(DeviceStreamState.stalled)),
+      );
+    });
+
+    test('a frame answers everything the user asked for', () async {
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
+      addTearDown(session.stop);
+
+      for (var i = 0; i < 3; i++) {
+        session.noteInput();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      expect(session.mark.unansweredInputs, 3);
+      device.sendFrame(5000);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(session.mark.unansweredInputs, 0);
+    });
+
+    test('frames the player has stopped taking are a fault', () async {
+      // The failure 1.6.0 had no signal for at all. Everything the old rule
+      // watched is perfect here — server alive, socket open, frames decoding —
+      // and the picture on screen has not moved since the player stopped
+      // consuming. It reported `live` throughout, so nothing was on screen to
+      // say the picture was old: a stale frame that looks live is the one thing
+      // this pane must never show.
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
+      addTearDown(session.stop);
+
+      final seen = <DeviceStreamHealth>[];
+      session.health.listen(seen.add);
+
+      // A viewer that connects, takes the head, and then stops reading — the
+      // player equivalent of a frozen decoder. Nothing is closed: this is
+      // backpressure, not a disconnection.
+      final viewer = await Socket.connect(session.url.host, session.url.port);
+      addTearDown(() async => viewer.destroy());
+      final reading = viewer.listen((_) {});
+      viewer.write(
+        'GET ${session.url.path} HTTP/1.1\r\n'
+        'Host: 127.0.0.1\r\n\r\n',
+      );
+      await viewer.flush();
+      // The first bytes a viewer sees are the HTTP head, which the response
+      // writes itself; the delivery clock only starts when one of *our* chunks
+      // has flushed.
+      for (var i = 0; i < 100 && session.mark.writtenUs == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(session.mark.writtenUs, greaterThan(0));
+      reading.pause();
+
+      // Keep the device sending. Bounded by frames, not by a clock: the write
+      // chain stalls once the socket buffers fill, and a megabyte or two is
+      // past any platform's default.
+      var stalled = false;
+      for (var i = 0; i < 64 && !stalled; i++) {
+        device.video.add(scrcpyPacket(131072, ptsUs: 10000 + i, key: true));
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        stalled = seen.any(
+          (h) => h.detail.contains('picture has not updated'),
+        );
+      }
+
+      expect(
+        stalled,
+        isTrue,
+        reason: 'the delivery clock never noticed a viewer that stopped '
+            'reading; states seen: ${seen.map((h) => h.state).toSet()}',
+      );
+      expect(seen.last.state, DeviceStreamState.stalled);
+      expect(seen.last.needsRestart, isTrue);
     });
 
     test('a closed socket is ended, and that is a fault', () async {

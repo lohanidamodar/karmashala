@@ -94,14 +94,31 @@ class StreamStalledOverlay extends StatelessWidget {
 /// "is it live or has it frozen?" is a fair question to have about a still
 /// picture, and this is the answer to it.
 class StreamIdleBadge extends StatelessWidget {
-  const StreamIdleBadge({super.key, required this.detail});
+  const StreamIdleBadge({
+    super.key,
+    required this.detail,
+    this.since,
+    this.onRestart,
+  });
 
   /// The stream's own line, e.g. `No screen changes for 20s.`
   final String detail;
 
+  /// How long the picture has stood still, when the stream said.
+  final Duration? since;
+
+  /// Reconnects. Present because idleness is the one state the app cannot be
+  /// certain about: a quiet device and a live view that has quietly stopped
+  /// working produce the same still picture, and past [kIdleUncertainAfter]
+  /// the honest thing is to say so and hand the user the way out rather than
+  /// keep insisting nothing is wrong.
+  final VoidCallback? onRestart;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final age = since;
+    final uncertain = age != null && age >= kIdleUncertainAfter;
     return Padding(
       padding: const EdgeInsets.all(8),
       child: DecoratedBox(
@@ -120,18 +137,64 @@ class StreamIdleBadge extends StatelessWidget {
                 color: theme.colorScheme.onInverseSurface,
               ),
               const SizedBox(width: 6),
-              Text(
-                detail,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onInverseSurface,
+              Flexible(
+                child: Text(
+                  uncertain
+                      ? '$detail The picture may be out of date.'
+                      : detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onInverseSurface,
+                  ),
                 ),
               ),
+              if (onRestart != null) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onRestart,
+                  child: Text(
+                    'Reconnect',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onInverseSurface,
+                      decoration: TextDecoration.underline,
+                      decorationColor: theme.colorScheme.onInverseSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// How long a still picture is allowed to pass without comment before the badge
+/// admits the app cannot tell a quiet device from a stopped one.
+const Duration kIdleUncertainAfter = Duration(seconds: 45);
+
+/// The last frame of the previous session, with the thing that says so.
+///
+/// One widget rather than two, and that is the point: a held frame and the
+/// overlay explaining it can no longer be separated by an edit, a refactor or a
+/// stray condition. A stale picture that reads as live is the failure this
+/// whole mechanism must never cause.
+class HeldPicture extends StatelessWidget {
+  const HeldPicture({super.key, required this.child, this.deviceLabel});
+
+  /// The frozen picture — a video view whose session has ended.
+  final Widget child;
+
+  final String? deviceLabel;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [child, StreamReconnectingOverlay(deviceLabel: deviceLabel)],
+  );
 }
 
 /// Covers the last frame of a stream that is being restarted.

@@ -87,8 +87,13 @@ class LoopbackMediaServer {
           pending = pending
               .then((_) async {
                 response.add(chunk);
-                onChunkWritten?.call();
+                // **After** the flush, not before it. `add` only buffers, so
+                // reporting there says a chunk was handed over when a stalled
+                // or dead viewer has taken nothing — and the live view reads
+                // this as "the picture is being updated". A viewer that has
+                // stopped consuming is exactly what it must be able to say.
                 await response.flush();
+                onChunkWritten?.call();
               })
               .catchError((Object _) {
                 // The viewer went away mid-write. `response.done` below is what
