@@ -696,6 +696,26 @@ class _DeviceToolbar extends ConsumerWidget {
             simulators.any((s) => s.udid == chosenSimulator)
         ? chosenSimulator
         : null;
+    // What the power button acts on, by the same rule as the rest of the bar:
+    // a simulator on screen or picked wins, and only then the Android device —
+    // and that one has to be an *emulator*, since `adb emu kill` talks to the
+    // emulator console and could only ever fail on a handset.
+    final liveOrPicked = liveSimulator ?? pickedSimulator;
+    final _PowerTarget? powerTarget = switch ((liveOrPicked, selected)) {
+      (final String udid, _) => _SimulatorPower(
+        udid,
+        simulators
+                .where((s) => s.udid == udid)
+                .map((s) => s.name)
+                .firstOrNull ??
+            'this simulator',
+      ),
+      (null, final AndroidDevice device) when device.isEmulator && onStopEmulator != null =>
+        _AndroidPower(device.displayName),
+      _ => null,
+    };
+    final busySimulators = ref.watch(simulatorTransitionsProvider);
+
     // Without a backend a simulator can still be listed, started and stopped;
     // only the picture is unavailable.
     final canMirror = ref.watch(simulatorBackendProvider) != null;
@@ -825,17 +845,36 @@ class _DeviceToolbar extends ConsumerWidget {
               icon: const Icon(AppIcons.arrowCounterClockwise),
               onPressed: onRestart,
             ),
-          if (onStopEmulator != null)
+          // Power acts on the device this toolbar is *about*, which is the
+          // same ordered answer every other control here uses. It used to be
+          // supplied from [selected] alone, so while a simulator's picture was
+          // up — with one Android emulator running — the button was still
+          // bound to the emulator, and pressing it shut down a device the user
+          // was not looking at. Stopping the wrong machine is the worst thing
+          // a control on this bar can do, so it names its target and shuts
+          // down nothing else.
+          if (powerTarget != null)
             IconButton(
-              tooltip: 'Stop emulator',
-              icon: stoppingEmulator
+              tooltip: switch (powerTarget) {
+                _SimulatorPower(:final name) => 'Shut down $name',
+                _AndroidPower(:final name) => 'Stop $name',
+              },
+              icon: stoppingEmulator || busySimulators.contains(liveOrPicked)
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(AppIcons.power),
-              onPressed: stoppingEmulator ? null : onStopEmulator,
+              onPressed:
+                  stoppingEmulator || busySimulators.contains(liveOrPicked)
+                  ? null
+                  : switch (powerTarget) {
+                      _SimulatorPower(:final udid) => () => ref
+                          .read(simulatorTransitionsProvider.notifier)
+                          .shutdown(udid),
+                      _AndroidPower() => onStopEmulator,
+                    },
             ),
           if (starting)
             const Padding(
@@ -1474,4 +1513,27 @@ class _HeadlessDeviceToggle extends ConsumerWidget {
       ),
     );
   }
+}
+
+
+/// Which device the toolbar's power button would shut down.
+///
+/// A sealed pair rather than a nullable udid beside a nullable serial: the two
+/// cases take different verbs — `simctl shutdown` against a udid, `adb emu
+/// kill` against an emulator's console — and the bug this replaced came from
+/// deciding which to use by testing one nullable field against another.
+sealed class _PowerTarget {
+  const _PowerTarget(this.name);
+
+  /// What the tooltip calls it, so the button says what it will stop.
+  final String name;
+}
+
+class _SimulatorPower extends _PowerTarget {
+  const _SimulatorPower(this.udid, super.name);
+  final String udid;
+}
+
+class _AndroidPower extends _PowerTarget {
+  const _AndroidPower(super.name);
 }

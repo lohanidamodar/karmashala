@@ -439,7 +439,9 @@ void main() {
 
     testWidgets('offers to stop a selected emulator', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
-      expect(find.byTooltip('Stop emulator'), findsOneWidget);
+      // The tooltip names the device now, because the button used to be able
+              // to stop one the user was not looking at.
+      expect(find.byTooltip('Stop Pixel'), findsOneWidget);
     });
 
     testWidgets('does not offer to stop a physical device', (tester) async {
@@ -450,7 +452,7 @@ void main() {
         sdk: _sdk(),
         devices: [_device(serial: _phoneSerial)],
       );
-      expect(find.byTooltip('Stop emulator'), findsNothing);
+      expect(find.byTooltip('Stop Pixel'), findsNothing);
       expect(
         find.byKey(const Key('stop-emulator-$_phoneSerial')),
         findsNothing,
@@ -462,7 +464,7 @@ void main() {
       (tester) async {
         final runner = FakeCommandRunner();
         await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
-        await tester.tap(find.byTooltip('Stop emulator'));
+        await tester.tap(find.byTooltip('Stop Pixel'));
         await tester.pumpAndSettle();
         expect(find.textContaining('is lost'), findsOneWidget);
 

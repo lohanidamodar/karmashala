@@ -358,4 +358,38 @@ void main() {
       );
     });
   });
+
+  group('the power button', () {
+    testWidgets('names the simulator on screen, not the emulator', (
+      tester,
+    ) async {
+      // The reported fault: with a simulator's picture up and one Android
+      // emulator running, power was still bound to the emulator — so pressing
+      // it shut down a device the user was not looking at. Stopping the wrong
+      // machine is the worst thing a control on this bar can do, which is why
+      // the tooltip now names its target.
+      await pump(tester, live: _running(), devices: [_device()]);
+
+      expect(find.byTooltip('Shut down iPhone 17'), findsOneWidget);
+      expect(
+        find.byTooltip('Stop Pixel'),
+        findsNothing,
+        reason: 'the emulator nobody is looking at is not the target',
+      );
+    });
+
+    testWidgets('offers the emulator when that is what the pane is about', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        live: const SimulatorLiveViewIdle(),
+        devices: [_device()],
+        picked: null,
+      );
+
+      expect(find.byTooltip('Stop Pixel'), findsOneWidget);
+      expect(find.byTooltip('Shut down iPhone 17'), findsNothing);
+    });
+  });
 }
