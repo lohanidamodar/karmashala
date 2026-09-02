@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 
 import '../../../core/process/path_translator.dart';
@@ -16,6 +17,9 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/data/repository_discovery_service.dart';
+import '../../workspaces/application/workspace_suggestion.dart';
+import '../../workspaces/application/workspaces_controller.dart';
+import '../../workspaces/domain/workspace.dart';
 import '../application/projects_controller.dart';
 
 /// Creates a project from a folder. The folder is chosen with the native
@@ -37,7 +41,18 @@ class NewProjectDialog extends ConsumerStatefulWidget {
 class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   final _nameController = TextEditingController();
   final _folderController = TextEditingController();
+  final _newWorkspaceController = TextEditingController();
   String _targetId = localHostEnvironmentId;
+
+  /// The context the project will be filed under — a guess until the user
+  /// touches it, and never applied to anything that already exists.
+  String? _workspaceId;
+
+  /// Once the user has answered the question themselves, the folder stops
+  /// answering it for them. A guess that keeps overwriting a decision is worse
+  /// than no guess.
+  bool _workspaceChosen = false;
+  bool _namingWorkspace = false;
   bool _busy = false;
   String? _error;
 
@@ -47,6 +62,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   void dispose() {
     _nameController.dispose();
     _folderController.dispose();
+    _newWorkspaceController.dispose();
     super.dispose();
   }
 
@@ -60,7 +76,44 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
           dir.replaceAll(RegExp(r'[\\/]+$'), ''),
         );
       }
+      _suggestWorkspace();
     });
+  }
+
+  /// Prefills the context from where the folder sits, by asking which context
+  /// already holds the projects nearest it on disk. Suggestion only: it never
+  /// runs once the user has chosen, and it never touches an existing project.
+  void _suggestWorkspace() {
+    if (_workspaceChosen || _namingWorkspace) return;
+    final root = _storedRoot(ref.read(environmentsControllerProvider));
+    _workspaceId = root == null
+        ? null
+        : suggestWorkspaceForRoot(
+            root: root,
+            projects: ref.read(projectsControllerProvider),
+          );
+  }
+
+  /// The folder as it will be *stored* — in the target environment's namespace,
+  /// which is the spelling the suggestion has to compare against.
+  EnvironmentPath? _storedRoot(List<ExecutionEnvironment> environments) {
+    final folder = _folderController.text.trim();
+    if (folder.isEmpty) return null;
+    if (_targetId == localHostEnvironmentId) {
+      return EnvironmentPath(environmentId: _targetId, path: folder);
+    }
+    final windows = _envById(environments, localHostEnvironmentId);
+    final target = _envById(environments, _targetId);
+    if (windows == null || target == null) return null;
+    try {
+      return _translator.translate(
+        EnvironmentPath(environmentId: windows.id, path: folder),
+        from: windows,
+        to: target,
+      );
+    } on PathTranslationException {
+      return null;
+    }
   }
 
   /// The path as it will be stored for the chosen target (for the preview).
@@ -111,12 +164,14 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       _error = null;
     });
     try {
+      final workspaceId = _resolveWorkspace();
       final result = await ref
           .read(projectsControllerProvider.notifier)
           .createInEnvironment(
             name: name,
             windowsPath: folder,
             targetEnvironmentId: _targetId,
+            workspaceId: workspaceId,
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -128,6 +183,8 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         ),
       );
       Navigator.of(context).pop(true);
+    } on DuplicateWorkspaceName catch (e) {
+      setState(() => _error = e.toString());
     } on RepositoryDiscoveryException catch (e) {
       setState(() => _error = e.message);
     } on PathTranslationException catch (e) {
@@ -139,10 +196,20 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     }
   }
 
+  /// The context to file the new project under, creating it first when the
+  /// user typed a new name. Nothing is written until the project is.
+  String? _resolveWorkspace() {
+    if (!_namingWorkspace) return _workspaceId;
+    final name = _newWorkspaceController.text.trim();
+    if (name.isEmpty) return null;
+    return ref.read(workspacesControllerProvider.notifier).create(name).id;
+  }
+
   @override
   Widget build(BuildContext context) {
     final environments = ref.watch(environmentsControllerProvider);
     final preview = _targetPreview(environments);
+    final workspaces = ref.watch(workspacesControllerProvider);
 
     return AlertDialog(
       title: const DesktopDialogTitle(
@@ -167,8 +234,12 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                       child: Text(_environmentLabel(env)),
                     ),
               ],
-              onChanged: (v) =>
-                  setState(() => _targetId = v ?? localHostEnvironmentId),
+              onChanged: (v) => setState(() {
+                _targetId = v ?? localHostEnvironmentId;
+                // The stored spelling changes with the target, and so does the
+                // namespace the suggestion compares in.
+                _suggestWorkspace();
+              }),
             ),
             const SizedBox(height: 12),
             Row(
@@ -180,10 +251,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                     decoration: InputDecoration(
                       labelText: 'Folder path',
                       hintText: Platform.isWindows
-                          ? r'C:\src\my-workspace'
-                          : '~/src/my-workspace',
+                          ? r'C:\src\karmashala'
+                          : '~/src/karmashala',
                     ),
-                    onChanged: (_) => setState(() {}),
+                    onChanged: (_) => setState(_suggestWorkspace),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -207,9 +278,11 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               controller: _nameController,
               decoration: const InputDecoration(
                 labelText: 'Project name',
-                hintText: 'My workspace',
+                hintText: 'Karmashala',
               ),
             ),
+            const SizedBox(height: 12),
+            _workspaceField(workspaces),
             if (_error != null) ...[
               const SizedBox(height: 12),
               DesktopErrorBanner(_error!),
@@ -231,6 +304,79 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Text('Create & scan'),
+        ),
+      ],
+    );
+  }
+
+  /// The context picker: which of the user's four or five contexts this project
+  /// belongs to. Prefilled from the folder, and a plain "None" is a complete
+  /// answer — an unassigned project is an ordinary project.
+  Widget _workspaceField(List<Workspace> workspaces) {
+    if (_namingWorkspace) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _newWorkspaceController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'New context',
+                hintText: 'Game dev',
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Pick an existing context instead',
+            icon: const Icon(AppIcons.x, size: Chrome.icon),
+            onPressed: _busy
+                ? null
+                : () => setState(() {
+                    _namingWorkspace = false;
+                    _newWorkspaceController.clear();
+                  }),
+          ),
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String?>(
+            initialValue: _workspaceId,
+            decoration: const InputDecoration(
+              labelText: 'Context',
+              helperText: 'Suggested from the folder. Change it or leave it.',
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('None')),
+              for (final workspace in workspaces)
+                DropdownMenuItem(
+                  value: workspace.id,
+                  child: Text(workspace.name),
+                ),
+            ],
+            onChanged: _busy
+                ? null
+                : (value) => setState(() {
+                    _workspaceId = value;
+                    _workspaceChosen = true;
+                  }),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'New context',
+          icon: const Icon(AppIcons.plus, size: Chrome.icon),
+          onPressed: _busy
+              ? null
+              : () => setState(() {
+                  _namingWorkspace = true;
+                  _workspaceChosen = true;
+                }),
         ),
       ],
     );

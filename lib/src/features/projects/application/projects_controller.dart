@@ -117,10 +117,15 @@ class ProjectsController extends Notifier<List<Project>> {
   /// Creates a project for [targetEnvironmentId] from a Windows-host folder
   /// [windowsPath] (a drive or `\\wsl.localhost\…` path the picker returned),
   /// binding the project and its repositories to the chosen environment.
+  ///
+  /// [workspaceId] is whatever the dialog was showing when the user pressed
+  /// create — a suggestion they left alone, one they changed, or nothing. It is
+  /// written once, here, and no existing project is touched.
   Future<ProjectCreationResult> createInEnvironment({
     required String name,
     required String windowsPath,
     required String targetEnvironmentId,
+    String? workspaceId,
   }) async {
     final dao = ref.read(executionEnvironmentDaoProvider);
     final windows = dao.getById(localHostEnvironmentId);
@@ -135,6 +140,7 @@ class ProjectsController extends Notifier<List<Project>> {
           windowsScanPath: windowsPath,
           windows: windows,
           target: target,
+          workspaceId: workspaceId,
         );
     await _autoImportSessions(result.repositories);
     _refresh();

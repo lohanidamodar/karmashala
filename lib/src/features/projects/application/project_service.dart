@@ -88,6 +88,7 @@ class ProjectService {
     required String windowsScanPath,
     required ExecutionEnvironment windows,
     required ExecutionEnvironment target,
+    String? workspaceId,
     int maxDepth = 5,
   }) async {
     final now = clock.nowUtc();
@@ -111,6 +112,7 @@ class ProjectService {
       name: name,
       root: toTarget(windowsScanPath),
       createdAt: now,
+      workspaceId: workspaceId,
     );
     projectDao.insert(project);
 
