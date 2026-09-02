@@ -221,7 +221,7 @@ void main() {
     await quiesce(tester, container);
   });
 
-  testWidgets('the state group and the toggle both ride the right edge', (
+  testWidgets('the toggle rides the right edge and the chips hold the middle', (
     tester,
   ) async {
     service.answer = usageSnapshot(percent: 62);
@@ -251,13 +251,13 @@ void main() {
     // And the state group rides the right edge with it rather than drifting
     // into the middle of the row: everything from the tab count rightwards is
     // one block, and the row's left half is where you are, not what is running.
-    // And nothing is parked between the state group and the toggle: they are
-    // one block riding the right edge. A second spacer centred the group, which
-    // opened a gap here and read as drift rather than as a zone.
+    // And the two chips are the middle group, near the centre of the row —
+    // they are about the one session in front of you, while the counts beside
+    // the toggle are about the whole window.
     expect(
-      toggle.left - chip.right,
-      lessThan(24),
-      reason: 'the quota chip sits directly against the panel toggle',
+      (chip.center.dx - row.center.dx).abs(),
+      lessThan(row.width * 0.1),
+      reason: 'the session chips sit around the middle of the row',
     );
     await quiesce(tester, container);
   });
@@ -292,6 +292,14 @@ void main() {
       row.right - toggle.right,
       lessThan(24),
       reason: 'the group ends where the row ends, at any width',
+    );
+    // And the chips stay in the middle at that width too: the wide window is
+    // where a layout drifts, because it is the only one with slack to misplace.
+    final chip = tester.getRect(find.textContaining('62%'));
+    expect(
+      (chip.center.dx - row.center.dx).abs(),
+      lessThan(row.width * 0.1),
+      reason: 'the session chips hold the middle on a wide window',
     );
     await quiesce(tester, container);
   });

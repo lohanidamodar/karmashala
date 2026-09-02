@@ -63,22 +63,38 @@ class ShellStatusBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       child: DefaultTextStyle.merge(
         style: style,
-        // Two groups with the slack between them, rather than one row with a
+        // Three groups with the slack between them, rather than one row with a
         // `Spacer`. The two look equivalent and are not: a `Flexible` child is
         // allotted a share of the free space and then sizes itself to its
         // content, and the share it does not use is **not** handed back to the
         // `Spacer` — under `MainAxisAlignment.start` it falls out at the end of
-        // the row. With three loose `Flexible`s on one row (repository, branch,
-        // the model chip) that came to some 500 blank pixels past the panel
-        // toggle on a 1600px window, with the whole state group stranded in the
-        // middle of the bar. With exactly two children, `spaceBetween` puts
-        // every pixel of slack between them and none of it can escape right.
+        // the row. Three loose `Flexible`s on one row came to some 500 blank
+        // pixels past the panel toggle on a 1600px window. `spaceBetween` puts
+        // every pixel of slack *between* the groups instead, so none of it can
+        // escape to either end.
+        //
+        // The order is what each group answers: where you are, what this
+        // session is costing, and what is running. The two chips sit in the
+        // middle because they are about the one session in front of you, while
+        // the counts on the right are about the whole window.
+        //
+        // "Middle" here means equal gaps, not dead centre — the middle group
+        // lands half the difference between the two side groups to the right of
+        // true centre, which measures 7px at 900 and 52px at 1800. Exact
+        // centring would need the side groups padded to a common width, and
+        // that width can only be known after they are laid out.
+        //
+        // Every group is `Flexible`, and that is not decoration: a non-flex
+        // child of a `Row` is laid out unbounded, and a `Flexible` inside an
+        // unbounded row is silently inert rather than an error — which is how
+        // the model chip lost the ability to give way and overflowed the
+        // minimum window by 8.2px. The weights are the order in which they
+        // yield. Where you are goes first, because a truncated branch is still
+        // a branch; the counts go last, because "2 need you" abbreviated is
+        // not a count of anything.
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Where you are. The elastic half: a long repository or branch is
-            // what gives way at 720px and on a host whose system font is wider
-            // than this one's.
             Flexible(
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -110,25 +126,37 @@ class ShellStatusBar extends ConsumerWidget {
                 ],
               ),
             ),
-            // What is running, hard against the right edge, with the panel
-            // toggle last.
+            // The session in front of you. Both `const`, so a rebuild of this
+            // row cannot rebuild either chip and neither a quota nor a model
+            // change can rebuild the row — each subscription is the chip's own,
+            // and it is the only thing that repaints for it.
             //
-            // `Flexible` as well, and it has to be: that is what gives this
-            // group a *bounded* width, and a bounded width is the only thing
-            // that lets the model chip inside it shrink. In a non-flex slot the
-            // group is laid out unbounded, where `Flexible` is silently inert —
-            // and the longest model name a shipped agent has then overflowed
-            // 720x560 at 1.3x text by 8.2px.
-            //
-            // Four fifths of the slack, against the left group's one. Not a
-            // tuning knob: it is the ordering the row has always had, said in
-            // the only place the layout can hear it. Where you are is elastic
-            // and abbreviates well — a truncated branch is still a branch —
-            // while every item on this side is a count or a state that means
-            // nothing abbreviated. An even split gave this group 360px of a
-            // 720px window and overflowed it by 90.
+            // The model before the quota: it is the fact you can *act* on, and
+            // the one whose label changes when you change it.
             Flexible(
               flex: 4,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  // The one item on the row that gives way inside its own
+                  // group. A model name is the one width here that is not ours
+                  // to predict — `Gemini 3.7 Flash (Medium)` is a real one —
+                  // and the chip's own 72px cap is in logical pixels, so the
+                  // text still grows with the OS text step.
+                  Flexible(child: FocusedModelChip()),
+                  UsageChip(),
+                ],
+              ),
+            ),
+            // 1 : 4 : 5, measured rather than picked. A loose `Flexible` is
+            // capped at its share even when the other groups leave the row
+            // half empty, so these are not preferences, they are budgets: at
+            // 720x560 the session chips need 209px with the longest model name
+            // a shipped agent has, and this group needs 362px at the 1.3x OS
+            // text step. Every neighbouring pair was tried against the window
+            // matrix — 3:5, 3:6 and 4:6 each overflow a cell that 4:5 clears.
+            Flexible(
+              flex: 5,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -161,22 +189,6 @@ class ShellStatusBar extends ConsumerWidget {
                           .read(sidePanelProvider.notifier)
                           .select(SidePanelSurface.inbox),
                     ),
-                  // Both `const`, so a rebuild of this row cannot rebuild
-                  // either chip and neither a quota nor a model change can
-                  // rebuild the row — each subscription is the chip's own, and
-                  // it is the only thing that repaints for it.
-                  //
-                  // The model before the quota: it is the fact about the
-                  // session you are looking at that you can *act* on, and the
-                  // one whose label changes when you change it.
-                  //
-                  // The only item here that gives way. A model name is the one
-                  // width on this side that is not ours to predict — `Gemini
-                  // 3.7 Flash (Medium)` is a real one — and the chip's own 72px
-                  // cap is in logical pixels, so the text still grows with the
-                  // OS text step.
-                  const Flexible(child: FocusedModelChip()),
-                  const UsageChip(),
                   _Item(
                     icon: AppIcons.sidebarSimple,
                     label: panel?.label ?? 'Panel closed',
