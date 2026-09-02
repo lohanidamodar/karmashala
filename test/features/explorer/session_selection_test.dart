@@ -470,6 +470,22 @@ void main() {
   });
 
   group('layout', () {
+    testWidgets('the strip fits the pane\'s own 200px minimum', (tester) async {
+      // The matrix below gives the panel the whole 720px window; in the app the
+      // Explorer is a pane the user drags, and it clamps to 200. That is where
+      // a count and two verbs in one row run out of room first.
+      addNative('n0', title: 'A title long enough to need the whole card');
+      await pump(tester, size: const Size(200, 700));
+      await enterSelection(tester);
+      await tester.tap(find.text('A title long enough to need the whole card'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('1 selected'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Delete'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Done'), findsOneWidget);
+    });
+
     testWidgets('the selection strip survives the window matrix', (
       tester,
     ) async {

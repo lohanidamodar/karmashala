@@ -36,6 +36,16 @@ class SessionSelectionBar extends ConsumerWidget {
       bulk.run(targets, deleteFromCli: deleteFromCli);
     }
 
+    // Two verbs and a count in a pane that clamps to 200px: at Material's
+    // default 16px of button padding they want nine pixels more than the row
+    // has. The strip is chrome at [Chrome.control] height, not a form.
+    final verb = TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+      minimumSize: const Size(0, Chrome.control),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Insets.xs,
@@ -49,7 +59,12 @@ class SessionSelectionBar extends ConsumerWidget {
           borderRadius: BorderRadius.circular(Radii.sm),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.sm, 0, Insets.xs, 0),
+          padding: const EdgeInsets.fromLTRB(
+            Insets.sm,
+            Insets.xs,
+            Insets.xs,
+            Insets.xs,
+          ),
           child: Row(
             children: [
               // The only thing in the row allowed to give way: at the pane's
@@ -66,12 +81,15 @@ class SessionSelectionBar extends ConsumerWidget {
               ),
               TextButton(
                 onPressed: count == 0 ? null : delete,
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
+                style: verb.copyWith(
+                  foregroundColor: WidgetStatePropertyAll(
+                    theme.colorScheme.error,
+                  ),
                 ),
                 child: const Text('Delete'),
               ),
               TextButton(
+                style: verb,
                 onPressed: () =>
                     ref.read(sessionSelectionProvider.notifier).leave(),
                 child: const Text('Done'),

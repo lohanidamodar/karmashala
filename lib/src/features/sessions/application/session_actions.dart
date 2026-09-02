@@ -92,7 +92,12 @@ class SessionActions {
   }
 
   /// Takes one native row out of the workspace, and nothing else: the row, the
-  /// open transcript if it was this one, and the line saying it happened.
+  /// transcript pane if it was showing this one, and the line saying so.
+  ///
+  /// [fromCliStore] records what the *caller* already did to the agent's own
+  /// transcript — this method never touches it. False in the bulk path even
+  /// when a purge is about to run, because that purge logs its own line once it
+  /// knows what it actually removed.
   ///
   /// **Publishes nothing.** The caller does, so a batch can publish once — see
   /// [deleteSessionsFromWorkspace].
@@ -101,10 +106,9 @@ class SessionActions {
     if (_ref.read(selectedSessionIdProvider) == session.id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
-    // The one destructive action in this class, and the only one that can reach
-    // outside the app: with `fromCliStore` it removed the agent's own
-    // transcript, which nothing here can put back. Logged after the fact so the
-    // line means it happened rather than that it was attempted — the throws in
+    // Deleting a session is the one act here that can reach irreversibly
+    // outside the app, so it is written down. After the fact, so the line means
+    // it happened rather than that it was attempted — the throws in
     // [deleteNative] all abandon the delete with the CLI store untouched.
     _log.info(
       'Deleted session ${session.id} (${session.title}): '
@@ -121,10 +125,10 @@ class SessionActions {
 
   /// Removes a whole selection of rows from the workspace as **one act**.
   ///
-  /// Each kind still goes through its own removal — the same DAO delete, the
-  /// same selection clearing, the same log line its single delete writes — but
-  /// the set publishes exactly once. That is not tidiness: three bare listeners
-  /// sit on `sessionsRevisionProvider` (the quick-open file index, the terminal
+  /// Each kind still goes through its own removal — the same DAO delete and the
+  /// same selection clearing its single delete does — but the set publishes
+  /// exactly once. That is not tidiness: three bare listeners sit on
+  /// `sessionsRevisionProvider` (the quick-open file index, the terminal
   /// layout, the remote controller) and each does real work per bump, so
   /// thirty-three rows published one at a time would run all three
   /// thirty-three times for one click.
@@ -901,10 +905,8 @@ class SessionActions {
   Future<DetectedSession?> _detectedSessionById(
     String agentId,
     String externalId,
-  ) async => (await _detectedByKey({(agentId, externalId)}))[(
-    agentId,
-    externalId,
-  )];
+  ) async =>
+      (await _detectedByKey({(agentId, externalId)}))[(agentId, externalId)];
 
   /// The store files behind `(agentId, conversationId)` pairs, in **one** walk
   /// of the CLI stores however many are asked for. Single and bulk deletes
