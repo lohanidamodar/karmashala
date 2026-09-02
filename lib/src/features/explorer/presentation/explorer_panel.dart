@@ -31,21 +31,13 @@ import '../application/session_diff_stat.dart';
 import '../application/session_forest.dart';
 import 'explorer_row.dart';
 import 'project_card.dart';
-import 'session_card.dart';
-import '../../../core/util/clock_provider.dart';
-import '../../sessions/presentation/continue_with_dialog.dart';
+import 'explorer_sections_view.dart';
+import 'session_rows.dart';
 import '../../sessions/application/session_actions.dart';
-import '../../sessions/presentation/agent_status_badge.dart';
-import '../../sessions/application/session_resume_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../sessions/domain/session_lineage.dart';
-import '../../sessions/domain/session_resume.dart';
-import '../../sessions/domain/session_status.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
-import '../../terminal/application/system_terminal_providers.dart';
-import '../../terminal/data/system_terminal_service.dart';
 
 /// The unified left pane: **Project → Session**, and deliberately nothing else.
 ///
@@ -70,8 +62,8 @@ import '../../terminal/data/system_terminal_service.dart';
 /// **What it costs to open a project.** Two indexed DAO reads. No git at all:
 /// there is no longer a row here that describes a checkout, so there is
 /// nothing here to ask git about. What a session card costs is charged when
-/// that card is *inflated*, because [_NativeSessionRow] and
-/// [_ImportedSessionRow] are `ConsumerWidget`s that watch inside their own
+/// that card is *inflated*, because [NativeSessionRow] and
+/// [ImportedSessionRow] are `ConsumerWidget`s that watch inside their own
 /// `build` — which is the distinction the old checkout rows got wrong, since
 /// they watched during the panel's own build and so paid for every row the
 /// list would never show.
@@ -344,7 +336,18 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         // The same gap the rows put between themselves, above the first and
         // below the last, so the column has one rhythm from end to end.
         padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
-        children: [for (final project in projects) ..._projectNodes(project)],
+        children: [
+          // Above the tree, and spliced into the *same* list rather than
+          // wrapped in a column of their own, so the sliver goes on inflating
+          // only what is on screen — see [explorerSectionNodes].
+          //
+          // Hidden while the search box has something in it: that box means
+          // "show me the projects called this", and a full set of saved groups
+          // sitting above the two results it found is the answer to a question
+          // nobody asked.
+          if (query.isEmpty) ...explorerSectionNodes(ref),
+          for (final project in projects) ..._projectNodes(project),
+        ],
       );
     }
 
@@ -570,9 +573,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     // placement and this tree watches it. Measured in
     // `session_switch_cost_test.dart`.
     final repositoryPaths = <String, EnvironmentPath>{
-      for (final repository in ref
-          .read(repositoryDaoProvider)
-          .getByProject(project.id))
+      for (final repository
+          in ref.read(repositoryDaoProvider).getByProject(project.id))
         repository.id: repository.path,
     };
     final pinnedIds = ref
@@ -605,7 +607,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               ts: imported.updatedAt ?? imported.createdAt,
               pinned: pinnedIds.contains(imported.id),
               rows: [
-                _ImportedSessionRow(
+                ImportedSessionRow(
                   session: imported,
                   depth: depth + (imported.isSubagent ? 1 : 0),
                   subPath: _subPathForImported(
@@ -631,7 +633,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     required Session? parent,
     required Map<String, EnvironmentPath> repositoryPaths,
   }) => [
-    _NativeSessionRow(
+    NativeSessionRow(
       session: node.session,
       depth: depth,
       subPath: _subPathForNative(project, node.session, repositoryPaths),
@@ -758,487 +760,4 @@ class _TreeHint extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NativeSessionRow extends ConsumerWidget {
-  const _NativeSessionRow({
-    required this.session,
-    required this.depth,
-    this.subPath,
-    this.pinned = false,
-    this.link,
-    this.parentTitle,
-    this.lineageBroken = false,
-  });
-
-  final Session session;
-  final int depth;
-  final String? subPath;
-  final bool pinned;
-  final SessionLink? link;
-  final String? parentTitle;
-  final bool lineageBroken;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(selectedSessionIdProvider) == session.id;
-    final actions = ref.read(sessionActionsProvider);
-    final terminals =
-        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-
-    Future<void> rename() async {
-      final name = await _promptRename(context, session.title);
-      if (name != null) actions.renameNative(session.id, name);
-    }
-
-    Future<void> delete() async {
-      final deleteFromCli = await _confirmDelete(context, session.title);
-      if (deleteFromCli == null) return;
-      try {
-        await actions.deleteNative(session.id, deleteFromCli: deleteFromCli);
-      } catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(error is StateError ? error.message : '$error'),
-          ),
-        );
-      }
-    }
-
-    // One click opens the session: a pane of ours that is still running comes
-    // back, a stopped conversation is resumed — in its own worktree when it has
-    // one — and an agent that will not share says so in plain words.
-    Future<void> open() async {
-      final messenger = ScaffoldMessenger.of(context);
-      final result = await ref
-          .read(explorerActionsProvider)
-          .openNative(session.id);
-      final message = result.message;
-      if (message == null) return;
-      messenger.showSnackBar(SnackBar(content: Text(message)));
-    }
-
-    // What we can honestly say about where this session's process is, before
-    // the user clicks anything. Three separately-weighted facts, none of which
-    // is allowed to become a confident "active": see [SessionWhereabouts].
-    final whereabouts = ref.watch(sessionWhereaboutsProvider(session.id));
-    // The newest evidence the agent itself produced, or failing that when the
-    // session was created. Never the time of our last poll: ageing a poll would
-    // make a week-old transcript look live.
-    final now = ref.read(clockProvider).nowUtc();
-    final since = whereabouts.lastSeen ?? session.createdAt;
-    final agentId = ref
-        .read(agentInstallationDaoProvider)
-        .getById(session.agentInstallationId)
-        ?.agentId;
-    final (statusIcon, statusColor) = _status(session.status, context);
-    // Asynchronous by construction: the card renders without it and fills in
-    // when git answers. Keyed by session, deduplicated by checkout.
-    final stat = ref.watch(sessionDiffStatProvider(session.id)).asData?.value;
-
-    return SessionCard(
-      depth: depth,
-      selected: selected,
-      pinned: pinned,
-      agentIcon: statusIcon,
-      agentColor: statusColor,
-      agentLabel: [
-        agentId == null
-            ? 'Agent'
-            : AgentRegistry.builtIn.displayNameFor(agentId),
-        session.status.name,
-      ].join('  ·  '),
-      // Two different things, deliberately both shown: the badge is what the
-      // agent is doing *now* (from a hook, its transcript, or its screen) and
-      // the word beside its name is the session's own lifecycle. A session can
-      // be `running` and its agent idle, waiting for you to type.
-      badge: AgentStatusBadge(sessionId: session.id),
-      age: compactAge(now.difference(since)),
-      // The corner has room for a number, not for how much to trust it. Loop
-      // 46's exact wording survives on hover, including the distinction
-      // between evidence the agent produced and the row's own birthday.
-      ageTooltip:
-          whereabouts.lastSeenLabel(now) ??
-          'Created ${describeAge(now.difference(session.createdAt))}',
-      title: session.title,
-      branch: stat?.branch,
-      subPath: subPath,
-      whereabouts: whereabouts.note,
-      whereaboutsTooltip: whereabouts.explanation,
-      stat: stat,
-      worktree: session.useWorktree,
-      link: link,
-      parentTitle: parentTitle,
-      lineageBroken: lineageBroken,
-      onTap: open,
-      menuItems: [
-        // Moving a session to another agent, or branching it, belongs on the
-        // session — not only on the delivery strip, which is the one place it
-        // used to live and is only reachable while a session is on screen.
-        DesktopMenuItem(
-          value: 'continue-with',
-          label: 'Continue with…',
-          icon: AppIcons.gitBranch,
-        ),
-        // One entry, not one per installed terminal. Three of the eight items
-        // in this menu used to be external-terminal openers, which is a lot of
-        // room for something the owner does not reach for; the default
-        // terminal is the answer in almost every case, and the rest is a
-        // setting rather than a menu.
-        if (terminals.isNotEmpty)
-          DesktopMenuItem(
-            value: 'terminal:${terminals.first.id}',
-            label: 'Open in system terminal',
-            icon: AppIcons.terminal,
-          ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'pin',
-          label: pinned ? 'Unpin' : 'Pin to top',
-          icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-        ),
-        DesktopMenuItem(
-          value: 'copy-cmd',
-          label: 'Copy resume command',
-          icon: AppIcons.copy,
-        ),
-        DesktopMenuItem(
-          value: 'rename',
-          label: 'Rename',
-          icon: AppIcons.pencilSimple,
-          shortcut: 'F2',
-        ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'delete',
-          label: 'Delete',
-          icon: AppIcons.trash,
-          destructive: true,
-        ),
-      ],
-      onMenu: (action) async {
-        if (action.startsWith('terminal:')) {
-          final id = action.substring('terminal:'.length);
-          final terminal = terminals.where((t) => t.id == id).firstOrNull;
-          if (terminal != null) {
-            await _openNativeInTerminal(context, actions, session, terminal);
-          }
-          return;
-        }
-        switch (action) {
-          case 'continue-with':
-            // The dialog owns every decision here — which agent, handoff or
-            // fork, and what permission mode the session lands in — and it
-            // launches nothing until the user has seen the packet. So this is
-            // a route to it, not a second place that reasons about any of it.
-            await ContinueWithDialog.show(context, session.id);
-          case 'pin':
-            ref
-                .read(settingsControllerProvider.notifier)
-                .togglePinnedSession(session.id);
-          case 'copy-cmd':
-            copyCommandToClipboard(
-              context,
-              () => actions.nativeResumeShellCommand(session.id),
-            );
-          case 'rename':
-            rename();
-          case 'delete':
-            delete();
-        }
-      },
-    );
-  }
-
-  /// The session's lifecycle, as a glyph and a semantic colour. Returned as a
-  /// record rather than a widget because the card draws it at its own size.
-  (IconData, Color) _status(SessionStatus status, BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final semantic = SemanticColors.of(context);
-    return switch (status) {
-      SessionStatus.running => (AppIcons.playCircle, semantic.working),
-      SessionStatus.completed => (AppIcons.checkCircle, semantic.idle),
-      SessionStatus.failed => (AppIcons.warningCircle, semantic.failure),
-      SessionStatus.cancelled => (AppIcons.xCircle, scheme.outline),
-      _ => (AppIcons.circle, scheme.outline),
-    };
-  }
-}
-
-class _ImportedSessionRow extends ConsumerWidget {
-  const _ImportedSessionRow({
-    required this.session,
-    required this.depth,
-    this.subPath,
-    this.pinned = false,
-  });
-
-  final ImportedSession session;
-  final int depth;
-  final String? subPath;
-  final bool pinned;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(selectedImportedSessionIdProvider) == session.id;
-    final actions = ref.read(sessionActionsProvider);
-    final terminals =
-        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-    final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
-    // The CLI store file's own mtime — the strongest "last seen" anywhere in the
-    // app, because it is the agent's own writing rather than anything we
-    // inferred. Aged rather than stated, so a row can never claim to be live.
-    final updatedAt = session.updatedAt;
-    final lastSeen = updatedAt == null
-        ? null
-        : compactAge(ref.read(clockProvider).nowUtc().difference(updatedAt));
-
-    Future<void> onMenu(String action) async {
-      switch (action) {
-        case final value when value.startsWith('terminal:'):
-          final id = value.substring('terminal:'.length);
-          final terminal = terminals.where((t) => t.id == id).firstOrNull;
-          if (terminal != null) {
-            await _openImportedInTerminal(context, actions, session, terminal);
-          }
-        case 'pin':
-          ref
-              .read(settingsControllerProvider.notifier)
-              .togglePinnedSession(session.id);
-        case 'resume':
-          await _open(context, ref, session);
-        case 'copy-cmd':
-          copyCommandToClipboard(
-            context,
-            () => actions.resumeShellCommand(session),
-          );
-        case 'rename':
-          final name = await _promptRename(context, session.displayTitle);
-          if (name != null) await actions.renameImported(session, name);
-        case 'delete':
-          final deleteFromCli = await _confirmDelete(
-            context,
-            session.displayTitle,
-          );
-          if (deleteFromCli != null) {
-            await actions.deleteImported(session, deleteFromCli: deleteFromCli);
-          }
-      }
-    }
-
-    final stat = ref
-        .watch(repositoryDiffStatProvider(session.repositoryId))
-        .asData
-        ?.value;
-
-    return SessionCard(
-      depth: depth,
-      selected: selected,
-      pinned: pinned,
-      agentIcon: session.isSubagent
-          ? AppIcons.arrowBendDownRight
-          : AppIcons.clockCounterClockwise,
-      agentLabel: [cliLabel, 'imported'].join('  ·  '),
-      age: lastSeen,
-      ageTooltip: lastSeen == null
-          ? null
-          : 'The agent last wrote to this conversation then. We cannot see '
-                'whether a process still has it open.',
-      title: session.displayTitle,
-      branch: stat?.branch,
-      subPath: subPath,
-      stat: stat,
-      onTap: () => _open(context, ref, session),
-      menuItems: [
-        DesktopMenuItem(
-          value: 'resume',
-          // "in app" was distinguishing it from the three external-terminal
-          // openers below it. With those collapsed to one, the qualifier is
-          // noise: resuming is what this app does.
-          label: 'Resume',
-          icon: AppIcons.play,
-        ),
-        if (terminals.isNotEmpty)
-          DesktopMenuItem(
-            value: 'terminal:${terminals.first.id}',
-            label: 'Open in system terminal',
-            icon: AppIcons.terminal,
-          ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'pin',
-          label: pinned ? 'Unpin' : 'Pin to top',
-          icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-        ),
-        DesktopMenuItem(
-          value: 'copy-cmd',
-          label: 'Copy resume command',
-          icon: AppIcons.copy,
-        ),
-        DesktopMenuItem(
-          value: 'rename',
-          label: 'Rename',
-          icon: AppIcons.pencilSimple,
-          shortcut: 'F2',
-        ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'delete',
-          label: 'Delete from CLI store',
-          icon: AppIcons.trash,
-          destructive: true,
-        ),
-      ],
-      onMenu: onMenu,
-    );
-  }
-}
-
-Future<void> _open(
-  BuildContext context,
-  WidgetRef ref,
-  ImportedSession session,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final result = await ref.read(explorerActionsProvider).openImported(session);
-  final message = result.message;
-  if (message != null) {
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-  }
-}
-
-Future<void> _openNativeInTerminal(
-  BuildContext context,
-  SessionActions actions,
-  Session session,
-  SystemTerminal terminal,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  try {
-    await actions.openSessionInSystemTerminal(session.id, terminal);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Opening in ${terminal.label}…')),
-    );
-  } catch (error) {
-    messenger.showSnackBar(
-      SnackBar(content: Text(error is StateError ? error.message : '$error')),
-    );
-  }
-}
-
-Future<void> _openImportedInTerminal(
-  BuildContext context,
-  SessionActions actions,
-  ImportedSession session,
-  SystemTerminal terminal,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  try {
-    await actions.openInSystemTerminal(session, terminal);
-    messenger.showSnackBar(
-      SnackBar(content: Text('Opening in ${terminal.label}…')),
-    );
-  } catch (error) {
-    messenger.showSnackBar(
-      SnackBar(content: Text(error is StateError ? error.message : '$error')),
-    );
-  }
-}
-
-/// Builds a shell command with [build], copies it to the clipboard, and reports
-/// the result. Used by the "Copy … command" menu actions.
-Future<void> copyCommandToClipboard(
-  BuildContext context,
-  String Function() build,
-) async {
-  final messenger = ScaffoldMessenger.of(context);
-  String message;
-  try {
-    await Clipboard.setData(ClipboardData(text: build()));
-    message = 'Command copied to clipboard';
-  } catch (e) {
-    message = e is StateError ? e.message : '$e';
-  }
-  messenger.showSnackBar(SnackBar(content: Text(message)));
-}
-
-Future<String?> _promptRename(BuildContext context, String current) {
-  final controller = TextEditingController(text: current);
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const DesktopDialogTitle(
-        icon: AppIcons.pencilSimple,
-        title: 'Rename session',
-      ),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        decoration: const InputDecoration(labelText: 'Title'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-          child: const Text('Rename'),
-        ),
-      ],
-    ),
-  ).then((v) => (v == null || v.isEmpty) ? null : v);
-}
-
-Future<bool?> _confirmDelete(BuildContext context, String title) {
-  var deleteFromCli = true;
-  return showDialog<bool>(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: const DesktopDialogTitle(
-          icon: AppIcons.trash,
-          title: 'Delete session?',
-          subtitle: 'Choose whether to also remove the CLI history.',
-        ),
-        content: SizedBox(
-          width: 400,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Remove "$title" from Karmashala.'),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: deleteFromCli,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: const Text('Also delete from the CLI store'),
-                subtitle: const Text(
-                  'Checked by default. This removes the original transcript.',
-                ),
-                onChanged: (value) =>
-                    setState(() => deleteFromCli = value ?? true),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.of(context).pop(deleteFromCli),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    ),
-  );
 }

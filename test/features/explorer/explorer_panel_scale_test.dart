@@ -57,7 +57,9 @@ void main() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    RepositoryDao(
+      db,
+    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
     AgentInstallationDao(db).insert(agentInstallation());
     git = FakeCommandRunner(responder: _git);
   });
@@ -89,7 +91,9 @@ void main() {
           cli: 'claudeCode',
           externalId: 'imported-ext-$i',
           environmentId: 'windows',
-          filePath: r'C:\store\' 'imported-ext-$i.jsonl',
+          filePath:
+              r'C:\store\'
+              'imported-ext-$i.jsonl',
           storeHome: r'C:\store',
           isSubagent: false,
           preview: 'Imported $i',
@@ -101,7 +105,10 @@ void main() {
     }
   }
 
-  Future<ProviderContainer> pump(WidgetTester tester, {bool expand = true}) async {
+  Future<ProviderContainer> pump(
+    WidgetTester tester, {
+    bool expand = true,
+  }) async {
     tester.view.physicalSize = const Size(460, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);

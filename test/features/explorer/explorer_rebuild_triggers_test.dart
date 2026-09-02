@@ -85,7 +85,9 @@ void main() {
     clock = _MovableClock(testTime);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project(id: 'p1', name: 'Hub', path: r'C:\hub'));
-    RepositoryDao(db).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
+    RepositoryDao(
+      db,
+    ).insert(repository(id: 'r1', name: 'hub', path: r'C:\hub'));
     AgentInstallationDao(db).insert(agentInstallation());
     // The owner's own database, as reported: 7 native, 107 imported.
     for (var i = 0; i < 7; i++) {
@@ -141,7 +143,9 @@ void main() {
         clockProvider.overrideWithValue(clock),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: FakeCommandRunner(responder: _git)),
+          FakeCommandRunnerFactory(
+            fallback: FakeCommandRunner(responder: _git),
+          ),
         ),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
@@ -189,9 +193,7 @@ void main() {
 
   /// Identity of every session card on screen, so a rebuild is countable.
   List<int> cardIdentities(WidgetTester tester) => [
-    for (final card in tester.widgetList<SessionCard>(
-      find.byType(SessionCard),
-    ))
+    for (final card in tester.widgetList<SessionCard>(find.byType(SessionCard)))
       identityHashCode(card),
   ];
 
@@ -243,32 +245,34 @@ void main() {
     expect(changed(before, after), 0);
   });
 
-  testWidgets('a status-registry cycle that finds nothing new rebuilds no card',
-      (tester) async {
-    final harness = await pump(tester);
-    final registry = harness.container.read(sessionStatusRegistryProvider);
+  testWidgets(
+    'a status-registry cycle that finds nothing new rebuilds no card',
+    (tester) async {
+      final harness = await pump(tester);
+      final registry = harness.container.read(sessionStatusRegistryProvider);
 
-    // The first cycle is a first observation and may legitimately publish.
-    await registry.cycle();
-    await tester.pumpAndSettle();
-    final before = cardIdentities(tester);
-
-    // Ten more ticks with nothing changing underneath — the steady state the
-    // user is in while they type.
-    for (var i = 0; i < 10; i++) {
-      clock.now = clock.now.add(kStatusCycleInterval);
+      // The first cycle is a first observation and may legitimately publish.
       await registry.cycle();
-      await tester.pump();
-    }
+      await tester.pumpAndSettle();
+      final before = cardIdentities(tester);
 
-    final after = cardIdentities(tester);
-    // ignore: avoid_print
-    print(
-      'EXPLORER-TRIGGER registry-cycles cards=${before.length} '
-      'rebuilt=${changed(before, after)} cycles=${registry.cycles}',
-    );
-    expect(changed(before, after), 0);
-  });
+      // Ten more ticks with nothing changing underneath — the steady state the
+      // user is in while they type.
+      for (var i = 0; i < 10; i++) {
+        clock.now = clock.now.add(kStatusCycleInterval);
+        await registry.cycle();
+        await tester.pump();
+      }
+
+      final after = cardIdentities(tester);
+      // ignore: avoid_print
+      print(
+        'EXPLORER-TRIGGER registry-cycles cards=${before.length} '
+        'rebuilt=${changed(before, after)} cycles=${registry.cycles}',
+      );
+      expect(changed(before, after), 0);
+    },
+  );
 
   testWidgets('a workspace mutation does rebuild every visible card', (
     tester,

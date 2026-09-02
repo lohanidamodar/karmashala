@@ -118,10 +118,7 @@ class ExplorerActions {
       if (plan is AntigravityResumeRefused) {
         // The row is still selected so its detail is on screen; what changes is
         // that the message now says *which* of several situations this is.
-        return ExplorerResult(
-          ExplorerOutcome.selected,
-          message: plan.reason,
-        );
+        return ExplorerResult(ExplorerOutcome.selected, message: plan.reason);
       }
       if (resolved == null) {
         // Nothing to resume: starting the agent here would be a *new*
@@ -142,7 +139,9 @@ class ExplorerActions {
       // Written before the launch, not after: `SessionLauncher` reuses the row
       // that already holds the conversation, so without this the click would
       // mint a *second* row and leave this one a phantom for ever.
-      _ref.read(sessionDaoProvider).updateExternalSessionId(sessionId, resolved);
+      _ref
+          .read(sessionDaoProvider)
+          .updateExternalSessionId(sessionId, resolved);
       externalId = resolved;
       continueNotice = antigravityContinueNotice(
         resolved,

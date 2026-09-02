@@ -206,10 +206,7 @@ class ProjectCard extends StatelessWidget {
         ],
         if (path.isNotEmpty || missing) ...[
           SizedBox(height: density.lineGap),
-          Padding(
-            padding: indent,
-            child: _pathLine(context, muted, density),
-          ),
+          Padding(padding: indent, child: _pathLine(context, muted, density)),
         ],
       ],
     );
@@ -228,7 +225,10 @@ class ProjectCard extends StatelessWidget {
       children: [
         Icon(AppIcons.circle, size: 8, color: semantic.working),
         const SizedBox(width: 3),
-        Text('${summary.running}', style: muted?.copyWith(color: semantic.working)),
+        Text(
+          '${summary.running}',
+          style: muted?.copyWith(color: semantic.working),
+        ),
       ],
     ),
   );
@@ -354,9 +354,7 @@ class ProjectCard extends StatelessWidget {
   /// density instead of at one hand-tuned width.
   Widget _line2(BuildContext context, TextStyle? muted, UiDensity density) =>
       Padding(
-        padding: EdgeInsets.only(
-          left: density.icon * 2 + 2 + density.glyphGap,
-        ),
+        padding: EdgeInsets.only(left: density.icon * 2 + 2 + density.glyphGap),
         child: _pathLine(context, muted, density),
       );
 

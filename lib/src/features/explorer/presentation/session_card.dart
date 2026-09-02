@@ -320,7 +320,11 @@ class SessionCard extends StatelessWidget {
     return Row(
       children: [
         if (leading != null) ...[
-          Icon(leading, size: density.iconSmall, color: scheme.onSurfaceVariant),
+          Icon(
+            leading,
+            size: density.iconSmall,
+            color: scheme.onSurfaceVariant,
+          ),
           SizedBox(width: density.glyphGap),
         ],
         // The left half is the only thing on the card allowed to be long, so it
