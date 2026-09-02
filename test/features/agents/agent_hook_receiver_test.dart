@@ -187,13 +187,15 @@ void main() {
     expect(reports.latest('nobody', 's1'), isNull);
   });
 
-  test('an agent with no hook spec is unknown', () {
-    // Codex, since Antigravity gained real hooks. Codex is told what happened
-    // through its `notify` program, not through a hook config, so there is no
-    // event name here for the receiver to classify.
+  test('an event the agent does not declare is unknown', () {
+    // Every shipped agent now declares a hook spec, so the case this protects
+    // is the other half of the same rule: a spec that does not name this event
+    // classifies nothing. `SubagentStop` is a real Codex event, deliberately
+    // left undeclared because it describes a different agent inside the
+    // session — and an undeclared event must not be able to say anything.
     final report = receiver.handle(
       agentId: 'codex',
-      event: 'Stop',
+      event: 'SubagentStop',
       body: body('s1'),
     );
 

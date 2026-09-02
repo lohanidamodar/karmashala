@@ -534,9 +534,115 @@ const _codex = AgentDescriptor(
     homeDirectoryName: '.codex',
     format: AgentStoreFormat.codexRollout,
   ),
-  // Codex configures notifications through TOML, not a JSON hook file, so its
-  // best available source today is the rollout file.
-  statusStrategy: AgentStatusStrategy.stateFile,
+  // **Codex has hooks**, and they are the only source that can say a turn
+  // started. The backlog recorded this agent as configurable only through TOML;
+  // it also reads `$CODEX_HOME/hooks.json`, in the same shape this app already
+  // writes for Claude Code, behind a per-entry trust grant — see [hooks].
+  statusStrategy: AgentStatusStrategy.hooks,
+  // **Every hook entry is trust-gated on a hash of the entry itself**, so the
+  // command must be identical on every launch and the callback address lives in
+  // a script the installer rewrites instead. The whole argument, and the source
+  // it was established from, is on [AgentHookSpec.trustsCommandByHash].
+  //
+  // Five events, and only five. The 0.145.0 installed here knows eleven
+  // (`config/src/hook_config.rs`, `HookEventsToml`), and the six left out are
+  // left out for reasons rather than for brevity:
+  //
+  //  * `SubagentStart` / `SubagentStop` describe a *different* agent inside
+  //    this session, exactly like Claude Code's, and neither is declared there
+  //    either;
+  //  * `PreCompact` / `PostCompact` happen inside a turn `PreToolUse` has
+  //    already reported as working, so they would restate it;
+  //  * `SessionStart` fires before the user has done anything, and "the CLI is
+  //    open" is not a status this app has a use for;
+  //  * `Interrupt` **does not exist in 0.145.0** — it is a twelfth event on the
+  //    project's `main`, and `HooksFile` is `deny_unknown_fields`, so naming it
+  //    here would make this CLI discard the entire file and every hook in it,
+  //    ours and the user's alike, with only a warning.
+  //
+  // **`PermissionRequest` is the sixth, and it is the one worth explaining.**
+  // It is the event this integration was wanted for: `awaitingApproval` is
+  // unreachable for Codex from the rollout by construction, because
+  // `should_persist_event_msg` drops approval requests as transient. The hook
+  // exists, it is safe to install — an observational handler is genuinely
+  // neutral, and the empty-stdout branch of `parse_completed` in
+  // `hooks/src/events/permission_request.rs` is a literally empty block — and
+  // it is still **not declared, because it does not mean what its name
+  // suggests**.
+  //
+  // It fires when an approval *decision* is being made, not when the user is
+  // being asked one. The session approval cache is consulted **inside**
+  // `start_approval_async`, which runs after the hook has already fired, so a
+  // user who approved `npm test` for the session gets `PermissionRequest` on
+  // every later `npm test`, a cache hit in microseconds, and no prompt at all.
+  // That is not an exotic configuration; it is what an ordinary session looks
+  // like after its first approval. The same is true of a guardian-reviewed
+  // call. Declaring this event would light up "Awaiting input" and fire an
+  // attention notification for calls the user never sees — the exact bug
+  // `cff3eca4` removed, arriving through a new transport.
+  //
+  // Nothing in the payload separates the two: there is no reviewer field, no
+  // cache-hit field, and `permission_mode` is a turn-level policy label that
+  // reads `"default"` for a cached approval, a guardian review and a real
+  // prompt alike. No other hook fires when the prompt is actually drawn — that
+  // is a protocol `EventMsg`, which the hook system does not observe. The
+  // source that *could* answer it is the app-server event stream, and reaching
+  // it means owning the process rather than watching a terminal the user types
+  // into, which is the one thing this app is built not to do.
+  //
+  // So `awaitingApproval` stays unreachable for Codex, and the terminal grid
+  // stays its only route to that state. Anyone revisiting this needs a signal
+  // that the turn is still *parked* some seconds after the request — not
+  // another reading of this payload.
+  //
+  // **And there is no failure event to declare.** `AgentActivityStatus.failed`
+  // stays unreachable for Codex through hooks as well as through the rollout,
+  // which is worth writing down so the next person does not go looking:
+  // `run_turn_stop_hooks` is called from one place, inside the success branch
+  // of `core/src/session/turn.rs`, so a turn that ends in an API error or an
+  // abort fires **no hook at all** — not `Stop` with a reason, but nothing.
+  // The only event that still arrives is `SessionEnd`, whose `reason` is the
+  // hard-coded constant `"other"` (`hooks/src/events/session_end.rs`). There is
+  // no Codex analogue of Claude Code's `StopFailure`.
+  hooks: AgentHookSpec(
+    // Beside `config.toml`, in the config folder Codex reads its user layer
+    // from (`hooks/src/engine/discovery.rs`, `load_hooks_json`). The trust
+    // grant is written to `[hooks.state]` in `config.toml` — by the CLI, never
+    // by us — so that file, which on a real machine carries `notify`, plugins,
+    // MCP servers and per-project trust levels, is never opened by this app.
+    configFileName: 'hooks.json',
+    // `configKey` and `entryStyle` are left at their defaults because Codex's
+    // file is Claude Code's shape exactly: a `hooks` object of event names, each
+    // a list of `{matcher?, hooks: [{type, command}]}` groups
+    // (`config/src/hook_config.rs`, `HooksFile` / `MatcherGroup`). A `matcher`
+    // is omitted, which selects every tool.
+    trustsCommandByHash: true,
+    // Codex hook input is `snake_case` and flat, one struct per event
+    // (`hooks/src/schema.rs`). `session_id` and `cwd` are the defaults, and
+    // both are present on every event declared below.
+    //
+    // There is **no message field anywhere in the payload** — no prose the
+    // agent wrote about what it is doing. `tool_name` is the closest thing that
+    // exists, and it is a name (`shell`, `apply_patch`), not a sentence, so it
+    // is quoted as evidence for the two tool events that carry it and
+    // contributes nothing to the other three, whose payloads have no such
+    // field. Composing a description out of the rest of the payload is what
+    // `evidence` exists to prevent.
+    messagePath: ['tool_name'],
+    eventStatus: {
+      'UserPromptSubmit': AgentActivityStatus.working,
+      'PreToolUse': AgentActivityStatus.working,
+      'PostToolUse': AgentActivityStatus.working,
+      'Stop': AgentActivityStatus.idle,
+      // The CLI is exiting. Its hook budget is **one second**, clamped to three
+      // (`discovery.rs`, `normalize_command_hook`), against every other event's
+      // ten minutes — so this is the one callback that can be killed before it
+      // lands. The `curl -m 2` in the script is bounded well inside the clamp
+      // and a local connection either completes or is refused immediately, so
+      // the cost of losing this race is one missed `idle`, not a stalled exit.
+      'SessionEnd': AgentActivityStatus.idle,
+    },
+  ),
   stateFile: AgentStateFileRules(
     idle: [
       StateRecordMatcher(['payload', 'role'], 'assistant'),

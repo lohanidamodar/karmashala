@@ -96,6 +96,20 @@ class AgentHookInstaller {
     if (spec == null) return false;
     if (!endpoint.reaches(environment)) return false;
 
+    // Written **before** the config entry that names it, so no launch can leave
+    // an entry pointing at a script that is not there yet. The reverse order is
+    // what an interrupted install would have to survive, and a hook whose
+    // command names a missing file is an error printed into the user's session.
+    if (spec.trustsCommandByHash &&
+        !await _writeCallbackScript(
+          descriptor: descriptor,
+          storeHome: storeHome,
+          endpoint: endpoint,
+          environment: environment,
+        )) {
+      return false;
+    }
+
     await _rewrite(descriptor, storeHome, (hooks) {
       var changed = false;
       for (final event in spec.eventStatus.keys) {
@@ -203,6 +217,17 @@ class AgentHookInstaller {
       }
       return changed;
     });
+    // The script goes with them. It is the only file in this feature that holds
+    // a bearer token in its own bytes rather than inside somebody else's config,
+    // so leaving it behind would outlive both the port it names and the app that
+    // could answer on it — the same argument [uninstall] exists for, one file
+    // further along. Removed whichever way the config edit went: a config that
+    // never carried our entry can still be sitting beside a script an earlier
+    // run wrote.
+    if (spec.trustsCommandByHash &&
+        _removeCallbackScripts(descriptor, storeHome)) {
+      changed = true;
+    }
     return changed;
   }
 
@@ -215,6 +240,13 @@ class AgentHookInstaller {
   /// The token is base64url (`A-Za-z0-9-_=`) and both the header and the URL
   /// are double-quoted, so the `&` between query parameters cannot background
   /// the command and nothing in it is expanded.
+  ///
+  /// **Except for an agent that trusts a hook by hashing its command.** Codex
+  /// does (see [AgentHookSpec.trustsCommandByHash]), and the address in that
+  /// string changes on every launch, so spelling it inline would revoke our own
+  /// trust every time the app started. For those agents the command names a
+  /// fixed script instead — constant for the life of the install — and the
+  /// address and token live in the script, which nothing hashes.
   String? hookCommand({
     required AgentDescriptor descriptor,
     required String event,
@@ -227,6 +259,14 @@ class AgentHookInstaller {
       environment: environment,
     );
     if (base == null) return null;
+    final spec = descriptor.hooks;
+    if (spec != null && spec.trustsCommandByHash) {
+      return _scriptCommand(
+        descriptor: descriptor,
+        event: event,
+        environment: environment,
+      );
+    }
     final uri = base.replace(
       queryParameters: {
         'agent': descriptor.id,
@@ -245,6 +285,235 @@ class AgentHookInstaller {
     return 'curl -s -m 2 -X POST '
         '-H "Authorization: Bearer ${endpoint.token}" '
         '--data-binary @- "$uri" || true';
+  }
+
+  /// The base name of the generated callback script, extension excluded.
+  ///
+  /// It **is** [agentHookMarker], and that is load-bearing rather than tidy:
+  /// an installed entry is recognised as ours only by the marker appearing in
+  /// its command string ([_isOurs]), and for a fixed-command agent the command
+  /// is nothing but this path and an event name. Naming the file anything else
+  /// would strand every entry in somebody's config the moment the app was
+  /// uninstalled, exactly as [legacyAgentHookMarkers] describes.
+  static const String _scriptBaseName = agentHookMarker;
+
+  /// The generated script's file name in [environment].
+  ///
+  /// Two spellings because the interpreter differs, not because the work does:
+  /// a `.cmd` is what `cmd.exe` will run, and a `.sh` is what a distribution's
+  /// `sh` will. Both are named explicitly by [_scriptCommand], so neither
+  /// relies on an execute bit — which a file written onto a
+  /// `\\wsl.localhost` share does not reliably carry anyway.
+  static String _scriptFileName(EnvironmentKind environment) =>
+      environment == EnvironmentKind.windowsNative
+      ? '$_scriptBaseName.cmd'
+      : '$_scriptBaseName.sh';
+
+  /// The command a fixed-command agent runs for [event] — the generated script,
+  /// named through the same home-directory variable the store locator itself
+  /// resolved, and the event as its one argument.
+  ///
+  /// **Every part of this string is a constant.** That is the whole requirement
+  /// ([AgentHookSpec.trustsCommandByHash]): the hash Codex trusts covers this
+  /// text, so anything in it that changed between launches would revoke the
+  /// user's grant on every start.
+  ///
+  /// The home directory is named as `%USERPROFILE%` / `$HOME` rather than
+  /// resolved here, and that is what makes one string correct in every
+  /// reachable environment. `CliStoreLocator` builds the store home from
+  /// exactly those two variables — `USERPROFILE` where the environment uses
+  /// Windows paths, `HOME` everywhere else — so the path the agent expands at
+  /// run time is the path this installer wrote to, by construction. It also
+  /// settles WSL, where the two disagree about spelling and not about place:
+  /// the app reaches that store as `\\wsl.localhost\<distro>\home\<user>\…`
+  /// and the agent inside the distribution reaches the same bytes as
+  /// `$HOME/…`. Writing the app's own view into the command would install a
+  /// path no process inside the distribution can open.
+  ///
+  /// **Both forms survive the shell the agent happens to use, which is not one
+  /// shell.** Codex hands the string to the session's own detected shell, and
+  /// only falls back to a fixed one when it has none
+  /// (`hooks/src/engine/command_runner.rs`, `default_shell_command`:
+  /// `%COMSPEC%` or `cmd.exe` with `/C` on Windows, `$SHELL` or `/bin/sh` with
+  /// `-lc` elsewhere). On Windows the detected shell is commonly PowerShell,
+  /// where `%USERPROFILE%` does not expand and a quoted path is a string
+  /// expression rather than a command — so naming `cmd.exe` explicitly is what
+  /// makes the same text work under `cmd`, Windows PowerShell and `pwsh`
+  /// alike: every one of them passes the quoted argument through unexpanded,
+  /// and the `cmd` we name does the expanding. On POSIX, `sh` is named for the
+  /// matching reason — a file written across a `\\wsl.localhost` share lands
+  /// mode 644, so it must be interpreted rather than executed.
+  static String? _scriptCommand({
+    required AgentDescriptor descriptor,
+    required String event,
+    required EnvironmentKind environment,
+  }) {
+    final store = descriptor.store;
+    // A fixed-command agent needs a directory of its own to keep the script in,
+    // and the store home is the only one this app knows how to name from inside
+    // the agent's environment. Without it there is nowhere to put the file.
+    if (store == null) return null;
+    final file = _scriptFileName(environment);
+    return switch (environment) {
+      EnvironmentKind.windowsNative =>
+        'cmd.exe /c "%USERPROFILE%\\'
+            '${store.homeDirectoryName.replaceAll('/', '\\')}\\$file" $event',
+      EnvironmentKind.localPosix || EnvironmentKind.wsl =>
+        'sh "\$HOME/${store.homeDirectoryName}/$file" $event',
+      // Never reached: [AgentHookEndpoint.reaches] is false for SSH, so no
+      // command is ever asked for. Spelled out rather than defaulted so a new
+      // environment kind is a compile error here instead of a silent guess.
+      EnvironmentKind.ssh => null,
+    };
+  }
+
+  /// Writes the callback script [_scriptCommand] names, and reports whether the
+  /// file on disk now spells this [endpoint].
+  ///
+  /// **This file is the one place the bearer token lives in bytes of our own.**
+  /// It is the same token, the same exposure and the same lifetime as the one
+  /// the inline command already writes into `settings.json` — status-only,
+  /// separate from the privileged `/rpc` credential, and documented as public
+  /// to anything running as this user (`LauncherControlServer`). What changes is
+  /// only where it sits, and one property improves: [uninstall] deletes the
+  /// file, so the token does not outlive the app that minted it.
+  ///
+  /// Nothing here is logged. The command, the URL and the script body all carry
+  /// the token, so none of them may reach a log line — the only thing this
+  /// reports upward is a bool.
+  Future<bool> _writeCallbackScript({
+    required AgentDescriptor descriptor,
+    required String storeHome,
+    required AgentHookEndpoint endpoint,
+    required EnvironmentKind environment,
+  }) async {
+    final uri = endpoint.uriFor(
+      agentId: descriptor.id,
+      event: '',
+      environment: environment,
+    );
+    if (uri == null) return false;
+    final file = _callbackScriptFile(descriptor, storeHome, environment);
+    if (file == null) return false;
+    // The address, with the event left to the script's own argument. Built by
+    // hand rather than through `Uri.replace` because the `$1` / `%~1` that
+    // stands in for it is not a legal query value and would be escaped.
+    final base =
+        '${uri.origin}${uri.path}'
+        '?agent=${Uri.encodeQueryComponent(descriptor.id)}'
+        '&marker=${Uri.encodeQueryComponent(agentHookMarker)}'
+        '&event=';
+    final contents = environment == EnvironmentKind.windowsNative
+        ? _windowsScript(base: base, token: endpoint.token)
+        : _posixScript(base: base, token: endpoint.token);
+
+    // Idempotent to the byte, exactly as the config write is: a relaunch that
+    // happened to bind the same port rewrites nothing.
+    if (file.existsSync()) {
+      try {
+        if (file.readAsStringSync() == contents) return true;
+      } on FileSystemException {
+        // Unreadable but present — rewritten below rather than trusted.
+      }
+    }
+    final parent = file.parent;
+    if (!parent.existsSync() && Directory(storeHome).existsSync()) {
+      await parent.create(recursive: true);
+    }
+    await _writeAtomically(file, contents);
+    try {
+      return file.readAsStringSync() == contents;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  /// The `sh` body. `$1` is the hook event name, supplied by the command.
+  ///
+  /// **Nothing this runs may reach the agent's stdout.** A hook that can decide
+  /// something reads its own stdout for that decision — Codex's
+  /// `PermissionRequest` looks for a `decision` there — and the endpoint answers
+  /// every callback with `{"ok":true,"status":"…"}`. Inline, `curl -s` prints
+  /// that body; here `-o /dev/null` throws it away before it can be read as a
+  /// verdict on somebody's tool call. The precedent is measured, not theoretical:
+  /// an empty `{}` from an Antigravity `PreToolUse` hook produced *"tool call
+  /// denied by pre-tool hook"* on a live run.
+  ///
+  /// **And the exit status is forced, not merely tidied.** The inline command
+  /// ends `|| true` because the owner watched `curl: (52) Empty reply from
+  /// server` and a non-zero status print into a live session. Here it is
+  /// load-bearing on top of that: Codex reads **exit code 2 with non-empty
+  /// stderr as a denial**, and turns the stderr text into the rejection the
+  /// user is shown (`hooks/src/events/permission_request.rs`, the exit-2 arm
+  /// of `parse_completed`). `curl` exits 2 on an option it cannot parse — a
+  /// truncated or half-written script is enough — so a wrapper that let its
+  /// own status through could start refusing the user's tool calls and
+  /// blaming curl for it. Every other non-zero exit, and a timeout, are
+  /// already neutral; 2 is the one that is not, and `exit 0` closes it.
+  static String _posixScript({required String base, required String token}) =>
+      '#!/bin/sh\n'
+      '# Karmashala agent status callback. Generated: rewritten on every\n'
+      '# launch, and deleted when the app exits. Edits will not survive.\n'
+      'curl -s -o /dev/null -m 2 -X POST \\\n'
+      '  -H "Authorization: Bearer $token" \\\n'
+      '  --data-binary @- \\\n'
+      '  "$base\$1" 2>/dev/null\n'
+      'exit 0\n';
+
+  /// The `cmd.exe` body. `%~1` is the hook event name, unquoted.
+  ///
+  /// CRLF throughout: a batch file with bare newlines is read by some Windows
+  /// shells and not others, and this one is written from a Dart process whose
+  /// default is `\n`. See [_posixScript] for why the output is discarded and the
+  /// status forced to zero.
+  static String _windowsScript({required String base, required String token}) =>
+      '@echo off\r\n'
+      'rem Karmashala agent status callback. Generated: rewritten on every\r\n'
+      'rem launch, and deleted when the app exits. Edits will not survive.\r\n'
+      'curl -s -o NUL -m 2 -X POST '
+      '-H "Authorization: Bearer $token" '
+      '--data-binary @- "$base%~1" 2>NUL\r\n'
+      'exit /b 0\r\n';
+
+  /// Deletes every spelling of the callback script under [storeHome]. Returns
+  /// whether anything was removed.
+  ///
+  /// Both spellings, not the one this environment would write: a store can be
+  /// reached from more than one side of a machine, and an uninstall that only
+  /// swept its own platform's extension would leave the other behind for ever.
+  bool _removeCallbackScripts(AgentDescriptor descriptor, String storeHome) {
+    var removed = false;
+    for (final environment in EnvironmentKind.values) {
+      final file = _callbackScriptFile(descriptor, storeHome, environment);
+      if (file == null || !file.existsSync()) continue;
+      try {
+        file.deleteSync();
+        removed = true;
+      } on FileSystemException {
+        // Someone else's directory, and the config entry is already gone — a
+        // script nothing names costs the agent nothing.
+      }
+    }
+    return removed;
+  }
+
+  /// Where the generated script sits **as this app sees it**: beside the hook
+  /// config, which for a fixed-command agent is the store home itself.
+  ///
+  /// `null` when this spec's config file is not directly in the store home. The
+  /// script's run-time path is built from the store's own directory name
+  /// ([_scriptCommand]), so the two only agree while the config sits there —
+  /// and a script the agent cannot find is the failure mode this whole feature
+  /// exists to avoid.
+  File? _callbackScriptFile(
+    AgentDescriptor descriptor,
+    String storeHome,
+    EnvironmentKind environment,
+  ) {
+    final config = configFileFor(descriptor, storeHome);
+    if (config == null || descriptor.store == null) return null;
+    if (p.normalize(config.parent.path) != p.normalize(storeHome)) return null;
+    return File(p.join(storeHome, _scriptFileName(environment)));
   }
 
   /// Reads the config, hands its hook map to [edit], and splices the result

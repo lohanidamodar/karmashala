@@ -265,6 +265,7 @@ class AgentHookSpec {
     this.messageWaiting = const {},
     this.eventKindPath = const [],
     this.eventKindMeaning = const {},
+    this.trustsCommandByHash = false,
     required this.eventStatus,
   });
 
@@ -349,6 +350,46 @@ class AgentHookSpec {
   /// unrecognised notice must not be able to raise "this session needs you",
   /// because that badge is what puts a key-sending button in front of a user.
   final Map<String, AgentHookMeaning> eventKindMeaning;
+
+  /// Whether this agent gates each hook entry on a hash of the entry itself, so
+  /// the installed **command string must not change between launches**.
+  ///
+  /// Codex does. Every discovered handler is hashed and compared to a
+  /// `trusted_hash` the user granted, and an entry that does not match is
+  /// listed but never dispatched
+  /// (`codex-rs/hooks/src/engine/discovery.rs`, `hook_trust_status` and the
+  /// `if enabled && (bypass || Managed | Trusted)` guard around
+  /// `handlers.push`).
+  ///
+  /// **What is hashed is the config entry, not the file the command names.**
+  /// `hook_hash` builds a `NormalizedHookIdentity { event_name, matcher, hooks:
+  /// [normalized handler] }`, converts it to TOML and takes
+  /// `version_for_toml` — sha256 over canonical, key-sorted JSON
+  /// (`codex-rs/config/src/fingerprint.rs`). Its own doc comment says why:
+  ///
+  ///   /// Hash a normalized, config-derived identity instead of source text so
+  ///   /// equivalent hooks from config TOML and hooks.json converge on the same
+  ///   /// trust identity.
+  ///
+  /// That single fact is what makes this installable at all. Karmashala's
+  /// callback address is an **ephemeral port and a per-launch bearer token**, so
+  /// a command spelling them inline would hash differently on every start and
+  /// demand a fresh trust review each time — unusable. A command that names a
+  /// fixed script instead hashes the same for ever, and the port and token live
+  /// in the script's contents, which nothing hashes. `AgentHookInstaller` writes
+  /// that script; see `hookCommand`.
+  ///
+  /// Two limits worth knowing before relying on it. The trust *state* is keyed
+  /// on the config file's absolute path, the event, the group index and the
+  /// handler index (`codex-rs/hooks/src/lib.rs`, `hook_key`), so our entry
+  /// keeps its trust only while its position in that event's list is stable —
+  /// adding ours last and removing only ours is what preserves it. And the
+  /// grant itself is the user's: the first launch after this is installed
+  /// leaves the entry
+  /// untrusted, firing nothing, until they say otherwise in the CLI's own
+  /// review. That is the honest shape for a callback into somebody's agent, and
+  /// it is why no bypass flag is passed anywhere in this feature.
+  final bool trustsCommandByHash;
 }
 
 /// One answer we can send to an agent's approval prompt, and what it does.
