@@ -6,7 +6,6 @@ import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
-import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -23,6 +22,9 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'package:karmashala/src/features/environments/domain/environment_kind.dart';
+import 'package:karmashala/src/features/environments/domain/execution_environment.dart';
+import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 
 /// Making a worktree and taking one away, over the endpoint an agent calls.
 ///
@@ -82,7 +84,20 @@ branch refs/heads/$worktreeBranch
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('karmashala_worktree_tools_');
     db = AppDatabase.memory();
-    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    // Pinned to Windows, not left to the host. Every path in these fixtures is
+    // a Windows one (`C:\src\demo\app`), and `worktreePathFor` picks its
+    // separator from the *environment's* kind — correctly, since a Mac's
+    // checkouts are POSIX paths. Inserting the host's own environment made the
+    // two disagree: on a Mac `p.dirname(r'C:\src\demo\app')` is `.`, so the
+    // worktree landed at `./.karmashala-worktrees/C:\src\demo\app-mcp`.
+    ExecutionEnvironmentDao(db).upsert(
+      ExecutionEnvironment(
+        id: localHostEnvironmentId,
+        kind: EnvironmentKind.windowsNative,
+        name: 'Windows',
+        createdAt: testTime,
+      ),
+    );
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
     RepositoryDao(db).insert(
