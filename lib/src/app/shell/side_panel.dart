@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
+import '../widgets/status_dot.dart';
 import 'logs_panel.dart';
 import 'pane_scaffold.dart';
 import 'resize_handle.dart';
@@ -207,17 +208,12 @@ class _RailButton extends StatelessWidget {
                   Positioned(
                     top: 1,
                     right: 0,
-                    child: Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: semantic.attention,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: scheme.surfaceContainerLow,
-                          width: 1,
-                        ),
-                      ),
+                    // No tooltip of its own: the button already carries one,
+                    // and it says the count.
+                    child: StatusDot(
+                      color: semantic.attention,
+                      label: '$badge waiting',
+                      ring: scheme.surfaceContainerLow,
                     ),
                   ),
               ],
