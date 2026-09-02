@@ -21,12 +21,18 @@ import 'note_edit_dialog.dart';
 class NotesView extends ConsumerWidget {
   const NotesView({super.key});
 
+  /// Builds of the note cards, counted so a cost test can prove that changing
+  /// session repaints only the cards whose send button names it.
+  @visibleForTesting
+  static int debugCardBuildCount = 0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The notes and nothing else. The selected session used to be watched here
+    // and handed to every card, so switching session repainted the whole list
+    // — including every note that was captured from a session of its own and
+    // never looks at the selection at all.
     final notes = ref.watch(notesProvider);
-    // Watched, not read: the fallback target for a note with no session of its
-    // own moves when the user changes session, and the button says which one.
-    final selectedSessionId = ref.watch(selectedSessionIdProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -50,10 +56,8 @@ class NotesView extends ConsumerWidget {
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: Insets.xs),
                   itemCount: notes.length,
-                  itemBuilder: (context, index) => _NoteCard(
-                    note: notes[index],
-                    selectedSessionId: selectedSessionId,
-                  ),
+                  itemBuilder: (context, index) =>
+                      _NoteCard(note: notes[index]),
                 ),
         ),
       ],
@@ -130,23 +134,23 @@ class _EmptyNotes extends StatelessWidget {
 }
 
 class _NoteCard extends ConsumerWidget {
-  const _NoteCard({required this.note, required this.selectedSessionId});
+  const _NoteCard({required this.note});
 
   final Note note;
 
-  /// The session the workbench is showing, used when the note's own session is
-  /// gone or it never had one.
-  final String? selectedSessionId;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    NotesView.debugCardBuildCount++;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final sessions = ref.read(sessionDaoProvider);
     final source = note.sourceSessionId == null
         ? null
         : sessions.getById(note.sourceSessionId!);
-    final targetId = source?.id ?? selectedSessionId;
+    // The selection is only the *fallback* target — a note that still has its
+    // own session ignores it. Subscribed here, and only on the branch that
+    // reads it, so changing session costs the cards that name it and no others.
+    final targetId = source?.id ?? ref.watch(selectedSessionIdProvider);
     final targetTitle = targetId == null
         ? null
         : (source?.title ?? sessions.getById(targetId)?.title ?? 'the session');

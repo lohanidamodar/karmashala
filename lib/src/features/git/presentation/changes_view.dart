@@ -26,6 +26,12 @@ class ChangesView extends ConsumerStatefulWidget {
 
   final String repositoryName;
 
+  /// Builds of the file rows, counted so a cost test can prove that a commit,
+  /// a delivery, a review thread or a session selection repaints the header
+  /// action that draws it and leaves the list alone.
+  @visibleForTesting
+  static int debugFileRowBuildCount = 0;
+
   @override
   ConsumerState<ChangesView> createState() => _ChangesViewState();
 }
@@ -35,24 +41,11 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final changes = ref.watch(repositoryChangesProvider);
-    final repositoryId = ref.watch(selectedRepositoryIdProvider);
-    final sessionId = ref.watch(selectedSessionIdProvider);
-    // One read for the whole panel; every line tile below picks its threads
-    // out of this index rather than asking the database for its own.
-    final threads =
-        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
-        ReviewThreadIndex.empty;
-    final pending = threads.pending;
-
-    // What this repository's work is called on the forge, so a branch, a
-    // commit or a pull request in view is one click from the page that owns it.
-    final delivery = repositoryId == null
-        ? null
-        : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
-    final head = ref.watch(recentCommitsProvider).asData?.value.firstOrNull;
-
+    // Nothing here watches a provider. Six of them used to be read in this one
+    // build — the changes, the selected repository and session, the review
+    // threads, the delivery and the commit log — so a commit landing or a
+    // review thread arriving repainted every file row in the panel. Each
+    // header action now subscribes to the one thing it draws.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -63,126 +56,24 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
             // Flexible, so a long branch name in a narrow panel ellipsises
             // rather than overflowing — this header sits in a side panel that
             // can be dragged down to 240px.
-            Flexible(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (delivery?.branch case final branch?) ...[
-                    const SizedBox(width: Insets.sm),
-                    Flexible(
-                      child: RemoteLink(
-                        text: branch,
-                        url: delivery!.remote?.branchUrl(branch),
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ),
-                  ],
-                  if (head != null) ...[
-                    const SizedBox(width: Insets.sm),
-                    Flexible(
-                      child: RemoteLink(
-                        text: shortSha(head.sha),
-                        // Drawn plainly when there is no remote — a commit
-                        // without one is still a commit.
-                        url: delivery?.remote?.commitUrl(head.sha),
-                        style: theme.textTheme.labelSmall,
-                        tooltip: head.subject,
-                      ),
-                    ),
-                  ],
-                  if (delivery?.pullRequest case final pr?) ...[
-                    const SizedBox(width: Insets.sm),
-                    Flexible(
-                      child: RemoteLink(
-                        text: '#${pr.number}',
-                        url: pr.url,
-                        style: theme.textTheme.labelSmall,
-                        tooltip: pr.title.isEmpty ? pr.url : pr.title,
-                        icon: true,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            changes.maybeWhen(
-              data: (files) => files.isEmpty
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.only(right: Insets.xs),
-                      child: Text(
-                        '${files.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-              orElse: () => const SizedBox.shrink(),
-            ),
+            const Flexible(child: _DeliveryLinks()),
+            const _ChangedFileCount(),
             IconButton(
               tooltip: 'Refresh',
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
               onPressed: () => ref.invalidate(repositoryChangesProvider),
             ),
-            if (pending.isNotEmpty)
-              IconButton(
-                // "Should fix", not "every comment": a thread nobody has
-                // triaged is a claim, and sending it would hand an agent work
-                // no human asked for.
-                tooltip: sessionId == null
-                    ? 'Select a session to send ${pending.length} review '
-                          'comments marked should-fix'
-                    : 'Send ${pending.length} should-fix review comments to '
-                          'the agent',
-                icon: Badge(
-                  label: Text('${pending.length}'),
-                  child: const Icon(AppIcons.chatCircleDots, size: Chrome.icon),
-                ),
-                onPressed: sessionId == null || repositoryId == null
-                    ? null
-                    : () async {
-                        // Nothing is cleared, marked or resolved by sending.
-                        // The thread stays should-fix until somebody looks at
-                        // the code and decides it is done — which is the whole
-                        // reason these are rows now. See
-                        // `buildReviewThreadPrompt`.
-                        await ref
-                            .read(sessionActionsProvider)
-                            .continueSession(
-                              sessionId,
-                              buildReviewThreadPrompt(pending),
-                            );
-                      },
-              ),
+            const _SendReviewThreadsButton(),
           ],
         ),
         Expanded(
-          child: changes.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => _ErrorBox(message: '$e'),
-            data: (files) => files.isEmpty
-                ? const PanePlaceholder(
-                    message: 'No working-tree changes.',
-                    icon: AppIcons.gitDiff,
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                    itemCount: files.length,
-                    itemBuilder: (context, index) {
-                      final file = files[index];
-                      return _ChangedFileSection(
-                        file: file,
-                        expanded: _expanded.contains(file.path),
-                        onToggle: () => setState(() {
-                          if (!_expanded.remove(file.path)) {
-                            _expanded.add(file.path);
-                          }
-                        }),
-                        onFullscreen: () => _openFullscreen(context, file),
-                      );
-                    },
-                  ),
+          child: _ChangedFiles(
+            expanded: _expanded,
+            onToggle: (path) => setState(() {
+              if (!_expanded.remove(path)) _expanded.add(path);
+            }),
+            onFullscreen: (file) => _openFullscreen(context, file),
           ),
         ),
       ],
@@ -195,6 +86,182 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
       context: context,
       builder: (_) => _DiffFullscreenDialog(file: file),
     );
+  }
+}
+
+/// What this repository's work is called on the forge, so a branch, a commit or
+/// a pull request in view is one click from the page that owns it.
+///
+/// Its own widget because it is the only thing in the header that cares about
+/// the delivery or the commit log, and both of those move on a git poll.
+class _DeliveryLinks extends ConsumerWidget {
+  const _DeliveryLinks();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final delivery = repositoryId == null
+        ? null
+        : ref.watch(repositoryDeliveryProvider(repositoryId)).asData?.value;
+    // Only the tip is drawn, so only the tip is subscribed to: the other seven
+    // commits the provider returns move without touching this row.
+    final head = ref.watch(
+      recentCommitsProvider.select((v) => v.asData?.value.firstOrNull),
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (delivery?.branch case final branch?) ...[
+          const SizedBox(width: Insets.sm),
+          Flexible(
+            child: RemoteLink(
+              text: branch,
+              url: delivery!.remote?.branchUrl(branch),
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
+        ],
+        if (head != null) ...[
+          const SizedBox(width: Insets.sm),
+          Flexible(
+            child: RemoteLink(
+              text: shortSha(head.sha),
+              // Drawn plainly when there is no remote — a commit without one
+              // is still a commit.
+              url: delivery?.remote?.commitUrl(head.sha),
+              style: theme.textTheme.labelSmall,
+              tooltip: head.subject,
+            ),
+          ),
+        ],
+        if (delivery?.pullRequest case final pr?) ...[
+          const SizedBox(width: Insets.sm),
+          Flexible(
+            child: RemoteLink(
+              text: '#${pr.number}',
+              url: pr.url,
+              style: theme.textTheme.labelSmall,
+              tooltip: pr.title.isEmpty ? pr.url : pr.title,
+              icon: true,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// How many files changed. Subscribed to the count alone, so the list growing a
+/// hunk redraws nothing here.
+class _ChangedFileCount extends ConsumerWidget {
+  const _ChangedFileCount();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref.watch(
+      repositoryChangesProvider.select((v) => v.asData?.value.length ?? 0),
+    );
+    if (count == 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: Insets.xs),
+      child: Text(
+        '$count',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Sends the should-fix review threads to the session on screen.
+///
+/// The review index and the selected session are read here rather than in the
+/// panel: a reply arriving over MCP bumps the index, and that must cost one
+/// badge rather than the whole file list.
+class _SendReviewThreadsButton extends ConsumerWidget {
+  const _SendReviewThreadsButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final threads =
+        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+        ReviewThreadIndex.empty;
+    final pending = threads.pending;
+    if (pending.isEmpty) return const SizedBox.shrink();
+
+    final sessionId = ref.watch(selectedSessionIdProvider);
+    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    return IconButton(
+      // "Should fix", not "every comment": a thread nobody has triaged is a
+      // claim, and sending it would hand an agent work no human asked for.
+      tooltip: sessionId == null
+          ? 'Select a session to send ${pending.length} review comments '
+                'marked should-fix'
+          : 'Send ${pending.length} should-fix review comments to the agent',
+      icon: Badge(
+        label: Text('${pending.length}'),
+        child: const Icon(AppIcons.chatCircleDots, size: Chrome.icon),
+      ),
+      onPressed: sessionId == null || repositoryId == null
+          ? null
+          : () async {
+              // Nothing is cleared, marked or resolved by sending. The thread
+              // stays should-fix until somebody looks at the code and decides
+              // it is done — which is the whole reason these are rows now. See
+              // `buildReviewThreadPrompt`.
+              await ref
+                  .read(sessionActionsProvider)
+                  .continueSession(
+                    sessionId,
+                    buildReviewThreadPrompt(pending),
+                  );
+            },
+    );
+  }
+}
+
+/// The list of changed files — the only part of the panel that watches the
+/// changes themselves.
+class _ChangedFiles extends ConsumerWidget {
+  const _ChangedFiles({
+    required this.expanded,
+    required this.onToggle,
+    required this.onFullscreen,
+  });
+
+  final Set<String> expanded;
+  final void Function(String path) onToggle;
+  final void Function(FileChange file) onFullscreen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref
+        .watch(repositoryChangesProvider)
+        .when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => _ErrorBox(message: '$e'),
+          data: (files) => files.isEmpty
+              ? const PanePlaceholder(
+                  message: 'No working-tree changes.',
+                  icon: AppIcons.gitDiff,
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                  itemCount: files.length,
+                  itemBuilder: (context, index) {
+                    final file = files[index];
+                    return _ChangedFileSection(
+                      file: file,
+                      expanded: expanded.contains(file.path),
+                      onToggle: () => onToggle(file.path),
+                      onFullscreen: () => onFullscreen(file),
+                    );
+                  },
+                ),
+        );
   }
 }
 
@@ -213,6 +280,7 @@ class _ChangedFileSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ChangesView.debugFileRowBuildCount++;
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
