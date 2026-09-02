@@ -9,7 +9,6 @@ import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/git/application/changes_providers.dart';
 import '../../features/notifications/application/attention_inbox.dart';
 import '../../features/projects/application/projects_controller.dart';
-import '../../features/sessions/presentation/model_chip.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 
 /// The window's bottom rule: where you are, and what is still running.
@@ -126,28 +125,17 @@ class ShellStatusBar extends ConsumerWidget {
                 ],
               ),
             ),
-            // The session in front of you. Both `const`, so a rebuild of this
-            // row cannot rebuild either chip and neither a quota nor a model
-            // change can rebuild the row — each subscription is the chip's own,
-            // and it is the only thing that repaints for it.
+            // What the account has left, which is the one thing here that is
+            // about neither where you are nor what is running in this window.
+            // `const`, so a rebuild of this row cannot rebuild the chip and a
+            // quota moving cannot rebuild the row — the subscription is the
+            // chip's own, and it is the only thing that repaints for it.
             //
-            // The model before the quota: it is the fact you can *act* on, and
-            // the one whose label changes when you change it.
-            Flexible(
-              flex: 4,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  // The one item on the row that gives way inside its own
-                  // group. A model name is the one width here that is not ours
-                  // to predict — `Gemini 3.7 Flash (Medium)` is a real one —
-                  // and the chip's own 72px cap is in logical pixels, so the
-                  // text still grows with the OS text step.
-                  Flexible(child: FocusedModelChip()),
-                  UsageChip(),
-                ],
-              ),
-            ),
+            // The model chip was here too, and moved: which model a session
+            // runs under is a fact about *that session*, so it belongs in the
+            // session's own bar beside its permission mode and its commit and
+            // push actions, not in the window's chrome beside the quota.
+            const Flexible(flex: 4, child: Center(child: UsageChip())),
             // 1 : 4 : 5, measured rather than picked. A loose `Flexible` is
             // capped at its share even when the other groups leave the row
             // half empty, so these are not preferences, they are budgets: at
