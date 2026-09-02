@@ -86,27 +86,13 @@ class SimulatorLivePane extends ConsumerWidget {
   }
 }
 
-class _Running extends ConsumerStatefulWidget {
+class _Running extends ConsumerWidget {
   const _Running({required this.view});
 
   final SimulatorLiveView view;
 
   @override
-  ConsumerState<_Running> createState() => _RunningState();
-}
-
-class _RunningState extends ConsumerState<_Running> {
-  /// Whether the desktop keyboard is driving the simulator.
-  ///
-  /// Held here rather than in the live-view notifier for the same reason the
-  /// Android pane holds it: arming it is a property of *this view*, and a state
-  /// that outlived the picture would leave the keyboard pointed at a simulator
-  /// the user can no longer see. Tearing the view down disposes this with it.
-  bool _forwarding = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final view = widget.view;
+  Widget build(BuildContext context, WidgetRef ref) {
     final screen = view.screen;
     final backend = ref.watch(simulatorBackendProvider);
     final name = ref
@@ -139,10 +125,10 @@ class _RunningState extends ConsumerState<_Running> {
           ),
         ),
         Expanded(
-          // Keyboard forwarding wraps the picture rather than sitting beside
-          // it, exactly as on the Android side: the switch and its state line
-          // belong under the thing they act on, and the focus ring has to be
-          // drawn around the mirror the keystrokes are going into.
+          // The same surface the Android pane uses, given a different sink.
+          // Focus, arming, the escape chord and the wording all live in there,
+          // which is what stops the two platforms drifting apart: the only
+          // thing this side chooses is what a keystroke means on the wire.
           child: DeviceKeyboardSurface(
             sink: backend == null
                 ? null
@@ -153,9 +139,6 @@ class _RunningState extends ConsumerState<_Running> {
                         .read(simulatorInputErrorProvider.notifier)
                         .report('$error'),
                   ),
-            forwarding: _forwarding,
-            onForwardingChanged: (value) =>
-                setState(() => _forwarding = value),
             deviceLabel: name ?? view.udid,
             child: Padding(
               padding: const EdgeInsets.all(Insets.sm),

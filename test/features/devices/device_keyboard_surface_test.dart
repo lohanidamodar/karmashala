@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/widgets/keyboard_capture.dart';
 import 'package:karmashala/src/features/devices/data/device_keyboard_sink.dart';
 import 'package:karmashala/src/features/devices/domain/device_keyboard.dart';
 import 'package:karmashala/src/features/devices/presentation/device_keyboard_surface.dart';
@@ -54,9 +55,7 @@ void main() {
   /// focused" is a real state rather than a flag.
   Future<FocusNode> pump(
     WidgetTester tester, {
-    required bool forwarding,
     DeviceKeyboardSink? keyboard,
-    ValueChanged<bool>? onForwardingChanged,
     bool useSink = true,
   }) async {
     final elsewhere = FocusNode(debugLabel: 'elsewhere');
@@ -70,8 +69,6 @@ void main() {
               Expanded(
                 child: DeviceKeyboardSurface(
                   sink: useSink ? (keyboard ?? sink) : null,
-                  forwarding: forwarding,
-                  onForwardingChanged: onForwardingChanged ?? (_) {},
                   deviceLabel: 'CPH1989',
                   child: const SizedBox.expand(
                     child: ColoredBox(color: Color(0xFF000000)),
@@ -93,34 +90,24 @@ void main() {
     await tester.pump();
   }
 
-  group('forwarding is off by default', () {
-    testWidgets('a focused pane with forwarding off sends nothing', (
+  /// Ctrl+Alt+K, pressed as a real chord.
+  Future<void> pressEscapeChord(WidgetTester tester) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+  }
+
+  group('focus is the switch', () {
+    testWidgets('clicking the picture starts forwarding, with no other act', (
       tester,
     ) async {
-      await pump(tester, forwarding: false);
-      await focusSurface(tester);
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
-      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-      await tester.pump();
-
-      expect(sink.sent, isEmpty);
-    });
-
-    testWidgets('and the state is stated on screen, not implied', (
-      tester,
-    ) async {
-      await pump(tester, forwarding: false);
-      expect(find.text(kKeyboardOffLabel), findsOneWidget);
-      expect(find.text(kKeyboardOnLabel), findsNothing);
-    });
-  });
-
-  group('forwarding on', () {
-    testWidgets('a focused pane types printable characters as text', (
-      tester,
-    ) async {
-      await pump(tester, forwarding: true);
+      // The owner reached for the pane expecting to type into it and nothing
+      // happened, because forwarding used to need arming first. One click is
+      // now the whole gesture.
+      await pump(tester);
       await focusSurface(tester);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyH);
@@ -128,10 +115,26 @@ void main() {
       await tester.pump();
 
       expect(sink.text, ['h', 'i']);
+      expect(find.text(kKeyboardOnLabel), findsOneWidget);
     });
 
-    testWidgets('and named keys as keycodes', (tester) async {
-      await pump(tester, forwarding: true);
+    testWidgets('an unfocused pane forwards nothing and says so', (
+      tester,
+    ) async {
+      // Never armed by merely existing: a mirror sitting in a pane the user is
+      // not looking at must not see the keystrokes meant for the terminal.
+      await pump(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.pump();
+
+      expect(sink.sent, isEmpty);
+      expect(find.text(kKeyboardOffLabel), findsOneWidget);
+      expect(find.text(kKeyboardOnLabel), findsNothing);
+    });
+
+    testWidgets('and named keys go as keycodes once focused', (tester) async {
+      await pump(tester);
       await focusSurface(tester);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
@@ -140,12 +143,8 @@ void main() {
       expect(sink.keyCodes, [AndroidKeyCode.del, AndroidKeyCode.del]);
     });
 
-    testWidgets('an unfocused pane in the background receives nothing', (
-      tester,
-    ) async {
-      // The mirror can sit in a pane the user is not looking at. Typing into
-      // the terminal must not also type into the phone.
-      final elsewhere = await pump(tester, forwarding: true);
+    testWidgets('losing focus stops forwarding again', (tester) async {
+      final elsewhere = await pump(tester);
       await focusSurface(tester);
       elsewhere.requestFocus();
       await tester.pump();
@@ -157,7 +156,7 @@ void main() {
     });
 
     testWidgets('losing focus lifts a key that was still held', (tester) async {
-      final elsewhere = await pump(tester, forwarding: true);
+      final elsewhere = await pump(tester);
       await focusSurface(tester);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
@@ -178,7 +177,7 @@ void main() {
     testWidgets('the desktop\'s own shortcuts stop reaching the app', (
       tester,
     ) async {
-      // This is the whole reason there is an off switch: Ctrl+W must close a
+      // This is the whole reason there is a way to stop: Ctrl+W must close a
       // tab on the phone, not in Karmashala.
       var appSawIt = false;
       await tester.pumpWidget(
@@ -195,8 +194,6 @@ void main() {
               child: Scaffold(
                 body: DeviceKeyboardSurface(
                   sink: sink,
-                  forwarding: true,
-                  onForwardingChanged: (_) {},
                   deviceLabel: 'CPH1989',
                   child: const SizedBox.expand(
                     child: ColoredBox(color: Color(0xFF000000)),
@@ -220,53 +217,96 @@ void main() {
     });
   });
 
-  group('the escape chord', () {
-    testWidgets('Ctrl+Alt+K turns forwarding off and is never forwarded', (
+  group('nothing else may take the keyboard away', () {
+    testWidgets('an armed, focused pane marks itself as holding the keyboard', (
       tester,
     ) async {
-      bool? requested;
-      await pump(
-        tester,
-        forwarding: true,
-        onForwardingChanged: (value) => requested = value,
-      );
+      // The terminal controller re-requests its pane's focus after a frame and
+      // used to guard only on "is this an EditableText", which a mirror is not
+      // — so it took the keyboard back and the next keystroke was typed into
+      // the shell. `keyboardIsSpokenFor` is the shared rule that stops it.
+      await pump(tester);
+      expect(keyboardIsSpokenFor(), isFalse);
+
+      await focusSurface(tester);
+      expect(keyboardIsSpokenFor(), isTrue);
+      expect(find.byType(KeyboardCaptureScope), findsOneWidget);
+    });
+
+    testWidgets('a pane that is not forwarding makes no such claim', (
+      tester,
+    ) async {
+      // Otherwise a mirror that is only being looked at would pin the keyboard
+      // away from the terminal for no reason.
+      await pump(tester);
+      await focusSurface(tester);
+      await pressEscapeChord(tester);
+
+      expect(keyboardIsSpokenFor(), isFalse);
+      expect(find.byType(KeyboardCaptureScope), findsNothing);
+    });
+
+    testWidgets('and a pane with no transport never claims it', (tester) async {
+      await pump(tester, useSink: false);
       await focusSurface(tester);
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump();
+      expect(keyboardIsSpokenFor(), isFalse);
+    });
+  });
 
-      expect(requested, isFalse);
+  group('the escape chord', () {
+    testWidgets('Ctrl+Alt+K stops forwarding and is never forwarded', (
+      tester,
+    ) async {
+      await pump(tester);
+      await focusSurface(tester);
+      await pressEscapeChord(tester);
+
+      expect(sink.sent, isEmpty);
+      expect(find.text(kKeyboardOffLabel), findsOneWidget);
+
+      // And the pane really is quiet afterwards, not merely relabelled.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.pump();
       expect(sink.sent, isEmpty);
     });
 
     testWidgets('and turns it back on from off', (tester) async {
-      bool? requested;
-      await pump(
-        tester,
-        forwarding: false,
-        onForwardingChanged: (value) => requested = value,
-      );
+      await pump(tester);
+      await focusSurface(tester);
+      await pressEscapeChord(tester);
+      await pressEscapeChord(tester);
+
+      expect(find.text(kKeyboardOnLabel), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.pump();
+      expect(sink.text, ['a']);
+    });
+
+    testWidgets('a suspended pane stays suspended across a focus round trip', (
+      tester,
+    ) async {
+      // Someone who turned forwarding off, looked away and looked back has not
+      // asked for it again. Re-arming on focus would make the off switch a
+      // thing that undoes itself.
+      final elsewhere = await pump(tester);
+      await focusSurface(tester);
+      await pressEscapeChord(tester);
+
+      elsewhere.requestFocus();
+      await tester.pump();
       await focusSurface(tester);
 
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.pump();
-
-      expect(requested, isTrue);
       expect(sink.sent, isEmpty);
     });
 
     testWidgets('the way out is written where the user can see it', (
       tester,
     ) async {
-      await pump(tester, forwarding: true);
+      await pump(tester);
+      await focusSurface(tester);
       expect(
         find.textContaining(kDeviceKeyboardEscapeLabel),
         findsAtLeastNWidgets(1),
@@ -278,7 +318,7 @@ void main() {
     testWidgets('no input transport at all says so and cannot be armed', (
       tester,
     ) async {
-      await pump(tester, forwarding: false, useSink: false);
+      await pump(tester, useSink: false);
       expect(find.text(kKeyboardUnavailableLabel), findsOneWidget);
       final toggle = tester.widget<Switch>(find.byType(Switch));
       expect(toggle.onChanged, isNull);
@@ -289,7 +329,7 @@ void main() {
     ) async {
       // Nothing to assert on the wire; what matters is that the pane does not
       // eat the key either — it goes back to the app rather than nowhere.
-      await pump(tester, forwarding: true, useSink: false);
+      await pump(tester, useSink: false);
       await focusSurface(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.pump();
@@ -306,7 +346,6 @@ void main() {
       const reason = 'iOS has no Page Down key';
       await pump(
         tester,
-        forwarding: true,
         keyboard: _RecordingSink(
           transport: DeviceKeyboardTransport.webDriverAgent,
           refuseWith: reason,
@@ -329,11 +368,11 @@ void main() {
     testWidgets('the adb fallback says what it cannot do', (tester) async {
       await pump(
         tester,
-        forwarding: true,
         keyboard: _RecordingSink(
           transport: DeviceKeyboardTransport.adbInput,
         ),
       );
+      await focusSurface(tester);
       expect(
         find.textContaining(DeviceKeyboardTransport.adbInput.limitation!),
         findsOneWidget,
