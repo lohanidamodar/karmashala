@@ -41,7 +41,7 @@ import '../terminal/fake_instance.dart';
 /// conversation each directory last used, in the same file it resolves
 /// `--continue` through. `planAntigravityResume` turns that one refusal into
 /// four answers, and this is the wiring that lets the two surfaces reach it —
-/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §6.3.
+/// the design note
 ///
 /// The plan's own rules are tested in `antigravity_session_resume_test.dart`.
 /// What is tested here is that clicking a stopped Antigravity card, and opening
@@ -233,31 +233,30 @@ void main() {
   });
 
   group('opening it in a system terminal', () {
-    test('finds the conversation, then refuses to open it blind', () async {
+    test('finds the conversation, then actually continues it', () async {
       // Two things at once, and both matter. The store *does* name the
-      // conversation, so the row stops being a phantom — but
-      // `resumeCommandLine` builds its resume arguments from a hard-coded
-      // switch on claudeCode/codex, so the command it produces for `agy` is
-      // the bare executable. Running that would start a NEW conversation under
-      // this session's name. Refusing in words is the honest outcome; the
-      // Explorer click above resumes properly because the pane launch reads
-      // the descriptor.
+      // conversation, so the row stops being a phantom — and the command now
+      // says which one, because `resumeCommandLine` reads the descriptor's
+      // `interactiveResume` (`--conversation` for `agy`) instead of a
+      // hard-coded switch on claudeCode/codex.
+      //
+      // This test used to assert a refusal. That refusal was the stopgap for
+      // exactly this builder: for `agy` it produced the bare executable, which
+      // in a terminal starts a NEW conversation under this session's name. With
+      // the builder reading the registry there is nothing left to refuse here,
+      // and refusing would now be the wrong answer.
       writeLastConversations({_repoPath: _conversation});
       insertPhantom();
 
-      await expectLater(
-        container
-            .read(sessionActionsProvider)
-            .openSessionInSystemTerminal('phantom', _terminal),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            allOf(contains(_conversation), contains('would start a new')),
-          ),
-        ),
-      );
-      expect(terminals.launches, isEmpty);
+      await container
+          .read(sessionActionsProvider)
+          .openSessionInSystemTerminal('phantom', _terminal);
+
+      expect(terminals.launches.single, [
+        r'C:\bin\agy.exe',
+        '--conversation',
+        _conversation,
+      ]);
       expect(
         SessionDao(db).getById('phantom')!.externalSessionId,
         _conversation,

@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// What one poll costs the attention inbox, measured against the algorithm it
 /// replaced.
 ///
-/// The audit's finding (`PERFORMANCE_SCALABILITY_AUDIT_2026-08-31.md` §P1, "the
+/// The audit's finding (the 2026-08-31 performance audit, §P1, "the
 /// inbox is unbounded and poll application can become quadratic"): every upsert
 /// was an `indexWhere` over the whole item list, and the id it compared was a
 /// *getter* that interpolated a fresh string for each item it looked at. A poll

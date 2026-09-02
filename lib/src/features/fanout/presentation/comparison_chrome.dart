@@ -10,7 +10,7 @@ import '../domain/comparison.dart';
 
 /// Small shared pieces of the comparison surface.
 ///
-/// Neutral by decision (`docs/superpowers/specs/2026-08-30-desktop-ui-direction.md`):
+/// Neutral by decision (the design note):
 /// the ramp carries the chrome and the only colour is [SemanticColors] — diff
 /// add/remove, a failed launch, a verdict. Nothing here is branded.
 

@@ -44,6 +44,11 @@ typedef MigrationStep = void Function(Database db);
 /// * **v23** — G1: a session's append-only decision record — the constraints,
 ///   rejected approaches, approvals, verdicts and marked checkpoints that a
 ///   handoff packet was carrying a transcript instead of.
+/// * **v24** — Index the pane hosting a session so switching terminal tabs does
+///   not scan every historical session row.
+/// * **v25** — G2: what a session left behind when it ended, so a crash or an
+///   unfinished check is still waiting in the morning rather than scrolling
+///   past at 14:32.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -68,7 +73,71 @@ final Map<int, MigrationStep> schemaMigrations = {
   21: _migrateToV21,
   22: _migrateToV22,
   23: _migrateToV23,
+  24: _migrateToV24,
+  25: _migrateToV25,
 };
+
+/// What a session left behind when it ended.
+///
+/// **Raises nothing for what is already there, and has to say so out loud.**
+/// The observer's durable signal is the session's own row, which goes on saying
+/// `failed` forever — so without the second statement below, the first sweep
+/// after an upgrade would present a workspace's whole history as things that
+/// just happened. That is a wall of notices about work the user finished with
+/// weeks ago, and the fastest possible way to teach somebody to ignore the
+/// list.
+///
+/// The baseline is written as **already-closed** rows: never raised, never
+/// shown, and marked [FollowUpReason.predatesTheFeature] so anyone reading the
+/// table can see exactly what they are. A closed row with no resolution is
+/// "not recorded", which is what this is — nobody decided anything about these,
+/// they simply predate the question. Follow-ups begin from the first ending
+/// this build actually observes.
+///
+/// No foreign key on `session_id`, matching `verification_runs`: a notice about
+/// a session must not be able to take that session's row with it, and a session
+/// deleted out from under a follow-up is something the reader resolves rather
+/// than a constraint violation.
+void _migrateToV25(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_follow_ups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      ending TEXT NOT NULL,
+      summary TEXT,
+      raised_at TEXT NOT NULL,
+      resolved_at TEXT,
+      resolution TEXT
+    );
+  ''');
+  // At most one *open* follow-up per session, enforced here rather than in the
+  // DAO because the writer is a poll: it re-reads the same ended rows on every
+  // session-revision bump, and without this the list would grow by an identical
+  // row per bump. Resolved rows are exempt — the same session ending twice over
+  // a week is two things to come back to, and only the later one is still open.
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_follow_ups_open '
+    'ON session_follow_ups (session_id) WHERE resolved_at IS NULL;',
+  );
+
+  // The status names are the ending names — `endingOfStatus` maps them one to
+  // one — so the mark this writes is exactly the one the service looks for.
+  final now = DateTime.now().toUtc().toIso8601String();
+  db.execute(
+    'INSERT INTO session_follow_ups '
+    '(session_id, reason, ending, raised_at, resolved_at) '
+    "SELECT id, 'predatesTheFeature', status, ?, ? FROM sessions "
+    "WHERE status IN ('completed', 'failed', 'cancelled');",
+    [now, now],
+  );
+}
+
+void _migrateToV24(Database db) {
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sessions_pane ON sessions (pane_id);',
+  );
+}
 
 void _migrateToV23(Database db) {
   // The decision record (G1): what a session decided, as opposed to what it

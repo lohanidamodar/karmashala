@@ -60,7 +60,7 @@ enum ShellWidth {
 /// The desktop shell: Explorer · Workbench · side panel, over a status bar.
 ///
 /// The terminal is not a dock any more. Karmashala is terminal-primary (see
-/// `docs/superpowers/specs/2026-08-30-session-daemon-direction.md`), so the
+/// the design note), so the
 /// terminal and its tabs live in the middle of the window and the navigation
 /// stays on the left — the shape Orca, cmux, Warp and Ghostty all converge on.
 class AppShell extends ConsumerStatefulWidget {

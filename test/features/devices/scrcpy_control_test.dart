@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:karmashala/src/features/devices/data/scrcpy_control.dart';
+import 'package:karmashala/src/features/devices/domain/device_keyboard.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The expected encoding, spelled out independently of the implementation.
@@ -17,6 +19,8 @@ int _i32(Uint8List b, int i) => ByteData.sublistView(b).getInt32(i);
 int _u64(Uint8List b, int i) => ByteData.sublistView(b).getUint64(i);
 
 void main() {
+  _keyboardWire();
+
   group('encodePressure', () {
     test('1.0 is 0xFFFF exactly, not 0x10000 truncated', () {
       // `Binary.u16FixedPointToFloat` special-cases 0xFFFF as 1.0 and divides
@@ -138,6 +142,100 @@ void main() {
       expect(ScrcpyPointerId.genericFinger, -2);
       expect(ScrcpyPointerId.virtualMouse, -3);
       expect(ScrcpyPointerId.virtualFinger, -4);
+    });
+  });
+}
+
+/// The keyboard half of the same protocol, read out of the same jar.
+///
+/// `ControlMessageReader.parseInjectKeycode` reads an unsigned byte then three
+/// ints — action, keycode, repeat, metaState — and hands them to
+/// `Controller.injectKeycode`, which builds a real `KeyEvent`.
+/// `parseInjectText` reads a string: a **four**-byte big-endian length
+/// (`parseString` passes 4 to `parseBufferLength`) followed by that many UTF-8
+/// bytes, capped at `INJECT_TEXT_MAX_LENGTH = 300`.
+void _keyboardWire() {
+  group('INJECT_KEYCODE', () {
+    const event = ScrcpyKeycodeEvent(
+      action: AndroidKeyAction.down,
+      keyCode: AndroidKeyCode.enter,
+      repeat: 0,
+      metaState: AndroidMetaState.shiftOn,
+    );
+
+    test('is exactly 14 bytes', () {
+      expect(event.encode().length, kScrcpyKeycodeMessageLength);
+      expect(kScrcpyKeycodeMessageLength, 14);
+    });
+
+    test('lays every field at the offset the server reads it from', () {
+      final bytes = event.encode();
+      expect(_u8(bytes, 0), ScrcpyControlType.injectKeycode);
+      expect(_u8(bytes, 1), AndroidKeyAction.down);
+      expect(_i32(bytes, 2), AndroidKeyCode.enter);
+      expect(_i32(bytes, 6), 0);
+      expect(_i32(bytes, 10), AndroidMetaState.shiftOn);
+    });
+
+    test('an auto-repeat carries the repeat count Android expects', () {
+      const held = ScrcpyKeycodeEvent(
+        action: AndroidKeyAction.down,
+        keyCode: AndroidKeyCode.del,
+        repeat: 7,
+      );
+      final bytes = held.encode();
+      expect(_i32(bytes, 6), 7);
+      expect(_i32(bytes, 10), AndroidMetaState.none);
+    });
+
+    test('the two key actions are the AOSP KeyEvent values', () {
+      expect(AndroidKeyAction.down, 0);
+      expect(AndroidKeyAction.up, 1);
+    });
+  });
+
+  group('INJECT_TEXT', () {
+    test('is a four-byte big-endian length then UTF-8', () {
+      final bytes = const ScrcpyTextEvent('hi').encode();
+      expect(_u8(bytes, 0), ScrcpyControlType.injectText);
+      expect(ByteData.sublistView(bytes).getUint32(1), 2);
+      expect(bytes.sublist(5), [0x68, 0x69]);
+      expect(bytes.length, 7);
+    });
+
+    test('the length counts bytes, not characters', () {
+      // 'é' is two bytes in UTF-8. Counting characters would make the server
+      // read one byte short and then misparse the *next* message.
+      final bytes = const ScrcpyTextEvent('é').encode();
+      expect(ByteData.sublistView(bytes).getUint32(1), 2);
+      expect(bytes.length, 7);
+    });
+
+    test('an empty string is refused rather than sent as a no-op', () {
+      expect(const ScrcpyTextEvent('').encode, throwsArgumentError);
+    });
+
+    test('text is split so no message exceeds the server cap', () {
+      // The server allocates the declared length and `readFully`s it; over
+      // INJECT_TEXT_MAX_LENGTH scrcpy 4.1 simply refuses the message, so a
+      // long paste has to arrive as several.
+      expect(kScrcpyInjectTextMaxBytes, 300);
+      final chunks = splitForInjectText('a' * 701);
+      expect(chunks.length, 3);
+      expect(chunks.first.length, kScrcpyInjectTextMaxBytes);
+      expect(chunks.join(), 'a' * 701);
+    });
+
+    test('a split never lands in the middle of a character', () {
+      // Two-byte 'é' 200 times = 400 bytes. A naive cut at byte 300 would
+      // halve one, and the server would decode a replacement character.
+      final chunks = splitForInjectText('é' * 200);
+      expect(chunks.length, 2);
+      for (final chunk in chunks) {
+        expect(utf8.encode(chunk).length, lessThanOrEqualTo(kScrcpyInjectTextMaxBytes));
+        expect(chunk.contains('�'), isFalse);
+      }
+      expect(chunks.join(), 'é' * 200);
     });
   });
 }

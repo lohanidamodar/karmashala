@@ -30,7 +30,6 @@ typedef AntigravityResumePlanner =
 /// conversation each directory last used, in
 /// `cache/last_conversations.json` — the very file it resolves `--continue`
 /// through — so the app could read the conversation it was refusing to open.
-/// See `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §4 and §6.3.
 ///
 /// The judgement is `planAntigravityResume`'s and stays there. This provider is
 /// the part that needs the workspace: which agent the session runs, which

@@ -683,7 +683,7 @@ class _StripTab {
 /// The workbench tab strip.
 ///
 /// **What overflow is for.** The app is built for a hundred live terminals
-/// (`docs/ARCHITECTURE.md`), and a horizontal strip is hopeless at a hundred
+///, and a horizontal strip is hopeless at a hundred
 /// tabs however well it scrolls — so the answer to "I cannot reach my tabs"
 /// cannot be better scrolling. It is [TabPicker]: a filterable list of every
 /// tab, reached from a button that appears exactly when the strip stops being

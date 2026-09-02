@@ -31,7 +31,7 @@ Future<List<TranscriptMessage>> readCliTranscript(
 ) async {
   // Antigravity's own file is a SQLite database whose message columns are
   // protobuf in an unpublished schema, so there is nothing here to parse — see
-  // `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §8. Refused by name rather than
+  // the design note Refused by name rather than
   // left to fail: without this the loop below reads a binary file as UTF-8
   // lines every two seconds behind the imported-session detail pane, and
   // arrives at the same empty list by throwing.

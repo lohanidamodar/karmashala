@@ -22,7 +22,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm/xterm.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_profiles.dart';
-import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 
 /// A process-free [TerminalInstance] so the controller can be tested without
 /// spawning a real PTY.
@@ -40,8 +39,15 @@ class FakeTerminalInstance
     this.restored,
     this.agentLaunch,
     Terminal? adoptTerminal,
+    bool shellIntegration = false,
   }) : adopted = adoptTerminal {
     terminal = adoptTerminal ?? (Terminal(maxLines: 1000)..resize(40, 10));
+    // Attached on the same condition a real pane attaches it, so a test can
+    // exercise OSC 133 — command blocks, and `terminal_run` waiting on one —
+    // by writing the markers a shell would emit.
+    if (shellIntegration) {
+      commandBlocks = CommandBlockRecorder(terminal)..attach();
+    }
     if (adoptTerminal == null && restored != null && restored!.isNotEmpty) {
       terminal.write(restored!);
     }
@@ -74,9 +80,11 @@ class FakeTerminalInstance
   @override
   final ScrollController scrollController = ScrollController();
 
-  /// The fake never runs a shell, so it has no command boundaries.
+  /// Null unless the pane was built with shell integration, exactly as a real
+  /// one is: the UI has to tell "no integration" from "integrated, nothing run
+  /// yet".
   @override
-  CommandBlockRecorder? get commandBlocks => null;
+  CommandBlockRecorder? commandBlocks;
 
   /// Live until disposed, so the fake exercises the same detach/end paths a
   /// real PTY does.
@@ -222,6 +230,7 @@ ProviderContainer fakeTerminalContainer({AppDatabase? database}) =>
 fakeTerminalOverrides({
   AppDatabase? database,
   TerminalInstanceFactory? instanceFactory,
+  bool shellIntegration = false,
 }) {
   return [
     if (database != null) databaseProvider.overrideWithValue(database),
@@ -236,7 +245,7 @@ fakeTerminalOverrides({
     ),
     // Off unless a test says otherwise; also keeps the terminal controller
     // from pulling in settings (and therefore a database) just to open a pane.
-    shellIntegrationEnabledProvider.overrideWithValue(false),
+    shellIntegrationEnabledProvider.overrideWithValue(shellIntegration),
     // Pinned, because the real list is host-shaped: a Mac offers the shells in
     // its /etc/shells and no `cmd`, so a test naming a profile would pass or
     // fail according to the machine it ran on.
@@ -276,4 +285,5 @@ TerminalInstance defaultFakeInstanceFactory({
   restored: restoredScrollback,
   agentLaunch: agentLaunch,
   adoptTerminal: adoptTerminal,
+  shellIntegration: shellIntegration,
 );

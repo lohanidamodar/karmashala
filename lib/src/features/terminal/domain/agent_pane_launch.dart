@@ -163,7 +163,7 @@ class AgentPaneLaunch {
 /// why the descriptor records two of those.
 ///
 /// An agent the registry has never heard of gets no arguments at all rather than
-/// another agent's flags (`PRODUCT.md` principle 5).
+/// another agent's flags.
 List<String> interactiveAgentArguments(
   AgentDescriptor? descriptor,
   PermissionMode permissionMode, {

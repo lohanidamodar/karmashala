@@ -38,6 +38,7 @@ class StartHarness {
     startLedger: ledger,
     send: (type, {id, payload = const {}}) async {
       sent.add((type: type, id: id, payload: payload));
+      return true;
     },
   );
 

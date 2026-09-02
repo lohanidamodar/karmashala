@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// Design tokens for Karmashala's desktop chrome.
 ///
-/// **Neutral by decision** (see `docs/superpowers/specs/`
+/// **Neutral by decision** (see the design note
 /// `2026-08-30-desktop-ui-direction.md`). The ink / brass / parchment identity
 /// is retired: a greyscale ramp carries the chrome, a single accent marks
 /// selection and focus, and colour that means something is reserved for

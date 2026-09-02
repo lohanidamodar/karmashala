@@ -27,7 +27,7 @@ const int kAntigravityAnnouncementLines = 40;
 /// app-launched Antigravity session had no CLI id at all. That is the phantom
 /// the owner hit: a row nothing could resume ("no CLI session id found"), rename
 /// from the store, or find again. See
-/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §3 and §6.2.
+/// the design note and §6.2.
 ///
 /// The rules for *which* conversation belong to `AntigravitySessionAttributor`
 /// (`features/agents/data/`), where the evidence for each of them is written

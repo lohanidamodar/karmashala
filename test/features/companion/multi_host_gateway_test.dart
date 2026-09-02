@@ -2,6 +2,12 @@
 /// in-process hosts — separate databases, separate bindings, separate host
 /// ids, one shared relay — so pairing-adds, switching and per-host removal are
 /// proven on the wire rather than against a script.
+///
+/// Every case here pairs at least once over a real socket, and the default
+/// per-test budget of thirty seconds sat only ten seconds above the pairing
+/// timeout it has to contain. Under `--concurrency=4` that is not enough
+/// room, and this file was one of the five that fail together and pass alone.
+@Timeout(Duration(minutes: 2))
 library;
 
 import 'dart:async';
@@ -142,6 +148,13 @@ void main() {
       )..start(),
       requestTimeout: const Duration(seconds: 2),
       helloTimeout: const Duration(seconds: 2),
+      // Spelled out rather than left on the production default of 20s. That
+      // default is what a phone on a real network should wait for a hosted
+      // relay; every pairing here is in-process over loopback, and none of
+      // these tests measures pairing latency — so a 20s cap was only an extra
+      // way for a loaded machine to fail them, as `TimeoutException after
+      // 0:00:20` out of `_pairOverAnyPath`, on a run where nothing was wrong.
+      pairingTimeout: const Duration(seconds: 90),
       reconnectBackoff: fastBackoff(),
     );
     gateways.add(gateway);
@@ -164,9 +177,12 @@ void main() {
     await awaitLink(gateway, CompanionLinkState.connected);
   }
 
+  /// Ten seconds was the budget here, which is a guess about how loaded the
+  /// machine is rather than a claim about the code. Thirty is the same claim
+  /// with room for `--concurrency=4`.
   Future<void> eventually(
     Future<bool> Function() check, {
-    Duration timeout = const Duration(seconds: 10),
+    Duration timeout = const Duration(seconds: 30),
     String reason = 'condition',
   }) async {
     final deadline = DateTime.now().add(timeout);

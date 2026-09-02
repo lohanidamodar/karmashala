@@ -26,7 +26,7 @@ import '../../support/fixtures.dart';
 /// conversation file looks alike from outside. Before this, an app-launched
 /// Antigravity session was a phantom — a row with no CLI id, which nothing could
 /// resume, rename or find again
-/// (`docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §3, §6.2).
+///.
 ///
 /// The rules themselves are `AntigravitySessionAttributor`'s and are tested in
 /// `antigravity_session_resume_test.dart`. What is tested here is the service

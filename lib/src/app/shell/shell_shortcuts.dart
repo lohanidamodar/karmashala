@@ -363,6 +363,30 @@ const List<ShellChord> shellChords = [
     does: 'Close the terminal pane, or its tab when it is the last',
     shellCost: 'readline delete previous word (^W)',
   ),
+  // What every other tabbed application uses, and what the owner reached for
+  // first. A terminal cannot tell `Ctrl+Tab` from a plain `Tab` — both encode
+  // as `^I` — so readline's completion is not lost: it is still on the `Tab`
+  // the user actually presses. That makes this one of the cheapest chords in
+  // the table, and it is listed before the page keys because it is the one
+  // people try.
+  ShellChord(
+    activator: SingleActivator(LogicalKeyboardKey.tab, control: true),
+    intent: StepTerminalTabIntent.next(),
+    label: 'Ctrl+Tab',
+    does: 'Next terminal tab',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.tab,
+      control: true,
+      shift: true,
+    ),
+    intent: StepTerminalTabIntent.previous(),
+    label: 'Ctrl+Shift+Tab',
+    does: 'Previous terminal tab',
+    skipsShell: true,
+  ),
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.pageDown, control: true),
     intent: StepTerminalTabIntent.next(),

@@ -476,4 +476,34 @@ void main() {
       expect(restored.tabs.single.focusedPaneId, hostPane);
     });
   });
+  test('a split tab names itself, not one of its regions', () async {
+    // The owner, seeing the strip above a split: "why is there this extra tab
+    // at the top? it doesn't do anything it's just there". Every region has a
+    // header now, so a tab that borrowed the focused pane's name printed the
+    // same word twice — once on the tab, once in the region below it — and
+    // added a `(2)` counting panes that were both already on screen.
+    final container = fakeTerminalContainer();
+    addTearDown(container.dispose);
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    controller.openTab(TerminalProfile.powerShell);
+    final tabId = container
+        .read(terminalSessionsControllerProvider)
+        .activeTab!
+        .id;
+
+    final slot = controller.splitPane(SplitAxis.vertical)!;
+    controller.openInSlot(slot, TerminalProfile.powerShell);
+
+    final title = controller.titleForTab(tabId);
+    expect(
+      title,
+      isNot(contains('(')),
+      reason: 'the pane count is redundant once every region has a header',
+    );
+    // With a working directory the tab names itself by that instead of
+    // borrowing a region's name; without one it still drops the count.
+  });
+
 }

@@ -480,6 +480,21 @@ class AdbService {
     );
   }
 
+  /// Presses a raw Android `KEYCODE_*` value.
+  ///
+  /// Numeric because the keyboard-forwarding path works in numbers all the way
+  /// down — scrcpy's `INJECT_KEYCODE` carries an int, and `input keyevent`
+  /// accepts one — and because [DeviceKey] only names the handful of keys the
+  /// hardware-button row offers.
+  Future<void> pressKeyCode(String serial, int keyCode) async {
+    await _runInput(
+      serial,
+      ['keyevent', '$keyCode'],
+      'key',
+      'Pressed keycode $keyCode',
+    );
+  }
+
   Future<void> _runInput(
     String serial,
     List<String> arguments,

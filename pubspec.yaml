@@ -65,6 +65,11 @@ dependencies:
   xterm:
     path: packages/xterm
   yaml: ^3.1.4
+
+# Dart-only stand-ins for the two Windows plugin implementations, whose C++
+# needs ATL and /await — both gone from the VS 2026 toolchain (MSVC 14.51).
+# Desktop never invokes either plugin (companion mode is Android, where the
+# real implementations load); see the stub packages' pubspecs for details.
 dependency_overrides:
   flutter_local_notifications_windows:
     path: packages/flutter_local_notifications_windows_stub

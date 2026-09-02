@@ -27,6 +27,15 @@ class AgentResume {
   final AgentResumeStyle style;
   final String token;
 
+  /// Whether this agent can be told to continue a conversation at all.
+  ///
+  /// The question a caller has to ask **before** building a command line, and
+  /// the reason it is exposed rather than left implicit in an empty argument
+  /// list: an unsupported resume and a resume with nothing to resume both come
+  /// back from [argumentsFor] as `[]`, and only the first of them means "do not
+  /// hand this to the user as a resume command".
+  bool get isSupported => style != AgentResumeStyle.unsupported;
+
   List<String> argumentsFor(String sessionId) =>
       style == AgentResumeStyle.unsupported ? const [] : [token, sessionId];
 }
@@ -531,7 +540,7 @@ enum AgentStoreFormat {
   /// opens holds the messages. This one names a store that yields *identity*
   /// without content — conversation id, working directory, title, step count,
   /// mtime — because `steps.step_payload` is protobuf in an unpublished schema
-  /// (`docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §2.5).
+  ///.
   ///
   /// So detection, adoption and the presence probe all work for this store,
   /// and `agentSupportsChatView` still says no. That split is the whole point

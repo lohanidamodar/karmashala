@@ -62,8 +62,7 @@ import '../terminal/fake_instance.dart';
 /// which **creates** rather than reads, and the tree ran one `git worktree
 /// list` per repository row.
 ///
-/// The invariant the assertions encode, and the rule `docs/ARCHITECTURE.md`
-/// already holds the terminal to: work must be proportional to what is
+/// The invariant the assertions encode, and the rule the design note/// already holds the terminal to: work must be proportional to what is
 /// **visible**, not to what is recorded. Since the Explorer now lists sessions
 /// and not checkouts, that invariant is **flatness in the checkout count** —
 /// the same cost at 69 checkouts as at 1, not merely a smaller slope.

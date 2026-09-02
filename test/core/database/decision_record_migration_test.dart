@@ -17,14 +17,14 @@ Database _migratedTo(int upTo) {
 }
 
 void main() {
-  test('the head is v23 and the keys stay contiguous', () {
+  test('the migration keys stay contiguous through v23', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 23);
+    expect(db.schemaVersion, 25);
   });
 
   test('v23 gives a session an append-only decision record', () {
@@ -131,10 +131,7 @@ void main() {
     expect(sessions[0]['external_session_id'], 'ext-1');
     expect(sessions[0]['permission_mode'], 'ask');
     expect(sessions[1]['title'], 'Another');
-    expect(
-      db.select('SELECT * FROM session_checkpoints;').single['id'],
-      'c-1',
-    );
+    expect(db.select('SELECT * FROM session_checkpoints;').single['id'], 'c-1');
     expect(db.select('SELECT * FROM verification_runs;').single['id'], 'v-1');
 
     // And no decision was manufactured from any of it. A checkpoint is not a

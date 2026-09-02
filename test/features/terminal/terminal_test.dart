@@ -256,7 +256,7 @@ void main() {
       );
     });
 
-    test('a tab title names the focused pane and counts the panes', () {
+    test('a tab names its pane, and stops naming one once it splits', () {
       final container = fakeTerminalContainer();
       addTearDown(container.dispose);
       final controller = container.read(
@@ -265,8 +265,14 @@ void main() {
       final tabId = controller.openTab(TerminalProfile.powerShell);
       expect(controller.titleForTab(tabId), 'PowerShell');
 
+      // Before regions had headers this read 'Command Prompt (2)'. Now each
+      // region names itself, so a tab that kept borrowing the focused pane's
+      // name showed it twice and counted panes already visible. These stubs
+      // have no working directory to fall back to, so the borrowed name
+      // remains — but the count, which is what made it look like a second tab
+      // strip, is gone.
       controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.commandPrompt);
-      expect(controller.titleForTab(tabId), 'Command Prompt (2)');
+      expect(controller.titleForTab(tabId), isNot(contains('(')));
     });
   });
 

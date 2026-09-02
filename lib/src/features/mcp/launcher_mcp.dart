@@ -23,7 +23,7 @@ import 'mcp_tool_catalogue.dart';
 ///
 /// Nothing in the app calls [ensureConfig] yet. `LauncherMcp`'s only caller was
 /// the launcher chat, deleted with mini mode, and the session-launch path has
-/// no field to carry a config path — see `docs/MCP_CONTROL_SURFACE.md` §6.1.
+/// no field to carry a config path — see the design note
 /// What is here is the half of that seam this feature owns: given a URL, it
 /// writes a config an agent CLI will accept.
 class LauncherMcp {

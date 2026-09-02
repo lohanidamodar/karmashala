@@ -1,4 +1,5 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -139,7 +140,8 @@ void main() {
   group('permissionArgsFor', () {
     test('an unrecognised agent never gets a guessed bypass flag', () {
       // Guessing any bypass flag for a binary we know nothing about may be
-      // wrong or may mean something else entirely; PRODUCT.md principle 5
+      // wrong or may mean something else entirely; an agent the registry has never heard of
+      // gets no arguments at all rather than another agent's flags
       // puts that on the wrong side of "safety by default".
       for (final mode in PermissionMode.values) {
         expect(
@@ -196,6 +198,127 @@ void main() {
       expect(permissionArgsFor('antigravity', PermissionMode.bypass), [
         '--dangerously-skip-permissions',
       ]);
+    });
+  });
+
+  group('resume arguments come from the registry', () {
+    // The bug: both builders chose their resume arguments with
+    // `switch (cli) { 'claudeCode' => ['--resume', id], 'codex' => ['resume',
+    // id], _ => [] }`, twenty lines under a `permissionArgsFor` that reads the
+    // registry properly. Antigravity therefore got a command line with **no**
+    // resume arguments — which does not fail, it silently starts a new
+    // conversation wearing the old session's name.
+    final cwd = EnvironmentPath(environmentId: 'windows', path: r'C:\ws\app');
+
+    test('Antigravity resumes with the --conversation it declares', () {
+      expect(
+        resumeCommandLine(
+          agentExecutable: 'agy',
+          cli: 'antigravity',
+          externalId: 'conv-1',
+          environment: windowsEnv(),
+          cwd: cwd,
+        ),
+        // `ask` is empty for `agy`: prompting is what an unflagged run does.
+        ['agy', '--conversation', 'conv-1'],
+      );
+    });
+
+    test('and carries it into the copied shell command too', () {
+      expect(
+        shellCommandLine(
+          agentExecutable: 'agy',
+          cli: 'antigravity',
+          externalId: 'conv-1',
+          permissionMode: PermissionMode.ask,
+          cwd: r'C:\ws\app',
+        ),
+        r'cd C:\ws\app && agy --conversation conv-1',
+      );
+    });
+
+    test('an agent the registry never heard of gets no resume arguments', () {
+      // Nothing is invented for it. The refusal that keeps such a command away
+      // from the user lives in `SessionActions`, which can put the agent's name
+      // in a sentence; here the only correct output is "no arguments".
+      expect(
+        resumeCommandLine(
+          agentExecutable: 'mystery',
+          cli: 'mysteryAgent',
+          externalId: 'x',
+          environment: windowsEnv(),
+          cwd: cwd,
+        ),
+        ['mystery'],
+      );
+    });
+
+    test('Claude Code and Codex keep the exact command lines they had', () {
+      // Pinned: the point of reading the registry is that these two do not
+      // move. Claude's flag comes before the id, Codex's is a subcommand, and
+      // both sit after the permission flags.
+      expect(
+        shellCommandLine(
+          agentExecutable: 'claude',
+          cli: 'claudeCode',
+          externalId: 'abc',
+          permissionMode: PermissionMode.ask,
+          cwd: r'C:\ws\app',
+        ),
+        r'cd C:\ws\app && claude --permission-mode manual --resume abc',
+      );
+      expect(
+        shellCommandLine(
+          agentExecutable: 'codex',
+          cli: 'codex',
+          externalId: 'sid',
+          permissionMode: PermissionMode.bypass,
+          cwd: r'C:\ws\app',
+        ),
+        r'cd C:\ws\app && codex '
+        '--dangerously-bypass-approvals-and-sandbox resume sid',
+      );
+    });
+
+    test('a fresh-session command still names no conversation', () {
+      expect(
+        shellCommandLine(
+          agentExecutable: 'agy',
+          cli: 'antigravity',
+          permissionMode: PermissionMode.ask,
+          cwd: r'C:\ws\app',
+        ),
+        r'cd C:\ws\app && agy',
+      );
+    });
+  });
+
+  group('resumeRefusalFor', () {
+    test('says nothing for an agent that declares a convention', () {
+      for (final cli in ['claudeCode', 'codex', 'antigravity']) {
+        expect(
+          resumeRefusalFor(AgentRegistry.builtIn, cli, 'ext-1'),
+          isNull,
+          reason: cli,
+        );
+      }
+    });
+
+    test('refuses in words for an agent that declares none', () {
+      final refusal = resumeRefusalFor(
+        AgentRegistry.builtIn,
+        'mysteryAgent',
+        'ext-1',
+      );
+      expect(refusal, isNotNull);
+      expect(refusal, contains('mysteryAgent'));
+      expect(refusal, contains('ext-1'));
+      expect(refusal, contains('start a new'));
+    });
+
+    test('has nothing to refuse when no conversation is named', () {
+      expect(resumeRefusalFor(AgentRegistry.builtIn, 'mysteryAgent', null), isNull);
+      expect(resumeRefusalFor(AgentRegistry.builtIn, 'mysteryAgent', ''), isNull);
     });
   });
 }

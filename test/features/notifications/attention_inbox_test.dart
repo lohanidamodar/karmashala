@@ -110,6 +110,89 @@ void main() {
     });
   });
 
+  group('where an item leads', () {
+    /// The same conversation, watched as read-only history rather than as the
+    /// row running it — which is how a Codex session looks for as long as its
+    /// row has no conversation id.
+    WatchedSession asHistory(WatchedSession live) => WatchedSession(
+      key: live.key,
+      label: live.label,
+      openId: 'imported-${live.key.sessionId}',
+      imported: true,
+      stateFilePath: '/store/rollout.jsonl',
+    );
+
+    test('an item follows the session to the row that is running it', () {
+      // The owner's third symptom, after the id lands. A Codex session filed
+      // its notification while the only record of the conversation was the
+      // imported transcript; attribution then gave the native row the same
+      // conversation id, so the *same* key is now reported by the row with the
+      // pane. The item is the same thing waiting — it keeps its place and its
+      // seen flag — but where to go for it is not identity, and an item still
+      // pointing at history opens a read-only view of a live session.
+      final live = session('a');
+      final inbox = AttentionInbox.empty.apply(
+        InboxUpdate(
+          watched: {live.key},
+          news: [news(asHistory(live), NotificationReason.finished)],
+        ),
+        t0,
+      );
+      expect(inbox.items.single.session.imported, isTrue);
+
+      final after = inbox.apply(
+        InboxUpdate(
+          watched: {live.key},
+          news: [news(live, NotificationReason.finished)],
+        ),
+        at(5),
+      );
+
+      expect(after.items.single.session, live);
+      expect(after.items.single.session.openId, 'row-a');
+      expect(after.items.single.at, t0, reason: 'not a new thing to tell');
+      expect(after.unseen, 1);
+    });
+
+    test('a rebound item keeps the seen flag it had', () {
+      final live = session('a');
+      final inbox = AttentionInbox.empty
+          .apply(
+            InboxUpdate(
+              watched: {live.key},
+              waiting: [waiting(asHistory(live))],
+            ),
+            t0,
+          )
+          .viewed({'imported-a'});
+      expect(inbox.unseen, 0);
+
+      final after = inbox.apply(
+        InboxUpdate(watched: {live.key}, waiting: [waiting(live)]),
+        at(5),
+      );
+
+      expect(after.items.single.session.openId, 'row-a');
+      expect(after.items.single.seen, isTrue);
+      expect(after.unseen, 0);
+    });
+
+    test('an unchanged session still costs nothing', () {
+      final a = session('a');
+      final inbox = AttentionInbox.empty.apply(
+        InboxUpdate(watched: {a.key}, waiting: [waiting(a)]),
+        t0,
+      );
+
+      final again = inbox.apply(
+        InboxUpdate(watched: {a.key}, waiting: [waiting(a)]),
+        at(5),
+      );
+
+      expect(identical(inbox, again), isTrue);
+    });
+  });
+
   group('what leaves, and what does not', () {
     test('a condition that clears while we are watching is retired', () {
       final a = session('a');

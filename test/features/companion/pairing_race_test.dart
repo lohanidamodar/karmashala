@@ -26,16 +26,16 @@ import 'package:flutter_test/flutter_test.dart';
 import '../remote/fake_bindings.dart';
 import '../remote/transport_harness.dart';
 
-/// A beacon group and port of this suite's own, so a real host on the LAN
-/// cannot leak into it (the lan_beacon_test convention).
+/// A beacon group of this suite's own, so a real host on the LAN cannot leak
+/// into it (the lan_beacon_test convention). The PORT is per test, from
+/// [freeBeaconPort] — see there for why sharing one across a file is a flake.
 final _lanGroup = InternetAddress('239.255.42.203');
-const _lanPort = 47699;
-
-/// A port nothing in this file ever advertises on, for the test whose whole
-/// point is that the LAN leg finds nobody.
-const _silentLanPort = 47700;
 
 void main() {
+  /// This test's beacon port, and one nothing ever advertises on, for the
+  /// test whose whole point is that the LAN leg finds nobody.
+  late int lanPort;
+  late int silentLanPort;
   late AppDatabase db;
   late PairedDeviceDao dao;
   late FakeRemoteBindings fake;
@@ -54,6 +54,8 @@ void main() {
   }
 
   setUp(() async {
+    lanPort = await freeBeaconPort();
+    silentLanPort = await freeBeaconPort();
     db = AppDatabase.memory();
     dao = PairedDeviceDao(db);
     fake = FakeRemoteBindings()..addSession('s1');
@@ -117,15 +119,12 @@ void main() {
     return gateway;
   }
 
-  /// [beaconPort] exists for the one test that must hear *nothing*: beacons
-  /// from earlier tests in this file are stopped at teardown, but a multicast
-  /// packet already in flight does not know that, and under a loaded machine
-  /// one arrives late enough to be heard by the next test's scout. A port of
-  /// its own makes "no desktop was found" true by construction rather than by
-  /// timing.
-  LanPathScout makeScout({int beaconPort = _lanPort}) => LanPathScout(
+  /// [beaconPort] defaults to this test's own; the test that must hear
+  /// *nothing* passes [silentLanPort], so "no desktop was found" is true by
+  /// construction rather than by timing.
+  LanPathScout makeScout({int? beaconPort}) => LanPathScout(
     group: _lanGroup,
-    beaconPort: beaconPort,
+    beaconPort: beaconPort ?? lanPort,
     attemptTimeout: const Duration(milliseconds: 800),
     retryCooldown: const Duration(seconds: 30),
     // The suite's listeners sit on loopback; dial there (the harness rule).
@@ -143,7 +142,7 @@ void main() {
       tag: 'racehost00000001',
       interval: const Duration(milliseconds: 100),
       group: _lanGroup,
-      beaconPort: _lanPort,
+      beaconPort: lanPort,
       // Loopback, so the suite never advertises onto the real network — and
       // so it still works on macOS 15+, where multicast off-machine is denied
       // until a human grants Local Network access. See lan_beacon_test.dart.
@@ -153,12 +152,35 @@ void main() {
     return beacon;
   }
 
-  test('a typed code pairs over the LAN while the relay is dead', () async {
+  /// A scout that has already joined the group and heard this host.
+  ///
+  /// The gateway starts its scout lazily, INSIDE `pairWithCode`/`pairWithQr`,
+  /// and the LAN leg is bounded by the same `pairingTimeout` as the relay leg.
+  /// Everything before the first sighting — the multicast join, the wait for
+  /// the next beacon tick — was therefore charged to that budget, and what was
+  /// left had to cover a dial plus a sealed round-trip. Joining first and
+  /// proving a beacon arrived puts a candidate in `scout.candidates` before
+  /// the clock starts, so the LAN leg dials on its very first pass instead of
+  /// spending the budget discovering it has nothing to dial yet. Running out
+  /// of that budget is `PairingException: Could not find your desktop` on a
+  /// run whose desktop was right there.
+  Future<LanPathScout> listeningScout() async {
+    final scout = makeScout();
+    await scout.start();
+    await scout.sightings.first.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () => fail('no beacon arrived on this suite group'),
+    );
+    return scout;
+  }
+
+  test('a typed code pairs over the LAN while the relay is dead',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     // The desktop believes in a relay that is not there — TODAY's situation.
     final dead = await deadRelay();
     await startService(relayOverride: dead);
     await advertiseHost();
-    final gateway = makeGateway(lan: makeScout());
+    final gateway = makeGateway(lan: await listeningScout());
     // The phone's configured relay is dead too: only the LAN can carry this.
     await gateway.setPairingRelay(dead);
 
@@ -194,11 +216,12 @@ void main() {
     expect((await gateway.listSessions()).single.id, 's1');
   });
 
-  test('a scanned QR pairs over the LAN while its relay is dead', () async {
+  test('a scanned QR pairs over the LAN while its relay is dead',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
     final dead = await deadRelay();
     await startService(relayOverride: dead);
     await advertiseHost();
-    final gateway = makeGateway(lan: makeScout());
+    final gateway = makeGateway(lan: await listeningScout());
 
     final session = await service!.beginPairing(
       capabilities: CapabilitySet.all,
@@ -232,7 +255,7 @@ void main() {
   });
 
   test('when both legs fail, one sentence says which failed how', () async {
-    final gateway = makeGateway(lan: makeScout(beaconPort: _silentLanPort));
+    final gateway = makeGateway(lan: makeScout(beaconPort: silentLanPort));
     await gateway.setPairingRelay(await deadRelay());
     final code = PairingCode.encode(List<int>.generate(20, (i) => i + 40));
 

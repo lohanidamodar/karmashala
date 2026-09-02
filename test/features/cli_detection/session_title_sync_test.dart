@@ -17,7 +17,7 @@ import '../../support/fixtures.dart';
 
 /// The rename the owner reported, and the hole it came out of.
 ///
-/// `docs/ANTIGRAVITY_SESSIONS_2026-09-01.md` §7: the owner ran `/rename test me
+/// the design note: the owner ran `/rename test me
 /// now` **inside `agy`**, the CLI recorded it correctly, and the sidebar went on
 /// saying "New session". Karmashala's own rename works — it was never asked.
 /// Nothing in the app read a CLI's title *back* into an already-launched native

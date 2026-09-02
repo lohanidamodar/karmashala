@@ -31,7 +31,11 @@ void main() {
   late TerminalSessionsController controller;
   late TerminalWorkspaceDao dao;
 
+  /// Every delay the autosave has armed a tick at, in order.
+  final armed = <Duration>[];
+
   setUp(() {
+    armed.clear();
     db = AppDatabase.memory();
     dao = TerminalWorkspaceDao(db);
     container = ProviderContainer(
@@ -40,7 +44,12 @@ void main() {
         scrollbackAutosaveFactoryProvider.overrideWithValue(
           ({required onTick}) => ScrollbackAutosave(
             onTick: onTick,
-            schedule: (interval, callback) => Object(),
+            // Recorded rather than run: the cadence the controller asks for is
+            // the assertion, and a real timer would outlive the test.
+            schedule: (interval, callback) {
+              armed.add(interval);
+              return Object();
+            },
             cancel: (_) {},
           ),
         ),
@@ -181,7 +190,7 @@ void main() {
 
   test('a tick is capped, so its cost does not grow with the number of panes', () {
     // The scale target forbids work proportional to all panes on a timer
-    // (docs/ARCHITECTURE.md). A zero budget is the extreme of the same rule:
+    //. A zero budget is the extreme of the same rule:
     // one pane always gets written — progress is guaranteed — and no more.
     controller.openTab(TerminalProfile.powerShell);
     for (var i = 0; i < 5; i++) {
@@ -212,6 +221,154 @@ void main() {
     }
     expect(controller.hasDirtyScrollback, isFalse);
     expect(ticks, panes.length);
+  });
+
+  group('a structural change', () {
+    /// Grows the single open tab by [extra] live panes. Splitting clears room
+    /// and starts nothing, so each one is two calls.
+    void grow(int extra) {
+      for (var i = 0; i < extra; i++) {
+        controller.openInSlot(
+          controller.splitPane(SplitAxis.horizontal)!,
+          TerminalProfile.powerShell,
+        );
+      }
+    }
+
+    List<String> openPanes() => container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .single
+        .layout
+        .panes
+        .where((id) => controller.instanceFor(id) != null)
+        .toList();
+
+    int encodesAcross(List<String> panes) =>
+        panes.fold(0, (sum, id) => sum + instance(id).encodes);
+
+    /// [n] live panes, all stored, and then all of them busy — the state a
+    /// workspace is in whenever anything is actually running in it.
+    List<String> busyWorkspace(int n) {
+      controller.openTab(TerminalProfile.powerShell);
+      grow(n - 1);
+      controller.persistWorkspace();
+      final panes = openPanes();
+      expect(panes, hasLength(n));
+      for (final paneId in panes) {
+        instance(paneId).terminal.write('output\r\n');
+      }
+      expect(controller.hasDirtyScrollback, isTrue);
+      return panes;
+    }
+
+    /// Filled by the cases below so the shape can be asserted across them.
+    final encodes = <int, int>{};
+
+    for (final n in [1, 10, 50]) {
+      test('over $n busy panes, re-encodes only the pane it adds', () {
+        final panes = busyWorkspace(n);
+        final before = encodesAcross(panes);
+
+        final added = controller.openInSlot(
+          controller.splitPane(SplitAxis.horizontal)!,
+          TerminalProfile.powerShell,
+        )!;
+
+        expect(
+          encodesAcross(panes),
+          before,
+          reason: 'the panes that were already open have not moved on screen',
+        );
+        expect(instance(added).encodes, 1, reason: 'the pane that appeared');
+        encodes[n] = encodesAcross(panes) - before + instance(added).encodes;
+      });
+    }
+
+    test('so its encode cost does not grow with the workspace', () {
+      expect(encodes.keys, containsAll([1, 10, 50]));
+      expect(
+        encodes.values.toSet(),
+        hasLength(1),
+        reason: 'encodes per structural change: $encodes',
+      );
+    });
+
+    test('leaves those panes still owing the autosave a write', () {
+      final panes = busyWorkspace(4);
+      controller.openInSlot(
+        controller.splitPane(SplitAxis.horizontal)!,
+        TerminalProfile.powerShell,
+      );
+
+      // Nothing was dropped: the text is late, not lost.
+      expect(
+        controller.saveDirtyScrollback(budget: const Duration(minutes: 1)),
+        containsAll(panes),
+      );
+      for (final paneId in panes) {
+        expect(storedScrollbackFor(paneId), contains('output'));
+      }
+    });
+
+    test('and quitting writes what it left, without waiting for a tick', () {
+      final panes = busyWorkspace(4);
+      controller.openInSlot(
+        controller.splitPane(SplitAxis.horizontal)!,
+        TerminalProfile.powerShell,
+      );
+
+      // The teardown save is the one that must never defer anything.
+      controller.persistWorkspace();
+
+      expect(controller.hasDirtyScrollback, isFalse);
+      for (final paneId in panes) {
+        expect(storedScrollbackFor(paneId), contains('output'));
+      }
+    });
+
+    test('still stores a pane the store has never seen', () {
+      // A new pane has no encoding to reuse, so deferring would store nothing
+      // for it at all — the one case a structural save has to encode. Its
+      // *row* has to exist as well, or a restart brings back a layout with a
+      // hole in it.
+      controller.openTab(TerminalProfile.powerShell);
+      final first = openPanes().single;
+      instance(first).terminal.write('before the split\r\n');
+
+      final added = controller.openInSlot(
+        controller.splitPane(SplitAxis.horizontal)!,
+        TerminalProfile.commandPrompt,
+      )!;
+
+      expect(instance(added).encodes, 1);
+      expect(dao.loadWorkspace().tabs.single.panes.map((p) => p.id), [
+        first,
+        added,
+      ]);
+      // And the text the split did *not* stop to re-encode is owed, not lost.
+      expect(controller.hasDirtyScrollback, isTrue);
+      controller.saveDirtyScrollback(budget: const Duration(minutes: 1));
+      expect(storedScrollbackFor(first), contains('before the split'));
+    });
+
+    test('asks the autosave to come back on its catch-up cadence', () {
+      busyWorkspace(4);
+      armed.clear();
+
+      controller.openInSlot(
+        controller.splitPane(SplitAxis.horizontal)!,
+        TerminalProfile.powerShell,
+      );
+
+      expect(
+        armed,
+        contains(kScrollbackAutosaveCatchUp),
+        reason:
+            'text a structural save left behind must not wait for the idle '
+            'tick that happened to be armed',
+      );
+    });
   });
 
   test('a generous budget still saves everything in one tick', () {

@@ -239,10 +239,13 @@ class RemoteAccessController {
         InboxItemKind.finished => 'finished',
         InboxItemKind.needsApproval => 'needs_approval',
         InboxItemKind.failed => 'failed',
-        // Delivery news (checks, reviews, merges) stays on the desktop in v1.
+        // Delivery news (checks, reviews, merges) stays on the desktop in v1,
+        // and so does a follow-up: what a session left behind is something to
+        // sit down with, not a buzz in a pocket.
         InboxItemKind.checksFailed ||
         InboxItemKind.changesRequested ||
-        InboxItemKind.readyToMerge => null,
+        InboxItemKind.readyToMerge ||
+        InboxItemKind.followUp => null,
       };
       if (kind == null) continue;
       unawaited(

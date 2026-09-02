@@ -258,6 +258,87 @@ void main() {
       expect(runner.requests.last.arguments, contains('localport=$port'));
     });
 
+    test("the installer's own rule counts, so the app stops telling the "
+        'owner to fix a firewall that is already open', () async {
+      // Measured on the owner's machine. The installer writes an inbound
+      // allow rule named `Karmashala`, scoped to the program and to
+      // `LocalPort: Any`, which covers the relay on whatever port it binds.
+      // The app looked only for a rule of its OWN name, did not find one,
+      // failed to add one without admin, and then told the owner "If the
+      // phone can't connect, allow Karmashala in Windows Defender Firewall"
+      // — while the phone was reaching the relay perfectly well. That hint
+      // cost real time chasing a firewall that was never shut.
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          if (!request.arguments.contains('show')) {
+            return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+          }
+          if (request.arguments.contains('name=$kFirewallRuleName')) {
+            return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+          }
+          // What `netsh advfirewall firewall show rule name=Karmashala`
+          // answers on the owner's machine, labels localised, paths not.
+          return const CommandResult(
+            exitCode: 0,
+            stdout: 'Rule Name: Karmashala\n'
+                'Enabled: Yes\n'
+                'Direction: In\n'
+                'Program: C:\\Program Files\\Karmashala\\karmashala.exe\n'
+                'LocalPort: Any\n'
+                'Action: Allow\n',
+            stderr: '',
+          );
+        },
+      );
+      final service = loopbackService(
+        firewall: runner,
+        executablePath: r'C:\Program Files\Karmashala\karmashala.exe',
+      );
+      await service.ensureRunning(0);
+      addTearDown(service.stop);
+
+      expect(
+        service.status.firewallHint,
+        isFalse,
+        reason: 'this program is already allowed inbound; say nothing',
+      );
+      expect(
+        [
+          for (final request in runner.requests)
+            request.arguments.firstWhere(
+              (a) => a == 'show' || a == 'delete' || a == 'add',
+            ),
+        ],
+        ['show', 'add', 'show'],
+        reason:
+            'it still tries to write its own rule, which is harmless — what '
+            'changed is that being refused is no longer reported as a problem '
+            'when this program is already allowed',
+      );
+    });
+
+    test("a rule naming some other program is not this app's", () async {
+      final runner = FakeCommandRunner(
+        responder: (request) => request.arguments.contains('show')
+            ? const CommandResult(
+                exitCode: 0,
+                stdout: 'Rule Name: Karmashala\n'
+                    'Program: C:\\Other\\thing.exe\n'
+                    'LocalPort: Any\n',
+                stderr: '',
+              )
+            : const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+      );
+      final service = loopbackService(
+        firewall: runner,
+        executablePath: r'C:\Program Files\Karmashala\karmashala.exe',
+      );
+      await service.ensureRunning(0);
+      addTearDown(service.stop);
+
+      expect(service.status.firewallHint, isTrue);
+    });
+
     test('a netsh that cannot run at all is a hint, not a crash', () async {
       final runner = FakeCommandRunner(
         throwError: CommandException('netsh missing'),

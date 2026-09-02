@@ -25,7 +25,7 @@ import 'fake_instance.dart';
 
 /// The scale target as a **gate**: N = 1 / 10 / 100 panes, asserted as a curve.
 ///
-/// `docs/ARCHITECTURE.md` §"Scale target — 100 live terminals" says what must
+/// the design note"Scale target — 100 live terminals" says what must
 /// not happen — work proportional to all panes, unbounded per-pane memory, a
 /// listener storm — and `tool/benchmark/terminal_scale_bench.dart` reports the
 /// wall-clock version of it. But a benchmark nobody runs cannot catch a
@@ -154,18 +154,21 @@ void main() {
       );
     });
 
-    test('what the whole app parses per frame is bounded however many panes', () {
-      for (final n in scale) {
-        final m = drive(n);
-        expect(
-          (m.hot + m.warm) / frames,
-          lessThanOrEqualTo(
-            (kIngestHotReserveBytes + kIngestWarmPoolBytes).toDouble(),
-          ),
-          reason: 'one reserve plus one pool, at every N',
-        );
-      }
-    });
+    test(
+      'what the whole app parses per frame is bounded however many panes',
+      () {
+        for (final n in scale) {
+          final m = drive(n);
+          expect(
+            (m.hot + m.warm) / frames,
+            lessThanOrEqualTo(
+              (kIngestHotReserveBytes + kIngestWarmPoolBytes).toDouble(),
+            ),
+            reason: 'one reserve plus one pool, at every N',
+          );
+        }
+      },
+    );
   });
 
   group('memory: a workspace holds a floor per pane, not a buffer per pane', () {
@@ -827,7 +830,9 @@ void main() {
           for (var i = 0; i < n; i++)
             controller.openTab(
               TerminalProfile.powerShell,
-              workingDirectory: r'C:\src\p' '$i',
+              workingDirectory:
+                  r'C:\src\p'
+                  '$i',
             ),
         ];
         // Opening activates, so the strip would otherwise start scrolled to
@@ -879,7 +884,9 @@ void main() {
       }
 
       // ignore: avoid_print
-      print('N tabs | exits | chips rebuilt at the exit | chips rebuilt elsewhere');
+      print(
+        'N tabs | exits | chips rebuilt at the exit | chips rebuilt elsewhere',
+      );
       for (final n in scale) {
         // ignore: avoid_print
         print(
@@ -912,7 +919,7 @@ void main() {
 /// A [SessionDao] that counts what `activePaneSessionIdProvider` asks of it.
 ///
 /// Subclassed rather than faked so the rest of the dao behaves exactly as the
-/// app's does; only the one method the wide watch drives is instrumented.
+/// app's does; only the active-tab query is instrumented.
 class _ProbeSessionDao extends SessionDao {
   _ProbeSessionDao(super.database, this._rows);
 
@@ -922,9 +929,11 @@ class _ProbeSessionDao extends SessionDao {
   int rowsWalked = 0;
 
   @override
-  List<Session> getAll() {
+  List<Session> getByPaneIds(Iterable<String> paneIds) {
     scans++;
-    rowsWalked += _rows.length;
-    return _rows;
+    final ids = paneIds.toSet();
+    final matches = _rows.where((row) => ids.contains(row.paneId)).toList();
+    rowsWalked += matches.length;
+    return matches;
   }
 }

@@ -12,6 +12,8 @@
 /// healed itself on the next dial into one that never did.
 library;
 
+import 'dart:async';
+
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/companion/client/companion_gateway.dart';
 import 'package:karmashala/src/features/companion/client/remote_companion_gateway.dart';
@@ -37,6 +39,27 @@ void main() {
   late SecureCompanionStore store;
   final gateways = <RemoteCompanionGateway>[];
   final hostLog = <String>[];
+  Completer<void>? busy;
+
+  /// A desktop that keeps the socket but stops answering: every `sessions.list`
+  /// now waits on a gate this test holds.
+  ///
+  /// It used to be `stageCost = 30s`, out-waited by the phone's 700ms request
+  /// timeout. That works, but nothing releases it: the calls the phone
+  /// abandoned still sat on the desktop's single per-device chain for the
+  /// full thirty seconds, so the "it heals on its own" case below had to find
+  /// its way home inside whatever was left of its budget. On a loaded machine
+  /// it did not, roughly one run in three. A gate ends the silence the moment
+  /// the test says the desktop is back.
+  void goSilent() => busy = fake.stageGate = Completer<void>();
+
+  /// The desktop finishes whatever held it up, at once.
+  void answerAgain() {
+    fake.stageGate = null;
+    final held = busy;
+    busy = null;
+    if (held != null && !held.isCompleted) held.complete();
+  }
 
   final hostId = DeviceId.parse('11111111222222223333333344444444');
 
@@ -63,6 +86,9 @@ void main() {
 
   tearDown(() async {
     fake.stageCost = Duration.zero;
+    // A gate still held would deadlock the shutdown as surely as it holds the
+    // desktop.
+    answerAgain();
     for (final gateway in gateways.reversed.toList()) {
       await gateway.close();
     }
@@ -127,10 +153,6 @@ void main() {
     await awaitLink(gateway, CompanionLinkState.connected);
     return gateway;
   }
-
-  /// A desktop that keeps the socket but stops answering: every `sessions.list`
-  /// and `transcript.get` now costs far longer than the phone will wait.
-  void goSilent() => fake.stageCost = const Duration(seconds: 30);
 
   /// Puts every stored copy of the pairing back one generation — the counter
   /// bump that never reached the keystore.
@@ -216,25 +238,39 @@ void main() {
       final watching = gateway.linkStates.listen(claimed.add);
       addTearDown(watching.cancel);
 
-      // Slower than the phone will wait, but not for ever: exactly one call is
-      // lost to it.
-      fake.stageCost = const Duration(milliseconds: 900);
+      // Exactly one call is lost to a desktop too busy to answer it, and this
+      // test says when it comes back. It used to be a 900ms handler racing a
+      // 700ms request timeout with 200ms between them, and then a three-second
+      // sleep to let the abandoned handler drain off the device's single
+      // chain — during which a second lost call would land in `claimed` and
+      // fail the assertion below over nothing.
+      goSilent();
       await expectLater(
         gateway.listSessions(),
         throwsA(isA<GatewayException>()),
       );
-      fake.stageCost = Duration.zero;
-      // Everything for one device runs on one chain, so the slow handler has to
-      // drain off it before the next request is even read.
-      await Future<void>.delayed(const Duration(seconds: 3));
-      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
-      await watching.cancel();
 
+      // The claim, checked at the only moment it means anything: right after
+      // the busy call, with nothing else having been asked for in between.
+      await watching.cancel();
       expect(
         claimed.where((s) => s != CompanionLinkState.connected),
         isEmpty,
         reason: 'one call the desktop was too busy to answer is not an outage',
       );
+
+      // And it is still a working link: the desktop gets free and the phone
+      // has its list, with nobody touching anything.
+      answerAgain();
+      await eventually(() async {
+        try {
+          await gateway.listSessions();
+          return true;
+        } on Object {
+          return false;
+        }
+      }, reason: 'the desktop answers again once it is no longer busy');
+      expect((await gateway.listSessions()).map((s) => s.id), ['s1', 's2']);
     },
   );
 
@@ -306,7 +342,7 @@ void main() {
       expect(gateway.link, isNot(CompanionLinkState.connected));
 
       // The desktop finishes whatever held it up. Nobody taps anything.
-      fake.stageCost = Duration.zero;
+      answerAgain();
       await awaitLink(gateway, CompanionLinkState.connected);
       // `eventually`, like the sibling case above, and for the same reason: what
       // is promised is that the phone comes back on its own, not that the very
