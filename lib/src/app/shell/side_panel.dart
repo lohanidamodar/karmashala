@@ -269,17 +269,30 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
               width: width,
               child: Material(
                 color: scheme.surface,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!widget.surface.drawsOwnHeader)
-                      _SidePanelHeader(surface: widget.surface),
-                    if (widget.surface.scopedToRepository) ...[
-                      const SidePanelContextLine(),
-                      const SidePanelWorktrees(),
+                // Every surface here can be closed from its header, whether
+                // the header is the panel's or the surface's own. The button
+                // is handed down rather than assembled here, because the five
+                // surfaces that draw their own header build its actions from
+                // their own providers and pulling that up would make this
+                // panel watch five features to add one glyph.
+                child: PaneCloseAction(
+                  tooltip:
+                      'Close panel  ·  '
+                      '${shellChordLabel<ToggleSidePanelIntent>()}',
+                  onClose: () =>
+                      ref.read(sidePanelProvider.notifier).collapse(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!widget.surface.drawsOwnHeader)
+                        _SidePanelHeader(surface: widget.surface),
+                      if (widget.surface.scopedToRepository) ...[
+                        const SidePanelContextLine(),
+                        const SidePanelWorktrees(),
+                      ],
+                      Expanded(child: _surfaceBody(widget.surface)),
                     ],
-                    Expanded(child: _surfaceBody(widget.surface)),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -311,21 +324,17 @@ class _ChangesSurface extends ConsumerWidget {
   );
 }
 
-class _SidePanelHeader extends ConsumerWidget {
+/// The header the panel draws for a surface that has none of its own. The
+/// close button is not listed here: it comes from the [PaneCloseAction] around
+/// the body, which is the same one the other five surfaces wear.
+class _SidePanelHeader extends StatelessWidget {
   const _SidePanelHeader({required this.surface});
 
   final SidePanelSurface surface;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => PaneHeader(
+  Widget build(BuildContext context) => PaneHeader(
     icon: SidePanel.iconFor(surface),
     title: surface.label,
-    actions: [
-      IconButton(
-        tooltip: 'Close panel  ·  ${shellChordLabel<ToggleSidePanelIntent>()}',
-        icon: const Icon(AppIcons.x, size: Chrome.iconAction),
-        onPressed: () => ref.read(sidePanelProvider.notifier).collapse(),
-      ),
-    ],
   );
 }

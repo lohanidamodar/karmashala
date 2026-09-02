@@ -43,12 +43,9 @@ class FileExplorerView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final root = ref.watch(selectedRepoWindowsRootProvider);
-    if (root == null) {
-      return const PanePlaceholder(
-        message: 'Select a repository to browse its files.',
-        icon: AppIcons.folder,
-      );
-    }
+    // The header stays in the empty state. This surface tells the side panel it
+    // draws its own (`drawsOwnHeader`), so returning a bare placeholder left the
+    // panel with no title and no way out of it but the rail glyph.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -56,20 +53,26 @@ class FileExplorerView extends ConsumerWidget {
           icon: AppIcons.folder,
           title: 'Files',
           actions: [
-            IconButton(
-              tooltip: 'Refresh',
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(AppIcons.arrowsClockwise),
-              onPressed: () =>
-                  ref.read(fileListingRefreshProvider.notifier).refresh(),
-            ),
+            if (root != null)
+              IconButton(
+                tooltip: 'Refresh',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(AppIcons.arrowsClockwise),
+                onPressed: () =>
+                    ref.read(fileListingRefreshProvider.notifier).refresh(),
+              ),
           ],
         ),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-            child: _DirChildren(dir: root, depth: 0),
-          ),
+          child: root == null
+              ? const PanePlaceholder(
+                  message: 'Select a repository to browse its files.',
+                  icon: AppIcons.folder,
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+                  child: _DirChildren(dir: root, depth: 0),
+                ),
         ),
       ],
     );

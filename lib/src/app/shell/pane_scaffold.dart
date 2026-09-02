@@ -1,6 +1,38 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
+
+/// The close button every [PaneHeader] in this subtree wears, after whatever
+/// actions the surface itself supplies.
+///
+/// It exists because the side panel holds two kinds of surface: six that let
+/// the panel draw their header, and five that draw their own from their own
+/// state. The panel used to give a close button only to the first six, so half
+/// its surfaces could be dismissed from the header and half could not.
+/// Hoisting the other five's actions into the panel would have made the panel
+/// watch five features to add one button; handing the button *down* costs the
+/// features nothing and keeps `drawsOwnHeader` meaning exactly what it says.
+class PaneCloseAction extends InheritedWidget {
+  const PaneCloseAction({
+    required this.tooltip,
+    required this.onClose,
+    required super.child,
+    super.key,
+  });
+
+  final String tooltip;
+  final VoidCallback onClose;
+
+  /// Null outside a container that offers one — a workbench pane closes from
+  /// its tab, not from its header.
+  static PaneCloseAction? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PaneCloseAction>();
+
+  @override
+  bool updateShouldNotify(PaneCloseAction oldWidget) =>
+      tooltip != oldWidget.tooltip || onClose != oldWidget.onClose;
+}
 
 /// The header a shell pane wears: a [Chrome.tabStrip] row on
 /// `surfaceContainerLow`, a leading glyph, the title in the chrome eyebrow, and
@@ -65,6 +97,14 @@ class PaneHeader extends StatelessWidget {
                 ),
               ),
               ...actions,
+              // Last, so a surface's own actions keep their order and the way
+              // out is always in the same corner.
+              if (PaneCloseAction.maybeOf(context) case final close?)
+                IconButton(
+                  tooltip: close.tooltip,
+                  icon: const Icon(AppIcons.x, size: Chrome.iconAction),
+                  onPressed: close.onClose,
+                ),
             ],
           ),
         ),
