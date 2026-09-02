@@ -18,8 +18,6 @@ import '../../sessions/domain/session.dart';
 class BulkDeleteTargets {
   const BulkDeleteTargets({this.natives = const [], this.imported = const []});
 
-  static const none = BulkDeleteTargets();
-
   final List<Session> natives;
   final List<ImportedSession> imported;
 

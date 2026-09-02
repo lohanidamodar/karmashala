@@ -82,10 +82,6 @@ class SessionSelectionController extends Notifier<SessionSelection> {
     state = state.copyWith(ids: ids);
   }
 
-  void clear() {
-    if (state.ids.isNotEmpty) state = state.copyWith(ids: const {});
-  }
-
   /// Drops ticked ids whose session has left the workspace.
   ///
   /// **Membership, not visibility.** A row scrolled off, inside a collapsed
