@@ -23,6 +23,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/mcp/mcp_tool_catalogue.dart';
+import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -247,22 +253,17 @@ void main() {
 
     test('presses the deny key, which is a different key', () async {
       final written = attachPane('s1');
-      await callTool('session_answer', {
-        'sessionId': 's1',
-        'decision': 'deny',
-      });
+      await callTool('session_answer', {'sessionId': 's1', 'decision': 'deny'});
       expect(written, ['\x1b']);
     });
 
     test('refuses to guess when the agent names no key to decline', () async {
       // Codex says how to continue and never says how to decline. Esc is a
       // guess, and the tool must not make it on the user's behalf.
-      AgentInstallationDao(db).insert(
-        agentInstallation(id: 'a2', agentId: 'codex'),
-      );
-      SessionDao(db).insert(
-        session(id: 's3', agentInstallationId: 'a2'),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(id: 'a2', agentId: 'codex'));
+      SessionDao(db).insert(session(id: 's3', agentInstallationId: 'a2'));
       attachPane('s3');
 
       final result = await callTool('session_answer', {
@@ -349,7 +350,10 @@ void main() {
       final structured = result.structured! as Map<String, Object?>;
 
       expect(structured['turns'], hasLength(2));
-      expect((structured['turns']! as List).last, containsPair('text', 'turn 4'));
+      expect(
+        (structured['turns']! as List).last,
+        containsPair('text', 'turn 4'),
+      );
       expect(structured['omittedTurns'], 3);
     });
   });
@@ -424,6 +428,89 @@ void main() {
     });
   });
 
+  group('open_session on an imported CLI session', () {
+    // The trap, found by walking `list_sessions` and calling this on every row
+    // while profiling: each call opened another external terminal window on the
+    // owner's desktop, and the answer said only "opened". A caller driving this
+    // in bulk has no way to see that and no tool here to undo it.
+    late _RecordingTerminals terminals;
+
+    // A container of its own: the external terminal has to be faked, and
+    // Riverpod will not take a new override on a container that is already
+    // running.
+    setUp(() async {
+      terminals = _RecordingTerminals();
+      await server.stop();
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          agentRegistryProvider.overrideWithValue(
+            const AgentRegistry([...builtInAgentDescriptors, _silent]),
+          ),
+          systemTerminalServiceProvider.overrideWithValue(terminals),
+          defaultSystemTerminalProvider.overrideWith(
+            (ref) async => const SystemTerminal(
+              kind: SystemTerminalKind.macTerminal,
+              label: 'Terminal',
+              executable: '/usr/bin/open',
+            ),
+          ),
+        ],
+      );
+      server = LauncherControlServer(container);
+      await server.start(
+        bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
+        socketDirectory: p.join(tmp.path, 'ipc'),
+      );
+      ImportedSessionDao(db).insertIfAbsent(
+        ImportedSession(
+          id: 'i-claude',
+          repositoryId: 'r1',
+          cli: AgentIds.claudeCode,
+          externalId: 'ext-7',
+          environmentId: 'windows',
+          filePath: '/store/ext-7.jsonl',
+          storeHome: '/store',
+          isSubagent: false,
+          preview: 'earlier work',
+          createdAt: testTime,
+        ),
+      );
+    });
+
+    test(
+      'says a window was opened, and that closing it is on the caller',
+      () async {
+        final result = await callTool('open_session', {'id': 'i-claude'});
+
+        expect(result.isError, isFalse);
+        expect(terminals.launches, hasLength(1));
+        // The two facts a caller cannot get any other way: something appeared on
+        // a desktop it cannot see, and this surface will not take it away.
+        expect(result.text, contains('Terminal'));
+        expect(result.text.toLowerCase(), contains('close it yourself'));
+      },
+    );
+
+    test('opening it twice opens two windows, whatever the hint says', () async {
+      await callTool('open_session', {'id': 'i-claude'});
+      await callTool('open_session', {'id': 'i-claude'});
+
+      // The annotation said `idempotent: true` — "twice is once, either way" —
+      // and a client reads that before deciding a call is safe to repeat or to
+      // run over a list. It is false on this branch, and the cost of the lie is
+      // one window per row.
+      expect(terminals.launches, hasLength(2));
+      expect(
+        kMcpToolAnnotations['open_session']!.idempotent,
+        isFalse,
+        reason: 'the hint has to match the branch that opens windows',
+      );
+    });
+  });
+
   group('open_session for an agent that cannot resume', () {
     // The MCP external-terminal open was the fourth surface building a resume
     // command from a hard-coded switch, and the only one with no guard at all:
@@ -462,51 +549,75 @@ void main() {
       expect(result.text, contains('start a new'));
     });
 
-    test('and open_sessions_in_tmux refuses it too, naming the session', () async {
-      // The tmux path built its own resume arguments, and its switch was the
-      // worst of the family: `_ => ['--resume', id]` handed Claude Code's flag
-      // to *every* other agent. A window that dies on an unknown option is the
-      // good outcome there; the bad one is a flag that means something else.
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
-      RepositoryDao(db).insert(
-        repository(
-          id: 'r-wsl',
-          environmentId: 'wsl:Ubuntu',
-          path: '/home/me/app',
-        ),
-      );
-      AgentInstallationDao(db).insert(
-        agentInstallation(
-          id: 'a-silent-wsl',
-          agentId: 'silent',
-          environmentId: 'wsl:Ubuntu',
-          path: '/home/me/.local/bin/silent',
-        ),
-      );
-      ImportedSessionDao(db).insertIfAbsent(
-        ImportedSession(
-          id: 'i-silent-wsl',
-          repositoryId: 'r-wsl',
-          cli: 'silent',
-          externalId: 'ext-10',
-          environmentId: 'wsl:Ubuntu',
-          filePath: '/store/ext-10.jsonl',
-          storeHome: '/store',
-          isSubagent: false,
-          title: 'Grouped work',
-          preview: 'earlier work',
-          createdAt: testTime,
-        ),
-      );
+    test(
+      'and open_sessions_in_tmux refuses it too, naming the session',
+      () async {
+        // The tmux path built its own resume arguments, and its switch was the
+        // worst of the family: `_ => ['--resume', id]` handed Claude Code's flag
+        // to *every* other agent. A window that dies on an unknown option is the
+        // good outcome there; the bad one is a flag that means something else.
+        ExecutionEnvironmentDao(db).upsert(wslEnv());
+        RepositoryDao(db).insert(
+          repository(
+            id: 'r-wsl',
+            environmentId: 'wsl:Ubuntu',
+            path: '/home/me/app',
+          ),
+        );
+        AgentInstallationDao(db).insert(
+          agentInstallation(
+            id: 'a-silent-wsl',
+            agentId: 'silent',
+            environmentId: 'wsl:Ubuntu',
+            path: '/home/me/.local/bin/silent',
+          ),
+        );
+        ImportedSessionDao(db).insertIfAbsent(
+          ImportedSession(
+            id: 'i-silent-wsl',
+            repositoryId: 'r-wsl',
+            cli: 'silent',
+            externalId: 'ext-10',
+            environmentId: 'wsl:Ubuntu',
+            filePath: '/store/ext-10.jsonl',
+            storeHome: '/store',
+            isSubagent: false,
+            title: 'Grouped work',
+            preview: 'earlier work',
+            createdAt: testTime,
+          ),
+        );
 
-      final result = await callTool('open_sessions_in_tmux', {
-        'ids': ['i-silent-wsl'],
-      });
+        final result = await callTool('open_sessions_in_tmux', {
+          'ids': ['i-silent-wsl'],
+        });
 
-      expect(result.isError, isTrue);
-      expect(result.text, contains('Grouped work'));
-      expect(result.text, contains('Silent Agent'));
-      expect(result.text, contains('ext-10'));
-    });
+        expect(result.isError, isTrue);
+        expect(result.text, contains('Grouped work'));
+        expect(result.text, contains('Silent Agent'));
+        expect(result.text, contains('ext-10'));
+      },
+    );
   });
+}
+
+/// The external terminal, faked: these cases are about what the tool *says* it
+/// did, not about whether a window really appeared.
+class _RecordingTerminals extends SystemTerminalService {
+  _RecordingTerminals() : super(_DeadRunner());
+
+  final launches = <List<String>>[];
+
+  @override
+  Future<void> launch(
+    SystemTerminal terminal, {
+    required List<String> command,
+    String? workingDirectory,
+  }) async => launches.add(command);
+}
+
+class _DeadRunner implements CommandRunner {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('no process should be started');
 }

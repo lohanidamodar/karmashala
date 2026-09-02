@@ -1168,6 +1168,22 @@ class _TabRail extends StatefulWidget {
 class _TabRailState extends State<_TabRail> {
   final _scroll = ScrollController();
 
+  /// The strip's scroll position, and only while exactly one viewport owns it.
+  ///
+  /// `hasClients` is not that question. It is true the moment *any* viewport is
+  /// attached, and for one frame there are two: the strip changes shape when it
+  /// starts overflowing — a bare `ListView` becomes a row with chevrons around
+  /// it — which moves the list to a new slot, and the outgoing viewport does not
+  /// detach until that frame ends. `ScrollController.position` is
+  /// `positions.single`, so it threw `Bad state: Too many elements` out of the
+  /// chevron's builder on every launch, which is where the strip first learns
+  /// it has overflowed.
+  ///
+  /// Null for that frame means the chevrons are drawn disabled, which is what
+  /// they already do before the first layout.
+  ScrollPosition? get _onePosition =>
+      _scroll.positions.length == 1 ? _scroll.positions.first : null;
+
   @override
   void initState() {
     super.initState();
@@ -1213,10 +1229,11 @@ class _TabRailState extends State<_TabRail> {
   /// cannot see is stepping to nowhere.
   void _revealActive() {
     final index = widget.activeIndex;
-    if (index < 0 || !_scroll.hasClients) return;
+    final position = _onePosition;
+    if (index < 0 || position == null) return;
     final extent = tabStripMetrics(widget.width, widget.tabs.length).extent;
     final target = revealOffset(
-      position: _scroll.position,
+      position: position,
       leading: index * extent,
       extent: extent,
     );
@@ -1226,8 +1243,8 @@ class _TabRailState extends State<_TabRail> {
   /// Scrolls most of a screenful, so a click lands somewhere recognisable
   /// rather than one tab along.
   void _page(bool forward) {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
+    final position = _onePosition;
+    if (position == null) return;
     final step = position.viewportDimension * 0.8;
     _scroll.animateTo(
       (position.pixels + (forward ? step : -step)).clamp(
@@ -1264,7 +1281,7 @@ class _TabRailState extends State<_TabRail> {
   Widget _chevron({required bool forward}) => ListenableBuilder(
     listenable: _scroll,
     builder: (context, _) {
-      final position = _scroll.hasClients ? _scroll.position : null;
+      final position = _onePosition;
       // A position exists from the moment the controller is attached, but its
       // pixels and extents do not exist until the viewport has been laid out —
       // and reading `maxScrollExtent` before then throws. Both chevrons are

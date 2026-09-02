@@ -114,6 +114,29 @@ void main() {
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
 
+  /// The same fake, with every command yielding once before it answers and a
+  /// record of how many were in flight at that moment.
+  ///
+  /// Counted rather than timed, as the rest of this suite's cost work is: two
+  /// git processes started together are observably together, and a caller that
+  /// awaits one before starting the other never gets past a peak of one.
+  late _OverlapRunner overlap;
+
+  ProviderContainer measuredHarness() {
+    overlap = _OverlapRunner(responder: respond);
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(fallback: overlap),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
+
   ProviderContainer harness() {
     final container = ProviderContainer(
       overrides: [
@@ -469,4 +492,81 @@ void main() {
       expect(delivery.stage, DeliveryStage.working);
     },
   );
+
+  test('the two base comparisons are started together', () async {
+    addSession('s1');
+    final container = measuredHarness();
+    // Held open while it resolves: the measuring runner adds a yield per
+    // command, which is long enough for an unlistened autoDispose family to be
+    // torn down mid-build.
+    final subscription = container.listen(
+      sessionDeliveryProvider('s1'),
+      (_, _) {},
+    );
+    addTearDown(subscription.close);
+
+    await container.read(sessionDeliveryProvider('s1').future);
+
+    // `git rev-list --left-right --count` and `git diff --numstat` ask
+    // different questions of the same base and neither needs the other's
+    // answer. The comment above them said "started together" from the day the
+    // line was written; the code awaited one before starting the other.
+    //
+    // This provider is the single producer of every checkout's local git facts
+    // — every Explorer row, the delivery strip, `delivery_status` — recomputed
+    // on every workspace change, so the wasted half was paid on all of them.
+    expect(
+      overlap.ranTogetherInOneDirectory(['rev-list', '--numstat']),
+      isTrue,
+      reason: 'both git processes are in flight at once, for one checkout',
+    );
+  });
+}
+
+/// A [FakeCommandRunner] that yields once per command and records which ones
+/// were in flight together.
+class _OverlapRunner extends FakeCommandRunner {
+  _OverlapRunner({super.responder});
+
+  final _inFlight = <String>[];
+  final _seenTogether = <Set<String>>[];
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async {
+    // Keyed by the repository the command names, which git carries as `-C
+    // <path>` rather than as the process's working directory — reading
+    // `request.workingDirectory` keys everything under `null` and hides the
+    // very thing this measures.
+    //
+    // The key matters because a session has both a checkout and a worktree and
+    // their deliveries are computed at the same time: "a rev-list and a numstat
+    // were both in flight" is true even when each provider is strictly
+    // sequential. Only both *for one repository* says anything about the code
+    // under test.
+    final args = request.arguments;
+    final dashC = args.indexOf('-C');
+    final where = dashC >= 0 && dashC + 1 < args.length
+        ? args[dashC + 1]
+        : '${request.workingDirectory}';
+    final line = '$where|${args.join(' ')}';
+    _inFlight.add(line);
+    _seenTogether.add({..._inFlight});
+    await Future<void>.delayed(Duration.zero);
+    final result = await super.run(request);
+    _inFlight.remove(line);
+    return result;
+  }
+
+  /// Whether [markers] were ever in flight together **for the same directory**.
+  bool ranTogetherInOneDirectory(List<String> markers) =>
+      _seenTogether.any((snapshot) {
+        final byDirectory = <String, Set<String>>{};
+        for (final line in snapshot) {
+          final parts = line.split('|');
+          byDirectory
+              .putIfAbsent(parts.first, () => {})
+              .addAll(markers.where((m) => parts.last.contains(m)));
+        }
+        return byDirectory.values.any((seen) => seen.length == markers.length);
+      });
 }

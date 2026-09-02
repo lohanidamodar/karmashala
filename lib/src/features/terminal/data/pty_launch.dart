@@ -254,12 +254,30 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         workingDirectory: command.workingDirectory,
         environment: command.environment,
       );
+    case ShellContextKind.windowsNative:
     case ShellContextKind.powerShell:
-      // A PowerShell destination gets the PowerShell form, not `cmd.exe`. The
-      // script is base64'd rather than quoted, which removes Windows
-      // command-line quoting from the problem entirely (the same reason the
-      // shell-integration bootstrap uses it) and survives flutter_pty's
-      // unquoted concatenation.
+      // **PowerShell is the Windows-native shell for an agent**, not `cmd.exe`.
+      // A Windows session's pane, its "copy command" line and the external
+      // terminal it opens into now all speak the same shell, which is what the
+      // owner asked for and what stops a copied line being valid in one place
+      // and rejected in another.
+      //
+      // The problem this has to solve either way: `flutter_pty` 0.4.2 builds its
+      // Windows command line as `<exe> <argv…>` while the Dart side has already
+      // put the executable at `argv[0]`, so the child is handed **its own
+      // executable name as its first argument** and the rest are concatenated
+      // with single spaces and no quoting. Directly-spawned, that starts a
+      // `codex.exe` turn asking about "codex.exe" and splits any argument
+      // containing a space.
+      //
+      // `-EncodedCommand` answers both: the whole script is one base64 token, so
+      // there is nothing for the unquoted concatenation to split, and the
+      // duplicated leading token binds to PowerShell's positional `-Command` and
+      // merely nests a second shell (measured; it is what the PowerShell profile
+      // has always done). It also removes `cmd`'s `%NAME%` expansion from the
+      // problem entirely — a prompt containing `%PATH%` used to arrive
+      // substituted on this path, which is the one thing
+      // [quoteWindowsCommandArgument] promises not to do to it.
       final script =
           '& ${command.parts.map(quotePowerShellArgument).join(' ')}';
       return PtyLaunch(
@@ -273,26 +291,10 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         workingDirectory: command.workingDirectory,
         environment: command.environment,
       );
-    case ShellContextKind.windowsNative:
     case ShellContextKind.commandPrompt:
-      // A Windows-native agent is launched **through `cmd.exe /c`**, not directly.
-      //
-      // `flutter_pty` 0.4.2 builds its Windows command line as
-      // `<exe> <argv…>` while the Dart side has already put the executable at
-      // `argv[0]`, so the child is always handed **its own executable name as its
-      // first argument**. Loop 38 found this as `powershell.exe powershell.exe`
-      // spawning a nested shell; for an agent CLI it is worse, because the first
-      // positional argument is the *prompt*: `codex.exe` starts a turn asking
-      // about "codex.exe". The same function also concatenates arguments with
-      // single spaces and no quoting, so any argument containing a space is split
-      // — verified by a real `codex.exe` launch rejecting `say` as an unexpected
-      // argument.
-      //
-      // `cmd.exe` ignores the duplicated leading token and re-parses the rest, so
-      // one `/c` argument carrying a correctly quoted command line fixes both.
-      // PowerShell cannot be used for this: its first positional parameter is
-      // `-Command`, which the duplicate would bind to — which is why the
-      // PowerShell branch above goes through `-EncodedCommand` instead.
+      // Only when the profile *names* `cmd.exe`. `cmd` ignores the duplicated
+      // leading token and re-parses the rest, so one `/c` argument carrying a
+      // correctly quoted command line survives `flutter_pty` the same way.
       return throughCommandPrompt(
         command.parts,
         workingDirectory: command.workingDirectory,

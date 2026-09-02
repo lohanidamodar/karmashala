@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:karmashala/src/core/process/command_runner.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -59,6 +60,10 @@ Future<void> _pump(
   List<IosSimulator> simulators = const [],
   bool simulatorBackend = false,
   List<String> slimmingArguments = const [],
+
+  /// Leaves the probes hanging, which is the state the pane is in for the
+  /// ~460ms its first listing takes on a real machine.
+  bool stillProbing = false,
 }) async {
   tester.view
     ..physicalSize = size
@@ -72,13 +77,21 @@ Future<void> _pump(
           commandRunnerFactoryProvider.overrideWithValue(
             FakeCommandRunnerFactory(fallback: runner),
           ),
-        androidSdkProvider.overrideWith((ref) async => sdk),
+        androidSdkProvider.overrideWith(
+          (ref) => stillProbing
+              ? Completer<AndroidSdk?>().future
+              : Future.value(sdk),
+        ),
         // The emulator argv and the post-boot slimming both come from saved
         // settings, which would drag a database into a widget test. Overridden
         // here so these cases stay about the pane.
         androidEmulatorArgumentsProvider.overrideWithValue(slimmingArguments),
         androidSlimmingServiceProvider.overrideWithValue(null),
-        devicesProvider.overrideWith((ref) async => devices),
+        devicesProvider.overrideWith(
+          (ref) => stillProbing
+              ? Completer<List<AndroidDevice>>().future
+              : Future.value(devices),
+        ),
         avdsProvider.overrideWith((ref) async => avds),
         deviceScreenSizeProvider.overrideWith(
           (ref, serial) async => screens[serial],
@@ -92,7 +105,8 @@ Future<void> _pump(
       child: const MaterialApp(home: Scaffold(body: DevicePane())),
     ),
   );
-  await tester.pumpAndSettle();
+  // `pumpAndSettle` would wait forever on a probe that never answers.
+  await (stillProbing ? tester.pump() : tester.pumpAndSettle());
 }
 
 class _StubSimulatorBackend implements WdaBackend {
@@ -111,6 +125,27 @@ IosSimulator _bootedSimulator(String udid, String name) => IosSimulator(
 );
 
 void main() {
+  group('while it is still finding out', () {
+    testWidgets('says it is looking, rather than inviting a pick', (
+      tester,
+    ) async {
+      await _pump(tester, sdk: null, devices: const [], stillProbing: true);
+
+      // The first listing costs about 460ms on a Mac — an SDK to discover,
+      // `adb` and `simctl` to ask. For that whole time the pane asked the user
+      // to "pick a device below" from a list that had not arrived, which reads
+      // as "there is nothing here" right up until it is wrong.
+      expect(find.textContaining('Looking for devices'), findsOneWidget);
+      expect(find.textContaining('Pick a device below'), findsNothing);
+    });
+
+    testWidgets('and stops saying it once the answer is in', (tester) async {
+      await _pump(tester, sdk: _sdk(), devices: const []);
+
+      expect(find.textContaining('Looking for devices'), findsNothing);
+    });
+  });
+
   group('the device picker', () {
     testWidgets('lists Android devices and booted simulators together', (
       tester,
@@ -148,10 +183,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final button = tester.widget<TextButton>(
-        find.ancestor(
-          of: find.text('Live view'),
-          matching: find.byType(TextButton),
-        ).first,
+        find
+            .ancestor(
+              of: find.text('Live view'),
+              matching: find.byType(TextButton),
+            )
+            .first,
       );
       expect(
         button.onPressed,
@@ -160,18 +197,14 @@ void main() {
       );
     });
 
-    testWidgets('a booted simulator is listed under Connected', (
-      tester,
-    ) async {
+    testWidgets('a booted simulator is listed under Connected', (tester) async {
       // It was listed in its own section *below* the idle emulators, which put
       // the one device actually running underneath the ones that are not.
       await _pump(
         tester,
         sdk: _sdk(),
         devices: const [],
-        simulators: [
-          _bootedSimulator('booted', 'iPhone 17 Pro'),
-        ],
+        simulators: [_bootedSimulator('booted', 'iPhone 17 Pro')],
         simulatorBackend: true,
       );
 
@@ -225,10 +258,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final button = tester.widget<TextButton>(
-        find.ancestor(
-          of: find.text('Live view'),
-          matching: find.byType(TextButton),
-        ).first,
+        find
+            .ancestor(
+              of: find.text('Live view'),
+              matching: find.byType(TextButton),
+            )
+            .first,
       );
       expect(button.onPressed, isNull);
     });
@@ -455,7 +490,7 @@ void main() {
     testWidgets('offers to stop a selected emulator', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
       // The tooltip names the device now, because the button used to be able
-              // to stop one the user was not looking at.
+      // to stop one the user was not looking at.
       expect(find.byTooltip('Stop Pixel'), findsOneWidget);
     });
 

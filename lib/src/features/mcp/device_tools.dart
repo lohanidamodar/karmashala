@@ -115,9 +115,7 @@ class DeviceControlTools {
           index: (args['index'] as num?)?.round(),
         ),
         'device_stop_emulator' => _deviceStopEmulator(_id(args)),
-        'device_boot' => _deviceBoot(
-          (args['name'] as String?) ?? _id(args),
-        ),
+        'device_boot' => _deviceBoot((args['name'] as String?) ?? _id(args)),
         'device_install_app' => _deviceInstallApp(
           id: _id(args),
           path: args['path'] as String?,
@@ -164,9 +162,7 @@ class DeviceControlTools {
   ) async {
     final driver = await _driver(id, verb);
     if (!driver.can(capability)) {
-      throw DeviceRefusal(
-        '$verb: ${driver.missingReason(capability)!}',
-      );
+      throw DeviceRefusal('$verb: ${driver.missingReason(capability)!}');
     }
     return driver;
   }
@@ -189,14 +185,21 @@ class DeviceControlTools {
 
   Future<Object?> _listDevices(int? limit) async {
     final fleet = await _fleet();
-    final android = await fleet.androidTargets();
-    final simulators = await fleet.simulatorTargets();
-    final avds = await fleet.avds();
+    // Three probes of three different things — adb, simctl, and the SDK's AVD
+    // list — awaited together rather than one after another. They share no
+    // state and neither orders the other, so serialising them only added the
+    // slower ones to the wait: measured on this Mac, `simctl list devices` is
+    // 214ms and `adb devices` 41ms, so a caller waited 255ms for something
+    // 214ms wide.
+    final (android, simulators, avds) = await (
+      fleet.androidTargets(),
+      fleet.simulatorTargets(),
+      fleet.avds(),
+    ).wait;
 
     final booted = [
       for (final target in simulators)
-        if (target.isReady ||
-            target.simulator.state == SimulatorState.booting)
+        if (target.isReady || target.simulator.state == SimulatorState.booting)
           target,
     ];
     final bootable =
@@ -215,6 +218,34 @@ class DeviceControlTools {
     final cap = (limit ?? _simulatorListLimit).clamp(1, 1000);
     final shown = bootable.take((cap - booted.length).clamp(0, cap)).toList();
 
+    // The same batching as the Android sizes above, in the branch that did not
+    // get it: one `simctl io <udid> enumerate` per running simulator, all asked
+    // at once rather than one round trip at a time inside the list below.
+    final onScreen = [...booted, ...shown];
+    final simulatorSizes = Map.fromIterables(
+      [for (final target in onScreen) target.id],
+      await [
+        for (final target in onScreen)
+          if (target.isReady)
+            fleet.simctl!.screenSize(target.id)
+          else
+            Future<DeviceScreenSize?>.value(),
+      ].wait,
+    );
+
+    // One `adb shell wm size` per ready device, asked for all of them at once.
+    // Awaiting inside the list below spawned them one at a time, so a phone and
+    // two emulators paid three round trips end to end to answer a question
+    // nobody had ordered.
+    final ready = [
+      for (final target in android)
+        if (target.isReady) target,
+    ];
+    final sizes = Map.fromIterables(
+      [for (final target in ready) target.id],
+      await [for (final target in ready) fleet.adb!.screenSize(target.id)].wait,
+    );
+
     return {
       'devices': [
         for (final target in android)
@@ -227,7 +258,7 @@ class DeviceControlTools {
             'emulator': target.device.isEmulator,
             'environmentId': target.device.environmentId,
             if (target.isReady) ...{
-              'screenSize': (await fleet.adb!.screenSize(target.id))?.toString(),
+              'screenSize': sizes[target.id]?.toString(),
               'coordinateSpace': CoordinateSpace.devicePixels.label,
             },
           },
@@ -236,7 +267,7 @@ class DeviceControlTools {
         for (final avd in avds) {'name': avd.name, 'running': avd.isRunning},
       ],
       'simulators': [
-        for (final target in [...booted, ...shown])
+        for (final target in onScreen)
           {
             'udid': target.id,
             'name': target.simulator.name,
@@ -246,9 +277,7 @@ class DeviceControlTools {
             'running': target.isReady,
             'available': target.simulator.isAvailable,
             if (target.isReady) ...{
-              'screenSizePixels': (await fleet.simctl!.screenSize(
-                target.id,
-              ))?.toString(),
+              'screenSizePixels': simulatorSizes[target.id]?.toString(),
               // Named rather than measured. Asking the backend for the point
               // size means installing and launching a runner inside the
               // simulator — seconds of work and a foreground app change, far
@@ -294,7 +323,7 @@ class DeviceControlTools {
       p.join(
         Directory.systemTemp.path,
         'karmashala_${driver.target.id}_'
-            '${DateTime.now().millisecondsSinceEpoch}.png',
+        '${DateTime.now().millisecondsSinceEpoch}.png',
       ),
     );
     await file.writeAsBytes(shot.bytes, flush: true);
@@ -377,7 +406,11 @@ class DeviceControlTools {
         '${DeviceKey.values.map((k) => k.name).join(', ')}.',
       );
     }
-    final driver = await _driverThatCan(id, 'device_key', DeviceCapability.keys);
+    final driver = await _driverThatCan(
+      id,
+      'device_key',
+      DeviceCapability.keys,
+    );
     // The driver refuses the individual keys its device does not have. That is
     // per-key rather than a capability because a device with *some* of them is
     // the normal case — see SimulatorDeviceDriver.pressKey.
@@ -597,10 +630,7 @@ class DeviceControlTools {
     String id, {
     String? name,
   }) async {
-    final target = await fleet.requireTarget(
-      id,
-      verb: 'device_stop_emulator',
-    );
+    final target = await fleet.requireTarget(id, verb: 'device_stop_emulator');
     final driver = fleet.driverForTarget(target);
     if (!target.isReady &&
         target is SimulatorTarget &&

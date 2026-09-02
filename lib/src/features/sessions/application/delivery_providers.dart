@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/domain/diff_stat.dart';
 import '../../git/domain/remote_repo.dart';
 import '../../github/application/github_providers.dart';
 import '../../github/data/github_service.dart';
@@ -140,10 +141,19 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
 
       // Both against the same base, and started together: they are two
       // processes that do not need each other's answer.
-      final aheadBehind = base == null
-          ? null
-          : await _orNull(() => changes.aheadBehind(dir, base: base));
-      final lines = await _orNull(() => changes.diffStat(dir, base: base));
+      //
+      // The comment said so from the day the line was written and the code did
+      // not — `git diff --numstat` was not even started until `git rev-list`
+      // had answered. This provider is the single producer of every checkout's
+      // local git facts, read by every Explorer row, the delivery strip and
+      // `delivery_status`, and recomputed on every workspace change, so the
+      // wasted half was paid on all of them.
+      final (aheadBehind, lines) = await (
+        base == null
+            ? Future<AheadBehind?>.value()
+            : _orNull(() => changes.aheadBehind(dir, base: base)),
+        _orNull(() => changes.diffStat(dir, base: base)),
+      ).wait;
 
       return SessionDelivery(
         branch: status.branch,

@@ -21,6 +21,23 @@ ExecutionEnvironment _wsl() => ExecutionEnvironment(
   createdAt: DateTime.utc(2026),
 );
 
+/// The environment probe's answer, in the shape the one shell prints it.
+///
+/// Every variable is read in a single call now, so a fake that answers "the
+/// value of ANDROID_HOME" per request describes a discovery that no longer
+/// happens — it has to answer them all at once, as a login shell would.
+CommandResult _env(Map<String, String> values) => CommandResult(
+  exitCode: 0,
+  stdout: [
+    // Interleaved with noise on purpose: a login shell runs the user's profile,
+    // and profiles print things. Only the marked lines are ours.
+    'nvm: using node v22',
+    for (final entry in values.entries)
+      '$kEnvMarker${entry.key}=${entry.value}',
+  ].join('\n'),
+  stderr: '',
+);
+
 void main() {
   group('sdkCandidateRoots', () {
     test(
@@ -78,6 +95,79 @@ void main() {
     });
   });
 
+  group('reading the environment', () {
+    test('asks one shell for every variable, not one shell each', () {
+      final request = environmentRequest(EnvironmentKind.localPosix, const [
+        'ANDROID_HOME',
+        'ANDROID_SDK_ROOT',
+        'HOME',
+      ]);
+
+      // A login shell is 63ms on the owner's Mac and three of them were 190ms
+      // of the device pane's first open, for three values one shell can print.
+      expect(request.executable, 'bash');
+      expect(request.arguments.first, '-lc');
+      final script = request.arguments.last;
+      expect(script, contains(r'$ANDROID_HOME'));
+      expect(script, contains(r'$ANDROID_SDK_ROOT'));
+      expect(script, contains(r'$HOME'));
+    });
+
+    test('a profile that prints things cannot shift a value', () {
+      // The reason each value names itself instead of being read off a line
+      // number: a login shell runs the user's profile, and profiles print
+      // banners, warnings and fortunes. On line numbers, the SDK root becomes
+      // whatever the version manager said.
+      final values = parseEnvironmentOutput(
+        'Welcome to your shell!\n'
+        'nvm: using node v22\n'
+        '${kEnvMarker}ANDROID_HOME=/Users/d/Library/Android/sdk\n'
+        'some trailing chatter\n',
+      );
+
+      expect(values, {'ANDROID_HOME': '/Users/d/Library/Android/sdk'});
+    });
+
+    test('an unset variable is absent, on either platform', () {
+      // POSIX prints an empty value; `cmd` echoes the literal `%NAME%`. Both
+      // mean "not set", and a path of `%ANDROID_HOME%` would send discovery
+      // looking for an SDK in a folder named after the variable.
+      expect(
+        parseEnvironmentOutput(
+          '${kEnvMarker}ANDROID_HOME=\n'
+          '${kEnvMarker}ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%\n'
+          '${kEnvMarker}HOME=/Users/d\n',
+        ),
+        {'HOME': '/Users/d'},
+      );
+    });
+
+    test('a value with an = in it survives', () {
+      // Split on the *first* `=` only: a path can contain one, and a truncated
+      // path is worse than no path because it looks like an answer.
+      expect(parseEnvironmentOutput('${kEnvMarker}HOME=/Users/d/a=b'), {
+        'HOME': '/Users/d/a=b',
+      });
+    });
+
+    test(
+      'the Windows form is one call too, and picks up no trailing space',
+      () {
+        final request = environmentRequest(
+          EnvironmentKind.windowsNative,
+          const ['ANDROID_HOME', 'LOCALAPPDATA'],
+        );
+
+        expect(request.executable, 'cmd');
+        // A space before `&` lands inside the *previous* echo's output, which
+        // would put a trailing space on every value but the last.
+        expect(request.arguments.last, isNot(contains(' &')));
+        expect(request.arguments.last, contains('%ANDROID_HOME%'));
+        expect(request.arguments.last, contains('%LOCALAPPDATA%'));
+      },
+    );
+  });
+
   group('AndroidSdkDiscoveryService', () {
     test('finds the SDK at a well-known path when no env var is set', () async {
       // Mirrors this machine: the SDK exists but ANDROID_HOME is unset and adb
@@ -85,16 +175,9 @@ void main() {
       final runner = FakeCommandRunner(
         responder: (request) {
           final joined = '${request.executable} ${request.arguments.join(' ')}';
-          if (joined.contains('ANDROID_HOME') ||
-              joined.contains('ANDROID_SDK_ROOT')) {
-            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-          }
-          if (joined.contains('LOCALAPPDATA')) {
-            return const CommandResult(
-              exitCode: 0,
-              stdout: r'C:\Users\d\AppData\Local',
-              stderr: '',
-            );
+          if (joined.contains(kEnvMarker)) {
+            // Neither SDK variable is set here; only the well-known location.
+            return _env({'LOCALAPPDATA': r'C:\Users\d\AppData\Local'});
           }
           // The probe runs the tool itself; only the well-known adb runs.
           if (request.executable.endsWith('adb.exe')) {
@@ -134,9 +217,7 @@ void main() {
               );
             }
             // No env vars, and no well-known path exists.
-            if (joined.contains('echo')) {
-              return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-            }
+            if (joined.contains(kEnvMarker)) return _env(const {});
             return const CommandResult(exitCode: 1, stdout: '', stderr: '');
           },
         );
@@ -179,12 +260,8 @@ void main() {
       final runner = FakeCommandRunner(
         responder: (request) {
           final joined = '${request.executable} ${request.arguments.join(' ')}';
-          if (joined.contains('ANDROID_HOME')) {
-            return const CommandResult(
-              exitCode: 0,
-              stdout: r'C:\sdk',
-              stderr: '',
-            );
+          if (joined.contains(kEnvMarker)) {
+            return _env({'ANDROID_HOME': r'C:\sdk'});
           }
           if (request.executable.endsWith('adb.exe') ||
               request.executable.endsWith('emulator.exe')) {
