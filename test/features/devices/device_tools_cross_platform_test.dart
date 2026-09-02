@@ -123,10 +123,15 @@ class _RecordingBackend implements WdaBackend {
 // ---------------------------------------------------------------------------
 
 const _adbPath = '/sdk/platform-tools/adb';
+const _emulatorPath = '/sdk/emulator/emulator';
 
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'localPosix', path: '/sdk'),
   adb: EnvironmentPath(environmentId: 'localPosix', path: _adbPath),
+  emulator: EnvironmentPath(
+    environmentId: 'localPosix',
+    path: _emulatorPath,
+  ),
 );
 
 /// A fake macOS host with a scriptable device set.
@@ -157,6 +162,16 @@ class _Host {
   /// Whether `adb install` should report a failure the way old adb does:
   /// exit 0, with `Failure [...]` in the output.
   bool installFailsQuietly = false;
+
+  /// AVDs the SDK knows about. A name, not a device: it exists whether or not
+  /// anything is running, which is the whole reason the stop verb takes one.
+  List<String> avdNames = ['Pixel_8_Pro_API_34'];
+
+  /// The pid `pidof` reports for any package, or null for "not running".
+  int? packagePid;
+
+  /// Raw `logcat -d` output.
+  String logcatOutput = '';
 
   final List<CommandRequest> commands = [];
 
@@ -288,6 +303,27 @@ Port: com.apple.iphonesimulator.rgba
       }
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
     }
+    if (args.contains('-list-avds')) {
+      return CommandResult(exitCode: 0, stdout: avdNames.join('\n'), stderr: '');
+    }
+    if (args.contains('avd')) {
+      // `emu avd name` — how a running emulator says which AVD it booted.
+      return CommandResult(
+        exitCode: 0,
+        stdout: '${avdNames.isEmpty ? '' : avdNames.first}\nOK',
+        stderr: '',
+      );
+    }
+    if (args.contains('pidof')) {
+      return CommandResult(
+        exitCode: packagePid == null ? 1 : 0,
+        stdout: packagePid == null ? '' : '$packagePid',
+        stderr: '',
+      );
+    }
+    if (args.contains('logcat')) {
+      return CommandResult(exitCode: 0, stdout: logcatOutput, stderr: '');
+    }
     if (args.contains('emu')) {
       androidSerials.remove(args[1]);
       return const CommandResult(exitCode: 0, stdout: 'OK', stderr: '');
@@ -316,6 +352,16 @@ Port: com.apple.iphonesimulator.rgba
         );
       }
       if (request.executable == _adbPath) return _adb(request);
+      if (request.executable == _emulatorPath) {
+        if (request.arguments.contains('-list-avds')) {
+          return CommandResult(
+            exitCode: 0,
+            stdout: avdNames.join('\n'),
+            stderr: '',
+          );
+        }
+        return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+      }
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
     },
     processFactory: (request) {
@@ -342,14 +388,23 @@ typedef _Rpc =
     Future<Map<String, dynamic>> Function(String, [Map<String, Object?>]);
 
 Future<({_Rpc call, Future<void> Function() dispose, _RecordingBackend backend})>
-_server(_Host host, {bool androidSdk = true, bool wda = true}) async {
+_server(
+  _Host host, {
+  bool androidSdk = true,
+  bool wda = true,
+  Duration sdkDiscovery = Duration.zero,
+  bool awaitSdk = true,
+}) async {
   final backend = _RecordingBackend(host.events);
   final container = ProviderContainer(
     overrides: [
       commandRunnerFactoryProvider.overrideWithValue(
         FakeCommandRunnerFactory(fallback: host.runner()),
       ),
-      androidSdkProvider.overrideWith((ref) => androidSdk ? _sdk() : null),
+      androidSdkProvider.overrideWith((ref) async {
+        if (sdkDiscovery > Duration.zero) await Future<void>.delayed(sdkDiscovery);
+        return androidSdk ? _sdk() : null;
+      }),
       hostCanRunSimulatorsProvider.overrideWithValue(true),
       // Slimming is a user preference read from the settings repository, which
       // wants a real preference store this test has no reason to stand up. It
@@ -359,7 +414,9 @@ _server(_Host host, {bool androidSdk = true, bool wda = true}) async {
       simulatorBackendProvider.overrideWithValue(wda ? backend : null),
     ],
   );
-  await container.read(androidSdkProvider.future);
+  // Normally resolved up front so the tools are not racing discovery; a test
+  // that is *about* that race asks for it not to be.
+  if (awaitSdk) await container.read(androidSdkProvider.future);
   final directory = await Directory.systemTemp.createTemp('cg_dev_tools');
   final bridgeFile = '${directory.path}${Platform.pathSeparator}bridge.json';
   final server = LauncherControlServer(container);
@@ -468,6 +525,54 @@ void _vocabularyTests() {
     expect(result['devices'], isEmpty);
     expect(result['simulators'], isNotEmpty);
     expect(result['androidNote'], contains('ANDROID_HOME'));
+  });
+
+  test('an SDK still being looked for is not an SDK that is missing', () async {
+    // Locating the SDK means running `adb --version` and `emulator -version` —
+    // process spawns, in flight for a second or two on a cold start. The
+    // provider reads null for "not found" and for "not yet", and reporting the
+    // second as the first told an agent there was no Android SDK on a machine
+    // that has one. Observed on this machine: two consecutive runs, one listing
+    // the SDK and one denying it, decided only by how long the app had been up.
+    final host = _Host(androidSerials: ['emulator-5554']);
+    final rpc = await _server(
+      host,
+      sdkDiscovery: const Duration(milliseconds: 300),
+      awaitSdk: false,
+    );
+    addTearDown(rpc.dispose);
+
+    final result = _ok(await rpc.call('list_devices'));
+    expect(
+      result['androidNote'],
+      isNull,
+      reason: 'claimed there was no SDK while it was still looking for one',
+    );
+    expect(result['devices'], hasLength(1));
+  });
+
+  test('a device that appears after the first call is seen by the second', () async {
+    // The listings are memoised so one tool call does not ask adb four times.
+    // When that memo outlived the call, device_boot started an emulator,
+    // reported it booted, and the next device_install_app answered "No Android
+    // devices are connected" from the empty list taken before the boot — seen
+    // for real against Pixel_8_Pro_API_34.
+    final host = _Host(simulatorStates: {'UDID-16': 'Shutdown'});
+    final rpc = await _server(host);
+    addTearDown(rpc.dispose);
+
+    expect(_ok(await rpc.call('list_devices'))['devices'], isEmpty);
+
+    host.androidSerials.add('emulator-5554');
+
+    final after = _ok(await rpc.call('list_devices'))['devices'] as List;
+    expect(
+      after,
+      hasLength(1),
+      reason: 'the fleet answered from a listing taken before the device came',
+    );
+    // …and it is drivable, not merely listed.
+    _ok(await rpc.call('device_tap', {'serial': 'emulator-5554', 'x': 1, 'y': 2}));
   });
 
   test('the same verb takes a serial or a udid', () async {
@@ -700,6 +805,35 @@ void _refusalTests() {
       host.commandLines,
       contains('$_adbPath -s emulator-5554 shell input keyevent KEYCODE_BACK'),
     );
+  });
+
+  test('an empty Android log says which of the two reasons it was', () async {
+    // Empty has two causes that call for opposite next moves — launch the app,
+    // or lower the level — and the tool used to assert the first without
+    // checking. On a live emulator it told a caller an app with pid 4866 was
+    // not running, when the truth was that it had logged nothing at `error`.
+    final host = _Host(
+      androidSerials: ['emulator-5554'],
+      simulatorStates: {'UDID-16': 'Shutdown'},
+    )..packagePid = 4866;
+    final rpc = await _server(host);
+    addTearDown(rpc.dispose);
+
+    final running = _ok(
+      await rpc.call('device_logcat', {
+        'package': 'com.example.app',
+        'level': 'error',
+      }),
+    );
+    expect(running['lines'], isEmpty);
+    expect(running['note'], contains('is running, but logged nothing'));
+    expect(running['note'], contains('error'));
+
+    host.packagePid = null;
+    final absent = _ok(
+      await rpc.call('device_logcat', {'package': 'com.example.app'}),
+    );
+    expect(absent['note'], contains('is not running'));
   });
 
   test('device_logcat refuses a level on iOS instead of guessing one', () async {
@@ -1093,6 +1227,42 @@ void _lifecycleTests() {
     );
     expect(result['stopped'], isTrue);
     expect(result['note'], contains('already shut down'));
+  });
+
+  test('an emulator can be stopped by AVD name, and again after', () async {
+    // The serial is assigned at boot and vanishes with the process, so the
+    // handle that worked once cannot be asked about twice. The AVD name is the
+    // one that survives — and is what device_boot already takes.
+    final host = _Host(
+      androidSerials: ['emulator-5554'],
+      simulatorStates: {'UDID-16': 'Shutdown'},
+    );
+    final rpc = await _server(host);
+    addTearDown(rpc.dispose);
+
+    final stopped = _ok(
+      await rpc.call('device_stop_emulator', {'serial': 'Pixel_8_Pro_API_34'}),
+    );
+    expect(stopped['stopped'], isTrue);
+    expect(host.commandLines, contains('$_adbPath -s emulator-5554 emu kill'));
+
+    final again = _ok(
+      await rpc.call('device_stop_emulator', {'serial': 'Pixel_8_Pro_API_34'}),
+    );
+    expect(again['stopped'], isTrue);
+    expect(again['note'], contains('already stopped'));
+  });
+
+  test('a serial that stopped explains why it no longer names anything', () async {
+    final host = _Host(simulatorStates: {'UDID-16': 'Shutdown'});
+    final rpc = await _server(host);
+    addTearDown(rpc.dispose);
+
+    final error = _error(
+      await rpc.call('device_stop_emulator', {'serial': 'emulator-5554'}),
+    );
+    expect(error, contains('keeps no serial'));
+    expect(error, contains('Pixel_8_Pro_API_34'));
   });
 
   test('device_stop_emulator never guesses which device to stop', () async {

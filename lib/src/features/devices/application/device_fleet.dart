@@ -39,10 +39,20 @@ class BootedDevice {
 /// point of the seam is that nothing above this file contains an
 /// `if (isSimulator)`.
 ///
-/// A fleet is built per call rather than held: the services under it are
-/// per-container singletons already, and the only state here is one listing,
-/// cached for the span of a single operation — which is exactly as long as a
-/// device listing stays true.
+/// A fleet is built **per operation** rather than held, and that is load-
+/// bearing rather than tidy. The two listings below are memoised so that one
+/// tool call does not ask adb for the device list four times; a fleet that
+/// outlived the call would go on answering from that memo forever. It did, for
+/// one revision of this file, and the symptom was precise: `device_boot`
+/// started an emulator, reported it booted, and the very next
+/// `device_install_app` said "No Android devices are connected" — because the
+/// fleet had cached the empty list from before the boot and nothing ever
+/// cleared it. A device plugged in, or a simulator booted from Xcode, would
+/// have been invisible for the life of the app the same way.
+///
+/// So the cache lasts exactly as long as a device listing stays true, which is
+/// one operation. See [deviceFleetProvider], which hands out a factory rather
+/// than an instance for this reason.
 class DeviceFleet {
   DeviceFleet({
     required this.adb,
@@ -112,6 +122,18 @@ class DeviceFleet {
   /// AVDs known to the SDK, which are not devices: an AVD is a name that only
   /// exists while the thing is stopped.
   Future<List<Avd>> avds() async => await adb?.listAvds() ?? const [];
+
+  /// The AVD called [name], or null. An AVD is not a device: it is a name that
+  /// exists whether or not anything is running, which is exactly why the stop
+  /// verb needs it — see [DeviceControlTools] on why a stopped emulator cannot
+  /// be named by serial.
+  Future<Avd?> avdNamed(String name) async {
+    final needle = name.trim();
+    for (final avd in await avds()) {
+      if (avd.name == needle) return avd;
+    }
+    return null;
+  }
 
   /// Every device on this machine, Android first.
   Future<List<DeviceTarget>> all() async => [
@@ -447,23 +469,52 @@ class DeviceFleet {
   }
 }
 
-/// The fleet, wired to the same services the device pane uses.
+/// Builds a fleet for one operation. See [deviceFleetProvider].
+typedef DeviceFleetFactory = Future<DeviceFleet> Function();
+
+/// A **factory**, not a fleet.
+///
+/// Riverpod caches a provider's value, so exposing the fleet directly handed
+/// every tool call the same instance — and therefore the same memoised device
+/// listing, taken whenever the first call happened to run. See [DeviceFleet]'s
+/// class comment for what that actually did. Handing out a factory keeps the
+/// expensive things cached (the services, and the SDK discovery future) while
+/// the cheap, perishable thing — who is plugged in right now — is asked again
+/// for every operation.
+///
+/// **The await is the second half of the same lesson.** `adbServiceProvider`
+/// reads `androidSdkProvider.asData?.value`, which is null in two completely
+/// different situations: discovery finished and found no SDK, and discovery has
+/// not finished yet. Locating the SDK means *running* `adb --version` and
+/// `emulator -version` — process spawns, not a lookup — so on a cold start it
+/// is genuinely in flight for a second or two. For the pane that ambiguity is
+/// harmless; it renders again when the value lands. For a tool it is not:
+/// `list_devices` said "No Android SDK was found" on a machine that has one,
+/// which is a confident false statement rather than a delay, and an agent that
+/// reads it goes away and does not come back. Observed exactly that way — two
+/// consecutive runs against the same machine, one listing the SDK and one
+/// denying it, decided only by how long the app had been up. `.future`
+/// resolves once and is cached, so the first caller pays for the probe and no
+/// one else does.
 ///
 /// The callbacks are how a plain class reaches Riverpod without importing it
 /// into its own logic — which is what keeps [DeviceFleet] constructible in a
 /// test with three stubs and no container.
-final deviceFleetProvider = Provider<DeviceFleet>((ref) {
-  final transitions = ref.read(simulatorTransitionsProvider.notifier);
-  return DeviceFleet(
-    adb: ref.watch(adbServiceProvider),
-    simctl: ref.watch(simctlServiceProvider),
-    backend: ref.watch(simulatorBackendProvider),
-    bootSimulator: transitions.boot,
-    simulatorIsBusy: transitions.isBusy,
-    refreshAndroid: () {
-      ref.invalidate(devicesProvider);
-      ref.invalidate(avdsProvider);
-    },
-    refreshSimulators: () => ref.invalidate(iosSimulatorsProvider),
-  );
+final deviceFleetProvider = Provider<DeviceFleetFactory>((ref) {
+  return () async {
+    await ref.read(androidSdkProvider.future);
+    final transitions = ref.read(simulatorTransitionsProvider.notifier);
+    return DeviceFleet(
+      adb: ref.read(adbServiceProvider),
+      simctl: ref.read(simctlServiceProvider),
+      backend: ref.read(simulatorBackendProvider),
+      bootSimulator: transitions.boot,
+      simulatorIsBusy: transitions.isBusy,
+      refreshAndroid: () {
+        ref.invalidate(devicesProvider);
+        ref.invalidate(avdsProvider);
+      },
+      refreshSimulators: () => ref.invalidate(iosSimulatorsProvider),
+    );
+  };
 });

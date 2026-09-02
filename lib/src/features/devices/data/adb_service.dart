@@ -734,6 +734,22 @@ class AdbService {
   /// When [packageName] is given the log is filtered to that package's live
   /// processes; a package that is not running yields an empty list rather than
   /// the whole system log.
+  /// The pids [packageName] is running under, empty when it is not running.
+  ///
+  /// Exposed rather than left inside [readLogcat] because "no log lines" and
+  /// "no process" are different answers and a caller has to be able to tell
+  /// them apart. `device_logcat` used to report an empty read as "the app does
+  /// not appear to be running", which is a statement about the device it had
+  /// not checked — and it was wrong the moment a level filter was the real
+  /// reason nothing came back. Seen on a live emulator: the app was up, its pid
+  /// was 4866, and the tool said it was not running.
+  Future<List<int>> pidsOf(String serial, String packageName) async {
+    final result = await runner.run(
+      _forDevice(serial, ['shell', 'pidof', packageName]),
+    );
+    return result.ok ? parsePidsFromPidof(result.stdout) : const [];
+  }
+
   Future<List<LogcatEntry>> readLogcat(
     String serial, {
     String? packageName,

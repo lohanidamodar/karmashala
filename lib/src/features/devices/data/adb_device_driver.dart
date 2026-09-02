@@ -124,8 +124,17 @@ class AdbDeviceDriver implements DeviceDriver {
     );
     return DeviceLogRead(
       lines: [for (final entry in entries) entry.toString()],
+      // Empty has two causes and they call for opposite next moves: launch the
+      // app, or lower the level. The device is asked which it is rather than
+      // guessed at — the guess was wrong on a live emulator, telling a caller
+      // an app with pid 4866 was not running when the truth was that it had
+      // logged nothing at `error`.
       note: entries.isEmpty && filter != null
-          ? 'No output — $filter does not appear to be running.'
+          ? (await adb.pidsOf(_serial, filter)).isEmpty
+                ? 'No output — $filter is not running on $_serial.'
+                : '$filter is running, but logged nothing'
+                      '${minLevel == null ? '' : ' at ${minLevel.name} or '
+                            'above'} in the last $lines lines.'
           : null,
     );
   }

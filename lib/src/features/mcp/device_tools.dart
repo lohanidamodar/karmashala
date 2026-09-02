@@ -145,11 +145,11 @@ class DeviceControlTools {
   static String? _id(Map<String, dynamic> args) =>
       (args['serial'] ?? args['udid'] ?? args['device']) as String?;
 
-  DeviceFleet _fleet() => _container.read(deviceFleetProvider);
+  Future<DeviceFleet> _fleet() => _container.read(deviceFleetProvider)();
 
   /// The driver for this call, or a refusal naming the device.
-  Future<DeviceDriver> _driver(String? id, String verb) =>
-      _fleet().driverFor(id, verb: verb);
+  Future<DeviceDriver> _driver(String? id, String verb) async =>
+      (await _fleet()).driverFor(id, verb: verb);
 
   /// The driver for this call, having first established that it can do the
   /// thing about to be asked of it.
@@ -188,7 +188,7 @@ class DeviceControlTools {
   static const int _simulatorListLimit = 40;
 
   Future<Object?> _listDevices(int? limit) async {
-    final fleet = _fleet();
+    final fleet = await _fleet();
     final android = await fleet.androidTargets();
     final simulators = await fleet.simulatorTargets();
     final avds = await fleet.avds();
@@ -430,7 +430,7 @@ class DeviceControlTools {
         'simulator name. list_devices shows all three.',
       );
     }
-    final booted = await _fleet().boot(name.trim());
+    final booted = await (await _fleet()).boot(name.trim());
     return {
       // Both spellings, because the id is what every following call needs and
       // an agent should not have to know which key its platform uses.
@@ -544,10 +544,59 @@ class DeviceControlTools {
         'loses whatever was on it.',
       );
     }
-    final fleet = _fleet();
+    final wanted = id.trim();
+    final fleet = await _fleet();
+
+    // An AVD name, before anything else. A running emulator answers to
+    // `emulator-5554`, but a *stopped* one answers to nothing at all — the
+    // serial is assigned at boot and vanishes with the process — so the serial
+    // that worked a moment ago is not a name this verb can be asked about
+    // twice. The AVD name is the only handle that survives, which is also the
+    // name device_boot takes, so the two halves of the lifecycle are spelled
+    // the same way.
+    if (await fleet.avdNamed(wanted) case final avd?) {
+      if (!avd.isRunning) {
+        return {
+          'name': avd.name,
+          'platform': 'android',
+          'stopped': true,
+          'note': '${avd.name} was already stopped.',
+        };
+      }
+      return _stopVirtualDevice(fleet, avd.runningSerial!, name: avd.name);
+    }
+
+    // A serial that names nothing, shaped like an emulator's. Saying only "no
+    // device is called that" is true and unhelpful: the overwhelmingly likely
+    // reason is that it already stopped, and the caller has no way to know the
+    // serial was never going to work a second time.
+    if (await fleet.find(wanted) == null &&
+        RegExp(r'^emulator-\d+$').hasMatch(wanted)) {
+      final stopped = [
+        for (final avd in await fleet.avds())
+          if (!avd.isRunning) avd.name,
+      ];
+      throw DeviceRefusal(
+        'No emulator is running as $wanted. A stopped emulator keeps no '
+        'serial — it is assigned at boot — so if you are stopping one you '
+        'already stopped, it is gone. Pass the AVD name instead, which is '
+        'stable and is what device_boot takes'
+        '${stopped.isEmpty ? '' : ': ${stopped.take(10).join(', ')}'}.',
+      );
+    }
+
     // Not `driverFor`: a simulator that is already shut down is not "ready",
     // and refusing to stop something that is already stopped would turn asking
     // for a state into an error about being in it.
+    return _stopVirtualDevice(fleet, wanted);
+  }
+
+  /// Stops the device [id] names, whichever platform it is on.
+  Future<Object?> _stopVirtualDevice(
+    DeviceFleet fleet,
+    String id, {
+    String? name,
+  }) async {
     final target = await fleet.requireTarget(
       id,
       verb: 'device_stop_emulator',
@@ -568,6 +617,7 @@ class DeviceControlTools {
     return {
       'serial': target.id,
       if (target.platform == DevicePlatform.ios) 'udid': target.id,
+      'name': ?name,
       'platform': target.platform.name,
       'stopped': true,
       'note': outcome,
@@ -1076,7 +1126,10 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
       'properties': {
         'serial': {
           'type': 'string',
-          'description': 'Emulator serial (emulator-5554) or simulator udid.',
+          'description':
+              'Emulator serial (emulator-5554), AVD name, or simulator udid. '
+              'Prefer the AVD name: a stopped emulator keeps no serial, so the '
+              'name is the only handle that survives a stop.',
         },
         'udid': {'type': 'string', 'description': 'Alias for serial.'},
       },
