@@ -213,10 +213,16 @@ class AppLifecycle {
         .installAll(endpoint)
         .then(
           (results) {
-            final installed = results.where((r) => r.installed).length;
+            final report = AgentHookInstallationReport(results);
+            // Published, not just logged. A skipped environment means the
+            // hook-only states are unreportable there for the whole run, and
+            // Settings is where the user can be told rather than told nothing.
+            _container
+                .read(agentHookInstallationReportProvider.notifier)
+                .set(report);
             _logger.info(
-              'Agent hooks: $installed installed, '
-              '${results.length - installed} skipped.',
+              'Agent hooks: ${report.installed} installed, '
+              '${results.length - report.installed} skipped.',
             );
           },
           onError: (Object error, StackTrace stack) =>

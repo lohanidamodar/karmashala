@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_reachability.dart';
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -36,6 +37,29 @@ class _StubLocator implements CliStoreLocator {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// A door that answers, or does not, without dialling anything.
+class _StubReachability implements AgentHookReachability {
+  const _StubReachability(this.answers);
+
+  final bool answers;
+
+  /// Every environment asked about, so a case can assert the probe ran once
+  /// per store rather than once per agent.
+  static final asked = <String>[];
+
+  @override
+  Future<bool> answersFrom(
+    ExecutionEnvironment environment,
+    AgentHookEndpoint endpoint,
+  ) async {
+    asked.add(environment.id);
+    return answers;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 void main() {
   late AppDatabase db;
   late Directory claudeHome;
@@ -61,11 +85,23 @@ void main() {
 
   File settings() => File(p.join(claudeHome.path, 'settings.json'));
 
-  ProviderContainer containerWith(_StubLocator locator) {
+  /// The container the service runs in, with the door answering by default.
+  ///
+  /// Reachability is stubbed rather than left live because the real probe runs
+  /// `curl` inside a distribution: unstubbed, every WSL case here would depend
+  /// on the machine running the suite having WSL. [doorAnswers] is the one
+  /// thing these cases vary.
+  ProviderContainer containerWith(
+    _StubLocator locator, {
+    bool doorAnswers = true,
+  }) {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         cliStoreLocatorProvider.overrideWithValue(locator),
+        agentHookReachabilityProvider.overrideWithValue(
+          _StubReachability(doorAnswers),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -230,6 +266,68 @@ void main() {
       final raw = settings().readAsStringSync();
       expect(raw, contains('172.18.240.1:4242/agent-hook'));
       expect(raw, isNot(contains('127.0.0.1')));
+    });
+
+    test('is skipped when the switch address is bound but dead', () async {
+      // The failure this was written for. The app bound 172.18.240.1:47821 and
+      // answered on it from Windows, so `reaches(wsl)` was true and four hooks
+      // went into four configs — while from inside the distribution every
+      // connection to that address completed its handshake and had its first
+      // data segment reset. The log read `4 installed, 0 skipped` and
+      // `notifications.status` read `0 by hook` for the rest of the day.
+      //
+      // A bind is a fact about the host. Only the round trip is a fact about
+      // the agent, and an install that cannot arrive must report a skip.
+      final (locator, wsl) = wslStore();
+      final service = containerWith(
+        locator,
+        doorAnswers: false,
+      ).read(agentHookInstallationServiceProvider);
+
+      final results = await service.installAll(reachable);
+
+      final claude = results.singleWhere((r) => r.environmentId == wsl.id);
+      expect(claude.installed, isFalse);
+      expect(
+        claude.skippedBecause,
+        contains('172.18.240.1:4242'),
+        reason: 'the reason has to name the address that did not answer',
+      );
+      expect(claude.skippedBecause, contains('does not answer'));
+      expect(
+        settings().existsSync() && settings().readAsStringSync().contains(agentHookMarker),
+        isFalse,
+        reason: 'a callback that cannot arrive has no business in the config',
+      );
+    });
+
+    test('the door is dialled once per store, not once per agent', () async {
+      _StubReachability.asked.clear();
+      final (locator, wsl) = wslStore();
+
+      await containerWith(
+        locator,
+      ).read(agentHookInstallationServiceProvider).installAll(reachable);
+
+      expect(_StubReachability.asked, [wsl.id]);
+    });
+
+    test('uninstall never dials: the sweep has to visit every store', () async {
+      _StubReachability.asked.clear();
+      final (locator, _) = wslStore();
+
+      await containerWith(
+        locator,
+        doorAnswers: false,
+      ).read(agentHookInstallationServiceProvider).uninstallAll();
+
+      expect(
+        _StubReachability.asked,
+        isEmpty,
+        reason:
+            'a store whose door is dead is exactly the one holding an entry '
+            'that needs removing',
+      );
     });
 
     test('is skipped, truthfully, when there is no switch address', () async {
