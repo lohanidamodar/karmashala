@@ -33,6 +33,7 @@ import 'delivery_strip.dart';
 import 'message_composer.dart';
 import 'permission_mode_chip.dart';
 import 'session_repositories_bar.dart';
+import 'session_stats_dialog.dart';
 
 /// The chat transcript for the selected native session, rendered CLI-style. Only
 /// conversational events are shown — lifecycle/status noise is filtered out.
@@ -252,8 +253,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                     controller: _composer,
                     // MonoCode's chip row: the session's own safety policy,
                     // where the message is written rather than buried in
-                    // Settings under the agent's name.
-                    chips: [PermissionModeChip(sessionId: widget.sessionId)],
+                    // Settings under the agent's name — and what the session
+                    // has cost so far, which is a question about this session
+                    // and belongs beside it rather than in the global chrome.
+                    chips: [
+                      PermissionModeChip(sessionId: widget.sessionId),
+                      SessionStatsButton(sessionId: widget.sessionId),
+                    ],
                     hintText: active
                         ? 'Message the agent…  (attach an image with 🖼)'
                         : 'Type to continue this session…',
