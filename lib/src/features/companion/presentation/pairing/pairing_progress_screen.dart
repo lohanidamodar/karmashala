@@ -7,6 +7,7 @@ import '../../../../app/theme/app_icons.dart';
 import '../../../../app/theme/design_tokens.dart';
 import '../../../remote/protocol.dart';
 import '../../client/companion_gateway.dart';
+import '../companion_chrome.dart';
 
 /// The moment a QR is decoded or a code submitted, the camera/input screen
 /// pushes this: staged, readable progress — code accepted, looking for the
@@ -107,7 +108,7 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
     final failed = _stage == CompanionPairingStage.failed;
     final paired = _stage == CompanionPairingStage.paired;
     return Scaffold(
-      appBar: AppBar(title: const Text('Pairing')),
+      appBar: companionAppBar(context, title: const Text('Pairing')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -122,22 +123,32 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
                   if (failed) ...[
                     const SizedBox(height: Insets.lg),
                     Container(
-                      padding: const EdgeInsets.all(Insets.md),
+                      padding: const EdgeInsets.all(Insets.lg),
                       decoration: BoxDecoration(
-                        color: scheme.errorContainer.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(Radii.sm),
+                        // The same tint-plus-words the link banner uses: the
+                        // sentence carries the meaning at full contrast and
+                        // the colour only supports it.
+                        color: SemanticColors.of(
+                          context,
+                        ).failure.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(Radii.md),
                       ),
                       child: Text(
                         _error ?? 'Pairing failed.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.error,
+                        // What went wrong is the only thing on this screen
+                        // worth reading once it appears, so it is set as prose
+                        // rather than as a caption.
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurface,
                         ),
                       ),
                     ),
                     const SizedBox(height: Insets.lg),
                     FilledButton.icon(
                       onPressed: _run,
-                      icon: const Icon(AppIcons.arrowsClockwise, size: 16),
+                      // Unsized: the touch theme gives every button glyph
+                      // Touch.icon, and a hand-picked 16 undercut it.
+                      icon: const Icon(AppIcons.arrowsClockwise),
                       label: const Text('Retry'),
                     ),
                     const SizedBox(height: Insets.sm),
@@ -188,6 +199,10 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
   Widget _stepRow(ThemeData theme, _Step step) {
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
+    final density = UiDensity.of(context);
+    // One step of a four-step rail: big enough to read as a state mark, and
+    // the same size whichever of the four states it is in.
+    final mark = density.icon + 2;
     final failed = _stage == CompanionPairingStage.failed;
     // Where the attempt stopped: on failure the current stage index is where
     // it died, and that row wears the warning.
@@ -199,22 +214,24 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
 
     final (Widget icon, Color colour) = done
         ? (
-            Icon(AppIcons.checkCircle, size: 20, color: semantic.idle),
+            Icon(AppIcons.checkCircle, size: mark, color: semantic.idle),
             scheme.onSurface,
           )
         : active && failed
-        ? (Icon(AppIcons.warning, size: 20, color: scheme.error), scheme.error)
+        ? (
+            Icon(AppIcons.warning, size: mark, color: semantic.failure),
+            semantic.failure,
+          )
         : active
         ? (
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            SizedBox.square(
+              dimension: density.icon,
+              child: const CircularProgressIndicator(strokeWidth: 2),
             ),
             scheme.onSurface,
           )
         : (
-            Icon(AppIcons.circle, size: 20, color: scheme.outlineVariant),
+            Icon(AppIcons.circle, size: mark, color: scheme.outlineVariant),
             scheme.onSurfaceVariant,
           );
 
@@ -223,7 +240,10 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 24, child: Center(child: icon)),
+          SizedBox(
+            width: Insets.xl,
+            child: Center(child: icon),
+          ),
           const SizedBox(width: Insets.md),
           Expanded(
             child: Column(

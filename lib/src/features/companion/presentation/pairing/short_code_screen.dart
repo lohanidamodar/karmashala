@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/design_tokens.dart';
 import '../../client/companion_gateway.dart';
 import '../../client/pairing_input.dart';
+import '../companion_chrome.dart';
 import 'pairing_progress_screen.dart';
 
 /// The QR fallback: type the code shown under the desktop's QR, or paste the
@@ -64,7 +65,10 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Type the pairing code')),
+      appBar: companionAppBar(
+        context,
+        title: const Text('Type the pairing code'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(Insets.xl),
@@ -75,7 +79,9 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 "Type the code shown under the desktop's QR "
                 '(like K7QM-3X2W-…), or paste its full pairing payload. '
                 'Codes expire after five minutes.',
-                style: theme.textTheme.bodySmall?.copyWith(
+                // Body, not caption: this is a paragraph someone reads before
+                // typing, and 12px prose is the ramp's metadata step.
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),
@@ -86,7 +92,10 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 enabled: !_busy,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _pair(),
-                style: theme.textTheme.bodySmall?.copyWith(
+                // The one string on this screen that is read character by
+                // character, so it takes the ramp's largest body step rather
+                // than its smallest.
+                style: theme.textTheme.bodyLarge?.copyWith(
                   fontFamily: kMonoFamily,
                 ),
                 decoration: InputDecoration(
@@ -101,9 +110,8 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
               FilledButton(
                 onPressed: _busy ? null : _pair,
                 child: _busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
+                    ? const SizedBox.square(
+                        dimension: Touch.icon,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text('Pair'),

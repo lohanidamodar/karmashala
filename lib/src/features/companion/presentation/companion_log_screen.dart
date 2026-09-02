@@ -8,6 +8,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/build_identity.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import '../../../core/logging/log_entry.dart';
+import 'companion_chrome.dart';
 
 /// The companion's own log, on the phone that produced it.
 ///
@@ -24,9 +25,9 @@ import '../../../core/logging/log_entry.dart';
 class CompanionLogScreen extends ConsumerStatefulWidget {
   const CompanionLogScreen({super.key});
 
-  static Future<void> show(BuildContext context) => Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => const CompanionLogScreen()),
-  );
+  static Future<void> show(BuildContext context) => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => const CompanionLogScreen()));
 
   @override
   ConsumerState<CompanionLogScreen> createState() => _CompanionLogScreenState();
@@ -45,7 +46,10 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
   List<LogEntry> _read() => ref.read(diagnosticsProvider).buffer.snapshot();
 
   List<LogEntry> get _visible => _problemsOnly
-      ? [for (final e in _entries) if (e.level >= Level.WARNING) e]
+      ? [
+          for (final e in _entries)
+            if (e.level >= Level.WARNING) e,
+        ]
       : _entries;
 
   Future<void> _refresh() async => setState(() => _entries = _read());
@@ -74,7 +78,8 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
     final dropped = ref.read(diagnosticsProvider).buffer.dropped;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: companionAppBar(
+        context,
         title: const Text('Diagnostics'),
         actions: [
           IconButton(
@@ -111,7 +116,13 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
                       ? 'No warnings or errors this run. Show everything to '
                             'see what the link has been doing.'
                       : 'Nothing logged yet.',
-                  style: density.muted(theme),
+                  textAlign: TextAlign.center,
+                  // Prose, not a caption: this is the sentence that stops the
+                  // screen looking broken, and it was set at the size the log
+                  // lines beside it use for metadata.
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               )
             else

@@ -7,6 +7,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The saved desktops, on the settings screen: which one this phone is
@@ -33,11 +34,9 @@ class ConnectionsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        CompanionSectionHeader(
           connections.length > 1 ? 'DESKTOPS' : 'PAIRED DESKTOP',
-          style: theme.textTheme.labelSmall,
         ),
-        const SizedBox(height: Insets.sm),
         if (connections.isEmpty)
           Text(
             'No desktops saved on this phone yet.',
@@ -165,10 +164,13 @@ class _ConnectionRow extends ConsumerWidget {
           constraints: density.isTouch
               ? const BoxConstraints(minHeight: Touch.target)
               : null,
+          // Less on the right than the left because the trailing icon button
+          // brings its own 48dp box; a full gutter on both sides would push
+          // the glyph a finger's width in from the edge it belongs on.
           padding: EdgeInsets.fromLTRB(
             density.padX,
             density.padY,
-            density.isTouch ? Insets.sm : Insets.sm,
+            Insets.sm,
             density.padY,
           ),
           decoration: last
@@ -211,7 +213,7 @@ class _ConnectionRow extends ConsumerWidget {
                         ),
                         if (connection.active) ...[
                           const SizedBox(width: Insets.sm),
-                          _ActiveBadge(),
+                          const _ActiveBadge(),
                         ],
                       ],
                     ),
@@ -237,12 +239,14 @@ class _ConnectionRow extends ConsumerWidget {
 
 /// The "Active" pill — colour plus a word, never colour alone.
 class _ActiveBadge extends StatelessWidget {
+  const _ActiveBadge();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: 1),
       decoration: BoxDecoration(
         color: semantic.idle.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(Radii.sm),

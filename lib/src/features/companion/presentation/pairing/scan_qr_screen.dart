@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../app/theme/design_tokens.dart';
 import '../../client/companion_gateway.dart';
 import '../../client/pairing_input.dart';
+import '../companion_chrome.dart';
 import 'pairing_progress_screen.dart';
 import 'short_code_screen.dart';
 
@@ -93,7 +94,7 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan the QR code')),
+      appBar: companionAppBar(context, title: const Text('Scan the QR code')),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -103,25 +104,25 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  Insets.md,
+                  Insets.lg,
                   Insets.sm,
-                  Insets.md,
+                  Insets.lg,
                   0,
                 ),
                 child: Text(
                   _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     color: scheme.error,
                   ),
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.all(Insets.md),
+              padding: const EdgeInsets.all(Insets.lg),
               child: Text(
                 "Point the camera at the QR code in the desktop's "
                 'Remote access settings.',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),

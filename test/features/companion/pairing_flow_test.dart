@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/companion/presentation/pairing/short_cod
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'dart:async';
 import 'companion_test_support.dart';
 
 /// Pairing on the phone: the QR path (scanner injected — no camera in tests)
@@ -103,5 +104,70 @@ void main() {
     deliver('{"secret":"s3cret"}');
     await tester.pump();
     expect(gateway.pairing, isNotNull);
+  });
+
+  testWidgets('the pairing screen is legible at 200% and offers both ways', (
+    tester,
+  ) async {
+    await pumpPhone(
+      tester,
+      gateway: FakeCompanionGateway(),
+      home: const PairingScreen(),
+      textScale: 2.0,
+    );
+
+    expect(find.text('Pair with your desktop'), findsOneWidget);
+    expect(find.text('Scan the QR code'), findsOneWidget);
+    expect(find.text('Paste the code instead'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the pairing screen shown as a root has no back arrow; pushed '
+      'from settings it does', (tester) async {
+    await pumpPhone(
+      tester,
+      gateway: FakeCompanionGateway(),
+      home: const PairingScreen(),
+    );
+    expect(find.byType(AppBar), findsNothing);
+
+    await tester.tap(find.text('Paste the code instead'));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Now push a second copy over the first: a screen you arrived at from
+    // somewhere has to show the way back to it.
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(builder: (_) => const PairingScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Add a desktop'), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+  });
+
+  testWidgets('the typed-code screen sets the code above the caption step', (
+    tester,
+  ) async {
+    await pumpPhone(
+      tester,
+      gateway: FakeCompanionGateway(),
+      home: const ShortCodeScreen(),
+      textScale: 2.0,
+    );
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    final caption = Theme.of(
+      tester.element(find.byType(TextField)),
+    ).textTheme.bodySmall;
+    expect(
+      field.style?.fontSize,
+      greaterThan(caption!.fontSize!),
+      reason: 'a code read character by character is not caption text',
+    );
+    expect(tester.takeException(), isNull);
   });
 }

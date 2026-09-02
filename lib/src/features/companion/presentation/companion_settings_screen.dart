@@ -6,6 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../core/logging/build_identity.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'companion_log_screen.dart';
 import 'connections_section.dart';
 
@@ -75,8 +76,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
         // every other row here is about.
         const ConnectionsSection(),
         const SizedBox(height: Insets.lg),
-        Text('THIS CONNECTION', style: theme.textTheme.labelSmall),
-        const SizedBox(height: Insets.sm),
+        const CompanionSectionHeader('THIS CONNECTION'),
         Container(
           padding: EdgeInsets.all(density.padX),
           decoration: BoxDecoration(
@@ -240,8 +240,7 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('PAIRING RELAY', style: theme.textTheme.labelSmall),
-        const SizedBox(height: Insets.sm),
+        const CompanionSectionHeader('PAIRING RELAY'),
         TextField(
           controller: _relay,
           enabled: _loaded,
@@ -249,9 +248,7 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
           textInputAction: TextInputAction.done,
           onSubmitted: _apply,
           onEditingComplete: () => _apply(_relay.text),
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontFamily: kMonoFamily,
-          ),
+          style: theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
             hintText: kDefaultCompanionRelayUrl,
@@ -284,8 +281,7 @@ class _DiagnosticsRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('DIAGNOSTICS', style: theme.textTheme.labelSmall),
-        const SizedBox(height: Insets.sm),
+        const CompanionSectionHeader('DIAGNOSTICS'),
         Text(buildIdentity(), style: density.muted(theme)),
         const SizedBox(height: Insets.sm),
         Align(

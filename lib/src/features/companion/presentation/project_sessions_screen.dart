@@ -6,6 +6,7 @@ import '../../../app/theme/design_tokens.dart';
 import '../../remote/protocol.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
@@ -39,57 +40,36 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
   late String _key = widget.projectKey;
 
   Future<void> _switchProject(List<CompanionProjectGroup> groups) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Insets.lg,
-                  0,
-                  Insets.lg,
-                  Insets.sm,
-                ),
-                child: Text(
-                  'Projects on this desktop',
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ),
-              for (final group in groups)
-                ListTile(
-                  leading: Icon(
-                    group.key == _key ? AppIcons.folderOpen : AppIcons.folder,
-                    color: group.folderMissing
-                        ? Theme.of(context).colorScheme.error
-                        : null,
-                  ),
-                  title: Text(
-                    group.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(
-                    [
-                      ?group.summary.label,
-                      ?group.summary.attentionLabel,
-                    ].join('  ·  '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  selected: group.key == _key,
-                  trailing: group.key == _key
-                      ? const Icon(AppIcons.check)
-                      : null,
-                  onTap: () => Navigator.of(context).pop(group.key),
-                ),
-            ],
+    final picked = await companionSheet<String>(
+      context,
+      title: 'Projects on this desktop',
+      children: [
+        for (final group in groups)
+          ListTile(
+            leading: Icon(
+              group.key == _key ? AppIcons.folderOpen : AppIcons.folder,
+              color: group.folderMissing
+                  ? Theme.of(context).colorScheme.error
+                  : null,
+            ),
+            title: Text(
+              group.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              [
+                ?group.summary.label,
+                ?group.summary.attentionLabel,
+              ].join('  ·  '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            selected: group.key == _key,
+            trailing: group.key == _key ? const Icon(AppIcons.check) : null,
+            onTap: () => Navigator.of(context).pop(group.key),
           ),
-        ),
-      ),
+      ],
     );
     if (picked != null && mounted) setState(() => _key = picked);
   }
@@ -105,8 +85,8 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
     final canSwitch = groups.length > 1;
 
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: Touch.appBarOf(context),
+      appBar: companionAppBar(
+        context,
         title: _Title(
           name: group?.name ?? 'Project',
           canSwitch: canSwitch,
@@ -127,9 +107,7 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
               onPressed: () => Navigator.of(context).push(
                 companionRoute<void>(
                   context,
-                  (_) => StartSessionScreen(
-                    projectId: group?.projectId,
-                  ),
+                  (_) => StartSessionScreen(projectId: group?.projectId),
                 ),
               ),
             ),
@@ -277,7 +255,7 @@ class _Facts extends StatelessWidget {
             style: muted,
           ),
           if (group.path.isNotEmpty || group.folderMissing) ...[
-            const SizedBox(height: 2),
+            SizedBox(height: UiDensity.of(context).lineGap),
             Row(
               children: [
                 if (group.folderMissing) ...[

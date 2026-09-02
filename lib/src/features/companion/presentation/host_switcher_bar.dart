@@ -5,6 +5,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
+import 'companion_chrome.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The strip above the session list that names the desktop being shown and
@@ -22,41 +23,40 @@ class HostSwitcherBar extends ConsumerWidget {
     WidgetRef ref,
     List<CompanionConnection> connections,
   ) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final connection in connections)
-              ListTile(
-                leading: Icon(
-                  connection.active ? AppIcons.check : AppIcons.deviceMobile,
-                ),
-                title: Text(
-                  connection.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: connection.active ? const Text('Active') : null,
-                selected: connection.active,
-                onTap: () => Navigator.of(context).pop(connection.hostId),
-              ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(AppIcons.plus),
-              title: const Text('Add a desktop'),
-              onTap: () => Navigator.of(context).pop(''),
+    // Scroll-controlled and titled like every other companion sheet: a bare
+    // Column in Material's half-height sheet overflowed as soon as a phone
+    // had four desktops, and at 200% text it overflowed with two.
+    final picked = await companionSheet<String>(
+      context,
+      title: 'DESKTOPS',
+      children: [
+        for (final connection in connections)
+          ListTile(
+            leading: Icon(
+              connection.active ? AppIcons.check : AppIcons.deviceMobile,
             ),
-          ],
+            title: Text(
+              connection.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: connection.active ? const Text('Active') : null,
+            selected: connection.active,
+            onTap: () => Navigator.of(context).pop(connection.hostId),
+          ),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(AppIcons.plus),
+          title: const Text('Add a desktop'),
+          onTap: () => Navigator.of(context).pop(''),
         ),
-      ),
+      ],
     );
     if (picked == null || !context.mounted) return;
     if (picked.isEmpty) {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const PairingScreen()),
-      );
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const PairingScreen()));
       return;
     }
     await ref.read(companionSwitchingProvider.notifier).switchTo(picked);
@@ -114,10 +114,7 @@ class HostSwitcherBar extends ConsumerWidget {
                   style: density.title(theme),
                 ),
               ),
-              Text(
-                '${connections.length} saved',
-                style: density.muted(theme),
-              ),
+              Text('${connections.length} saved', style: density.muted(theme)),
               const SizedBox(width: Insets.xs),
               Icon(
                 AppIcons.caretDown,
