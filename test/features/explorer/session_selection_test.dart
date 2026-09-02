@@ -376,6 +376,99 @@ void main() {
     });
   });
 
+  group('the confirmation', () {
+    Future<void> tickTwoAndAsk(WidgetTester tester) async {
+      await enterSelection(tester);
+      await tester.tap(find.text('One'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Two'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('names the count and the rows, and offers the transcripts '
+        'unticked', (tester) async {
+      addNative('n0', title: 'One');
+      addImported('i0', title: 'Two', minutes: 1);
+      await pump(tester);
+      await tickTwoAndAsk(tester);
+
+      expect(find.text('Delete 2 sessions?'), findsOneWidget);
+      // A selection can hold rows that are scrolled away or filtered out of
+      // sight, so the dialog names them rather than only counting them.
+      expect(find.textContaining('"One"'), findsOneWidget);
+      expect(find.textContaining('"Two"'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Delete 2 sessions'),
+        findsOneWidget,
+      );
+
+      // Unticked by default, matching the single-session delete: the rows come
+      // back by re-importing, a transcript comes back from nowhere.
+      final box = tester.widget<CheckboxListTile>(
+        find.byType(CheckboxListTile),
+      );
+      expect(box.value, isFalse);
+      expect(
+        find.textContaining("Also delete the agents' transcripts"),
+        findsOneWidget,
+      );
+      // One destructive verb, not two: the owner declined an End beside it.
+      expect(find.widgetWithText(FilledButton, 'End'), findsNothing);
+    });
+
+    testWidgets('Cancel changes nothing at all', (tester) async {
+      addNative('n0', title: 'One');
+      addImported('i0', title: 'Two', minutes: 1);
+      final container = await pump(tester);
+      await tickTwoAndAsk(tester);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(SessionDao(db).getById('n0'), isNotNull);
+      expect(find.byType(SessionCard), findsNWidgets(2));
+      expect(container.read(sessionSelectionProvider).ids, {'n0', 'i0'});
+      expect(container.read(sessionSelectionProvider).active, isTrue);
+    });
+
+    testWidgets('confirming empties the tree and the selection with it', (
+      tester,
+    ) async {
+      addNative('n0', title: 'One');
+      addImported('i0', title: 'Two', minutes: 1);
+      final container = await pump(tester);
+      await tickTwoAndAsk(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete 2 sessions'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SessionCard), findsNothing);
+      expect(container.read(sessionSelectionProvider).ids, isEmpty);
+      // The mode stays on: a user clearing up usually has more to clear up,
+      // and leaving is one click.
+      expect(container.read(sessionSelectionProvider).active, isTrue);
+      expect(find.text('0 selected'), findsOneWidget);
+    });
+
+    testWidgets('one session is asked about in the singular', (tester) async {
+      addNative('n0', title: 'One');
+      await pump(tester);
+      await enterSelection(tester);
+      await tester.tap(find.text('One'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete 1 session?'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Delete 1 session'),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('layout', () {
     testWidgets('the selection strip survives the window matrix', (
       tester,

@@ -87,20 +87,75 @@ class SessionActions {
       }
       await _ref.read(cliSessionMutatorProvider).delete(detected);
     }
-    _ref.read(sessionDaoProvider).delete(id);
-    if (_ref.read(selectedSessionIdProvider) == id) {
+    _removeNativeRow(session, fromCliStore: deleteFromCli);
+    _publish(SessionChange.removed(id));
+  }
+
+  /// Takes one native row out of the workspace, and nothing else: the row, the
+  /// open transcript if it was this one, and the line saying it happened.
+  ///
+  /// **Publishes nothing.** The caller does, so a batch can publish once — see
+  /// [deleteSessionsFromWorkspace].
+  void _removeNativeRow(Session session, {required bool fromCliStore}) {
+    _ref.read(sessionDaoProvider).delete(session.id);
+    if (_ref.read(selectedSessionIdProvider) == session.id) {
       _ref.read(selectedSessionIdProvider.notifier).select(null);
     }
     // The one destructive action in this class, and the only one that can reach
-    // outside the app: with `deleteFromCli` it removes the agent's own
+    // outside the app: with `fromCliStore` it removed the agent's own
     // transcript, which nothing here can put back. Logged after the fact so the
-    // line means it happened rather than that it was attempted — the throws
-    // above all abandon the delete with the CLI store untouched.
+    // line means it happened rather than that it was attempted — the throws in
+    // [deleteNative] all abandon the delete with the CLI store untouched.
     _log.info(
-      'Deleted session $id (${session.title}): '
-      'fromCliStore=$deleteFromCli agent=${session.agentInstallationId}',
+      'Deleted session ${session.id} (${session.title}): '
+      'fromCliStore=$fromCliStore agent=${session.agentInstallationId}',
     );
-    _publish(SessionChange.removed(id));
+  }
+
+  void _removeImportedRow(ImportedSession session) {
+    _ref.read(importedSessionDaoProvider).delete(session.id);
+    if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
+      _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+    }
+  }
+
+  /// Removes a whole selection of rows from the workspace as **one act**.
+  ///
+  /// Each kind still goes through its own removal — the same DAO delete, the
+  /// same selection clearing, the same log line its single delete writes — but
+  /// the set publishes exactly once. That is not tidiness: three bare listeners
+  /// sit on `sessionsRevisionProvider` (the quick-open file index, the terminal
+  /// layout, the remote controller) and each does real work per bump, so
+  /// thirty-three rows published one at a time would run all three
+  /// thirty-three times for one click.
+  ///
+  /// The CLI store is not touched here. Removing a row from the workspace is
+  /// undone by re-importing it; deleting an agent's transcript is undone by
+  /// nothing, so that half runs behind this and reports for itself — see
+  /// [purgeSessionsFromCliStore].
+  void deleteSessionsFromWorkspace({
+    List<Session> natives = const [],
+    List<ImportedSession> imported = const [],
+  }) {
+    if (natives.isEmpty && imported.isEmpty) return;
+    for (final session in natives) {
+      _removeNativeRow(session, fromCliStore: false);
+    }
+    for (final session in imported) {
+      _removeImportedRow(session);
+    }
+    // The coarse word, deliberately: this named several rows, and a change that
+    // names no single one is exactly what `sessionId: null` means. Not
+    // `workspaceChanged` — no project, repository or checkout moved.
+    _publish(
+      const SessionChange(
+        kinds: {
+          SessionChangeKind.membership,
+          SessionChangeKind.status,
+          SessionChangeKind.placement,
+        },
+      ),
+    );
   }
 
   Future<void> renameImported(ImportedSession session, String title) async {
@@ -125,21 +180,82 @@ class SessionActions {
   ///
   /// Logged after the fact, like [deleteNative], so the line means the
   /// transcripts are gone rather than that we tried.
-  Future<CliDeleteReport> purgeFromCliStore(
-    List<ImportedSession> sessions,
-  ) async {
-    if (sessions.isEmpty) return CliDeleteReport.empty;
+  Future<CliDeleteReport> purgeFromCliStore(List<ImportedSession> sessions) =>
+      purgeSessionsFromCliStore(imported: sessions);
+
+  /// The same batch, for a selection that holds **both** kinds of row.
+  ///
+  /// An imported row already carries its own store file, so it maps straight to
+  /// a [DetectedSession]. A native row carries only the conversation id, and
+  /// finding the file behind it means walking the CLI stores — which is why
+  /// [deleteNative] can only afford to delete one session at a time. Here every
+  /// native row is looked up in **one** pass over the stores, and the
+  /// transcripts of both kinds then go to [CliSessionMutator.deleteAll] as a
+  /// single batch: one index pass per store rather than one per session.
+  ///
+  /// Never throws. A native row whose conversation cannot be identified comes
+  /// back as a failure under its own title, because that is the honest report —
+  /// its transcript is still on disk.
+  Future<CliDeleteReport> purgeSessionsFromCliStore({
+    List<Session> natives = const [],
+    List<ImportedSession> imported = const [],
+  }) async {
+    if (natives.isEmpty && imported.isEmpty) return CliDeleteReport.empty;
     // Resolved before the first await: this may outlive the container that
     // started it, and a provider read afterwards would throw.
     final mutator = _ref.read(cliSessionMutatorProvider);
-    final report = await mutator.deleteAll(sessions.map(_toDetected));
+    final installations = _ref.read(agentInstallationDaoProvider);
+
+    final targets = <DetectedSession>[for (final s in imported) _toDetected(s)];
+    final failures = <CliDeleteFailure>[];
+    final wanted = <(String, String), Session>{};
+    for (final session in natives) {
+      final agentId = installations
+          .getById(session.agentInstallationId)
+          ?.agentId;
+      final externalId = session.externalSessionId;
+      if (agentId == null || externalId == null) {
+        failures.add(
+          CliDeleteFailure(
+            label: session.title,
+            error: StateError('The CLI session could not be identified.'),
+          ),
+        );
+        continue;
+      }
+      wanted[(agentId, externalId)] = session;
+    }
+    if (wanted.isNotEmpty) {
+      final found = await _detectedByKey(wanted.keys.toSet());
+      for (final entry in wanted.entries) {
+        final detected = found[entry.key];
+        if (detected == null) {
+          failures.add(
+            CliDeleteFailure(
+              label: entry.value.title,
+              error: StateError('The CLI session file could not be found.'),
+            ),
+          );
+        } else {
+          targets.add(detected);
+        }
+      }
+    }
+
+    final report = targets.isEmpty
+        ? CliDeleteReport.empty
+        : await mutator.deleteAll(targets);
     if (report.deleted > 0) {
       _log.info(
         'Deleted ${report.deleted} session file(s) from the CLI store '
-        '(${report.failures.length} left behind).',
+        '(${report.failures.length + failures.length} left behind).',
       );
     }
-    return report;
+    if (failures.isEmpty) return report;
+    return CliDeleteReport(
+      deleted: report.deleted,
+      failures: [...report.failures, ...failures],
+    );
   }
 
   Future<void> deleteImported(
@@ -149,10 +265,7 @@ class SessionActions {
     if (deleteFromCli) {
       await _ref.read(cliSessionMutatorProvider).delete(_toDetected(session));
     }
-    _ref.read(importedSessionDaoProvider).delete(session.id);
-    if (_ref.read(selectedImportedSessionIdProvider) == session.id) {
-      _ref.read(selectedImportedSessionIdProvider.notifier).select(null);
-    }
+    _removeImportedRow(session);
     _publish(SessionChange.removed(session.id));
   }
 
@@ -788,6 +901,16 @@ class SessionActions {
   Future<DetectedSession?> _detectedSessionById(
     String agentId,
     String externalId,
+  ) async => (await _detectedByKey({(agentId, externalId)}))[(
+    agentId,
+    externalId,
+  )];
+
+  /// The store files behind `(agentId, conversationId)` pairs, in **one** walk
+  /// of the CLI stores however many are asked for. Single and bulk deletes
+  /// share it so neither can come to read a store differently from the other.
+  Future<Map<(String, String), DetectedSession>> _detectedByKey(
+    Set<(String, String)> wanted,
   ) async {
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
     final stores = await _ref
@@ -797,17 +920,17 @@ class SessionActions {
       stores,
       {for (final environment in environments) environment.id: environment},
     );
+    final found = <(String, String), DetectedSession>{};
     for (final project in projects) {
       for (final session in [
         ...project.sessions,
         ...project.subagentSessions,
       ]) {
-        if (session.cli == agentId && session.sessionId == externalId) {
-          return session;
-        }
+        final key = (session.cli, session.sessionId);
+        if (wanted.contains(key)) found[key] = session;
       }
     }
-    return null;
+    return found;
   }
 
   DetectedSession _toDetected(ImportedSession session) => DetectedSession(
