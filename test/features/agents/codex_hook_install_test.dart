@@ -30,6 +30,8 @@ void main() {
   File configToml() => File(p.join(storeHome(), 'config.toml'));
   File posixScript() => File(p.join(storeHome(), '$agentHookMarker.sh'));
   File windowsScript() => File(p.join(storeHome(), '$agentHookMarker.cmd'));
+  File endpointFile() =>
+      File(p.join(storeHome(), '$agentHookMarker.endpoint'));
 
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_codexhook_');
@@ -283,10 +285,18 @@ args = ["blender-mcp"]
       expect(handler['type'], 'command');
       expect(handler['command'], contains(agentHookMarker));
 
+      // The script carries no address and no token either — it reads them
+      // out of the endpoint file beside it when the hook fires, which is what
+      // makes *it* a constant too and leaves one file to rewrite per launch.
       final script = posixScript().readAsStringSync();
-      expect(script, contains('127.0.0.1:4242/agent-hook'));
-      expect(script, contains('agent=codex'));
-      expect(script, contains(r'&event=$1'));
+      expect(script, isNot(contains('127.0.0.1')));
+      expect(script, isNot(contains('tok-abc')));
+      expect(script, contains('$agentHookMarker.endpoint'));
+
+      final endpointText = endpointFile().readAsStringSync();
+      expect(endpointText, contains('url=http://127.0.0.1:4242/agent-hook'));
+      expect(endpointText, contains('agent=codex'));
+      expect(endpointText, endsWith('token=tok-abc\n'));
     });
 
     test('leaves a pre-existing user hook, and every sibling key', () async {
@@ -357,7 +367,7 @@ args = ["blender-mcp"]
       expect(configToml().readAsStringSync(), ownerShapedConfigToml);
     });
 
-    test('rewrites the script for a new port, and nothing else', () async {
+    test('rewrites the endpoint file for a new port, and nothing else', () async {
       hooksFile().writeAsStringSync(
         jsonEncode({
           'hooks': {
@@ -388,10 +398,12 @@ args = ["blender-mcp"]
 
       expect(installed, isTrue);
       // The config is untouched — which is the property the trust grant
-      // survives on — while the script now names the new port.
+      // survives on — and so is the script, because it is a constant. One file
+      // changed, and it is the one nothing else on the machine reads.
       expect(hooksFile().readAsStringSync(), afterFirst);
-      expect(posixScript().readAsStringSync(), contains('127.0.0.1:5555'));
-      expect(posixScript().readAsStringSync(), isNot(contains('4242')));
+      expect(posixScript().readAsStringSync(), isNot(contains('5555')));
+      expect(endpointFile().readAsStringSync(), contains('127.0.0.1:5555'));
+      expect(endpointFile().readAsStringSync(), isNot(contains('4242')));
       expect(handlersFor('Stop').first['command'], 'mine.sh');
     });
 
@@ -409,6 +421,7 @@ args = ["blender-mcp"]
       expect(hooksFile().existsSync(), isFalse);
       expect(posixScript().existsSync(), isFalse);
       expect(windowsScript().existsSync(), isFalse);
+      expect(endpointFile().existsSync(), isFalse);
     });
   });
 
@@ -443,8 +456,12 @@ args = ["blender-mcp"]
       final script = windowsScript().readAsStringSync();
       expect(script, startsWith('@echo off\r\n'));
       expect(script, contains('-o NUL'));
-      expect(script, contains(r'&event=%~1'));
+      // The event is still the script's one argument; what moved is the URL it
+      // is appended to, which now comes out of the endpoint file.
+      expect(script, contains(r'"%KS_URL%%~1"'));
       expect(script.trimRight(), endsWith('exit /b 0'));
+      // CRLF for the batch file, and CRLF for the file `for /f` reads.
+      expect(endpointFile().readAsStringSync(), contains('\r\n'));
     });
   });
 
@@ -465,9 +482,40 @@ args = ["blender-mcp"]
 
       expect(removed, isTrue);
       // The one file in this feature that holds a bearer token in bytes of our
-      // own must not outlive the app that minted it.
+      // own must not outlive the app that minted it — and the script it is
+      // read by goes with it.
       expect(posixScript().existsSync(), isFalse);
+      expect(endpointFile().existsSync(), isFalse);
       expect(hooksFile().readAsStringSync(), isNot(contains(agentHookMarker)));
+    });
+
+    test('retiring the endpoint keeps the entry and the script', () async {
+      // What the app does on the way out. The entry and the script are
+      // constants with nothing stale in them; the address and the token are
+      // not, and only they are removed. Taking the entry out here and putting
+      // byte-identical bytes back on the next start is the churn that lost us
+      // the race with the CLI that owns the file.
+      await installer.install(
+        descriptor: codex,
+        storeHome: storeHome(),
+        endpoint: endpoint,
+        environment: EnvironmentKind.localPosix,
+      );
+      final entry = handlersFor('Stop').single['command'];
+
+      expect(
+        installer.retireEndpoint(descriptor: codex, storeHome: storeHome()),
+        isTrue,
+      );
+
+      expect(endpointFile().existsSync(), isFalse);
+      expect(posixScript().existsSync(), isTrue);
+      expect(handlersFor('Stop').single['command'], entry);
+      // And a second call has nothing left to do.
+      expect(
+        installer.retireEndpoint(descriptor: codex, storeHome: storeHome()),
+        isFalse,
+      );
     });
 
     test('sweeps a script left by the other platform', () async {
@@ -532,6 +580,9 @@ args = ["blender-mcp"]
       );
       expect(installed, isTrue);
       expect(jsonEncode(hooks()), isNot(contains('tok-abc')));
+      // Nor the script, which is now the only generated file anything else
+      // ever reads out loud — the token is in the endpoint file alone.
+      expect(posixScript().readAsStringSync(), isNot(contains('tok-abc')));
     });
   });
 }

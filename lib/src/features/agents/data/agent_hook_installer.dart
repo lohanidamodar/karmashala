@@ -50,14 +50,43 @@ const List<String> legacyAgentHookConfigKeys = <String>['chitragupta'];
 /// fires on every tool call and never arrives. An environment
 /// [AgentHookEndpoint] cannot reach is **refused here as well as skipped by the
 /// caller**, so a mistake upstream cannot put a dead URL in somebody's file.
+///
+/// ## Three files, and only one of them changes
+///
+/// An install writes, per agent and per environment:
+///
+///  1. the **config entry**, in the agent's own file — a constant, written once
+///     and then recognised and left alone on every later launch;
+///  2. the **callback script**, `karmashala-agent-hook.{cmd,sh}` in the store
+///     home — also a constant, and therefore also written once;
+///  3. the **endpoint file**, `karmashala-agent-hook.endpoint` beside it — the
+///     address and the bearer token, rewritten on every launch and deleted on
+///     the way out ([retireEndpoint]).
+///
+/// That split is the whole design, and [hookCommand] carries the argument for
+/// it: until Loop 71 the port and a per-launch token were spelled into (1),
+/// which meant three CLIs' global config had to be rewritten twice per app
+/// lifetime, and the race in the paragraph below had two chances a launch to
+/// bite. It had already bitten on the owner's machine — zero occurrences of
+/// [agentHookMarker] in the Windows `~/.claude/settings.json`, an Antigravity
+/// block of `{}` — while Orca's Claude hooks, written three months earlier,
+/// were still firing, for the single reason that their command never changes.
 class AgentHookInstaller {
-  const AgentHookInstaller({this.replace = _replaceFile});
+  const AgentHookInstaller({
+    this.replace = _replaceFile,
+    this.restrict = restrictToOwner,
+  });
 
   /// How staged content is moved onto the real config. Injectable because the
   /// failure path is the guarantee: a rename cannot be made to fail on demand,
   /// and "an interrupted install leaves a config the agent can still parse" is
   /// otherwise a claim with no test behind it.
   final Future<void> Function(File staged, File destination) replace;
+
+  /// How the endpoint file is closed to other accounts on the machine, applied
+  /// to the staged file **before** the token is written into it. Injectable so
+  /// a test can prove it is attempted without spawning `icacls` or `chmod`.
+  final Future<bool> Function(File file, EnvironmentKind environment) restrict;
 
   /// Writes one hook entry per event the descriptor declares. Returns whether
   /// the config **on disk** now carries this endpoint's callback for every one
@@ -81,11 +110,14 @@ class AgentHookInstaller {
   /// hooks are there — a reported install that wrote nothing is worse than a
   /// reported skip, because only the skip ever gets investigated.
   ///
-  /// **Idempotent to the byte.** An event whose entry already spells the exact
-  /// command for this [endpoint] is left alone, so a relaunch that happens to
-  /// bind the same port rewrites nothing — the file keeps whatever formatting
-  /// the user's editor gave it. The port is ephemeral, so this is rare; a
-  /// rewrite that changes nothing is still a write to somebody else's config.
+  /// **Idempotent to the byte, and now that is the usual case rather than a
+  /// lucky one.** An event whose entry already spells the command is left
+  /// alone, so the file keeps whatever formatting the user's editor gave it.
+  /// The command no longer depends on the port or the token, so *every* launch
+  /// after the first finds its own entry already there and writes nothing —
+  /// which is the point: a rewrite that changes nothing is still a write to
+  /// somebody else's config, and every write is another chance to lose the
+  /// race above.
   Future<bool> install({
     required AgentDescriptor descriptor,
     required String storeHome,
@@ -96,17 +128,26 @@ class AgentHookInstaller {
     if (spec == null) return false;
     if (!endpoint.reaches(environment)) return false;
 
+    // Read the config **before** writing anything beside it. The two orderings
+    // below are each right on their own and would contradict each other
+    // without this: the generated files have to exist before the entry that
+    // names them, and nothing of ours may be left beside a config we turned out
+    // not to be able to edit. A file that is not a JSON object throws here, one
+    // step earlier than it used to, so a store we refuse to touch is a store we
+    // wrote nothing into — not one holding a bearer token beside a
+    // `settings.json` we never opened.
+    _readConfigObject(descriptor, storeHome);
+
     // Written **before** the config entry that names it, so no launch can leave
     // an entry pointing at a script that is not there yet. The reverse order is
     // what an interrupted install would have to survive, and a hook whose
     // command names a missing file is an error printed into the user's session.
-    if (spec.trustsCommandByHash &&
-        !await _writeCallbackScript(
-          descriptor: descriptor,
-          storeHome: storeHome,
-          endpoint: endpoint,
-          environment: environment,
-        )) {
+    if (!await _writeCallbackFiles(
+      descriptor: descriptor,
+      storeHome: storeHome,
+      endpoint: endpoint,
+      environment: environment,
+    )) {
       return false;
     }
 
@@ -217,74 +258,114 @@ class AgentHookInstaller {
       }
       return changed;
     });
-    // The script goes with them. It is the only file in this feature that holds
-    // a bearer token in its own bytes rather than inside somebody else's config,
-    // so leaving it behind would outlive both the port it names and the app that
-    // could answer on it — the same argument [uninstall] exists for, one file
-    // further along. Removed whichever way the config edit went: a config that
-    // never carried our entry can still be sitting beside a script an earlier
+    // The script and the endpoint file go with them. The endpoint file is the
+    // only file in this feature that holds a bearer token and a port, so
+    // leaving it behind would outlive both the address it names and the app
+    // that could answer on it — the same argument [uninstall] exists for, one
+    // file further along. Removed whichever way the config edit went: a config
+    // that never carried our entry can still be sitting beside files an earlier
     // run wrote.
-    if (spec.trustsCommandByHash &&
-        _removeCallbackScripts(descriptor, storeHome)) {
-      changed = true;
-    }
+    if (_removeGeneratedFiles(descriptor, storeHome)) changed = true;
     return changed;
   }
 
-  /// The command line an agent runs for [event]: post the hook payload from
-  /// stdin to the endpoint address for [environment], bounded so a stopped app
-  /// costs nothing. `null` when nothing this app binds is reachable from there.
+  /// Deletes the endpoint file and leaves everything else in place.
   ///
-  /// It names no path of its own — only `curl`, a URL and a header — so the one
-  /// string is equally valid in a Windows shell and in a distribution's `sh`.
-  /// The token is base64url (`A-Za-z0-9-_=`) and both the header and the URL
-  /// are double-quoted, so the `&` between query parameters cannot background
-  /// the command and nothing in it is expanded.
+  /// What the app does **on the way out**, in place of a full [uninstall].
   ///
-  /// **Except for an agent that trusts a hook by hashing its command.** Codex
-  /// does (see [AgentHookSpec.trustsCommandByHash]), and the address in that
-  /// string changes on every launch, so spelling it inline would revoke our own
-  /// trust every time the app started. For those agents the command names a
-  /// fixed script instead — constant for the life of the install — and the
-  /// address and token live in the script, which nothing hashes.
+  /// The config entry and the script are now constants — the same bytes on
+  /// every launch, on every machine, for the life of the install — so there is
+  /// nothing in either of them that goes stale, and taking them out on quit
+  /// only to put identical bytes back on the next start is what put us in the
+  /// documented race in the first place (see the class doc). What genuinely
+  /// dies with the process is the **address and the token**, and those live
+  /// here alone.
+  ///
+  /// With the file gone the installed script costs the agent one
+  /// `if not exist` / `[ -f ]` and exits zero. That is strictly cheaper than
+  /// what a stale entry costs today — a `curl -m 2` at a port nothing owns, on
+  /// every tool call — and it is why leaving the entry behind is now safe.
+  ///
+  /// Returns whether a file was removed.
+  bool retireEndpoint({
+    required AgentDescriptor descriptor,
+    required String storeHome,
+  }) {
+    if (descriptor.hooks == null) return false;
+    final file = _endpointFile(descriptor, storeHome);
+    if (file == null || !file.existsSync()) return false;
+    try {
+      file.deleteSync();
+      return true;
+    } on FileSystemException {
+      // Someone else's directory. The script fails closed on a token it cannot
+      // authenticate with anyway, so this is hygiene rather than a hole.
+      return false;
+    }
+  }
+
+  /// The command line an agent runs for [event]: run the generated callback
+  /// script, with the event as its one argument. `null` when nothing this app
+  /// binds is reachable from [environment], or when the agent declares no store
+  /// to keep the script in.
+  ///
+  /// **Every part of this string is a constant**, and that is the whole point
+  /// of the change that produced it. Until Loop 71 the address and a per-launch
+  /// bearer token were spelled *inline*:
+  ///
+  /// ```
+  /// curl -s -m 2 -X POST -H "Authorization: Bearer <token>" \
+  ///   --data-binary @- "http://127.0.0.1:<port>/agent-hook?…" || true
+  /// ```
+  ///
+  /// `LauncherControlServer.start()` mints a fresh hook token on every run, so
+  /// that string differed on every launch — which meant three CLIs' **global**
+  /// config files had to be rewritten twice per app lifetime, and every rewrite
+  /// was another chance to lose the race this class documents: an agent CLI
+  /// rewrites its own `settings.json` from the copy it loaded at *its* start-up
+  /// and our entry goes with it. On the owner's machine that race had already
+  /// been lost — `karmashala-agent-hook` appeared in the Windows
+  /// `~/.claude/settings.json` **zero** times, and the Antigravity block was
+  /// `{}`, while Orca's Claude hooks, written on 22 June, were still firing
+  /// three months later for one reason: *their command string never changes.*
+  ///
+  /// So the volatile half moved one level of indirection out, into an endpoint
+  /// file the script reads **when the hook fires** ([_endpointFileName]). That
+  /// is Orca's shape — all 17 of its hook scripts open by sourcing
+  /// `ORCA_AGENT_HOOK_ENDPOINT` — adapted in the one way that matters here:
+  /// ours is a **fixed path**, not an environment variable. An environment
+  /// variable has to be set in the agent's own environment, and we do not own
+  /// that environment for any of the three. Their hooks live in *global*
+  /// config and fire for a CLI the user started in their own terminal, in a
+  /// process tree this app never touched; Codex additionally runs each hook
+  /// through the session's own shell with `-lc`
+  /// (`hooks/src/engine/command_runner.rs`), a login shell that reads the
+  /// user's profile and can replace anything it inherited. Orca reaches the
+  /// same conclusion from the other end — `command-code-hook.cmd` carries a
+  /// `:sourceEndpointByPort` fallback that goes looking on disk *"for hook
+  /// processes that inherit no environment"*.
+  ///
+  /// Codex was already half-way here for a different reason: it hashes the
+  /// entry to decide trust (see [AgentHookSpec.trustsCommandByHash]), so its
+  /// command had to be fixed or the grant would be revoked every launch. That
+  /// requirement is now met for all three agents by construction rather than
+  /// for one agent as a special case.
   String? hookCommand({
     required AgentDescriptor descriptor,
     required String event,
     required AgentHookEndpoint endpoint,
     required EnvironmentKind environment,
   }) {
-    final base = endpoint.uriFor(
-      agentId: descriptor.id,
+    // The reachability gate the URL used to provide. An environment nothing
+    // this app binds can serve gets no command at all, so a mistake upstream
+    // cannot put a hook in a config it could never call back from.
+    if (!endpoint.reaches(environment)) return null;
+    if (descriptor.hooks == null) return null;
+    return _scriptCommand(
+      descriptor: descriptor,
       event: event,
       environment: environment,
     );
-    if (base == null) return null;
-    final spec = descriptor.hooks;
-    if (spec != null && spec.trustsCommandByHash) {
-      return _scriptCommand(
-        descriptor: descriptor,
-        event: event,
-        environment: environment,
-      );
-    }
-    final uri = base.replace(
-      queryParameters: {
-        'agent': descriptor.id,
-        'event': event,
-        'marker': agentHookMarker,
-      },
-    );
-    // Silent, and it always succeeds. A status callback is Karmashala's
-    // business, not the agent's: the owner watched `curl: (52) Empty reply
-    // from server` print into a live session and the shell exit non-zero
-    // because the app happened not to be answering on the WSL interface. A
-    // hook that cannot deliver must cost the agent nothing — no message, no
-    // exit code — so `-s` swallows the diagnostic and `|| true` swallows the
-    // status. What the app loses is a status update it was never guaranteed;
-    // what the user loses otherwise is confidence in their own terminal.
-    return 'curl -s -m 2 -X POST '
-        '-H "Authorization: Bearer ${endpoint.token}" '
-        '--data-binary @- "$uri" || true';
   }
 
   /// The base name of the generated callback script, extension excluded.
@@ -296,6 +377,23 @@ class AgentHookInstaller {
   /// would strand every entry in somebody's config the moment the app was
   /// uninstalled, exactly as [legacyAgentHookMarkers] describes.
   static const String _scriptBaseName = agentHookMarker;
+
+  /// The file the generated script reads its address and token out of, every
+  /// time a hook fires.
+  ///
+  /// One name for both platforms, because one store home is only ever reached
+  /// from one side of the machine: `CliStoreLocator` builds a Windows store
+  /// under `%USERPROFILE%` and a WSL store under a `\\wsl.localhost` UNC, which
+  /// are different directories. The *contents* are written with the line
+  /// endings that environment's reader expects — `for /f` is given CRLF, `read`
+  /// is given LF — and only the script beside it ever opens it.
+  ///
+  /// It sits in the store home rather than in this app's own data directory on
+  /// purpose. A WSL agent's `sh` cannot open a Windows path, and an SSH agent
+  /// cannot open a local one at all; the store home is the single place both
+  /// this app and the agent can name, which is the same reason
+  /// [_scriptCommand] spells the home directory as a variable.
+  static const String _endpointFileName = '$_scriptBaseName.endpoint';
 
   /// The generated script's file name in [environment].
   ///
@@ -309,14 +407,17 @@ class AgentHookInstaller {
       ? '$_scriptBaseName.cmd'
       : '$_scriptBaseName.sh';
 
-  /// The command a fixed-command agent runs for [event] — the generated script,
-  /// named through the same home-directory variable the store locator itself
+  /// The command an agent runs for [event] — the generated script, named
+  /// through the same home-directory variable the store locator itself
   /// resolved, and the event as its one argument.
   ///
-  /// **Every part of this string is a constant.** That is the whole requirement
-  /// ([AgentHookSpec.trustsCommandByHash]): the hash Codex trusts covers this
-  /// text, so anything in it that changed between launches would revoke the
-  /// user's grant on every start.
+  /// **Every part of this string is a constant**, for every agent. Codex is
+  /// where the requirement is *enforced* ([AgentHookSpec.trustsCommandByHash]:
+  /// the hash it trusts covers this text, so anything that changed between
+  /// launches would revoke the user's grant on every start), and it is worth
+  /// having for the other two as well — an entry that never changes is an entry
+  /// that can be written once and then left alone, which is what stops us
+  /// racing the CLI that owns the file.
   ///
   /// The home directory is named as `%USERPROFILE%` / `$HOME` rather than
   /// resolved here, and that is what makes one string correct in every
@@ -349,9 +450,12 @@ class AgentHookInstaller {
     required EnvironmentKind environment,
   }) {
     final store = descriptor.store;
-    // A fixed-command agent needs a directory of its own to keep the script in,
-    // and the store home is the only one this app knows how to name from inside
-    // the agent's environment. Without it there is nowhere to put the file.
+    // A stable command needs a directory of its own to keep the script and the
+    // endpoint file in, and the store home is the only one this app knows how
+    // to name from inside the agent's environment. Without it there is nowhere
+    // to put either file, so such an agent gets no hook rather than an inline
+    // command that would change on every launch — which is the bug, not the
+    // fallback.
     if (store == null) return null;
     final file = _scriptFileName(environment);
     return switch (environment) {
@@ -367,21 +471,29 @@ class AgentHookInstaller {
     };
   }
 
-  /// Writes the callback script [_scriptCommand] names, and reports whether the
-  /// file on disk now spells this [endpoint].
+  /// Writes the two files [_scriptCommand] depends on — the constant script and
+  /// the endpoint file it reads — and reports whether both are on disk spelling
+  /// what this run intends.
   ///
-  /// **This file is the one place the bearer token lives in bytes of our own.**
-  /// It is the same token, the same exposure and the same lifetime as the one
-  /// the inline command already writes into `settings.json` — status-only,
-  /// separate from the privileged `/rpc` credential, and documented as public
-  /// to anything running as this user (`LauncherControlServer`). What changes is
-  /// only where it sits, and one property improves: [uninstall] deletes the
-  /// file, so the token does not outlive the app that minted it.
+  /// The order is the same argument as [install]'s: the endpoint file is
+  /// written **after** the script, because a script with no endpoint file exits
+  /// zero and costs the agent nothing, while an endpoint file with no script is
+  /// a token sitting on disk that nothing will ever delete.
   ///
-  /// Nothing here is logged. The command, the URL and the script body all carry
-  /// the token, so none of them may reach a log line — the only thing this
-  /// reports upward is a bool.
-  Future<bool> _writeCallbackScript({
+  /// **The endpoint file is the one place the bearer token lives in bytes of
+  /// our own**, and after this change it is the *only* place: the config entry
+  /// no longer carries it. Same token, same lifetime and the same status-only
+  /// privilege the inline command had — separate from the `/rpc` credential and
+  /// documented as public to anything running as this user
+  /// (`LauncherControlServer`'s threat model). Two properties improve:
+  /// [retireEndpoint] deletes it on the way out, so it does not outlive the app
+  /// that minted it, and it is written under an owner-only permission where the
+  /// platform lets us assert one ([restrict]).
+  ///
+  /// Nothing here is logged. The URL and the file body both carry the token, so
+  /// neither may reach a log line — the only thing this reports upward is a
+  /// bool.
+  Future<bool> _writeCallbackFiles({
     required AgentDescriptor descriptor,
     required String storeHome,
     required AgentHookEndpoint endpoint,
@@ -393,8 +505,20 @@ class AgentHookInstaller {
       environment: environment,
     );
     if (uri == null) return false;
-    final file = _callbackScriptFile(descriptor, storeHome, environment);
-    if (file == null) return false;
+    final script = _callbackScriptFile(descriptor, storeHome, environment);
+    final endpointFile = _endpointFile(descriptor, storeHome);
+    if (script == null || endpointFile == null) return false;
+
+    if (!await _writeIfChanged(
+      script,
+      storeHome,
+      environment == EnvironmentKind.windowsNative
+          ? _windowsScript
+          : _posixScript,
+    )) {
+      return false;
+    }
+
     // The address, with the event left to the script's own argument. Built by
     // hand rather than through `Uri.replace` because the `$1` / `%~1` that
     // stands in for it is not a legal query value and would be escaped.
@@ -403,12 +527,31 @@ class AgentHookInstaller {
         '?agent=${Uri.encodeQueryComponent(descriptor.id)}'
         '&marker=${Uri.encodeQueryComponent(agentHookMarker)}'
         '&event=';
-    final contents = environment == EnvironmentKind.windowsNative
-        ? _windowsScript(base: base, token: endpoint.token)
-        : _posixScript(base: base, token: endpoint.token);
+    return _writeIfChanged(
+      endpointFile,
+      storeHome,
+      _endpointFileContents(
+        base: base,
+        token: endpoint.token,
+        newline: environment == EnvironmentKind.windowsNative ? '\r\n' : '\n',
+      ),
+      harden: (staged) => restrict(staged, environment),
+    );
+  }
 
-    // Idempotent to the byte, exactly as the config write is: a relaunch that
-    // happened to bind the same port rewrites nothing.
+  /// Writes [contents] to [file] unless it already holds exactly that, and
+  /// reports whether the bytes on disk are now [contents].
+  ///
+  /// Idempotent to the byte, exactly as the config write is. That now matters
+  /// for the script rather than being a nicety: its text is a constant, so
+  /// after the first install every later launch reads it, finds it identical
+  /// and writes nothing at all.
+  Future<bool> _writeIfChanged(
+    File file,
+    String storeHome,
+    String contents, {
+    Future<void> Function(File staged)? harden,
+  }) async {
     if (file.existsSync()) {
       try {
         if (file.readAsStringSync() == contents) return true;
@@ -420,7 +563,7 @@ class AgentHookInstaller {
     if (!parent.existsSync() && Directory(storeHome).existsSync()) {
       await parent.create(recursive: true);
     }
-    await _writeAtomically(file, contents);
+    await _writeAtomically(file, contents, harden: harden);
     try {
       return file.readAsStringSync() == contents;
     } on FileSystemException {
@@ -428,61 +571,169 @@ class AgentHookInstaller {
     }
   }
 
+  /// The endpoint file's body: the address and the token, and nothing else.
+  ///
+  /// `key=value`, one per line, with `#` comments — the shape both readers can
+  /// parse without spawning anything. `sh` walks it with `case`, `cmd.exe` with
+  /// a `for /f "eol=# tokens=1,* delims=="`, so neither pays a process for the
+  /// read. Orca executes its equivalent instead (`endpoint.cmd`, `call`ed;
+  /// `endpoint.env`, sourced), which is cheaper still and makes the file
+  /// arbitrary code in somebody's home directory. Parsing it costs a few lines
+  /// of shell and buys the property that a corrupted or half-written file can
+  /// only ever produce an empty `url`, which the script treats as "do nothing".
+  ///
+  /// [newline] is the environment's, not this process's: `for /f` is handed a
+  /// CRLF file and `read` an LF one, so neither reader has to strip anything.
+  static String _endpointFileContents({
+    required String base,
+    required String token,
+    required String newline,
+  }) => <String>[
+    '# Karmashala agent status callback endpoint.',
+    '#',
+    '# Generated on every launch and deleted when the app exits. The script',
+    '# beside this file reads it each time a hook fires, which is what lets the',
+    '# command in your agent\'s own config stay a constant. Editing this file',
+    '# changes nothing past the current launch.',
+    'url=$base',
+    'token=$token',
+  ].map((line) => '$line$newline').join();
+
   /// The `sh` body. `$1` is the hook event name, supplied by the command.
+  ///
+  /// **A constant.** No port, no token, no agent id: everything that changes
+  /// between launches is read out of the endpoint file at fire time. See
+  /// [hookCommand] for why that is the whole point.
+  ///
+  /// The endpoint file is named relative to `$0` rather than spelled out, so
+  /// the script and the file it reads cannot end up disagreeing about a path.
+  /// `${0%/*}` is a parameter expansion, not `dirname` — this runs on every
+  /// hook of every agent, and a process spawned to compute a directory would be
+  /// a process too many.
+  ///
+  /// **Fail closed, and specifically at 401.** The endpoint file survives an
+  /// unclean exit, so this has to assume the port it names may belong to
+  /// somebody else by now — the hazard `AgentHookInstallationService` documents
+  /// as *"hands its bearer token to whatever binds that port next"*. So nothing
+  /// is sent until an **unauthenticated** probe comes back `401`: no token, no
+  /// payload, just a status line. `AgentHookReachability` already establishes
+  /// what that probe means — *"any HTTP status line coming back proves the
+  /// door, and a `401` proves it as well as a `200` does, so the probe carries
+  /// no credential"* — and this one is stricter on purpose. A squatter proves
+  /// nothing by accepting a connection; ours is the only listener on that port
+  /// that answers `401` to a `GET /agent-hook` with no credential, because that
+  /// is what `LauncherControlServer._handleAgentHook` does before it looks at
+  /// anything else. A dead port prints `000`, a stranger prints whatever it
+  /// serves, and both mean the same thing here: exit without sending.
+  ///
+  /// What survives that guard is a process deliberately impersonating this app
+  /// on this machine, and the threat model already concedes that case — *"a
+  /// process running as this user is inside the boundary, by construction"*.
   ///
   /// **Nothing this runs may reach the agent's stdout.** A hook that can decide
   /// something reads its own stdout for that decision — Codex's
   /// `PermissionRequest` looks for a `decision` there — and the endpoint answers
-  /// every callback with `{"ok":true,"status":"…"}`. Inline, `curl -s` prints
-  /// that body; here `-o /dev/null` throws it away before it can be read as a
-  /// verdict on somebody's tool call. The precedent is measured, not theoretical:
-  /// an empty `{}` from an Antigravity `PreToolUse` hook produced *"tool call
-  /// denied by pre-tool hook"* on a live run.
+  /// every callback with `{"ok":true,"status":"…"}`. `-o /dev/null` throws it
+  /// away before it can be read as a verdict on somebody's tool call. The
+  /// precedent is measured, not theoretical: an empty `{}` from an Antigravity
+  /// `PreToolUse` hook produced *"tool call denied by pre-tool hook"* on a live
+  /// run. The probe's body is discarded for the same reason; only its status
+  /// code is read, into a shell variable.
   ///
-  /// **And the exit status is forced, not merely tidied.** The inline command
-  /// ends `|| true` because the owner watched `curl: (52) Empty reply from
-  /// server` and a non-zero status print into a live session. Here it is
-  /// load-bearing on top of that: Codex reads **exit code 2 with non-empty
-  /// stderr as a denial**, and turns the stderr text into the rejection the
-  /// user is shown (`hooks/src/events/permission_request.rs`, the exit-2 arm
-  /// of `parse_completed`). `curl` exits 2 on an option it cannot parse — a
-  /// truncated or half-written script is enough — so a wrapper that let its
-  /// own status through could start refusing the user's tool calls and
-  /// blaming curl for it. Every other non-zero exit, and a timeout, are
+  /// **And the exit status is forced, not merely tidied.** Codex reads **exit
+  /// code 2 with non-empty stderr as a denial**, and turns the stderr text into
+  /// the rejection the user is shown (`hooks/src/events/permission_request.rs`,
+  /// the exit-2 arm of `parse_completed`). `curl` exits 2 on an option it
+  /// cannot parse — a truncated or half-written script is enough — so a wrapper
+  /// that let its own status through could start refusing the user's tool calls
+  /// and blaming curl for it. Every other non-zero exit, and a timeout, are
   /// already neutral; 2 is the one that is not, and `exit 0` closes it.
-  static String _posixScript({required String base, required String token}) =>
+  static const String _posixScript =
       '#!/bin/sh\n'
-      '# Karmashala agent status callback. Generated: rewritten on every\n'
-      '# launch, and deleted when the app exits. Edits will not survive.\n'
+      '# Karmashala agent status callback. Generated; edits will not survive.\n'
+      '#\n'
+      '# This file is a constant: the address and the token live in the\n'
+      '# endpoint file beside it and are read here, every time a hook fires.\n'
+      '# Nothing is sent until an unauthenticated probe proves the port still\n'
+      '# belongs to Karmashala.\n'
+      'endpoint="\${0%/*}/$_endpointFileName"\n'
+      '[ -f "\$endpoint" ] || exit 0\n'
+      "url=''\n"
+      "token=''\n"
+      'while IFS= read -r line; do\n'
+      '  case "\$line" in\n'
+      '    url=*) url="\${line#url=}" ;;\n'
+      '    token=*) token="\${line#token=}" ;;\n'
+      '  esac\n'
+      'done < "\$endpoint"\n'
+      '[ -n "\$url" ] && [ -n "\$token" ] || exit 0\n'
+      "code=\$(curl -s -o /dev/null -m 2 -w '%{http_code}' \"\$url\" "
+      '2>/dev/null)\n'
+      '[ "\$code" = "401" ] || exit 0\n'
       'curl -s -o /dev/null -m 2 -X POST \\\n'
-      '  -H "Authorization: Bearer $token" \\\n'
+      '  -H "Authorization: Bearer \$token" \\\n'
       '  --data-binary @- \\\n'
-      '  "$base\$1" 2>/dev/null\n'
+      '  "\$url\$1" 2>/dev/null\n'
       'exit 0\n';
 
   /// The `cmd.exe` body. `%~1` is the hook event name, unquoted.
   ///
   /// CRLF throughout: a batch file with bare newlines is read by some Windows
   /// shells and not others, and this one is written from a Dart process whose
-  /// default is `\n`. See [_posixScript] for why the output is discarded and the
-  /// status forced to zero.
-  static String _windowsScript({required String base, required String token}) =>
+  /// default is `\n`. See [_posixScript] for the guard, the discarded output
+  /// and the forced exit status — this is the same script in the other shell.
+  ///
+  /// Two spellings differ for reasons rather than taste. `%~dp0` is `cmd`'s
+  /// `${0%/*}` and already carries its trailing separator. And the probe's
+  /// status code comes back through a temporary file read with `set /p`, which
+  /// is a builtin: the obvious `for /f %%c in ('curl …')` would spawn a second
+  /// `cmd.exe` to run the pipeline, on every hook of every tool call, which is
+  /// the one cost this design cannot afford. The file goes to `%TEMP%` and is
+  /// deleted immediately; a `%RANDOM%` in its name keeps two hooks firing at
+  /// once out of each other's way.
+  static const String _windowsScript =
       '@echo off\r\n'
-      'rem Karmashala agent status callback. Generated: rewritten on every\r\n'
-      'rem launch, and deleted when the app exits. Edits will not survive.\r\n'
+      'rem Karmashala agent status callback. Generated; edits will not '
+      'survive.\r\n'
+      'rem\r\n'
+      'rem This file is a constant: the address and the token live in the\r\n'
+      'rem endpoint file beside it and are read here, every time a hook '
+      'fires.\r\n'
+      'rem Nothing is sent until an unauthenticated probe proves the port\r\n'
+      'rem still belongs to Karmashala.\r\n'
+      'setlocal\r\n'
+      'set "KS_ENDPOINT=%~dp0$_endpointFileName"\r\n'
+      'if not exist "%KS_ENDPOINT%" exit /b 0\r\n'
+      'set "KS_URL="\r\n'
+      'set "KS_TOKEN="\r\n'
+      'for /f "usebackq eol=# tokens=1,* delims==" %%A in '
+      '("%KS_ENDPOINT%") do (\r\n'
+      '  if "%%A"=="url" set "KS_URL=%%B"\r\n'
+      '  if "%%A"=="token" set "KS_TOKEN=%%B"\r\n'
+      ')\r\n'
+      'if not defined KS_URL exit /b 0\r\n'
+      'if not defined KS_TOKEN exit /b 0\r\n'
+      'set "KS_PROBE=%TEMP%\\$_scriptBaseName.%RANDOM%.code"\r\n'
+      'set "KS_CODE="\r\n'
+      'curl -s -o NUL -m 2 -w "%%{http_code}" "%KS_URL%" > "%KS_PROBE%" '
+      '2>NUL\r\n'
+      'set /p KS_CODE=<"%KS_PROBE%"\r\n'
+      'del "%KS_PROBE%" >NUL 2>NUL\r\n'
+      'if not "%KS_CODE%"=="401" exit /b 0\r\n'
       'curl -s -o NUL -m 2 -X POST '
-      '-H "Authorization: Bearer $token" '
-      '--data-binary @- "$base%~1" 2>NUL\r\n'
+      '-H "Authorization: Bearer %KS_TOKEN%" '
+      '--data-binary @- "%KS_URL%%~1" 2>NUL\r\n'
       'exit /b 0\r\n';
 
-  /// Deletes every spelling of the callback script under [storeHome]. Returns
-  /// whether anything was removed.
+  /// Deletes every generated file under [storeHome] — both spellings of the
+  /// script, and the endpoint file. Returns whether anything was removed.
   ///
-  /// Both spellings, not the one this environment would write: a store can be
-  /// reached from more than one side of a machine, and an uninstall that only
-  /// swept its own platform's extension would leave the other behind for ever.
-  bool _removeCallbackScripts(AgentDescriptor descriptor, String storeHome) {
-    var removed = false;
+  /// Both script spellings, not the one this environment would write: a store
+  /// can be reached from more than one side of a machine, and an uninstall that
+  /// only swept its own platform's extension would leave the other behind for
+  /// ever.
+  bool _removeGeneratedFiles(AgentDescriptor descriptor, String storeHome) {
+    var removed = retireEndpoint(descriptor: descriptor, storeHome: storeHome);
     for (final environment in EnvironmentKind.values) {
       final file = _callbackScriptFile(descriptor, storeHome, environment);
       if (file == null || !file.existsSync()) continue;
@@ -497,23 +748,61 @@ class AgentHookInstaller {
     return removed;
   }
 
-  /// Where the generated script sits **as this app sees it**: beside the hook
-  /// config, which for a fixed-command agent is the store home itself.
+  /// Where the generated script sits **as this app sees it**: in the store
+  /// home, which is the same directory [_scriptCommand] names from inside the
+  /// agent's own environment.
   ///
-  /// `null` when this spec's config file is not directly in the store home. The
-  /// script's run-time path is built from the store's own directory name
-  /// ([_scriptCommand]), so the two only agree while the config sits there —
-  /// and a script the agent cannot find is the failure mode this whole feature
-  /// exists to avoid.
+  /// The two agree by construction rather than by luck.
+  /// `CliStoreLocator._homesUnder` builds every store home as
+  /// `<home>/<store.homeDirectoryName>` and nothing else, from `%USERPROFILE%`
+  /// where the environment uses Windows paths and `$HOME` everywhere else — the
+  /// exact two variables the command spells. **The agent's config file has
+  /// nothing to do with it**: Antigravity keeps its data in
+  /// `~/.gemini/antigravity-cli` and reads `~/.gemini/config/hooks.json`, and
+  /// an earlier version of this refused to write a script at all in that case,
+  /// which is why Antigravity kept the inline command long after Codex stopped
+  /// needing one.
+  ///
+  /// `null` only for an agent that declares no store, which has nowhere of its
+  /// own to keep a file — and therefore no way to be given a stable command.
   File? _callbackScriptFile(
     AgentDescriptor descriptor,
     String storeHome,
     EnvironmentKind environment,
+  ) => descriptor.store == null
+      ? null
+      : File(p.join(storeHome, _scriptFileName(environment)));
+
+  /// Where the endpoint file sits, as this app sees it. See
+  /// [_callbackScriptFile] for why the store home is the right directory.
+  File? _endpointFile(AgentDescriptor descriptor, String storeHome) =>
+      descriptor.store == null
+      ? null
+      : File(p.join(storeHome, _endpointFileName));
+
+  /// The config's raw text and its decoded root object, or a throw.
+  ///
+  /// Called twice per install — once as [install]'s pre-flight and once inside
+  /// [_rewrite] — and that is deliberate rather than sloppy. The file is small,
+  /// it is read at start-up off the launch path, and re-reading it means the
+  /// splice works on the bytes that are there *now* rather than on a copy taken
+  /// before this app wrote two files beside it.
+  ///
+  /// A missing or empty file reads as `{}`: an agent installed but never run
+  /// has no config yet, and refusing to create one would be refusing to install
+  /// for the case the feature is most useful in.
+  (String, Map<String, Object?>) _readConfigObject(
+    AgentDescriptor descriptor,
+    String storeHome,
   ) {
-    final config = configFileFor(descriptor, storeHome);
-    if (config == null || descriptor.store == null) return null;
-    if (p.normalize(config.parent.path) != p.normalize(storeHome)) return null;
-    return File(p.join(storeHome, _scriptFileName(environment)));
+    final file = configFileFor(descriptor, storeHome)!;
+    final raw = file.existsSync() ? file.readAsStringSync() : '{}';
+    final trimmed = raw.trim().isEmpty ? '{}' : raw;
+    final decoded = jsonDecode(trimmed);
+    if (decoded is! Map<String, Object?>) {
+      throw const FormatException('Agent config root is not a JSON object');
+    }
+    return (trimmed, decoded);
   }
 
   /// Reads the config, hands its hook map to [edit], and splices the result
@@ -525,13 +814,7 @@ class AgentHookInstaller {
   ) async {
     final spec = descriptor.hooks!;
     final file = configFileFor(descriptor, storeHome)!;
-    final raw = await file.exists() ? await file.readAsString() : '{}';
-    final trimmed = raw.trim().isEmpty ? '{}' : raw;
-
-    final decoded = jsonDecode(trimmed);
-    if (decoded is! Map<String, Object?>) {
-      throw const FormatException('Agent config root is not a JSON object');
-    }
+    final (trimmed, decoded) = _readConfigObject(descriptor, storeHome);
     final current = decoded[spec.configKey];
     final hooks = current is Map<String, Object?>
         ? Map<String, Object?>.from(current)
@@ -576,8 +859,20 @@ class AgentHookInstaller {
   /// slower and the window is wider. Staging inverts that: the only step that
   /// touches the real file is a rename, and a failed rename leaves the config
   /// exactly as the user's editor left it.
-  Future<void> _writeAtomically(File file, String contents) async {
+  Future<void> _writeAtomically(
+    File file,
+    String contents, {
+    Future<void> Function(File staged)? harden,
+  }) async {
     final staged = File('${file.path}.karmashala-tmp');
+    if (harden != null) {
+      // The permission goes on the **empty** file, before the token is in it —
+      // the same order `LauncherControlServer` uses for its handshake file, and
+      // for the same reason: a credential is never written under an ACL that
+      // was not applied, not even for the instant before a follow-up call.
+      await staged.create(recursive: false);
+      await harden(staged);
+    }
     await staged.writeAsString(contents, flush: true);
     try {
       await replace(staged, file);
@@ -677,3 +972,77 @@ class AgentHookInstaller {
 /// which is what an agent inside that distribution has to be able to read.
 Future<void> _replaceFile(File staged, File destination) =>
     staged.rename(destination.path);
+
+/// Closes [file] to every account on the machine but this one, where this
+/// process can assert that from where it is running. Returns whether it was.
+///
+/// The endpoint file is the only place the hook token is now at rest, so it is
+/// worth doing even though the token is the *weak* half of the pair: status
+/// reports only, never `/rpc`, and already public to any process running as
+/// this user. The boundary being asserted is the other one — **no other
+/// unprivileged account** — which is the same boundary
+/// `mcp/handshake_file_permissions.dart` establishes for `mcp_bridge.json`, and
+/// this is deliberately a narrow re-spelling of it rather than an import:
+/// `agents/` does not depend on `mcp/` (see `AgentHookEndpoint`'s class doc for
+/// why that rule exists), and a shared helper would have to live somewhere new.
+///
+/// **Three cases, and only two of them can be asserted from here.**
+///
+///  * A Windows host writing a `windowsNative` store — `%USERPROFILE%\.claude`
+///    and friends. `icacls`, granting the owner, `SYSTEM` and
+///    `BUILTIN\Administrators` by well-known SID and then stripping
+///    inheritance, so the file stops tracking whatever a GPO or a
+///    roaming-profile setup does to its ancestors. That audit is written up in
+///    `handshake_file_permissions.dart` and applies here unchanged.
+///  * A POSIX host writing a `localPosix` store — `chmod 600`.
+///  * A **Windows host writing a WSL store**, across `\\wsl.localhost`. Neither
+///    tool applies: `icacls` has no ACL to set on a 9p share, and `chmod` is
+///    not a Windows program. The file lands mode 644 in the distribution user's
+///    own `$HOME` — the same exposure the generated script has always had
+///    there, on a filesystem whose only other account is `root`, which can read
+///    it either way. Reported as `false` rather than papered over.
+///
+/// A `false` is **not** fatal, and that is the opposite of the handshake
+/// file's rule. There the ACL was the whole boundary around a credential that
+/// opens sessions and drives devices, so a failure withholds the token. Here
+/// the credential can do nothing but report a status, the alternative to
+/// writing it is an app that cannot see its agents at all, and the file it
+/// replaces — the agent's own `settings.json`, carrying this same token inline
+/// — never had an asserted ACL in the first place.
+Future<bool> restrictToOwner(File file, EnvironmentKind environment) async {
+  try {
+    if (Platform.isWindows) {
+      if (environment != EnvironmentKind.windowsNative) return false;
+      final env = Platform.environment;
+      final user = env['USERNAME'];
+      if (user == null || user.isEmpty) return false;
+      final domain = env['USERDOMAIN'];
+      final principal = (domain == null || domain.isEmpty)
+          ? user
+          : '$domain\\$user';
+      // Grant first, strip inheritance second: `/inheritance:r` deletes
+      // inherited ACEs outright rather than converting them, so the other order
+      // leaves a file its own owner cannot open.
+      final granted = await Process.run('icacls', [
+        file.path,
+        '/grant:r',
+        '*S-1-5-18:(F)', // NT AUTHORITY\SYSTEM
+        '*S-1-5-32-544:(F)', // BUILTIN\Administrators, and it is localised
+        '$principal:(F)',
+      ]);
+      if (granted.exitCode != 0) return false;
+      final stripped = await Process.run('icacls', [
+        file.path,
+        '/inheritance:r',
+      ]);
+      return stripped.exitCode == 0;
+    }
+    if (environment != EnvironmentKind.localPosix) return false;
+    final result = await Process.run('chmod', ['600', file.path]);
+    return result.exitCode == 0;
+  } on Object {
+    // A machine without `icacls` or `chmod`, a path the tool will not accept.
+    // The install goes on: see the class doc for why this is not fatal.
+    return false;
+  }
+}

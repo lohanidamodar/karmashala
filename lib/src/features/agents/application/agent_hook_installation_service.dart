@@ -94,12 +94,22 @@ class AgentHookInstallation {
 /// * **The file belongs to the user.** The installer splices only the `hooks`
 ///   value back in and marks its own entries, so hooks the user configured
 ///   survive an install, an uninstall and a re-install unchanged.
-/// * **The port is ephemeral**, so this runs on every launch rather than once —
-///   and [uninstallAll] runs on the way out, so nothing is left pointing at a
-///   port this app no longer owns. A stale entry costs an immediate
-///   connection-refused, bounded by the `curl -m 2` in the command itself, but
-///   it survives quitting *and* uninstalling the app, and hands its bearer
-///   token to whatever binds that port next.
+/// * **The port is ephemeral**, so this runs on every launch rather than once.
+///   What it rewrites each time is no longer the config, though: since Loop 71
+///   the entry names a constant script and the address and the token live in an
+///   endpoint file the script reads when a hook fires (see
+///   `AgentHookInstaller`). So [retireEndpoints] — not [uninstallAll] — is what
+///   runs on the way out, and it deletes exactly the volatile half.
+///
+///   That closes the hazard this bullet used to describe. A stale *entry* used
+///   to survive quitting **and** uninstalling the app, cost a `curl -m 2` on
+///   every tool call for ever, and hand its bearer token to whatever bound that
+///   port next. Now: the entry that survives is a constant naming a script; the
+///   script finds no endpoint file and exits zero without dialling anything;
+///   and if an unclean exit leaves the endpoint file behind, the script still
+///   sends nothing until an unauthenticated probe comes back `401`, which is
+///   what this app answers to a credential-less `GET /agent-hook` and a
+///   stranger on that port does not.
 /// * **The address depends on where the agent runs, and some agents cannot be
 ///   reached at all.** `127.0.0.1` inside a WSL2 distribution is that
 ///   distribution's own loopback, so a loopback hook installed there would fire
@@ -135,14 +145,32 @@ class AgentHookInstallationService {
         ),
       );
 
-  /// Removes every hook [installAll] wrote, on the way out.
+  /// Deletes every endpoint file [installAll] wrote, leaving the config entries
+  /// and the scripts in place. **This is what runs on the way out.**
   ///
-  /// The command names an **ephemeral** port and carries a bearer token, so an
-  /// entry left behind outlives the app that could answer it: every tool call
-  /// the user makes after quitting runs a `curl` at a port nothing owns, and
-  /// the entry survives uninstalling Karmashala entirely. Bounded and
-  /// loopback-only, so this is hygiene rather than a hole — but it is hygiene
-  /// in somebody else's config file, which is the kind worth keeping.
+  /// The entry and the script are constants; the address and the token are not,
+  /// and they die with this process. Retiring only the endpoint file leaves
+  /// nothing behind that names a port, and leaves the entry where it is — which
+  /// is the point of making it constant in the first place. A config we do not
+  /// rewrite is a config we cannot lose the race for.
+  ///
+  /// Unreachable environments are swept too, for the same reason
+  /// [uninstallAll] sweeps them: a file an earlier build wrote is still ours.
+  Future<List<AgentHookInstallation>> retireEndpoints() => _forEachStore(
+    verb: 'retire the endpoint for',
+    skipUnreachable: false,
+    act: (installer, descriptor, home, _) async =>
+        installer.retireEndpoint(descriptor: descriptor, storeHome: home),
+  );
+
+  /// Removes every hook [installAll] wrote — entries, scripts and endpoint
+  /// files alike.
+  ///
+  /// The complete removal, for a user who wants this app out of their agents'
+  /// configuration and for the unreachable-environment sweep in [installAll],
+  /// where an entry that cannot deliver has no business staying. The *exit*
+  /// path is [retireEndpoints]: see its doc for why taking the entry out twice
+  /// a launch was itself the bug.
   ///
   /// Unreachable environments are swept too, unlike [installAll]: they should
   /// hold nothing of ours, and if an older build wrote one — or this launch
