@@ -40,6 +40,7 @@ import 'chat_transcript.dart';
 import 'delivery_strip.dart';
 import 'message_composer.dart';
 import 'permission_mode_chip.dart';
+import 'session_notice_line.dart';
 import 'session_repositories_bar.dart';
 import 'session_stats_dialog.dart';
 
@@ -125,9 +126,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
           sourceMessageOrdinal: ordinal,
           sourceMessageRole: message.role,
         );
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('Saved to Notes.')),
-    );
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(const SnackBar(content: Text('Saved to Notes.')));
   }
 
   /// Translates a path the agent wrote into one this process can open, or null
@@ -361,6 +362,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   // transcript and noticing a tool row with no result under
                   // it. Draws nothing when nothing is outstanding.
                   ActivityStrip(sessionId: widget.sessionId),
+                  // Directly above the composer whose chip row posts it, so the
+                  // answer to "what did that chip just do" is next to the chip
+                  // rather than across the bottom of the window.
+                  SessionNoticeLine(sessionId: widget.sessionId),
                   MessageComposer(
                     controller: _composer,
                     // MonoCode's chip row: the session's own safety policy,
@@ -444,11 +449,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       final reference = message.subagent;
       if (reference != null) _subagents[out.length] = reference;
       out.add(
-        ChatMessage(
-          role: message.role,
-          text: message.text,
-          tool: message.tool,
-        ),
+        ChatMessage(role: message.role, text: message.text, tool: message.tool),
       );
     }
     return out;

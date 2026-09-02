@@ -74,6 +74,9 @@ class McpToolAnnotations {
 /// tool cannot ship without someone deciding whether it can be undone.
 const Map<String, McpToolAnnotations> kMcpToolAnnotations =
     <String, McpToolAnnotations>{
+      // The guides. Reads a table compiled into the binary; touches nothing.
+      'instructions': McpToolAnnotations.read,
+
       // Checkpoints — a per-turn record of the working tree.
       'checkpoint_list': McpToolAnnotations.read,
       'checkpoint_diff': McpToolAnnotations.read,
@@ -146,6 +149,32 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // is not idempotent — a second identical call is a second decision, and
       // the record's job is to say that it was made twice.
       'decision_record': McpToolAnnotations(),
+
+      // Review threads. A comment somebody can come back to: an anchor, a
+      // status, and replies.
+      'review_thread_list': McpToolAnnotations.read,
+      'review_thread_get': McpToolAnnotations.read,
+      // Opens a thread and writes its first comment. Not idempotent, for the
+      // same reason `decision_record` is not: a second identical call is a
+      // second comment, and collapsing them would silently discard the fact
+      // that it was raised twice. Not destructive — it removes nothing, and an
+      // agent's thread lands as `open`, which is a claim rather than an
+      // instruction.
+      'review_thread_add': McpToolAnnotations(),
+      // Appends to a thread. Append-only, so not idempotent and not
+      // destructive: nothing already said can be edited or taken back by it.
+      'review_thread_reply': McpToolAnnotations(),
+      // Overwrites one field and only that field. Idempotent — the same status
+      // twice leaves the same thread. **Not** destructive, and that was the
+      // close call: moving a thread to `dismissed` or `resolved` takes it out
+      // of the set that gets sent to an agent, which feels like ending
+      // something. But nothing is removed — every comment and the anchor stay
+      // exactly as they were, and one more call puts the status back, which is
+      // precisely the undo `destructiveHint` says does not exist. `inbox_dismiss`
+      // is marked destructive because for an event-derived item nothing re-files
+      // it; a review thread is a row that is still there afterwards. Same call
+      // as `session_rename`, which also overwrites a field and is not marked.
+      'review_thread_status': McpToolAnnotations(idempotent: true),
 
       // Fan-out.
       'fanout_list': McpToolAnnotations.read,

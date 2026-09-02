@@ -106,8 +106,7 @@ class AgentDiscoveryReport {
           : 'Found ${_count(foundCount, 'agent')} in '
                 '${_count(scanned.length, 'environment')}.',
       if (addedCount > 0) '$addedCount new.',
-      if (updatedCount > 0)
-        '${_count(updatedCount, 'version')} changed.',
+      if (updatedCount > 0) '${_count(updatedCount, 'version')} changed.',
       if (removedCount > 0) '$removedCount no longer installed.',
     ];
 
@@ -126,6 +125,5 @@ class AgentDiscoveryReport {
   static String _names(List<EnvironmentScanReport> of) =>
       of.map((e) => e.environmentName).join(', ');
 
-  static String _count(int n, String noun) =>
-      '$n $noun${n == 1 ? '' : 's'}';
+  static String _count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 }

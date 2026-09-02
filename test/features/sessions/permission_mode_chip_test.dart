@@ -16,6 +16,7 @@ import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_notice_line.dart';
 import 'package:karmashala/src/features/sessions/presentation/permission_mode_chip.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
@@ -94,7 +95,19 @@ const _bypassOnly = AgentDescriptor(
       ],
       child: const MaterialApp(
         home: Scaffold(
-          body: Center(child: PermissionModeChip(sessionId: 's1')),
+          // The chip *and* the bar it posts into, because that is how both
+          // hosts compose them: what the chip says now lands in the session's
+          // own bar, and a harness holding only the chip would leave every
+          // message here with nowhere to be drawn.
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PermissionModeChip(sessionId: 's1'),
+                SessionNoticeLine(sessionId: 's1'),
+              ],
+            ),
+          ),
         ),
       ),
     ),
@@ -486,10 +499,14 @@ void main() {
     // restart is an offer.
     expect(SessionDao(h.db).getById('s1')!.paneId, pane);
     expect(find.text('Restart to apply'), findsOneWidget);
-    // And the offer is honest before it is taken: a snackbar action is one tap
-    // with no dialog behind it, so both costs are in the message itself.
+    // And the offer is honest before it is taken: it is one tap with no dialog
+    // behind it, so both costs are in the message itself.
     expect(find.textContaining('ends the agent running now'), findsOneWidget);
     expect(find.textContaining('re-sends the conversation'), findsOneWidget);
+    // In this session's bar and nowhere else. A snackbar put it across the
+    // bottom of the window, covering the status bar to report something that
+    // was true of one session out of however many were open.
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('the restart offer performs the restart when it is taken', (

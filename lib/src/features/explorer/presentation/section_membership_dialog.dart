@@ -1,0 +1,82 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/theme/app_icons.dart';
+import '../../../app/widgets/desktop_dialog.dart';
+import '../application/explorer_sections.dart';
+import '../domain/explorer_section.dart';
+
+/// Which hand-filled sections one session is in.
+///
+/// **Only the manual ones are listed**, and the Pinned section is not among
+/// them even though its membership is also explicit: pinning has its own verb
+/// on the same menu ("Pin to top"), writing to the same
+/// `Settings.pinnedSessionIds` the pin glyph reads. Offering it twice, in two
+/// shapes, is how the two would eventually disagree.
+///
+/// Rule sections are absent because there is nothing here to decide: a session
+/// is in "Checks failing" when its checks are failing, and a checkbox that
+/// could not be honoured would be a lie with a tick in it.
+class SectionMembershipDialog extends ConsumerWidget {
+  const SectionMembershipDialog({required this.sessionId, super.key});
+
+  final String sessionId;
+
+  static Future<void> show(
+    BuildContext context,
+    WidgetRef ref,
+    String sessionId,
+  ) => showDialog<void>(
+    context: context,
+    builder: (context) => SectionMembershipDialog(sessionId: sessionId),
+  );
+
+  /// Whether this dialog has anything to offer for [ref]'s workspace.
+  ///
+  /// The row menus ask before drawing the entry: a menu item that opens an
+  /// empty dialog teaches the user that the menu is not to be trusted.
+  static bool hasManualSections(WidgetRef ref) => ref
+      .watch(explorerSectionsProvider)
+      .any((section) => section.rule.kind == SectionRuleKind.manual);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sections = [
+      for (final section in ref.watch(explorerSectionsProvider))
+        if (section.rule.kind == SectionRuleKind.manual) section,
+    ];
+    final controller = ref.read(explorerSectionsProvider.notifier);
+
+    return AlertDialog(
+      title: const DesktopDialogTitle(
+        icon: AppIcons.folder,
+        title: 'Add to section',
+        subtitle: 'Sections you fill by hand.',
+      ),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final section in sections)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: section.members.contains(sessionId),
+                title: Text(section.name),
+                onChanged: (checked) => (checked ?? false)
+                    ? controller.addMember(section.id, sessionId)
+                    : controller.removeMember(section.id, sessionId),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
+      ],
+    );
+  }
+}

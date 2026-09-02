@@ -167,7 +167,9 @@ class _OutputPanel extends StatelessWidget {
       decoration: BoxDecoration(
         // One step behind the message it belongs to — the same recess
         // `MarkdownMessage` uses for code, so the two cannot drift apart.
-        color: dark ? scheme.surfaceContainerLowest : scheme.surfaceContainerLow,
+        color: dark
+            ? scheme.surfaceContainerLowest
+            : scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(
           color: activity.isError ? failure : scheme.outlineVariant,
@@ -285,7 +287,9 @@ class _MoreToggle extends StatelessWidget {
             size: Chrome.iconSmall,
           ),
           label: Text(
-            expanded ? 'Less' : '+$hiddenLines line${hiddenLines == 1 ? '' : 's'}',
+            expanded
+                ? 'Less'
+                : '+$hiddenLines line${hiddenLines == 1 ? '' : 's'}',
           ),
           style: TextButton.styleFrom(
             visualDensity: VisualDensity.compact,

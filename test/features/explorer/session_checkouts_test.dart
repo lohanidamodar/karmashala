@@ -89,7 +89,9 @@ void main() {
     }
     if (verb.isNotEmpty && verb.first == 'status') {
       final header = verb.contains('--branch') ? '## main...origin/main\n' : '';
-      final changed = dirty.contains(dirOf(request)) ? ' M lib/main.dart\n' : '';
+      final changed = dirty.contains(dirOf(request))
+          ? ' M lib/main.dart\n'
+          : '';
       return CommandResult(exitCode: 0, stdout: '$header$changed', stderr: '');
     }
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
@@ -286,7 +288,12 @@ void main() {
       insertAllCheckouts();
       ProjectDao(db).insert(project(id: 'p2', name: 'Other', path: otherPath));
       RepositoryDao(db).insert(
-        repository(id: 'other', projectId: 'p2', name: 'other', path: otherPath),
+        repository(
+          id: 'other',
+          projectId: 'p2',
+          name: 'other',
+          path: otherPath,
+        ),
       );
       insertSession('s1', workingDirectory: appPath);
       subagent('sub-1', 's1', directory: otherPath);
@@ -341,35 +348,42 @@ void main() {
       // wasted processes on a 9p path.
       expect(
         git.requests
-            .where((r) => r.arguments.skip(2).take(2).join(' ') == 'worktree list')
+            .where(
+              (r) => r.arguments.skip(2).take(2).join(' ') == 'worktree list',
+            )
             .length,
         2,
       );
     });
 
-    test('the selected repository lists its own worktrees, and only those', () async {
-      withFamilies();
-      container.read(selectedRepositoryIdProvider.notifier).select('app');
+    test(
+      'the selected repository lists its own worktrees, and only those',
+      () async {
+        withFamilies();
+        container.read(selectedRepositoryIdProvider.notifier).select('app');
 
-      final worktrees = await container.read(
-        selectedCheckoutWorktreesProvider.future,
-      );
+        final worktrees = await container.read(
+          selectedCheckoutWorktreesProvider.future,
+        );
 
-      // The main worktree is dropped — it *is* the selected repository, and
-      // repeating it as a child of itself is how the old tree drew one
-      // checkout twice.
-      expect(
-        worktrees.map((w) => canonicalPathKey(w.path.path)),
-        [canonicalPathKey(relayPath), canonicalPathKey(inboxPath)],
-      );
-      expect(
-        git.requests
-            .where((r) => r.arguments.skip(2).take(2).join(' ') == 'worktree list')
-            .length,
-        1,
-        reason: 'level two asked about more than the one repository chosen',
-      );
-    });
+        // The main worktree is dropped — it *is* the selected repository, and
+        // repeating it as a child of itself is how the old tree drew one
+        // checkout twice.
+        expect(worktrees.map((w) => canonicalPathKey(w.path.path)), [
+          canonicalPathKey(relayPath),
+          canonicalPathKey(inboxPath),
+        ]);
+        expect(
+          git.requests
+              .where(
+                (r) => r.arguments.skip(2).take(2).join(' ') == 'worktree list',
+              )
+              .length,
+          1,
+          reason: 'level two asked about more than the one repository chosen',
+        );
+      },
+    );
 
     test('a clone with no worktrees says so, rather than failing', () async {
       withFamilies();
@@ -388,15 +402,17 @@ void main() {
     const scale = 69;
 
     void seedManyCheckouts() {
-      RepositoryDao(db).insert(
-        repository(id: 'hub', name: 'demo', path: hubPath),
-      );
+      RepositoryDao(
+        db,
+      ).insert(repository(id: 'hub', name: 'demo', path: hubPath));
       for (var i = 1; i < scale; i++) {
         RepositoryDao(db).insert(
           repository(
             id: 'wt-$i',
             name: 'wt-$i',
-            path: r'C:\src\demo\projects\wt-' '$i',
+            path:
+                r'C:\src\demo\projects\wt-'
+                '$i',
           ),
         );
       }
@@ -427,46 +443,51 @@ void main() {
       );
     });
 
-    test('classified, 69 checkouts collapse to the clones they hang off', () async {
-      // The same 69 rows, once `git worktree list` has said what they are: 68
-      // of them are worktrees of the hub, so the picker is one row and the
-      // worktrees move to level two under it.
-      seedManyCheckouts();
-      families = {
-        hubPath: [
-          hubPath,
-          for (var i = 1; i < scale; i++) r'C:\src\demo\projects\wt-' '$i',
-        ],
-      };
-      insertSession('s1');
-      subagent('sub-1', 's1', directory: r'C:\src\demo\projects\wt-7');
-      follow('s1');
+    test(
+      'classified, 69 checkouts collapse to the clones they hang off',
+      () async {
+        // The same 69 rows, once `git worktree list` has said what they are: 68
+        // of them are worktrees of the hub, so the picker is one row and the
+        // worktrees move to level two under it.
+        seedManyCheckouts();
+        families = {
+          hubPath: [
+            hubPath,
+            for (var i = 1; i < scale; i++)
+              r'C:\src\demo\projects\wt-'
+                  '$i',
+          ],
+        };
+        insertSession('s1');
+        subagent('sub-1', 's1', directory: r'C:\src\demo\projects\wt-7');
+        follow('s1');
 
-      final labels = checkoutLabelsProvider('p1');
-      final subscription = container.listen(labels, (_, _) {});
-      addTearDown(subscription.close);
-      await container.read(labels.future);
-      final classifying = git.requests.length;
+        final labels = checkoutLabelsProvider('p1');
+        final subscription = container.listen(labels, (_, _) {});
+        addTearDown(subscription.close);
+        await container.read(labels.future);
+        final classifying = git.requests.length;
 
-      final offers = offered();
-      // ignore: avoid_print
-      print(
-        'PICKER-COST-CLASSIFIED checkouts=$scale offered=${offers.length} '
-        'git_to_classify=$classifying',
-      );
+        final offers = offered();
+        // ignore: avoid_print
+        print(
+          'PICKER-COST-CLASSIFIED checkouts=$scale offered=${offers.length} '
+          'git_to_classify=$classifying',
+        );
 
-      expect(offers, ['hub']);
-      // One `git worktree list`, not 69: the command reports the whole family
-      // wherever it is run, and every one of these rows is in one family.
-      expect(classifying, 1);
+        expect(offers, ['hub']);
+        // One `git worktree list`, not 69: the command reports the whole family
+        // wherever it is run, and every one of these rows is in one family.
+        expect(classifying, 1);
 
-      // Level two holds what the picker no longer does.
-      container.read(selectedRepositoryIdProvider.notifier).select('hub');
-      final worktrees = await container.read(
-        selectedCheckoutWorktreesProvider.future,
-      );
-      expect(worktrees, hasLength(scale - 1));
-    });
+        // Level two holds what the picker no longer does.
+        container.read(selectedRepositoryIdProvider.notifier).select('hub');
+        final worktrees = await container.read(
+          selectedCheckoutWorktreesProvider.future,
+        );
+        expect(worktrees, hasLength(scale - 1));
+      },
+    );
 
     test('a tab switch re-reads it without starting one either', () {
       seedManyCheckouts();

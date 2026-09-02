@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 
 import '../../../core/logging/app_logger.dart';
 import '../../../core/util/clock.dart';
@@ -309,31 +310,174 @@ class ClaudeAuthService {
   }
 }
 
+/// Why a Keychain read produced no secret.
+///
+/// The distinction is the whole reason this type exists. A missing item means
+/// nobody has logged in; a refusal means the credential is right there and
+/// macOS would not hand it over — usually because the user answered the access
+/// prompt with *Deny*, sometimes because the login Keychain is locked. Folding
+/// the two together produced "Not signed in to Claude in this environment" in
+/// front of users who were plainly signed in.
+enum ClaudeKeychainOutcome {
+  /// The secret was returned.
+  found,
+
+  /// `security` exited 44 — no such item. Verified against the real tool on
+  /// macOS 25.5: a missing service prints "The specified item could not be
+  /// found in the keychain." and exits 44, while a present one exits 0.
+  notFound,
+
+  /// Anything else: denied, locked, or `security` itself failing.
+  refused,
+}
+
+/// One read of the Keychain: the secret, or why there isn't one.
+@immutable
+class ClaudeKeychainRead {
+  const ClaudeKeychainRead(this.outcome, {this.secret, this.detail});
+
+  const ClaudeKeychainRead.notFound() : this(ClaudeKeychainOutcome.notFound);
+
+  final ClaudeKeychainOutcome outcome;
+
+  /// The credential. Never logged, never put in a message.
+  final String? secret;
+
+  /// `security`'s own words, for a message the user can act on. Only ever set
+  /// on [ClaudeKeychainOutcome.refused], where the secret was not produced.
+  final String? detail;
+}
+
+/// The process-wide memo of the Keychain read.
+///
+/// Every fetch used to spawn `security find-generic-password`, and the status
+/// bar's quota chip polls once a minute while the window is focused. On a Mac
+/// where the user answered the access prompt with *Allow* rather than *Always
+/// Allow*, that is a Keychain dialog a minute — the app asking, over and over,
+/// for something it already had.
+///
+/// **Refusals are cached too, and that is deliberate.** Caching only successes
+/// would leave the one case that actually raises a dialog re-asking on every
+/// tick, which is the bug. A user who fixes the grant waits out the window
+/// rather than being interrogated during it.
+///
+/// The window is long against the poll and short against a working session, so
+/// a re-login is picked up without anyone restarting the app. A token that goes
+/// stale sooner than that is handled where it is noticed: the usage endpoint
+/// 401s, and that path calls [forget] and reads again.
+class ClaudeKeychainCache {
+  ClaudeKeychainCache({
+    Future<ClaudeKeychainRead> Function()? read,
+    DateTime Function()? now,
+    this.lifetime = const Duration(minutes: 10),
+  }) : _read = read ?? _securityRead,
+       _now = now ?? DateTime.now;
+
+  final Future<ClaudeKeychainRead> Function() _read;
+  final DateTime Function() _now;
+  final Duration lifetime;
+
+  ClaudeKeychainRead? _cached;
+  DateTime? _readAt;
+
+  /// Reads through the memo, spawning `security` only when nothing fresh is
+  /// held.
+  Future<ClaudeKeychainRead> read() async {
+    final held = _cached;
+    final at = _readAt;
+    if (held != null && at != null && _now().difference(at) < lifetime) {
+      return held;
+    }
+    final fresh = await _read();
+    _cached = fresh;
+    _readAt = _now();
+    return fresh;
+  }
+
+  /// Drops what is held, so the next [read] asks macOS again.
+  ///
+  /// Called when the token we handed out was rejected: the copy we are holding
+  /// is provably wrong at that point, whatever the clock says.
+  void forget() {
+    _cached = null;
+    _readAt = null;
+  }
+
+  static Future<ClaudeKeychainRead> _securityRead() async {
+    if (!Platform.isMacOS) return const ClaudeKeychainRead.notFound();
+    try {
+      final result = await Process.run('security', [
+        'find-generic-password',
+        '-s',
+        ClaudeAuthService.keychainService,
+        '-w',
+      ]);
+      return claudeKeychainReadOf(
+        result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+      );
+    } on Object catch (error) {
+      // The tool itself could not be run. Not a signed-out user.
+      return ClaudeKeychainRead(
+        ClaudeKeychainOutcome.refused,
+        detail: '$error',
+      );
+    }
+  }
+}
+
+/// What one `security find-generic-password -w` run meant.
+///
+/// Pure, and separate from the spawn, because the exit codes are the load
+/// bearing part and a test cannot make macOS deny a prompt on demand. The codes
+/// were read off the real tool on this machine (macOS 25.5): a present item
+/// exits 0 and prints the secret, a missing service exits **44** with
+/// "SecKeychainSearchCopyNext: The specified item could not be found in the
+/// keychain."
+ClaudeKeychainRead claudeKeychainReadOf(
+  int exitCode, {
+  Object? stdout,
+  Object? stderr,
+}) {
+  const itemNotFound = 44;
+  if (exitCode == 0) {
+    final out = '$stdout'.trim();
+    // An empty success is not a credential, and treating it as one would hand
+    // the usage endpoint an empty bearer token.
+    return out.isEmpty
+        ? const ClaudeKeychainRead.notFound()
+        : ClaudeKeychainRead(ClaudeKeychainOutcome.found, secret: out);
+  }
+  if (exitCode == itemNotFound) return const ClaudeKeychainRead.notFound();
+  return ClaudeKeychainRead(
+    ClaudeKeychainOutcome.refused,
+    detail: _tidySecurityError(stderr),
+  );
+}
+
+/// `security` prefixes its own name and the failing call; the tail is the only
+/// part a user can act on.
+String? _tidySecurityError(Object? stderr) {
+  final text = '$stderr'.trim();
+  if (text.isEmpty) return null;
+  final last = text.split('\n').last.trim();
+  final colon = last.lastIndexOf(': ');
+  return colon == -1 ? last : last.substring(colon + 2);
+}
+
+/// The one memo the app reads through. Shared, because both account detection
+/// and the usage endpoint need the same token and macOS keeps one copy of it.
+final claudeKeychain = ClaudeKeychainCache();
+
 /// The raw credentials JSON out of the macOS login Keychain, or null.
 ///
 /// `security find-generic-password -w` prints just the secret. Run directly
 /// rather than through a [CommandRunner]: this is always the local Mac's own
 /// Keychain, never an environment the runner could route to, and the value is a
 /// credential that must not travel further than it has to. It is never logged.
-///
-/// Shared, because both account detection and the usage endpoint need the same
-/// token and macOS keeps only one copy of it.
-Future<String?> readClaudeKeychainCredentials() async {
-  if (!Platform.isMacOS) return null;
-  try {
-    final result = await Process.run('security', [
-      'find-generic-password',
-      '-s',
-      ClaudeAuthService.keychainService,
-      '-w',
-    ]);
-    if (result.exitCode != 0) return null;
-    final out = (result.stdout as String).trim();
-    return out.isEmpty ? null : out;
-  } on Object {
-    return null;
-  }
-}
+Future<String?> readClaudeKeychainCredentials() async =>
+    (await claudeKeychain.read()).secret;
 
 /// Whether [installation] is a Claude Code installation (the only agent account
 /// switching supports for now).

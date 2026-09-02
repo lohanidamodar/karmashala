@@ -91,10 +91,18 @@ void main() {
   /// One session on the hub, so the tree has something to place and the
   /// measurement is of checkouts rather than of an empty project.
   void seed(int count) {
-    RepositoryDao(db).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
+    RepositoryDao(
+      db,
+    ).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
     for (var i = 1; i < count; i++) {
       RepositoryDao(db).insert(
-        repository(id: 'r$i', name: 'clone$i', path: r'C:\hub\clone' '$i'),
+        repository(
+          id: 'r$i',
+          name: 'clone$i',
+          path:
+              r'C:\hub\clone'
+              '$i',
+        ),
       );
     }
     SessionDao(db).insert(
@@ -161,10 +169,12 @@ void main() {
       // Every call is `git -C <dir> …`; the subcommand is what identifies it.
       final args = request.arguments.skip(2).toList();
       if (args.isEmpty) continue;
-      final key = args.length > 1 && (args.first == 'worktree' ||
-              args.first == 'remote' ||
-              args.first == 'rev-list' ||
-              args.first == 'rev-parse')
+      final key =
+          args.length > 1 &&
+              (args.first == 'worktree' ||
+                  args.first == 'remote' ||
+                  args.first == 'rev-list' ||
+                  args.first == 'rev-parse')
           ? '${args[0]} ${args[1]}'
           : args.first;
       counts[key] = (counts[key] ?? 0) + 1;
@@ -235,16 +245,12 @@ void main() {
     testWidgets('costs git per visible row, not per checkout', (tester) async {
       expect(gitByScale.keys.toSet(), scale.toSet());
       // ignore: avoid_print
-      print(
-        'CHECKOUT-COST expanded curve=$gitByScale rows=$rowsByScale',
-      );
+      print('CHECKOUT-COST expanded curve=$gitByScale rows=$rowsByScale');
       // The project holds one session at every scale, so it draws one card at
       // every scale: rows follow sessions, not the repositories table.
-      expect(
-        rowsByScale.values.toSet(),
-        {1},
-        reason: 'the panel drew a row per recorded checkout ($rowsByScale)',
-      );
+      expect(rowsByScale.values.toSet(), {
+        1,
+      }, reason: 'the panel drew a row per recorded checkout ($rowsByScale)');
       // Git is charged for the session card that is actually on screen — the
       // same handful of processes whether the project has 1 checkout or 69.
       expect(
@@ -307,7 +313,8 @@ CommandResult _git(CommandRequest request) {
     final path = request.arguments[1];
     return CommandResult(
       exitCode: 0,
-      stdout: 'worktree ${path.replaceAll(r'\', '/')}\nbranch refs/heads/main\n',
+      stdout:
+          'worktree ${path.replaceAll(r'\', '/')}\nbranch refs/heads/main\n',
       stderr: '',
     );
   }
@@ -326,7 +333,11 @@ CommandResult _git(CommandRequest request) {
     );
   }
   if (joined.startsWith('rev-parse --abbrev-ref origin/HEAD')) {
-    return const CommandResult(exitCode: 0, stdout: 'origin/main\n', stderr: '');
+    return const CommandResult(
+      exitCode: 0,
+      stdout: 'origin/main\n',
+      stderr: '',
+    );
   }
   if (joined.startsWith('rev-list --left-right')) {
     return const CommandResult(exitCode: 0, stdout: '0\t2\n', stderr: '');

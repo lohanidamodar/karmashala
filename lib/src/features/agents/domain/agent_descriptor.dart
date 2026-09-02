@@ -173,11 +173,9 @@ class AgentMcpSupport {
   ///   claude.ai Google Drive: … ✔ Connected      # ran the subcommand
   ///
   /// Verified against 2.1.251.
-  const AgentMcpSupport.configFile({
-    required this.flag,
-    required this.evidence,
-  }) : style = AgentMcpStyle.configFile,
-       urlKey = '';
+  const AgentMcpSupport.configFile({required this.flag, required this.evidence})
+    : style = AgentMcpStyle.configFile,
+      urlKey = '';
 
   /// The agent takes the URL on its command line, as `[flag] <urlKey>=<url>`.
   ///

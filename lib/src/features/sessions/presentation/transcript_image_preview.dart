@@ -242,7 +242,12 @@ class _ImageViewerDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.xs, Insets.sm),
+            padding: const EdgeInsets.fromLTRB(
+              Insets.md,
+              Insets.sm,
+              Insets.xs,
+              Insets.sm,
+            ),
             child: Row(
               children: [
                 Expanded(

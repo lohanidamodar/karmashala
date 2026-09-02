@@ -53,6 +53,10 @@ typedef MigrationStep = void Function(Database db);
 ///   it was written, so a restart can put back what was running.
 /// * **v28** — the model picker: a session carries its own model id, the way
 ///   it has carried its own permission mode since v11.
+/// * **v29** — saved Explorer sections: live, rule-based groups over state the
+///   app already polls, plus the manual groups and the built-in Pinned one.
+/// * **v30** — review comments as durable, addressable threads, anchored to a
+///   file's *content* rather than to a row of whatever diff was on screen.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -82,6 +86,8 @@ final Map<int, MigrationStep> schemaMigrations = {
   26: _migrateToV26,
   27: _migrateToV27,
   28: _migrateToV28,
+  29: _migrateToV29,
+  30: _migrateToV30,
 };
 
 /// Was this pane running when its row was written?
@@ -1092,4 +1098,190 @@ void _migrateToV27(Database db) {
 /// claim about what they ran under that nothing in the database can support.
 void _migrateToV28(Database db) {
   db.execute('ALTER TABLE sessions ADD COLUMN model_id TEXT;');
+}
+
+/// Review comments as **durable, addressable threads**, anchored to content.
+///
+/// ## What this replaces, and why it was a correctness bug
+///
+/// `DiffAnnotationsController` held review comments in a `Notifier` — no rows,
+/// no replies, no status — and keyed each one by `(repositoryId, path,
+/// diffIndex)`, where `diffIndex` was the **row number of a line inside the
+/// unified diff currently on screen**. That number belongs to a rendering, not
+/// to the code. It moves when a hunk grows, when another hunk appears above it,
+/// when git coalesces two hunks that drift within three context lines of each
+/// other, and when the file is staged. So the instant the agent edited the file
+/// a comment was attached to — the entire point of writing the comment — the
+/// comment silently began pointing at different lines, and said nothing about
+/// it. The controller also cleared every annotation on send, which is the only
+/// reason the mis-anchoring was survivable: comments never lived long enough
+/// for anybody to notice they had drifted.
+///
+/// ## Why the anchor is a blob sha
+///
+/// `blob_sha` is `git hash-object` of the file's bytes at the moment the thread
+/// was opened, and `start_line`/`end_line` are line numbers **in that
+/// content**. Together they are a claim that can be *checked*: ask git for the
+/// file's current hash, and either it is the same bytes — in which case the
+/// range still means what it meant — or it is not, and the thread is
+/// **detached** and is rendered saying so. Nothing re-anchors by matching the
+/// excerpt against the new file, and that is the deliberate part. Fuzzy
+/// re-anchoring is right most of the time, and a pointer that is right most of
+/// the time is the same failure `diff_index` had: the reader cannot tell which
+/// case they are holding, so they cannot trust any of them.
+///
+/// `start_line` is nullable because a **file-level** comment is a real review
+/// comment ("this file should not exist") and not a degraded line comment. Null
+/// there means "about the file", never "about line 0".
+///
+/// `anchor_excerpt` is the text the author was looking at, kept verbatim. It is
+/// evidence for the human reading a detached thread, and it is never fed back
+/// into locating the line.
+///
+/// ## Why comments are their own table
+///
+/// Because a thread accepts replies, including from an agent, and the opening
+/// comment and a reply are the same thing said at different times — a `body`
+/// column plus a `replies` blob would have made the first message special for
+/// no reason anybody could later explain. `sequence` is 1-based and unique per
+/// thread, the same chain discipline `session_decisions` uses, so two writers
+/// cannot both claim position 4 and a reply cannot silently overwrite one.
+///
+/// Comments cascade from their thread: a comment with no thread has no anchor
+/// and no subject, so it is not a record of anything. The thread cascades from
+/// its repository, matching `notes`, for the same reason — the path in the
+/// anchor is only resolvable inside a checkout this app still knows about.
+///
+/// Nothing is back-filled, because there is nothing to back-fill: the
+/// annotations this replaces were never written to disk in any version of the
+/// schema.
+void _migrateToV30(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS review_threads (
+      id             TEXT PRIMARY KEY,
+      repository_id  TEXT NOT NULL,
+      file_path      TEXT NOT NULL,
+      blob_sha       TEXT NOT NULL,
+      start_line     INTEGER,
+      end_line       INTEGER,
+      anchor_excerpt TEXT,
+      status         TEXT NOT NULL,
+      session_id     TEXT,
+      created_at     TEXT NOT NULL,
+      updated_at     TEXT NOT NULL,
+      FOREIGN KEY (repository_id) REFERENCES repositories (id) ON DELETE CASCADE
+    );
+  ''');
+  // The one query the diff view runs per render: every thread on a repository,
+  // grouped in memory by path. Indexed on the pair rather than on
+  // `repository_id` alone so a single file's threads are also a range scan for
+  // the MCP tools, which ask by path.
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_review_threads_repo_path '
+    'ON review_threads (repository_id, file_path);',
+  );
+
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS review_thread_comments (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id   TEXT NOT NULL,
+      sequence    INTEGER NOT NULL,
+      author      TEXT NOT NULL,
+      author_kind TEXT NOT NULL,
+      body        TEXT NOT NULL,
+      created_at  TEXT NOT NULL,
+      FOREIGN KEY (thread_id) REFERENCES review_threads (id) ON DELETE CASCADE
+    );
+  ''');
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_review_thread_comment_sequence '
+    'ON review_thread_comments (thread_id, sequence);',
+  );
+}
+
+/// Saved Explorer sections: live groups over facts the app already has.
+///
+/// **Two tables, and the split is the design.** `explorer_sections` holds what
+/// the user *said* — a name, a rule, where it sits — and is the only thing
+/// persisted. What is *in* a section is never written down for a rule section,
+/// because it is not a fact about the section: it is what the rule says right
+/// now about state that changes every couple of minutes. Storing membership
+/// would create a second answer that goes stale the moment a check turns red,
+/// and the app would then have to decide which of the two to draw.
+/// `explorer_section_members` exists only for the groups the user fills by
+/// hand, where the list *is* the definition.
+///
+/// **Position is priority.** A session can satisfy three rules at once, and the
+/// order of these rows is what decides where it is drawn — see
+/// `assignSections`. That is why `position` is stored rather than derived from
+/// a name or an insertion order: the user rearranges it, and rearranging it has
+/// to mean something.
+///
+/// **Pinned is a row like the others, and is not.** It is seeded here with
+/// `kind = 'pinned'` at position 0 so that everything downstream — ordering,
+/// priority, the collapse toggle — has one code path instead of a special case
+/// bolted beside it. What makes it built-in is that the UI refuses to rename,
+/// re-rule, reorder or delete it, and that its membership is read from
+/// `Settings.pinnedSessionIds` rather than from the members table. There is one
+/// pin store in this app and it is the one the pin glyph on every row already
+/// writes; a second would let a row show a filled pin while sitting outside the
+/// Pinned section.
+///
+/// **No foreign key from a member to a session**, matching `verification_runs`
+/// and `session_follow_ups`: a group is the user's list, and a session deleted
+/// out from under it is a stale entry the reader drops, not a constraint
+/// violation that fails the delete.
+///
+/// **The three seeded rule sections are a suggestion, not a claim.** They are
+/// written once, here, and never re-seeded: a user who deletes "Checks failing"
+/// has deleted it. They are written **collapsed**, which is not cosmetic — a
+/// collapsed section matches nothing and builds no rows, so a workspace that
+/// upgrades into this feature and never opens one pays exactly nothing for it.
+/// The order they are seeded in is the severity order a fixed priority table
+/// would have imposed (a red build, then an agent holding the user up, then
+/// work that died), which is the point: the default behaviour is the sensible
+/// one, and it is expressed as something the user can drag.
+///
+/// `release/*` and "PR open" are deliberately **not** seeded. The first is
+/// specific to a workspace's own branch naming and guessing at it would be
+/// noise; the second is broad enough that on a busy repository it is the whole
+/// session list wearing a hat. Both are one dialog away.
+void _migrateToV29(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS explorer_sections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      pattern TEXT,
+      position INTEGER NOT NULL,
+      collapsed INTEGER NOT NULL DEFAULT 1
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS explorer_section_members (
+      section_id TEXT NOT NULL
+        REFERENCES explorer_sections(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      PRIMARY KEY (section_id, session_id)
+    );
+  ''');
+
+  // `INSERT OR IGNORE` rather than a plain insert: the step is required to be
+  // idempotent at the DDL level (see [MigrationStep]), and a seed that threw on
+  // a re-run would be the one statement in this file that could not be applied
+  // twice.
+  const seed = [
+    ('section-pinned', 'Pinned', 'pinned', 0),
+    ('section-checks-failing', 'Checks failing', 'checksFailing', 1),
+    ('section-awaiting-input', 'Awaiting input', 'awaitingInput', 2),
+    ('section-ended-in-failure', 'Ended in failure', 'endedInFailure', 3),
+  ];
+  for (final (id, name, kind, position) in seed) {
+    db.execute(
+      'INSERT OR IGNORE INTO explorer_sections '
+      '(id, name, kind, pattern, position, collapsed) '
+      'VALUES (?, ?, ?, NULL, ?, 1);',
+      [id, name, kind, position],
+    );
+  }
 }

@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/github/domain/merge_strategies.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
@@ -45,6 +46,11 @@ void main() {
   var revList = '0\t2\n';
   var numstat = '30\t4\tlib/a.dart\n';
   String? prJson;
+  var policyJson =
+      '{"data":{"repository":{"mergeCommitAllowed":false,'
+      '"squashMergeAllowed":true,"rebaseMergeAllowed":false,'
+      '"pullRequest":{"reviewThreads":{"nodes":'
+      '[{"isResolved":false},{"isResolved":true}]}}}}}';
 
   setUp(() {
     statusOutput = '## work...origin/work [ahead 2]\n';
@@ -53,6 +59,11 @@ void main() {
     revList = '0\t2\n';
     numstat = '30\t4\tlib/a.dart\n';
     prJson = null;
+    policyJson =
+        '{"data":{"repository":{"mergeCommitAllowed":false,'
+        '"squashMergeAllowed":true,"rebaseMergeAllowed":false,'
+        '"pullRequest":{"reviewThreads":{"nodes":'
+        '[{"isResolved":false},{"isResolved":true}]}}}}}';
     gitCalls = [];
     ghCalls = [];
     db = AppDatabase.memory();
@@ -67,6 +78,9 @@ void main() {
     final args = request.arguments;
     if (request.executable == 'gh') {
       ghCalls.add(args);
+      if (args.first == 'api') {
+        return CommandResult(exitCode: 0, stdout: policyJson, stderr: '');
+      }
       final json = prJson;
       if (json == null) {
         return const CommandResult(
@@ -193,6 +207,75 @@ void main() {
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.merged,
     );
+  });
+
+  group('the forge policy — the second gh process', () {
+    const openPr =
+        '{"number":9,"state":"OPEN","url":"https://github.com/o/r/pull/9",'
+        '"mergeable":"MERGEABLE","statusCheckRollup":'
+        '[{"status":"COMPLETED","conclusion":"SUCCESS"}]}';
+
+    test('an open PR buys the merge settings and the open threads', () async {
+      addSession('s1', at: null);
+      prJson = openPr;
+
+      final delivery = await harness().read(
+        sessionDeliveryProvider('s1').future,
+      );
+
+      expect(delivery.mergeStrategies.squash, isTrue);
+      expect(delivery.mergeStrategies.mergeCommit, isFalse);
+      expect(delivery.pullRequest?.unresolvedReviewThreads, 1);
+      expect(ghCalls.where((c) => c.first == 'api'), hasLength(1));
+    });
+
+    test('no pull request, no query — a branch costs nothing', () async {
+      addSession('s1', at: null);
+      prJson = null;
+
+      final delivery = await harness().read(
+        sessionDeliveryProvider('s1').future,
+      );
+
+      expect(delivery.mergeStrategies, MergeStrategies.unknown);
+      expect(ghCalls.where((c) => c.first == 'api'), isEmpty);
+    });
+
+    test('a closed pull request is not asked about either', () async {
+      addSession('s1', at: null);
+      prJson = '{"number":9,"state":"MERGED","url":"u"}';
+
+      await harness().read(sessionDeliveryProvider('s1').future);
+
+      expect(ghCalls.where((c) => c.first == 'api'), isEmpty);
+    });
+
+    test('the Explorer\'s row never pays for it', () async {
+      // The local provider is what a tree draws per row. One GraphQL query per
+      // visible session for a fact nineteen of them do not draw is the bill
+      // this split exists to refuse.
+      addSession('s1', at: null);
+      prJson = openPr;
+
+      await harness().read(sessionLocalDeliveryProvider('s1').future);
+
+      expect(ghCalls, isEmpty);
+    });
+
+    test('a query that fails leaves the strip exactly as it was', () async {
+      addSession('s1', at: null);
+      prJson = openPr;
+      policyJson = 'not json at all';
+
+      final delivery = await harness().read(
+        sessionDeliveryProvider('s1').future,
+      );
+
+      expect(delivery.mergeStrategies, MergeStrategies.unknown);
+      expect(delivery.pullRequest?.unresolvedReviewThreads, isNull);
+      // And the pull request itself still arrived: the two halves fail apart.
+      expect(delivery.pullRequest?.number, 9);
+    });
   });
 
   test('however many sessions share a worktree, git is asked once', () async {

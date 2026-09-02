@@ -59,10 +59,7 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
   /// Arms the tick if it is not already running. Idempotent, and safe from
   /// `build` — it schedules, it does not set state.
   void _startTicking() {
-    _tick ??= Timer.periodic(
-      kActivityTickInterval,
-      (_) => setState(() {}),
-    );
+    _tick ??= Timer.periodic(kActivityTickInterval, (_) => setState(() {}));
   }
 
   void _stopTicking() {

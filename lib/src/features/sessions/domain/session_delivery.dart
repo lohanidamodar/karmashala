@@ -1,5 +1,6 @@
 import '../../git/domain/diff_stat.dart';
 import '../../git/domain/remote_repo.dart';
+import '../../github/domain/merge_strategies.dart';
 import '../../github/domain/pull_request_snapshot.dart';
 import 'delivery_stage.dart';
 
@@ -27,6 +28,7 @@ class SessionDelivery {
     this.behindBase,
     this.unpushed,
     this.pullRequest,
+    this.mergeStrategies = MergeStrategies.unknown,
     this.hasWorktree = false,
     this.agentRunning,
     this.archived = false,
@@ -74,6 +76,13 @@ class SessionDelivery {
 
   final PullRequestSnapshot? pullRequest;
 
+  /// Which merge buttons the forge leaves enabled for this repository.
+  ///
+  /// Defaults to [MergeStrategies.unknown] rather than being nullable: "we did
+  /// not ask" and "we asked and learned nothing" are the same thing to every
+  /// reader, and the type already carries a null per strategy for it.
+  final MergeStrategies mergeStrategies;
+
   /// Whether this session works in a worktree of its own — the only thing
   /// archiving can remove.
   final bool hasWorktree;
@@ -94,6 +103,42 @@ class SessionDelivery {
   /// Whether the current branch is the one a PR would be proposed *against*.
   bool get isOnDefaultBranch =>
       branch != null && defaultBranch != null && branch == defaultBranch;
+
+  /// Whether the base has moved on under this branch, on evidence.
+  ///
+  /// **Two independent signals, both read only in the positive direction, and
+  /// they are not redundant.**
+  ///
+  /// [behindBase] is `git rev-list --count` against whatever `origin/main` this
+  /// clone last fetched. Nothing in this app runs `git fetch` — see
+  /// `checkoutDeliveryProvider`, which is deliberately five local processes and
+  /// no network — so the count is only as fresh as the user's last pull. That
+  /// makes a count above zero *proof* that the branch is behind (those commits
+  /// are already on this disk and are not on this branch) and a count of zero
+  /// proof of nothing at all.
+  ///
+  /// [PullRequestSnapshot.isBehindBase] is GitHub's own `mergeStateStatus:
+  /// BEHIND`, which knows the true tip of the base and knows whether the
+  /// repository even requires branches to be current. It is authoritative when
+  /// it fires, and silent whenever a higher-priority blocker masks it — see
+  /// [MergeStateStatus] for the observed ordering.
+  ///
+  /// So each one catches what the other misses: the local count sees a branch
+  /// with no pull request at all, and the forge's reading sees a branch whose
+  /// base moved since the last fetch. Either alone is enough, and neither
+  /// staying quiet means anything.
+  bool get isBehindBase =>
+      (behindBase ?? 0) > 0 || pullRequest?.isBehindBase == true;
+
+  /// Whether something established says this branch and its base disagree.
+  ///
+  /// Only the forge can say this today. A local `git merge --no-commit` would
+  /// answer it without a network round trip, but it is a *write*: it leaves
+  /// MERGE_HEAD and a half-merged index in a working tree an agent may be
+  /// editing, and this getter is read on a two-minute poll for every visible
+  /// session. Asking GitHub costs nothing extra because the answer already
+  /// rides in the `gh pr view` the strip was making anyway.
+  bool get hasConflict => pullRequest?.hasConflict == true;
 
   /// The furthest point this work has reached. See [DeliveryStage].
   DeliveryStage get stage {
@@ -145,6 +190,7 @@ class SessionDelivery {
     int? behindBase,
     int? unpushed,
     PullRequestSnapshot? pullRequest,
+    MergeStrategies? mergeStrategies,
     bool? hasWorktree,
     bool? agentRunning,
     bool? archived,
@@ -161,6 +207,7 @@ class SessionDelivery {
     behindBase: behindBase ?? this.behindBase,
     unpushed: unpushed ?? this.unpushed,
     pullRequest: pullRequest ?? this.pullRequest,
+    mergeStrategies: mergeStrategies ?? this.mergeStrategies,
     hasWorktree: hasWorktree ?? this.hasWorktree,
     agentRunning: agentRunning ?? this.agentRunning,
     archived: archived ?? this.archived,
@@ -181,6 +228,7 @@ class SessionDelivery {
       other.behindBase == behindBase &&
       other.unpushed == unpushed &&
       other.pullRequest == pullRequest &&
+      other.mergeStrategies == mergeStrategies &&
       other.hasWorktree == hasWorktree &&
       other.agentRunning == agentRunning &&
       other.archived == archived;
@@ -198,7 +246,13 @@ class SessionDelivery {
     aheadOfBase,
     behindBase,
     unpushed,
-    Object.hash(pullRequest, hasWorktree, agentRunning, archived),
+    Object.hash(
+      pullRequest,
+      mergeStrategies,
+      hasWorktree,
+      agentRunning,
+      archived,
+    ),
   );
 
   @override

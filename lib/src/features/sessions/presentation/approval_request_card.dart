@@ -96,16 +96,11 @@ class ApprovalRequestCard extends ConsumerWidget {
               ),
               const SizedBox(width: Insets.xs),
               Expanded(
-                child: Text(
-                  switch (waiting) {
-                    AgentWaitKind.approval => '$agentName is waiting for you',
-                    AgentWaitKind.input =>
-                      '$agentName is waiting for your input',
-                    AgentWaitKind.unrecorded =>
-                      '$agentName needs your attention',
-                  },
-                  style: theme.textTheme.labelLarge,
-                ),
+                child: Text(switch (waiting) {
+                  AgentWaitKind.approval => '$agentName is waiting for you',
+                  AgentWaitKind.input => '$agentName is waiting for your input',
+                  AgentWaitKind.unrecorded => '$agentName needs your attention',
+                }, style: theme.textTheme.labelLarge),
               ),
             ],
           ),

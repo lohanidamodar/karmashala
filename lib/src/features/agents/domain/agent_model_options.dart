@@ -75,7 +75,8 @@ List<AgentModelOption> modelOptionsFor(
   String? agentName,
 }) {
   final name = agentName ?? descriptor?.displayName ?? 'This agent';
-  final support = descriptor?.launch.model ?? const AgentModelSupport.unsupported();
+  final support =
+      descriptor?.launch.model ?? const AgentModelSupport.unsupported();
   final fit = support.isSupported
       ? AgentModelFit.selectable
       : AgentModelFit.notTellable;

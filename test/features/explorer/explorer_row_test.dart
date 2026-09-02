@@ -173,9 +173,7 @@ void main() {
       await pump(tester);
       final project = tester.getRect(tile(find.byType(ProjectCard))).left;
       final checkout = tester.getRect(tile(find.byType(CheckoutRow))).left;
-      final session = tester
-          .getRect(tile(find.byType(SessionCard).first))
-          .left;
+      final session = tester.getRect(tile(find.byType(SessionCard).first)).left;
       final subagent = tester.getRect(tile(find.byType(SessionCard).last)).left;
 
       expect(checkout, greaterThan(project));
@@ -290,7 +288,10 @@ void main() {
       tester,
     ) async {
       await pump(tester);
-      await tester.tap(find.byType(SessionCard).first, buttons: kSecondaryButton);
+      await tester.tap(
+        find.byType(SessionCard).first,
+        buttons: kSecondaryButton,
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Rename'), findsOneWidget);
@@ -350,8 +351,9 @@ void main() {
       // question as "can an assistive technology find this anywhere".
       final labels = <String>[];
       void visit(SemanticsNode node) {
-        for (final id in node.getSemanticsData().customSemanticsActionIds ??
-            const <int>[]) {
+        for (final id
+            in node.getSemanticsData().customSemanticsActionIds ??
+                const <int>[]) {
           final label = CustomSemanticsAction.getAction(id)?.label;
           if (label != null) labels.add(label);
         }

@@ -56,12 +56,13 @@ final agentSessionStatusProvider = StreamProvider.autoDispose
 /// never as "probably idle".
 final sessionActivityLookupProvider =
     Provider<AgentActivityStatus Function(String sessionId)>(
-      (ref) => (sessionId) =>
-          ref
-              .read(sessionStatusRegistryProvider)
-              .reportForOpenId(sessionId)
-              ?.status ??
-          AgentActivityStatus.unknown,
+      (ref) =>
+          (sessionId) =>
+              ref
+                  .read(sessionStatusRegistryProvider)
+                  .reportForOpenId(sessionId)
+                  ?.status ??
+              AgentActivityStatus.unknown,
     );
 
 /// The bottom rows of the pane [session] runs in, or nothing.

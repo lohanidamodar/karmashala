@@ -376,6 +376,27 @@ class SimctlService {
   /// Rejects anything else here rather than passing it on: `simctl ui` reports
   /// an unknown appearance on stderr in a form that reads like a device fault,
   /// and the caller ends up debugging the simulator instead of their typo.
+  /// Whether [udid] is currently in dark appearance, or null if it will not
+  /// say.
+  ///
+  /// Read rather than remembered. The toggle used to track this in the widget,
+  /// starting at light — so a simulator already dark was toggled *to* dark on
+  /// the first press (nothing visibly happened), and any rebuild of the control
+  /// reset the belief and stranded the device in dark with no way back. The
+  /// device knows; asking it costs one `simctl` call on a button press.
+  Future<bool?> isDarkAppearance(String udid) async {
+    try {
+      final result = await runner.run(_simctl(['ui', udid, 'appearance']));
+      if (!result.ok) return null;
+      final answer = result.stdout.trim().toLowerCase();
+      if (answer == 'dark') return true;
+      if (answer == 'light') return false;
+      return null;
+    } on Object {
+      return null;
+    }
+  }
+
   Future<void> setAppearance(String udid, String appearance) {
     final value = appearance.toLowerCase();
     if (value != 'light' && value != 'dark') {

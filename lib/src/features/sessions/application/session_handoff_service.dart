@@ -608,9 +608,7 @@ class SessionHandoffService {
     return (
       permission: permission,
       override:
-          starting.chosen ||
-              permission.wasChosen ||
-              permission.carried.changed
+          starting.chosen || permission.wasChosen || permission.carried.changed
           ? permission.mode
           : null,
     );

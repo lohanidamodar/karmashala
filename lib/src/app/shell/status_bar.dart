@@ -133,6 +133,11 @@ class ShellStatusBar extends ConsumerWidget {
             // than pushing the panel toggle off the window.
             const Flexible(child: FocusedModelChip()),
             const UsageChip(),
+            // One spacer, not two: the running-state group stays hard against
+            // the right, in the order tabs → background → attention → model →
+            // quota, with the panel toggle last. A second spacer centred the
+            // group, which reads as drift rather than as a zone — this row's
+            // right edge is where the eye goes for state.
             _Item(
               icon: AppIcons.sidebarSimple,
               label: panel?.label ?? 'Panel closed',

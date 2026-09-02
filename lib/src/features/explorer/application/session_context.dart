@@ -5,7 +5,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_signals.dart';
+import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'checkout_default.dart';
 import 'picked_checkouts.dart';
@@ -54,6 +54,25 @@ final activePaneSessionIdProvider = Provider<String?>((ref) {
   }
   return fallback;
 });
+
+/// The session the window is about: the one selected in the Explorer, or — when
+/// nothing is selected — whatever the terminal tab on screen is running.
+///
+/// The fallback is the whole point. Selection is dropped on purpose in two
+/// places (`_releaseHijackedSelection` when a selected session has no pane left,
+/// `_releaseEndedPane` when a pane ends under the terminal), so a user who has
+/// touched neither the tree nor anything else can end up looking straight at a
+/// running agent while the selection is null. Anything keyed on selection alone
+/// then draws nothing — which is how the status bar's quota and model chips
+/// vanished off a window with an agent plainly running in it.
+///
+/// The pane bar under the terminal already resolved it this way. Two different
+/// answers to "which session is this window about" is one too many.
+final focusedSessionIdProvider = Provider<String?>(
+  (ref) =>
+      ref.watch(selectedSessionIdProvider) ??
+      ref.watch(activePaneSessionIdProvider),
+);
 
 /// The repository whose checkout contains [sessionId]'s work, in the absence of
 /// a pick.

@@ -6,11 +6,13 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
+import 'package:karmashala/src/features/github/domain/merge_strategies.dart';
 import 'package:karmashala/src/features/github/domain/pull_request_snapshot.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
@@ -39,8 +41,21 @@ class _Recorder {
   final sent = <String>[];
   final opened = <String>[];
   final archived = <({String sessionId, bool discardUncommitted})>[];
+  final updated = <String>[];
   Object? throwOnSend;
   ArchiveOutcome outcome = const ArchiveOutcome.archived();
+  UpdateOutcome updateOutcome = const UpdateOutcome.updated('origin/main');
+}
+
+class _RecordingUpdate extends DeliveryUpdateService {
+  _RecordingUpdate(super.ref, this._recorder);
+  final _Recorder _recorder;
+
+  @override
+  Future<UpdateOutcome> updateFromBase(String sessionId) async {
+    _recorder.updated.add(sessionId);
+    return _recorder.updateOutcome;
+  }
 }
 
 class _RecordingActions extends SessionActions {
@@ -131,6 +146,9 @@ void main() {
           ),
           sessionArchiveServiceProvider.overrideWith(
             (ref) => _RecordingArchive(ref, recorder),
+          ),
+          deliveryUpdateServiceProvider.overrideWith(
+            (ref) => _RecordingUpdate(ref, recorder),
           ),
           openExternalUrlProvider.overrideWithValue((url) async {
             recorder.opened.add(url);
@@ -373,6 +391,164 @@ void main() {
     await tester.tap(find.text('Merge'));
     await tester.pumpAndSettle();
     expect(recorder.sent, [DeliveryAction.merge.prompt]);
+  });
+
+  testWidgets('being behind and conflicting are facts on the line', (
+    tester,
+  ) async {
+    // The line says what is true; the row below says what to do about it. A
+    // line that reports only how far ahead a branch is reads as "up to date"
+    // to anyone scanning it, which is the whole reason the counterpart is
+    // drawn beside it.
+    await pump(
+      tester,
+      const SessionDelivery(
+        branch: 'work',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 0,
+        aheadOfBase: 3,
+        behindBase: 4,
+        pullRequest: PullRequestSnapshot(
+          number: 12,
+          state: PullRequestState.open,
+          url: 'https://github.com/o/r/pull/12',
+          mergeable: false,
+        ),
+      ),
+    );
+
+    expect(find.text('3 ahead of origin/main'), findsOneWidget);
+    expect(find.text('4 behind origin/main'), findsOneWidget);
+    expect(find.text('conflicts'), findsOneWidget);
+  });
+
+  testWidgets('a forge-only BEHIND is drawn without a number', (tester) async {
+    // GitHub knows; this clone has fetched nothing since. "0 behind main"
+    // would be a contradiction, so the count is dropped and the fact kept.
+    await pump(
+      tester,
+      const SessionDelivery(
+        branch: 'work',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 0,
+        behindBase: 0,
+        pullRequest: PullRequestSnapshot(
+          number: 12,
+          state: PullRequestState.open,
+          url: 'https://github.com/o/r/pull/12',
+          mergeStateStatus: MergeStateStatus.behind,
+        ),
+      ),
+    );
+
+    expect(find.text('behind origin/main'), findsOneWidget);
+    expect(find.text('0 behind origin/main'), findsNothing);
+  });
+
+  testWidgets('Update is the app doing it, not a sentence to the agent', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const SessionDelivery(
+        branch: 'work',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 0,
+        aheadOfBase: 2,
+        behindBase: 4,
+      ),
+    );
+
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+
+    expect(recorder.updated, ['s1']);
+    // The distinction the whole strip is built on: nothing was typed into the
+    // session, because there is nothing here for a model to compose.
+    expect(recorder.sent, isEmpty);
+    // And it reports, because it has no transcript to report into.
+    expect(find.text('Updated from origin/main.'), findsOneWidget);
+  });
+
+  testWidgets('a refused update says why, and nothing else happens', (
+    tester,
+  ) async {
+    recorder.updateOutcome = const UpdateOutcome.refused(
+      UpdateRefusal.conflicted,
+      base: 'origin/main',
+    );
+    await pump(
+      tester,
+      const SessionDelivery(
+        branch: 'work',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 0,
+        aheadOfBase: 2,
+        behindBase: 4,
+      ),
+    );
+
+    await tester.tap(find.text('Update'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('The merge was undone'), findsOneWidget);
+    expect(recorder.sent, isEmpty);
+  });
+
+  testWidgets('Resolve conflicts is a prompt — the agent has to decide', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const SessionDelivery(
+        hasRemote: true,
+        dirtyFiles: 0,
+        pullRequest: PullRequestSnapshot(
+          number: 12,
+          state: PullRequestState.open,
+          url: 'https://github.com/o/r/pull/12',
+          mergeable: false,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Resolve conflicts'));
+    await tester.pumpAndSettle();
+    expect(recorder.sent, [DeliveryAction.resolveConflicts.prompt]);
+  });
+
+  testWidgets('the merge prompt names the strategy the repository allows', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      const SessionDelivery(
+        hasRemote: true,
+        dirtyFiles: 0,
+        mergeStrategies: MergeStrategies(
+          mergeCommit: false,
+          squash: true,
+          rebase: false,
+        ),
+        pullRequest: PullRequestSnapshot(
+          number: 12,
+          state: PullRequestState.open,
+          url: 'https://github.com/o/r/pull/12',
+          mergeable: true,
+          checks: ChecksSummary(passed: 1),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Merge'));
+    await tester.pumpAndSettle();
+    // Not `DeliveryAction.merge.prompt`: the sentence that leaves the app has
+    // to be the one the tooltip promised, and that one names a squash.
+    expect(recorder.sent, ['Merge the pull request with a squash merge.']);
   });
 
   testWidgets('a blocked step is drawn, disabled, with its reason', (

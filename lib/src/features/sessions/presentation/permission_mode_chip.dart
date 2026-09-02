@@ -10,6 +10,7 @@ import '../../agents/domain/agent_permission_options.dart';
 import '../../agents/presentation/permission_mode_picker.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../application/session_launcher.dart';
+import '../application/session_notice.dart';
 import '../application/session_signals.dart';
 
 /// The composer's permission control: the mode this session will run under, and
@@ -210,7 +211,11 @@ class PermissionModeChip extends ConsumerWidget {
     PermissionMode? mode,
     AgentPermissionOption current,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    // The session's own bar rather than `ScaffoldMessenger`. Everything said
+    // below is true of this session and false of the others open beside it, and
+    // a snackbar says it across the bottom of the window with nothing naming
+    // which session it means — while covering the status bar to do it.
+    final notices = ref.read(sessionNoticesProvider.notifier);
     final running = launcher.livePaneFor(sessionId) != null;
 
     // Asked **before** the row is written, so Cancel leaves the session exactly
@@ -233,7 +238,7 @@ class PermissionModeChip extends ConsumerWidget {
     // The dialog above already said what a restart costs and the user said yes
     // to it, so this is the restart — not a second prompt for the same answer.
     if (mode != null && mode.isDangerous && running) {
-      await _restart(messenger, launcher, savedLabel: mode.label);
+      await _restart(notices, launcher, savedLabel: mode.label);
       return;
     }
 
@@ -243,29 +248,27 @@ class PermissionModeChip extends ConsumerWidget {
     final what = mode == null
         ? 'Following the ${current.agentName} default in Settings'
         : mode.label;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          running
-              // Names both costs on the face of the message rather than behind
-              // the button, because a snackbar action is one tap and the user
-              // has no dialog to read them in. The token cost is the one nobody
-              // expects: `--resume` reloads the transcript locally for nothing,
-              // and then the next message carries all of it to the model.
-              ? '$what — applies the next time this session is '
-                    'launched or resumed, not to the agent running now. '
-                    'Restarting ends the agent running now, and the next '
-                    'message re-sends the conversation as context.'
-              : '$what — applies when this session next runs.',
-        ),
+    notices.post(
+      sessionId,
+      SessionNotice(
+        message: running
+            // Names both costs on the face of the message rather than behind
+            // the button, because the action is one tap and the user has no
+            // dialog to read them in. The token cost is the one nobody
+            // expects: `--resume` reloads the transcript locally for nothing,
+            // and then the next message carries all of it to the model.
+            ? '$what — applies the next time this session is '
+                  'launched or resumed, not to the agent running now. '
+                  'Restarting ends the agent running now, and the next '
+                  'message re-sends the conversation as context.'
+            : '$what — applies when this session next runs.',
         // Only when something is running. With nothing to end, "applies when
         // this session next runs" is already true and a restart button would be
         // offering to solve a problem the user does not have.
         action: running
-            ? SnackBarAction(
+            ? SessionNoticeAction(
                 label: 'Restart to apply',
-                onPressed: () =>
-                    _restart(messenger, launcher, savedLabel: what),
+                onPressed: () => _restart(notices, launcher, savedLabel: what),
               )
             : null,
       ),
@@ -274,34 +277,37 @@ class PermissionModeChip extends ConsumerWidget {
 
   /// Runs the restart and reports either outcome.
   ///
-  /// Takes the messenger and the launcher rather than a [BuildContext] and a
+  /// Takes the notices and the launcher rather than a [BuildContext] and a
   /// [WidgetRef] because both of its callers outlive the widget: one awaits a
-  /// dialog, the other is a snackbar action the user may press seconds later,
-  /// by which time the composer may have been rebuilt for another session. The
-  /// launcher reads from the root container, so it stays valid either way.
+  /// dialog, the other is a bar action the user may press seconds later, by
+  /// which time the composer may have been rebuilt for another session. Both
+  /// read from the root container, so they stay valid either way — and the
+  /// outcome still lands in the right session's bar, which is the one thing a
+  /// captured `BuildContext` could not promise.
   ///
   /// [savedLabel] is what was already written to the row. A failed restart must
   /// still say the choice was kept, or the user is left believing the whole
   /// action was rejected and picks the mode again.
   Future<void> _restart(
-    ScaffoldMessengerState messenger,
+    SessionNotices notices,
     SessionLauncher launcher, {
     required String savedLabel,
   }) async {
     try {
       await launcher.restartSession(sessionId);
-      messenger.showSnackBar(
-        SnackBar(content: Text('$savedLabel — session restarted.')),
+      notices.post(
+        sessionId,
+        SessionNotice(message: '$savedLabel — session restarted.'),
       );
     } on Object catch (error) {
       // `StateError.message` rather than the exception's `toString`, which
       // prefixes "Bad state:" — the same unwrapping the Explorer does.
       final reason = error is StateError ? error.message : '$error';
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '$savedLabel is saved, but the restart failed. $reason',
-          ),
+      notices.post(
+        sessionId,
+        SessionNotice(
+          message: '$savedLabel is saved, but the restart failed. $reason',
+          tone: SessionNoticeTone.warning,
         ),
       );
     }

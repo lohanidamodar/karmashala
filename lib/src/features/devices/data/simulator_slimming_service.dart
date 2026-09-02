@@ -138,6 +138,26 @@ String _unescapeXml(String value) => value
     .replaceAll('&apos;', "'")
     .replaceAll('&amp;', '&');
 
+/// The labels a booted device's launchd currently knows about, from
+/// `launchctl list`'s three-column table (`PID\tStatus\tLabel`, one header
+/// row first).
+///
+/// Tolerant like the plist parsers above: a row that does not split into
+/// three tab-separated fields is skipped rather than thrown over, and the
+/// header row itself never matches a label because no real label is called
+/// `Label`.
+Set<String> parseLaunchctlLabels(String output) {
+  final labels = <String>{};
+  for (final line in output.split('\n')) {
+    final fields = line.split('\t');
+    if (fields.length < 3) continue;
+    final label = fields[2].trim();
+    if (label.isEmpty || label == 'Label') continue;
+    labels.add(label);
+  }
+  return labels;
+}
+
 /// What a device's `disabled.plist` currently says.
 ///
 /// Readable on a **shut-down** device, which is the point: `simctl spawn
@@ -304,6 +324,37 @@ class SimulatorSlimmingService {
   /// [SlimmingStatus.disabledUnmanaged].
   Future<void> unslim(String udid, {bool boot = true}) =>
       _writeEntries(udid, const {}, boot: boot);
+
+  /// Labels this build manages that a **booted** device's launchd has never
+  /// heard of.
+  ///
+  /// A label Apple renamed or removed between iOS releases is not an error to
+  /// `launchctl` — disabling it, or leaving a now-meaningless entry in
+  /// `disabled.plist`, is silently ignored, so a whole category can look like
+  /// it is working while doing nothing. This is the drift check: it runs
+  /// `launchctl list` against the real device and reports whatever this
+  /// build's table names that the device does not.
+  ///
+  /// Needs a booted device — `simctl spawn` only reaches a running one, which
+  /// is why this is a separate call rather than folded into [slim]: slimming
+  /// itself only ever touches a shut-down device (see [_ensureShutdown]), and
+  /// this check would force a boot first for no other reason.
+  Future<Set<String>> staleLabels(String udid) async {
+    final result = await runner.run(
+      CommandRequest(
+        executable: _xcrun,
+        arguments: ['simctl', 'spawn', udid, 'launchctl', 'list'],
+      ),
+    );
+    if (!result.ok) {
+      throw StateError(
+        'Could not list launchd services on $udid: ${result.stderr.trim()}. '
+        'The device must be booted for this check — simctl spawn only '
+        'reaches a running device.',
+      );
+    }
+    return allManagedLabels.difference(parseLaunchctlLabels(result.stdout));
+  }
 
   Future<void> _writeEntries(
     String udid,

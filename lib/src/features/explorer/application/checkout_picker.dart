@@ -126,10 +126,7 @@ final projectCheckoutsProvider = Provider<List<Repository>>((ref) {
 
   final rest = byId.values.toList()
     ..sort((a, b) => a.path.path.compareTo(b.path.path));
-  return [
-    ...leading,
-    ...rest.where((r) => !led.contains(r.id) && isParent(r)),
-  ];
+  return [...leading, ...rest.where((r) => !led.contains(r.id) && isParent(r))];
 });
 
 /// Level two: the linked worktrees of the repository the picker has selected,
@@ -225,7 +222,8 @@ final checkoutLabelsProvider = FutureProvider.autoDispose
         for (final repository in repositories)
           Checkout(repository.path): repository.id,
       };
-      final family = <Checkout, ({String? branch, bool isMain, String? owner})>{};
+      final family =
+          <Checkout, ({String? branch, bool isMain, String? owner})>{};
       for (final repository in repositories) {
         if (family.containsKey(Checkout(repository.path))) continue;
         final List<GitWorktree> listed;
@@ -280,7 +278,9 @@ class CheckoutPicker {
     }
     // Only when it differs: selecting a project kicks off a CLI-store scan.
     if (_ref.read(selectedProjectIdProvider) != repository.projectId) {
-      _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);
+      _ref
+          .read(selectedProjectIdProvider.notifier)
+          .select(repository.projectId);
     }
     _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
   }

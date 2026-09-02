@@ -7,10 +7,13 @@ import 'package:file_selector/file_selector.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../browser/application/browser_consent_providers.dart';
+import '../../browser/domain/browser_consent.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../mcp/control_server_status.dart';
 import '../../mcp/launcher_control_server.dart';
 import '../../mcp/launcher_mcp.dart';
+import '../../projects/application/projects_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../application/settings_controller.dart';
 import 'settings_row.dart';
@@ -29,6 +32,7 @@ class ToolsPage extends StatelessWidget {
         TerminalAppSection(),
         CodeEditorSection(),
         McpBridgeSection(),
+        BrowserConsentSection(),
       ],
     );
   }
@@ -370,4 +374,100 @@ String _hostPathHint(String what) {
   if (Platform.isWindows) return r'C:\path\to\' '$what.exe';
   if (Platform.isMacOS) return '/Applications/My$what.app/Contents/MacOS/$what';
   return '/usr/local/bin/$what';
+}
+
+/// Settings → Tools → Browser: the one browser capability an agent cannot have
+/// until a person hands it over.
+///
+/// ## Why the grant lives here and not in a prompt
+///
+/// The obvious design is a dialog on the first `browser_evaluate`. It is worse
+/// than it looks. The agent may be working while nobody is at the machine, so
+/// the dialog blocks a turn on a person who is not there; and a prompt that
+/// appears mid-flow is a prompt that gets approved without being read, which is
+/// how consent becomes a formality. A switch on a settings page is a decision
+/// someone makes deliberately, in a place they can come back to — which is the
+/// same place they will look when they want it back.
+///
+/// It is per project, and the switch names the project, because that is the
+/// unit the developer thinks in. The gate resolves a call's project from the
+/// calling session's checkout, falling back to the checkout the Explorer is
+/// pointed at — see `browser_consent_providers.dart`.
+class BrowserConsentSection extends ConsumerWidget {
+  const BrowserConsentSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final projects = ref.watch(projectsControllerProvider);
+    final store = ref.watch(browserConsentStoreProvider);
+    // The store reads storage on every call rather than holding state, so that
+    // a grant taken back here is in force on the very next tool call. The cost
+    // is that there is nothing for the UI to watch — hence the revision.
+    ref.watch(browserConsentRevisionProvider);
+
+    return SettingsSection(
+      title: 'BROWSER',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: Insets.sm),
+            child: Text(
+              'browser_evaluate runs whatever JavaScript an agent composes '
+              'inside a page you are already logged in to, so it can read '
+              'cookies and stored tokens as easily as it reads the DOM — and '
+              'nothing about it shows in the browser pane. It is refused until '
+              'you allow it, per project. Finding, capturing and screenshotting '
+              'a page never need this.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          if (projects.isEmpty)
+            Text(
+              'No projects yet. Add one and it will be listed here.',
+              style: theme.textTheme.bodySmall,
+            )
+          else
+            for (final project in projects)
+              Builder(
+                builder: (context) {
+                  final grant = store.grantFor(
+                    project.id,
+                    BrowserCapability.evaluate,
+                  );
+                  return SettingsSwitchRow(
+                    label: 'Run JavaScript in the page — ${project.name}',
+                    // The date is the whole reason a grant is a record rather
+                    // than a boolean: "I allowed this at some point" and "I
+                    // allowed this on the 3rd" are different things to a person
+                    // deciding whether to take it back.
+                    help: grant == null
+                        ? 'Not allowed. Agents working in this project cannot '
+                              'call browser_evaluate.'
+                        : 'Allowed since '
+                              '${grant.grantedAt.toLocal()} '
+                              '(${grant.grantedBy}).',
+                    value: grant != null,
+                    onChanged: (allow) {
+                      if (allow) {
+                        store.grant(
+                          project.id,
+                          BrowserCapability.evaluate,
+                          grantedBy: 'Settings → Tools → Browser',
+                        );
+                      } else {
+                        store.revoke(project.id, BrowserCapability.evaluate);
+                      }
+                      ref
+                          .read(browserConsentRevisionProvider.notifier)
+                          .bump();
+                    },
+                  );
+                },
+              ),
+        ],
+      ),
+    );
+  }
 }

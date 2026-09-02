@@ -4,6 +4,7 @@ import '../../../core/process/command_runner.dart';
 import '../../environments/domain/environment_path.dart';
 import '../domain/github_repo.dart';
 import '../domain/issue.dart';
+import '../domain/merge_strategies.dart';
 import '../domain/pull_request.dart';
 import '../domain/pull_request_snapshot.dart';
 
@@ -55,6 +56,9 @@ PullRequestSnapshot? parseGhPullRequestView(String json) {
       // GitHub computes mergeability lazily and answers UNKNOWN until it has.
       _ => null,
     },
+    mergeStateStatus: MergeStateStatus.parse(
+      _stringOrNull(decoded['mergeStateStatus']),
+    ),
     reviewDecision: ReviewDecision.parse(
       _stringOrNull(decoded['reviewDecision']),
     ),
@@ -108,6 +112,97 @@ ChecksSummary parseCheckRollup(Object? rollup) {
     pending: pending,
     skipped: skipped,
   );
+}
+
+/// What one pull request's review conversations and its repository's merge
+/// settings say — the two facts the delivery strip needs that `gh pr view
+/// --json` cannot give it.
+///
+/// A record rather than a class because it is a return shape and nothing keeps
+/// one: both halves are unpacked into [PullRequestSnapshot] and
+/// `SessionDelivery` the moment they arrive.
+typedef ForgePolicy = ({
+  MergeStrategies strategies,
+
+  /// Null when the query did not answer; see
+  /// [PullRequestSnapshot.unresolvedReviewThreads].
+  int? unresolvedReviewThreads,
+});
+
+/// Nothing asked, or nothing answered — the reading that changes no decision.
+const ForgePolicy kUnknownForgePolicy = (
+  strategies: MergeStrategies.unknown,
+  unresolvedReviewThreads: null,
+);
+
+/// The one query in this file that is not `gh <noun> <verb> --json`.
+///
+/// **Both halves come back in one process on purpose.** Unresolved review
+/// threads are not in `gh pr view`'s field set at all (checked on 2026-09-02:
+/// the nearest fields, `comments` and `reviews`, carry bodies with no
+/// resolution flag), and the merge settings are on the repository rather than
+/// the pull request, so they would otherwise be a `gh pr view` *plus* a `gh
+/// repo view`. GraphQL will return a repository and one of its pull requests in
+/// the same document, which turns two extra processes into one — and this call
+/// is already the expensive half of the delivery poll.
+///
+/// `{owner}` and `{repo}` are `gh`'s own placeholders, filled from the working
+/// directory, so this stays repo-relative like every other call here and needs
+/// no parsing of the remote URL. Verified against `lohanidamodar/karmashala-app`
+/// and `cli/cli` on 2026-09-02.
+const String kForgePolicyQuery =
+    r'query($owner:String!,$name:String!,$number:Int!){'
+    r'repository(owner:$owner,name:$name){'
+    r'mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed '
+    r'pullRequest(number:$number){'
+    r'reviewThreads(first:100){totalCount nodes{isResolved}}}}}';
+
+/// Parses [kForgePolicyQuery]'s response.
+///
+/// **Every missing piece degrades to null rather than to a zero.** A GraphQL
+/// response that carries `errors` alongside a partial `data` is normal — a
+/// token that can read a repository's pull requests but not its settings gets
+/// exactly that — and reading an absent `mergeCommitAllowed` as `false` would
+/// disable a merge the repository actually allows. Likewise an absent
+/// `reviewThreads` is "did not ask", not "nothing is open".
+ForgePolicy parseForgePolicy(String json) {
+  const empty = kUnknownForgePolicy;
+  final trimmed = json.trim();
+  if (trimmed.isEmpty) return empty;
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(trimmed);
+  } catch (_) {
+    return empty;
+  }
+  if (decoded is! Map) return empty;
+  final repository = (decoded['data'] as Map?)?['repository'];
+  if (repository is! Map) return empty;
+
+  bool? flag(Object? value) => value is bool ? value : null;
+  final strategies = MergeStrategies(
+    mergeCommit: flag(repository['mergeCommitAllowed']),
+    squash: flag(repository['squashMergeAllowed']),
+    rebase: flag(repository['rebaseMergeAllowed']),
+  );
+
+  final threads = (repository['pullRequest'] as Map?)?['reviewThreads'];
+  if (threads is! Map) {
+    return (strategies: strategies, unresolvedReviewThreads: null);
+  }
+  final nodes = threads['nodes'];
+  if (nodes is! List) {
+    return (strategies: strategies, unresolvedReviewThreads: null);
+  }
+  var unresolved = 0;
+  for (final node in nodes) {
+    if (node is Map && node['isResolved'] == false) unresolved++;
+  }
+  // The page is 100 threads. A pull request with more than that has bigger
+  // problems than this count's precision, and undercounting is the harmless
+  // direction: the strip only asks whether the number is above zero, and the
+  // unresolved threads on a conversation that long are not all on page two.
+  return (strategies: strategies, unresolvedReviewThreads: unresolved);
 }
 
 /// Whether `gh` said the branch simply has no pull request — a fact — rather
@@ -230,8 +325,13 @@ class GitHubService {
       'view',
       branch,
       '--json',
-      'number,title,state,url,isDraft,mergeable,reviewDecision,'
-          'statusCheckRollup,headRefName',
+      // `mergeStateStatus` rides along in the call that was already being
+      // made. It is the only field here that costs GitHub extra work — it is
+      // computed lazily, the same computation behind `mergeable` — and asking
+      // for it beside `mergeable` costs nothing more, because requesting
+      // either one is what triggers the computation in the first place.
+      'number,title,state,url,isDraft,mergeable,mergeStateStatus,'
+          'reviewDecision,statusCheckRollup,headRefName',
     ]);
     if (!result.ok) {
       if (mentionsNoPullRequest(result.stderr)) return null;
@@ -254,6 +354,54 @@ class GitHubService {
       throw GitHubException('gh issue list failed: ${result.stderr.trim()}');
     }
     return parseGhIssues(result.stdout);
+  }
+
+  /// The repository's merge settings and the pull request's open review
+  /// conversations, in one `gh api graphql` call. See [kForgePolicyQuery].
+  ///
+  /// Never throws for a policy reason: a token without settings access, a
+  /// GraphQL error, or a repository `gh` cannot resolve all come back as
+  /// [MergeStrategies.unknown] with a null thread count, which is the reading
+  /// that changes nothing about what the strip offers. Only a failed process
+  /// throws, and the delivery provider already turns that into null.
+  Future<ForgePolicy> forgePolicyFor(
+    EnvironmentPath repo, {
+    required int number,
+  }) async {
+    final result = await _gh(repo, [
+      'api',
+      'graphql',
+      '-f',
+      'query=$kForgePolicyQuery',
+      '-F',
+      'owner={owner}',
+      '-F',
+      'name={repo}',
+      '-F',
+      'number=$number',
+    ]);
+    // `gh api graphql` exits non-zero on a GraphQL error but still prints the
+    // document, so the body is parsed either way: a partial answer is worth
+    // more than none, and a body that carries nothing usable degrades to
+    // "could not tell" inside the parser.
+    return parseForgePolicy(result.stdout);
+  }
+
+  /// Takes a pull request out of draft (`gh pr ready`).
+  ///
+  /// **One of the app's own operations, not a prompt.** There is nothing here
+  /// for a model to compose: it is a boolean on the forge, and the only way to
+  /// get it wrong is to flip it on the wrong pull request — which is why the
+  /// number is passed explicitly rather than left to `gh` to infer from
+  /// whatever branch happens to be checked out.
+  Future<void> markPullRequestReady(
+    EnvironmentPath repo, {
+    required int number,
+  }) async {
+    final result = await _gh(repo, ['pr', 'ready', '$number']);
+    if (!result.ok) {
+      throw GitHubException('gh pr ready failed: ${result.stderr.trim()}');
+    }
   }
 
   /// Creates a pull request and returns its URL (gh prints it to stdout).

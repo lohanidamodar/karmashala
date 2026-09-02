@@ -101,6 +101,55 @@ List<DiffLine> parseUnifiedDiff(String diff) {
   return lines;
 }
 
+/// The line number each row of [lines] occupies **in the new file**, or null
+/// for a row that is not a line of it.
+///
+/// This is the translation that makes a review comment anchorable. The row
+/// index a widget builder has is a position in a rendering — it is what the old
+/// `DiffAnnotation.diffIndex` stored, and it is meaningless the moment the diff
+/// is regenerated. The number this returns is a position in the *file*, which
+/// together with the file's content hash is a claim that can be checked later
+/// (see `review_thread.dart`).
+///
+/// Null for a header, a hunk marker, and — deliberately — for every **removed**
+/// line. A removed line is not in the new file at all, so there is no line
+/// number that could honestly be given for it. Handing back the number of the
+/// line that follows the deletion would be an anchor onto text the comment was
+/// not about, which is the exact failure mode this feature exists to remove;
+/// the caller turns a comment on a removed line into a file-level thread that
+/// quotes the removed text instead.
+///
+/// `\ No newline at end of file` is git's annotation, not a line of the file,
+/// and is skipped — counting it would shift every number after it by one.
+List<int?> newFileLineNumbers(List<DiffLine> lines) {
+  final numbers = List<int?>.filled(lines.length, null);
+  var next = 0;
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    switch (line.kind) {
+      case DiffLineKind.hunk:
+        next = _newStartOf(line.text) ?? 0;
+      case DiffLineKind.added || DiffLineKind.context:
+        // Before the first hunk header there is no numbering to be had, and a
+        // guess would be a fabricated anchor.
+        if (next == 0) continue;
+        if (line.text.startsWith(r'\')) continue;
+        numbers[i] = next;
+        next++;
+      case DiffLineKind.removed || DiffLineKind.meta:
+        continue;
+    }
+  }
+  return numbers;
+}
+
+/// The `+c` of a `@@ -a,b +c,d @@` header, or null when it does not parse.
+int? _newStartOf(String header) {
+  final match = RegExp(r'^@@ -\d+(?:,\d+)? \+(\d+)').firstMatch(header);
+  if (match == null) return null;
+  return int.tryParse(match.group(1)!);
+}
+
 /// Parses `git diff --name-status` output into [FileChange]s.
 ///
 /// This is a comparison between two committed states, so nothing in it is

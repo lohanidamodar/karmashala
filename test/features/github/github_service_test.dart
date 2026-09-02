@@ -9,6 +9,119 @@ import '../../support/fake_command_runner.dart';
 void main() {
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\app');
 
+  group('mergeStateStatus', () {
+    // Every literal here is a value GitHub actually returned for a real pull
+    // request; the shapes were taken from `gh pr view --json` against
+    // `cli/cli` and `lohanidamodar/karmashala-app` on 2026-09-02.
+    PullRequestSnapshot parse(String mergeStateStatus) => parseGhPullRequestView(
+      '{"number":1,"state":"OPEN","mergeStateStatus":"$mergeStateStatus"}',
+    )!;
+
+    test('BEHIND is read as behind, and nothing else is', () {
+      expect(parse('BEHIND').mergeStateStatus, MergeStateStatus.behind);
+      expect(parse('BEHIND').isBehindBase, isTrue);
+      // BLOCKED masks BEHIND on the wire, so it must not be read as one: the
+      // observed case is a PR that is blocked on a required review and may or
+      // may not also be behind.
+      expect(parse('BLOCKED').isBehindBase, isFalse);
+      expect(parse('CLEAN').isBehindBase, isFalse);
+    });
+
+    test('DIRTY establishes a conflict on its own', () {
+      expect(parse('DIRTY').hasConflict, isTrue);
+      expect(parse('CLEAN').hasConflict, isFalse);
+    });
+
+    test('UNKNOWN is null, not a value — the same as mergeable', () {
+      // GitHub computes this lazily and answers UNKNOWN until it has. Giving
+      // that its own enum case would let a caller switch on it as a state of
+      // the pull request rather than a state of GitHub's queue.
+      expect(parse('UNKNOWN').mergeStateStatus, isNull);
+      expect(
+        parseGhPullRequestView('{"number":1,"state":"OPEN"}')!.mergeStateStatus,
+        isNull,
+      );
+    });
+
+    test('a conflict still arrives when only mergeable says so', () {
+      final pr = parseGhPullRequestView(
+        '{"number":1,"state":"OPEN","mergeable":"CONFLICTING"}',
+      )!;
+      expect(pr.hasConflict, isTrue);
+    });
+  });
+
+  group('parseForgePolicy', () {
+    // The response shape below is the one `gh api graphql` returned for
+    // cli/cli#14315 on 2026-09-02, trimmed to the fields asked for.
+    const real =
+        '{"data":{"repository":{"mergeCommitAllowed":true,'
+        '"squashMergeAllowed":true,"rebaseMergeAllowed":true,'
+        '"pullRequest":{"reviewThreads":{"totalCount":1,'
+        '"nodes":[{"isResolved":true}]}}}}}';
+
+    test('reads the three merge settings and the open threads', () {
+      final policy = parseForgePolicy(real);
+      expect(policy.strategies.mergeCommit, isTrue);
+      expect(policy.strategies.squash, isTrue);
+      expect(policy.strategies.rebase, isTrue);
+      // One thread, resolved: an answer of zero, not an absence.
+      expect(policy.unresolvedReviewThreads, 0);
+    });
+
+    test('counts only the unresolved ones', () {
+      final policy = parseForgePolicy(
+        '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":'
+        '[{"isResolved":false},{"isResolved":true},{"isResolved":false}]}}}}}',
+      );
+      expect(policy.unresolvedReviewThreads, 2);
+    });
+
+    test('a squash-only repository reports the other two as false', () {
+      final policy = parseForgePolicy(
+        '{"data":{"repository":{"mergeCommitAllowed":false,'
+        '"squashMergeAllowed":true,"rebaseMergeAllowed":false}}}',
+      );
+      expect(policy.strategies.preferredLabel, 'squash merge');
+      expect(policy.strategies.noneAllowed, isFalse);
+      // A definite `false` must survive as a definite `false`. Folding it into
+      // the same null that "we did not ask" uses would make a forbidden
+      // strategy indistinguishable from an unknown one, and the merge blocker
+      // below is built on being able to tell those apart.
+      expect(policy.strategies.mergeCommit, isFalse);
+      expect(policy.strategies.rebase, isFalse);
+    });
+
+    test('a missing setting is null, never false', () {
+      // The failure this avoids: a token that can read pull requests but not
+      // repository settings gets a partial document, and reading the absence
+      // as "not allowed" would disable a merge the repository permits.
+      final policy = parseForgePolicy(
+        '{"data":{"repository":{"pullRequest":{"reviewThreads":'
+        '{"nodes":[]}}}},"errors":[{"message":"Resource not accessible"}]}',
+      );
+      expect(policy.strategies.mergeCommit, isNull);
+      expect(policy.strategies.noneAllowed, isFalse);
+      expect(policy.strategies.preferredLabel, isNull);
+      expect(policy.unresolvedReviewThreads, 0);
+    });
+
+    test('absent threads are null, not zero', () {
+      final policy = parseForgePolicy(
+        '{"data":{"repository":{"squashMergeAllowed":true}}}',
+      );
+      expect(policy.unresolvedReviewThreads, isNull);
+      expect(policy.strategies.squash, isTrue);
+    });
+
+    test('garbage and emptiness both degrade to knowing nothing', () {
+      for (final body in ['', 'not json', '[]', '{"errors":[{}]}']) {
+        final policy = parseForgePolicy(body);
+        expect(policy, kUnknownForgePolicy, reason: body);
+      }
+    });
+  });
+
   group('parsers', () {
     test('parseGhPullRequests reads number/title/state/author', () {
       final prs = parseGhPullRequests(
@@ -146,6 +259,108 @@ void main() {
       expect(pr?.reviewDecision, ReviewDecision.approved);
       expect(pr?.checks.state, ChecksState.passing);
       expect(pr?.isReadyToMerge, isTrue);
+    });
+
+    test('pullRequestFor asks GitHub for its own merge verdict', () async {
+      // The field rides in the call that was already being made — it is the
+      // same lazy computation `mergeable` triggers, so asking for both costs
+      // one process and no extra work on GitHub's side.
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(
+            exitCode: 0,
+            stdout:
+                '{"number":12,"state":"OPEN","mergeStateStatus":"BEHIND"}',
+            stderr: '',
+          );
+        },
+      );
+      final pr = await GitHubService(
+        runner,
+      ).pullRequestFor(repo, branch: 'work');
+
+      expect(captured.arguments.join(','), contains('mergeStateStatus'));
+      expect(pr?.mergeStateStatus, MergeStateStatus.behind);
+    });
+
+    test('forgePolicyFor asks graphql once, repo-relative', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(
+            exitCode: 0,
+            stdout:
+                '{"data":{"repository":{"squashMergeAllowed":true,'
+                '"pullRequest":{"reviewThreads":{"nodes":'
+                '[{"isResolved":false}]}}}}}',
+            stderr: '',
+          );
+        },
+      );
+      final policy = await GitHubService(
+        runner,
+      ).forgePolicyFor(repo, number: 12);
+
+      expect(captured.arguments.take(2), ['api', 'graphql']);
+      // gh fills these from the working directory, which is how this stays a
+      // repo-relative call like every other one in this service instead of
+      // parsing the remote URL itself.
+      expect(captured.arguments, contains('owner={owner}'));
+      expect(captured.arguments, contains('name={repo}'));
+      expect(captured.arguments, contains('number=12'));
+      expect(captured.workingDirectory, repo);
+      expect(policy.strategies.squash, isTrue);
+      expect(policy.unresolvedReviewThreads, 1);
+    });
+
+    test('a graphql error still yields whatever the body carried', () async {
+      // `gh api graphql` exits non-zero on a GraphQL error and prints the
+      // document anyway. Throwing would discard a partial answer that is worth
+      // more than none — and would turn a permissions quirk into a red row.
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 1,
+          stdout:
+              '{"data":{"repository":{"squashMergeAllowed":true}},'
+              '"errors":[{"message":"nope"}]}',
+          stderr: 'gh: GraphQL error',
+        ),
+      );
+      final policy = await GitHubService(
+        runner,
+      ).forgePolicyFor(repo, number: 12);
+      expect(policy.strategies.squash, isTrue);
+      expect(policy.unresolvedReviewThreads, isNull);
+    });
+
+    test('markPullRequestReady names the number rather than the branch',
+        () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      await GitHubService(runner).markPullRequestReady(repo, number: 12);
+      expect(captured.arguments, ['pr', 'ready', '12']);
+    });
+
+    test('a refused pr-ready throws with what gh said', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 1,
+          stdout: '',
+          stderr: 'not a draft',
+        ),
+      );
+      expect(
+        () => GitHubService(runner).markPullRequestReady(repo, number: 12),
+        throwsA(isA<GitHubException>()),
+      );
     });
 
     test('a branch with no pull request is null, not an error', () async {

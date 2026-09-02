@@ -91,7 +91,9 @@ List<Repository> sessionCheckouts(Ref ref, Session session) {
   _subagentCheckouts(ref, session, own).forEach(add);
   final directory = own?.path;
   add(
-    directory == null ? own : _deepestContaining(repositories, directory) ?? own,
+    directory == null
+        ? own
+        : _deepestContaining(repositories, directory) ?? own,
   );
   return ordered;
 }
@@ -159,16 +161,15 @@ List<Repository> _subagentCheckouts(Ref ref, Session parent, Repository? own) {
     for (final entry in found.entries)
       entry.key: _changeRank(ref, entry.value.path),
   };
-  return found.values.toList()
-    ..sort((a, b) {
-      final byChanges = changes[b.id]!.compareTo(changes[a.id]!);
-      if (byChanges != 0) return byChanges;
-      final byVotes = votes[b.id]!.compareTo(votes[a.id]!);
-      if (byVotes != 0) return byVotes;
-      return canonicalPathKey(
-        a.path.path,
-      ).compareTo(canonicalPathKey(b.path.path));
-    });
+  return found.values.toList()..sort((a, b) {
+    final byChanges = changes[b.id]!.compareTo(changes[a.id]!);
+    if (byChanges != 0) return byChanges;
+    final byVotes = votes[b.id]!.compareTo(votes[a.id]!);
+    if (byVotes != 0) return byVotes;
+    return canonicalPathKey(
+      a.path.path,
+    ).compareTo(canonicalPathKey(b.path.path));
+  });
 }
 
 /// How a checkout ranks on "is there work in progress here": 2 for changes git

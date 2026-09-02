@@ -156,6 +156,81 @@ void main() {
     expect(SessionDelivery.unknown.stage, DeliveryStage.working);
   });
 
+  group('behind the base, and conflicting with it', () {
+    // Neither is a stage. A branch that conflicts with its base has travelled
+    // exactly as far as one that does not — the stage line is how far the work
+    // got, and these are answers to a different question ("what is in the
+    // way") that `deliveryActionsFor` asks instead.
+    test('a local count above zero is proof', () {
+      expect(
+        const SessionDelivery(behindBase: 3).isBehindBase,
+        isTrue,
+      );
+    });
+
+    test('a count of zero is proof of nothing, because nothing fetches', () {
+      // The count is measured against whatever origin/main this clone last
+      // saw, and this app never runs `git fetch`. Zero means "no commits on
+      // this disk that this branch lacks", which is not "up to date".
+      expect(const SessionDelivery(behindBase: 0).isBehindBase, isFalse);
+      expect(SessionDelivery.unknown.isBehindBase, isFalse);
+    });
+
+    test("GitHub's BEHIND carries it when the local ref is stale", () {
+      expect(
+        const SessionDelivery(
+          behindBase: 0,
+          pullRequest: PullRequestSnapshot(
+            number: 1,
+            state: PullRequestState.open,
+            mergeStateStatus: MergeStateStatus.behind,
+          ),
+        ).isBehindBase,
+        isTrue,
+      );
+    });
+
+    test('a masked reading is not a denial', () {
+      // BLOCKED outranks BEHIND on the wire, so a blocked pull request may or
+      // may not also be behind. The local count is still allowed to answer.
+      expect(
+        const SessionDelivery(
+          behindBase: 2,
+          pullRequest: PullRequestSnapshot(
+            number: 1,
+            state: PullRequestState.open,
+            mergeStateStatus: MergeStateStatus.blocked,
+          ),
+        ).isBehindBase,
+        isTrue,
+      );
+    });
+
+    test('either conflict reading is enough, and neither is the default', () {
+      PullRequestSnapshot pr({bool? mergeable, MergeStateStatus? state}) =>
+          PullRequestSnapshot(
+            number: 1,
+            state: PullRequestState.open,
+            mergeable: mergeable,
+            mergeStateStatus: state,
+          );
+      expect(
+        SessionDelivery(pullRequest: pr(mergeable: false)).hasConflict,
+        isTrue,
+      );
+      expect(
+        SessionDelivery(
+          pullRequest: pr(state: MergeStateStatus.dirty),
+        ).hasConflict,
+        isTrue,
+      );
+      // Not computed yet must never read as a conflict: GitHub answers UNKNOWN
+      // until it has, and every freshly opened pull request passes through it.
+      expect(SessionDelivery(pullRequest: pr()).hasConflict, isFalse);
+      expect(SessionDelivery.unknown.hasConflict, isFalse);
+    });
+  });
+
   group('what the row reads', () {
     test('line counts render as +N -M', () {
       expect(

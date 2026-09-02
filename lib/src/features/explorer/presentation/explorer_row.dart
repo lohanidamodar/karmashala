@@ -146,7 +146,8 @@ class _ExplorerRowState extends State<ExplorerRow> {
   /// there is no pointer: this is the path a keyboard takes.
   Future<void> _openMenu(BuildContext context) async {
     final box = context.findRenderObject() as RenderBox?;
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (box == null || overlay == null || !box.hasSize) return;
     final origin = box.localToGlobal(
       Offset(Insets.lg, box.size.height),
@@ -277,8 +278,8 @@ class _ExplorerRowState extends State<ExplorerRow> {
       tile = Builder(
         builder: (context) => Semantics(
           customSemanticsActions: {
-            CustomSemanticsAction(label: widget.kind.menuLabel):
-                () => _openMenu(context),
+            CustomSemanticsAction(label: widget.kind.menuLabel): () =>
+                _openMenu(context),
           },
           child: withMenu,
         ),

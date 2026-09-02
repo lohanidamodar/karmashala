@@ -66,7 +66,9 @@ void main() {
     if (verb.isNotEmpty && verb.first == 'status') {
       // The `##` header only when asked for, or it reads as a changed file.
       final header = verb.contains('--branch') ? '## main...origin/main\n' : '';
-      final changed = dirty.contains(dirOf(request)) ? ' M lib/main.dart\n' : '';
+      final changed = dirty.contains(dirOf(request))
+          ? ' M lib/main.dart\n'
+          : '';
       return CommandResult(exitCode: 0, stdout: '$header$changed', stderr: '');
     }
     // No remote, so nothing measures against `origin/HEAD` and one `git status`
