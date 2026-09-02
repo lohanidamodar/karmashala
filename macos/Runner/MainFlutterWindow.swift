@@ -32,6 +32,9 @@ class MainFlutterWindow: NSWindow {
     LifecycleChannel.shared.attach(
       messenger: flutterViewController.engine.binaryMessenger)
 
+    CommandChordChannel.shared.attach(
+      messenger: flutterViewController.engine.binaryMessenger)
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
@@ -56,6 +59,14 @@ class MainFlutterWindow: NSWindow {
       if LifecycleChannel.shared.requestQuit() {
         return true
       }
+    }
+    // Everything else the app binds to Cmd, for the same reason and in the same
+    // place. Moving the shortcuts from Ctrl to Cmd for macOS put every one of
+    // them on this path: Ctrl+K was never a key equivalent, so the text-input
+    // plugin never saw it, and Cmd+K is and does. Only chords Dart has actually
+    // registered are taken, so Cmd+A/C/V in a real text field still reach it.
+    if CommandChordChannel.shared.handle(event) {
+      return true
     }
     return super.performKeyEquivalent(with: event)
   }
@@ -150,5 +161,55 @@ final class LifecycleChannel {
     guard let channel else { return false }
     channel.invokeMethod("quitRequested", arguments: nil)
     return true
+  }
+}
+
+
+/// The app's own Cmd chords, claimed before the Flutter view can eat them.
+///
+/// Dart registers exactly what it binds; nothing else is intercepted. That
+/// matters — swallowing every Cmd combination here would take Cmd+A, Cmd+C and
+/// Cmd+V away from every text field in the app.
+final class CommandChordChannel {
+  static let shared = CommandChordChannel()
+
+  private var channel: FlutterMethodChannel?
+
+  /// Lower-cased characters, keyed by whether Shift is part of the chord.
+  private var plain: Set<String> = []
+  private var shifted: Set<String> = []
+
+  func attach(messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "karmashala/command_chords", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "register",
+        let arguments = call.arguments as? [String: Any]
+      else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      self?.plain = Set((arguments["plain"] as? [String] ?? []))
+      self?.shifted = Set((arguments["shifted"] as? [String] ?? []))
+      result(nil)
+    }
+    self.channel = channel
+  }
+
+  /// Whether [event] is one of the registered chords. Sends it to Dart if so.
+  func handle(_ event: NSEvent) -> Bool {
+    guard let channel, let characters = event.charactersIgnoringModifiers
+    else { return false }
+    let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    let key = characters.lowercased()
+    if modifiers == .command, plain.contains(key) {
+      channel.invokeMethod("chord", arguments: ["key": key, "shift": false])
+      return true
+    }
+    if modifiers == [.command, .shift], shifted.contains(key) {
+      channel.invokeMethod("chord", arguments: ["key": key, "shift": true])
+      return true
+    }
+    return false
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -652,13 +653,95 @@ bool handleAppChordFromTerminal(
 /// the terminal in front of them. On a session with a chat view it toggles
 /// between the two renderings of that one session; everywhere else it simply
 /// lands on the terminal, which is already what the workbench shows.
-class ShellShortcuts extends ConsumerWidget {
+class ShellShortcuts extends ConsumerStatefulWidget {
   const ShellShortcuts({required this.child, super.key});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ShellShortcuts> createState() => _ShellShortcutsState();
+}
+
+class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
+  /// Where macOS hands back the Cmd chords the Flutter view would have eaten.
+  ///
+  /// On macOS a `Cmd` combination is a *key equivalent*, offered to the key
+  /// window's views before anything else — and Flutter's text-input plugin
+  /// answers for the whole window while a field is focused. The terminal keeps
+  /// a hidden field focused for its keyboard input, so with a pane in front,
+  /// every one of these was swallowed before `Shortcuts` was consulted. It is
+  /// the same path that made Cmd+Q do nothing, and it is new here only because
+  /// these chords moved from Ctrl, which is not a key equivalent at all.
+  ///
+  /// The window claims only what is registered below, so Cmd+A, Cmd+C and
+  /// Cmd+V still reach a real text field.
+  static const MethodChannel _chords = MethodChannel(
+    'karmashala/command_chords',
+  );
+
+  /// A context below [Actions], since that is where an intent is invoked.
+  BuildContext? _actionsContext;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!Platform.isMacOS) return;
+    _chords.setMethodCallHandler(_onChord);
+    unawaited(_registerChords());
+  }
+
+  @override
+  void dispose() {
+    if (Platform.isMacOS) _chords.setMethodCallHandler(null);
+    super.dispose();
+  }
+
+  /// The character each Cmd chord is reached by, as AppKit reports it.
+  ///
+  /// Pane-only chords are left out: copy and paste belong to the pane's own
+  /// `ShortcutManager`, and there is no shell-level action to invoke for them.
+  Future<void> _registerChords() async {
+    final plain = <String>[];
+    final shifted = <String>[];
+    for (final chord in shellChords) {
+      if (chord.paneOnly || !chord.activator.meta) continue;
+      final key = chord.activator.trigger.keyLabel.toLowerCase();
+      if (key.isEmpty || key.length > 1) continue;
+      (chord.activator.shift ? shifted : plain).add(key);
+    }
+    try {
+      await _chords.invokeMethod('register', {
+        'plain': plain,
+        'shifted': shifted,
+      });
+    } on PlatformException {
+      // A host without the channel simply keeps the old behaviour.
+    } on MissingPluginException {
+      // Same.
+    }
+  }
+
+  Future<void> _onChord(MethodCall call) async {
+    if (call.method != 'chord') return;
+    final arguments = call.arguments;
+    if (arguments is! Map) return;
+    final key = arguments['key'];
+    final shift = arguments['shift'] == true;
+    final context = _actionsContext;
+    if (key is! String || context == null || !context.mounted) return;
+    for (final chord in shellChords) {
+      if (chord.paneOnly || !chord.activator.meta) continue;
+      if (chord.activator.shift != shift) continue;
+      if (chord.activator.trigger.keyLabel.toLowerCase() != key) continue;
+      Actions.maybeInvoke(context, chord.intent);
+      return;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = this.ref;
+    final child = widget.child;
     final controller = ref.read(shellControllerProvider.notifier);
     return Shortcuts(
       shortcuts: shellShortcutMap,
@@ -744,7 +827,15 @@ class ShellShortcuts extends ConsumerWidget {
             },
           ),
         },
-        child: Focus(autofocus: true, child: child),
+        // A context beneath [Actions], so a chord arriving from the window
+        // has somewhere to be invoked. Captured here rather than passed down
+        // because the intent must be dispatched from inside this subtree.
+        child: Builder(
+          builder: (context) {
+            _actionsContext = context;
+            return Focus(autofocus: true, child: child);
+          },
+        ),
       ),
     );
   }
