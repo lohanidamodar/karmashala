@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fakes.dart';
 
 void main() {
+  group('on macOS', _macOsCredentialsTests);
+
   group('parseClaudeSnapshot', () {
     test('reads identity and token metadata when signed in', () {
       final snap = parseClaudeSnapshot(
@@ -189,5 +191,105 @@ void main() {
       expect((creds as Map)['claudeAiOauth']['accessToken'], 'A-token');
       expect(File(paths.configFile).readAsStringSync(), '{not valid json');
     });
+  });
+}
+
+/// Where the credentials live, and how the paths to them are spelled.
+///
+/// Both halves of a plainly logged-in Mac account reporting itself signed out:
+/// the config path was joined with the Windows separator, so
+/// `/Users/me/.claude` became `/Users/me\.claude.json` and could not exist; and
+/// even with that fixed, macOS keeps `claudeAiOauth` in the login Keychain and
+/// writes no credentials file at all.
+void _macOsCredentialsTests() {
+  ClaudeAuthService serviceReading(String? keychain) => ClaudeAuthService(
+    ids: SequentialIdGenerator(),
+    clock: FixedClock(DateTime.utc(2026, 9, 2)),
+    readKeychainCredentials: () async => keychain,
+  );
+
+  test('the Keychain stands in for the credentials file', () async {
+    final dir = await Directory.systemTemp.createTemp('claude-auth');
+    addTearDown(() => dir.delete(recursive: true));
+    final config = File('${dir.path}/.claude.json');
+    await config.writeAsString(
+      jsonEncode({
+        'oauthAccount': {
+          'emailAddress': 'me@x.com',
+          'organizationName': 'My Org',
+        },
+      }),
+    );
+    final service = serviceReading(
+      jsonEncode({
+        'claudeAiOauth': {'subscriptionType': 'max', 'expiresAt': 1785221891296},
+      }),
+    );
+
+    final snapshot = await service.readSnapshot(
+      ClaudeAuthPaths(
+        environmentId: 'windows',
+        // Deliberately absent: on macOS nothing writes it.
+        credentialsFile: '${dir.path}/.claude/.credentials.json',
+        configFile: config.path,
+        credentialsInKeychain: true,
+      ),
+    );
+
+    expect(snapshot.email, 'me@x.com');
+    expect(
+      snapshot.subscriptionType,
+      'max',
+      reason: 'the plan comes from the Keychain, not the missing file',
+    );
+  });
+
+  test('an empty Keychain reads as signed out, not as a crash', () async {
+    final dir = await Directory.systemTemp.createTemp('claude-auth');
+    addTearDown(() => dir.delete(recursive: true));
+    final service = serviceReading(null);
+
+    final snapshot = await service.readSnapshot(
+      ClaudeAuthPaths(
+        environmentId: 'windows',
+        credentialsFile: '${dir.path}/.credentials.json',
+        configFile: '${dir.path}/.claude.json',
+        credentialsInKeychain: true,
+      ),
+    );
+
+    expect(snapshot.email, isNull);
+  });
+
+  test('switching is refused rather than half-applied', () async {
+    // Rewriting the identity while the tokens stayed in the Keychain would
+    // leave Claude authenticated as one account and labelled as another.
+    final service = serviceReading('{}');
+
+    expect(
+      () => service.switchTo(
+        ClaudeAccount(
+          id: 'a',
+          email: 'a@x.com',
+          claudeAiOauth: const {},
+          oauthAccount: const {},
+          capturedEnvironmentId: 'windows',
+          capturedAt: DateTime.utc(2026),
+        ),
+        const ClaudeAuthPaths(
+          environmentId: 'windows',
+          credentialsFile: '/tmp/nope/.credentials.json',
+          configFile: '/tmp/nope/.claude.json',
+          credentialsInKeychain: true,
+        ),
+      ),
+      throwsA(
+        isA<ClaudeAuthException>().having(
+          (e) => e.message,
+          'message',
+          contains('Keychain'),
+        ),
+      ),
+    );
   });
 }
