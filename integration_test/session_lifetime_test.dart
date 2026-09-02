@@ -213,7 +213,7 @@ void main() {
     );
 
     // What quitting does: snapshot, then the processes die with the app.
-    controller.persistWorkspace();
+    controller.persistLayout();
     before.dispose();
     first.close();
 

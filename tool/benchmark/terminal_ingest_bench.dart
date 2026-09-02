@@ -15,7 +15,7 @@ import '../../test/terminal/perf/corpora.dart';
 ///   flutter test tool/benchmark/terminal_ingest_bench.dart
 ///
 /// **The multi-session benchmark.** `terminal_scale_bench.dart` measures what
-/// the *workspace* costs at N panes — the autosave tick, the listener fan-out,
+/// the *layout* costs at N panes — the autosave tick, the listener fan-out,
 /// the memory. This one measures what **ingestion** costs: N panes all
 /// producing output at once, through the production path (a
 /// [PtyOutputCoalescer] per pane, `onData` → `Terminal.write`), with no
@@ -123,7 +123,7 @@ void main() {
     );
     for (final n in [1, 10, 100]) {
       final baselineRss = rssMegabytes();
-      // The workspace this models: one visible tab, everything else open but
+      // The layout this models: one visible tab, everything else open but
       // hidden — which is what `TerminalSessionsController` sets.
       var now = Duration.zero;
       final budget = TerminalIngestBudget(clock: () => now);

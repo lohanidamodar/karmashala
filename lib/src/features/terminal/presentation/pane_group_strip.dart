@@ -145,7 +145,7 @@ class PaneTabChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
-    // Per pane, not per workspace: a process dying redraws its own chip and
+    // Per pane, not per layout: a process dying redraws its own chip and
     // leaves the rest of the header alone — the rule the workbench strip
     // already follows.
     final liveness = ref.watch(terminalPaneLivenessProvider(paneId));
@@ -230,7 +230,7 @@ class PaneTabChip extends ConsumerWidget {
 }
 
 /// What a dragged pane looks like under the pointer — the same label-only
-/// treatment a dragged workspace tab gets, and for the same reason: dragging a
+/// treatment a dragged tab gets, and for the same reason: dragging a
 /// control that can still be clicked reads as a bug.
 class _PaneDragFeedback extends StatelessWidget {
   const _PaneDragFeedback({required this.title});

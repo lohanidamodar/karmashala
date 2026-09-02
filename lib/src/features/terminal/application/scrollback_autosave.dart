@@ -88,7 +88,7 @@ class ScrollbackAutosave {
 
   /// Brings the next tick forward to [catchUpInterval].
   ///
-  /// For work that arrives **between** ticks: a structural workspace save
+  /// For work that arrives **between** ticks: a structural layout save
   /// writes the tabs and their layout immediately but deliberately leaves the
   /// scrollback text to this timer, and without this that text would wait for
   /// whichever idle tick was already armed — up to a full [interval] away, when

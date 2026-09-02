@@ -38,12 +38,12 @@ class MountedTabs {
 
   bool contains(String tabId) => _mru.contains(tabId);
 
-  /// Re-derives the set from the workspace.
+  /// Re-derives the set from the layout.
   ///
   /// Called on every build rather than on every activation, so there is one
   /// path and no way for the set to drift from the tabs that actually exist:
   /// closed tabs drop out, the active tab is always held, and tabs never
-  /// visited fill whatever room is left — which is what a restored workspace
+  /// visited fill whatever room is left — which is what a restored layout
   /// looks like before the user has touched any of it.
   void sync({required Iterable<String> openTabIds, String? activeTabId}) {
     final open = openTabIds.toSet();

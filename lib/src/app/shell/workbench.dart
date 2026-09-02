@@ -134,7 +134,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // pane there would republish the terminal while the tree is still building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // A restored workspace can put an agent pane on screen before anything is
+      // A restored layout can put an agent pane on screen before anything is
       // selected; the side panel should describe that session, not the row the
       // Explorer happens to highlight first.
       if (active != null) ref.read(sessionContextProvider).follow(active);

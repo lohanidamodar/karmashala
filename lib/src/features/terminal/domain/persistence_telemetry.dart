@@ -4,7 +4,7 @@
 /// numbers. They exist because "the app feels like it is falling behind" was a
 /// report nobody could answer — the autosave's cadence, its budget and the
 /// dirty set were all internal, so whether writes were keeping up with output
-/// was invisible until a workspace came back missing text.
+/// was invisible until a layout came back missing text.
 ///
 /// The two numbers worth watching together are [dirtyPanes] and
 /// [oldestUnsaved]. A dirty count that rises and falls is an autosave doing its
@@ -47,7 +47,7 @@ class ScrollbackWrite {
   /// How many panes it wrote. Fewer than were dirty means it hit its budget,
   /// which is the interesting case rather than a fault: the budget exists so a
   /// write cannot hold a frame, and a pass that keeps being cut off says the
-  /// workspace is producing faster than it is being saved.
+  /// layout is producing faster than it is being saved.
   final int panes;
 
   final Duration took;

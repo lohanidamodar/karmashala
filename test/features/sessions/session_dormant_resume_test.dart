@@ -130,7 +130,7 @@ void main() {
         .instanceFor(paneId)!
         .terminal
         .write('what happened yesterday\r\n');
-    first.read(terminalSessionsControllerProvider.notifier).persistWorkspace();
+    first.read(terminalSessionsControllerProvider.notifier).persistLayout();
     first.dispose();
 
     // The restart. The pane comes back holding its scrollback with nothing
@@ -243,7 +243,7 @@ void main() {
 
     final first = containerOver(db);
     final sessionId = await startSession(first);
-    first.read(terminalSessionsControllerProvider.notifier).persistWorkspace();
+    first.read(terminalSessionsControllerProvider.notifier).persistLayout();
     first.dispose();
 
     final next = containerOver(db, idPrefix: 't-');

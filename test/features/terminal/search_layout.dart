@@ -55,16 +55,16 @@ class ManualSearchSchedule {
   }
 }
 
-/// A workspace of [panes] tabs, each holding one pane whose terminal carries
+/// A layout of [panes] tabs, each holding one pane whose terminal carries
 /// [linesPerPane] lines of history.
 ///
 /// Panes are their own tabs rather than splits so every pane is addressable and
 /// none of them is on screen but the first — which is the shape the cost
 /// assertions care about.
-class SearchWorkspace {
-  SearchWorkspace._(this.container, this.sessions, this.panes, this.schedule);
+class SearchLayout {
+  SearchLayout._(this.container, this.sessions, this.panes, this.schedule);
 
-  factory SearchWorkspace({
+  factory SearchLayout({
     int panes = 12,
     int linesPerPane = 2500,
     String Function(int pane, int line)? text,
@@ -101,7 +101,7 @@ class SearchWorkspace {
         ].join('\r\n'),
       );
     }
-    return SearchWorkspace._(container, sessions, ids, schedule);
+    return SearchLayout._(container, sessions, ids, schedule);
   }
 
   final ProviderContainer container;

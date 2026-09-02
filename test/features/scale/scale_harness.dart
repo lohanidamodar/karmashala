@@ -61,7 +61,7 @@ class CountingDatabase extends AppDatabase {
 ///
 /// `mainBuffer` is the scrollback codec's single entry point into the buffer —
 /// it reads the getter once per `encodeScrollback` call — so [bufferReads] is
-/// the encode count, the same unit `workspace_save_cost_test` uses.
+/// the encode count, the same unit `layout_save_cost_test` uses.
 ///
 /// `listeners` is a plain public field on xterm's `Observable`, so the live
 /// listener count needs nothing added to the app to be observed.
@@ -82,7 +82,7 @@ class CountingTerminal extends Terminal {
 /// A scheduler with no clock: it records what was armed and fires it only when
 /// a test says so.
 ///
-/// The same seam `workspace_save_cost_test` records the autosave's cadence
+/// The same seam `layout_save_cost_test` records the autosave's cadence
 /// through, plus the ability to actually run the tick — which is what makes a
 /// soak of a stated length in *app* time cost nothing in wall time.
 class RecordedSchedule {
@@ -126,13 +126,13 @@ class RecordedSchedule {
   }
 }
 
-/// A workspace of process-free panes over a real database, driven through the
+/// A layout of process-free panes over a real database, driven through the
 /// production [TerminalSessionsController].
 ///
 /// One pane per tab rather than splits: every pane is then addressable, and the
 /// per-tab costs (a stored row, a label, a tier) are all in the measurement.
-class ScaleWorkspace {
-  ScaleWorkspace._(
+class ScaleLayout {
+  ScaleLayout._(
     this.container,
     this.controller,
     this.database,
@@ -141,7 +141,7 @@ class ScaleWorkspace {
     this.instancesByPane,
   );
 
-  factory ScaleWorkspace({AppDatabase? database}) {
+  factory ScaleLayout({AppDatabase? database}) {
     final db = database ?? CountingDatabase();
     final schedule = RecordedSchedule();
     final terminals = <String, CountingTerminal>{};
@@ -187,7 +187,7 @@ class ScaleWorkspace {
         ),
       ],
     );
-    return ScaleWorkspace._(
+    return ScaleLayout._(
       container,
       container.read(terminalSessionsControllerProvider.notifier),
       db,
@@ -259,11 +259,11 @@ class ScaleWorkspace {
   }
 
   /// Writes everything that is owed and leaves nothing dirty — the state a
-  /// workspace nobody is typing into settles into within a second of the last
+  /// layout nobody is typing into settles into within a second of the last
   /// keystroke.
   void settle() {
     controller.saveDirtyScrollback(budget: const Duration(minutes: 1));
-    controller.persistWorkspace();
+    controller.persistLayout();
   }
 
   /// What the store currently holds for [paneId] — read back through SQL

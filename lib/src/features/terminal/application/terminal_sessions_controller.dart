@@ -15,7 +15,7 @@ import '../../settings/application/settings_controller.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
 import '../data/terminal_instance.dart';
-import '../data/terminal_workspace_dao.dart';
+import '../data/terminal_layout_dao.dart';
 import '../domain/agent_pane_launch.dart';
 import '../domain/detach_policy.dart';
 import '../domain/ingest_tier.dart';
@@ -173,7 +173,7 @@ class TerminalSessionsState {
 }
 
 /// Manages open terminal tabs, the split tree inside each, which pane has focus,
-/// and persisting the whole workspace so it survives a restart.
+/// and persisting the whole layout so it survives a restart.
 ///
 /// The tab list and live instances are the controller's **own fields**, with
 /// [state] published from them. Riverpod forbids reading `state` inside `build`
@@ -225,7 +225,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///
   /// A pane that is not in [_dirty] has not touched its buffer since this was
   /// produced, so re-running the encoder on it can only produce the same string.
-  /// Keeping it turns a workspace save from "re-encode every pane" into "encode
+  /// Keeping it turns a layout save from "re-encode every pane" into "encode
   /// the ones that changed" — which is what makes a save on every structural
   /// change (open, split, close, detach) affordable, and what makes the save on
   /// quit a delta over the last autosave tick rather than a full re-encode of
@@ -258,15 +258,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// this, a hundred tabs would be a hundred queries a frame.
   final Map<String, String> _titles = {};
 
-  /// Whether the user has closed a tab, a pane or a session since the workspace
+  /// Whether the user has closed a tab, a pane or a session since the layout
   /// was restored.
   ///
-  /// An empty workspace has two causes that the store cannot tell apart, and
+  /// An empty layout has two causes that the store cannot tell apart, and
   /// only one of them is a fact worth writing down. *The user closed everything*
   /// is a decision, and clearing the store is the correct outcome — Loop 29's
   /// behaviour, and tested. *We momentarily have nothing* is a bug, and a save
-  /// deletes every tab the workspace no longer holds, so writing it destroys
-  /// the user's workspace outright; Loop 48 watched that happen once in ten
+  /// deletes every tab the layout no longer holds, so writing it destroys
+  /// the user's layout outright; Loop 48 watched that happen once in ten
   /// real runs and never found the trigger. (A save writes only the rows that
   /// changed now, but "every tab vanished" changes every row — incremental
   /// writing narrows the cost of this failure, not its reach.)
@@ -290,7 +290,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Whether [shutdownProcesses] has already run.
   ///
   /// It empties [_tabs], so the container's own teardown must not persist
-  /// afterwards: it would write that emptiness over the workspace the user
+  /// afterwards: it would write that emptiness over the layout the user
   /// expects back.
   bool _processesShutDown = false;
 
@@ -304,17 +304,17 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _disposed = true;
       _autosave.stop();
       if (_processesShutDown) return;
-      persistWorkspace();
+      persistLayout();
       _disposeAll();
     });
     // A rename happens in the sessions feature and never touches a terminal, so
     // nothing here would republish and the tab strip would keep the old name.
     // `listen` rather than `watch`: re-running `build` would restore the
-    // workspace again.
+    // layout again.
     ref.listen(sessionsRevisionProvider, (_, _) {
       if (!_disposed) _publish();
     });
-    _restoreWorkspace();
+    _restoreLayout();
     _autosave.start();
     return _snapshot();
   }
@@ -334,7 +334,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     if (_processesShutDown) return;
     _processesShutDown = true;
     _autosave.stop();
-    persistWorkspace();
+    persistLayout();
     await Future.wait(_disposeAll());
   }
 
@@ -392,7 +392,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Tells every pane how visible it is, so ingestion can cost what the pane is
   /// worth rather than the same for all of them.
   ///
-  /// The workspace is the only thing that knows this, which is why it lives
+  /// The layout is the only thing that knows this, which is why it lives
   /// here and not in the pane: a pane cannot see which tab is in front. Called
   /// from [_publish], so every open, close, split, activate, detach and
   /// reattach re-derives it from one place — there is no second path that could
@@ -563,9 +563,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///
   /// The verb behind the tab menu's *Close others / to the right / to the left
   /// / all*, and — with one id — behind [closeTab] itself. Deliberately **not**
-  /// a loop over [closeTab]: that would publish and write the workspace once
+  /// a loop over [closeTab]: that would publish and write the layout once
   /// per tab, so clearing twenty tabs would rebuild every consumer twenty times
-  /// and save the whole workspace twenty times over. One bulk close is one
+  /// and save the whole layout twenty times over. One bulk close is one
   /// publish and one save, whatever the count.
   ///
   /// [detach] means what it means in [closeTab]. [activate] names the tab to
@@ -990,7 +990,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Selecting a tab in a region header and focusing a pane are the same act:
   /// a pane behind another is not on screen, so there is nowhere for focus to
   /// sit there. Not persisted — the front pane of each region rides along on
-  /// the next structural save and on quit, and writing the workspace every time
+  /// the next structural save and on quit, and writing the layout every time
   /// somebody clicks a pane is exactly the per-interaction database work this
   /// controller is careful not to do.
   void focusPane(String paneId) {
@@ -1323,7 +1323,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   // --- persistence -----------------------------------------------------------
 
-  /// Writes the whole workspace — tabs, layouts, detached sessions and every
+  /// Writes the whole layout — tabs, splits, detached sessions and every
   /// pane's scrollback, re-encoding whatever has moved since it was last
   /// written.
   ///
@@ -1340,14 +1340,14 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Does nothing when no database is wired up (tests, and any bootstrap that
   /// has not opened one).
   ///
-  /// Also does nothing when it would replace a non-empty stored workspace with
+  /// Also does nothing when it would replace a non-empty stored layout with
   /// an empty one that no user action accounts for — see
   /// [_userClosedSinceRestore]. That case is a bug by construction, and the
   /// difference between a bug and a data loss is whether the bug is allowed to
   /// write.
-  void persistWorkspace() => _persist(refreshScrollback: true);
+  void persistLayout() => _persist(refreshScrollback: true);
 
-  /// Writes the workspace's **shape** — which tabs exist, in what order, split
+  /// Writes the layout's **shape** — which tabs exist, in what order, split
   /// how, with which panes — without re-encoding a buffer to get text the
   /// autosave already owes a write for.
   ///
@@ -1357,7 +1357,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// scrollback *text* is a different question: re-encoding is the expensive
   /// half of a save — the codec walks every line and emits an SGR run per style
   /// change, ~5 ms for a pane holding a full durable window — and on a busy
-  /// workspace every live pane is dirty, so a structural save was paying for
+  /// layout every live pane is dirty, so a structural save was paying for
   /// all of them. At the hundred-pane scale target that is the bulk of the
   /// 645 ms `tool/benchmark/terminal_scale_bench.dart` measured, and it is what
   /// the owner sees as "resuming session still makes ui laggy".
@@ -1365,7 +1365,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// So a structural save writes the encoding each pane *already* has and
   /// leaves the pane dirty. [saveDirtyScrollback] then refreshes it on the next
   /// tick, inside the 8 ms budget that exists for exactly this, and
-  /// [persistWorkspace] flushes the rest on the way out. A pane the store has
+  /// [persistLayout] flushes the rest on the way out. A pane the store has
   /// never seen has no encoding to reuse, so it is encoded here and its text is
   /// never merely assumed.
   ///
@@ -1391,15 +1391,15 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         final stored = dao.storedTabCount();
         if (stored > 0) {
           _log.error(
-            'Refusing to save an empty terminal workspace over $stored stored '
+            'Refusing to save an empty terminal layout over $stored stored '
             'tab(s): nothing the user closed accounts for it being empty. The '
-            'stored workspace is left untouched. This should not happen — if '
+            'stored layout is left untouched. This should not happen — if '
             'the terminal really is empty, please report it.',
           );
           return;
         }
       }
-      dao.saveWorkspace(
+      dao.saveLayout(
         rows,
         activeTabId: _activeTabId,
         userClosed: _userClosedSinceRestore,
@@ -1412,7 +1412,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       // rather than merely no worse.
       if (!refreshScrollback && hasDirtyScrollback) _autosave.catchUpSoon();
     } catch (error, stack) {
-      _log.warning('Could not persist the terminal workspace.', error, stack);
+      _log.warning('Could not persist the terminal layout.', error, stack);
     }
   }
 
@@ -1437,7 +1437,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// The one question it exists to answer is whether the autosave is keeping
   /// up: a dirty count that does not fall, or an oldest-unsaved age that keeps
   /// climbing, is the shape of "my work is not being written" — which is the
-  /// class of problem that was previously invisible until a workspace came
+  /// class of problem that was previously invisible until a layout came
   /// back missing output.
   PersistenceTelemetry get persistenceTelemetry {
     final now = _uptime.elapsed;
@@ -1638,7 +1638,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     );
   }
 
-  /// Recreates the stored workspace: the tabs, the splits inside them, and each
+  /// Recreates the stored layout: the tabs, the splits inside them, and each
   /// pane's scrollback — as a **dormant** buffer, except for the panes of the
   /// active tab that were running when the app closed, which get a process back.
   ///
@@ -1660,19 +1660,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Defensive at every step: a layout that will not parse, a pane whose profile
   /// no longer exists, a tab left with nothing in it — each is dropped rather
   /// than thrown on, because a corrupt row must never make the terminal
-  /// unopenable. The worst case is an empty workspace, which is what a first run
+  /// unopenable. The worst case is an empty layout, which is what a first run
   /// looks like anyway.
-  void _restoreWorkspace() {
+  void _restoreLayout() {
     // Whatever the previous life of this controller decided about closing
-    // things, this one starts owing the store the workspace it just read.
+    // things, this one starts owing the store the layout it just read.
     _userClosedSinceRestore = false;
     final dao = _dao();
     if (dao == null) return;
 
     try {
-      final stored = dao.loadWorkspace();
+      final stored = dao.loadLayout();
       // Which tab counts as "the active tab" has to be decided before any pane
-      // is built, and the same way the fallback below decides it: a workspace
+      // is built, and the same way the fallback below decides it: a layout
       // stored with no active row activates its last tab. Resolved against the
       // *stored* list rather than the rebuilt one, so a last tab that turns out
       // to be unrebuildable starts nothing rather than promoting another tab's
@@ -1729,7 +1729,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
       _activeTabId ??= _tabs.isEmpty ? null : _tabs.last.id;
     } catch (error, stack) {
-      _log.warning('Could not restore the terminal workspace.', error, stack);
+      _log.warning('Could not restore the terminal layout.', error, stack);
     }
   }
 
@@ -1782,7 +1782,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   ///
   /// Returns false — and the caller falls back to the dormant pane — if the
   /// factory *throws* rather than degrading. Nothing in production does that,
-  /// and this runs inside the restore: a workspace must not be lost because one
+  /// and this runs inside the restore: a layout must not be lost because one
   /// pane could not be started.
   bool _adoptRestarted(StoredTerminalPane pane, TerminalProfile profile) {
     final TerminalInstance instance;
@@ -1810,10 +1810,10 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     return true;
   }
 
-  /// The workspace DAO, or `null` when no database is wired up.
-  TerminalWorkspaceDao? _dao() {
+  /// The layout DAO, or `null` when no database is wired up.
+  TerminalLayoutDao? _dao() {
     try {
-      return ref.read(terminalWorkspaceDaoProvider);
+      return ref.read(terminalLayoutDaoProvider);
     } catch (_) {
       return null;
     }
@@ -1978,7 +1978,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       _oscTitles[paneId] = trimmed;
     }
     // Only when it actually changed: a TUI that repaints its title every frame
-    // must not republish the whole workspace every frame.
+    // must not republish the whole layout every frame.
     _publish();
   }
 
@@ -2009,7 +2009,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Whether the pane that just exited should take itself off the screen.
   ///
   /// See [shouldCollapseOnExit] for the rule; this is only the part that has to
-  /// read the workspace to answer it.
+  /// read the layout to answer it.
   bool _shouldCollapse(String paneId, TerminalInstance instance) {
     final tab = _tabContaining(paneId);
     if (tab == null) return false;
@@ -2331,7 +2331,7 @@ final terminalDetachedProvider = Provider<List<DetachedSession>>(
 /// Whether one pane has a process behind it.
 ///
 /// A family, so a process exiting repaints that pane's status bar and its tab's
-/// dot rather than every consumer of the workspace.
+/// dot rather than every consumer of the layout.
 final terminalPaneLivenessProvider = Provider.family<PaneLiveness, String>(
   (ref, paneId) => ref.watch(
     terminalSessionsControllerProvider.select((s) => s.livenessOf(paneId)),
@@ -2372,7 +2372,7 @@ final terminalPaneLivenessProvider = Provider.family<PaneLiveness, String>(
 /// [terminalTabsProvider] exists to protect.
 ///
 /// `autoDispose`, unlike its sibling above, because a family keyed by pane id
-/// otherwise keeps one entry per pane the workspace has *ever* held for the
+/// otherwise keeps one entry per pane the layout has *ever* held for the
 /// life of the container. Nothing outside a mounted pane view asks this
 /// question, and a pane whose view is gone can be asked again for the price of
 /// a map lookup when it comes back.

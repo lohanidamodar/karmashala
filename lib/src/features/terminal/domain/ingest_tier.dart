@@ -9,7 +9,7 @@
 /// because the cost is on the *producer* side.
 ///
 /// The tiers are the fix. They are set by `TerminalSessionsController` from the
-/// only thing that decides them — where the pane is in the workspace — and never
+/// only thing that decides them — where the pane is in the layout — and never
 /// by the pane itself.
 enum IngestTier {
   /// In the active tab: the user is looking at it.

@@ -5,7 +5,7 @@
 /// server or an ssh session must not end it. But it was applied to *every* live
 /// pane, so opening a shell, typing nothing, and closing the tab left a
 /// PowerShell running with no tab — and, since the tiering work, a cold pane
-/// with a spool and a row in the workspace, restored on the next launch.
+/// with a spool and a row in the layout, restored on the next launch.
 /// Multiplied by a working day that is a background session list nobody asked
 /// for and a slower restore every morning.
 ///

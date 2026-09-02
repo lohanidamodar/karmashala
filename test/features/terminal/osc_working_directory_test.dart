@@ -12,7 +12,7 @@ import 'fake_instance.dart';
 ///
 /// A pane used to record only the directory it was *launched* in, and that
 /// stale value was read by relative-path link resolution, the tab label, the
-/// workspace record a pane is restored from and the MCP terminal tools. These
+/// layout record a pane is restored from and the MCP terminal tools. These
 /// pin the reading of the sequence, the ownership of xterm's single OSC slot,
 /// and the cost of a `cd`.
 void main() {
@@ -216,7 +216,7 @@ void main() {
 
       expect(notifications, 1,
           reason: 'a shell that re-emits OSC 7 on every prompt redraw must not '
-              'republish the workspace per prompt');
+              'republish the layout per prompt');
     });
   });
 

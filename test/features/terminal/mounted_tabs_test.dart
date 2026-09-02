@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The eviction policy behind the bounded mounted set, on its own — no widget
 /// tree, because none of these answers depend on one.
 void main() {
-  test('every tab is mounted while the workspace fits in the budget', () {
+  test('every tab is mounted while the layout fits in the budget', () {
     final mounted = MountedTabs(budget: 4);
 
     mounted.sync(openTabIds: ['a', 'b', 'c'], activeTabId: 'c');
@@ -55,7 +55,7 @@ void main() {
     expect(mounted.ids, ['a']);
   });
 
-  test('a restored workspace mounts tabs nobody has activated yet', () {
+  test('a restored layout mounts tabs nobody has activated yet', () {
     final mounted = MountedTabs(budget: 3);
 
     // What a restore looks like: tabs exist, none has been switched to.

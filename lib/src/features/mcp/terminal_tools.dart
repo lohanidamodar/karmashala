@@ -7,7 +7,7 @@ import '../terminal/data/terminal_instance.dart';
 import '../terminal/domain/terminal_profile.dart';
 import '../terminal/application/terminal_profiles.dart';
 
-/// The terminal workspace, as an agent can drive it.
+/// The terminal layout, as an agent can drive it.
 ///
 /// These go through `TerminalSessionsController` — the same object the tab bar
 /// calls — rather than spawning anything of their own. A pane an agent opened
@@ -120,7 +120,7 @@ class TerminalControlTools {
       final known = profiles.any((profile) => profile.id == profileId);
       if (!known) {
         // `resolveTerminalProfile` falls back to the first profile, which is
-        // right when restoring a workspace and wrong here: an agent that asked
+        // right when restoring a layout and wrong here: an agent that asked
         // for a WSL shell and silently got PowerShell would run its commands
         // against the wrong filesystem.
         throw ArgumentError(
@@ -391,7 +391,7 @@ const List<Map<String, dynamic>> terminalControlToolSchemas = [
   {
     'name': 'terminal_list',
     'description':
-        'The terminal workspace: every tab, the panes in each, which pane is '
+        'The terminal layout: every tab, the panes in each, which pane is '
         'focused, and the panes still running with no tab showing them '
         '(detached). Also lists the shell profiles this machine offers, which '
         'is where terminal_open gets its profileId. Start here — every other '

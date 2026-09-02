@@ -179,7 +179,7 @@ void main() {
         orderedEquals([1]),
         reason:
             'only the new pane\'s own empty buffer is encoded — a start must '
-            'never re-encode a workspace: $encodes',
+            'never re-encode a layout: $encodes',
       );
       expect(
         screenScans.values.toSet(),
@@ -565,7 +565,7 @@ class _StartWorkspace {
       );
     }
     await container.pump();
-    controller.persistWorkspace();
+    controller.persistLayout();
     await container.pump();
   }
 
@@ -653,7 +653,7 @@ class _RowCountingDatabase extends CountingDatabase {
 /// `terminalTailLines` — the only thing that reads a pane's screen outside the
 /// renderer — goes through `Terminal.buffer`, which is a different getter from
 /// the `mainBuffer` the scrollback codec uses. Counting both apart is what lets
-/// this file tell "a start re-encoded a workspace" from "a start re-read one".
+/// this file tell "a start re-encoded a layout" from "a start re-read one".
 class _CountingScreen extends CountingTerminal {
   int screenReads = 0;
 

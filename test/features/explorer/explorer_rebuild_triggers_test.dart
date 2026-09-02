@@ -298,7 +298,7 @@ void main() {
   testWidgets('opening a second terminal tab rebuilds no session card', (
     tester,
   ) async {
-    // The terminal workspace republishes its whole state on every structural
+    // The terminal layout republishes its whole state on every structural
     // change, and `sessionWhereaboutsProvider` watches it — but the value it
     // produces is unchanged, so Riverpod stops there and no card is touched.
     final harness = await pump(tester);
@@ -312,7 +312,7 @@ void main() {
     final after = cardIdentities(tester);
     // ignore: avoid_print
     print(
-      'EXPLORER-TRIGGER terminal-workspace-change cards=${before.length} '
+      'EXPLORER-TRIGGER terminal-layout-change cards=${before.length} '
       'rebuilt=${changed(before, after)}',
     );
     expect(changed(before, after), 0);

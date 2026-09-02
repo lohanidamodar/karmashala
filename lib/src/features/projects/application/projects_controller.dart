@@ -7,6 +7,7 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
+import '../../cli_detection/domain/imported_session.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
 import '../../environments/domain/execution_environment.dart';
@@ -15,10 +16,11 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
-import '../../sessions/application/session_actions.dart';
+import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../domain/project.dart';
+import 'cli_store_purge.dart';
 import 'project_providers.dart';
 import 'project_service.dart';
 import 'project_service_provider.dart';
@@ -225,30 +227,82 @@ class ProjectsController extends Notifier<List<Project>> {
   /// repositories, sessions, events and imported sessions. Clears any selection
   /// that pointed into the deleted project.
   ///
-  /// When [deleteCliSessions] is set, each of the project's imported CLI
-  /// sessions is also deleted from the originating agent's on-disk store
-  /// (Claude/Codex history), best-effort, before the workspace rows are removed.
+  /// When [deleteCliSessions] is set, the project's imported CLI sessions are
+  /// also deleted from the originating agents' on-disk stores (Claude/Codex
+  /// history) — **after** this returns, by [CliStorePurgeRunner], which reports
+  /// anything it could not remove.
+  ///
+  /// The workspace half is synchronous and the store half is not, and the split
+  /// is the point. This used to delete the store files inline, one session at a
+  /// time: a store-index pass, a `DELETE` and a signal fan-out **each**, all on
+  /// the UI isolate, so a project of 33 sessions decoded 289 index records,
+  /// rewrote the Codex index 33 times and woke every watcher of the session list
+  /// 34 times before the row disappeared. Now the row goes at once, the store is
+  /// purged in one pass per store behind it, and the whole thing publishes once.
+  /// See `project_delete_cost_test.dart`.
   Future<void> deleteProject(
     String projectId, {
     bool deleteCliSessions = false,
   }) async {
+    final project = ref.read(projectDaoProvider).getById(projectId);
     final repos = ref.read(repositoryDaoProvider).getByProject(projectId);
-    if (deleteCliSessions) {
-      final actions = ref.read(sessionActionsProvider);
-      final importedDao = ref.read(importedSessionDaoProvider);
-      for (final repo in repos) {
-        for (final session in importedDao.getByRepository(repo.id)) {
-          try {
-            await actions.deleteImported(session, deleteFromCli: true);
-          } catch (_) {
-            // Best-effort per session — a locked/removed file shouldn't block
-            // deleting the rest or the project itself.
-          }
-        }
-      }
-    }
     final repoIds = repos.map((r) => r.id).toSet();
+    // Read before the rows go: the cascade takes the records with the project,
+    // and the store still has to be told which files they named.
+    final imported = deleteCliSessions
+        ? [
+            for (final repo in repos)
+              ...ref.read(importedSessionDaoProvider).getByRepository(repo.id),
+          ]
+        : const <ImportedSession>[];
+
+    // Resolved before the delete: the cascade takes the session rows with the
+    // project, so afterwards there is nothing left to ask which repository a
+    // selected session belonged to.
+    final selection = _selectionInto(repoIds);
+
     ref.read(projectDaoProvider).delete(projectId);
+    _clearSelections(projectId, repoIds, selection);
+    // One publish for the whole delete. It used to be one per session plus this
+    // one, and each of those woke every watcher of the session list.
+    ref.read(sessionsRevisionProvider.notifier).bump();
+    _refresh();
+
+    ref
+        .read(cliStorePurgeRunnerProvider)
+        .start(projectName: project?.name ?? 'The project', sessions: imported);
+  }
+
+  /// Whether the selected session — native, imported — sits in [repoIds].
+  ///
+  /// Asked *before* the project row goes, because the cascade takes the answer
+  /// with it.
+  ({bool session, bool imported}) _selectionInto(Set<String> repoIds) {
+    final session = ref.read(selectedSessionIdProvider);
+    final imported = ref.read(selectedImportedSessionIdProvider);
+    return (
+      session: session != null &&
+          repoIds.contains(
+            ref.read(sessionDaoProvider).getById(session)?.repositoryId,
+          ),
+      imported: imported != null &&
+          repoIds.contains(
+            ref.read(importedSessionDaoProvider).getById(imported)?.repositoryId,
+          ),
+    );
+  }
+
+  /// Drops any selection that pointed into the project just deleted.
+  ///
+  /// The two session halves are new here only in *where* they happen: they used
+  /// to ride along inside the per-session delete, which meant they ran only when
+  /// "delete session files" was ticked — so removing a project without it left
+  /// the app selecting a session whose row the cascade had taken.
+  void _clearSelections(
+    String projectId,
+    Set<String> repoIds,
+    ({bool session, bool imported}) selection,
+  ) {
     if (ref.read(selectedProjectIdProvider) == projectId) {
       ref.read(selectedProjectIdProvider.notifier).select(null);
     }
@@ -256,8 +310,12 @@ class ProjectsController extends Notifier<List<Project>> {
     if (selectedRepo != null && repoIds.contains(selectedRepo)) {
       ref.read(selectedRepositoryIdProvider.notifier).select(null);
     }
-    ref.read(sessionsRevisionProvider.notifier).bump();
-    _refresh();
+    if (selection.session) {
+      ref.read(selectedSessionIdProvider.notifier).select(null);
+    }
+    if (selection.imported) {
+      ref.read(selectedImportedSessionIdProvider.notifier).select(null);
+    }
   }
 
   void _refresh() => state = ref.read(projectDaoProvider).getAll();

@@ -1,6 +1,6 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,22 +8,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_instance.dart';
 
 /// Loop 48 §7: one real run in ten restored 8 tabs and reported `tabs=0` at
-/// quit, and because `saveWorkspace` is a destructive full replace, the stored
-/// workspace was erased. The trigger was never found — so the guard is written
+/// quit, and because `saveLayout` is a destructive full replace, the stored
+/// layout was erased. The trigger was never found — so the guard is written
 /// against the *shape* of the failure rather than its cause: a save that would
-/// replace a non-empty stored workspace with an empty one may only happen when
+/// replace a non-empty stored layout with an empty one may only happen when
 /// the user is the one who emptied it.
 void main() {
   group('an empty save nobody asked for', () {
-    test('is refused, and the stored workspace survives', () {
+    test('is refused, and the stored layout survives', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
 
-      // A stored workspace the user has, in a pane the app can no longer
+      // A stored layout the user has, in a pane the app can no longer
       // rebuild — the one deterministic way to reach "the store holds tabs and
       // the controller has none" without a user closing anything.
-      final dao = TerminalWorkspaceDao(db);
-      dao.saveWorkspace([
+      final dao = TerminalLayoutDao(db);
+      dao.saveLayout([
         StoredTerminalTab(
           id: 'tab-1',
           layout: PaneLayout.single('pane-1'),
@@ -57,16 +57,16 @@ void main() {
 
       // This is the quit-time save. Before the guard it wrote nothing over
       // something.
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       expect(
         dao.storedTabCount(),
         1,
         reason:
-            'the stored workspace must outlive a restore that found nothing',
+            'the stored layout must outlive a restore that found nothing',
       );
       expect(
-        dao.loadWorkspace().tabs.single.panes.single.scrollback,
+        dao.loadLayout().tabs.single.panes.single.scrollback,
         'work the user has not finished',
       );
     });
@@ -74,8 +74,8 @@ void main() {
     test('stops being refused once the user has closed something', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final dao = TerminalWorkspaceDao(db);
-      dao.saveWorkspace([
+      final dao = TerminalLayoutDao(db);
+      dao.saveLayout([
         StoredTerminalTab(
           id: 'tab-1',
           layout: PaneLayout.single('pane-1'),
@@ -99,10 +99,10 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       // The guard is armed: restore found nothing and the store is not empty.
-      controller.persistWorkspace();
+      controller.persistLayout();
       expect(dao.storedTabCount(), 1);
 
-      // The user opens a tab and ends it. Now an empty workspace is something
+      // The user opens a tab and ends it. Now an empty layout is something
       // they asked for, and the unrestorable row goes with it.
       final tabId = controller.openTab(TerminalProfile.powerShell);
       controller.closeTab(tabId, detach: false);
@@ -113,10 +113,10 @@ void main() {
   });
 
   group('an empty save the user caused', () {
-    test('still clears the stored workspace', () {
+    test('still clears the stored layout', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final dao = TerminalWorkspaceDao(db);
+      final dao = TerminalLayoutDao(db);
 
       final container = fakeTerminalContainer(database: db);
       addTearDown(container.dispose);
@@ -127,17 +127,17 @@ void main() {
       expect(dao.storedTabCount(), 1);
 
       // Closing detaches (keep-alive), so the session is still stored; ending
-      // it is what empties the workspace. Both are user actions.
+      // it is what empties the layout. Both are user actions.
       controller.closeTab(tabId);
       controller.endAllDetached();
 
       expect(dao.storedTabCount(), 0);
     });
 
-    test('leaves the outgoing workspace in the backup tables', () {
+    test('leaves the outgoing layout in the backup tables', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
-      final dao = TerminalWorkspaceDao(db);
+      final dao = TerminalLayoutDao(db);
 
       final container = fakeTerminalContainer(database: db);
       addTearDown(container.dispose);
@@ -152,7 +152,7 @@ void main() {
           .panes
           .single;
       controller.instanceFor(paneId)!.terminal.write('one irreplaceable line');
-      controller.persistWorkspace();
+      controller.persistLayout();
 
       controller.closeTab(tabId, detach: false);
 
@@ -163,17 +163,17 @@ void main() {
         backup.tabs.single.panes.single.scrollback,
         contains('one irreplaceable line'),
       );
-      expect(db.readMetadata(kTerminalWorkspaceBackupAtKey), isNotNull);
+      expect(db.readMetadata(kTerminalLayoutBackupAtKey), isNotNull);
     });
   });
 
   group('the backup', () {
     late AppDatabase db;
-    late TerminalWorkspaceDao dao;
+    late TerminalLayoutDao dao;
 
     setUp(() {
       db = AppDatabase.memory();
-      dao = TerminalWorkspaceDao(db);
+      dao = TerminalLayoutDao(db);
     });
     tearDown(() => db.close());
 
@@ -203,31 +203,31 @@ void main() {
     });
 
     test('is not taken when the save is not an emptying one', () {
-      dao.saveWorkspace([tab('a')], activeTabId: 'a');
-      dao.saveWorkspace([tab('b')], activeTabId: 'b');
+      dao.saveLayout([tab('a')], activeTabId: 'a');
+      dao.saveLayout([tab('b')], activeTabId: 'b');
       expect(dao.loadBackup().tabs, isEmpty);
-      expect(db.readMetadata(kTerminalWorkspaceBackupAtKey), isNull);
+      expect(db.readMetadata(kTerminalLayoutBackupAtKey), isNull);
     });
 
     test('is not taken when there was nothing stored to lose', () {
-      dao.saveWorkspace(const []);
+      dao.saveLayout(const []);
       expect(dao.loadBackup().tabs, isEmpty);
-      expect(db.readMetadata(kTerminalWorkspaceBackupAtKey), isNull);
+      expect(db.readMetadata(kTerminalLayoutBackupAtKey), isNull);
     });
 
-    test('is taken when a save shrinks a workspace nobody closed', () {
-      dao.saveWorkspace([tab('a'), tab('b')], activeTabId: 'a');
+    test('is taken when a save shrinks a layout nobody closed', () {
+      dao.saveLayout([tab('a'), tab('b')], activeTabId: 'a');
       // One tab where two were stored, and nothing the user did explains it.
-      dao.saveWorkspace([tab('c')], activeTabId: 'c');
+      dao.saveLayout([tab('c')], activeTabId: 'c');
 
       final backup = dao.loadBackup();
       expect(backup.tabs.map((t) => t.id), ['a', 'b']);
-      expect(dao.loadWorkspace().tabs.single.id, 'c');
+      expect(dao.loadLayout().tabs.single.id, 'c');
     });
 
     test('is not taken when the user is the one closing tabs', () {
-      dao.saveWorkspace([tab('a'), tab('b')], activeTabId: 'a');
-      dao.saveWorkspace([tab('a')], activeTabId: 'a', userClosed: true);
+      dao.saveLayout([tab('a'), tab('b')], activeTabId: 'a');
+      dao.saveLayout([tab('a')], activeTabId: 'a', userClosed: true);
       expect(
         dao.loadBackup().tabs,
         isEmpty,
@@ -236,10 +236,10 @@ void main() {
     });
 
     test('holds only the most recent emptying', () {
-      dao.saveWorkspace([tab('a')], activeTabId: 'a');
-      dao.saveWorkspace(const []);
-      dao.saveWorkspace([tab('b')], activeTabId: 'b');
-      dao.saveWorkspace(const []);
+      dao.saveLayout([tab('a')], activeTabId: 'a');
+      dao.saveLayout(const []);
+      dao.saveLayout([tab('b')], activeTabId: 'b');
+      dao.saveLayout(const []);
 
       final backup = dao.loadBackup();
       expect(backup.tabs.single.id, 'b');

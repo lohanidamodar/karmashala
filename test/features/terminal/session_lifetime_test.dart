@@ -224,7 +224,7 @@ void main() {
           .panes
           .single;
       controller.instanceFor(pane)!.terminal.write('yesterday\r\n');
-      controller.persistWorkspace();
+      controller.persistLayout();
       first.dispose();
 
       // This is about the Start button, so the pane has to be one that did not
@@ -335,7 +335,7 @@ void main() {
         ),
       );
       controller.instanceFor(opened.paneId)!.terminal.write('yesterday\r\n');
-      controller.persistWorkspace();
+      controller.persistLayout();
       first.dispose();
 
       final next = fakeTerminalContainer(database: db);
@@ -388,7 +388,7 @@ void main() {
         ),
       );
       controller.closeTab(opened.tabId);
-      controller.persistWorkspace();
+      controller.persistLayout();
       first.dispose();
 
       final next = fakeTerminalContainer(database: db);
@@ -484,7 +484,7 @@ void main() {
       giveShellHistory(controller.instanceFor(backgroundPane)!);
       controller.instanceFor(backgroundPane)!.terminal.write('a long build\r\n');
       controller.closeTab(closed);
-      controller.persistWorkspace();
+      controller.persistLayout();
       first.dispose();
 
       final next = fakeTerminalContainer(database: db);
@@ -522,7 +522,7 @@ void main() {
           .single;
       giveShellHistory(controller.instanceFor(pane)!);
       controller.closeTab(tabId);
-      controller.persistWorkspace();
+      controller.persistLayout();
       first.dispose();
 
       final next = fakeTerminalContainer(database: db);

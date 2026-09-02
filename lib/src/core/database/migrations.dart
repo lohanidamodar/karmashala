@@ -17,7 +17,7 @@ typedef MigrationStep = void Function(Database db);
 /// * **v2** — Loop 1: the core domain schema (environments, projects,
 ///   repositories, agent installations, sessions, and the append-only
 ///   session-event log).
-/// * **v7** — Loop 29: the terminal workspace (tabs, their pane split trees and
+/// * **v7** — Loop 29: the terminal layout (tabs, their pane split trees and
 ///   each pane's persisted scrollback).
 /// * **v8** — Loop 37: SSH as an execution environment (saved hosts, trusted
 ///   host keys, and the `ssh_host_id` link on `execution_environments`).
@@ -480,7 +480,7 @@ void _migrateToV8(Database db) {
 }
 
 void _migrateToV7(Database db) {
-  // The terminal workspace (Loop 29): which tabs were open, how each tab's panes
+  // The terminal layout (Loop 29): which tabs were open, how each tab's panes
   // were split, and each pane's scrollback, so the terminal comes back after a
   // restart. `layout` is the pane tree as JSON (see PaneLayout.toJson);
   // `scrollback` is the rendered buffer re-emitted as text + SGR runs, capped
@@ -571,7 +571,7 @@ void _migrateToV2(Database db) {
     );
   ''');
 
-  // Projects: a logical workspace rooted at a folder in some environment.
+  // Projects: a unit of work rooted at a folder in some environment.
   db.execute('''
     CREATE TABLE IF NOT EXISTS projects (
       id                  TEXT PRIMARY KEY,
@@ -863,9 +863,9 @@ void _migrateToV12(Database db) {
 }
 
 void _migrateToV13(Database db) {
-  // The workspace-loss guard (Loop 53).
+  // The layout-loss guard (Loop 53).
   //
-  // `saveWorkspace` is a destructive full replace, so the one save that can
+  // `saveLayout` is a destructive full replace, so the one save that can
   // never be taken back is the one that writes nothing over something. Loop 48
   // watched that happen once in ten real runs and could not find the trigger.
   //

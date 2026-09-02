@@ -155,7 +155,7 @@ void main() {
     expect(position.pixels, position.maxScrollExtent);
   });
 
-  testWidgets('a workspace restored with a Start on it comes back typable', (
+  testWidgets('a layout restored with a Start on it comes back typable', (
     tester,
   ) async {
     // The end-to-end shape of the report, and the one path a tab switch does
@@ -187,7 +187,7 @@ void main() {
     for (var i = 0; i < 300; i++) {
       firstController.instanceFor(paneId)!.terminal.write('claude said $i\r\n');
     }
-    firstController.persistWorkspace();
+    firstController.persistLayout();
     first.dispose();
 
     final container = fakeTerminalContainer(

@@ -30,7 +30,7 @@ import 'fake_instance.dart';
 /// the UI isolate.
 ///
 /// Measured on the Loop 26 corpora at a full durable window (~256 KiB): the
-/// replay parse cost **6-15 ms** and the workspace save that immediately
+/// replay parse cost **6-15 ms** and the layout save that immediately
 /// follows re-encoded the same buffer for another **3-10 ms** — 10-25 ms of
 /// main-isolate work per resume that 1.1.3 did not spend.
 ///
@@ -102,7 +102,7 @@ void main() {
     );
   }
 
-  /// A workspace holding one agent pane with [lines] of history, saved and
+  /// A layout holding one agent pane with [lines] of history, saved and
   /// reopened — which is how a [DormantTerminalInstance] comes to exist.
   ({
     ProviderContainer container,
@@ -110,7 +110,7 @@ void main() {
     String paneId,
     String stored,
   })
-  restoredWorkspace({int lines = 2000}) {
+  restoredLayout({int lines = 2000}) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
 
@@ -120,7 +120,7 @@ void main() {
         .instanceFor(opened.paneId)!
         .terminal
         .write('${agentHistory(lines)}\r\n');
-    first.controller.persistWorkspace();
+    first.controller.persistLayout();
     final stored = encodeScrollback(
       first.controller.instanceFor(opened.paneId)!.terminal,
     );
@@ -142,7 +142,7 @@ void main() {
 
   group('resuming a session the workbench is already showing', () {
     test('hands over the buffer instead of parsing the history again', () {
-      final app = restoredWorkspace();
+      final app = restoredLayout();
       final dormant =
           app.controller.instanceFor(app.paneId)! as DormantTerminalInstance;
       // What the workbench does the moment it draws a restored pane, and the
@@ -181,7 +181,7 @@ void main() {
     });
 
     test('the history is still on screen afterwards', () {
-      final app = restoredWorkspace(lines: 50);
+      final app = restoredLayout(lines: 50);
       // Shown, so there is a buffer to adopt.
       app.controller.instanceFor(app.paneId)!.terminal;
 
@@ -206,7 +206,7 @@ void main() {
   });
 
   test('a dormant pane nobody has looked at still replays its text', () {
-    final app = restoredWorkspace(lines: 50);
+    final app = restoredLayout(lines: 50);
     final dormant =
         app.controller.instanceFor(app.paneId)! as DormantTerminalInstance;
     expect(dormant.bufferBuilt, isFalse);
@@ -271,7 +271,7 @@ void main() {
         .single;
     final pane = countingPane(app.controller, paneId);
     pane.terminal.write('${agentHistory(300)}\r\n');
-    // A second tab, so closing the first leaves a workspace to be active in.
+    // A second tab, so closing the first leaves a tab to be active in.
     app.controller.openTab(TerminalProfile.commandPrompt);
     // Detaching parks the scrollback: the buffer keeps only the screen, and the
     // history moves into the parked window.
@@ -295,7 +295,7 @@ void main() {
 ///
 /// `Terminal.mainBuffer` is the codec's single entry point into the buffer, so
 /// counting reads of it *is* the encode count — the same probe
-/// `workspace_save_cost_test.dart` uses. `charsParsed` is the other half: what
+/// `layout_save_cost_test.dart` uses. `charsParsed` is the other half: what
 /// a new pane had to hand to the VT parser in order to hold its history.
 class _CountingInstance
     implements

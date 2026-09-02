@@ -134,7 +134,7 @@ class DiagnosticsPage extends ConsumerWidget {
 /// Reads rather than sets, like [WatchSetSection]. It exists because "the app
 /// feels like it is falling behind" was a report nobody could answer: the
 /// autosave's cadence, its 8 ms budget and the dirty set were all internal, so
-/// whether writes were keeping up was invisible until a workspace came back
+/// whether writes were keeping up was invisible until a layout came back
 /// missing text.
 ///
 /// Sampled on build rather than watched. The dirty set moves on the terminal's
@@ -152,7 +152,7 @@ class _PersistenceSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Never *creates* the controller: on a machine where the terminal has not
-    // been opened, building it here would restore a whole workspace to answer
+    // been opened, building it here would restore a whole layout to answer
     // a diagnostics question.
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.exists(terminalSessionsControllerProvider)) {

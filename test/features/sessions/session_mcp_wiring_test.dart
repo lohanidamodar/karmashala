@@ -234,7 +234,7 @@ void main() {
       );
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       // The restart: a different port, a different credential, a config
@@ -281,7 +281,7 @@ void main() {
               .paneId!;
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       final next = containerOver(
@@ -317,7 +317,7 @@ void main() {
       final paneId = (await launchIn(first)).paneId!;
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       final next = containerOver(db, idPrefix: 't-');
@@ -332,9 +332,9 @@ void main() {
       ]);
     });
 
-    test('a workspace saved before the fix loses the flag it baked in',
+    test('a layout saved before the fix loses the flag it baked in',
         () async {
-      // The owner will restore an existing workspace, whose rows still carry
+      // The owner will restore an existing layout, whose rows still carry
       // the MCP flag inside `arguments`. Installing the fix has to repair
       // those, not merely stop writing new ones.
       final db = seededDatabase();
@@ -344,7 +344,7 @@ void main() {
       final paneId = (await launchIn(first)).paneId!;
       first
           .read(terminalSessionsControllerProvider.notifier)
-          .persistWorkspace();
+          .persistLayout();
       first.dispose();
 
       db.execute(

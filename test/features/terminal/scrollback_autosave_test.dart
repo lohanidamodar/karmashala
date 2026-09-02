@@ -97,7 +97,7 @@ void main() {
     }
 
     test('pulls an idle tick forward, cancelling the one it replaces', () {
-      // Work that arrived between ticks: a structural workspace save writes the
+      // Work that arrived between ticks: a structural layout save writes the
       // tabs now and leaves the scrollback for the autosave, so waiting out a
       // full idle interval would sit on text already known to be owed.
       final h = harness(backlog: false);

@@ -57,7 +57,7 @@ final terminalSearchSchedulerProvider = Provider<TerminalSearchScheduler>(
 );
 
 /// Find state: one query at a time, opened against one pane, optionally
-/// reaching the rest of the workspace.
+/// reaching the rest of the layout.
 class TerminalSearchState {
   const TerminalSearchState({
     this.visible = false,
@@ -204,7 +204,7 @@ class TerminalSearchState {
 }
 
 /// Drives find for the pane the bar was opened against, and — when asked — for
-/// every other pane in the workspace.
+/// every other pane in the layout.
 ///
 /// Highlighting goes through xterm's own `TerminalController.highlight` and
 /// `Buffer.createAnchor`, so no vendored file changes: anchors ride along with
@@ -236,7 +236,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   /// [kCrossPaneMatchBudget] bounds.
   int _swept = 0;
 
-  /// Panes the armed sweep has still to read, in workspace order.
+  /// Panes the armed sweep has still to read, in layout order.
   List<String> _pending = const [];
   Object? _sweepHandle;
 
@@ -524,7 +524,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
     _scheduler.cancel(handle);
   }
 
-  /// Every live pane but the one the bar is open against, in workspace order.
+  /// Every live pane but the one the bar is open against, in layout order.
   ///
   /// Empty split regions have a pane id and no terminal; they are dropped here
   /// so they never count towards "searched 4 of 12 panes".

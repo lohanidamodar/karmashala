@@ -72,14 +72,14 @@ class StoredTerminalTab {
 }
 
 /// Everything needed to bring the terminal back as the user left it.
-class StoredTerminalWorkspace {
-  const StoredTerminalWorkspace({
+class StoredTerminalLayout {
+  const StoredTerminalLayout({
     required this.tabs,
     required this.activeTabId,
     this.detached = const [],
   });
 
-  static const empty = StoredTerminalWorkspace(tabs: [], activeTabId: null);
+  static const empty = StoredTerminalLayout(tabs: [], activeTabId: null);
 
   final List<StoredTerminalTab> tabs;
 
@@ -90,21 +90,24 @@ class StoredTerminalWorkspace {
   final String? activeTabId;
 }
 
-/// The `app_metadata` key stamped when a save emptied a non-empty workspace.
+/// The `app_metadata` key stamped when a save emptied a non-empty layout.
 ///
 /// The backup rows carry their own `updated_at`, but those are the timestamps of
 /// the *save that stored them*, not of the emptying — this is when the copy was
 /// taken, which is the question anyone recovering one is actually asking.
-const kTerminalWorkspaceBackupAtKey = 'terminal.workspace_backup_at';
+///
+/// The key itself still says "workspace": it is stored data, and renaming it
+/// would orphan the timestamp already on disk.
+const kTerminalLayoutBackupAtKey = 'terminal.workspace_backup_at';
 
-/// Reads and writes the terminal workspace (schema v7, backup tables v11) with
+/// Reads and writes the terminal layout (schema v7, backup tables v11) with
 /// hand-written SQL.
 ///
 /// Loading is deliberately forgiving: a row this code cannot parse is skipped
 /// rather than thrown on, because a corrupt layout must never make the terminal
 /// unopenable.
-class TerminalWorkspaceDao {
-  TerminalWorkspaceDao(this._db);
+class TerminalLayoutDao {
+  TerminalLayoutDao(this._db);
 
   final AppDatabase _db;
 
@@ -120,7 +123,7 @@ class TerminalWorkspaceDao {
   /// So for that one column the dao keeps its own record, and the fallback
   /// whenever it has none is to **write**. Nothing else writes the column:
   /// [saveScrollback] is the only other writer and keeps this in step,
-  /// [loadWorkspace] primes it with what it has just read, and [clear] empties
+  /// [loadLayout] primes it with what it has just read, and [clear] empties
   /// it.
   final Map<String, String> _writtenScrollback = {};
 
@@ -135,7 +138,7 @@ class TerminalWorkspaceDao {
     return (rows.first['n'] as int?) ?? 0;
   }
 
-  /// Makes the stored workspace be [tabs], by writing **only the rows that
+  /// Makes the stored layout be [tabs], by writing **only the rows that
   /// differ from what is stored**.
   ///
   /// This used to be `DELETE FROM terminal_tabs;` followed by an INSERT per tab
@@ -152,16 +155,16 @@ class TerminalWorkspaceDao {
   /// of the stored *structure* (never the scrollback) say which is which, so
   /// ordinals and the delete-what-vanished semantics the full replace got for
   /// free are still read from the store rather than assumed — see
-  /// [_writeChangedRows] and `workspace_write_cost_test.dart`.
+  /// [_writeChangedRows] and `layout_write_cost_test.dart`.
   ///
-  /// A copy of the outgoing workspace is taken first, inside the same
+  /// A copy of the outgoing layout is taken first, inside the same
   /// transaction, when this save **loses** something:
   ///
   /// * it empties a store that was not empty — the Loop 48 shape, whether or not
   ///   the user asked for it; or
   /// * it stores fewer tabs than were there and [userClosed] is false, so
   ///   nothing the user did accounts for the shrink. Observed for real: a
-  ///   workspace whose panes could no longer be rebuilt restored as zero tabs,
+  ///   layout whose panes could no longer be rebuilt restored as zero tabs,
   ///   the terminal opened one for the user, and that one-tab save replaced
   ///   eight stored ones. The controller's guard does not cover it because the
   ///   save is not empty — but it is still a loss, and a loss with a copy behind
@@ -169,7 +172,7 @@ class TerminalWorkspaceDao {
   ///
   /// A save the user's own closes account for costs nothing extra, which is what
   /// keeps closing a tab as cheap as it was.
-  void saveWorkspace(
+  void saveLayout(
     List<StoredTerminalTab> tabs, {
     String? activeTabId,
     bool userClosed = false,
@@ -178,7 +181,7 @@ class TerminalWorkspaceDao {
     final written = _db.transaction(() {
       final stored = storedTabCount();
       if (tabs.isEmpty || (!userClosed && tabs.length < stored)) {
-        _backupWorkspace(now, stored);
+        _backupLayout(now, stored);
       }
       return _writeChangedRows(tabs, activeTabId, now);
     });
@@ -190,7 +193,7 @@ class TerminalWorkspaceDao {
       ..addAll(written);
   }
 
-  /// The body of [saveWorkspace]: upsert what moved, delete what vanished.
+  /// The body of [saveLayout]: upsert what moved, delete what vanished.
   ///
   /// The stored **structure** is read first — every tab and pane row minus the
   /// scrollback column, which is the only expensive one. That read is what lets
@@ -349,7 +352,7 @@ class TerminalWorkspaceDao {
   }
 
   /// Updates one pane's scrollback in place — the autosave path, which must not
-  /// rewrite the whole workspace every tick.
+  /// rewrite the whole layout every tick.
   void saveScrollback(String paneId, String scrollback) {
     _db.execute(
       'UPDATE terminal_panes SET scrollback = ?, updated_at = ? WHERE id = ?;',
@@ -363,16 +366,16 @@ class TerminalWorkspaceDao {
     }
   }
 
-  /// Copies the stored workspace into the backup tables, replacing whatever was
+  /// Copies the stored layout into the backup tables, replacing whatever was
   /// there. Does nothing when there is nothing to lose.
   ///
-  /// Called from inside [saveWorkspace]'s transaction, so a failure anywhere in
+  /// Called from inside [saveLayout]'s transaction, so a failure anywhere in
   /// the save rolls the copy back with it — the backup can never be a snapshot
   /// of a delete that did not happen.
   ///
-  /// [stored] is the tab count [saveWorkspace] has already taken, passed rather
+  /// [stored] is the tab count [saveLayout] has already taken, passed rather
   /// than counted again.
-  void _backupWorkspace(String now, int stored) {
+  void _backupLayout(String now, int stored) {
     if (stored == 0) return;
     _db.execute('DELETE FROM terminal_panes_backup;');
     _db.execute('DELETE FROM terminal_tabs_backup;');
@@ -388,11 +391,11 @@ class TerminalWorkspaceDao {
       'SELECT id, tab_id, ordinal, profile_id, title, working_directory, '
       'scrollback, launch_command, was_live, updated_at FROM terminal_panes;',
     );
-    _db.writeMetadata(kTerminalWorkspaceBackupAtKey, now);
+    _db.writeMetadata(kTerminalLayoutBackupAtKey, now);
   }
 
-  StoredTerminalWorkspace loadWorkspace() {
-    final workspace = _load('terminal_tabs', 'terminal_panes');
+  StoredTerminalLayout loadLayout() {
+    final layout = _load('terminal_tabs', 'terminal_panes');
     // Reading the live tables *is* learning what the store holds, so the record
     // a save compares scrollback against costs nothing to bring up to date
     // here. It is also what makes the first save after a restore free rather
@@ -400,24 +403,24 @@ class TerminalWorkspaceDao {
     _writtenScrollback
       ..clear()
       ..addEntries([
-        for (final tab in [...workspace.tabs, ...workspace.detached])
+        for (final tab in [...layout.tabs, ...layout.detached])
           for (final pane in tab.panes) MapEntry(pane.id, pane.scrollback),
       ]);
-    return workspace;
+    return layout;
   }
 
-  /// The workspace as it stood immediately before the last save that emptied it.
+  /// The layout as it stood immediately before the last save that emptied it.
   ///
-  /// Empty when no save has ever emptied a non-empty workspace.
-  StoredTerminalWorkspace loadBackup() =>
+  /// Empty when no save has ever emptied a non-empty layout.
+  StoredTerminalLayout loadBackup() =>
       _load('terminal_tabs_backup', 'terminal_panes_backup');
 
-  StoredTerminalWorkspace _load(String tabTable, String paneTable) {
+  StoredTerminalLayout _load(String tabTable, String paneTable) {
     final tabRows = _db.query(
       'SELECT id, layout, focused_pane_id, is_active, detached '
       'FROM $tabTable ORDER BY ordinal;',
     );
-    if (tabRows.isEmpty) return StoredTerminalWorkspace.empty;
+    if (tabRows.isEmpty) return StoredTerminalLayout.empty;
 
     final tabs = <StoredTerminalTab>[];
     final detached = <StoredTerminalTab>[];
@@ -460,7 +463,7 @@ class TerminalWorkspaceDao {
       if (!isDetached && boolFromInt(row['is_active'])) activeTabId = id;
     }
 
-    return StoredTerminalWorkspace(
+    return StoredTerminalLayout(
       tabs: tabs,
       detached: detached,
       activeTabId: activeTabId,
@@ -497,6 +500,6 @@ class TerminalWorkspaceDao {
   }
 }
 
-final terminalWorkspaceDaoProvider = Provider<TerminalWorkspaceDao>(
-  (ref) => TerminalWorkspaceDao(ref.watch(databaseProvider)),
+final terminalLayoutDaoProvider = Provider<TerminalLayoutDao>(
+  (ref) => TerminalLayoutDao(ref.watch(databaseProvider)),
 );

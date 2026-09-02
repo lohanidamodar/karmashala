@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
 
-/// Where a pane sits in the workspace is the only thing that decides how much
+/// Where a pane sits in the layout is the only thing that decides how much
 /// of the UI isolate its output may spend.
 ///
 /// A pane cannot work this out for itself — it cannot see which tab is in
@@ -103,7 +103,7 @@ void main() {
     expect(instance.ingestTier, IngestTier.hot);
     // Warm when the second tab took the front, cold when its own tab closed,
     // hot again when it came back — three transitions and no others, because
-    // the tier is derived from the workspace rather than stepped through.
+    // the tier is derived from the layout rather than stepped through.
     expect(instance.tierHistory, [
       IngestTier.warm,
       IngestTier.cold,

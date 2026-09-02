@@ -5,28 +5,28 @@ import 'package:karmashala/src/app/theme/app_theme.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_search_bar.dart';
 
-import 'search_workspace.dart';
+import 'search_layout.dart';
 
 /// What the find bar actually says, which is the whole point of the two
 /// honesty rules this feature is built on: a pattern that will not compile must
 /// not read as "not found", and a pane's history vanishing behind a full-screen
 /// program must not read as "not there".
 void main() {
-  late SearchWorkspace workspace;
+  late SearchLayout layout;
 
   setUp(() {
-    workspace = SearchWorkspace(
+    layout = SearchLayout(
       panes: 2,
       linesPerPane: 3,
       text: (pane, line) => 'pane $pane line $line',
     );
-    addTearDown(workspace.dispose);
+    addTearDown(layout.dispose);
   });
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
-        container: workspace.container,
+        container: layout.container,
         child: MaterialApp(
           theme: AppTheme.dark(),
           home: const Scaffold(body: TerminalSearchBar()),
@@ -37,8 +37,8 @@ void main() {
   }
 
   testWidgets('a hit reads as a position in a total', (tester) async {
-    workspace.search
-      ..open(workspace.panes.first)
+    layout.search
+      ..open(layout.panes.first)
       ..setQuery('line 1');
     await pump(tester);
 
@@ -48,8 +48,8 @@ void main() {
   testWidgets('a broken pattern says so instead of "No results"', (
     tester,
   ) async {
-    workspace.search
-      ..open(workspace.panes.first)
+    layout.search
+      ..open(layout.panes.first)
       ..toggleRegex()
       ..setQuery('line (');
     await pump(tester);
@@ -61,9 +61,9 @@ void main() {
   testWidgets('a full-screen program says where the rest of the hits went', (
     tester,
   ) async {
-    workspace.write(workspace.panes.first, '\x1b[?1049h');
-    workspace.search
-      ..open(workspace.panes.first)
+    layout.write(layout.panes.first, '\x1b[?1049h');
+    layout.search
+      ..open(layout.panes.first)
       ..setQuery('line 1');
     await pump(tester);
 
@@ -74,15 +74,15 @@ void main() {
   testWidgets('a hit in another pane is named, and can be jumped to', (
     tester,
   ) async {
-    workspace.write(workspace.panes[1], 'only-over-here\r\n');
-    workspace.search
-      ..open(workspace.panes.first)
+    layout.write(layout.panes[1], 'only-over-here\r\n');
+    layout.search
+      ..open(layout.panes.first)
       ..toggleCrossPane()
       ..setQuery('only-over-here');
-    workspace.schedule.drain();
+    layout.schedule.drain();
     await pump(tester);
 
-    final title = workspace.state.currentPaneTitle!;
+    final title = layout.state.currentPaneTitle!;
     expect(find.text(title), findsOneWidget);
     expect(find.text('2 panes'), findsOneWidget);
 
@@ -90,13 +90,13 @@ void main() {
     await tester.pump();
 
     // The pane's own FocusNode is not in this tree — only the bar is — so the
-    // observable part of the jump is the workspace moving to it.
+    // observable part of the jump is the layout moving to it.
     expect(
-      workspace.container
+      layout.container
           .read(terminalSessionsControllerProvider)
           .activeTab!
           .focusedPaneId,
-      workspace.panes[1],
+      layout.panes[1],
       reason: 'the button really jumps to the pane the hit came from',
     );
   });

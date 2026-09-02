@@ -3,7 +3,7 @@
 /// These are two different budgets, so they are two constants:
 ///
 /// * The **live** window is RAM. Every open pane holds its own `Terminal`, and
-///   a split workspace can have many at once, so this is what bounds resident
+///   a split layout can have many at once, so this is what bounds resident
 ///   memory while the app runs.
 /// * The **durable** window is SQLite. The autosave re-encodes dirty panes
 ///   every 20 s and the encoder emits SGR runs, so this bounds write cost and

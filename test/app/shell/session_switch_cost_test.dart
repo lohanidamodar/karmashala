@@ -43,7 +43,7 @@ import '../../support/fixtures.dart';
 /// so this is not a scale problem — it is per-switch work that is large.
 ///
 /// Counted, never timed, for the reason `session_signal_cost_test.dart` and
-/// `workspace_save_cost_test.dart` both give: the suite runs at
+/// `layout_save_cost_test.dart` both give: the suite runs at
 /// `--concurrency=4`, so a wall-clock assertion over a few milliseconds is a
 /// coin toss — while the units that matter (database statements, provider
 /// builds, transcript subscriptions, subprocesses, scrollback encodes) are all
@@ -147,7 +147,7 @@ void main() {
       observers: [rebuilds],
       overrides: [
         // Every pane's buffer counts what reads it, so a switch that re-encodes
-        // scrollback shows up in the unit `workspace_save_cost_test` uses.
+        // scrollback shows up in the unit `layout_save_cost_test` uses.
         ...fakeTerminalOverrides(
           database: db,
           instanceFactory: _countingFactory(terminals),

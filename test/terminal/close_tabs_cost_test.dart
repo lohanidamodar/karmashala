@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_workspace_dao.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
 
@@ -11,23 +11,23 @@ import '../features/terminal/fake_instance.dart';
 /// What clearing the deck is allowed to cost.
 ///
 /// The bulk closes could have been a loop over `closeTab`, and that loop would
-/// have been correct and unbearable: every tab republishing the whole workspace
-/// to every consumer and writing the whole workspace to disk. Closing twenty
+/// have been correct and unbearable: every tab republishing the whole layout
+/// to every consumer and writing the whole layout to disk. Closing twenty
 /// tabs is one act, so it is one publish and one save — and these count them,
 /// because a cost test counts work rather than timing it.
 void main() {
   late AppDatabase db;
-  late _CountingWorkspaceDao dao;
+  late _CountingLayoutDao dao;
   late ProviderContainer container;
   late TerminalSessionsController controller;
 
   setUp(() {
     db = AppDatabase.memory();
-    dao = _CountingWorkspaceDao(db);
+    dao = _CountingLayoutDao(db);
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
-        terminalWorkspaceDaoProvider.overrideWithValue(dao),
+        terminalLayoutDaoProvider.overrideWithValue(dao),
       ],
     );
     controller = container.read(terminalSessionsControllerProvider.notifier);
@@ -127,19 +127,19 @@ void main() {
   });
 }
 
-/// The workspace dao, counting the writes the controller asks it for.
-class _CountingWorkspaceDao extends TerminalWorkspaceDao {
-  _CountingWorkspaceDao(super.db);
+/// The layout dao, counting the writes the controller asks it for.
+class _CountingLayoutDao extends TerminalLayoutDao {
+  _CountingLayoutDao(super.db);
 
   int saves = 0;
 
   @override
-  void saveWorkspace(
+  void saveLayout(
     List<StoredTerminalTab> tabs, {
     String? activeTabId,
     bool userClosed = false,
   }) {
     saves++;
-    super.saveWorkspace(tabs, activeTabId: activeTabId, userClosed: userClosed);
+    super.saveLayout(tabs, activeTabId: activeTabId, userClosed: userClosed);
   }
 }

@@ -12,7 +12,7 @@ import 'fake_instance.dart';
 /// Detaching rather than killing is right for the thing this app is for: an
 /// agent mid-turn, a build, a dev server, an ssh session. It was applied to
 /// every live pane, so opening a shell, typing nothing and closing the tab left
-/// a PowerShell running with no tab, a row in the workspace and (since the
+/// a PowerShell running with no tab, a row in the layout and (since the
 /// tiering work) a spool. Multiplied by a working day, that is a background
 /// session list nobody asked for and a slower restore every morning.
 void main() {
@@ -157,7 +157,7 @@ void main() {
       );
     });
 
-    test('a released pane leaves no workspace row behind', () {
+    test('a released pane leaves no layout row behind', () {
       final pane = openPane();
       controller.closeTab(
         container.read(terminalSessionsControllerProvider).activeTabId!,

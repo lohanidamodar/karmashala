@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_search.dart';
 
-import 'search_workspace.dart';
+import 'search_layout.dart';
 
 /// What **find** costs, counted rather than timed.
 ///
@@ -30,66 +30,66 @@ import 'search_workspace.dart';
 /// 100 panes.
 void main() {
   test('with cross-pane off, typing never leaves the pane being searched', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
-    final focused = workspace.panes.first;
-    final focusedLines = workspace.lineCount(focused);
+    final layout = SearchLayout(panes: 12, linesPerPane: 2500);
+    addTearDown(layout.dispose);
+    final focused = layout.panes.first;
+    final focusedLines = layout.lineCount(focused);
 
-    workspace.search.open(focused);
+    layout.search.open(focused);
     for (final prefix in ['l', 'li', 'lin', 'line', 'line ', 'line 4']) {
-      workspace.search.setQuery(prefix);
+      layout.search.setQuery(prefix);
     }
 
     expect(
-      workspace.state.linesScanned,
+      layout.state.linesScanned,
       6 * focusedLines,
       reason: 'six keystrokes, one pane each, and no sweep',
     );
-    expect(workspace.schedule.pendingCount, 0, reason: 'nothing was armed');
-    expect(workspace.state.panesSearched, 1);
+    expect(layout.schedule.pendingCount, 0, reason: 'nothing was armed');
+    expect(layout.state.panesSearched, 1);
   });
 
   test('cross-pane does not sweep on every keystroke', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
-    final focused = workspace.panes.first;
-    final focusedLines = workspace.lineCount(focused);
+    final layout = SearchLayout(panes: 12, linesPerPane: 2500);
+    addTearDown(layout.dispose);
+    final focused = layout.panes.first;
+    final focusedLines = layout.lineCount(focused);
 
-    workspace.search
+    layout.search
       ..open(focused)
       ..toggleCrossPane();
     for (final prefix in ['l', 'li', 'lin', 'line', 'line ', 'line 4']) {
-      workspace.search.setQuery(prefix);
+      layout.search.setQuery(prefix);
     }
 
     expect(
-      workspace.state.linesScanned,
+      layout.state.linesScanned,
       6 * focusedLines,
       reason: 'the other eleven panes have not been touched yet',
     );
     expect(
-      workspace.schedule.pendingCount,
+      layout.schedule.pendingCount,
       1,
       reason: 'one sweep armed for the settled query, not six',
     );
-    expect(workspace.state.panesPending, 11);
+    expect(layout.state.panesPending, 11);
   });
 
   test('a sweep slice reads one pane, bounded by the scan window', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
-    final focused = workspace.panes.first;
+    final layout = SearchLayout(panes: 12, linesPerPane: 2500);
+    addTearDown(layout.dispose);
+    final focused = layout.panes.first;
 
-    workspace.search
+    layout.search
       ..open(focused)
       ..toggleCrossPane()
       ..setQuery('line 4');
 
     final perSlice = <int>[];
-    var previous = workspace.state.linesScanned;
-    while (workspace.schedule.step()) {
-      perSlice.add(workspace.state.linesScanned - previous);
-      previous = workspace.state.linesScanned;
+    var previous = layout.state.linesScanned;
+    while (layout.schedule.step()) {
+      perSlice.add(layout.state.linesScanned - previous);
+      previous = layout.state.linesScanned;
     }
 
     expect(perSlice.length, 11, reason: 'eleven other panes, one slice each');
@@ -103,25 +103,25 @@ void main() {
       isTrue,
       reason: 'this is the number that has to hold at 100 panes',
     );
-    expect(workspace.state.panesSearched, 12);
-    expect(workspace.state.panesPending, 0);
-    expect(workspace.state.scanning, isFalse);
+    expect(layout.state.panesSearched, 12);
+    expect(layout.state.panesPending, 0);
+    expect(layout.state.scanning, isFalse);
   });
 
   test('the whole sweep is bounded by panes times the window', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
-    final focused = workspace.panes.first;
-    final focusedLines = workspace.lineCount(focused);
+    final layout = SearchLayout(panes: 12, linesPerPane: 2500);
+    addTearDown(layout.dispose);
+    final focused = layout.panes.first;
+    final focusedLines = layout.lineCount(focused);
 
-    workspace.search
+    layout.search
       ..open(focused)
       ..toggleCrossPane()
       ..setQuery('line 4');
-    workspace.schedule.drain();
+    layout.schedule.drain();
 
     expect(
-      workspace.state.linesScanned,
+      layout.state.linesScanned,
       focusedLines + 11 * kCrossPaneScanLines,
       reason: 'the focused pane in full, every other one bounded',
     );
@@ -130,59 +130,59 @@ void main() {
   test('the match budget stops the sweep before it runs out of panes', () {
     // 'pane' is on every line of every pane, which is the pathological query:
     // without a budget this collects 12 x 2 500 matches and allocates them all.
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
-    final focused = workspace.panes.first;
+    final layout = SearchLayout(panes: 12, linesPerPane: 2500);
+    addTearDown(layout.dispose);
+    final focused = layout.panes.first;
 
-    final focusedLines = workspace.lineCount(focused);
-    workspace.search
+    final focusedLines = layout.lineCount(focused);
+    layout.search
       ..open(focused)
       ..toggleCrossPane()
       ..setQuery('pane');
-    workspace.schedule.drain();
+    layout.schedule.drain();
 
     expect(
-      workspace.state.panesPending,
+      layout.state.panesPending,
       greaterThan(0),
       reason: 'the budget stopped it, and the bar can say so',
     );
-    expect(workspace.state.scanning, isFalse);
+    expect(layout.state.scanning, isFalse);
     expect(
-      workspace.state.linesScanned,
+      layout.state.linesScanned,
       lessThanOrEqualTo(focusedLines + kCrossPaneScanLines),
       reason: 'twelve panes of hits cost at most one panes window',
     );
   });
 
   test('closing the bar cancels a sweep that was still armed', () {
-    final workspace = SearchWorkspace(panes: 12, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
+    final layout = SearchLayout(panes: 12, linesPerPane: 2500);
+    addTearDown(layout.dispose);
 
-    workspace.search
-      ..open(workspace.panes.first)
+    layout.search
+      ..open(layout.panes.first)
       ..toggleCrossPane()
       ..setQuery('line 4');
-    expect(workspace.schedule.pendingCount, 1);
+    expect(layout.schedule.pendingCount, 1);
 
-    workspace.search.close();
+    layout.search.close();
 
-    expect(workspace.schedule.pendingCount, 0);
-    expect(workspace.state.linesScanned, 0);
+    expect(layout.schedule.pendingCount, 0);
+    expect(layout.state.linesScanned, 0);
   });
 
   test('a pane closed mid-sweep is skipped rather than thrown over', () {
-    final workspace = SearchWorkspace(panes: 4, linesPerPane: 2500);
-    addTearDown(workspace.dispose);
+    final layout = SearchLayout(panes: 4, linesPerPane: 2500);
+    addTearDown(layout.dispose);
 
-    workspace.search
-      ..open(workspace.panes.first)
+    layout.search
+      ..open(layout.panes.first)
       ..toggleCrossPane()
       ..setQuery('line 4');
     // Ended for real rather than detached: a detached pane is still tracked and
     // still searchable, which is not the case being tested.
-    workspace.sessions.closeTab(workspace.tabOf(workspace.panes.last), detach: false);
+    layout.sessions.closeTab(layout.tabOf(layout.panes.last), detach: false);
 
-    expect(workspace.schedule.drain, returnsNormally);
-    expect(workspace.state.panesSearched, 3, reason: 'the closed pane is gone');
+    expect(layout.schedule.drain, returnsNormally);
+    expect(layout.state.panesSearched, 3, reason: 'the closed pane is gone');
   });
 }

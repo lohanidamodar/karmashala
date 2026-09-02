@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
 
-/// What one change to one pane is allowed to tell the rest of the workspace.
+/// What one change to one pane is allowed to tell the rest of the layout.
 ///
 /// The controller used to hand every consumer a fresh copy of everything on
 /// every publish, so a process exiting in a background pane rebuilt the tab
