@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
+import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 
 /// The command line `flutter_pty` 0.4.2 really hands to `CreateProcessW`.
@@ -137,6 +138,79 @@ void main() {
       );
       expect(launch.workingDirectory, r'C:\ws');
       expect(launch.environment, {'K': 'v'});
+    });
+  });
+
+  group('and the command line a WSL *agent* pane really gets', () {
+    // The owner's report: resuming a WSL agent session dies as
+    // `/mnt/c/…/wsl.exe: line 1: MZ: command not found` whenever WSL interop is
+    // unregistered. Spawned directly, the duplicated leading token makes
+    // `wsl.exe` treat the second `wsl.exe` as the command to run *inside* the
+    // distro, so the login shell execs a Windows PE back out through
+    // `binfmt_misc` — and reads its `MZ` header as a script when it cannot.
+    ShellCommand resume() => const ShellCommand(
+      executable: 'claude',
+      arguments: ['--resume', 'abc123'],
+      workingDirectory: '/home/me/proj',
+    );
+
+    test('a resume goes through cmd.exe, so nothing crosses back out', () {
+      final launch = wrapForPty(resume(), const LaunchContext.wsl('Ubuntu'));
+
+      expect(
+        conPtyCommandLine(launch),
+        'cmd.exe cmd.exe /c wsl.exe -d Ubuntu --cd /home/me/proj '
+        '-- claude --resume abc123',
+        reason: 'cmd drops the stray token, so wsl.exe sees its own options '
+            'and runs the agent in the distro with no PE round-trip',
+      );
+    });
+
+    test('an ordinary prompt does too', () {
+      final launch = wrapForPty(
+        const ShellCommand(
+          executable: 'claude',
+          arguments: ['fix the failing test'],
+          workingDirectory: '/home/me/proj',
+        ),
+        const LaunchContext.wsl('Ubuntu'),
+      );
+
+      expect(conPtyCommandLine(launch), startsWith('cmd.exe cmd.exe /c '));
+      expect(conPtyCommandLine(launch), contains('"fix the failing test"'));
+    });
+
+    test('but a prompt with a percent sign keeps the direct form', () {
+      // `cmd` substitutes `%NAME%` while parsing and quoting does not stop it,
+      // so routing this through cmd would hand the agent something other than
+      // what the user typed. Depending on interop is the lesser harm.
+      final launch = wrapForPty(
+        const ShellCommand(
+          executable: 'claude',
+          arguments: [r'explain %PATH% to me'],
+          workingDirectory: '/home/me/proj',
+        ),
+        const LaunchContext.wsl('Ubuntu'),
+      );
+
+      expect(launch.executable, 'wsl.exe');
+      expect(conPtyCommandLine(launch), startsWith('wsl.exe wsl.exe -d Ubuntu'));
+      expect(conPtyCommandLine(launch), contains(r'%PATH%'));
+    });
+
+    test('and the environment still crosses with WSLENV naming it', () {
+      final launch = wrapForPty(
+        const ShellCommand(
+          executable: 'claude',
+          arguments: ['go'],
+          workingDirectory: '/home/me/proj',
+          environment: {'KARMASHALA_SESSION': 's1'},
+        ),
+        const LaunchContext.wsl('Ubuntu'),
+      );
+
+      expect(launch.environment['KARMASHALA_SESSION'], 's1');
+      expect(launch.environment['WSLENV'], 'KARMASHALA_SESSION/u');
     });
   });
 }

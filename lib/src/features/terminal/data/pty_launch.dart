@@ -170,6 +170,15 @@ PtyLaunch ptyLaunchFor(
   }
 }
 
+/// Whether `cmd.exe` would rewrite any part of [command] while parsing it.
+///
+/// `cmd` substitutes `%NAME%` at parse time, and quoting does not stop it. Only
+/// a percent sign can start that, so its absence is a complete answer: a
+/// command with none is one `cmd /c` passes through untouched.
+bool _expandsUnderCmd(ShellCommand command) =>
+    command.parts.any((part) => part.contains('%')) ||
+    (command.workingDirectory?.contains('%') ?? false);
+
 /// One Windows command line, handed to `cmd.exe /c` so that `cmd` re-parses it.
 ///
 /// **Every** ConPTY child is spawned as `<exe> <exe> <args…>`: `flutter_pty`
@@ -290,12 +299,50 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         environment: command.environment,
       );
     case ShellContextKind.wsl:
-      // Deliberately still direct, unlike the shell pane: an agent command
-      // carries a user prompt, and routing it through `cmd.exe` would start
-      // expanding `%NAME%` inside it — the one thing
-      // [quoteWindowsCommandArgument] promises this path does not do. So the
-      // agent pane keeps the PE round-trip (and its interop dependency) that
-      // `ptyLaunchFor`'s WSL branch no longer has.
+      // **Through `cmd.exe /c` too, unless the command contains a percent
+      // sign.** Spawned directly, `flutter_pty`'s duplicated leading token
+      // makes the real command line `wsl.exe wsl.exe -d <distro> …`, and
+      // `wsl.exe` reads that second token as *the command to run inside the
+      // distro*: the distribution's login shell then execs a Windows PE back
+      // out through `binfmt_misc`. It works every day and dies the moment WSL
+      // interop is unregistered, as
+      //
+      //   /mnt/c/…/WindowsApps/wsl.exe: line 1: MZ: command not found
+      //
+      // — the shell reading the PE's `MZ` header as a script. The owner hit
+      // that resuming an agent session, which is why "wsl is working fine" and
+      // "the pane will not start" are both true: `wsl.exe` is fine, and what
+      // is broken is running a Windows executable from inside Linux.
+      //
+      // The wrapper this path could not previously use is `cmd.exe`, because
+      // `cmd` expands `%NAME%` while parsing and an agent command carries a
+      // user's prompt — the one thing [quoteWindowsCommandArgument] promises
+      // not to do to it. That is only a hazard when there *is* a percent sign,
+      // so the choice is made per command rather than once for the path: a
+      // resume, and every prompt without a `%`, now reaches the distro
+      // directly and needs no interop at all. A prompt containing one keeps
+      // the round-trip, because silently rewriting what the user typed is
+      // worse than depending on a feature that is normally on.
+      if (!_expandsUnderCmd(command)) {
+        return throughCommandPrompt(
+          [
+            'wsl.exe',
+            '-d',
+            context.wslDistribution ?? '',
+            if (command.workingDirectory != null) ...[
+              '--cd',
+              command.workingDirectory!,
+            ],
+            '--',
+            ...command.parts,
+          ],
+          environment: {
+            ...command.environment,
+            if (command.environment.isNotEmpty)
+              'WSLENV': command.environment.keys.map((k) => '$k/u').join(':'),
+          },
+        );
+      }
       return PtyLaunch(
         executable: 'wsl.exe',
         arguments: [
