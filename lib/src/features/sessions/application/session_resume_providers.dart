@@ -61,7 +61,7 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
 
-      // A session card needs only its own pane. Watching the whole workspace
+      // A session card needs only its own pane. Watching the whole layout
       // made every visible card recompute when a tab was activated or an
       // unrelated process exited — O(session cards) work on the switch path.
       // The session revision above handles a row moving to another pane; this
