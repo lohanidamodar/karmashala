@@ -389,7 +389,13 @@ void main() {
             'message',
             allOf(
               contains('did not answer'),
-              contains('busy'),
+              // The owner's second objection — the request *was* sent — said
+              // positively. It used to read "the link is up, so it is busy
+              // with something else", which answered the first objection by
+              // over-claiming: after a revoke the link is not up, and one
+              // unanswered request is not evidence that it is. The reason is
+              // hedged now; the two facts the report was about are not.
+              contains('was sent'),
               isNot(contains('unreachable')),
               isNot(contains('nothing was sent')),
             ),

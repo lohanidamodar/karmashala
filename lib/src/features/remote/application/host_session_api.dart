@@ -107,6 +107,14 @@ class HostSessionApi {
     ).toJson(),
   );
 
+  /// Tells the companion its pairing is gone, before the link is taken away.
+  ///
+  /// The phone cannot work this out for itself: over a relay the link outlives
+  /// a revoke — the host closes its own runtime, but the phone's relay socket
+  /// stays up — so the next request simply goes unanswered, and silence reads
+  /// exactly like a busy desktop. One frame turns that guess into a fact.
+  Future<void> sendPairingRevoked() => _send(FrameType.pairingRevoked);
+
   /// Handles one decoded envelope from the companion.
   Future<void> handleEnvelope(Envelope envelope) async {
     if (!kSupportedVersions.contains(envelope.version)) {
@@ -266,6 +274,7 @@ class HostSessionApi {
         case FrameType.transcriptAppended:
         case FrameType.approvalRequested:
         case FrameType.hostStatus:
+        case FrameType.pairingRevoked:
         case FrameType.result:
         case FrameType.error:
           await _error(

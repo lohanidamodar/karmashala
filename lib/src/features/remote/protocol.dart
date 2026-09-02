@@ -236,6 +236,15 @@ enum FrameType {
   approvalRequested('approval.requested', origin: FrameOrigin.host),
   hostStatus('host.status', origin: FrameOrigin.host),
 
+  /// The host has revoked this pairing; nothing more will be answered.
+  ///
+  /// Sent because the phone cannot otherwise tell. Over a relay the *link*
+  /// survives a revoke — the host closes its own runtime, but the phone's relay
+  /// socket stays up — so a request after it simply goes unanswered, and
+  /// silence is indistinguishable from a busy desktop. Saying it outright turns
+  /// a guess into a fact.
+  pairingRevoked('pairing.revoked', origin: FrameOrigin.host),
+
   /// The answer to a request, correlated by `id`.
   result('result', origin: FrameOrigin.host),
 

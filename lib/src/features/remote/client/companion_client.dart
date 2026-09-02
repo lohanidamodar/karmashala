@@ -78,6 +78,11 @@ class HostStatusEvent extends CompanionEvent {
   final RemoteHostStatus status;
 }
 
+/// The host revoked this pairing. The link is over, and said so.
+class PairingRevokedEvent extends CompanionEvent {
+  const PairingRevokedEvent();
+}
+
 /// One connection to the paired host.
 class CompanionClient {
   CompanionClient({
@@ -303,6 +308,9 @@ class CompanionClient {
         } on ProtocolException {
           return;
         }
+      case FrameType.pairingRevoked:
+        onLog?.call('the host revoked this pairing');
+        _emit(const PairingRevokedEvent());
       case FrameType.sessionChanged:
         _tolerant(
           () => _emit(

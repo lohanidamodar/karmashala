@@ -271,6 +271,12 @@ void main() {
 
     // Revoke on the host: the phone surfaces a readable refusal and a
     // disconnected link — not a crash, not silence.
+    //
+    // It says *revoked*, which it can only do because the host says so on the
+    // way out. Over a relay the link outlives a revoke — the host closes its
+    // runtime, the phone's relay socket does not — so without that frame this
+    // request merely goes unanswered, and the phone would report a busy
+    // desktop for a pairing that no longer exists.
     await service!.revoke(dao.getActive().single.id);
     await expectLater(
       gateway.sendPrompt('s1', 'again'),
@@ -278,7 +284,37 @@ void main() {
         isA<GatewayException>().having(
           (e) => e.message,
           'message',
-          contains('unreachable'),
+          contains('revoked'),
+        ),
+      ),
+    );
+    await awaitLink(gateway, CompanionLinkState.disconnected);
+  });
+
+  test('a revoked pairing says so, rather than blaming a busy desktop',
+      () async {
+    // A revoke and a slow desktop look identical on the wire: a request goes
+    // out and nothing comes back. They must not read the same.
+    //
+    // The phone cannot tell them apart on its own, either — over a relay the
+    // *link* outlives a revoke, since the host closes its runtime while the
+    // phone's relay socket stays up. So the host says it outright on the way
+    // out, and the sentence for everything still genuinely unknown stays
+    // hedged rather than claiming the link is up.
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+    expect((await gateway.listSessions()).single.id, 's1');
+
+    await service!.revoke(dao.getActive().single.id);
+
+    await expectLater(
+      gateway.sendPrompt('s1', 'and now?'),
+      throwsA(
+        isA<GatewayException>().having(
+          (e) => e.message,
+          'message',
+          allOf(contains('revoked'), isNot(contains('busy'))),
         ),
       ),
     );

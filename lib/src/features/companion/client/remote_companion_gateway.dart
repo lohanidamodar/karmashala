@@ -40,9 +40,20 @@ const String _kUnreachable =
 /// sentence are false for a timeout: the host is demonstrably reachable, since
 /// the link is carrying frames, and the request *was* sent. Only the answer is
 /// missing, and the honest reason is usually that the desktop is busy.
+///
+/// It no longer says *why*, though. "The link is up, so it is busy with
+/// something else" is a claim the phone cannot support from one unanswered
+/// request — and after a revoke it is flatly wrong: the relay socket does
+/// outlive the pairing, so the link looks up while the host will never answer
+/// again. That case is now told outright ([_kRevoked]); everything left here is
+/// genuinely unknown, and reads that way.
 const String _kUnanswered =
-    'The desktop did not answer in time. The link is up, so it is busy with '
-    'something else.';
+    'The desktop did not answer in time. The request was sent, so it may still '
+    'be working on it.';
+
+/// The host revoked this pairing and said so on the way out.
+const String _kRevoked =
+    'This pairing was revoked on the desktop. Pair again to reconnect.';
 
 /// How long a beacon host that refused a direct dial is left alone by the LAN
 /// *upgrade* — the one that spends a working link on the attempt.
@@ -1745,6 +1756,13 @@ class RemoteCompanionGateway implements CompanionGateway {
         _applyAppended(page);
       case ApprovalRequestedEvent(:final request):
         _applyApproval(request);
+      case PairingRevokedEvent():
+        // The one case where silence would have been read as a busy desktop.
+        // Now it is a fact, so the link stops claiming anything else.
+        _revoked = true;
+        onLog?.call('the host revoked this pairing; the link is over');
+        _link.value = CompanionLinkState.disconnected;
+        _declareDead();
       case HostStatusEvent(:final status):
         _lastHostStatus = status;
         // The greeting that opens a connection arrives while the client is
@@ -2020,6 +2038,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   CompanionClient _requireClient() {
+    if (_revoked) throw const GatewayException(_kRevoked);
     if (_record == null) throw const GatewayException(_kNotPaired);
     final client = _client;
     if (client == null ||
@@ -2045,6 +2064,11 @@ class RemoteCompanionGateway implements CompanionGateway {
       return answer;
     } on RemoteApiException catch (error) {
       if (error.code == null) {
+        // A request already in flight when the revoke arrived. The frame and
+        // the request race by nature — the phone asks, the host revokes, the
+        // answer never comes — so what matters is which is known by the time
+        // the failure is described, not which happened first.
+        if (_revoked) throw const GatewayException(_kRevoked);
         _noteUnanswered();
         throw const GatewayException(_kUnanswered);
       }
@@ -2064,6 +2088,10 @@ class RemoteCompanionGateway implements CompanionGateway {
 
   /// Requests that have gone unanswered with nothing answered between them.
   int _unanswered = 0;
+
+  /// Set when the host says the pairing is gone. Never cleared: the device key
+  /// went with it, so this link cannot come back — only a fresh pairing can.
+  bool _revoked = false;
 
   /// How many of those the link is given before the phone stops calling it
   /// connected.

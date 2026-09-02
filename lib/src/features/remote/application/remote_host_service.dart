@@ -376,7 +376,18 @@ class RemoteHostService {
   Future<void> revoke(String deviceId) async {
     devices.revoke(deviceId);
     final runtime = _runtimes.remove(deviceId);
-    if (runtime != null) await runtime.close();
+    if (runtime != null) {
+      // Said before the link is taken away, because afterwards there is nothing
+      // to say it on. A phone that is not listening — asleep, or already gone —
+      // loses nothing: it cannot reconnect either way, since the device key was
+      // just cleared.
+      try {
+        await runtime.run((api) => api.sendPairingRevoked());
+      } on Object catch (error) {
+        onLog?.call('could not tell the device it was revoked: $error');
+      }
+      await runtime.close();
+    }
     _lanRoutes.removeWhere((_, route) => route.deviceId == deviceId);
     onDevicesChanged?.call();
   }

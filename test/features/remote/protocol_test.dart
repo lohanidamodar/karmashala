@@ -185,6 +185,7 @@ void main() {
         'transcript.appended',
         'approval.requested',
         'host.status',
+        'pairing.revoked',
         'result',
         'error',
       });
