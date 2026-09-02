@@ -26,6 +26,7 @@ import '../domain/session_event.dart';
 import '../domain/tool_activity.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
+import 'activity_strip.dart';
 import 'agent_status_badge.dart';
 import 'approval_request_card.dart';
 import 'chat_transcript.dart';
@@ -249,6 +250,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   // read until the agent's prompt is answered.
                   ApprovalRequestCard(sessionId: widget.sessionId),
                   DeliveryStrip(sessionId: widget.sessionId),
+                  // Directly above the box, because "what is it doing right
+                  // now" was only answerable by scrolling to the end of the
+                  // transcript and noticing a tool row with no result under
+                  // it. Draws nothing when nothing is outstanding.
+                  ActivityStrip(sessionId: widget.sessionId),
                   MessageComposer(
                     controller: _composer,
                     // MonoCode's chip row: the session's own safety policy,
