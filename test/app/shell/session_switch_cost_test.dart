@@ -23,10 +23,12 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:xterm/xterm.dart';
 
 import '../../features/scale/scale_harness.dart';
 import '../../features/terminal/fake_instance.dart';
@@ -52,10 +54,11 @@ import '../../support/fixtures.dart';
 /// any one of them measured alone looks cheap.
 ///
 /// What it found (2026-09-02), with two live sessions and a third row drawn:
-/// **105 statements, 47 provider builds, one whole-transcript read**, no
-/// subprocess and no scrollback encode — and the bill grew by about one
-/// statement per session in the workspace. Three things were paying for it,
-/// none of them the database itself:
+/// **105 statements, 47 provider builds, one whole-transcript read and six
+/// dead-pane screen scans**, no subprocess and no scrollback encode — and the
+/// bill grew by about one statement per session in the workspace (177 at 20
+/// sessions, 257 at 100, 557 at 400). Three things were paying for it, none of
+/// them the database itself:
 ///
 /// 1. **The conversation was built behind the terminal.** `WorkbenchView` put
 ///    both surfaces in an `IndexedStack`, which builds every child, so landing
@@ -68,32 +71,40 @@ import '../../support/fixtures.dart';
 /// 2. **The switch named no row.** The workbench published its "the pane on
 ///    screen moved" change without a session id, which `SessionSignals`
 ///    correctly reads as "all of them", so every per-session provider in the
-///    app rebuilt: five builds and a handful of reads per Explorer card, per
-///    switch, for rows nothing had happened to.
+///    app rebuilt — five builds and a handful of reads per Explorer card, per
+///    switch, for rows nothing had happened to, plus a walk of every drawn
+///    dead pane's screen looking for a resume refusal it could not have
+///    acquired.
 ///
 /// 3. **The Explorer asked the database where every session lives.** A switch
 ///    moves placement, the tree watches placement, and the tree is built for
 ///    every session in the project — only the cards on screen are *inflated* —
 ///    so `_subPathFor*` cost one `repositories` lookup per session. That is the
-///    term that grew: 475 statements at 400 sessions.
+///    term that grew.
 ///
 /// After all three: **62 statements, 29 provider builds, no transcript read,
-/// nothing at all for a session the switch did not name, and a flat curve —
-/// 73 statements whether the workspace holds 20 sessions or 400.**
+/// no dead-pane scan, nothing at all for a session the switch did not name,
+/// and a flat curve — 73 statements whether the workspace holds 20 sessions or
+/// 400.**
 ///
 /// What was measured and left alone, because no number justified touching it:
 /// the delivery strip, `sessionVerdictProvider` and
 /// `ReviewSessionService.offerFor` cost about a dozen indexed row lookups
 /// between them and start no process; `checkoutDeliveryProvider` is keyed by
-/// checkout and stays warm across a switch, so no git runs; and narrowing the
+/// checkout and stays warm across a switch, so no git runs; narrowing the
 /// session rows' `watch(selectedSessionIdProvider)` to a `select` changed the
-/// count by nothing at all, because the panel above them rebuilds wholesale.
+/// count by nothing at all, because the panel above them rebuilds wholesale;
+/// and `SessionWhereabouts` still has no `==`, so every recompute of it reads
+/// downstream as a change. That last one is what makes a dead pane's card walk
+/// the pane's screen, and (2) is what stopped a switch asking — so adding
+/// equality to the domain type would now move none of these numbers, while
+/// changing behaviour anywhere that relies on identity.
 void main() {
   late CountingDatabase db;
   late FakeCommandRunner git;
   late _Rebuilds rebuilds;
   late ProviderContainer container;
-  final terminals = <String, CountingTerminal>{};
+  final terminals = <String, _TailCountingTerminal>{};
 
   /// Every session whose agent transcript was subscribed to, in order.
   ///
@@ -208,7 +219,14 @@ void main() {
 
   /// Mounts the whole app and gives each session a live pane of its own, which
   /// is what "two active sessions" means.
-  Future<void> mount(WidgetTester tester) async {
+  ///
+  /// [deadPanes] idle rows additionally get a pane whose process has **exited**
+  /// and whose screen holds output — the expensive shape, because a dead pane's
+  /// card walks that screen looking for an agent's resume refusal. Opened
+  /// before the tree is pumped, like the live ones: adding tabs to a mounted
+  /// strip re-attaches its rail's scroll controller mid-frame, which is a
+  /// separate complaint and not this file's subject.
+  Future<void> mount(WidgetTester tester, {int deadPanes = 0}) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -230,6 +248,19 @@ void main() {
           .panes
           .single;
       SessionDao(db).updatePaneId(id, paneId);
+    }
+    for (var i = 0; i < deadPanes; i++) {
+      controller.openTab(TerminalProfile.powerShell);
+      final paneId = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      final instance = controller.instanceFor(paneId)! as FakeTerminalInstance;
+      instance.terminal.write('a screenful of the run that ended\r\n' * 20);
+      instance.livenessNotifier.value = PaneLiveness.exited;
+      SessionDao(db).updatePaneId('idle$i', paneId);
     }
     container.read(selectedRepositoryIdProvider.notifier).select('r1');
 
@@ -253,6 +284,8 @@ void main() {
   }
 
   int encodes() => terminals.values.fold(0, (sum, t) => sum + t.bufferReads);
+
+  int tailScans() => terminals.values.fold(0, (sum, t) => sum + t.tailReads);
 
   /// Opens both sessions once, so neither side of a measurement is the
   /// first-ever look at a session, and leaves `s1` up.
@@ -449,6 +482,48 @@ void main() {
     });
   });
 
+  testWidgets('a switch reads no dead pane\'s screen', (tester) async {
+    // `sessionWhereaboutsProvider` scans a dead pane's buffer for an agent's
+    // resume refusal, and `SessionWhereabouts` carries no `==`, so every
+    // recompute counts as a change downstream. A switch that woke those cards
+    // would pay a screen walk per drawn dead pane, on the UI isolate. It does
+    // not wake them — the switch names the row it moved — so the walk never
+    // happens and the missing equality costs this path nothing.
+    seedIdleRows(6);
+    await mount(tester, deadPanes: 6);
+    await warmUp(tester);
+    reset();
+    final before = tailScans();
+
+    await container.read(explorerActionsProvider).openNative('s2');
+    await settle(tester);
+
+    // ignore: avoid_print
+    print('SWITCH-COST-TAILS tailScans=${tailScans() - before}');
+    // ignore: avoid_print
+    print('SWITCH-COST-TAILS-PROVIDERS ${rebuilds.report}');
+    expect(
+      tailScans() - before,
+      0,
+      reason: 'a switch says nothing about a pane that died before it',
+    );
+
+    // The guard against a false green: the scan is still there to be paid, and
+    // a signal that genuinely names every row still pays it. Without this the
+    // assertion above would pass just as well if the cards had stopped
+    // describing dead panes at all.
+    final beforeBump = tailScans();
+    container.read(sessionsRevisionProvider.notifier).bump();
+    await settle(tester);
+    // ignore: avoid_print
+    print('SWITCH-COST-TAILS onCoarseBump=${tailScans() - beforeBump}');
+    expect(
+      tailScans() - beforeBump,
+      greaterThan(0),
+      reason: 'a change that names no row must still reach every dead card',
+    );
+  });
+
   testWidgets('one workbench tab switch spawns nothing', (tester) async {
     await mount(tester);
     await container.read(explorerActionsProvider).openNative('s1');
@@ -527,7 +602,33 @@ String _tally(List<String> statements) {
 }
 
 /// A pane factory whose terminals count reads of their buffer.
-TerminalInstanceFactory _countingFactory(Map<String, CountingTerminal> into) =>
+/// A [CountingTerminal] that also counts **screen scans** — reads of the active
+/// buffer made by `terminalTailLines`, and not xterm's own reads while it
+/// writes or paints.
+///
+/// A dead pane's Explorer card scans that pane's screen every time
+/// `sessionWhereaboutsProvider` recomputes, looking for an agent's resume
+/// refusal, and `SessionWhereabouts` carries no `==` so every recompute counts
+/// as a change downstream. The walk is on the UI isolate, so anything that
+/// wakes those cards pays one per drawn dead pane. This is what prices it.
+class _TailCountingTerminal extends CountingTerminal {
+  int tailReads = 0;
+
+  @override
+  Buffer get buffer {
+    // Attributed, because xterm reads this getter constantly on its own account
+    // — every `write`, every paint. Only the app walking the screen is a cost
+    // this file is about.
+    if (StackTrace.current.toString().contains('terminal_grid_text.dart')) {
+      tailReads++;
+    }
+    return super.buffer;
+  }
+}
+
+TerminalInstanceFactory _countingFactory(
+  Map<String, _TailCountingTerminal> into,
+) =>
     ({
       required id,
       required profile,
@@ -537,7 +638,7 @@ TerminalInstanceFactory _countingFactory(Map<String, CountingTerminal> into) =>
       agentLaunch,
       adoptTerminal,
     }) {
-      final terminal = CountingTerminal()..resize(120, 40);
+      final terminal = _TailCountingTerminal()..resize(120, 40);
       if (restoredScrollback != null && restoredScrollback.isNotEmpty) {
         terminal.write(restoredScrollback);
       }
