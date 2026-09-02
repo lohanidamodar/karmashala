@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io' show FileSystemEntityType;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../../app/shell/side_panel_state.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
@@ -11,9 +14,12 @@ import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/data/subagent_transcript.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../file_explorer/application/file_explorer_providers.dart';
 import '../../notes/application/composer_draft.dart';
 import '../../notes/application/notes_providers.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/system_terminal_service.dart';
@@ -23,9 +29,10 @@ import '../application/session_engine_provider.dart';
 import '../application/session_providers.dart';
 import '../application/session_ui_providers.dart';
 import '../domain/session_event.dart';
-import '../domain/tool_activity.dart';
 import '../domain/session_event_types.dart';
 import '../domain/session_launch.dart';
+import '../domain/tool_activity.dart';
+import '../domain/transcript_path_link.dart';
 import 'activity_strip.dart';
 import 'agent_status_badge.dart';
 import 'approval_request_card.dart';
@@ -144,6 +151,102 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     );
   }
 
+  /// Where this session's agent was standing.
+  ///
+  /// `Session.workingDirectory` is null for every row written before schema
+  /// v22 and for a session nobody recorded a cwd for; null means **unknown**,
+  /// never "the repository root", so the fallback is made here and out loud
+  /// rather than being read as a claim the row does not make.
+  EnvironmentPath? _workingDirectory() {
+    final session = ref.read(sessionDaoProvider).getById(widget.sessionId);
+    if (session == null) return null;
+    return session.workingDirectory ??
+        ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+  }
+
+  void _say(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// What a click on a file path in the conversation does.
+  ///
+  /// **It reveals; it does not open.** The path is expanded to in the Files
+  /// panel and its row selected, and that is all — the panel already opens a
+  /// file when its row is tapped, so opening stays a second, deliberate click.
+  /// A folder is only opened in the tree.
+  ///
+  /// This is also the **only** place the feature touches a disk. Detection is
+  /// by shape (`kTranscriptPathPattern`), so a transcript full of path-shaped
+  /// tokens costs no `stat` at all until somebody asks for one; asking is what
+  /// turns "this looks like a path" into "this file is not there".
+  Future<void> _openPath(String token) async {
+    final parsed = tokenForMatch(token);
+    final base = _workingDirectory();
+    if (base == null) {
+      _say('Karmashala has no record of where this session runs, so it '
+          'cannot place ${parsed.path}.');
+      return;
+    }
+    final kind = ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(base.environmentId)
+        ?.kind;
+    final resolved = resolveTranscriptPath(
+      parsed.path,
+      workingDirectory: base.path,
+      context: transcriptPathContext(kind),
+    );
+    final path = EnvironmentPath(
+      environmentId: base.environmentId,
+      path: resolved,
+    );
+
+    // No host spelling: an SSH session's files are on the other machine, and
+    // `RevealInFileManager` is the one place that words that.
+    final revealer = ref.read(revealInFileManagerProvider);
+    final hostPath = ref.read(editorActionsProvider).windowsPathFor(path);
+    if (hostPath == null) {
+      _say((await revealer.reveal(path)).error ?? 'There is no path on this '
+          'machine for $resolved.');
+      return;
+    }
+
+    final type = ref.read(hostPathProbeProvider)(hostPath);
+    if (type == FileSystemEntityType.notFound) {
+      _say('$resolved is not on disk.');
+      return;
+    }
+    final isDirectory = type == FileSystemEntityType.directory;
+
+    // Inside the checkout the panel is rooted at: show it there, where the
+    // reader already is.
+    final root = ref.read(selectedRepoWindowsRootProvider);
+    if (root != null && isUnderFileTreeRoot(root, hostPath)) {
+      ref
+          .read(fileRevealTargetProvider.notifier)
+          .reveal(
+            FileRevealTarget(hostPath: hostPath, isDirectory: isDirectory),
+          );
+      if (ref.read(sidePanelProvider) != SidePanelSurface.files) {
+        ref.read(sidePanelProvider.notifier).select(SidePanelSurface.files);
+      }
+      return;
+    }
+
+    // Outside it there is no row to select, so the host's own file manager is
+    // the only place left. `canReveal` starts no process, so asking first
+    // costs nothing and turns a click that would do nothing into one that says
+    // why.
+    if (!revealer.canReveal(path)) {
+      _say((await revealer.reveal(path)).error ?? 'There is no way to show '
+          '$resolved on this machine.');
+      return;
+    }
+    final outcome = await revealer.reveal(path, select: !isDirectory);
+    if (!outcome.ok) _say(outcome.error!);
+  }
+
   Future<void> _stop() async {
     await ref.read(sessionEngineProvider).stop(widget.sessionId);
     ref.publishSessionChange(SessionChange.statusChanged(widget.sessionId));
@@ -222,6 +325,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
             data: (messages) => ChatTranscriptView(
               messages: messages,
               resolveHostPath: resolveHostPath,
+              // Paths in the conversation are clickable, and a click reveals
+              // rather than opens — see [_openPath].
+              onPathTap: _openPath,
               // The one thing the parent's `Task(…)` row never showed: what
               // the agent it spawned actually did. Collapsed, and unread until
               // it is opened — a fan-out of ten must not bury this
