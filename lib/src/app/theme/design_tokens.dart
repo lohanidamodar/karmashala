@@ -428,6 +428,12 @@ class Chrome {
   /// A dense list row (explorer tree, palette results).
   static const row = 26.0;
 
+  /// A menu row. [menuRow] is the house one-liner every popup draws; a picker
+  /// whose choices need a sentence under the name gets [menuRowTall] instead,
+  /// so the two kinds still read as one list.
+  static const menuRow = 32.0;
+  static const menuRowTall = 44.0;
+
   /// One level of a file tree's indentation.
   ///
   /// Narrower than [Insets.lg] on purpose: a repository nests deeply and a
