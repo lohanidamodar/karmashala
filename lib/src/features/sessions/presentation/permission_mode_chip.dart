@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_dialog.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_permission_options.dart';
 import '../../settings/domain/permission_mode.dart';
@@ -28,7 +29,10 @@ import '../application/session_signals.dart';
 /// * **Changing it does not touch the running process.** Every agent here reads
 ///   its permission policy off the command line at startup, so the chip says the
 ///   change applies on the next launch instead of implying the live agent has
-///   been re-governed.
+///   been re-governed. What it *does* offer is a restart — a second process
+///   under the new flags, on the same conversation — and it never performs one
+///   without saying what a restart costs: the turn in flight, and the tokens
+///   the next message spends re-sending the conversation.
 /// One row of the permission menu: a mode to set for this session, or the
 /// Settings default to hand it back to.
 ///
@@ -186,16 +190,40 @@ class PermissionModeChip extends ConsumerWidget {
     return '${current.mode.label}\n$origin\n${current.summary}';
   }
 
-  void _apply(
+  Future<void> _apply(
     BuildContext context,
     WidgetRef ref,
     SessionLauncher launcher,
     PermissionMode? mode,
     AgentPermissionOption current,
-  ) {
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     final running = launcher.livePaneFor(sessionId) != null;
+
+    // Asked **before** the row is written, so Cancel leaves the session exactly
+    // as the user found it — the mode unchanged and the agent still running.
+    // Writing first and offering to undo would be a different promise: the
+    // session would already be recorded as bypassing prompts, and the next
+    // resume from anywhere else in the app would honour it.
+    if (mode != null && mode.isDangerous) {
+      final confirmed = await _confirmDangerous(
+        context,
+        mode: mode,
+        option: current,
+        restarts: running,
+      );
+      if (confirmed != true) return;
+    }
+
     launcher.setPermissionMode(sessionId, mode);
+
+    // The dialog above already said what a restart costs and the user said yes
+    // to it, so this is the restart — not a second prompt for the same answer.
+    if (mode != null && mode.isDangerous && running) {
+      await _restart(messenger, launcher, savedLabel: mode.label);
+      return;
+    }
+
     // Only claim what happened. A live agent was started with the old flags and
     // there is no documented way to re-govern any of these CLIs mid-session, so
     // saying anything else here would be the lie this control exists to remove.
@@ -206,11 +234,160 @@ class PermissionModeChip extends ConsumerWidget {
       SnackBar(
         content: Text(
           running
+              // Names both costs on the face of the message rather than behind
+              // the button, because a snackbar action is one tap and the user
+              // has no dialog to read them in. The token cost is the one nobody
+              // expects: `--resume` reloads the transcript locally for nothing,
+              // and then the next message carries all of it to the model.
               ? '$what — applies the next time this session is '
-                    'launched or resumed, not to the agent running now.'
+                    'launched or resumed, not to the agent running now. '
+                    'Restarting ends the agent running now, and the next '
+                    'message re-sends the conversation as context.'
               : '$what — applies when this session next runs.',
         ),
+        // Only when something is running. With nothing to end, "applies when
+        // this session next runs" is already true and a restart button would be
+        // offering to solve a problem the user does not have.
+        action: running
+            ? SnackBarAction(
+                label: 'Restart to apply',
+                onPressed: () =>
+                    _restart(messenger, launcher, savedLabel: what),
+              )
+            : null,
       ),
+    );
+  }
+
+  /// Runs the restart and reports either outcome.
+  ///
+  /// Takes the messenger and the launcher rather than a [BuildContext] and a
+  /// [WidgetRef] because both of its callers outlive the widget: one awaits a
+  /// dialog, the other is a snackbar action the user may press seconds later,
+  /// by which time the composer may have been rebuilt for another session. The
+  /// launcher reads from the root container, so it stays valid either way.
+  ///
+  /// [savedLabel] is what was already written to the row. A failed restart must
+  /// still say the choice was kept, or the user is left believing the whole
+  /// action was rejected and picks the mode again.
+  Future<void> _restart(
+    ScaffoldMessengerState messenger,
+    SessionLauncher launcher, {
+    required String savedLabel,
+  }) async {
+    try {
+      await launcher.restartSession(sessionId);
+      messenger.showSnackBar(
+        SnackBar(content: Text('$savedLabel — session restarted.')),
+      );
+    } on Object catch (error) {
+      // `StateError.message` rather than the exception's `toString`, which
+      // prefixes "Bad state:" — the same unwrapping the Explorer does.
+      final reason = error is StateError ? error.message : '$error';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '$savedLabel is saved, but the restart failed. $reason',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Confirms a mode that removes the prompts, naming every consequence of
+  /// saying yes.
+  ///
+  /// Three of them when [restarts], and the second and third are the ones the
+  /// user cannot see coming:
+  ///
+  /// * bypass itself, which is the reason the mode is marked
+  ///   [PermissionMode.isDangerous] and is the only one the chip's colour
+  ///   already hints at;
+  /// * the restart, because the flags are only read at startup — an agent
+  ///   part-way through a turn is killed with that turn, and the resume picks
+  ///   up from the last exchange the CLI wrote rather than from where it had
+  ///   actually got to;
+  /// * the tokens. Resuming reads the transcript off disk and costs nothing,
+  ///   but the next message sends the accumulated conversation to the model as
+  ///   input. Prompt caching discounts a prefix that is still warm; its TTL is
+  ///   minutes, so a restart after a pause pays in full, and the longer the
+  ///   session the larger that bill.
+  ///
+  /// With nothing running only the first applies, and the other two are left
+  /// out rather than softened — a warning about ending an agent that is not
+  /// there teaches the user to click through the next one.
+  Future<bool?> _confirmDangerous(
+    BuildContext context, {
+    required PermissionMode mode,
+    required AgentPermissionOption option,
+    required bool restarts,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return AlertDialog(
+          // Three paragraphs do not fit an 800x600 window, let alone a phone,
+          // and a warning the user cannot read to the end is worse than none:
+          // the cost they scroll to is the one this dialog was added for.
+          scrollable: true,
+          title: DesktopDialogTitle(
+            icon: AppIcons.warning,
+            title: '${mode.label}?',
+            subtitle: restarts
+                ? 'This restarts the session.'
+                : 'This applies the next time the session runs.',
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${option.agentName} will make every file edit and run '
+                  'every command without asking. You will not be prompted, '
+                  'and nothing here can stop a command the agent has already '
+                  'decided to run.',
+                ),
+                if (restarts) ...[
+                  const SizedBox(height: Insets.md),
+                  Text(
+                    'The agent running now is ended, because these flags are '
+                    'only read when it starts. If it is part-way through a '
+                    'turn, that work is lost: the resume continues from the '
+                    'last exchange it recorded, not from where it had got to.',
+                  ),
+                  const SizedBox(height: Insets.md),
+                  Text(
+                    'Resuming itself costs nothing — the conversation is read '
+                    'back from disk. The next message you send is what costs: '
+                    'it carries the whole conversation to the model as '
+                    'context, so a session that has run a long time is not '
+                    'cheap to pick up again.',
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: theme.colorScheme.error,
+                foregroundColor: theme.colorScheme.onError,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              // Says what the button does, not that it agrees: "OK" on a
+              // dialog offering three consequences names none of them.
+              child: Text(restarts ? 'Restart in bypass' : 'Use bypass'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

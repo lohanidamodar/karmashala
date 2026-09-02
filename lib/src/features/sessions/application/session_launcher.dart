@@ -16,6 +16,7 @@ import '../../environments/domain/environment_path.dart';
 import '../../environments/domain/execution_environment.dart';
 import '../../git/application/git_providers.dart';
 import '../../mcp/session_mcp.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -295,10 +296,123 @@ class SessionLauncher {
   /// command at whatever has focus would be a guess about another program's
   /// UI. So this writes the row, and the control says the change applies on the
   /// next launch rather than implying the live agent has been re-governed.
+  ///
+  /// The one thing that *can* move a running session onto a new policy is a new
+  /// command line, and [restartSession] is that: the agent is replaced, not
+  /// re-governed, so nothing above stops being true. It stays a separate call
+  /// rather than a flag here, because the two acts are not comparable — writing
+  /// a row is cheap and reversible, and ending an agent that may be mid-turn is
+  /// neither, so it must never happen as a side effect of recording a choice.
   void setPermissionMode(String sessionId, PermissionMode? mode) {
     _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
     // One row's own policy. Only the chip that draws it is watching.
     _publish(SessionChange.reconfigured(sessionId));
+  }
+
+  /// Ends the agent [sessionId] is running now and starts a new one on the same
+  /// conversation — the only way a mode written by [setPermissionMode] can
+  /// reach a session that is already up.
+  ///
+  /// This does not contradict the reasoning above; it is the other half of it.
+  /// Nothing here talks to the live process about its policy. The process is
+  /// *replaced* by one whose command line carries the new flags, and the
+  /// conversation is carried across by the agent's own resume convention, so
+  /// the user keeps the transcript and loses only the turn that was in flight.
+  ///
+  /// **Every refusal happens before anything is killed.** A row that has gone,
+  /// a conversation the CLI has never named, a repository or an installation no
+  /// longer in the workspace — each is checked while the agent is still
+  /// running, so a restart that cannot happen costs the user nothing. Ordered
+  /// the other way, the same conditions would end working sessions and then
+  /// explain why they could not be restarted.
+  ///
+  /// The conversation id is the load-bearing one. Without it the relaunch has
+  /// nothing to hand the resume convention, so the agent would come up on a
+  /// *new* conversation wearing this session's row, title and history — the
+  /// silent loss [SessionConversationMissing] guards against from the other
+  /// direction. A Codex session spends its first moments in exactly that state,
+  /// because Codex will not accept an id from us and one is only discovered
+  /// afterwards, so this is an ordinary condition and not a corrupt row.
+  ///
+  /// The pane does not survive, and cannot: a pane will not take a second
+  /// process while the first is still in it (see
+  /// [TerminalSessionsController.startAgentInPane], which refuses a live pane)
+  /// and there is no way to stop that process without disposing the terminal
+  /// showing it. What the user is continuing is the agent's transcript rather
+  /// than this run's scrollback, and `--resume` is what brings that back —
+  /// including into the chat view, which is built from the agent's own store
+  /// and never from the buffer.
+  ///
+  /// Note what is deliberately *not* passed to [launch]. No permission
+  /// override: the mode is on the row by the time this is called and [launch]
+  /// reads it from there, whereas an override would also be written back, which
+  /// is precisely what freezes a session that is deliberately following the
+  /// Settings default. No working directory either: the row already carries it,
+  /// and restating it here would be a second answer able to disagree with the
+  /// one every other resume gets.
+  Future<SessionLaunchResult> restartSession(String sessionId) async {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) {
+      throw StateError('This session no longer exists.');
+    }
+    final installation = _ref
+        .read(agentInstallationDaoProvider)
+        .getById(session.agentInstallationId);
+    if (installation == null) {
+      throw StateError(
+        'The agent for this session is not installed. '
+        'Run "Discover agents" in Settings.',
+      );
+    }
+    final repository = _ref
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId);
+    if (repository == null) {
+      throw StateError('The session\'s repository is no longer available.');
+    }
+    final externalId = session.externalSessionId;
+    if (externalId == null || externalId.isEmpty) {
+      throw StateError(
+        '${agentDisplayName(installation.agentId)} has not named a '
+        'conversation for this session yet, so restarting it would open a new '
+        'conversation instead of continuing this one.',
+      );
+    }
+
+    // Only now, once nothing above can refuse. Ending is not undoable: the
+    // agent is asked to exit and killed if it will not, and whatever it was in
+    // the middle of goes with it.
+    //
+    // A session with no live pane is not an error here — it is a session that
+    // already stopped, and starting it again is exactly what was asked for.
+    final paneId = livePaneFor(sessionId);
+    if (paneId != null) {
+      _ref.read(terminalSessionsControllerProvider.notifier).endSession(paneId);
+    }
+    // After the kill, not before it, so the line records an agent that is
+    // actually gone rather than one we were about to end — and gone is the
+    // fact a user asking "where did my agent go" needs, whether or not the
+    // launch below succeeds. [launch] logs the process that replaced it.
+    _log.info(
+      'Restarting $sessionId to apply its permission mode: '
+      'agent=${installation.agentId} ended=${paneId ?? 'nothing'} '
+      'conversation=$externalId',
+    );
+
+    return launch(
+      SessionLaunchRequest(
+        repository: repository,
+        installation: installation,
+        title: session.title,
+        purpose: SessionPurpose.existingSession,
+        resumeExternalSessionId: externalId,
+        // So [_reusableRowForResume] continues *this* row instead of minting a
+        // second one beside it: it compares the request's surface against the
+        // candidate's, and a mismatch is one of the ways a single conversation
+        // ended up with two rows before Loop 66.
+        surface: session.surface,
+      ),
+    );
   }
 
   /// The single default-installation resolution.

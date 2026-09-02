@@ -16,6 +16,7 @@ import 'package:karmashala/src/features/sessions/application/session_launcher.da
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
+import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
@@ -809,5 +810,142 @@ void main() {
     expect(line, contains('resumed='));
     expect(line, contains('conversation='));
     expect(line, contains('mcp='));
+  });
+
+  // --- restarting to apply a permission mode ---------------------------------
+
+  test('a restart replaces the agent with one under the new mode', () async {
+    final h = harness(
+      settings: const Settings().withPermissions(
+        'roverCli',
+        const AgentPermissions(existingSessions: PermissionMode.ask),
+      ),
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+    final terminals = h.container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+
+    final started = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Continue',
+        purpose: SessionPurpose.existingSession,
+        resumeExternalSessionId: 'external-1',
+      ),
+    );
+    final id = started.session.id;
+    final firstPane = started.paneId!;
+    expect(terminals.instanceFor(firstPane)!.agentLaunch!.arguments, [
+      '--careful',
+      '--continue',
+      'external-1',
+    ]);
+
+    // Exactly what the chip does: write the row, then ask for the restart.
+    launcher.setPermissionMode(id, PermissionMode.bypass);
+    final restarted = await launcher.restartSession(id);
+
+    // One session, not two. A restart that minted a second row would leave the
+    // tree drawing both and the double-writer check choosing between them.
+    expect(restarted.session.id, id);
+    expect(
+      SessionDao(h.db).getAllByExternalSessionId('external-1'),
+      hasLength(1),
+    );
+    expect(SessionDao(h.db).getById(id)!.status, SessionStatus.running);
+
+    // A different process, and the old one is gone rather than detached: this
+    // is an end, not a tab being closed.
+    expect(restarted.paneId, isNot(firstPane));
+    expect(terminals.instanceFor(firstPane), isNull);
+
+    // And the whole point — the new flags are on a command line, which is the
+    // only place any of these CLIs reads a permission policy from.
+    expect(terminals.instanceFor(restarted.paneId!)!.agentLaunch!.arguments, [
+      '--trust-me',
+      '--continue',
+      'external-1',
+    ]);
+  });
+
+  test('a restart keeps a session following the default', () async {
+    final h = harness(
+      settings: const Settings().withPermissions(
+        'roverCli',
+        const AgentPermissions(existingSessions: PermissionMode.bypass),
+      ),
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    final started = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Continue',
+        purpose: SessionPurpose.existingSession,
+        resumeExternalSessionId: 'external-2',
+      ),
+    );
+    final id = started.session.id;
+    expect(SessionDao(h.db).getById(id)!.permissionMode, isNull);
+
+    final restarted = await launcher.restartSession(id);
+
+    // The restart resolves a mode to put on the command line, and the trap is
+    // writing that resolution back: the session would silently stop tracking
+    // the Settings default, which is the half of the owner's report that says
+    // "changing the default moved nothing".
+    expect(SessionDao(h.db).getById(id)!.permissionMode, isNull);
+    expect(
+      h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(restarted.paneId!)!
+          .agentLaunch!
+          .arguments,
+      ['--trust-me', '--continue', 'external-2'],
+    );
+  });
+
+  test('a restart is refused when the CLI has named no conversation', () async {
+    final h = harness();
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final launcher = h.container.read(sessionLauncherProvider);
+
+    // Rover takes no `--session-id`, so like Codex it has no conversation id
+    // until something discovers one — the ordinary state of a fresh session.
+    final started = await launcher.launch(
+      SessionLaunchRequest(
+        repository: repository(),
+        installation: agentInstallation(agentId: 'roverCli'),
+        title: 'Rover run',
+        purpose: SessionPurpose.newSession,
+      ),
+    );
+    final id = started.session.id;
+    expect(SessionDao(h.db).getById(id)!.externalSessionId, isNull);
+
+    await expectLater(
+      launcher.restartSession(id),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('new conversation'),
+        ),
+      ),
+    );
+
+    // The refusal costs nothing: relaunching without an id would come up on a
+    // blank conversation wearing this row's title, so the only safe answer is
+    // to leave the agent that has the history running.
+    expect(launcher.livePaneFor(id), started.paneId);
+    expect(SessionDao(h.db).getById(id)!.status, SessionStatus.running);
   });
 }
