@@ -333,10 +333,11 @@ class _ClaudeCounters {
   /// block — thinking, text, tool_use — and every one of them repeats the same
   /// `usage`. Summing them multiplies the tokens by up to ten. The blocks for
   /// one message are written together, so skipping a repeat of the previous
-  /// record's `message.id` costs one string and catches 1,512 of the 1,530
-  /// duplicate groups in the owner's largest session. The remainder are records
-  /// a resume replayed verbatim, tens of lines apart; catching those would mean
-  /// remembering every id in every file, which is a much worse trade.
+  /// record's `message.id` costs one string and catches **2,090 of the 2,108**
+  /// duplicate records in the owner's largest session — 5,402 records for 3,294
+  /// replies. The eighteen it misses are records a resume replayed verbatim,
+  /// thirty lines apart; catching those would mean remembering every id in
+  /// every file, which is a much worse trade for half a percent.
   ///
   /// Tool calls are counted from **every** record, because each holds a
   /// different block — the dedup is about `usage`, not about content.
