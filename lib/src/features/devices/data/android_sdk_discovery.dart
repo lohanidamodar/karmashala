@@ -91,21 +91,63 @@ String? sdkRootFromAdbPath(String adbPath, EnvironmentKind kind) {
   return trimmed.join(sep);
 }
 
-/// Command that prints an environment variable's value in [kind].
-CommandRequest envRequest(EnvironmentKind kind, String name) => switch (kind) {
-  // `cmd /c echo %VAR%` prints the literal `%VAR%` when unset; the caller
-  // treats that as empty.
-  EnvironmentKind.windowsNative => CommandRequest(
-    executable: 'cmd',
-    arguments: ['/c', 'echo %$name%'],
-  ),
-  EnvironmentKind.localPosix ||
-  EnvironmentKind.wsl ||
-  EnvironmentKind.ssh => CommandRequest(
-    executable: 'bash',
-    arguments: ['-lc', 'echo \$$name'],
-  ),
-};
+/// Marks a line of [environmentRequest]'s output as one of ours.
+///
+/// A login shell runs the user's profile, and profiles print things — a version
+/// manager's banner, a fortune, a warning about a missing tool. Reading values
+/// off line numbers would hand the SDK root whatever that noise happened to
+/// say, so each value names itself and everything unmarked is ignored.
+const kEnvMarker = '__karmashala_env:';
+
+/// Command that prints every one of [names] with its value, in **one** shell.
+///
+/// One, not one per variable, and that is the whole point: on POSIX this is a
+/// *login* shell — needed so `PATH` and `ANDROID_HOME` from `~/.profile` are
+/// visible at all — and a login shell costs about 63ms on the owner's Mac
+/// against 72ms for one that answers all three. Asked separately, reading three
+/// variables cost 190ms of the device pane's first open.
+CommandRequest environmentRequest(EnvironmentKind kind, List<String> names) =>
+    switch (kind) {
+      // `echo %VAR%` prints the literal `%VAR%` when unset; the caller treats
+      // that as empty. No space before `&`, or the value picks up a trailing
+      // one.
+      EnvironmentKind.windowsNative => CommandRequest(
+        executable: 'cmd',
+        arguments: [
+          '/c',
+          [for (final n in names) 'echo $kEnvMarker$n=%$n%'].join('&'),
+        ],
+      ),
+      EnvironmentKind.localPosix ||
+      EnvironmentKind.wsl ||
+      EnvironmentKind.ssh => CommandRequest(
+        executable: 'bash',
+        arguments: [
+          '-lc',
+          [for (final n in names) 'echo "$kEnvMarker$n=\$$n"'].join('; '),
+        ],
+      ),
+    };
+
+/// The values [environmentRequest] printed, by name.
+///
+/// Unmarked lines are dropped, and so is a Windows value that came back as the
+/// literal `%NAME%` — that is `cmd`'s way of saying the variable is unset.
+Map<String, String> parseEnvironmentOutput(String stdout) {
+  final values = <String, String>{};
+  for (final line in stdout.split(RegExp(r'[\r\n]+'))) {
+    final marked = line.trim();
+    if (!marked.startsWith(kEnvMarker)) continue;
+    final body = marked.substring(kEnvMarker.length);
+    final split = body.indexOf('=');
+    if (split <= 0) continue;
+    final name = body.substring(0, split);
+    final value = body.substring(split + 1).trim();
+    if (value.isEmpty || value == '%$name%') continue;
+    values[name] = value;
+  }
+  return values;
+}
 
 /// Command that succeeds only when [path] is a runnable SDK tool.
 ///
@@ -195,16 +237,8 @@ class AndroidSdkDiscoveryService {
       EnvironmentKind.wsl ||
       EnvironmentKind.ssh => const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
     };
-    final env = <String, String>{};
-    for (final name in names) {
-      final value = await _runOrNull(envRequest(_kind, name));
-      if (value == null) continue;
-      final trimmed = value.trim();
-      // `cmd /c echo %VAR%` echoes the literal when the variable is unset.
-      if (trimmed.isEmpty || trimmed == '%$name%') continue;
-      env[name] = trimmed;
-    }
-    return env;
+    final output = await _runOrNull(environmentRequest(_kind, names));
+    return output == null ? const {} : parseEnvironmentOutput(output);
   }
 
   /// Whether [path] runs. A missing executable surfaces as a [CommandException]
