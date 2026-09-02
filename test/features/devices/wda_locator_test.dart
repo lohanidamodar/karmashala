@@ -33,7 +33,10 @@ void main() {
     ).locate();
 
     expect(found!.source, WdaSource.bundled);
-    expect(found.appPath, contains('K.app/Contents/Resources'));
+    // Joined rather than spelled with `/`: the locator builds a host path, and
+    // on Windows — where this suite also runs — that is `\`. The assertion is
+    // about *which* directory was chosen, not about a separator.
+    expect(found.appPath, contains(p.join('K.app', 'Contents', 'Resources')));
   });
 
   test('falls back to the checkout, for anyone running from source', () {
