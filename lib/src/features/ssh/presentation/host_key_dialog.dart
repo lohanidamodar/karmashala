@@ -96,7 +96,7 @@ class _HostKeyTrustDialogState extends State<HostKeyTrustDialog> {
                 const SizedBox(height: Insets.xs),
                 SelectableText(
                   'ssh-keygen -lf $publicKeyFile',
-                  style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+                  style: MonoStyles.body,
                 ),
               ],
               const SizedBox(height: Insets.sm),
@@ -164,7 +164,7 @@ class _KeyFacts extends StatelessWidget {
           Text('Key algorithm', style: theme.textTheme.labelSmall),
           SelectableText(
             keyType,
-            style: const TextStyle(fontFamily: kMonoFamily, fontSize: 13),
+            style: MonoStyles.label,
           ),
           const SizedBox(height: Insets.sm),
           Text('Fingerprint', style: theme.textTheme.labelSmall),
@@ -174,7 +174,7 @@ class _KeyFacts extends StatelessWidget {
               Expanded(
                 child: SelectableText(
                   fingerprint,
-                  style: const TextStyle(fontFamily: kMonoFamily, fontSize: 13),
+                  style: MonoStyles.label,
                 ),
               ),
               IconButton(

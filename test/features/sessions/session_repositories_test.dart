@@ -1,5 +1,13 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_repositories_bar.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -70,5 +78,52 @@ void main() {
     service.attach('s1', 'r2');
     SessionDao(db).delete('s1');
     expect(linkDao.linksFor('s1'), isEmpty);
+  });
+
+  group('the Add repo menu', () {
+    Future<void> pump(WidgetTester tester) async {
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      container.read(selectedSessionIdProvider.notifier).select('s1');
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: Scaffold(body: SessionRepositoriesBar(sessionId: 's1')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers the project\'s other checkouts as house menu rows', (
+      tester,
+    ) async {
+      // It was a hand-rolled Row in a plain `PopupMenuItem`: no shared gutter,
+      // and Material's own label size beside the Explorer's menus.
+      await pump(tester);
+      await tester.tap(find.text('Add repo'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DesktopMenuItem<String>), findsOneWidget);
+      expect(find.text('api'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(DesktopMenuItem<String>)).height,
+        Chrome.menuRow,
+      );
+      expect(find.byIcon(AppIcons.linkSimple), findsOneWidget);
+    });
+
+    testWidgets('a pick attaches the checkout it names', (tester) async {
+      await pump(tester);
+      await tester.tap(find.text('Add repo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('api'));
+      await tester.pumpAndSettle();
+
+      expect(service.forSession('s1').map((r) => r.id), ['r1', 'r2']);
+    });
   });
 }

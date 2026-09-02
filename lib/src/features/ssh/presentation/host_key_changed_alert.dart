@@ -140,9 +140,7 @@ class _Fingerprint extends StatelessWidget {
         Text('$label · $keyType', style: theme.textTheme.labelSmall),
         SelectableText(
           value,
-          style: TextStyle(
-            fontFamily: kMonoFamily,
-            fontSize: 12,
+          style: MonoStyles.body.copyWith(
             color: highlight ? theme.colorScheme.error : null,
           ),
         ),

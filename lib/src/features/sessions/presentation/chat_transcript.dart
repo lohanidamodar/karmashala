@@ -265,11 +265,7 @@ class _ChatMessageTile extends StatelessWidget {
                 else
                   SelectableText(
                     message.text,
-                    style: const TextStyle(
-                      fontFamily: kMonoFamily,
-                      fontSize: 12.5,
-                      height: 1.35,
-                    ),
+                    style: MonoStyles.label.copyWith(height: 1.35),
                   ),
                 ?detail,
               ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../sessions/application/session_actions.dart';
@@ -91,16 +92,10 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
                         onSelected: (t) => _openIn(session, t),
                         itemBuilder: (context) => [
                           for (final t in list)
-                            PopupMenuItem(
+                            DesktopMenuItem(
                               value: t,
-                              height: 32,
-                              child: Row(
-                                children: [
-                                  const Icon(AppIcons.terminal, size: 16),
-                                  const SizedBox(width: 10),
-                                  Text('Open in ${t.label}'),
-                                ],
-                              ),
+                              label: 'Open in ${t.label}',
+                              icon: AppIcons.terminal,
                             ),
                         ],
                       ),

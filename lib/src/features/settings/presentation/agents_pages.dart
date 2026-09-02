@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/application/claude_accounts_controller.dart';
@@ -598,21 +599,15 @@ class _ClaudeInstallCardState extends ConsumerState<_ClaudeInstallCard> {
                       '${account.email}.',
                     ),
                     itemBuilder: (_) => [
+                      // The account already in force is the checked one, not a
+                      // row with a tick tacked on the far end.
                       for (final account in accounts)
-                        PopupMenuItem(
+                        DesktopMenuItem(
                           value: account,
                           enabled: !(activeAccount?.matches(account) ?? false),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(account.email)),
-                              if (activeAccount?.matches(account) ?? false)
-                                Icon(
-                                  AppIcons.checkCircle,
-                                  size: 14,
-                                  color: theme.colorScheme.primary,
-                                ),
-                            ],
-                          ),
+                          selected: activeAccount?.matches(account) ?? false,
+                          label: account.email,
+                          icon: AppIcons.userCircle,
                         ),
                     ],
                     child: Padding(

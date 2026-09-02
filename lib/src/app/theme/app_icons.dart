@@ -499,6 +499,18 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData userCircle = IconData(
+    0xe4c4,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData clipboardText = IconData(
+    0xe198,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData pushPinFill = IconData(
     0xe3e2,
     fontFamily: 'PhosphorFill',

@@ -1,3 +1,6 @@
+import 'package:karmashala/src/app/theme/app_icons.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -124,6 +127,7 @@ void main() {
   Future<void> pumpNoChatAgent(
     WidgetTester tester, {
     required bool inAPane,
+    List<SystemTerminal> terminals = const [],
   }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -150,9 +154,7 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
-        availableSystemTerminalsProvider.overrideWith(
-          (ref) async => const <SystemTerminal>[],
-        ),
+        availableSystemTerminalsProvider.overrideWith((ref) async => terminals),
         sessionDeliveryProvider.overrideWith(
           (ref, _) async => SessionDelivery.unknown,
         ),
@@ -204,6 +206,38 @@ void main() {
     await pumpNoChatAgent(tester, inAPane: true);
 
     expect(find.textContaining('Its terminal is the session'), findsOneWidget);
+  });
+
+  testWidgets('the external-terminal menu draws the house menu row', (
+    tester,
+  ) async {
+    // It was a hand-rolled 32px Row beside menus built from `DesktopMenuItem`
+    // — same height, different gutter, different type ramp.
+    await pumpNoChatAgent(
+      tester,
+      inAPane: true,
+      terminals: const [
+        SystemTerminal(
+          kind: SystemTerminalKind.windowsTerminal,
+          label: 'Windows Terminal',
+          executable: 'wt.exe',
+        ),
+      ],
+    );
+
+    await tester.tap(find.byIcon(AppIcons.arrowSquareOut));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byType(DesktopMenuItem<SystemTerminal>),
+      findsOneWidget,
+      reason: 'the row is the shared one, not a Row of its own',
+    );
+    expect(find.text('Open in Windows Terminal'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(DesktopMenuItem<SystemTerminal>)).height,
+      Chrome.menuRow,
+    );
   });
 
   testWidgets('...but not when there is no terminal left to point at', (

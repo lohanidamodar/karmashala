@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/data/cli_transcript_reader.dart';
 import '../../cli_detection/data/subagent_transcript.dart';
@@ -434,16 +435,10 @@ class _OpenInTerminalButton extends ConsumerWidget {
               },
               itemBuilder: (context) => [
                 for (final t in list)
-                  PopupMenuItem(
+                  DesktopMenuItem(
                     value: t,
-                    height: 32,
-                    child: Row(
-                      children: [
-                        const Icon(AppIcons.terminal, size: 16),
-                        const SizedBox(width: 10),
-                        Text('Open in ${t.label}'),
-                      ],
-                    ),
+                    label: 'Open in ${t.label}',
+                    icon: AppIcons.terminal,
                   ),
               ],
             ),

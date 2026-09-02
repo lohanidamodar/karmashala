@@ -102,18 +102,7 @@ void main() {
     // a literal size before the rule existed, no new file may join, and one
     // that gets cleaned up must be struck off (the loop below enforces it).
     const debt = {
-      'lib/src/features/detail/presentation/repository_info_view.dart',
-      'lib/src/features/environments/presentation/environments_section.dart',
-      'lib/src/features/fanout/presentation/comparison_view.dart',
       'lib/src/features/git/presentation/changes_view.dart',
-      'lib/src/features/sessions/presentation/chat_transcript.dart',
-      'lib/src/features/sessions/presentation/markdown_message.dart',
-      'lib/src/features/sessions/presentation/message_composer.dart',
-      'lib/src/features/ssh/presentation/host_key_changed_alert.dart',
-      'lib/src/features/ssh/presentation/host_key_dialog.dart',
-      'lib/src/features/ssh/presentation/known_hosts_section.dart',
-      'lib/src/features/ssh/presentation/remote_file_browser_dialog.dart',
-      'lib/src/features/ssh/presentation/ssh_hosts_section.dart',
     };
     // A literal size only: `fontSize: someVariable` is a value that came from
     // somewhere accountable (a setting, a theme style) and is allowed.

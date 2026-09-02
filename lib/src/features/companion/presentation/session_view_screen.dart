@@ -5,18 +5,18 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../remote/protocol.dart';
 import '../../sessions/domain/delivery_stage.dart';
-import '../../sessions/presentation/chat_transcript.dart';
 import '../application/companion_providers.dart';
 import '../client/companion_gateway.dart';
 import 'companion_approval_card.dart';
 import 'companion_composer.dart';
 import 'companion_states.dart';
 import 'companion_status_badge.dart';
+import 'companion_transcript_view.dart';
 import 'link_banner.dart';
 
-/// One session's transcript on the phone: the desktop chat view (Loop 41/49)
-/// with the composer reduced to what the protocol lets a phone do — send a
-/// prompt, answer an approval.
+/// One session's transcript on the phone: the desktop chat's shapes drawn
+/// bottom-up by [CompanionTranscriptView], with the composer reduced to what
+/// the protocol lets a phone do — send a prompt, answer an approval.
 class SessionViewScreen extends ConsumerWidget {
   const SessionViewScreen({required this.sessionId, super.key});
 
@@ -119,11 +119,8 @@ class SessionViewScreen extends ConsumerWidget {
                   ref.invalidate(companionTranscriptProvider(sessionId));
                 },
               ),
-              data: (messages) => ChatTranscriptView(
-                messages: [
-                  for (final message in messages)
-                    ChatMessage(role: message.role, text: message.text),
-                ],
+              data: (messages) => CompanionTranscriptView(
+                messages: messages,
                 // Two different nothings the phone cannot tell apart: an
                 // agent that keeps no readable transcript (its terminal IS
                 // the session, as the desktop says) and a session that has

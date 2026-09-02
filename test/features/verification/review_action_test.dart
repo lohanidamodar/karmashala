@@ -1,6 +1,9 @@
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
+import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:karmashala/src/features/verification/presentation/review_action.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,6 +78,29 @@ void main() {
     await tester.tap(find.text('Flaky CLI'));
     await tester.pumpAndSettle();
     expect(SessionDao(h.db).getAll(), hasLength(2));
+  });
+
+  testWidgets('the reviewer menu draws the house two-line row', (tester) async {
+    // It was a dense `ListTile` in a plain `PopupMenuItem` — Material's own
+    // gutter and title size, in a menu that has to read like every other one.
+    await pump(tester);
+    await tester.tap(find.byType(OutlinedButton));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DesktopMenuDetailItem<ReviewTarget>), findsNWidgets(2));
+    // The reason to pick one over the other is on the row, not behind a hover.
+    expect(find.textContaining('read and run, never write'), findsWidgets);
+    expect(
+      tester
+          .getSize(
+            find.widgetWithText(
+              DesktopMenuDetailItem<ReviewTarget>,
+              'Flaky CLI',
+            ),
+          )
+          .height,
+      greaterThanOrEqualTo(Chrome.menuRowTall),
+    );
   });
 
   testWidgets('with nothing else installed it says why, and starts nothing', (

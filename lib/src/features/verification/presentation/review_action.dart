@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../application/review_session_service.dart';
 
 /// The one control that starts an independent review, wherever a verdict is
@@ -128,7 +129,10 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
   /// The doc's "one click" is the case that matters — two agents installed, one
   /// of them yours — and a menu of one would be a click spent confirming
   /// something the app already knew.
-  Future<void> _press(List<ReviewTarget> usable, ReviewTarget? preferred) async {
+  Future<void> _press(
+    List<ReviewTarget> usable,
+    ReviewTarget? preferred,
+  ) async {
     if (usable.length == 1) return _start(usable.single);
     final box = context.findRenderObject() as RenderBox?;
     final overlay =
@@ -150,18 +154,15 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
           ?preferred,
           ...usable.where((t) => t != preferred),
         ])
-          PopupMenuItem<ReviewTarget>(
+          DesktopMenuDetailItem<ReviewTarget>(
             value: target,
-            child: ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              title: Text(target.agentName),
-              subtitle: Text(
-                _tooltipFor(target),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            label: target.agentName,
+            icon: AppIcons.robot,
+            // What this reviewer would really be, in the permission carry's own
+            // words. It is the reason to pick one over the other, so it is on
+            // the row rather than behind a hover.
+            detail: _tooltipFor(target),
+            detailMaxLines: 3,
           ),
       ],
     );

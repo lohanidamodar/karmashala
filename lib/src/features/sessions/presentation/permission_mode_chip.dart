@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_permission_options.dart';
+import '../../agents/presentation/permission_mode_picker.dart';
 import '../../settings/domain/permission_mode.dart';
 import '../application/session_launcher.dart';
 import '../application/session_signals.dart';
@@ -91,20 +93,31 @@ class PermissionModeChip extends ConsumerWidget {
       itemBuilder: (context) => [
         // First, and its own row: handing the session back to the Settings
         // default is where every session starts and the only state that follows
-        // a later change to that setting.
-        PopupMenuItem<PermissionChoice>(
+        // a later change to that setting. It names what the default resolves to
+        // *today*, because "follow the default" is not an answer to "what will
+        // this run under" — and that is the question the menu was opened with.
+        DesktopMenuDetailItem<PermissionChoice>(
           value: PermissionChoice.followDefault,
-          child: _DefaultRow(resolved: current, selected: effective.inherited),
+          selected: effective.inherited,
+          label: 'Follow the Settings default',
+          detail:
+              'Currently ${current.mode.label.toLowerCase()} for '
+              '${current.agentName}. Changing that setting changes this '
+              'session too.',
         ),
-        const PopupMenuDivider(),
+        const DesktopMenuDivider(),
         for (final option in options)
-          PopupMenuItem<PermissionChoice>(
+          DesktopMenuDetailItem<PermissionChoice>(
             value: PermissionChoice(option.mode),
             enabled: option.isSelectable,
-            child: _MenuRow(
-              option: option,
-              selected: !effective.inherited && option.mode == current.mode,
+            selected: !effective.inherited && option.mode == current.mode,
+            label: option.mode.label,
+            badge: option.fitLabel,
+            badgeColor: permissionFitColour(
+              Theme.of(context).colorScheme,
+              option.fit,
             ),
+            detail: option.summary,
           ),
       ],
       child: Tooltip(
@@ -131,7 +144,7 @@ class PermissionModeChip extends ConsumerWidget {
             children: [
               Icon(
                 _iconFor(current.fit, current.mode),
-                size: 13,
+                size: Chrome.iconSmall,
                 color: foreground,
               ),
               const SizedBox(width: Insets.xs),
@@ -388,117 +401,6 @@ class PermissionModeChip extends ConsumerWidget {
           ],
         );
       },
-    );
-  }
-}
-
-/// The menu's first row: hand this session back to the Settings default.
-///
-/// It names what the default resolves to *today* rather than only offering the
-/// idea, because "follow the default" is not an answer to "what will this run
-/// under" — and that is the question the user opened this menu with.
-class _DefaultRow extends StatelessWidget {
-  const _DefaultRow({required this.resolved, required this.selected});
-
-  final AgentPermissionOption resolved;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 18,
-          child: selected
-              ? Icon(AppIcons.check, size: 13, color: scheme.primary)
-              : null,
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Follow the Settings default',
-                style: theme.textTheme.bodySmall,
-              ),
-              Text(
-                'Currently ${resolved.mode.label.toLowerCase()} for '
-                '${resolved.agentName}. Changing that setting changes this '
-                'session too.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({required this.option, required this.selected});
-
-  final AgentPermissionOption option;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final muted = !option.isSelectable;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 18,
-          child: selected
-              ? Icon(AppIcons.check, size: 13, color: scheme.primary)
-              : null,
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      option.mode.label,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: muted ? scheme.onSurfaceVariant : null,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Text(
-                    option.fitLabel,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: switch (option.fit) {
-                        PermissionModeFit.exact => scheme.onSurfaceVariant,
-                        PermissionModeFit.approximate => scheme.tertiary,
-                        PermissionModeFit.none => scheme.error,
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                option.summary,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

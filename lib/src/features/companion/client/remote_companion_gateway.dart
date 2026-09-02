@@ -1986,9 +1986,10 @@ class RemoteCompanionGateway implements CompanionGateway {
       // its start rather than one showing its end.
       if (page.omitted > 0)
         CompanionChatMessage(
-          role: 'tool',
-          text: '${page.omitted} earlier messages are not shown here. '
-              'The desktop has the whole conversation.',
+          role: kCompanionNoticeRole,
+          text: '${page.omitted} earlier messages are not loaded — this is '
+              'the top of what the phone has. The desktop holds the whole '
+              'conversation.',
         ),
       for (final message in page.messages)
         CompanionChatMessage(role: message.role, text: message.text),

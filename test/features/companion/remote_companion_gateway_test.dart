@@ -291,6 +291,31 @@ void main() {
     await awaitLink(gateway, CompanionLinkState.disconnected);
   });
 
+  test('a transcript too long for one frame arrives with its top named',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
+    // The host answers with the tail and says how much it kept back; the
+    // phone turns that count into the marker that opens its window, so a
+    // conversation that begins mid-sentence never reads as a lost start.
+    const extra = 12;
+    fake.transcripts['s1'] = [
+      for (var i = 0; i < kRemoteTranscriptPageMax + extra; i++)
+        RemoteTranscriptMessage(role: 'agent', text: 'turn-$i'),
+    ];
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+
+    final messages = await gateway.transcript('s1').first;
+    expect(messages.length, kRemoteTranscriptPageMax + 1);
+    expect(messages.first.role, kCompanionNoticeRole);
+    expect(
+      messages.first.text,
+      startsWith('$extra earlier messages are not loaded'),
+    );
+    expect(messages[1].text, 'turn-$extra');
+    expect(messages.last.text, 'turn-${kRemoteTranscriptPageMax + extra - 1}');
+  });
+
   test('a revoked pairing says so, rather than blaming a busy desktop',
       () async {
     // A revoke and a slow desktop look identical on the wire: a request goes

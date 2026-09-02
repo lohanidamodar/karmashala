@@ -27,6 +27,7 @@ import '../domain/terminal_profile.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/shell/tab_picker.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import 'command_history_sheet.dart';
 import 'empty_pane_region.dart';
 import 'pane_group_strip.dart';
@@ -39,6 +40,14 @@ import '../application/terminal_profiles.dart';
 // The chip shape moved out so a region header could share it; re-exported so
 // this file is still the one import a tab chip needs.
 export '../../../app/shell/workbench_tab_chip.dart';
+
+/// How `Ctrl+Shift+F` is written to the user.
+///
+/// The pane's own chords are dispatched by [TerminalActions.onPaneKey] rather
+/// than declared in `shellChords`, so there is no [shellChordLabel] to read for
+/// them — this is the one place the string is spelled, for the toolbar tooltip
+/// and the pane menu alike.
+const kFindInScrollbackChord = 'Ctrl+Shift+F';
 
 /// Everything the terminal surface can be asked to *do*, in one place.
 ///
@@ -610,33 +619,59 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
     final hasSelection = selection != null;
     final choice = await showMenu<String>(
       context: context,
+      // The same one-pixel anchor `ContextMenuRegion._show` uses, so a menu
+      // opened from a pane lands where one opened from the Explorer does.
       position: RelativeRect.fromRect(
-        position & const Size(40, 40),
+        Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
       items: [
-        PopupMenuItem(
+        DesktopMenuItem(
           value: 'copy',
+          label: 'Copy',
+          icon: AppIcons.copy,
+          shortcut: shellChordLabel<CopySelectionTextIntent>(),
           enabled: hasSelection,
-          child: const Text('Copy'),
         ),
-        const PopupMenuItem(value: 'paste', child: Text('Paste')),
-        const PopupMenuItem(value: 'find', child: Text('Find…')),
-        const PopupMenuDivider(),
+        DesktopMenuItem(
+          value: 'paste',
+          label: 'Paste',
+          icon: AppIcons.clipboardText,
+          shortcut: shellChordLabel<TerminalPasteIntent>(),
+        ),
+        DesktopMenuItem(
+          value: 'find',
+          label: 'Find…',
+          icon: AppIcons.magnifyingGlass,
+          shortcut: kFindInScrollbackChord,
+        ),
+        const DesktopMenuDivider(),
         // Only while there is a split to collapse, and only then: with one
         // pane the tab strip's own close button is the way, and two words for
         // one act in two places is how a menu stops being read.
         if (_sessions.isPaneInSplit(paneId)) ...[
           // The way back out of a split, beside the way to close one. The
           // region this pane leaves goes with it — see [movePaneToNewTab].
-          const PopupMenuItem(
+          DesktopMenuItem(
             value: 'untangle',
-            child: Text('Move pane to a new tab'),
+            label: 'Move pane to a new tab',
+            icon: AppIcons.terminalWindow,
           ),
-          const PopupMenuItem(value: 'close', child: Text('Close pane')),
+          DesktopMenuItem(
+            value: 'close',
+            label: 'Close pane',
+            icon: AppIcons.x,
+            shortcut: shellChordLabel<CloseTerminalTabIntent>(),
+          ),
+          const DesktopMenuDivider(),
         ],
         // Closing the tab only detaches; this is how a session actually ends.
-        const PopupMenuItem(value: 'end', child: Text('End session')),
+        DesktopMenuItem(
+          value: 'end',
+          label: 'End session',
+          icon: AppIcons.power,
+          destructive: true,
+        ),
       ],
     );
     switch (choice) {
@@ -707,7 +742,7 @@ class TerminalToolbar extends ConsumerWidget {
             onPressed: () => actions.showCommands(context),
           ),
         IconButton(
-          tooltip: 'Find in scrollback (Ctrl+Shift+F)',
+          tooltip: 'Find in scrollback ($kFindInScrollbackChord)',
           icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
@@ -798,21 +833,75 @@ class _NoTerminalOpen extends StatelessWidget {
 /// A chord in a tooltip, or nothing when the action has none.
 String _chord(String? label) => label == null ? '' : ' ($label)';
 
+/// A bulk close, named the way VS Code names it.
+///
+/// Declared in the order the menu lists them, so the rows and this list cannot
+/// drift apart, and carrying the three things a row needs — what it is called,
+/// what it draws, and which tabs it takes — in one place rather than three.
+enum TabCloseScope {
+  others('Close others', AppIcons.minusCircle),
+  toTheRight('Close to the right', AppIcons.caretRight),
+  toTheLeft('Close to the left', AppIcons.caretLeft),
+  all('Close all', AppIcons.xCircle);
+
+  const TabCloseScope(this.label, this.icon);
+
+  /// What the menu row says.
+  final String label;
+
+  /// What it draws in the row's leading slot.
+  final IconData icon;
+
+  /// The tabs this scope closes, for the tab at [index] of [ids].
+  List<String> apply(List<String> ids, int index) => switch (this) {
+    TabCloseScope.others => [
+      for (var i = 0; i < ids.length; i++)
+        if (i != index) ids[i],
+    ],
+    TabCloseScope.toTheRight => ids.sublist(index + 1),
+    TabCloseScope.toTheLeft => ids.sublist(0, index),
+    TabCloseScope.all => List.of(ids),
+  };
+
+  /// Whether it would close anything at all from [index] of [count] tabs.
+  ///
+  /// A greyed row is better than a live one that silently does nothing: "Close
+  /// to the right" on the last tab has to say so rather than swallow the click.
+  bool closesAnything(int index, int count) => switch (this) {
+    TabCloseScope.others || TabCloseScope.all => count > 1,
+    TabCloseScope.toTheRight => index < count - 1,
+    TabCloseScope.toTheLeft => index > 0,
+  };
+}
+
 /// One terminal tab, drawn as a chip in the workbench strip.
 class TerminalTabChip extends StatelessWidget {
   const TerminalTabChip({
     required this.title,
     required this.liveness,
     required this.selected,
+    required this.index,
+    required this.tabCount,
     required this.onTap,
     required this.onClose,
     required this.onEnd,
+    required this.onBulkClose,
     super.key,
   });
 
   final String title;
   final PaneLiveness liveness;
   final bool selected;
+
+  /// Where this tab sits in the strip, and how many there are.
+  ///
+  /// The two facts a bulk row needs to know whether it would close anything —
+  /// handed in rather than read from a provider, because the chip is a dumb
+  /// view of one tab and the strip is the thing that knows the shape of the
+  /// row it laid out.
+  final int index;
+  final int tabCount;
+
   final VoidCallback onTap;
 
   /// Closes the tab, leaving anything running in the background.
@@ -821,6 +910,11 @@ class TerminalTabChip extends StatelessWidget {
   /// Ends the tab's sessions outright. Only ever reached deliberately, from the
   /// tab's context menu — the X is not a kill switch.
   final VoidCallback onEnd;
+
+  /// Runs one of the bulk closes. The confirmation those need is the strip's,
+  /// not the chip's: it is the thing that can see which of the tabs it would
+  /// close still has a session running.
+  final ValueChanged<TabCloseScope> onBulkClose;
 
   @override
   Widget build(BuildContext context) {
@@ -850,23 +944,44 @@ class TerminalTabChip extends StatelessWidget {
     if (overlay == null) return;
     final choice = await showMenu<String>(
       context: context,
+      // `ContextMenuRegion._show`'s anchor. The chip keeps `showMenu` rather
+      // than that widget because the gesture already arrives through
+      // [WorkbenchTabChip]'s own `InkWell`, and the strip wraps the chip in a
+      // `Draggable` that a second translucent detector would fight.
       position: RelativeRect.fromRect(
-        position & const Size(40, 40),
+        Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
       items: [
-        const PopupMenuItem(
-          value: 'close',
-          child: Text('Close tab, keep running'),
+        // Closing one tab detaches, and says nothing: that is a view action,
+        // and the session is still in the background list. The four below are
+        // the user clearing the deck, so they ask first — see
+        // [confirmBulkTabClose].
+        DesktopMenuItem(value: 'close', label: 'Close tab', icon: AppIcons.x),
+        for (final scope in TabCloseScope.values)
+          DesktopMenuItem(
+            value: scope.name,
+            label: scope.label,
+            icon: scope.icon,
+            enabled: scope.closesAnything(index, tabCount),
+          ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'end',
+          label: 'End session',
+          icon: AppIcons.power,
+          destructive: true,
         ),
-        const PopupMenuItem(value: 'end', child: Text('End session')),
       ],
     );
+    if (choice == null) return;
     switch (choice) {
       case 'close':
         onClose();
       case 'end':
         onEnd();
+      default:
+        onBulkClose(TabCloseScope.values.byName(choice));
     }
   }
 }

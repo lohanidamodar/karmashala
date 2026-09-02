@@ -147,7 +147,7 @@ class _Field extends ConsumerWidget {
           const SizedBox(height: 2),
           SelectableText(
             value,
-            style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+            style: MonoStyles.body,
           ),
         ],
       ),
@@ -279,10 +279,7 @@ class _GitDetails extends ConsumerWidget {
                         leadWidget: RemoteLink(
                           text: shortSha(c.sha),
                           url: remoteRepo?.commitUrl(c.sha),
-                          style: const TextStyle(
-                            fontFamily: kMonoFamily,
-                            fontSize: 11.5,
-                          ),
+                          style: MonoStyles.small,
                         ),
                       ),
                   ],
@@ -322,7 +319,7 @@ class _GitDetails extends ConsumerWidget {
               child ??
               SelectableText(
                 value,
-                style: const TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+                style: MonoStyles.body,
               ),
         ),
         ?action,
@@ -346,7 +343,7 @@ class _GitDetails extends ConsumerWidget {
         leadWidget ??
             Text(
               lead,
-              style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11.5),
+              style: MonoStyles.small,
             ),
         const SizedBox(width: 8),
         Expanded(
@@ -384,7 +381,7 @@ class _RemoteValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const style = TextStyle(fontFamily: kMonoFamily, fontSize: 12);
+    const style = MonoStyles.body;
     final url = webUrlForRemote(remote);
     if (url == null) return SelectableText(remote, style: style);
     return Row(

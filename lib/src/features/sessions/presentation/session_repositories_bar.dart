@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../application/session_providers.dart';
 import '../application/session_repositories_service.dart';
@@ -67,16 +68,10 @@ class SessionRepositoriesBar extends ConsumerWidget {
               },
               itemBuilder: (context) => [
                 for (final repo in attachable)
-                  PopupMenuItem(
+                  DesktopMenuItem(
                     value: repo.id,
-                    height: 32,
-                    child: Row(
-                      children: [
-                        const Icon(AppIcons.linkSimple, size: 16),
-                        const SizedBox(width: 10),
-                        Text(repo.name),
-                      ],
-                    ),
+                    label: repo.name,
+                    icon: AppIcons.linkSimple,
                   ),
               ],
               child: const Chip(

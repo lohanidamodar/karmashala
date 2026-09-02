@@ -326,7 +326,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
                       kept.changes.map((c) => c.path).join(', '),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontFamily: kMonoFamily),
+                      style: MonoStyles.body,
                     ),
                     onChanged: (value) => setInner(() {
                       if (value ?? false) {
@@ -577,7 +577,7 @@ class _CandidateColumn extends ConsumerWidget {
               ? 'Nothing uncommitted. Committed work shows as a commit count '
                     'above.'
               : snapshot.data!,
-          style: const TextStyle(fontFamily: kMonoFamily, fontSize: 11),
+          style: MonoStyles.small,
         ),
       ),
     );
