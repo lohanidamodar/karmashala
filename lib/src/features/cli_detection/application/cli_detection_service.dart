@@ -154,13 +154,14 @@ class CliStoreLocator {
 class CliDetectionService {
   CliDetectionService({
     ClaudeStoreReader? claudeReader,
-    this.codexReader = const CodexStoreReader(),
+    CodexStoreReader? codexReader,
     this.antigravityReader = const AntigravityStoreSessions(),
     this.translator = const PathTranslator(),
     this.registry = AgentRegistry.builtIn,
-    // Not const any more: the Claude reader carries the cache that keeps a
-    // scan proportional to what changed rather than to the whole store.
-  }) : claudeReader = claudeReader ?? ClaudeStoreReader();
+    // Not const any more: both store readers carry the cache that keeps a scan
+    // proportional to what changed rather than to the whole store.
+  }) : claudeReader = claudeReader ?? ClaudeStoreReader(),
+       codexReader = codexReader ?? CodexStoreReader();
 
   final ClaudeStoreReader claudeReader;
   final CodexStoreReader codexReader;

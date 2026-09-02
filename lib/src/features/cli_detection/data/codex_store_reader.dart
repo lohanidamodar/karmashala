@@ -13,8 +13,43 @@ import '../domain/detected_session.dart';
 /// `<codexHome>/sessions/[YYYY/MM/DD/]rollout-*.jsonl` records its `cwd` in a
 /// leading `session_meta` line, and the session's editable label is the
 /// `thread_name` in `<codexHome>/session_index.jsonl`.
+/// What a rollout was last seen to say, so an unchanged one costs a `stat`.
+///
+/// Shared by default: the saving is across *scans*, and a fresh cache every
+/// pass would read every rollout again — which is the cost this exists to
+/// remove. A test passes its own so it starts cold.
+class CodexRolloutCache {
+  CodexRolloutCache();
+
+  static final CodexRolloutCache shared = CodexRolloutCache();
+
+  final Map<String, _CachedRollout> _byPath = {};
+
+  void clear() => _byPath.clear();
+}
+
+class _CachedRollout {
+  const _CachedRollout({required this.meta, required this.size});
+
+  final _CodexMeta meta;
+
+  /// The size the file had when it was read. A file that has only *grown*
+  /// still says the same thing — see [CodexStoreReader._readRollout].
+  final int size;
+}
+
 class CodexStoreReader {
-  const CodexStoreReader();
+  CodexStoreReader({CodexRolloutCache? cache})
+    : _cache = cache ?? CodexRolloutCache.shared;
+
+  final CodexRolloutCache _cache;
+
+  /// Bytes actually pulled off the disk, over every scan this reader has run.
+  ///
+  /// Exposed rather than inferred, the way [ClaudeStoreReader] exposes it: the
+  /// claim is that a scan costs what *changed*, and a number nobody can read is
+  /// a claim nobody can check.
+  int bytesRead = 0;
 
   Future<List<DetectedSession>> read(
     String codexHome,
@@ -31,13 +66,15 @@ class CodexStoreReader {
       final name = p.basename(entity.path);
       if (!name.startsWith('rollout-') || !name.endsWith('.jsonl')) continue;
 
-      final meta = await _readRollout(entity);
-      if (meta == null) continue;
-
-      DateTime? modified;
+      final FileStat stat;
       try {
-        modified = (await entity.stat()).modified;
-      } catch (_) {}
+        stat = await entity.stat();
+      } on Object {
+        continue;
+      }
+      final meta = await _readRollout(entity, stat);
+      if (meta == null) continue;
+      final modified = stat.modified;
 
       sessions.add(
         DetectedSession(
@@ -56,7 +93,28 @@ class CodexStoreReader {
     return sessions;
   }
 
-  Future<_CodexMeta?> _readRollout(File file) async {
+  /// The `session_meta` a rollout opens with.
+  ///
+  /// Cached on the file's size, because **every field here is first-wins from
+  /// the head of the file**: `cwd`, `id`, `startedAt` and the preview all come
+  /// from the opening lines and are never rewritten. A rollout that has grown
+  /// since the last scan therefore still says exactly what it said, and only
+  /// one that *shrank* — a file replaced under the same name — has to be read
+  /// again.
+  ///
+  /// That is a stronger rule than [ClaudeStoreReader]'s, which must still read
+  /// the tail for a title that gets re-stamped. Here there is nothing in the
+  /// tail worth having.
+  ///
+  /// Without this, a scan re-decoded up to 400 lines of every rollout every
+  /// time it ran. On the owner's machine that was **39% of the app's entire
+  /// idle CPU** — measured in a profile build with the window untouched.
+  Future<_CodexMeta?> _readRollout(File file, FileStat stat) async {
+    final cached = _cache._byPath[file.path];
+    if (cached != null && stat.size >= cached.size) {
+      return cached.meta;
+    }
+
     String? cwd;
     String? id;
     DateTime? startedAt;
@@ -68,6 +126,7 @@ class CodexStoreReader {
               .openRead()
               .transform(utf8.decoder)
               .transform(const LineSplitter())) {
+        bytesRead += line.length + 1;
         if (lines++ > 400 && cwd != null) break;
         if (line.isEmpty) continue;
         final Map<String, dynamic> json;
@@ -101,12 +160,17 @@ class CodexStoreReader {
 
     if (cwd == null || cwd.isEmpty) return null;
     id ??= _idFromFileName(p.basename(file.path));
-    return _CodexMeta(
+    final meta = _CodexMeta(
       cwd: cwd,
       id: id,
       preview: preview,
       startedAt: startedAt,
     );
+    // Only a complete answer is cached. A rollout still being written may not
+    // have its `session_meta` yet, and remembering the miss would keep it
+    // missing.
+    _cache._byPath[file.path] = _CachedRollout(meta: meta, size: stat.size);
+    return meta;
   }
 
   /// An ISO-8601 instant, in UTC, or null for anything else.

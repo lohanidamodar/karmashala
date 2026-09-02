@@ -63,7 +63,7 @@ void main() {
         '{"id":"u1","thread_name":"My Thread"}',
       ]);
 
-      final sessions = await const CodexStoreReader().read(
+      final sessions = await CodexStoreReader(cache: CodexRolloutCache()).read(
         p.join(tmp.path, '.codex'),
         'wsl:Ubuntu',
       );
@@ -80,7 +80,7 @@ void main() {
       write('.codex/sessions/rollout-x-uuid.jsonl', [
         '{"id":"u2","timestamp":"t"}',
       ]);
-      final sessions = await const CodexStoreReader().read(
+      final sessions = await CodexStoreReader(cache: CodexRolloutCache()).read(
         p.join(tmp.path, '.codex'),
         'wsl:Ubuntu',
       );
