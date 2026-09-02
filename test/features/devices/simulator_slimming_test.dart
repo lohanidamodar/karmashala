@@ -781,4 +781,111 @@ void main() {
       expect(parseDisabledPlist(files.files[_plist]!), _launchdEntries);
     });
   });
+
+  group('SimulatorSlimmingService.staleLabels', () {
+    test('reports nothing missing when every managed label is loaded', () async {
+      final runner = FakeCommandRunner(
+        environmentId: 'macos',
+        responder: (request) => CommandResult(
+          exitCode: 0,
+          stdout: _launchctlListOutput(allManagedLabels),
+          stderr: '',
+        ),
+      );
+
+      final stale = await _service(
+        runner,
+        _FakeFileStore(),
+      ).staleLabels(_udid);
+
+      expect(stale, isEmpty);
+      final spawn = runner.requests.single;
+      expect(spawn.executable, 'xcrun');
+      expect(spawn.arguments, ['simctl', 'spawn', _udid, 'launchctl', 'list']);
+    });
+
+    test('names the labels a booted device does not know about', () async {
+      // Stands in for Apple renaming a label between iOS releases: the
+      // category table still lists the old name, but the device's own
+      // launchd answers with something else entirely. Disabling — or
+      // un-disabling — a name it has never heard of is a silent no-op, which
+      // is exactly the failure mode this check exists to surface.
+      final present = allManagedLabels.difference({
+        'com.apple.chronod',
+        'com.apple.searchd',
+      });
+      final runner = FakeCommandRunner(
+        environmentId: 'macos',
+        responder: (request) => CommandResult(
+          exitCode: 0,
+          stdout: _launchctlListOutput(present),
+          stderr: '',
+        ),
+      );
+
+      final stale = await _service(
+        runner,
+        _FakeFileStore(),
+      ).staleLabels(_udid);
+
+      expect(stale, {'com.apple.chronod', 'com.apple.searchd'});
+    });
+
+    test('refuses to guess when the device cannot be reached', () async {
+      // `simctl spawn` fails outright on a device that is not booted — this
+      // check needs the real launchd, so it must say so rather than reporting
+      // every managed label as missing.
+      final runner = FakeCommandRunner(
+        environmentId: 'macos',
+        responder: (request) => const CommandResult(
+          exitCode: 1,
+          stdout: '',
+          stderr: 'Unable to lookup in current state: Shutdown',
+        ),
+      );
+
+      await expectLater(
+        _service(runner, _FakeFileStore()).staleLabels(_udid),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('must be booted'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('parseLaunchctlLabels', () {
+    test('reads the label column and skips the header', () {
+      const output =
+          'PID\tStatus\tLabel\n'
+          '123\t0\tcom.apple.chronod\n'
+          '-\t0\tcom.apple.searchd\n';
+
+      expect(parseLaunchctlLabels(output), {
+        'com.apple.chronod',
+        'com.apple.searchd',
+      });
+    });
+
+    test('skips a row that does not have three tab-separated fields', () {
+      const output =
+          'PID\tStatus\tLabel\n'
+          'garbage line with no tabs\n'
+          '123\t0\tcom.apple.chronod\n';
+
+      expect(parseLaunchctlLabels(output), {'com.apple.chronod'});
+    });
+  });
+}
+
+/// A `launchctl list` table naming exactly [labels], header included.
+String _launchctlListOutput(Iterable<String> labels) {
+  final buffer = StringBuffer('PID\tStatus\tLabel\n');
+  for (final label in labels) {
+    buffer.writeln('-\t0\t$label');
+  }
+  return buffer.toString();
 }
