@@ -524,21 +524,47 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// keep-alive. Panes with nothing running behind them are simply dropped;
   /// there is no session there to keep. Pass `detach: false` to end them for
   /// real, which is what "End session" does.
-  void closeTab(String id, {bool detach = true}) {
-    final tab = _tabById(id);
-    if (tab == null) return;
+  void closeTab(String id, {bool detach = true}) =>
+      closeTabs([id], detach: detach);
+
+  /// Closes every tab in [ids] at once.
+  ///
+  /// The verb behind the tab menu's *Close others / to the right / to the left
+  /// / all*, and — with one id — behind [closeTab] itself. Deliberately **not**
+  /// a loop over [closeTab]: that would publish and write the workspace once
+  /// per tab, so clearing twenty tabs would rebuild every consumer twenty times
+  /// and save the whole workspace twenty times over. One bulk close is one
+  /// publish and one save, whatever the count.
+  ///
+  /// [detach] means what it means in [closeTab]. [activate] names the tab to
+  /// leave in front when the active one is among those closed — the tab the
+  /// menu was opened from, which survives every scope but *close all*; without
+  /// it the keyboard lands on whichever tab happens to be last.
+  void closeTabs(
+    Iterable<String> ids, {
+    bool detach = true,
+    String? activate,
+  }) {
+    final closing = {
+      for (final id in ids)
+        if (_tabById(id) != null) id,
+    };
+    if (closing.isEmpty) return;
     _userClosedSinceRestore = true;
-    for (final paneId in tab.layout.panes) {
-      if (detach) {
-        _detachOrRelease(paneId);
-      } else {
-        _releasePane(paneId);
+    for (final id in closing) {
+      for (final paneId in _tabById(id)!.layout.panes) {
+        if (detach) {
+          _detachOrRelease(paneId);
+        } else {
+          _releasePane(paneId);
+        }
       }
     }
-    _tabs.removeWhere((t) => t.id == id);
+    _tabs.removeWhere((t) => closing.contains(t.id));
     _tabsMutated();
-    if (_activeTabId == id) {
-      _activeTabId = _tabs.isEmpty ? null : _tabs.last.id;
+    if (closing.contains(_activeTabId)) {
+      _activeTabId =
+          _tabById(activate)?.id ?? (_tabs.isEmpty ? null : _tabs.last.id);
     }
     _publish();
     persistStructure();

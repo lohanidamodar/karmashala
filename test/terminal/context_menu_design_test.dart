@@ -76,7 +76,8 @@ void main() {
     await tester.tap(find.byType(TerminalTabChip), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    expectHouseRows(tester, rows: 2);
+    // Close tab, the four bulk closes, End session.
+    expectHouseRows(tester, rows: 6);
     expect(find.byType(DesktopMenuDivider), findsOneWidget);
     final label = tester.widget<Text>(find.text('End session'));
     expect(

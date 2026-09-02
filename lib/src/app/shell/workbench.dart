@@ -18,6 +18,7 @@ import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/domain/pane_liveness.dart';
 import '../../features/terminal/domain/terminal_drag.dart';
+import '../../features/terminal/presentation/close_tabs_dialog.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
@@ -824,11 +825,15 @@ class _TabStrip extends ConsumerWidget {
     final active = ref.watch(terminalActiveTabIdProvider);
     final onPanes = _showingPanes(ref);
     return [
-      for (final tab in tabs)
+      for (final (index, tab) in tabs.indexed)
         _StripTab(
           active: onPanes && tab.id == active,
-          chip: () =>
-              _TabChip(tab: tab, selected: onPanes && tab.id == active),
+          chip: () => _TabChip(
+            tab: tab,
+            selected: onPanes && tab.id == active,
+            index: index,
+            tabCount: tabs.length,
+          ),
         ),
     ];
   }
@@ -842,10 +847,21 @@ class _TabStrip extends ConsumerWidget {
 /// its own panes through [terminalPaneLivenessProvider], so a process exiting
 /// redraws that tab and leaves the other ninety-nine alone.
 class _TabChip extends ConsumerWidget {
-  const _TabChip({required this.tab, required this.selected});
+  const _TabChip({
+    required this.tab,
+    required this.selected,
+    required this.index,
+    required this.tabCount,
+  });
 
   final TerminalTab tab;
   final bool selected;
+
+  /// Where the strip laid this chip out, and how wide the row is. The chip
+  /// itself reads no provider, so this is how it learns whether "close to the
+  /// right" has anything to the right of it.
+  final int index;
+  final int tabCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -855,9 +871,12 @@ class _TabChip extends ConsumerWidget {
       title: title,
       liveness: _liveness(ref),
       selected: selected,
+      index: index,
+      tabCount: tabCount,
       onTap: () => activateTerminalTab(ref, tab.id),
       onClose: () => sessions.closeTab(tab.id),
       onEnd: () => sessions.closeTab(tab.id, detach: false),
+      onBulkClose: (scope) => _bulkClose(context, ref, scope),
     );
 
     // Dropping a tab on a region of a split moves it there — VS Code's gesture,
@@ -871,6 +890,55 @@ class _TabChip extends ConsumerWidget {
       feedback: _TabDragFeedback(title: title),
       childWhenDragging: Opacity(opacity: 0.4, child: chip),
       child: chip,
+    );
+  }
+
+  /// Runs [scope], asking first when it would take a running session with it.
+  ///
+  /// The decision, stated once: a single close is a view action and detaching
+  /// is right, but a bulk close is the user clearing the deck — and silently
+  /// parking a dozen live agents in the background list is the outcome nobody
+  /// wants. So the set is counted, and a set with anything live in it asks,
+  /// with *end* as the default answer. A set with nothing live has no question
+  /// to put, and simply closes.
+  Future<void> _bulkClose(
+    BuildContext context,
+    WidgetRef ref,
+    TabCloseScope scope,
+  ) async {
+    // Read now rather than trusting the index the chip was built with: a tab
+    // can have gone between the menu opening and a row being picked.
+    final tabs = ref.read(terminalTabsProvider);
+    final at = tabs.indexWhere((candidate) => candidate.id == tab.id);
+    if (at < 0) return;
+    final ids = scope.apply([for (final tab in tabs) tab.id], at);
+    if (ids.isEmpty) return;
+
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final state = ref.read(terminalSessionsControllerProvider);
+    final closing = {for (final tab in tabs) tab.id: tab};
+    final live = ids
+        .where(
+          (id) => closing[id]!.layout.panes.any(
+            (paneId) => state.livenessOf(paneId).isLive,
+          ),
+        )
+        .length;
+
+    if (live == 0) {
+      sessions.closeTabs(ids, activate: tab.id);
+      return;
+    }
+    final choice = await confirmBulkTabClose(
+      context,
+      tabs: ids.length,
+      live: live,
+    );
+    if (choice == null || !context.mounted) return;
+    sessions.closeTabs(
+      ids,
+      detach: choice == BulkCloseChoice.keepRunning,
+      activate: tab.id,
     );
   }
 
