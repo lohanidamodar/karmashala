@@ -57,6 +57,8 @@ typedef MigrationStep = void Function(Database db);
 ///   app already polls, plus the manual groups and the built-in Pinned one.
 /// * **v30** — review comments as durable, addressable threads, anchored to a
 ///   file's *content* rather than to a row of whatever diff was on screen.
+/// * **v31** — workspaces: the level *above* project, so ~31 projects across
+///   four unrelated contexts can be narrowed to the one being worked in.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -88,6 +90,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   28: _migrateToV28,
   29: _migrateToV29,
   30: _migrateToV30,
+  31: _migrateToV31,
 };
 
 /// Was this pane running when its row was written?
@@ -1284,4 +1287,54 @@ void _migrateToV29(Database db) {
       [id, name, kind, position],
     );
   }
+}
+
+/// Workspaces: the grouping level *above* project.
+///
+/// **Additive and only additive.** The owner's live database holds ~31
+/// projects and thousands of sessions, and this upgrade must be something it
+/// can survive while the app is open on it: one new table, one nullable
+/// column, no data movement and no `DELETE`, `DROP` or `UPDATE` of any
+/// existing row. Every project on the far side of it is *unassigned*, which is
+/// the correct answer — nothing here knows which context a project belongs to,
+/// and guessing would file 31 things wrong at once.
+///
+/// **Unassigned is first-class, not a hole.** `workspace_id` is nullable and
+/// stays nullable: a project with no workspace is an ordinary project that
+/// shows under "All", never a row waiting to be fixed. That is also why the
+/// foreign key is `ON DELETE SET NULL` rather than `CASCADE` — deleting a
+/// workspace must lose the *grouping*, never the projects grouped by it. A
+/// cascade here would turn "I do not want these four buckets any more" into
+/// "delete 31 projects and their sessions", which is the single worst thing
+/// this table could do.
+///
+/// **Names are unique, case-insensitively.** The whole feature is a picker,
+/// and two rows both called "Personal" in a picker are two answers to a
+/// question with one answer. Enforced in the schema rather than in the
+/// controller because the controller is not the only writer — the suggestion
+/// path writes here too.
+///
+/// **No index on `projects.workspace_id`.** The filter never queries by it:
+/// the project list is already read whole (~31 rows, `ProjectDao.getAll`) and
+/// narrowed in memory, so an index would be paid for on every write and read
+/// by nothing. The one scan it *would* serve is the `SET NULL` fan-out when a
+/// workspace is deleted, over those same 31 rows, once.
+void _migrateToV31(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_name '
+    'ON workspaces (name COLLATE NOCASE);',
+  );
+  // A `REFERENCES` clause is legal on `ADD COLUMN` precisely because the
+  // default is NULL — which is also what every existing project gets.
+  db.execute(
+    'ALTER TABLE projects ADD COLUMN workspace_id TEXT '
+    'REFERENCES workspaces (id) ON DELETE SET NULL;',
+  );
 }

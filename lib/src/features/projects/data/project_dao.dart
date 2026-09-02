@@ -12,24 +12,43 @@ class ProjectDao {
   void insert(Project project) {
     _db.execute(
       'INSERT INTO projects '
-      '(id, name, root_environment_id, root_path, created_at) '
-      'VALUES (?, ?, ?, ?, ?);',
+      '(id, name, root_environment_id, root_path, created_at, workspace_id) '
+      'VALUES (?, ?, ?, ?, ?, ?);',
       [
         project.id,
         project.name,
         project.root.environmentId,
         project.root.path,
         isoFromDate(project.createdAt),
+        project.workspaceId,
       ],
     );
   }
 
   void update(Project project) {
     _db.execute(
-      'UPDATE projects SET name = ?, root_environment_id = ?, root_path = ? '
-      'WHERE id = ?;',
-      [project.name, project.root.environmentId, project.root.path, project.id],
+      'UPDATE projects SET name = ?, root_environment_id = ?, root_path = ?, '
+      'workspace_id = ? WHERE id = ?;',
+      [
+        project.name,
+        project.root.environmentId,
+        project.root.path,
+        project.workspaceId,
+        project.id,
+      ],
     );
+  }
+
+  /// Files [id] under [workspaceId], or unassigns it when that is null.
+  ///
+  /// Its own statement rather than a read-modify-[update], so moving a project
+  /// between contexts cannot rewrite its name or root on the way — and so the
+  /// cost of the move is one `UPDATE`, whatever else the row holds.
+  void setWorkspace(String id, String? workspaceId) {
+    _db.execute('UPDATE projects SET workspace_id = ? WHERE id = ?;', [
+      workspaceId,
+      id,
+    ]);
   }
 
   Project? getById(String id) {
@@ -54,5 +73,6 @@ class ProjectDao {
       path: row['root_path']! as String,
     ),
     createdAt: dateFromIso(row['created_at']),
+    workspaceId: row['workspace_id'] as String?,
   );
 }
