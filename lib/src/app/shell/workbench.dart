@@ -98,6 +98,25 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// publish that changes nothing about *this* session costs one lookup.
   String? _shownPane;
 
+  /// The session whose **conversation** is mounted, or null when none is.
+  ///
+  /// The conversation is built only once it has been asked for, and only for
+  /// the session it was asked for. An [IndexedStack] builds every child, so
+  /// putting the two surfaces in one meant that landing on a session's terminal
+  /// — which is what every tap does — also mounted its chat view, and
+  /// `sessionChatTranscriptProvider` answers a fresh subscription with a CLI
+  /// **store scan** followed by a read and JSON parse of that session's
+  /// **whole transcript file**. Two sessions switched back and forth paid that
+  /// on every switch, for a surface nobody was looking at: the lag the owner
+  /// reported. Measured in `session_switch_cost_test.dart`.
+  ///
+  /// What the stack was for survives: while the conversation *is* the surface
+  /// the user chose, both children stay built, so toggling to the terminal and
+  /// back keeps its scroll position. Only the never-asked-for case is dropped —
+  /// and a switch to another session is exactly that case, because a different
+  /// session's transcript has no scroll position to keep.
+  String? _conversationFor;
+
   @override
   void initState() {
     super.initState();
@@ -119,7 +138,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // selected; the side panel should describe that session, not the row the
       // Explorer happens to highlight first.
       if (active != null) ref.read(sessionContextProvider).follow(active);
-      if (selected != null) _showSurfaceFor(_shownPane);
+      if (selected != null) _showSurfaceFor(_shownPane, selected);
     });
   }
 
@@ -128,20 +147,30 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// opens the conversation" a property rather than a race won.
   void _showChat() => ref.read(terminalVisibleProvider.notifier).set(false);
 
-  /// Reveals the pane the selected session is already running in. Starts and
-  /// stops nothing: a detached pane comes back as a tab, one already in a tab is
+  /// Reveals the pane [sessionId] is already running in. Starts and stops
+  /// nothing: a detached pane comes back as a tab, one already in a tab is
   /// simply focused.
-  void _showTerminalFor(String? paneId) {
+  ///
+  /// [sessionId] is carried alongside the pane purely to **name the change**.
+  /// This used to publish a placement change with no row on it, and a change
+  /// that names no row is read — correctly — as being about every row, so one
+  /// switch woke every per-session provider in the app: at a screenful of
+  /// Explorer cards that is five rebuilds and a handful of reads per row, for a
+  /// session nothing happened to. Every caller knows whose pane this is, so it
+  /// says so. Measured in `session_switch_cost_test.dart`.
+  void _showTerminalFor(String? paneId, String? sessionId) {
     if (paneId != null) {
       final terminals = ref.read(terminalSessionsControllerProvider.notifier);
       terminals
         ..reattachSession(paneId)
         ..focusPane(paneId);
-      // Which pane a session is showing in moved. The pane is what is known
-      // here, not the row, so this names no session — which
-      // [SessionSignals.forSession] reads as "all of them", the safe answer.
+      // Which pane this session is showing in moved, and nothing about any
+      // other row. A pane with no session behind it — there is no such caller
+      // today — would still be the honest broadcast.
       ref.publishSessionChange(
-        const SessionChange(kinds: {SessionChangeKind.placement}),
+        sessionId == null
+            ? const SessionChange(kinds: {SessionChangeKind.placement})
+            : SessionChange.moved(sessionId),
       );
     }
     ref.read(terminalVisibleProvider.notifier).set(true);
@@ -155,7 +184,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
   /// place that says so, in the same words the conversation's own empty hint
   /// reads off the same helper.
   void _openSession(String sessionId) =>
-      _showSurfaceFor(sessionTerminalPane(ref, sessionId));
+      _showSurfaceFor(sessionTerminalPane(ref, sessionId), sessionId);
 
   /// Follows the selected session onto the pane it acquires, or loses.
   ///
@@ -183,7 +212,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // Gaining a pane moves the workbench onto it, or the session would be off
     // screen.
     if (paneId != null) {
-      _showTerminalFor(paneId);
+      _showTerminalFor(paneId, sessionId);
     } else if (ended) {
       _releaseEndedPane();
     }
@@ -218,9 +247,9 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     ref.read(selectedSessionIdProvider.notifier).select(null);
   }
 
-  void _showSurfaceFor(String? paneId) {
+  void _showSurfaceFor(String? paneId, String? sessionId) {
     _shownPane = paneId;
-    _showTerminalFor(paneId);
+    _showTerminalFor(paneId, sessionId);
   }
 
   @override
@@ -236,7 +265,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
       // selected it is already resuming it into one (`openImported`). This used
       // to switch straight to the transcript, which is how the one path the
       // user could not miss opened the chat interface every single time.
-      if (next != null) _showSurfaceFor(null);
+      if (next != null) _showSurfaceFor(null, null);
     });
     // ...and the pane the selected session has can arrive after the tap that
     // selected it, or go away under it. Both of these move it: the terminal's
@@ -273,6 +302,15 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // With nothing to read, the workbench is the terminal — an empty middle
     // would be worse than the surface the app is primarily about.
     final onTerminal = ref.watch(terminalVisibleProvider) || session == null;
+    // Asked for, or let go of — see [_conversationFor]. Written here rather
+    // than in a listener because both inputs are read here and nowhere else,
+    // and neither is a provider this may write to.
+    if (!onTerminal) {
+      _conversationFor = session.id;
+    } else if (_conversationFor != session?.id) {
+      _conversationFor = null;
+    }
+    final conversationMounted = session != null && _conversationFor != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -282,10 +320,12 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         Expanded(
           child: ColoredBox(
             color: scheme.surfaceContainerLowest,
-            // With two surfaces, an IndexedStack rather than a branch: the
+            // With two surfaces up, an IndexedStack rather than a branch: the
             // conversation keeps its scroll position while the terminal is up,
             // and — the Loop 26 property — the hidden one paints nothing. With
-            // one surface there is nothing to keep alive, so it is not paid for.
+            // one surface there is nothing to keep alive, so it is not paid
+            // for — and until the conversation has been asked for there is no
+            // second surface at all ([_conversationFor]).
             child: session == null
                 ? const _TerminalSurface()
                 : IndexedStack(
@@ -300,10 +340,11 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
                       // behind the toggle. It is named outright in that case.
                       // Only a native session is ever reached that way — an
                       // imported one has no pane of ours to follow.
-                      if (session.selected)
-                        const WorkbenchSessionView()
-                      else
-                        SessionTranscriptView(sessionId: session.id),
+                      if (conversationMounted)
+                        if (session.selected)
+                          const WorkbenchSessionView()
+                        else
+                          SessionTranscriptView(sessionId: session.id),
                     ],
                   ),
           ),
@@ -316,7 +357,7 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
           session: session,
           onTerminal: onTerminal,
           onChat: _showChat,
-          onTerminalView: () => _showTerminalFor(session?.paneId),
+          onTerminalView: () => _showTerminalFor(session?.paneId, session?.id),
         ),
       ],
     );

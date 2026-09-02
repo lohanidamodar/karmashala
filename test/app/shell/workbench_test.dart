@@ -613,6 +613,12 @@ void main() {
     // IndexedStack keeps the hidden surface built and unpainted, which is what
     // `pane_layout_view_test` proves about IndexedStack and what lets the chat
     // view keep its scroll position while a terminal is up.
+    //
+    // **Once it has been asked for.** A stack that always held both meant every
+    // tap on a session mounted its conversation behind the terminal, and that
+    // costs a CLI store scan plus a whole-transcript parse — see
+    // `session_switch_cost_test.dart`. Until the toggle is pressed there is one
+    // surface, and nothing hidden to keep alive.
     seedSessionInAPane();
     container.read(selectedSessionIdProvider.notifier).select('s1');
     await pump(tester);
@@ -620,12 +626,19 @@ void main() {
     IndexedStack surfaces() =>
         tester.widget<IndexedStack>(find.byKey(kWorkbenchSurfaces));
 
-    expect(surfaces().children.length, 2, reason: 'both surfaces stay alive');
+    expect(surfaces().children.length, 1, reason: 'only the terminal is asked for');
     expect(surfaces().index, 0, reason: 'the terminal is showing');
 
     await tester.tap(find.byTooltip('Chat view'));
     await tester.pumpAndSettle();
     expect(surfaces().index, 1, reason: 'now the conversation is');
+    expect(surfaces().children.length, 2);
+
+    // ...and back, with both still alive: that is what the stack is for.
+    await tester.tap(find.byTooltip('Terminal view'));
+    await tester.pumpAndSettle();
+    expect(surfaces().index, 0);
+    expect(surfaces().children.length, 2, reason: 'both surfaces stay alive');
   });
 
   testWidgets('with one surface there is no stack to pay for', (tester) async {
