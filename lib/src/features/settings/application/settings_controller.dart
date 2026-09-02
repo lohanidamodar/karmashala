@@ -268,6 +268,17 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Sets the per-agent default model, or with a null [modelId] hands the agent
+  /// back to choosing for itself — no model flag at all.
+  ///
+  /// Null stays a first-class answer here rather than being widened to "some
+  /// model": it is what every session ran under before this setting existed and
+  /// is still the shipped default. See `Settings.defaultModels`.
+  void setDefaultModel(String agentId, String? modelId) {
+    state = state.withDefaultModel(agentId, modelId);
+    _save();
+  }
+
   void setShellIntegrationEnabled(bool value) {
     state = state.copyWith(shellIntegrationEnabled: value);
     _save();

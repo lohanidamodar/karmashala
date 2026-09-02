@@ -6,33 +6,9 @@ import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/application/session_model_providers.dart';
 import '../../agents/domain/agent_model_options.dart';
+import '../../agents/presentation/model_picker.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
-
-/// One row of the model menu: a model to set for this session, or the default
-/// to hand it back to.
-///
-/// A type of its own rather than a nullable `String` because `PopupMenuButton`
-/// reads a null selection as a *dismissal* and never calls `onSelected` for it
-/// — so "follow the default" written as a null value would have looked right
-/// and done nothing.
-@immutable
-class ModelChoice {
-  const ModelChoice(this.modelId);
-
-  /// Follow the default — which today is the agent's own, since Karmashala
-  /// stores no per-agent model preference. See `SessionLauncher.defaultModelFor`.
-  static const followDefault = ModelChoice(null);
-
-  final String? modelId;
-
-  @override
-  bool operator ==(Object other) =>
-      other is ModelChoice && other.modelId == modelId;
-
-  @override
-  int get hashCode => modelId.hashCode;
-}
 
 /// Everything the chip draws, resolved from one session's model state.
 ///
@@ -48,6 +24,7 @@ class ModelChipView {
     required this.options,
     required this.selectedId,
     required this.inherited,
+    required this.defaultModelId,
     required this.defaultDetail,
   });
 
@@ -71,9 +48,14 @@ class ModelChipView {
 
   final bool inherited;
 
-  /// The second line of the "follow the default" row: what the default
-  /// resolves to *today*, because "follow the default" is not an answer to
-  /// "what will this run on" — and that is the question the menu was opened
+  /// What the per-agent default in Settings names *today*, or null for "let the
+  /// agent choose". Null is why the way-back row cannot promise a live switch:
+  /// there is nothing to switch to.
+  final String? defaultModelId;
+
+  /// The second line of the "follow the Settings default" row: what that
+  /// default resolves to *today*, because "follow the default" is not an answer
+  /// to "what will this run on" — and that is the question the menu was opened
   /// with.
   final String defaultDetail;
 
@@ -93,12 +75,23 @@ ModelChipView modelChipViewFor(SessionModelState state) {
       ? null
       : options.where((o) => o.model.id == state.modelId).firstOrNull;
   final tellable = state.support.isSupported;
+  // The Settings default's own name, so every sentence about "the default" can
+  // say what it is instead of making the reader go and look.
+  final defaultLabel = state.defaultModelId == null
+      ? null
+      : (state.support.modelFor(state.defaultModelId)?.label ??
+            state.defaultModelId!);
 
   // "Following" rather than "inherited": inheriting sounds like something that
   // happened once, and the point of this state is that it is live.
   final origin = state.inherited
-      ? 'No model is set for this session, so ${state.agentName} starts on '
-            'whatever it is configured to use.'
+      ? defaultLabel == null
+            ? 'No model is set for this session, and Settings leaves the '
+                  'choice to ${state.agentName}, so it starts on whatever it '
+                  'is configured to use.'
+            : 'No model is set for this session, so it follows the Settings '
+                  'default for ${state.agentName} ($defaultLabel) and moves '
+                  'when that setting moves.'
       : 'Set for this session, and it stays set across a relaunch.';
   final rule = tellable
       ? state.support.switchesLive
@@ -124,9 +117,12 @@ ModelChipView modelChipViewFor(SessionModelState state) {
     options: options,
     selectedId: state.modelId,
     inherited: state.inherited,
-    defaultDetail:
-        'No model flag is passed, so ${state.agentName} starts on whatever '
-        'it is configured to use.',
+    defaultModelId: state.defaultModelId,
+    defaultDetail: defaultLabel == null
+        ? 'Settings leaves the choice to ${state.agentName}, so no model flag '
+              'is passed and it starts on whatever it is configured to use.'
+        : 'Currently $defaultLabel for ${state.agentName}. Changing that '
+              'setting changes this session too.',
   );
 }
 
@@ -143,11 +139,15 @@ ModelChipView modelChipViewFor(SessionModelState state) {
 ///   listed, disabled, and say why: an agent that takes no model flag, and the
 ///   model a session is already on that this build's list has never heard of.
 /// * **A session following the default says so, and can go back to it.** The
-///   menu's first row is the way back, without which the first pick is
-///   irreversible. It is a [ModelChoice] rather than a nullable `String`
-///   because `PopupMenuButton` reads a *null* selection as a dismissal and
-///   never calls `onSelected` for it — so "follow the default" written as a
+///   default is the per-agent one in **Settings**, followed live — a session
+///   that never chose moves when that setting moves, and a session that chose
+///   does not. The menu's first row is the way back, without which the first
+///   pick is irreversible. It is a [ModelChoice] rather than a nullable
+///   `String` because `PopupMenuButton` reads a *null* selection as a dismissal
+///   and never calls `onSelected` for it — so "follow the default" written as a
 ///   null value would have looked right and done nothing.
+///   The Settings default may itself name no model, and that stays a legitimate
+///   answer rather than a gap: no `--model` is passed and the agent chooses.
 /// * **Changing it may or may not touch the running process, and the chip says
 ///   which.** Claude Code and Antigravity take `/model <id>` in a session that
 ///   is sitting at its prompt; Codex's `/model` is a picker and takes no
@@ -215,9 +215,12 @@ class ModelChip extends StatelessWidget {
           // where every session starts and the only way back from a pick.
           DesktopMenuDetailItem<ModelChoice>(
             value: ModelChoice.followDefault,
-            selected: view.selectedId == null,
-            label: 'Let the agent choose',
-            badge: 'next launch',
+            selected: view.inherited,
+            label: 'Follow the Settings default',
+            // A default that names no model has nothing to switch *to*, so this
+            // row cannot promise `now` however idle the agent is — see
+            // [ModelDeferral.noModel].
+            badge: view.defaultModelId != null && live ? 'now' : 'next launch',
             detail: view.defaultDetail,
           ),
           const DesktopMenuDivider(),
@@ -225,7 +228,10 @@ class ModelChip extends StatelessWidget {
             DesktopMenuDetailItem<ModelChoice>(
               value: ModelChoice(option.model.id),
               enabled: option.isSelectable,
-              selected: option.model.id == view.selectedId,
+              // Never both: a session that follows the default resolves to a
+              // model, and ticking that model as well would read as a choice
+              // this session made.
+              selected: !view.inherited && option.model.id == view.selectedId,
               label: option.model.label,
               badge: option.isSelectable
                   ? (live ? 'now' : 'next launch')
@@ -379,9 +385,13 @@ void _apply(
   // different ways.
   final notices = ref.read(sessionNoticesProvider.notifier);
   final outcome = launcher.setModel(state.sessionId, choice.modelId);
-  final what = choice.modelId == null
+  String label(String id) => state.support.modelFor(id)?.label ?? id;
+  final target = choice.modelId ?? state.defaultModelId;
+  final what = choice.modelId != null
+      ? label(choice.modelId!)
+      : target == null
       ? '${state.agentName} will choose its own model'
-      : (state.support.modelFor(choice.modelId)?.label ?? choice.modelId!);
+      : 'Following the Settings default (${label(target)})';
   // Only ever one of two sentences, and never a third that could be read as
   // either. The deferral says *why*, because "the agent is mid-turn" is a wait
   // a moment and "this CLI takes its model from the command line" is a never.

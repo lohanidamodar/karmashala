@@ -58,6 +58,7 @@ class Settings {
     this.defaultAgent,
     this.defaultAgentInstallationId,
     this.permissions = const {},
+    this.defaultModels = const {},
     this.themeMode = AppThemeMode.system,
     this.defaultTerminalProfileId,
     this.keepAwake = false,
@@ -122,6 +123,15 @@ class Settings {
   /// Per-agent permission preferences, keyed by `AgentDescriptor.id` (defaults
   /// to "ask" when absent).
   final Map<String, AgentPermissions> permissions;
+
+  /// Per-agent default models, keyed by `AgentDescriptor.id`.
+  ///
+  /// **Absence is the answer, not a missing one.** A key that is not here means
+  /// "let the agent choose": no `--model` is passed and the CLI starts on
+  /// whatever it is configured to use, which is the state every session was in
+  /// before this setting existed. Writing a null down instead would make the
+  /// shipped default look like a value somebody picked.
+  final Map<String, String> defaultModels;
 
   /// The app theme preference.
   final AppThemeMode themeMode;
@@ -319,11 +329,16 @@ class Settings {
   AgentPermissions permissionsFor(String agentId) =>
       permissions[agentId] ?? const AgentPermissions();
 
+  /// The model new sessions on [agentId] start on, or null for "let the agent
+  /// choose" — which passes no model flag at all.
+  String? defaultModelFor(String agentId) => defaultModels[agentId];
+
   Settings copyWith({
     String? defaultAgent,
     bool clearDefaultAgent = false,
     String? defaultAgentInstallationId,
     Map<String, AgentPermissions>? permissions,
+    Map<String, String>? defaultModels,
     AppThemeMode? themeMode,
     String? defaultTerminalProfileId,
     bool? keepAwake,
@@ -372,6 +387,7 @@ class Settings {
         ? null
         : (defaultAgentInstallationId ?? this.defaultAgentInstallationId),
     permissions: permissions ?? this.permissions,
+    defaultModels: defaultModels ?? this.defaultModels,
     themeMode: themeMode ?? this.themeMode,
     defaultTerminalProfileId:
         defaultTerminalProfileId ?? this.defaultTerminalProfileId,
@@ -424,6 +440,19 @@ class Settings {
   Settings withPermissions(String agentId, AgentPermissions value) =>
       copyWith(permissions: {...permissions, agentId: value});
 
+  /// Sets [agentId]'s default model, or with a null [modelId] **removes** it.
+  ///
+  /// Removal rather than a stored null, for the reason [defaultModels] gives:
+  /// "let the agent choose" is the absence of a preference, and a file that
+  /// held one would have to keep answering what that null meant.
+  Settings withDefaultModel(String agentId, String? modelId) => copyWith(
+    defaultModels: {
+      for (final entry in defaultModels.entries)
+        if (entry.key != agentId) entry.key: entry.value,
+      if (modelId != null && modelId.isNotEmpty) agentId: modelId,
+    },
+  );
+
   Map<String, dynamic> toJson() => {
     if (defaultAgent != null) 'defaultAgent': defaultAgent,
     if (defaultAgentInstallationId != null)
@@ -472,6 +501,7 @@ class Settings {
     'permissions': {
       for (final entry in permissions.entries) entry.key: entry.value.toJson(),
     },
+    if (defaultModels.isNotEmpty) 'defaultModels': defaultModels,
   };
 
   static Settings fromJson(Map<String, dynamic> json) {
@@ -496,6 +526,19 @@ class Settings {
         }
       }
     }
+    // Same shape as the permissions above, and for the same reason: whatever
+    // agent ids the file names survive a round-trip, registered here or not.
+    final defaultModels = <String, String>{};
+    final models = json['defaultModels'];
+    if (models is Map) {
+      for (final entry in models.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        if (key is String && value is String && value.isNotEmpty) {
+          defaultModels[key] = value;
+        }
+      }
+    }
     final terminalId = json['defaultTerminalProfileId'];
     double? toDouble(Object? v) => v is num ? v.toDouble() : null;
     return Settings(
@@ -504,6 +547,7 @@ class Settings {
           ? json['defaultAgentInstallationId'] as String
           : null,
       permissions: permissions,
+      defaultModels: defaultModels,
       themeMode: themeMode,
       defaultTerminalProfileId: terminalId is String ? terminalId : null,
       keepAwake: json['keepAwake'] == true,
@@ -657,7 +701,8 @@ class Settings {
       other.logBufferSize == logBufferSize &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
-      _mapEquals(other.permissions, permissions);
+      _mapEquals(other.permissions, permissions) &&
+      _stringMapEquals(other.defaultModels, defaultModels);
 
   @override
   int get hashCode => Object.hash(
@@ -704,6 +749,9 @@ class Settings {
         androidSlimming,
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
+        Object.hashAllUnordered(
+          defaultModels.entries.map((e) => Object.hash(e.key, e.value)),
+        ),
       ),
     ),
     Object.hashAllUnordered(
@@ -718,6 +766,14 @@ class Settings {
     if (a.length != b.length) return false;
     for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  static bool _stringMapEquals(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
     }
     return true;
   }

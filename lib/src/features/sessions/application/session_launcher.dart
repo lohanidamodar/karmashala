@@ -337,17 +337,22 @@ class SessionLauncher {
 
   /// The default model for [agentId], for a session that has not chosen one.
   ///
-  /// **Null today, and deliberately not a model name.** There is no per-agent
-  /// model preference in Settings yet, and inventing one here would be the
-  /// failure `PermissionModeMapping` documents in the other direction: a claim
-  /// that a session is running on a particular model when nothing was ever
-  /// passed to the agent to make that true. Null means no model flag, which is
-  /// what every session in the database is actually in.
+  /// The Settings preference, read **live** rather than captured, so a session
+  /// that never chose moves when the setting moves — exactly as
+  /// [permissionFor] reads the per-agent permission default.
   ///
-  /// It is a method rather than an inline null so a Settings preference has one
-  /// place to be wired into, reached by both the chip and the launch path — the
+  /// **Null is still an answer, and still the shipped one.** "Let the agent
+  /// choose" is a setting a user can hold on purpose: no model flag is passed
+  /// and the CLI starts on whatever it is configured to use. Widening it to
+  /// some invented model name would be the failure `PermissionModeMapping`
+  /// documents in the other direction — a claim that a session is running on a
+  /// particular model when nothing was ever passed to make that true.
+  ///
+  /// It is a method rather than an inline lookup so the preference has one
+  /// place to be read, reached by both the chip and the launch path — the
   /// property that kept permission-mode resolution from splitting into eight.
-  String? defaultModelFor(String agentId) => null;
+  String? defaultModelFor(String agentId) =>
+      _ref.read(settingsControllerProvider).defaultModelFor(agentId);
 
   /// The model [sessionId] will run on at its next launch or resume, and the
   /// agent it will be handed to.
@@ -361,7 +366,17 @@ class SessionLauncher {
   /// A null `modelId` is an answer, not a gap: no model is named anywhere, so
   /// no model flag is passed and the agent starts on whatever it is configured
   /// to use.
-  ({String? modelId, AgentDescriptor? descriptor, bool inherited})?
+  ///
+  /// `defaultModelId` is what the Settings preference says *today*, carried out
+  /// of the same call rather than looked up again by the caller: the menu has
+  /// to name what "follow the default" resolves to, and a second read of the
+  /// setting is a second answer waiting to disagree with this one.
+  ({
+    String? modelId,
+    String? defaultModelId,
+    AgentDescriptor? descriptor,
+    bool inherited,
+  })?
   effectiveModelFor(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return null;
@@ -369,12 +384,14 @@ class SessionLauncher {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
     if (installation == null) return null;
+    final defaultModelId = defaultModelFor(installation.agentId);
     final resolved = resolveSessionModel(
       sessionModelId: session.modelId,
-      defaultModelId: defaultModelFor(installation.agentId),
+      defaultModelId: defaultModelId,
     );
     return (
       modelId: resolved.modelId,
+      defaultModelId: defaultModelId,
       descriptor: _ref.read(agentRegistryProvider).byId(installation.agentId),
       inherited: resolved.followsDefault,
     );

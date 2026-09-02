@@ -51,6 +51,10 @@ enum SettingsSectionId {
   ]),
   agents('Agents', AppIcons.robot, [
     'default agent',
+    'default model',
+    'model',
+    'opus',
+    'sonnet',
     'claude',
     'codex',
     'accounts',

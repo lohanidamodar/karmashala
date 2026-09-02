@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
+import 'package:karmashala/src/features/agents/presentation/model_picker.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -100,6 +101,7 @@ Future<Harness> harness(
   AgentRegistry registry = AgentRegistry.builtIn,
   AgentActivityStatus status = AgentActivityStatus.idle,
   String? model,
+  String? defaultModel,
 }) async {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -113,7 +115,11 @@ Future<Harness> harness(
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       agentRegistryProvider.overrideWithValue(registry),
       settingsControllerProvider.overrideWith(
-        () => _StaticSettings(const Settings()),
+        () => _StaticSettings(
+          defaultModel == null
+              ? const Settings()
+              : const Settings().withDefaultModel(agentId, defaultModel),
+        ),
       ),
       sessionActivityLookupProvider.overrideWithValue((_) => status),
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),
@@ -163,6 +169,73 @@ void main() {
         .widgetList<Tooltip>(find.byType(Tooltip))
         .firstWhere((t) => (t.message ?? '').isNotEmpty);
     expect(tooltip.message, contains('No model is set for this session'));
+  });
+
+  testWidgets('the Settings default reaches the chip, named as a default', (
+    tester,
+  ) async {
+    final h = await harness(tester, defaultModel: 'opus');
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+
+    // The effective model, drawn as what it is: this session runs on Opus and
+    // did not choose it.
+    expect(find.text('Opus'), findsOneWidget);
+    expect(find.text('· default'), findsOneWidget);
+    final tooltip = tester
+        .widgetList<Tooltip>(find.byType(Tooltip))
+        .firstWhere((t) => (t.message ?? '').isNotEmpty);
+    expect(tooltip.message, contains('follows the Settings default'));
+
+    await openMenu(tester);
+    final back = tester
+        .widgetList<DesktopMenuDetailItem<ModelChoice>>(
+          find.byType(DesktopMenuDetailItem<ModelChoice>),
+        )
+        .first;
+    // "Follow the default" is not an answer to "what will this run on", so the
+    // row says what the default resolves to today.
+    expect(back.value, ModelChoice.followDefault);
+    expect(find.textContaining('Currently Opus'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(
+          DesktopMenuDetailItem<ModelChoice>,
+          'Follow the Settings default',
+        ),
+        matching: find.byIcon(AppIcons.check),
+      ),
+      findsOneWidget,
+    );
+    // And only once: ticking Opus as well would read as a choice this session
+    // made, which is the state that must not move when the setting does.
+    expect(
+      find.descendant(
+        of: find.byType(DesktopMenuDetailItem<ModelChoice>),
+        matching: find.byIcon(AppIcons.check),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a session that chose outranks the Settings default', (
+    tester,
+  ) async {
+    final h = await harness(tester, model: 'sonnet', defaultModel: 'opus');
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    await tester.pumpWidget(h.app);
+
+    expect(find.text('Sonnet'), findsOneWidget);
+    expect(find.text('· default'), findsNothing);
+    expect(
+      h.container
+          .read(sessionLauncherProvider)
+          .effectiveModelFor(h.sessionId)!
+          .modelId,
+      'sonnet',
+    );
   });
 
   testWidgets('the chip shows the model the launcher resolves', (tester) async {
@@ -268,7 +341,7 @@ void main() {
     expect(first.value, isNotNull);
     expect(find.byType(DesktopMenuDivider), findsOneWidget);
 
-    await tester.tap(find.text('Let the agent choose'));
+    await tester.tap(find.text('Follow the Settings default'));
     await tester.pumpAndSettle();
 
     expect(SessionDao(h.db).getById(h.sessionId)!.modelId, isNull);

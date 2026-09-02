@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../domain/agent_descriptor.dart';
 
 /// The model one session will run on, and everything a control needs to say so.
@@ -17,6 +18,7 @@ class SessionModelState {
     required this.sessionId,
     required this.descriptor,
     required this.modelId,
+    required this.defaultModelId,
     required this.inherited,
   });
 
@@ -29,6 +31,11 @@ class SessionModelState {
   /// The model this session will actually be launched with, or null for "no
   /// model flag, the agent's own default".
   final String? modelId;
+
+  /// What the per-agent default in Settings names, or null for "let the agent
+  /// choose". Carried so the menu can say what "follow the default" resolves
+  /// to without reading the setting a second time.
+  final String? defaultModelId;
 
   /// Whether [modelId] came from the default rather than from a choice made for
   /// this session. Two states that must not look alike — see `ModelChip`.
@@ -45,10 +52,12 @@ class SessionModelState {
       other.sessionId == sessionId &&
       identical(other.descriptor, descriptor) &&
       other.modelId == modelId &&
+      other.defaultModelId == defaultModelId &&
       other.inherited == inherited;
 
   @override
-  int get hashCode => Object.hash(sessionId, descriptor, modelId, inherited);
+  int get hashCode =>
+      Object.hash(sessionId, descriptor, modelId, defaultModelId, inherited);
 }
 
 /// The model [sessionId] runs on, resolved by [SessionLauncher] and by nothing
@@ -76,10 +85,22 @@ final sessionModelProvider = Provider.autoDispose
           .read(sessionLauncherProvider)
           .effectiveModelFor(sessionId);
       if (effective == null) return null;
+      // And the one setting this chip follows, selected rather than watched
+      // whole: a window resize writes settings too, and a chip that repainted
+      // for that would be the cost this feature was asked not to add. The value
+      // still comes out of the launcher's resolution above; this only decides
+      // *when* to resolve again.
+      final agentId = effective.descriptor?.id;
+      ref.watch(
+        settingsControllerProvider.select(
+          (s) => agentId == null ? null : s.defaultModelFor(agentId),
+        ),
+      );
       return SessionModelState(
         sessionId: sessionId,
         descriptor: effective.descriptor,
         modelId: effective.modelId,
+        defaultModelId: effective.defaultModelId,
         inherited: effective.inherited,
       );
     });
