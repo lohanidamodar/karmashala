@@ -35,6 +35,8 @@ import 'project_card.dart';
 import 'explorer_sections_view.dart';
 import 'session_rows.dart';
 import 'session_selection_bar.dart';
+import '../../workspaces/application/workspaces_controller.dart';
+import '../../workspaces/presentation/workspace_scope_bar.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
@@ -301,6 +303,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final focused =
         ref.watch(shellControllerProvider).focusedPane == ShellPane.explorer;
     final allProjects = ref.watch(sortedProjectsProvider);
+    final scoped = ref.watch(workspaceScopedProjectsProvider);
     // Re-read sessions whenever the workspace mutates. Not on a permission
     // mode: the panel draws none, and its children each narrow further.
     ref.watchSessionKinds(const {
@@ -313,8 +316,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     final query = _query.trim().toLowerCase();
     final projects = query.isEmpty
-        ? allProjects
-        : allProjects
+        ? scoped
+        : scoped
               .where(
                 (p) =>
                     p.name.toLowerCase().contains(query) ||
@@ -338,6 +341,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         message: allProjects.isEmpty
             ? 'No projects yet.\nUse + to create one from a folder, then its '
                   'CLI sessions are imported automatically.'
+            : scoped.isEmpty
+            ? 'No projects in this context.\nPick All projects above to see '
+                  'everything.'
             : 'No projects match "$_query".',
       );
     } else {
@@ -414,6 +420,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       ],
       body: Column(
         children: [
+          const WorkspaceScopeBar(),
           if (allProjects.isNotEmpty)
             Padding(
               // Inset to the row tiles' own edges: the field and the rows
