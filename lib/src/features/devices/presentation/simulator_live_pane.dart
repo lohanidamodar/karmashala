@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import '../application/ios_device_providers.dart';
 import '../application/simulator_live_view.dart';
 import '../data/device_gesture_sink.dart';
 import '../domain/simulator_backend.dart';
+import 'device_controls.dart';
 import 'device_touch_surface.dart';
 
 /// The simulator's picture, when there is one.
@@ -149,6 +149,13 @@ class _Running extends ConsumerWidget {
 /// mapping is derived from it — so rotating would leave every tap landing in
 /// the wrong place until the view was restarted. It needs the view to follow a
 /// size change, which is more than a button.
+///
+/// The busy gate, the failure snackbar and the row itself now live in
+/// [DeviceControlBar], shared with the Android row: those manners are the same
+/// on both platforms, and keeping two copies is how the Android row ended up
+/// without any of them. What is left here is the part that is genuinely iOS —
+/// which commands to send, and the two pieces of state the buttons name
+/// themselves after.
 class _SimulatorControls extends ConsumerStatefulWidget {
   const _SimulatorControls({required this.udid});
 
@@ -168,133 +175,97 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   /// What the last toggle left the device in. Re-read before every toggle, so a
   /// device locked from somewhere else cannot leave the button inverted.
   bool _locked = false;
-  bool _busy = false;
-
-  Future<void> _run(String what, Future<void> Function() action) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      await action();
-    } on Object catch (error) {
-      if (mounted) _say('$what failed: $error');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _say(String message) => ScaffoldMessenger.maybeOf(
-    context,
-  )?.showSnackBar(SnackBar(content: Text(message)));
 
   Future<void> _press(SimulatorButton button) async {
     final backend = ref.read(simulatorBackendProvider);
     if (backend == null) return;
-    await _run(button.name, () => backend.pressButton(widget.udid, button));
+    await backend.pressButton(widget.udid, button);
   }
 
   Future<void> _toggleLock() async {
     final backend = ref.read(simulatorBackendProvider);
     if (backend == null) return;
-    await _run('Lock', () async {
-      final locked = await backend.isLocked(widget.udid);
-      await backend.setLocked(widget.udid, locked: !locked);
-      if (mounted) setState(() => _locked = !locked);
-    });
+    final locked = await backend.isLocked(widget.udid);
+    await backend.setLocked(widget.udid, locked: !locked);
+    if (mounted) setState(() => _locked = !locked);
   }
 
   Future<void> _appearance() async {
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
     final wanted = !_dark;
-    await _run('Appearance', () async {
-      await simctl.setAppearance(widget.udid, wanted ? 'dark' : 'light');
-      if (mounted) setState(() => _dark = wanted);
-    });
+    await simctl.setAppearance(widget.udid, wanted ? 'dark' : 'light');
+    if (mounted) setState(() => _dark = wanted);
   }
 
   Future<void> _screenshot() async {
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
-    // The Desktop, because that is where the Simulator's own Cmd+S puts them
-    // and it is the one place a person will think to look.
-    final home = Platform.environment['HOME'];
-    final stamp = DateTime.now()
-        .toIso8601String()
-        .replaceAll(':', '-')
-        .split('.')
-        .first;
-    final path = home == null
-        ? null
-        : '$home/Desktop/Simulator Screen Shot $stamp.png';
-    await _run('Screenshot', () async {
-      await simctl.screenshot(widget.udid, hostPath: path);
-      if (mounted) _say(path == null ? 'Screenshot saved.' : 'Saved to $path');
-    });
+    final path = desktopScreenshotPath('Simulator');
+    await simctl.screenshot(widget.udid, hostPath: path);
+    if (mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(
+          content: Text(path == null ? 'Screenshot saved.' : 'Saved to $path'),
+        ),
+      );
+    }
   }
 
   Future<void> _openUrl() async {
-    final url = await askForSimulatorUrl(context);
+    final url = await askForDeviceUrl(context);
     if (url == null || url.trim().isEmpty) return;
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
-    await _run('Open URL', () => simctl.openUrl(widget.udid, url.trim()));
+    await simctl.openUrl(widget.udid, url.trim());
   }
 
   @override
   Widget build(BuildContext context) {
     final canPress = ref.watch(simulatorBackendProvider) != null;
 
-    Widget button(
-      String tooltip,
-      IconData icon,
-      VoidCallback? onPressed, {
-      Key? key,
-    }) => IconButton(
-      key: key,
-      tooltip: tooltip,
-      icon: Icon(icon),
-      onPressed: _busy ? null : onPressed,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.xs),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          button(
-            canPress
-                ? 'Home'
-                : 'Home needs WebDriverAgent, which this build has no copy of',
-            AppIcons.circle,
-            canPress ? () => _press(SimulatorButton.home) : null,
-            key: const Key('simulator-home'),
-          ),
-          button(
-            _locked ? 'Unlock' : 'Lock',
-            AppIcons.power,
-            canPress ? _toggleLock : null,
-            key: const Key('simulator-lock'),
-          ),
-          button(
-            _dark ? 'Switch to light appearance' : 'Switch to dark appearance',
-            AppIcons.circleHalf,
-            _appearance,
-            key: const Key('simulator-appearance'),
-          ),
-          button(
-            'Save a screenshot to the Desktop',
-            AppIcons.image,
-            _screenshot,
-            key: const Key('simulator-screenshot'),
-          ),
-          button(
-            'Open a URL or deep link',
-            AppIcons.globe,
-            _openUrl,
-            key: const Key('simulator-open-url'),
-          ),
-        ],
-      ),
+    return DeviceControlBar(
+      controls: [
+        DeviceControl(
+          name: 'Home',
+          tooltip: canPress
+              ? 'Home'
+              : 'Home needs WebDriverAgent, which this build has no copy of',
+          icon: AppIcons.circle,
+          onPressed: canPress ? () => _press(SimulatorButton.home) : null,
+          buttonKey: const Key('simulator-home'),
+        ),
+        DeviceControl(
+          name: 'Lock',
+          tooltip: _locked ? 'Unlock' : 'Lock',
+          icon: AppIcons.power,
+          onPressed: canPress ? _toggleLock : null,
+          buttonKey: const Key('simulator-lock'),
+        ),
+        DeviceControl(
+          name: 'Appearance',
+          tooltip: _dark
+              ? 'Switch to light appearance'
+              : 'Switch to dark appearance',
+          icon: AppIcons.circleHalf,
+          onPressed: _appearance,
+          buttonKey: const Key('simulator-appearance'),
+        ),
+        DeviceControl(
+          name: 'Screenshot',
+          tooltip: 'Save a screenshot to the Desktop',
+          icon: AppIcons.image,
+          onPressed: _screenshot,
+          buttonKey: const Key('simulator-screenshot'),
+        ),
+        DeviceControl(
+          name: 'Open URL',
+          tooltip: 'Open a URL or deep link',
+          icon: AppIcons.globe,
+          onPressed: _openUrl,
+          buttonKey: const Key('simulator-open-url'),
+        ),
+      ],
     );
   }
 }
@@ -333,46 +304,3 @@ Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
     );
   },
 );
-
-
-/// Asks for a URL to open on the simulator. Null if the dialog was dismissed.
-///
-/// Extracted so it can be tested on its own — it is the whole of a bug worth a
-/// regression test. It holds **no `TextEditingController`**: the first version
-/// created one and disposed it as soon as `showDialog` returned, which is after
-/// the route pops but *before* its exit animation has finished painting the
-/// field. Every frame of that animation then threw "A TextEditingController was
-/// used after being disposed", and because the error repeats per frame it took
-/// the whole app into an error state rather than failing once.
-///
-/// Reading the text from `onChanged` needs no controller and so cannot outlive
-/// one.
-Future<String?> askForSimulatorUrl(BuildContext context) {
-  var typed = '';
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Open a URL'),
-      content: TextField(
-        key: const Key('simulator-url-field'),
-        autofocus: true,
-        decoration: const InputDecoration(
-          hintText: 'myapp://path, or https://example.com',
-        ),
-        onChanged: (value) => typed = value,
-        onSubmitted: Navigator.of(context).pop,
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          key: const Key('simulator-url-open'),
-          onPressed: () => Navigator.of(context).pop(typed),
-          child: const Text('Open'),
-        ),
-      ],
-    ),
-  );
-}

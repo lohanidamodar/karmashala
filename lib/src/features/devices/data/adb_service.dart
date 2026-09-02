@@ -520,6 +520,98 @@ class AdbService {
     _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
+  /// Whether the device is in dark mode, or `null` when it will not say.
+  ///
+  /// Read rather than remembered. The appearance can be changed from the
+  /// device's own Quick Settings tile or by a scheduled switch at dusk, so a
+  /// toggle that trusted its last write would sit inverted — offering "dark"
+  /// on a device that is already dark. `cmd uimode night` answers with one
+  /// line, `Night mode: yes`, which is why this is a cheap thing to ask before
+  /// every flip rather than something to cache.
+  Future<bool?> isNightMode(String serial) async {
+    final result = await runner.run(
+      _forDevice(serial, const ['shell', 'cmd', 'uimode', 'night']),
+    );
+    if (!result.ok) return null;
+    return parseNightMode(result.stdout);
+  }
+
+  /// Switches the device between light and dark.
+  ///
+  /// `cmd uimode night`, not `settings put secure ui_night_mode`. The setting
+  /// is only half the story: it records the preference, but the running system
+  /// UI and every foreground app keep the appearance they were configured with
+  /// until something tells them otherwise. `cmd` goes through the same
+  /// `UiModeManager` call the Quick Settings tile makes, so what is on screen
+  /// changes with it.
+  Future<void> setNightMode(String serial, {required bool dark}) async {
+    final value = dark ? 'yes' : 'no';
+    final summary = 'Set night mode to $value';
+    final result = await runner.run(
+      _forDevice(serial, ['shell', 'cmd', 'uimode', 'night', value]),
+    );
+    if (!result.ok) {
+      final error = StateError(
+        '$summary failed on $serial: ${result.stderr.trim()}',
+      );
+      _report(
+        DeviceAction(
+          verb: 'appearance',
+          serial: serial,
+          summary: summary,
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(
+      DeviceAction(verb: 'appearance', serial: serial, summary: summary),
+    );
+  }
+
+  /// Opens a URL — a web link, or a custom scheme to reach a deep link in an
+  /// installed app.
+  ///
+  /// The exit code is **not** the answer here, which is the whole reason this
+  /// does not go through the usual "ok or throw" shape. Measured against an
+  /// API 34 emulator: an intent nothing can handle still exits 0, printing
+  ///
+  /// ```
+  /// Error: Activity not started, unable to resolve Intent { … }
+  /// ```
+  ///
+  /// to stderr. A deep link typed with the wrong scheme — the single most
+  /// likely thing to get wrong here — would otherwise report success and do
+  /// nothing at all, which is the failure this control exists to make visible.
+  Future<void> openUrl(String serial, String url) async {
+    final summary = 'Opened $url';
+    final result = await runner.run(
+      _forDevice(serial, [
+        'shell',
+        'am',
+        'start',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        url,
+      ]),
+    );
+    if (!result.ok || result.stderr.contains('Error:')) {
+      final complaint = result.stderr.trim().isEmpty
+          ? result.stdout.trim()
+          : result.stderr.trim();
+      final error = StateError('am start failed on $serial: $complaint');
+      _report(
+        DeviceAction(
+          verb: 'openUrl',
+          serial: serial,
+          summary: summary,
+        ).failed(error),
+      );
+      throw error;
+    }
+    _report(DeviceAction(verb: 'openUrl', serial: serial, summary: summary));
+  }
+
   /// Reads recent log lines, newest last.
   ///
   /// When [packageName] is given the log is filtered to that package's live

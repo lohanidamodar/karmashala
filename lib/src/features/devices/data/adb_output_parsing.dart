@@ -203,3 +203,24 @@ List<int> parseOwnedScrcpyPids(String output, {required String jarPath}) {
   }
   return pids;
 }
+
+/// Reads `adb shell cmd uimode night`, which answers with one line:
+/// `Night mode: yes`.
+///
+/// Null for anything else. The alternatives all lie in one direction or the
+/// other: `custom_schedule` and `custom_bedtime` are answers a two-state toggle
+/// cannot represent, and `auto` means "whatever the sensor says", which is not
+/// a state this app set or can promise. Reporting "unknown" lets the caller
+/// leave the control alone instead of claiming the device is light when it is
+/// dark.
+bool? parseNightMode(String output) {
+  final match = RegExp(
+    r'night\s+mode\s*:\s*(\w+)',
+    caseSensitive: false,
+  ).firstMatch(output);
+  return switch (match?.group(1)?.toLowerCase()) {
+    'yes' => true,
+    'no' => false,
+    _ => null,
+  };
+}
