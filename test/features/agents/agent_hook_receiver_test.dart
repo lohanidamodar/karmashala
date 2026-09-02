@@ -274,6 +274,115 @@ void main() {
     });
   });
 
+  group('failure', () {
+    test('StopFailure is a failure, and Stop is still not', () {
+      // The event Claude Code 2.1.258 fires *instead of* `Stop` when an API
+      // error ended the turn — its own table: "Fires instead of Stop when an
+      // API error (rate limit, auth failure, etc.) ended the turn."
+      final failed = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'StopFailure',
+        body: jsonEncode({
+          'session_id': 's1',
+          'cwd': r'C:\src\demo',
+          'hook_event_name': 'StopFailure',
+          'error': 'rate_limit',
+          'last_assistant_message': 'partial work',
+        }),
+      );
+
+      expect(failed.status, AgentActivityStatus.failed);
+      expect(failed.detail, 'StopFailure');
+      // A failure holds the user up but offers nothing to press.
+      expect(failed.waiting, AgentWaitKind.unrecorded);
+      expect(reports.latest('claudeCode', 's1')!.status,
+          AgentActivityStatus.failed);
+
+      // And an ordinary finished turn is untouched by any of it.
+      expect(
+        receiver.handle(
+          agentId: 'claudeCode',
+          event: 'Stop',
+          body: body('s1'),
+        ).status,
+        AgentActivityStatus.idle,
+      );
+    });
+
+    /// An `agy` `Stop` payload in the shape 1.1.23 actually sends — protojson,
+    /// camelCase, and the termination reason spelled with the
+    /// `EXECUTOR_TERMINATION_REASON_` prefix stripped.
+    String stop(String reason) => jsonEncode({
+      'conversationId': 'c1',
+      'executionNum': 1,
+      'terminationReason': reason,
+      'fullyIdle': true,
+      'transcriptPath': '/tmp/t.jsonl',
+      'workspacePaths': <String>[],
+    });
+
+    test('an Antigravity run that ended badly is not "finished"', () {
+      for (final reason in [
+        'ERROR',
+        'MAX_INVOCATIONS',
+        'MAX_FORCED_INVOCATIONS',
+        'MAX_TOKEN_BUDGET_EXCEEDED',
+      ]) {
+        final report = receiver.handle(
+          agentId: 'antigravity',
+          event: 'Stop',
+          body: stop(reason),
+        );
+        expect(report.status, AgentActivityStatus.failed, reason: reason);
+        expect(report.sessionId, 'c1', reason: reason);
+        expect(report.detail, 'Stop/$reason', reason: reason);
+      }
+    });
+
+    test('an Antigravity run that ended normally is still idle', () {
+      // `NO_TOOL_CALL` is the reason the one captured payload carried: the
+      // model answered without calling a tool. `USER_CANCELED` is the user's
+      // own Ctrl-C, which is an ending and not a failure.
+      for (final reason in ['NO_TOOL_CALL', 'USER_CANCELED']) {
+        expect(
+          receiver
+              .handle(agentId: 'antigravity', event: 'Stop', body: stop(reason))
+              .status,
+          AgentActivityStatus.idle,
+          reason: reason,
+        );
+      }
+    });
+
+    test('a termination reason we have not judged records nothing', () {
+      // Six of the twelve enum values are undeclared because nothing here knows
+      // whether they end a run well or badly. `unknown` is not recorded, so the
+      // session keeps whatever it last said rather than being told it finished.
+      final report = receiver.handle(
+        agentId: 'antigravity',
+        event: 'Stop',
+        body: stop('TERMINAL_CUSTOM_HOOK'),
+      );
+
+      expect(report.status, AgentActivityStatus.unknown);
+      expect(reports.latest('antigravity', 'c1'), isNull);
+    });
+
+    test('an invocation event carries no reason and still reads working', () {
+      // The property that makes this a descriptor-only change: an event whose
+      // payload has no `terminationReason` falls through to `eventStatus`.
+      for (final event in ['PreInvocation', 'PostInvocation']) {
+        final report = receiver.handle(
+          agentId: 'antigravity',
+          event: event,
+          body: jsonEncode({'conversationId': 'c1'}),
+        );
+        expect(report.status, AgentActivityStatus.working, reason: event);
+        expect(report.detail, event, reason: event);
+      }
+    });
+  });
+
   test('clear() drops everything recorded', () {
     receiver.handle(agentId: 'claudeCode', event: 'Stop', body: body('s1'));
     reports.clear();

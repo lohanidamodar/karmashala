@@ -253,6 +253,30 @@ const _claudeCode = AgentDescriptor(
       'Notification': AgentActivityStatus.awaitingApproval,
       'Stop': AgentActivityStatus.idle,
       'SessionEnd': AgentActivityStatus.idle,
+      // **The direct failure signal, and it needs no interpretation.** Read out
+      // of the installed 2.1.258 binary's own hook-event table:
+      //
+      //   StopFailure: {summary: "When the turn ends due to an API error",
+      //     description: "Fires instead of Stop when an API error (rate limit,
+      //     auth failure, etc.) ended the turn. Fire-and-forget — hook output
+      //     and exit codes are ignored.",
+      //     matcherMetadata: {fieldToMatch: "error", values: ["rate_limit",
+      //     "overloaded","authentication_failed","oauth_org_not_allowed",
+      //     "account_on_hold","billing_error","invalid_request",
+      //     "model_not_found","server_error","max_output_tokens","unknown"]}}
+      //
+      // Two properties make this the one hook worth adding without a live run
+      // behind it. **"Fires instead of Stop"** means a broken turn no longer
+      // reports idle, rather than reporting both. **"Fire-and-forget — hook
+      // output and exit codes are ignored"** means it carries none of the
+      // stdout risk that keeps `PermissionRequest` undeclared: there is no
+      // decision for an empty reply to be misread as.
+      //
+      // Its `error` values are the same vocabulary the transcript's own
+      // top-level `error` field uses (`stateFile.failed` above), so hook and
+      // state file agree about what a failure is. An older CLI that does not
+      // know the event simply never fires it.
+      'StopFailure': AgentActivityStatus.failed,
     },
   ),
   // A transcript ending in an assistant record is a finished turn; one ending
@@ -978,6 +1002,61 @@ const _antigravity = AgentDescriptor(
     // pending permission nowhere this app can hear, so that state stays
     // unreachable for this agent — see `grid`, which is empty for the same
     // reason.
+    // **`Stop` is not the same thing as "finished".** Its payload carries a
+    // `terminationReason`, and while this mapped `Stop` to `idle`
+    // unconditionally, an `agy` run that died on an error, ran out of
+    // invocations or blew its token budget arrived as "your agent finished".
+    //
+    // The wire spelling is prefix-stripped SCREAMING_SNAKE, established from
+    // the 1.1.23 binary rather than guessed:
+    //
+    //  * `StopHookArgs` declares `termination_reason` as a **string** field
+    //    (`protobuf:"bytes,2,opt,name=termination_reason,
+    //    json=terminationReason,proto3"`), not as the enum — so the enum is
+    //    converted to text before it is sent;
+    //  * the enum's twelve value names are in the descriptor blob in full, all
+    //    spelled `EXECUTOR_TERMINATION_REASON_*` (`…_UNSPECIFIED`, `…_ERROR`,
+    //    `…_USER_CANCELED`, `…_MAX_INVOCATIONS`, `…_NO_TOOL_CALL`,
+    //    `…_MAX_FORCED_INVOCATIONS`, `…_EARLY_CONTINUE`,
+    //    `…_TERMINAL_STEP_TYPE`, `…_TERMINAL_CUSTOM_HOOK`,
+    //    `…_INJECTED_RESPONSE`, `…_MAX_TOKEN_BUDGET_EXCEEDED`,
+    //    `…_HALTED_STEP`);
+    //  * **no bare spelling exists as a literal anywhere in the binary** —
+    //    `strings agy | grep '^NO_TOOL_CALL$'` finds nothing — so the observed
+    //    wire value cannot have come from a lookup table;
+    //  * the one transformation literal that does exist is the bare prefix
+    //    `EXECUTOR_TERMINATION_REASON_`, trailing underscore and all, sitting
+    //    in the Go string blob beside the executor's own messages. Nothing but
+    //    a `TrimPrefix` needs that string.
+    //
+    // The live payload captured when these hooks were first wired is exactly
+    // what that derivation predicts: `"terminationReason":"NO_TOOL_CALL"`.
+    eventKindPath: ['terminationReason'],
+    // Six of the twelve. The other six — `UNSPECIFIED`, `HALTED_STEP`,
+    // `EARLY_CONTINUE`, `INJECTED_RESPONSE`, `TERMINAL_STEP_TYPE`,
+    // `TERMINAL_CUSTOM_HOOK` — are left undeclared because nothing here knows
+    // whether they end a run well or badly, and an undeclared subtype resolves
+    // to `unknown`, which is not recorded and so leaves the session saying
+    // whatever it last said. That is the direction to be wrong in: guessing
+    // `idle` is what tells a user their work is done.
+    eventKindMeaning: {
+      // The captured one: the model answered without calling a tool, which is
+      // how an ordinary turn ends.
+      'NO_TOOL_CALL': AgentHookMeaning(AgentActivityStatus.idle),
+      // The user stopped it themselves. Not a failure — they are already
+      // looking at the session.
+      'USER_CANCELED': AgentHookMeaning(AgentActivityStatus.idle),
+      'ERROR': AgentHookMeaning(AgentActivityStatus.failed),
+      // The run hit a ceiling with work outstanding. The CLI's own shipped
+      // hooks doc calls this family "stopped due to error" and puts an `error`
+      // string beside it.
+      'MAX_INVOCATIONS': AgentHookMeaning(AgentActivityStatus.failed),
+      'MAX_FORCED_INVOCATIONS': AgentHookMeaning(AgentActivityStatus.failed),
+      'MAX_TOKEN_BUDGET_EXCEEDED': AgentHookMeaning(AgentActivityStatus.failed),
+    },
+    // `PreInvocation` and `PostInvocation` payloads carry no
+    // `terminationReason`, so they fall through to these untouched — the
+    // property that makes reading the subtype a descriptor-only change.
     eventStatus: {
       'PreInvocation': AgentActivityStatus.working,
       'PostInvocation': AgentActivityStatus.working,
