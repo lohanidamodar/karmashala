@@ -120,6 +120,9 @@ void main() {
     expectHouseRows(tester, rows: 4);
     expect(find.text('Ctrl+Shift+C'), findsOneWidget);
     expect(find.text('Ctrl+Shift+V'), findsOneWidget);
-    expect(find.text(kFindInScrollbackChord), findsOneWidget);
+    expect(
+      find.text(shellChordLabel<FindInScrollbackIntent>()!),
+      findsOneWidget,
+    );
   });
 }

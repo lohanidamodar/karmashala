@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -36,7 +37,12 @@ Future<void> pumpWorkbench(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+      child: const MaterialApp(
+        // As `AppShell` builds it. A pane's chords are declared in
+        // `shellChords` and dispatched through this widget's `Actions`, so a
+        // workbench pumped without it answers no keystroke.
+        home: Scaffold(body: ShellShortcuts(child: WorkbenchView())),
+      ),
     ),
   );
   await tester.pump();

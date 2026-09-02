@@ -372,9 +372,12 @@ void main() {
     // key away from anyone. Ctrl+Shift+T and Ctrl+Shift+W always reach the app.
     expect(kept, ['Ctrl+B', 'Ctrl+T', 'Ctrl+W']);
     // And the map the Shortcuts widget installs is the same list, less the
-    // pane-only copy/paste chords the rest of the app must not re-bind.
-    final paneOnly = shellChords.where((c) => c.paneOnly).length;
-    expect(shellShortcutMap.length, shellChords.length - paneOnly);
+    // pane-only copy/paste chords the rest of the app must not re-bind and the
+    // pane-local ones that would shadow a text field's own keys.
+    final elsewhere = shellChords
+        .where((c) => c.paneOnly || c.paneLocal)
+        .length;
+    expect(shellShortcutMap.length, shellChords.length - elsewhere);
   });
 
   test('every claimed chord names what the shell loses, or loses nothing', () {

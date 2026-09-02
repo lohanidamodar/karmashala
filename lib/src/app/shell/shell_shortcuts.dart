@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
+import '../../features/terminal/domain/pane_layout.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_state.dart';
@@ -97,11 +98,50 @@ class StepTerminalTabIntent extends Intent {
   final bool forward;
 }
 
+/// Divides the focused pane, leaving the new region empty to fill.
+class SplitTerminalPaneIntent extends Intent {
+  const SplitTerminalPaneIntent(this.axis);
+
+  final SplitAxis axis;
+}
+
+/// Searches the focused pane's scrollback.
+class FindInScrollbackIntent extends Intent {
+  const FindInScrollbackIntent();
+}
+
+/// Scrolls the focused pane to the command before or after the one on screen —
+/// the ones OSC 133 saw, so it does nothing in a pane without shell
+/// integration.
+class JumpCommandIntent extends Intent {
+  const JumpCommandIntent.next() : forward = true;
+  const JumpCommandIntent.previous() : forward = false;
+
+  final bool forward;
+}
+
+/// Brings the previous or next pane stacked in this region forward.
+class StepPaneInRegionIntent extends Intent {
+  const StepPaneInRegionIntent.next() : forward = true;
+  const StepPaneInRegionIntent.previous() : forward = false;
+
+  final bool forward;
+}
+
+/// Moves pane focus one region in a direction.
+class MovePaneFocusIntent extends Intent {
+  const MovePaneFocusIntent(this.direction);
+
+  final PaneDirection direction;
+}
+
 /// One entry in the application's keyboard map.
 ///
 /// The [Shortcuts] map and the terminal's skip-list are the *same list read two
 /// ways* ([shellShortcutMap], [appChordForTerminal]), so a chord cannot be bound
-/// in one and forgotten in the other.
+/// in one and forgotten in the other. `TerminalActions.onPaneKey` holds no chord
+/// table of its own — it asks [handleAppChordFromTerminal] and nothing else —
+/// and `pane_chord_registry_test.dart` fails if it grows one.
 @immutable
 class ShellChord {
   const ShellChord({
@@ -112,6 +152,7 @@ class ShellChord {
     this.skipsShell = false,
     this.shellCost,
     this.paneOnly = false,
+    this.paneLocal = false,
   });
 
   final SingleActivator activator;
@@ -142,6 +183,17 @@ class ShellChord {
   /// the app-wide [shellShortcutMap] and from [appChordForTerminal].
   final bool paneOnly;
 
+  /// Whether this chord is dispatched only from a focused terminal pane.
+  ///
+  /// Not the same question as [paneOnly], which is about *who* dispatches: a
+  /// pane-local chord goes through the app's own [Actions] like every other
+  /// entry here, reached from `TerminalActions.onPaneKey`. It is kept out of
+  /// [shellShortcutMap] because binding it app-wide would shadow something the
+  /// rest of the app needs — `Ctrl+Shift+↑/↓` is Flutter's own
+  /// extend-selection-by-paragraph in every text field — for a verb whose
+  /// subject is a pane the user is already looking at.
+  final bool paneLocal;
+
   /// Whether who gets this chord is a real question.
   ///
   /// A terminal cannot encode `Ctrl+Shift+<letter>` at all — there is no
@@ -149,7 +201,12 @@ class ShellChord {
   /// however they are set, and offering the user a switch for them would be
   /// offering a switch that does nothing. Everything without `Shift` is
   /// genuinely contested and is what Settings lists.
-  bool get contested => !activator.shift;
+  ///
+  /// A [paneLocal] chord is never listed: Settings trades a chord the app takes
+  /// *everywhere* back to the shell, and these have no app-wide binding to
+  /// trade — handing one back would strand its verb with no keyboard route at
+  /// all.
+  bool get contested => !activator.shift && !paneLocal;
 
   /// Whether a focused terminal pane must let this chord through to the app,
   /// after the user's own answer in [overrides] (keyed by [label]).
@@ -171,6 +228,11 @@ class ShellChord {
 /// | `Ctrl+Shift+P` | quick open, already filtered to commands | app |
 /// | `Ctrl+Shift+A` | the attention inbox — open it, or close it again | app |
 /// | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | terminal font size up / down / reset | app |
+/// | `Ctrl+Shift+D` / `Ctrl+Shift+E` | split the pane right / down | app |
+/// | `Ctrl+Shift+F` | find in the scrollback | app |
+/// | `Ctrl+Shift+↑` / `Ctrl+Shift+↓` | jump to the previous / next command | app — pane local |
+/// | `Ctrl+Shift+PageUp` / `PageDown` | step the panes stacked in this region | app — pane local |
+/// | `Ctrl+Alt+←↑↓→` | move pane focus | app — pane local |
 /// | `Ctrl+V` | paste into the terminal | app — pane only |
 /// | `Ctrl+A` | — | **shell** — readline's beginning-of-line |
 ///
@@ -462,6 +524,118 @@ List<ShellChord> _buildChords() => [
     does: 'Terminal font size back to the default',
     skipsShell: true,
   ),
+  // The pane's own verbs. On the control modifier on every platform, macOS
+  // included — like `Ctrl+Tab` above, and for the same reason: this is the
+  // shape a terminal user already has, and `TerminalActions.onPaneKey` has
+  // only ever looked at Ctrl.
+  //
+  // Splitting and finding act on the active tab's focused pane, which exists
+  // whether or not the keyboard is in it — so they are bound app-wide, the way
+  // `Ctrl+Shift+T` and `Ctrl+Shift+W` already are, and the toolbar buttons
+  // beside them do the same thing with a click.
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.keyD,
+      control: true,
+      shift: true,
+    ),
+    intent: SplitTerminalPaneIntent(SplitAxis.horizontal),
+    label: 'Ctrl+Shift+D',
+    does: 'Split the pane right',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.keyE,
+      control: true,
+      shift: true,
+    ),
+    intent: SplitTerminalPaneIntent(SplitAxis.vertical),
+    label: 'Ctrl+Shift+E',
+    does: 'Split the pane down',
+    skipsShell: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.keyF,
+      control: true,
+      shift: true,
+    ),
+    intent: FindInScrollbackIntent(),
+    label: 'Ctrl+Shift+F',
+    does: 'Find in the scrollback',
+    skipsShell: true,
+  ),
+  // Pane-local from here: declared so nothing dispatches them behind the
+  // registry's back, but out of the app-wide map — `Ctrl+Shift+↑/↓` is
+  // Flutter's own paragraph-selection in every text field, and moving focus
+  // between regions is a sentence with no subject anywhere else.
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.arrowUp,
+      control: true,
+      shift: true,
+    ),
+    intent: JumpCommandIntent.previous(),
+    label: 'Ctrl+Shift+Up',
+    does: 'Jump to the previous command',
+    skipsShell: true,
+    paneLocal: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.arrowDown,
+      control: true,
+      shift: true,
+    ),
+    intent: JumpCommandIntent.next(),
+    label: 'Ctrl+Shift+Down',
+    does: 'Jump to the next command',
+    skipsShell: true,
+    paneLocal: true,
+  ),
+  // Ctrl+PageUp/Down steps *tabs*; with Shift it steps the tabs stacked in
+  // this region. Alt+Arrow walks between regions, but a pane behind another
+  // has no direction to be in — without this it would be reachable only by
+  // clicking its chip.
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.pageUp,
+      control: true,
+      shift: true,
+    ),
+    intent: StepPaneInRegionIntent.previous(),
+    label: 'Ctrl+Shift+PageUp',
+    does: 'Previous pane in this region',
+    skipsShell: true,
+    paneLocal: true,
+  ),
+  ShellChord(
+    activator: SingleActivator(
+      LogicalKeyboardKey.pageDown,
+      control: true,
+      shift: true,
+    ),
+    intent: StepPaneInRegionIntent.next(),
+    label: 'Ctrl+Shift+PageDown',
+    does: 'Next pane in this region',
+    skipsShell: true,
+    paneLocal: true,
+  ),
+  for (final (key, direction, label) in const [
+    (LogicalKeyboardKey.arrowLeft, PaneDirection.left, 'Left'),
+    (LogicalKeyboardKey.arrowRight, PaneDirection.right, 'Right'),
+    (LogicalKeyboardKey.arrowUp, PaneDirection.up, 'Up'),
+    (LogicalKeyboardKey.arrowDown, PaneDirection.down, 'Down'),
+  ])
+    ShellChord(
+      activator: SingleActivator(key, control: true, alt: true),
+      intent: MovePaneFocusIntent(direction),
+      label: 'Ctrl+Alt+$label',
+      does: 'Move pane focus ${direction.name}',
+      skipsShell: true,
+      paneLocal: true,
+    ),
   // Copy and paste. Pane-only: outside a terminal the platform's own Ctrl+C /
   // Ctrl+V already work and must not be re-bound.
   ShellChord(
@@ -522,13 +696,15 @@ Map<ShortcutActivator, Intent>? _shortcutMap;
 
 /// The bindings [ShellShortcuts] installs, derived from [shellChords].
 /// Pane-only chords are absent on purpose: they are copy and paste, and the
-/// rest of the app already has those from the platform.
+/// rest of the app already has those from the platform. So are the pane-local
+/// ones — see [ShellChord.paneLocal] for what binding those app-wide would
+/// shadow.
 Map<ShortcutActivator, Intent> get shellShortcutMap =>
     _shortcutMap ??= _buildShortcutMap();
 
 Map<ShortcutActivator, Intent> _buildShortcutMap() => {
   for (final chord in shellChords)
-    if (!chord.paneOnly) chord.activator: chord.intent,
+    if (!chord.paneOnly && !chord.paneLocal) chord.activator: chord.intent,
 };
 
 /// What a terminal pane keeps for itself, replacing xterm's own defaults.
@@ -585,10 +761,17 @@ Map<ShortcutActivator, Intent> terminalPaneShortcutsFor([
 /// Reads the declared defaults, not the user's overrides: every chord this
 /// picks is a `Ctrl+Shift+…` or a `Ctrl+<digit>`, which is to say one nobody
 /// gives back to a shell that cannot encode it.
-String? shellChordLabel<T extends Intent>() {
+///
+/// [where] narrows an intent type that carries a direction — the two halves of
+/// [SplitTerminalPaneIntent] are different verbs on different keys, and a
+/// tooltip that said "split right" over `Ctrl+Shift+E` would be worse than no
+/// tooltip.
+String? shellChordLabel<T extends Intent>({bool Function(T intent)? where}) {
   ShellChord? best;
   for (final chord in shellChords) {
-    if (chord.intent is! T) continue;
+    final intent = chord.intent;
+    if (intent is! T) continue;
+    if (where != null && !where(intent)) continue;
     if (best == null || (!best.skipsShell && chord.skipsShell)) best = chord;
   }
   return best?.label;
@@ -599,6 +782,10 @@ String? shellChordLabel<T extends Intent>() {
 /// Matching ignores the *kind* of event on purpose: the key-up and any repeat of
 /// a claimed combo must be swallowed too, or xterm's fallback leaks a character
 /// for a chord the app already acted on.
+///
+/// Pane-local chords are matched here — this is the only place they are ever
+/// dispatched from, which is why they can be declared without also being bound
+/// app-wide.
 Intent? appChordForTerminal(
   KeyEvent event, {
   Map<String, bool> overrides = const {},
@@ -823,6 +1010,46 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
               intent.delta == 0
                   ? settings.resetTerminalFontSize()
                   : settings.adjustTerminalFontSize(intent.delta);
+              return null;
+            },
+          ),
+          // The pane's own verbs. Here rather than in the pane so a chord and
+          // the toolbar button beside it run the same code — and so the pane
+          // needs no chord table of its own to keep in step with this one.
+          SplitTerminalPaneIntent: CallbackAction<SplitTerminalPaneIntent>(
+            onInvoke: (intent) {
+              TerminalActions(ref).split(intent.axis);
+              return null;
+            },
+          ),
+          FindInScrollbackIntent: CallbackAction<FindInScrollbackIntent>(
+            onInvoke: (intent) {
+              TerminalActions(ref).openSearch();
+              return null;
+            },
+          ),
+          JumpCommandIntent: CallbackAction<JumpCommandIntent>(
+            onInvoke: (intent) {
+              TerminalActions(ref).jumpCommand(forward: intent.forward);
+              return null;
+            },
+          ),
+          StepPaneInRegionIntent: CallbackAction<StepPaneInRegionIntent>(
+            onInvoke: (intent) {
+              final sessions = ref.read(
+                terminalSessionsControllerProvider.notifier,
+              );
+              intent.forward
+                  ? sessions.nextPaneInRegion()
+                  : sessions.previousPaneInRegion();
+              return null;
+            },
+          ),
+          MovePaneFocusIntent: CallbackAction<MovePaneFocusIntent>(
+            onInvoke: (intent) {
+              ref
+                  .read(terminalSessionsControllerProvider.notifier)
+                  .movePaneFocus(intent.direction);
               return null;
             },
           ),

@@ -41,14 +41,6 @@ import '../application/terminal_profiles.dart';
 // this file is still the one import a tab chip needs.
 export '../../../app/shell/workbench_tab_chip.dart';
 
-/// How `Ctrl+Shift+F` is written to the user.
-///
-/// The pane's own chords are dispatched by [TerminalActions.onPaneKey] rather
-/// than declared in `shellChords`, so there is no [shellChordLabel] to read for
-/// them — this is the one place the string is spelled, for the toolbar tooltip
-/// and the pane menu alike.
-const kFindInScrollbackChord = 'Ctrl+Shift+F';
-
 /// Everything the terminal surface can be asked to *do*, in one place.
 ///
 /// The terminal used to be a dock that owned both its tab strip and its panes.
@@ -225,95 +217,44 @@ class TerminalActions {
   /// the widget consults *before* its own shortcut manager and before
   /// `Terminal.keyInput`.
   ///
-  /// The pane's own verbs are all `Ctrl+Shift+*` because `Ctrl+D`, `Ctrl+E`,
-  /// `Ctrl+F` and `Ctrl+W` are live control characters a shell expects to
-  /// receive.
-  ///
-  /// **This is also the only hook the app's own chords have.** Key events reach
-  /// the focused node first and bubble *upward*, so no wrapper above
-  /// `TerminalView` can see a key before it does — and xterm reports every key
-  /// as handled, turning an unclaimed `Ctrl+B` into a literal `^B` and leaving
-  /// the shell's ambient [Shortcuts] permanently unreachable from the app's
-  /// primary surface. So the pane asks [handleAppChordFromTerminal] — the
-  /// declared skip-list, derived from the one shortcut map — and dispatches
-  /// what it finds through the same [Actions] the rest of the app uses. One
+  /// **This is the only hook the app's own chords have.** Key events reach the
+  /// focused node first and bubble *upward*, so no wrapper above `TerminalView`
+  /// can see a key before it does — and xterm reports every key as handled,
+  /// turning an unclaimed `Ctrl+B` into a literal `^B` and leaving the shell's
+  /// ambient [Shortcuts] permanently unreachable from the app's primary
+  /// surface. So the pane asks [handleAppChordFromTerminal] — the declared
+  /// skip-list, derived from the one shortcut map — and dispatches what it
+  /// finds through the same [Actions] the rest of the app uses. One
   /// implementation of "toggle the side panel", reached two ways.
+  ///
+  /// **And it asks nothing else.** The pane's own verbs — split, find, the
+  /// command jumps, the region and focus moves — used to be an `if` chain right
+  /// here, which is how `Ctrl+Shift+D/E/F` came to be handled by a chord in no
+  /// list, `Ctrl+PageUp` came to ignore the answer the user gave Settings, and
+  /// three tooltips came to spell their chords out by hand. They are entries in
+  /// `shellChords` now, pane-local ones stay out of the app-wide map, and
+  /// `pane_chord_registry_test.dart` fails if this method ever claims a key the
+  /// registry has not declared.
   KeyEventResult onPaneKey(FocusNode node, KeyEvent event) {
-    final keyboard = HardwareKeyboard.instance;
-    if (!keyboard.isControlPressed) return KeyEventResult.ignored;
-
-    final key = event.logicalKey;
-    final shift = keyboard.isShiftPressed;
-    final alt = keyboard.isAltPressed;
-
-    void Function()? action;
-    if (shift && !alt) {
-      if (key == LogicalKeyboardKey.keyD) {
-        action = () => split(SplitAxis.horizontal);
-      } else if (key == LogicalKeyboardKey.keyE) {
-        action = () => split(SplitAxis.vertical);
-      } else if (key == LogicalKeyboardKey.keyW) {
-        action = closeFocusedPane;
-      } else if (key == LogicalKeyboardKey.keyF) {
-        action = openSearch;
-      } else if (key == LogicalKeyboardKey.keyT) {
-        action = () => open(defaultProfile());
-      } else if (key == LogicalKeyboardKey.arrowUp) {
-        action = () => jumpCommand(forward: false);
-      } else if (key == LogicalKeyboardKey.arrowDown) {
-        action = () => jumpCommand(forward: true);
-      } else if (key == LogicalKeyboardKey.pageUp) {
-        // Ctrl+PageUp/Down steps *tabs*; with Shift it steps the tabs stacked
-        // in this region. Alt+Arrow walks between regions, but a pane behind
-        // another has no direction to be in — without this it would be
-        // reachable only by clicking its chip.
-        action = _sessions.previousPaneInRegion;
-      } else if (key == LogicalKeyboardKey.pageDown) {
-        action = _sessions.nextPaneInRegion;
-      }
-    } else if (alt && !shift) {
-      if (key == LogicalKeyboardKey.arrowLeft) {
-        action = () => _sessions.movePaneFocus(PaneDirection.left);
-      } else if (key == LogicalKeyboardKey.arrowRight) {
-        action = () => _sessions.movePaneFocus(PaneDirection.right);
-      } else if (key == LogicalKeyboardKey.arrowUp) {
-        action = () => _sessions.movePaneFocus(PaneDirection.up);
-      } else if (key == LogicalKeyboardKey.arrowDown) {
-        action = () => _sessions.movePaneFocus(PaneDirection.down);
-      }
-    } else if (!shift && !alt) {
-      if (key == LogicalKeyboardKey.pageUp) {
-        action = _sessions.previousTab;
-      } else if (key == LogicalKeyboardKey.pageDown) {
-        action = _sessions.nextTab;
-      }
+    // The typing path: every keystroke in a pane arrives here, and only a
+    // modified one can be a chord.
+    if (!HardwareKeyboard.instance.isControlPressed) {
+      return KeyEventResult.ignored;
     }
-
-    // The pane's own verbs win; then the app's skip-list. Nothing overlaps
-    // today, and ordering it this way keeps it that way — a chord the pane
-    // owns cannot be taken from it by a later addition to the shell map.
-    if (action == null) {
-      final context = node.context;
-      if (context == null) return KeyEventResult.ignored;
-      // Claimed for the app, or passed to the process. There is no third
-      // answer: reporting `ignored` for a chord the shell owns would let
-      // xterm's fallback type it as a control character.
-      return handleAppChordFromTerminal(
-            context,
-            event,
-            // Whose chord this is, is the user's call: the declared skip-list
-            // is a default and Settings can flip any of it.
-            overrides: ref
-                .read(settingsControllerProvider)
-                .terminalChordOverrides,
-          )
-          ? KeyEventResult.handled
-          : KeyEventResult.ignored;
-    }
-    // Act once, on the down event, but swallow the matching up/repeat too so a
-    // consumed combo cannot leak a character through xterm's fallback.
-    if (event is KeyDownEvent) action();
-    return KeyEventResult.handled;
+    final context = node.context;
+    if (context == null) return KeyEventResult.ignored;
+    // Claimed for the app, or passed to the process. There is no third
+    // answer: reporting `ignored` for a chord the shell owns would let
+    // xterm's fallback type it as a control character.
+    return handleAppChordFromTerminal(
+          context,
+          event,
+          // Whose chord this is, is the user's call: the declared skip-list
+          // is a default and Settings can flip any of it.
+          overrides: ref.read(settingsControllerProvider).terminalChordOverrides,
+        )
+        ? KeyEventResult.handled
+        : KeyEventResult.ignored;
   }
 }
 
@@ -643,7 +584,7 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
           value: 'find',
           label: 'Find…',
           icon: AppIcons.magnifyingGlass,
-          shortcut: kFindInScrollbackChord,
+          shortcut: shellChordLabel<FindInScrollbackIntent>(),
         ),
         const DesktopMenuDivider(),
         // Only while there is a split to collapse, and only then: with one
@@ -742,12 +683,14 @@ class TerminalToolbar extends ConsumerWidget {
             onPressed: () => actions.showCommands(context),
           ),
         IconButton(
-          tooltip: 'Find in scrollback ($kFindInScrollbackChord)',
+          tooltip:
+              'Find in scrollback'
+              '${_chord(shellChordLabel<FindInScrollbackIntent>())}',
           icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
         IconButton(
-          tooltip: 'Split right (Ctrl+Shift+D)',
+          tooltip: 'Split right${_chord(_splitChord(SplitAxis.horizontal))}',
           // `sidebarSimple` means the side panel everywhere else in the
           // chrome; a split is its own shape, and the vertical one no longer
           // needs a RotatedBox to be drawn.
@@ -755,7 +698,7 @@ class TerminalToolbar extends ConsumerWidget {
           onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
         ),
         IconButton(
-          tooltip: 'Split down (Ctrl+Shift+E)',
+          tooltip: 'Split down${_chord(_splitChord(SplitAxis.vertical))}',
           icon: const Icon(AppIcons.squareSplitVertical, size: Chrome.icon),
           onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
         ),
@@ -832,6 +775,11 @@ class _NoTerminalOpen extends StatelessWidget {
 
 /// A chord in a tooltip, or nothing when the action has none.
 String _chord(String? label) => label == null ? '' : ' ($label)';
+
+/// The chord that splits along [axis]. Both halves share one intent type, so
+/// the axis is what tells `Ctrl+Shift+D` from `Ctrl+Shift+E`.
+String? _splitChord(SplitAxis axis) =>
+    shellChordLabel<SplitTerminalPaneIntent>(where: (i) => i.axis == axis);
 
 /// A bulk close, named the way VS Code names it.
 ///
