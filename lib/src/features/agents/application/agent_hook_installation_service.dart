@@ -15,6 +15,52 @@ import 'agent_status_providers.dart';
 const String _noAddressBound =
     'no callback address this app binds is reachable from this environment';
 
+/// What the last install sweep did, for anything that has to say so out loud.
+///
+/// A hook that was not installed is not a transient error: for the rest of the
+/// run, `awaitingApproval` and `failed` cannot be reported for any session in
+/// that environment, because no shipped CLI writes them to a transcript in a
+/// form worth trusting. That is a degraded app, and the only trace it used to
+/// leave was one `I bootstrap:` line in a file nobody opens — which is how a
+/// day went by with nine sessions on disk probes.
+class AgentHookInstallationReport {
+  const AgentHookInstallationReport(this.results);
+
+  static const AgentHookInstallationReport none = AgentHookInstallationReport(
+    <AgentHookInstallation>[],
+  );
+
+  final List<AgentHookInstallation> results;
+
+  int get installed => results.where((r) => r.installed).length;
+
+  /// Why each environment got nothing, one entry per environment rather than
+  /// one per agent: the reason is a property of the door, and four copies of
+  /// it is a wall of text saying one thing.
+  Map<String, String> get skippedByEnvironment => {
+    for (final result in results)
+      if (!result.installed && result.skippedBecause != null)
+        result.environmentId: result.skippedBecause!,
+  };
+
+  bool get anySkipped => skippedByEnvironment.isNotEmpty;
+}
+
+/// Ambient state, written after each sweep by whoever ran it.
+class AgentHookInstallationReportController
+    extends Notifier<AgentHookInstallationReport> {
+  @override
+  AgentHookInstallationReport build() => AgentHookInstallationReport.none;
+
+  void set(AgentHookInstallationReport next) => state = next;
+}
+
+final agentHookInstallationReportProvider =
+    NotifierProvider<
+      AgentHookInstallationReportController,
+      AgentHookInstallationReport
+    >(AgentHookInstallationReportController.new);
+
 /// One agent config the installer touched, or declined to.
 class AgentHookInstallation {
   const AgentHookInstallation({

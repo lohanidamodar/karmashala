@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../agents/application/agent_hook_installation_service.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import '../../browser/domain/browser_consent.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -284,6 +285,7 @@ class McpBridgeSection extends ConsumerWidget {
     final bridge = const LauncherMcp().bridgeExecutable();
     final available = bridge != null;
     final control = ref.watch(controlServerStatusProvider);
+    final hooks = ref.watch(agentHookInstallationReportProvider);
     return SettingsSection(
       title: 'MCP BRIDGE',
       child: Column(
@@ -357,6 +359,41 @@ class McpBridgeSection extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(top: Insets.xs, left: 20),
                 child: Text(detail, style: theme.textTheme.bodySmall),
+              ),
+          ],
+          // And the third half of it: hooks. A skipped environment costs every
+          // session in it the two states only a hook can report — awaiting
+          // approval, and failed — for the whole run. That used to be one line
+          // in a log file, so nine sessions ran on disk probes all day with
+          // nothing on screen saying the app had quietly stopped being able to
+          // tell you your agent was blocked.
+          if (hooks.anySkipped) ...[
+            const SizedBox(height: Insets.sm),
+            for (final entry in hooks.skippedByEnvironment.entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: Insets.xs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      AppIcons.warningCircle,
+                      size: Chrome.icon,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Text(
+                        'No status callbacks from ${entry.key} — '
+                        '${entry.value}. Sessions there fall back to reading '
+                        'the CLI\'s files, which cannot tell you when an agent '
+                        'is waiting for approval or has failed.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ],
