@@ -105,9 +105,14 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'list_agents': McpToolAnnotations.read,
       'get_usage': McpToolAnnotations.read,
       'open_new_session': McpToolAnnotations(),
-      // Reveals a session that is already running, or resumes one that is not.
-      // Twice is once, either way.
-      'open_session': McpToolAnnotations(idempotent: true),
+      // Reveals a session that is already running, or resumes one that is not
+      // — and for an *imported* CLI session, opens an external terminal window
+      // to resume it in. Twice is twice on that branch: a second call opens a
+      // second window, and nothing in this surface closes one. It was annotated
+      // idempotent, which is the hint a client reads before deciding it is safe
+      // to repeat or to run over a list, and a driver walking `list_sessions`
+      // opened a window per row on the owner's desktop.
+      'open_session': McpToolAnnotations(),
       'session_transcript': McpToolAnnotations.read,
       'session_send': McpToolAnnotations(),
       // Presses the agent's own approve/deny key. Approving is granting

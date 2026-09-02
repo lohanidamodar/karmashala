@@ -94,15 +94,18 @@ void main() {
       expect(metrics.overflowing, isFalse);
     });
 
-    test('they stop shrinking at the floor, and that is where overflow starts', () {
-      // 900 / 10 is 90, under the floor: the tenth tab is the one that does
-      // not fit.
-      expect(tabStripMetrics(900, 8).overflowing, isFalse);
-      final metrics = tabStripMetrics(900, 10);
+    test(
+      'they stop shrinking at the floor, and that is where overflow starts',
+      () {
+        // 900 / 10 is 90, under the floor: the tenth tab is the one that does
+        // not fit.
+        expect(tabStripMetrics(900, 8).overflowing, isFalse);
+        final metrics = tabStripMetrics(900, 10);
 
-      expect(metrics.extent, kMinTabWidth);
-      expect(metrics.overflowing, isTrue);
-    });
+        expect(metrics.extent, kMinTabWidth);
+        expect(metrics.overflowing, isTrue);
+      },
+    );
 
     test('a hundred tabs overflow every window the app supports', () {
       // The 720px minimum window and a 4K one alike: this is why the picker
@@ -184,7 +187,9 @@ void main() {
         for (var i = 0; i < count; i++)
           terminals().openTab(
             TerminalProfile.powerShell,
-            workingDirectory: r'C:\src\p' '$i',
+            workingDirectory:
+                r'C:\src\p'
+                '$i',
           ),
       ];
       terminals().activateTab(ids.first);
@@ -214,7 +219,8 @@ void main() {
     /// The strip's own scroll view — the only horizontal one in the workbench.
     ListView strip(WidgetTester tester) => tester.widget<ListView>(
       find.byWidgetPredicate(
-        (widget) => widget is ListView && widget.scrollDirection == Axis.horizontal,
+        (widget) =>
+            widget is ListView && widget.scrollDirection == Axis.horizontal,
       ),
     );
 
@@ -301,6 +307,48 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(strip(tester).controller!.offset, greaterThan(0));
+      expect(chevron(tester, 'Earlier tabs').onPressed, isNotNull);
+    });
+
+    testWidgets('the strip starting to overflow throws nothing', (
+      tester,
+    ) async {
+      // The launch bug, reproduced: the strip is built without chevrons while
+      // it fits and with them once it does not, which moves the `ListView` to a
+      // new slot. For the frame in between, the outgoing viewport is still
+      // attached and the controller has two positions —
+      // `ScrollController.position` is `positions.single`, so reading it threw
+      // `Bad state: Too many elements` out of the chevron's own builder. It ran
+      // on every start of the app, and the chevrons never drew.
+      openTabs(4);
+      await pump(tester);
+      expect(find.byTooltip('Later tabs'), findsNothing, reason: 'it fits');
+
+      openTabs(30);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'crossing into overflow reads a position that is briefly two',
+      );
+      expect(find.byTooltip('Later tabs'), findsOneWidget);
+    });
+
+    testWidgets('and the chevrons still work after that crossing', (
+      tester,
+    ) async {
+      // The other half: disabling them for that one frame is only acceptable
+      // because they come back. A guard that left them dead would look exactly
+      // like the fix.
+      openTabs(4);
+      await pump(tester);
+      openTabs(30);
+      await tester.pumpAndSettle();
+
+      expect(chevron(tester, 'Later tabs').onPressed, isNotNull);
+      await tester.tap(find.byTooltip('Later tabs'));
+      await tester.pumpAndSettle();
       expect(chevron(tester, 'Earlier tabs').onPressed, isNotNull);
     });
 

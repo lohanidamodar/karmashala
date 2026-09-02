@@ -1293,8 +1293,10 @@ class LauncherControlServer implements SessionMcp {
       'name': 'open_session',
       'description':
           'Open one session by its id. A Karmashala session that is still '
-          'running is reattached to a tab; anything else is resumed. Imported '
-          'CLI sessions open in an external terminal.',
+          'running is reattached to a tab; anything else is resumed. An '
+          'imported CLI session opens a new external terminal window every '
+          'time this is called, and nothing here closes one — do not call it '
+          'over a list of sessions.',
       'inputSchema': {
         'type': 'object',
         'properties': {
@@ -2070,7 +2072,15 @@ class LauncherControlServer implements SessionMcp {
           command: command,
           workingDirectory: env.wslDistribution == null ? repo.path.path : null,
         );
-    return {'opened': session.displayTitle, 'environmentId': env.id};
+    // Named in the answer, because the caller cannot see the desktop: this
+    // branch is the one that opened a window, and it is the one an automated
+    // caller has no way to undo.
+    return {
+      'opened': session.displayTitle,
+      'environmentId': env.id,
+      'externalTerminal': terminal.label,
+      'note': 'Opened a new external terminal window. Close it yourself.',
+    };
   }
 
   Future<Object?> _openNativeSession(Session session) async {
