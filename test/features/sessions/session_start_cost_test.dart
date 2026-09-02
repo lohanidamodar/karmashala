@@ -53,16 +53,27 @@ import '../terminal/fake_instance.dart';
 /// stopped:
 ///
 /// ```txt
-/// sessions   statements   row reads   screen scans   rebuilds
-///        1    26 ->  24     2 ->  1       2 ->  1     6 ->  5
-///       10    38 ->  24    11 ->  1       5 ->  1     9 ->  5
-///      100   158 ->  24   101 ->  1      35 ->  1    39 ->  5
+/// sessions   statements   row reads   screen scans   rebuilds   rows decoded
+///        1    26 ->  24     2 ->  1       2 ->  1     6 ->  5     11 ->  10
+///       10    38 ->  24    11 ->  1       5 ->  1     9 ->  5     56 ->  46
+///      100   158 ->  24   101 ->  1      35 ->  1    39 ->  5    506 -> 406
 /// ```
 ///
 /// The fix is one word. A launch *does* know what it moved: one row appeared,
 /// started, and claimed a pane. Naming the row leaves `broadcasts` alone, so
 /// the ninety-nine cards that did not change stay asleep — and a start now
 /// costs the same at a hundred sessions as at one.
+///
+/// **What is left, and why it stays.** The last column does still rise, and
+/// that is the honest floor: four providers legitimately re-read the session
+/// list when the list changes shape — the placement map, the project summary,
+/// the Explorer's own list, and `SessionEndingObserver`'s sweep — and each is
+/// one statement and N decoded rows. That is pinned below as a slope rather
+/// than removed, so a *fifth* scanning watcher cannot be added without a number
+/// moving. The observer also re-arms one `ref.listen` per running row on every
+/// rebuild, which looks alarming and costs nothing: `statusStreams` is 1 at
+/// every scale, before the fix and after, because re-listening a live provider
+/// builds no stream.
 ///
 /// Counted, not timed, for the reason `session_signal_cost_test.dart` and
 /// `quiet_soak_cost_test.dart` both give: the suite runs at `--concurrency=4`,
@@ -84,6 +95,8 @@ void main() {
     /// rather than inside any one of them.
     final statements = <int, int>{};
     final rowReads = <int, int>{};
+    final rowsScanned = <int, int>{};
+    final statusSubscriptions = <int, int>{};
     final notifications = <int, int>{};
     final encodes = <int, int>{};
     final screenScans = <int, int>{};
@@ -99,6 +112,8 @@ void main() {
 
         statements[count] = measured.statements;
         rowReads[count] = measured.rowReads;
+        rowsScanned[count] = measured.rowsScanned;
+        statusSubscriptions[count] = measured.statusSubscriptions;
         notifications[count] = measured.notifications;
         encodes[count] = measured.encodes;
         screenScans[count] = measured.screenScans;
@@ -108,6 +123,8 @@ void main() {
           'SESSION-START sessions=$count statements=${measured.statements} '
           'reads=${measured.reads} writes=${measured.writes} '
           'rowReads=${measured.rowReads} scans=${measured.tableScans} '
+          'rowsScanned=${measured.rowsScanned} '
+          'statusStreams=${measured.statusSubscriptions} '
           'notified=${measured.notifications} encodes=${measured.encodes} '
           'screenScans=${measured.screenScans} spawns=${measured.spawns}',
         );
@@ -132,6 +149,30 @@ void main() {
         notifications.values.toSet(),
         hasLength(1),
         reason: 'providers republished per start: $notifications',
+      );
+      expect(
+        statusSubscriptions.values.toSet(),
+        orderedEquals([1]),
+        reason:
+            'the session that started needs a status stream; the ones already '
+            'running keep the streams they have. `SessionEndingObserver` '
+            're-arms a `ref.listen` per running row on every rebuild, and this '
+            'is what says that costs nothing: $statusSubscriptions',
+      );
+      // Rows, not statements. Four providers legitimately re-read the list
+      // when the list changes shape — the placement map, the project summary,
+      // the Explorer's own list and the follow-up sweep — and each is one
+      // statement and N decoded rows. A fifth would be invisible in every
+      // other number on this page.
+      expect(
+        [
+          (rowsScanned[10]! - rowsScanned[1]!) / 9,
+          (rowsScanned[100]! - rowsScanned[10]!) / 90,
+        ],
+        everyElement(4),
+        reason:
+            'a start may re-read the session list a fixed number of times, '
+            'and that number is four: $rowsScanned',
       );
       expect(
         encodes.values.toSet(),
@@ -336,6 +377,8 @@ class _StartCost {
     required this.writes,
     required this.rowReads,
     required this.tableScans,
+    required this.rowsScanned,
+    required this.statusSubscriptions,
     required this.notifications,
     required this.encodes,
     required this.screenScans,
@@ -354,6 +397,17 @@ class _StartCost {
   /// Unfiltered reads of the sessions table. A create genuinely changes the
   /// shape of every list, so these are legitimate — but they must not multiply.
   final int tableScans;
+
+  /// **Rows decoded** out of the sessions table, which is the unit a statement
+  /// count hides: one `getAll()` is one statement and N `Session` objects, and
+  /// `SessionEndingObserver` answers every membership-or-status signal with
+  /// exactly that.
+  final int rowsScanned;
+
+  /// Streams `agentSessionStatusProvider` had to build. The observer re-arms
+  /// one `ref.listen` per running row on every rebuild, so a start that made
+  /// those churn would build a stream per session here.
+  final int statusSubscriptions;
 
   /// Providers that actually republished, which is a widget rebuild each.
   final int notifications;
@@ -418,9 +472,10 @@ class _StartWorkspace {
         // are. The live one fans into `SessionStatusRegistry`, which stats
         // transcript files on its own cycle — a disk cost `periodic_tick_bench`
         // owns.
-        agentSessionStatusProvider.overrideWith(
-          (ref, id) => const Stream<AgentStatusReport>.empty(),
-        ),
+        agentSessionStatusProvider.overrideWith((ref, id) {
+          statusSubscriptions++;
+          return const Stream<AgentStatusReport>.empty();
+        }),
         // Nothing under `C:\src\demo` exists on a test machine, so the default
         // would call every recorded directory gone.
         sessionDirectoryPresentProvider.overrideWithValue((_) => true),
@@ -467,7 +522,7 @@ class _StartWorkspace {
   }
 
   final int sessions;
-  final db = CountingDatabase();
+  final db = _RowCountingDatabase();
   final git = FakeCommandRunner();
   final Map<String, _CountingScreen> terminals = {};
 
@@ -477,6 +532,9 @@ class _StartWorkspace {
 
   /// Agent panes built, which is one PTY each.
   int processes = 0;
+
+  /// Status streams built during the measurement.
+  int statusSubscriptions = 0;
 
   /// Every republication any of the subscribed providers has made — one
   /// widget rebuild each. Recomputations that produced an equal value do not
@@ -526,6 +584,7 @@ class _StartWorkspace {
     db.reset();
     git.requests.clear();
     processes = 0;
+    statusSubscriptions = 0;
     notifications = 0;
     for (final terminal in terminals.values) {
       terminal
@@ -542,6 +601,8 @@ class _StartWorkspace {
       writes: db.writes.length,
       rowReads: db.reads.where(_oneRowRead.hasMatch).length,
       tableScans: db.reads.where(_unfilteredSessionScan.hasMatch).length,
+      rowsScanned: db.sessionRowsScanned,
+      statusSubscriptions: statusSubscriptions,
       notifications: notifications,
       // The new pane's own terminal is built during the measurement, so its
       // reads are counted too — a start that encoded a hundred scrollbacks and
@@ -555,6 +616,35 @@ class _StartWorkspace {
   void dispose() {
     container.dispose();
     db.close();
+  }
+}
+
+/// A [CountingDatabase] that also counts the *rows* the sessions table gave
+/// back.
+///
+/// A statement count hides the whole of `SessionEndingObserver`: one `getAll()`
+/// is one statement and N decoded rows, and the observer answers every
+/// membership-or-status signal with one. Counting rows is what tells a scan
+/// that is O(1) in statements from one that is O(sessions) in work.
+class _RowCountingDatabase extends CountingDatabase {
+  int sessionRowsScanned = 0;
+
+  static final _sessionTable = RegExp(r'FROM\s+sessions\b');
+
+  @override
+  void reset() {
+    super.reset();
+    sessionRowsScanned = 0;
+  }
+
+  @override
+  List<Map<String, Object?>> query(
+    String sql, [
+    List<Object?> params = const [],
+  ]) {
+    final rows = super.query(sql, params);
+    if (_sessionTable.hasMatch(sql)) sessionRowsScanned += rows.length;
+    return rows;
   }
 }
 
