@@ -285,8 +285,14 @@ class CompanionSessionSummary {
   String get projectKey => projectId ?? 'name:$projectName';
 }
 
+/// The role on the gateway's own marker for history the host kept back — not a
+/// turn anybody took, and drawn as the top edge of the loaded window rather
+/// than as a message.
+const String kCompanionNoticeRole = 'notice';
+
 /// One transcript turn. Role vocabulary matches the desktop chat view:
-/// `user`, `agent`, `tool`, or `error`.
+/// `user`, `agent`, `tool` or `error`, plus [kCompanionNoticeRole] for the
+/// gateway's own marker.
 class CompanionChatMessage {
   const CompanionChatMessage({required this.role, required this.text});
 
