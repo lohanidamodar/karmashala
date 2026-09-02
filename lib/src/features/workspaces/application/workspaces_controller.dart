@@ -125,12 +125,3 @@ final workspaceScopedProjectsProvider = Provider<List<Project>>((ref) {
       if (scope.includes(project) || project.id == selectedId) project,
   ];
 });
-
-/// Workspace ids that at least one project is filed under. The picker uses it
-/// to say whether "No context" is worth offering.
-final assignedWorkspaceIdsProvider = Provider<Set<String>>((ref) {
-  return {
-    for (final project in ref.watch(projectsControllerProvider))
-      if (project.workspaceId != null) project.workspaceId!,
-  };
-});
