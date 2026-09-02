@@ -7,6 +7,7 @@ import '../../../app/widgets/desktop_menu.dart';
 import '../../agents/application/session_model_providers.dart';
 import '../../agents/domain/agent_model_options.dart';
 import '../application/session_launcher.dart';
+import '../application/session_notice.dart';
 
 /// One row of the model menu: a model to set for this session, or the default
 /// to hand it back to.
@@ -114,8 +115,11 @@ ModelChipView modelChipViewFor(SessionModelState state) {
     qualifier: state.modelId == null
         ? null
         : (current?.fitLabel ?? (state.inherited ? 'default' : null)),
-    tooltip: [current?.model.label ?? state.modelId ?? 'Agent default', origin, rule]
-        .join('\n'),
+    tooltip: [
+      current?.model.label ?? state.modelId ?? 'Agent default',
+      origin,
+      rule,
+    ].join('\n'),
     alarming: !tellable,
     options: options,
     selectedId: state.modelId,
@@ -340,17 +344,22 @@ Widget _buildModelChip(
     maxLabelWidth: maxLabelWidth,
     switchesNow: () =>
         launcher.liveModelSwitchBlockerFor(state.sessionId) == null,
-    onSelected: (choice) => _apply(context, launcher, state, choice),
+    onSelected: (choice) => _apply(ref, launcher, state, choice),
   );
 }
 
 void _apply(
-  BuildContext context,
+  WidgetRef ref,
   SessionLauncher launcher,
   SessionModelState state,
   ModelChoice choice,
 ) {
-  final messenger = ScaffoldMessenger.of(context);
+  // Into the session's own bar, for the reason `PermissionModeChip` gives: every
+  // sentence below is about one session, and the two chips sit in the same row
+  // — a message from one arriving across the bottom of the window and a message
+  // from the other arriving beside the chip would be the same event reported two
+  // different ways.
+  final notices = ref.read(sessionNoticesProvider.notifier);
   final outcome = launcher.setModel(state.sessionId, choice.modelId);
   final what = choice.modelId == null
       ? '${state.agentName} will choose its own model'
@@ -373,5 +382,5 @@ void _apply(
                 'to, so the session running now is unchanged.',
           _ => '$what — applies when this session next runs.',
         };
-  messenger.showSnackBar(SnackBar(content: Text(message)));
+  notices.post(state.sessionId, SessionNotice(message: message));
 }

@@ -18,6 +18,7 @@ import 'package:karmashala/src/features/sessions/application/session_working_dir
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
+import 'package:karmashala/src/features/sessions/presentation/session_notice_line.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -75,7 +76,20 @@ class Harness {
   Widget get app => UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
-      home: Scaffold(body: Center(child: SessionModelChip(sessionId: sessionId))),
+      home: Scaffold(
+        // The chip and the session bar it posts into, as both hosts compose
+        // them: what a model change reports now belongs to this session rather
+        // than to the window.
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SessionModelChip(sessionId: sessionId),
+              SessionNoticeLine(sessionId: sessionId),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -119,10 +133,11 @@ Future<Harness> harness(
       );
   final written = <String>[];
   container
-      .read(terminalSessionsControllerProvider.notifier)
-      .instanceFor(launched.paneId!)!
-      .terminal
-      .onOutput = written.add;
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(launched.paneId!)!
+          .terminal
+          .onOutput =
+      written.add;
   if (model != null) SessionDao(db).updateModel(launched.session.id, model);
   return Harness(db, container, launched.session.id, written);
 }
@@ -335,10 +350,7 @@ void main() {
     await openMenu(tester);
 
     // Four models plus the way back to the default.
-    expect(
-      find.byType(DesktopMenuDetailItem<ModelChoice>),
-      findsNWidgets(5),
-    );
+    expect(find.byType(DesktopMenuDetailItem<ModelChoice>), findsNWidgets(5));
     expect(
       find.descendant(
         of: find.byType(DesktopMenuDetailItem<ModelChoice>),

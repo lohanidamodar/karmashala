@@ -12,6 +12,7 @@ import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/domain/session.dart';
 import '../../features/sessions/presentation/approval_request_card.dart';
+import '../../features/sessions/presentation/session_notice_line.dart';
 import '../../features/sessions/presentation/delivery_strip.dart';
 import '../../features/sessions/presentation/permission_mode_chip.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
@@ -692,7 +693,13 @@ class _SessionBar extends ConsumerWidget {
             children: [
               // Full width and above everything, so the facts read as a caption
               // over the row rather than as the first item in it.
-              if (sessionId != null) DeliveryStateLine(sessionId: sessionId),
+              if (sessionId != null) ...[
+                DeliveryStateLine(sessionId: sessionId),
+                // Whatever this session has just been told, in this session's
+                // bar. Full width for the same reason, and directly over the
+                // chips that post it.
+                SessionNoticeLine(sessionId: sessionId),
+              ],
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1111,11 +1118,9 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
   // `activePaneSessionIdProvider` already made, and for the same reason: this
   // was a full table scan run to label a strip of a dozen tabs.
   final titles = <String, String>{
-    for (final record in ref
-        .read(sessionDaoProvider)
-        .getByPaneIds([
-          for (final tab in terminals.tabs) ...tab.layout.panes,
-        ]))
+    for (final record in ref.read(sessionDaoProvider).getByPaneIds([
+      for (final tab in terminals.tabs) ...tab.layout.panes,
+    ]))
       if (record.paneId != null) record.paneId!: record.title,
   };
   final onPanes = _showingPanes(ref);
