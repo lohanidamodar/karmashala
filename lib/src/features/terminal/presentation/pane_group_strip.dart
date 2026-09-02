@@ -7,6 +7,7 @@ import '../../../app/shell/tab_strip_metrics.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../application/terminal_sessions_controller.dart';
 import '../domain/pane_layout.dart';
 import '../domain/terminal_drag.dart';
@@ -190,14 +191,31 @@ class PaneTabChip extends ConsumerWidget {
     if (overlay == null) return;
     final choice = await showMenu<String>(
       context: context,
+      // `ContextMenuRegion._show`'s anchor. As in the workbench strip, the chip
+      // keeps `showMenu`: the right-click already comes from
+      // [WorkbenchTabChip]'s `InkWell`, and this chip is inside a `Draggable`.
       position: RelativeRect.fromRect(
-        position & const Size(40, 40),
+        Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
-      items: const [
-        PopupMenuItem(value: 'untangle', child: Text('Move to a new tab')),
-        PopupMenuItem(value: 'close', child: Text('Close pane, keep running')),
-        PopupMenuItem(value: 'end', child: Text('End session')),
+      items: [
+        DesktopMenuItem(
+          value: 'untangle',
+          label: 'Move to a new tab',
+          icon: AppIcons.terminalWindow,
+        ),
+        DesktopMenuItem(
+          value: 'close',
+          label: 'Close pane, keep running',
+          icon: AppIcons.x,
+        ),
+        const DesktopMenuDivider(),
+        DesktopMenuItem(
+          value: 'end',
+          label: 'End session',
+          icon: AppIcons.power,
+          destructive: true,
+        ),
       ],
     );
     switch (choice) {

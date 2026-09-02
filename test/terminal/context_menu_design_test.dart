@@ -1,0 +1,115 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/shell/workbench.dart';
+import 'package:karmashala/src/app/theme/app_theme.dart';
+import 'package:karmashala/src/app/theme/design_tokens.dart';
+import 'package:karmashala/src/app/widgets/desktop_menu.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
+import 'package:karmashala/src/features/terminal/presentation/pane_group_strip.dart';
+import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';
+
+import '../features/terminal/fake_instance.dart';
+
+/// The terminal's three right-click menus draw the *house* menu row.
+///
+/// They were raw `PopupMenuItem`s with a bare `Text` child, which Material
+/// renders at 48px with no icon — visibly a different kind of menu from the one
+/// the Explorer and the Files panel open two panes away. These pin the fix:
+/// every row is a [DesktopMenuItem], so a change back to a plain item is a test
+/// failure rather than something only a screenshot would catch.
+void main() {
+  late AppDatabase db;
+  late ProviderContainer container;
+
+  setUp(() {
+    db = AppDatabase.memory();
+    container = fakeTerminalContainer(database: db);
+  });
+
+  tearDown(() {
+    container.dispose();
+    db.close();
+  });
+
+  TerminalSessionsController terminals() =>
+      container.read(terminalSessionsControllerProvider.notifier);
+
+  Future<void> pump(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(body: WorkbenchView()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  /// Every row of the open menu, asserted to be a house row of the house height.
+  void expectHouseRows(WidgetTester tester, {required int rows}) {
+    final items = find.byType(DesktopMenuItem<String>);
+    expect(items, findsNWidgets(rows));
+    expect(
+      find.byType(PopupMenuItem<String>),
+      findsNothing,
+      reason: 'a bare PopupMenuItem is the 48px Material row this replaced',
+    );
+    for (var i = 0; i < rows; i++) {
+      expect(tester.getSize(items.at(i)).height, Chrome.menuRow);
+    }
+  }
+
+  testWidgets('the tab menu draws house rows, with End session in the error '
+      'colour', (tester) async {
+    await pump(tester);
+
+    await tester.tap(find.byType(TerminalTabChip), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expectHouseRows(tester, rows: 2);
+    expect(find.byType(DesktopMenuDivider), findsOneWidget);
+    final label = tester.widget<Text>(find.text('End session'));
+    expect(
+      label.style?.color,
+      AppTheme.light().colorScheme.error,
+      reason: 'ending a session is the destructive verb of this menu',
+    );
+  });
+
+  testWidgets('the pane menu draws house rows', (tester) async {
+    await pump(tester);
+    terminals().splitPane(SplitAxis.horizontal);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PaneTabChip), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expectHouseRows(tester, rows: 3);
+    expect(find.byType(DesktopMenuDivider), findsOneWidget);
+  });
+
+  testWidgets('the terminal body menu draws house rows, with the chords it '
+      'really binds', (tester) async {
+    await pump(tester);
+
+    await tester.tapAt(const Offset(400, 400), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    // Copy, Paste, Find…, End session — the split-only pair is absent because
+    // there is no split to collapse.
+    expectHouseRows(tester, rows: 4);
+    expect(find.text('Ctrl+Shift+C'), findsOneWidget);
+    expect(find.text('Ctrl+Shift+V'), findsOneWidget);
+    expect(find.text(kFindInScrollbackChord), findsOneWidget);
+  });
+}
