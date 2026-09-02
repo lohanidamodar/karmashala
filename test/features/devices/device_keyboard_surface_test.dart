@@ -6,16 +6,31 @@ import 'package:karmashala/src/features/devices/domain/device_keyboard.dart';
 import 'package:karmashala/src/features/devices/presentation/device_keyboard_surface.dart';
 
 class _RecordingSink implements DeviceKeyboardSink {
-  _RecordingSink({this.transport = DeviceKeyboardTransport.scrcpyControl});
+  _RecordingSink({
+    this.transport = DeviceKeyboardTransport.scrcpyControl,
+    this.refuseWith,
+  });
 
   final List<DeviceKeyIntent> sent = [];
+
+  /// When set, every keycode is refused with this reason — a sink that knows
+  /// something more specific than its transport's blanket limitation.
+  final String? refuseWith;
 
   @override
   final DeviceKeyboardTransport transport;
 
   @override
+  String? refusal;
+
+  @override
   bool send(DeviceKeyIntent intent) {
+    if (refuseWith != null && intent is DeviceKeycodeIntent) {
+      refusal = refuseWith;
+      return false;
+    }
     sent.add(intent);
+    refusal = null;
     return true;
   }
 
@@ -279,6 +294,36 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
       await tester.pump();
       expect(sink.sent, isEmpty);
+    });
+
+    testWidgets('a refused key is reported in the sink\'s own words', (
+      tester,
+    ) async {
+      // The transport's `limitation` is one blanket sentence about chords. A
+      // sink that refused Page Down because iOS has no such key knows better,
+      // and telling the user about a modifier problem they do not have sends
+      // them looking in the wrong place.
+      const reason = 'iOS has no Page Down key';
+      await pump(
+        tester,
+        forwarding: true,
+        keyboard: _RecordingSink(
+          transport: DeviceKeyboardTransport.webDriverAgent,
+          refuseWith: reason,
+        ),
+      );
+      await focusSurface(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+      await tester.pump();
+
+      expect(find.text(reason), findsOneWidget);
+      expect(
+        find.textContaining(
+          DeviceKeyboardTransport.webDriverAgent.limitation!,
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('the adb fallback says what it cannot do', (tester) async {

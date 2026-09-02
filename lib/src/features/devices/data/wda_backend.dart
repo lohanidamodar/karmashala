@@ -312,6 +312,31 @@ class WdaBackend implements SimulatorBackend {
     });
   }
 
+  /// The USB HID **keyboard** usage page. WebDriverAgent's
+  /// `performIoHidEvent` also reaches the consumer page (`0x0C`), which is
+  /// where volume and Siri live, but nothing routed here needs it: those are
+  /// hardware buttons, and [pressButton] owns those.
+  static const int _hidKeyboardPage = 0x07;
+
+  @override
+  Future<void> pressKey(String udid, SimulatorKey key) async {
+    await attach(udid);
+    final session = await _session();
+    // Session-level, unlike `/wda/homescreen`: the route only exists under a
+    // session, and asking the server for it answers "unknown command".
+    //
+    // The duration is what the device sees the key held for, so it has to be
+    // long enough for the press to register and short enough not to trip
+    // auto-repeat. 10 ms was measured working for arrows, Backspace, Escape and
+    // Return against WebDriverAgent 16.11.4 on an iOS 18.2 simulator; the call
+    // blocks for it, which is why it is not larger.
+    await _post('/session/$session/wda/performIoHidEvent', {
+      'page': _hidKeyboardPage,
+      'usage': key.hidUsage,
+      'durationSeconds': 0.01,
+    });
+  }
+
   @override
   Future<void> pressButton(String udid, SimulatorButton button) async {
     await attach(udid);

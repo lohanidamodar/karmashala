@@ -129,10 +129,13 @@ class _DeviceKeyboardSurfaceState extends State<DeviceKeyboardSurface> {
       return KeyEventResult.handled;
     }
     if (!sink.send(intent)) {
-      final limitation = sink.transport.limitation;
+      // The sink's own reason first. It knows which key was refused and why,
+      // where the transport's [limitation] is one blanket sentence — telling
+      // someone who pressed Page Down that "Cmd chords cannot be sent" would
+      // send them hunting for a modifier problem they do not have.
+      final reason = sink.refusal ?? sink.transport.limitation;
       setState(
-        () => _notice =
-            limitation ?? 'That key could not be sent to the device.',
+        () => _notice = reason ?? 'That key could not be sent to the device.',
       );
     }
     return KeyEventResult.handled;
@@ -217,9 +220,12 @@ class _KeyboardBar extends StatelessWidget {
         ? ''
         : '${transport!.limitation}. ';
     final detail = switch ((available, armed, focused)) {
+      // Deliberately says *what* is missing without naming a transport: this
+      // bar now sits under an Android mirror and an iOS simulator, and "no adb
+      // fallback" is nonsense under the second one.
       (false, _, _) =>
-        'No control socket and no adb fallback for this device, so nothing '
-            'can be typed into it.',
+        'Nothing here can carry a keystroke to this device, so it cannot be '
+            'typed into.',
       (true, false, _) =>
         'Turn this on and your keyboard drives $device. '
             '$kDeviceKeyboardEscapeLabel toggles it from here.',
