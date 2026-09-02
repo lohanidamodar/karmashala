@@ -2316,6 +2316,52 @@ final terminalPaneLivenessProvider = Provider.family<PaneLiveness, String>(
   ),
 );
 
+/// The object currently behind pane [paneId] — the thing a view has to rebuild
+/// against when it is swapped out from under it.
+///
+/// **The narrow watch has a hole in it, and this is the patch.**
+/// [terminalTabsProvider] and [terminalActiveTabIdProvider] are what
+/// `TerminalPaneStack` watches, and neither of them moves when
+/// [TerminalSessionsController.startPane] runs: starting a pane changes no
+/// tab's shape and no tab's position, so `_tabsView` is handed back by identity
+/// and `select` correctly concludes nothing happened. But `startPane` releases
+/// the pane's instance and adopts a brand new one — new `Terminal`, new
+/// `FocusNode`, new `ScrollController` — so "nothing happened" was wrong about
+/// the one thing that matters. Measured, with a widget test over the real
+/// panel: after a restart the new node reported `context == null` and
+/// `ancestors == 0`, i.e. it had never been attached to anything, because the
+/// stack never rebuilt and `TerminalPaneView` was still rendering the *disposed*
+/// instance. `requestFocus()` on an unattached node is a no-op that reports no
+/// error, which is exactly the shape of the bug the owner saw: *"after resume
+/// sometimes i'm unable to focus to the claude prompt"* — and why the pane also
+/// showed no new prompt, since the buffer on screen belonged to the dead
+/// session.
+///
+/// Sometimes, rather than always, because any *other* rebuild of the stack
+/// picks the swap up in passing — changing the font size, importing a theme,
+/// opening or closing a tab. So the pane came back typable whenever something
+/// unrelated happened to rebuild, and stayed dead when nothing did.
+///
+/// A family watching the whole state rather than a `select`: what changes is
+/// the identity of an object the state does not carry, so there is nothing to
+/// select on. Recomputing is a map lookup, and `Provider` only notifies when
+/// the value it returns actually differs — so a pane whose instance did not
+/// move still costs its consumers nothing, which is the property
+/// [terminalTabsProvider] exists to protect.
+///
+/// `autoDispose`, unlike its sibling above, because a family keyed by pane id
+/// otherwise keeps one entry per pane the workspace has *ever* held for the
+/// life of the container. Nothing outside a mounted pane view asks this
+/// question, and a pane whose view is gone can be asked again for the price of
+/// a map lookup when it comes back.
+final terminalPaneInstanceProvider = Provider.autoDispose
+    .family<TerminalInstance?, String>((ref, paneId) {
+      ref.watch(terminalSessionsControllerProvider);
+      return ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId);
+    });
+
 /// Whether the terminal is the surface the workbench is showing.
 ///
 /// Defaults to **true**: the app is terminal-primary, so the terminal is what
