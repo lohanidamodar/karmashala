@@ -209,7 +209,7 @@ class HostSessionApi {
             envelope.id,
             RemoteTranscriptPage(
               sessionId: sessionId,
-              messages: page.messages.sublist(start),
+              messages: collapseTaskNotifications(page.messages.sublist(start)),
               cursor: page.cursor,
               omitted: start,
             ).toJson(),
@@ -398,7 +398,10 @@ class HostSessionApi {
       FrameType.transcriptAppended,
       payload: RemoteTranscriptPage(
         sessionId: sessionId,
-        messages: page.messages.sublist(cursor),
+        // The live path matters as much as the opening one: a subagent that
+        // finishes while the phone is watching arrives here, not through
+        // `transcript.get`.
+        messages: collapseTaskNotifications(page.messages.sublist(cursor)),
         cursor: page.cursor,
       ).toJson(),
     );
@@ -453,5 +456,58 @@ class HostSessionApi {
     FrameType.error,
     id: id,
     payload: {'code': code.wire, 'message': message},
+  );
+}
+
+/// The wrapper a delegated agent's completion arrives in. Claude Code writes
+/// the whole envelope into the parent transcript as an ordinary turn, so the
+/// reader hands it on as one: this session's own store holds 199 of them, the
+/// largest 7,703 characters of XML, and the phone drew each as conversation.
+const String _taskNotificationOpen = '<task-notification>';
+const String _taskNotificationClose = '</task-notification>';
+
+final RegExp _taskNotificationSummary = RegExp(
+  '<summary>(.*?)</summary>',
+  dotAll: true,
+);
+
+/// Folds every task-notification envelope down to the one line it already
+/// carries, and leaves every other message byte for byte.
+///
+/// Done here rather than in the phone's tile because the host is where the
+/// whole transcript is, and because the envelope is most of what a busy
+/// session sends over the link — the reason a transcript is tail-bounded at
+/// [kRemoteTranscriptPageMax] at all.
+///
+/// **Recognised by the wrapper element and nothing else**: the text must open
+/// AND close with it, so a person's message that merely quotes
+/// `</task-notification>` is still their message, delivered whole. The
+/// envelope's own `<summary>` is used verbatim — the host re-words nothing —
+/// and lands as a `tool` row, which no reader can mistake for someone
+/// speaking.
+///
+/// One in, one out. `transcript.appended` pages by index into this list, so a
+/// dropped turn would shift every delta after it; and a reader whose
+/// conversation quietly jumped would have no way to know that it had.
+List<RemoteTranscriptMessage> collapseTaskNotifications(
+  List<RemoteTranscriptMessage> messages,
+) => [for (final message in messages) _collapseTaskNotification(message)];
+
+RemoteTranscriptMessage _collapseTaskNotification(
+  RemoteTranscriptMessage message,
+) {
+  final text = message.text.trim();
+  if (!text.startsWith(_taskNotificationOpen) ||
+      !text.endsWith(_taskNotificationClose)) {
+    return message;
+  }
+  final summary = _taskNotificationSummary.firstMatch(text)?.group(1)?.trim();
+  return RemoteTranscriptMessage(
+    role: 'tool',
+    // No outcome is claimed for an envelope that names none: "reported back"
+    // is the only thing true of every one of them.
+    text: summary == null || summary.isEmpty
+        ? 'A background task reported back.'
+        : summary,
   );
 }

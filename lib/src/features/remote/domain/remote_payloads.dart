@@ -239,7 +239,8 @@ class RemoteSessionSnapshot {
 class RemoteTranscriptMessage {
   const RemoteTranscriptMessage({required this.role, required this.text});
 
-  /// `user`, `agent`, or `error`.
+  /// `user`, `agent`, `error`, or `tool` — the last for a row the host folded
+  /// down (a task-notification envelope), never for a turn somebody took.
   final String role;
   final String text;
 

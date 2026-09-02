@@ -727,4 +727,168 @@ void main() {
       expect(harness.fake.transcriptReads - before, 1);
     });
   });
+
+  group('a task-notification envelope is folded down before it crosses', () {
+    // Seen on the phone, 2026-09-02: a subagent completion landed as a turn
+    // whose text was the raw payload, so the chat read
+    // `</result><usage><subagent_tokens>295802</subagent_tokens>…` as
+    // conversation and it was most of the screen. This session's own store
+    // holds 199 of them.
+    String envelope({
+      String? summary,
+      String status = 'completed',
+      String body = 'Done.\n\nThe gate is green.',
+    }) =>
+        '<task-notification>\n'
+        '<task-id>afe13d031b3d72daa</task-id>\n'
+        '<tool-use-id>toolu_01ARtzQPvBn3KUMhfkUE2AoL</tool-use-id>\n'
+        '<status>$status</status>\n'
+        '${summary == null ? '' : '<summary>$summary</summary>\n'}'
+        '<result>$body</result>\n'
+        '<usage><subagent_tokens>295802</subagent_tokens>'
+        '<tool_uses>165</tool_uses><duration_ms>2614397</duration_ms></usage>\n'
+        '</task-notification>';
+
+    Future<RemoteTranscriptPage> pageOf(List<RemoteTranscriptMessage> stored) async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = stored;
+      await harness.request(
+        FrameType.transcriptGet,
+        payload: const {'sessionId': 's1'},
+      );
+      return RemoteTranscriptPage.fromJson(harness.last.payload);
+    }
+
+    test('it becomes the one line it already carries', () async {
+      final page = await pageOf([
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(summary: 'Agent "Mobile chat scroll to latest" finished'),
+        ),
+      ]);
+
+      expect(page.messages, hasLength(2));
+      expect(page.messages.first.text, 'go on then');
+      // The envelope's own words, not ours — and a `tool` row, so nobody
+      // reads it as something a person said.
+      expect(
+        page.messages.last,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'Agent "Mobile chat scroll to latest" finished',
+        ),
+      );
+    });
+
+    test('and it is a fraction of the bytes it replaces', () async {
+      final raw = envelope(
+        summary: 'Agent "Mobile chat scroll to latest" finished',
+        body: List.filled(400, 'a paragraph of the report').join('\n'),
+      );
+      final page = await pageOf([
+        RemoteTranscriptMessage(role: 'user', text: raw),
+      ]);
+
+      expect(page.messages.single.text.length, lessThan(raw.length ~/ 20));
+    });
+
+    test('an envelope that names no summary claims no outcome', () async {
+      final page = await pageOf([
+        RemoteTranscriptMessage(role: 'user', text: envelope(status: 'failed')),
+      ]);
+
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'A background task reported back.',
+        ),
+      );
+    });
+
+    test('a person who quotes the tag keeps their whole message', () async {
+      const quoted =
+          'the phone showed me `</task-notification>` as a message — see '
+          '<task-notification> in the backlog for what that is';
+      final page = await pageOf(const [
+        RemoteTranscriptMessage(role: 'user', text: quoted),
+      ]);
+
+      // Not folded, not re-roled, not shortened: it is theirs.
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(role: 'user', text: quoted),
+      );
+    });
+
+    test('a live one is folded too, on the way through the poll', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+      ];
+      await harness.watch('s1');
+      harness.sent.clear();
+
+      // What the owner actually hit: the subagent finished while the phone
+      // was already watching, so the envelope came through `transcript
+      // .appended` rather than the opening read.
+      harness.fake.transcripts['s1']!.add(
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(summary: 'Agent "Host transcript hygiene" finished'),
+        ),
+      );
+      await harness.api.pollTranscript('s1');
+
+      final page = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(
+        page.messages.single,
+        const RemoteTranscriptMessage(
+          role: 'tool',
+          text: 'Agent "Host transcript hygiene" finished',
+        ),
+      );
+    });
+
+    test('one turn in, one turn out, so the cursor still lines up', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        RemoteTranscriptMessage(role: 'user', text: envelope(summary: 'one')),
+        RemoteTranscriptMessage(role: 'user', text: envelope(summary: 'two')),
+        const RemoteTranscriptMessage(role: 'agent', text: 'and on we go'),
+      ];
+      await harness.watch('s1');
+      final opened = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(opened.messages, hasLength(3));
+      expect(opened.cursor, 3);
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      await harness.api.pollTranscript('s1');
+
+      // A dropped turn here would have shifted the delta and resent history.
+      final appended = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(appended.messages, hasLength(1));
+      expect(appended.messages.single.text, 'brand new');
+    });
+
+    test('the wire carries the store\'s own bytes, entities and all', () async {
+      // The phone's `&lt;explicit paths&gt;` was written that way by the agent
+      // CLI, inside a task-notification body — nothing here escapes, and
+      // nothing here unescapes either, because a message may genuinely be
+      // quoting an entity.
+      const literal = 'a README badge with `?style=flat&amp;color=08C` in it';
+      const angled = 'git commit -F msg -- <explicit paths>';
+      final page = await pageOf(const [
+        RemoteTranscriptMessage(role: 'user', text: literal),
+        RemoteTranscriptMessage(role: 'agent', text: angled),
+      ]);
+
+      expect(page.messages.first.text, literal);
+      expect(page.messages.last.text, angled);
+    });
+  });
 }
