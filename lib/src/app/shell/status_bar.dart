@@ -63,85 +63,127 @@ class ShellStatusBar extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
       child: DefaultTextStyle.merge(
         style: style,
+        // Two groups with the slack between them, rather than one row with a
+        // `Spacer`. The two look equivalent and are not: a `Flexible` child is
+        // allotted a share of the free space and then sizes itself to its
+        // content, and the share it does not use is **not** handed back to the
+        // `Spacer` — under `MainAxisAlignment.start` it falls out at the end of
+        // the row. With three loose `Flexible`s on one row (repository, branch,
+        // the model chip) that came to some 500 blank pixels past the panel
+        // toggle on a 1600px window, with the whole state group stranded in the
+        // middle of the bar. With exactly two children, `spaceBetween` puts
+        // every pixel of slack between them and none of it can escape right.
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Flexible, so the row yields the left-hand names rather than
-            // overflowing: a long repository or branch is the elastic part, and
-            // the counts on the right are not. It costs nothing while there is
-            // room, and it is what keeps the row intact at 720px and on a host
-            // whose system font is wider than this one's.
-            if (repo != null) ...[
-              Flexible(
-                child: _Item(icon: AppIcons.bookBookmark, label: repo.name),
+            // Where you are. The elastic half: a long repository or branch is
+            // what gives way at 720px and on a host whose system font is wider
+            // than this one's.
+            Flexible(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (repo != null) ...[
+                    Flexible(
+                      child: _Item(
+                        icon: AppIcons.bookBookmark,
+                        label: repo.name,
+                      ),
+                    ),
+                    Flexible(
+                      child: _Item(
+                        icon: AppIcons.gitBranch,
+                        label: switch (branch) {
+                          AsyncData(:final value) => value ?? 'detached',
+                          AsyncError() => 'no git',
+                          _ => '…',
+                        },
+                      ),
+                    ),
+                  ] else
+                    Flexible(
+                      child: _Item(
+                        icon: AppIcons.bookBookmark,
+                        label: 'No repository selected',
+                      ),
+                    ),
+                ],
               ),
-              Flexible(
-                child: _Item(
-                  icon: AppIcons.gitBranch,
-                  label: switch (branch) {
-                    AsyncData(:final value) => value ?? 'detached',
-                    AsyncError() => 'no git',
-                    _ => '…',
-                  },
-                ),
-              ),
-            ] else
-              Flexible(
-                child: _Item(
-                  icon: AppIcons.bookBookmark,
-                  label: 'No repository selected',
-                ),
-              ),
-            const Spacer(),
-            _Item(
-              icon: AppIcons.terminal,
-              label:
-                  '$openTabs tab'
-                  '${openTabs == 1 ? '' : 's'}',
             ),
-            if (detached > 0)
-              _Item(
-                icon: AppIcons.terminalWindow,
-                label: '$detached in background',
-                emphasised: true,
-              ),
-            if (attention > 0)
-              _Item(
-                // The Inbox's own glyph, not a warning sign: this is the
-                // same count, the same list and the same click as the rail.
-                icon: AppIcons.tray,
-                label: attention == 1 ? '1 needs you' : '$attention need you',
-                emphasised: true,
-                // The same number the rail badges and the tray badges, and the
-                // same click: there is one inbox and three ways in.
-                onTap: () => ref
-                    .read(sidePanelProvider.notifier)
-                    .select(SidePanelSurface.inbox),
-              ),
-            // Both `const`, so a rebuild of this row cannot rebuild either
-            // chip and neither a quota nor a model change can rebuild the row —
-            // each subscription is the chip's own, and it is the only thing
-            // that repaints for it.
+            // What is running, hard against the right edge, with the panel
+            // toggle last.
             //
-            // The model before the quota: it is the fact about the session you
-            // are looking at that you can *act* on, and the one whose label
-            // changes when you change it.
+            // `Flexible` as well, and it has to be: that is what gives this
+            // group a *bounded* width, and a bounded width is the only thing
+            // that lets the model chip inside it shrink. In a non-flex slot the
+            // group is laid out unbounded, where `Flexible` is silently inert —
+            // and the longest model name a shipped agent has then overflowed
+            // 720x560 at 1.3x text by 8.2px.
             //
-            // `Flexible`, and the only right-hand item that is: a model name is
-            // the one thing on this side whose width is not ours to predict —
-            // `Gemini 3.7 Flash (Medium)` is a real one — so it is the item
-            // that gives way at 720px with Windows' largest text step rather
-            // than pushing the panel toggle off the window.
-            const Flexible(child: FocusedModelChip()),
-            const UsageChip(),
-            // One spacer, not two: the running-state group stays hard against
-            // the right, in the order tabs → background → attention → model →
-            // quota, with the panel toggle last. A second spacer centred the
-            // group, which reads as drift rather than as a zone — this row's
-            // right edge is where the eye goes for state.
-            _Item(
-              icon: AppIcons.sidebarSimple,
-              label: panel?.label ?? 'Panel closed',
-              onTap: () => ref.read(sidePanelProvider.notifier).toggle(),
+            // Four fifths of the slack, against the left group's one. Not a
+            // tuning knob: it is the ordering the row has always had, said in
+            // the only place the layout can hear it. Where you are is elastic
+            // and abbreviates well — a truncated branch is still a branch —
+            // while every item on this side is a count or a state that means
+            // nothing abbreviated. An even split gave this group 360px of a
+            // 720px window and overflowed it by 90.
+            Flexible(
+              flex: 4,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _Item(
+                    icon: AppIcons.terminal,
+                    label:
+                        '$openTabs tab'
+                        '${openTabs == 1 ? '' : 's'}',
+                  ),
+                  if (detached > 0)
+                    _Item(
+                      icon: AppIcons.terminalWindow,
+                      label: '$detached in background',
+                      emphasised: true,
+                    ),
+                  if (attention > 0)
+                    _Item(
+                      // The Inbox's own glyph, not a warning sign: this is the
+                      // same count, the same list and the same click as the
+                      // rail.
+                      icon: AppIcons.tray,
+                      label: attention == 1
+                          ? '1 needs you'
+                          : '$attention need you',
+                      emphasised: true,
+                      // The same number the rail badges and the tray badges,
+                      // and the same click: there is one inbox and three ways
+                      // in.
+                      onTap: () => ref
+                          .read(sidePanelProvider.notifier)
+                          .select(SidePanelSurface.inbox),
+                    ),
+                  // Both `const`, so a rebuild of this row cannot rebuild
+                  // either chip and neither a quota nor a model change can
+                  // rebuild the row — each subscription is the chip's own, and
+                  // it is the only thing that repaints for it.
+                  //
+                  // The model before the quota: it is the fact about the
+                  // session you are looking at that you can *act* on, and the
+                  // one whose label changes when you change it.
+                  //
+                  // The only item here that gives way. A model name is the one
+                  // width on this side that is not ours to predict — `Gemini
+                  // 3.7 Flash (Medium)` is a real one — and the chip's own 72px
+                  // cap is in logical pixels, so the text still grows with the
+                  // OS text step.
+                  const Flexible(child: FocusedModelChip()),
+                  const UsageChip(),
+                  _Item(
+                    icon: AppIcons.sidebarSimple,
+                    label: panel?.label ?? 'Panel closed',
+                    onTap: () => ref.read(sidePanelProvider.notifier).toggle(),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

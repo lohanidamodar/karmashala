@@ -261,4 +261,38 @@ void main() {
     );
     await quiesce(tester, container);
   });
+
+  testWidgets('the state group reaches the right edge of a wide window', (
+    tester,
+  ) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = barContainer();
+    // Wide, because this is invisible at 800: the narrower the row, the less
+    // free space there is to be lost, and the bug is *unused free space*. On a
+    // 1600px window it came to 500 blank pixels past the panel toggle, with the
+    // whole group sitting in the middle of the bar.
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(bar(container));
+    await tester.pumpAndSettle();
+
+    final row = tester.getRect(find.byType(ShellStatusBar));
+    final toggle = tester.getRect(
+      find
+          .ancestor(
+            of: find.byIcon(AppIcons.sidebarSimple),
+            matching: find.byType(InkWell),
+          )
+          .first,
+    );
+    expect(
+      row.right - toggle.right,
+      lessThan(24),
+      reason: 'the group ends where the row ends, at any width',
+    );
+    await quiesce(tester, container);
+  });
 }
