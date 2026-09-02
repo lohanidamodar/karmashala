@@ -123,6 +123,14 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   Player? _heldPlayer;
   VideoController? _heldVideo;
 
+  /// Whether the picture on screen belongs to the session being replaced.
+  ///
+  /// Held across the whole restart, not derived from which field the controller
+  /// is in: the picture is the outgoing session's from the moment the restart
+  /// begins, and it is only [_heldVideo] for the part of that after the old
+  /// session has been torn down.
+  bool _holdingPicture = false;
+
   Timer? _reconnectTimer;
 
   /// When an unwell stream is worth restarting, and how long to wait first.
@@ -190,6 +198,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   /// Turns the live view off entirely: no session, and no device it is for.
   Future<void> _stopStream() async {
     _liveSerial = null;
+    _holdingPicture = false;
     await _disposeSession();
     await _releaseHeldPicture();
   }
@@ -285,6 +294,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     final retainPicture = _session?.serial == device.serial && _player != null;
     setState(() {
       _starting = true;
+      _holdingPicture = retainPicture;
       _streamError = null;
     });
     await _disposeSession(retainPicture: retainPicture);
@@ -344,6 +354,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
         _player = player;
         _video = controller;
         _starting = false;
+        _holdingPicture = false;
         _health = null;
         _sink = sink;
         // The keyboard needs no screen size, so it is available immediately in
@@ -365,6 +376,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
       unawaited(_releaseHeldPicture());
       setState(() {
         _starting = false;
+        _holdingPicture = false;
         _liveSerial = null;
         _streamError = '$error';
       });
@@ -638,7 +650,7 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
                   video: _video ?? _heldVideo,
                   device: live,
                   starting: _starting,
-                  reconnecting: _video == null && _heldVideo != null,
+                  reconnecting: _holdingPicture,
                   sink: _sink,
                   keyboard: _keyboardSink,
                   health: _health,
