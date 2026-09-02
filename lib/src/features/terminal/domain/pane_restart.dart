@@ -51,3 +51,21 @@ bool shouldRestartOnLaunch({
   required bool inActiveTab,
   required bool isAgentPane,
 }) => enabled && wasLive && inActiveTab && !isAgentPane;
+
+
+/// Whether a dormant pane should be started when its tab is *opened*.
+///
+/// The same rule as [shouldRestartOnLaunch] minus [inActiveTab], because
+/// opening the tab is what that condition was standing in for. The cost
+/// argument there — "at ten tabs, start everything is ten shells the user is
+/// not looking at" — is answered exactly by waiting: a tab nobody opens costs
+/// nothing, and a tab they do open is the one they are looking at.
+///
+/// Agent panes stay excluded for the reasons in the library comment: starting
+/// one spends tokens and runs tools unattended, and steals the pane that a
+/// proper `--resume` is looking for.
+bool shouldRestartOnActivate({
+  required bool enabled,
+  required bool wasLive,
+  required bool isAgentPane,
+}) => enabled && wasLive && !isAgentPane;

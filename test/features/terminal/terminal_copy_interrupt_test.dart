@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_instance.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 
 /// `Ctrl+C` in a terminal pane means two different things, and which one is
 /// decided by whether there is a selection *right now*.
@@ -16,6 +17,13 @@ import 'fake_instance.dart';
 /// static map beside `Ctrl+V`, because it is not a setting: the same key is
 /// copy or interrupt depending on the state of one pane at one moment.
 void main() {
+  // These cases press `Ctrl+…` by name, so they pin the platform whose command
+  // modifier that is. The chord table follows the host — on macOS every one of
+  // them is `⌘` instead — and which modifier carries a command is pinned in
+  // `shell_shortcuts_platform_test.dart`. What is under test here is what the
+  // chord *does*, which is the same on every platform.
+  setUp(() => commandKeyIsMeta = false);
+
   late AppDatabase db;
   late ProviderContainer container;
   String? clipboard;

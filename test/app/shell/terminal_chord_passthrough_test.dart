@@ -25,6 +25,13 @@ import '../../support/fixtures.dart';
 /// hook that runs before xterm is `TerminalView.onKeyEvent`, and what it claims
 /// is the declared skip-list in `shellChords`.
 void main() {
+  // These cases press `Ctrl+…` by name, so they pin the platform whose command
+  // modifier that is. The chord table follows the host — on macOS every one of
+  // them is `⌘` instead — and which modifier carries a command is pinned in
+  // `shell_shortcuts_platform_test.dart`. What is under test here is what the
+  // chord *does*, which is the same on every platform.
+  setUp(() => commandKeyIsMeta = false);
+
   late AppDatabase db;
 
   setUp(() {

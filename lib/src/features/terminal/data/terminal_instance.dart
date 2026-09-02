@@ -708,6 +708,7 @@ class DormantTerminalInstance
     required this.restoredScrollback,
     this.workingDirectory,
     this.agentLaunch,
+    this.wasLive = false,
   });
 
   @override
@@ -718,6 +719,13 @@ class DormantTerminalInstance
   final String profileId;
   @override
   final String? workingDirectory;
+
+  /// Whether this pane had a process behind it when the app last closed.
+  ///
+  /// Kept so a tab the user opens *later* can start what was running in it, the
+  /// way the active tab does at launch. Without it a dormant pane cannot tell
+  /// "the user left a shell here" from "this was already just history".
+  final bool wasLive;
 
   /// Replayed history with nothing running behind it: the directory it holds is
   /// the one the pane was last observed in, and nothing here can move it.

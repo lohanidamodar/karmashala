@@ -513,8 +513,39 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   void activateTab(String id) {
     if (_activeTabId == id) return;
     _activeTabId = id;
+    _restoreLivePanesIn(id);
     _publish();
     _focusActivePane();
+  }
+
+  /// Starts the panes in [tabId] that were running when the app last closed.
+  ///
+  /// The other half of `shouldRestartOnLaunch`, which only ever covers the tab
+  /// the user was left in front of. Every other tab kept its Start button
+  /// forever, even once the user opened it — so the answer to "why must I press
+  /// Start?" was "because this was not the active tab at launch", which is not
+  /// a reason a person can see.
+  ///
+  /// Waiting until the tab is opened is also what makes it cheap: the launch
+  /// rule stops at the active tab to avoid spawning ten shells nobody is
+  /// looking at, and a tab nobody opens still spawns nothing.
+  void _restoreLivePanesIn(String tabId) {
+    final tab = _tabById(tabId);
+    if (tab == null) return;
+    for (final paneId in tab.layout.panes) {
+      final instance = _instances[paneId];
+      if (instance is! DormantTerminalInstance) continue;
+      if (!shouldRestartOnActivate(
+        enabled: _restoreLivePanes,
+        wasLive: instance.wasLive,
+        isAgentPane: instance.agentLaunch != null,
+      )) {
+        continue;
+      }
+      // The Start button's own path, so opening a tab and pressing Start do
+      // exactly the same thing — including how the scrollback is carried over.
+      startPane(paneId);
+    }
   }
 
   /// Closes tab [id].
@@ -1706,6 +1737,9 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         workingDirectory: pane.workingDirectory,
         restoredScrollback: pane.scrollback,
         agentLaunch: pane.agentLaunch,
+        // Remembered so opening this tab later can start what was running in
+        // it — the launch rule only ever covers the tab left in front.
+        wasLive: pane.wasLive,
       ),
     );
     return true;
