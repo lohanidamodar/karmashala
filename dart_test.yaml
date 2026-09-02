@@ -1,5 +1,8 @@
 # Test tags. Declaring a tag here is what keeps `flutter test` from warning
 # about it; it changes no default behaviour.
+#
+# Both tags below are excluded from the ordinary gate and run deliberately with
+# `tool/live_tests.ps1` — see CLAUDE.md §18 for what a failure in each means.
 tags:
   # Opt-in end-to-end tests that need a real SSH server (see
   # test/features/ssh/live_ssh_test.dart). They skip themselves when the

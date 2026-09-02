@@ -535,3 +535,88 @@ breaking the toolchain for everyone else.
 
 - run and test on windows as primary target
 - https://github.com/Norbert515/vide_cli this project implemented in dart might already have some reference for us regarding how to work with agents and cli, orchestrate multiple agents, manage subagents and handle agent sessions. We can use it as a reference for our project.
+
+---
+
+## 18. Live tests — opt-in, and meant to be run
+
+The default gate excludes two tags:
+
+```bash
+flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4
+```
+
+That exclusion is correct and must stay. The tests behind those tags bind real
+sockets, drive a real WSL distribution and dial a real SSH server; making the
+ordinary suite depend on any of that would be a worse bug than the ones they
+catch.
+
+But an excluded test is only a comment until somebody runs it, and these exist
+for the failures **no stand-in can see** — above all whether an endpoint a
+Windows process binds is reachable *for data* from inside a WSL network
+namespace. That link is what silently degrades agent status when it breaks, and
+nothing but a real distribution can measure it.
+
+### Running them
+
+```powershell
+pwsh tool/live_tests.ps1              # both families
+pwsh tool/live_tests.ps1 -Family wsl  # WSL only
+pwsh tool/live_tests.ps1 -Family ssh  # SSH only
+```
+
+From Windows, never from a WSL shell — §17 applies to this script like anything
+else. It prints what it found **before** running anything, so a green run whose
+prerequisites were absent cannot be mistaken for a run that proved something,
+and it uses the expanded reporter so a self-skip prints its reason rather than a
+bare `~1`.
+
+Worth doing after any change to the hook endpoint, the WSL launch path, the
+terminal's process shutdown, or the SSH transport — and worth a scheduled task
+on a machine where WSL status matters, because the switch address is reset by
+things outside this app.
+
+| Tag | Files | Needs | Skips itself when |
+| --- | --- | --- | --- |
+| `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart` | Windows + a WSL distro with `curl`; `flutter_pty` for the pane test | there is no WSL, or no `curl` in it |
+| `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
+
+A WSL distribution running `sshd` on a spare port is a good SSH target.
+
+### A failure is not automatically a bug
+
+`live_wsl_hook_test.dart` deliberately does **not** skip itself when the WSL
+switch address is missing or dead — that is the failure it exists to catch. Its
+messages classify themselves, and the two need opposite responses:
+
+- **`THIS MACHINE, not the app`** — no switch address bound, or `curl` from
+  inside the distro cannot reach it (exit 7, 28, 52 or 56). The Hyper-V firewall
+  or the WSL switch is shut. Nothing in this repository will fix it, and the app
+  is right to write no hook rather than a URL that cannot answer.
+- **`THE APP`** — the endpoint answered but the report never landed, or the
+  distro's shell could not run the command the installer wrote (exit 127/2, a
+  quoting failure). That is a bug here.
+- **`UNCLASSIFIED`** — read the probe output printed under the verdict before
+  deciding.
+
+**As of 2026-09-03 the WSL hook test fails on the owner's machine with the first
+verdict.** `curl` exit 56 — `172.18.240.1` accepts the connection and it is
+reset before a byte comes back. Do not "fix" it in the app.
+
+The discriminator, which takes half a minute and needs no Karmashala at all:
+
+```powershell
+$l = [System.Net.Sockets.TcpListener]::new([Net.IPAddress]::Parse('172.18.240.1'), 47999)
+$l.Start(); $c = $l.AcceptTcpClient()
+$c.GetStream().Write([Text.Encoding]::ASCII.GetBytes("HTTP/1.1 200 OK`r`n`r`nhi"), 0, 22)
+```
+
+```bash
+curl -sS -m 5 http://172.18.240.1:47999/    # from inside the distro
+```
+
+Measured on 2026-09-03: the bare listener is reset the same way — curl reports
+`(56) Recv failure: Connection reset by peer` and PowerShell reports *"An
+existing connection was forcibly closed by the remote host"*. No Dart is
+involved. If that bare listener ever *does* answer while the app's endpoint is
+still reset, the verdict flips to `THE APP` and it is a bug here.

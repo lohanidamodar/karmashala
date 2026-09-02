@@ -34,8 +34,17 @@ import '../../support/fixtures.dart';
 /// own `~/.claude`), reads back the command the installer wrote, runs that exact
 /// string through the distro's `sh`, and asserts the report arrived.
 ///
-/// Skips itself where there is no WSL, no `curl` inside it, or no switch
-/// address — the same shape as `live_ssh_test.dart`.
+/// Skips itself where there is no WSL or no `curl` inside it — the same shape
+/// as `live_ssh_test.dart`. It does **not** skip itself when the switch address
+/// is missing or dead: that is the failure it exists to catch, and skipping it
+/// would turn the one measurement nobody else can make into silence.
+///
+/// **A failure here is not automatically a bug in this app**, and the messages
+/// below say which it is. See [_verdict]: the door between a Windows-bound
+/// socket and a WSL network namespace is the machine's, and on a machine where
+/// it is shut this test is the thing that says so out loud.
+///
+/// How to run it: `tool/live_tests.ps1 -Family wsl`, or see CLAUDE.md §18.
 void main() {
   final probe = _probeWsl();
   if (probe != null) {
@@ -79,16 +88,22 @@ void main() {
     expect(
       endpoint.wslHost,
       isNotNull,
-      reason: 'the switch interface has to be bound before anything is written',
+      reason:
+          'THIS MACHINE, not the app: nothing could be bound on the WSL switch '
+          'interface, so there is no address to write into a hook at all. '
+          'Check that a `vEthernet (WSL...)` adapter exists and holds an '
+          'address (`Get-NetIPAddress`), and that `wslHostAddressAmong` still '
+          'recognises it. Until then WSL agents cannot report status, and the '
+          'app is right to write nothing rather than a URL that cannot answer.',
     );
 
-    final installed = await const AgentHookInstaller().install(
+    final wrote = await const AgentHookInstaller().install(
       descriptor: AgentRegistry.builtIn.byId('claudeCode')!,
       storeHome: uncHome,
       endpoint: endpoint,
       environment: EnvironmentKind.wsl,
     );
-    expect(installed, isTrue);
+    expect(wrote, isTrue);
 
     // Exactly what the agent will run, read back out of the config file the
     // installer wrote rather than rebuilt here.
@@ -103,18 +118,32 @@ void main() {
             as Map;
     expect(command['command'], contains(endpoint.wslHost!));
 
-    final output = await _wsl([
-      'sh',
-      '-c',
-      'printf %s \'{"session_id":"live-wsl","cwd":"/tmp"}\' | '
-          '${command['command']}',
-    ]);
+    const payload = r'{"session_id":"live-wsl","cwd":"/tmp"}';
+    final hook = command['command']! as String;
+    final output = await _wsl(['sh', '-c', "printf %s '$payload' | $hook"]);
 
-    expect(output, contains('"ok":true'));
+    // The installed command is written to cost the agent nothing when it cannot
+    // deliver — `-s` swallows the diagnostic and `|| true` the exit code — so
+    // its silence carries no diagnosis of its own. Ask the same question with
+    // the muzzle off, and let the exit code say which side is broken.
+    if (!output.contains('"ok":true')) {
+      final diagnosis = await _wslRaw([
+        'sh',
+        '-c',
+        "printf %s '$payload' | "
+            "${hook.replaceAll('curl -s ', 'curl -sS ').replaceAll(' || true', '')}"
+            '; echo "exit=\$?"',
+      ]);
+      fail(_verdict(diagnosis, endpoint.wslHost!));
+    }
+
     expect(
       reports.latest('claudeCode', 'live-wsl')?.status,
       AgentActivityStatus.idle,
-      reason: 'the callback has to land in the same registry a Windows one does',
+      reason:
+          'THE APP: the endpoint answered ok, so the door is open and the '
+          'command string survived the distro shell — but the report did not '
+          'land in the registry a Windows callback lands in.',
     );
   });
 
@@ -131,8 +160,68 @@ void main() {
           'http://127.0.0.1:${endpoint.port}/agent-hook; echo "exit=\$?"',
     ]);
 
-    expect('${result.stdout}${result.stderr}', contains('exit=7'));
+    expect(
+      '${result.stdout}${result.stderr}',
+      contains('exit=7'),
+      reason:
+          'if this ever passes from loopback, the whole switch-address design '
+          'is unnecessary and `AgentHookEndpoint` should be revisited',
+    );
   });
+}
+
+/// What a failed delivery **means**, read off `curl`'s own exit code.
+///
+/// The point of running against a real distribution is that it can tell the two
+/// failures apart, and a bare `Expected: contains '"ok":true' / Actual: ''`
+/// cannot. Every branch names which side is at fault, because the wrong
+/// attribution is expensive in both directions: a machine problem filed as a
+/// bug wastes a day, and an app problem waved off as "the machine again" is how
+/// this path silently degraded in the first place.
+String _verdict(String probe, String host) {
+  final code = RegExp(r'exit=(\d+)').firstMatch(probe)?.group(1) ?? '?';
+  final blame = switch (code) {
+    '0' =>
+      'THE APP: curl reached $host and came back clean, but the body was not '
+          '{"ok":true}. The receiver answered something else — read it below.',
+    '7' =>
+      'THIS MACHINE, not the app: connection refused/unreachable to $host from '
+          'inside WSL. The Windows process is listening and the distro cannot '
+          'reach it, which is the Hyper-V firewall or the switch, not a line of '
+          'Dart. Agents in WSL will report no status until it is opened.',
+    '28' =>
+      'THIS MACHINE, not the app: the connection to $host timed out from '
+          'inside WSL — the address answers ARP but carries no data. This is '
+          'the state the app can only refuse to pretend around.',
+    '52' || '56' =>
+      'THIS MACHINE, on the evidence, not the app: $host accepted the '
+          'connection from inside WSL and it was reset before a response could '
+          'be written. Confirm it in half a minute without this app in the '
+          'picture: bind a bare `[System.Net.Sockets.TcpListener]` on $host '
+          'from PowerShell and `curl` it from the distro. Measured on the '
+          "owner's machine that plain listener is reset identically (curl 56, "
+          '"An existing connection was forcibly closed by the remote host" on '
+          'the Windows side), so no Dart is involved — it is the Hyper-V '
+          'firewall or the switch. If a bare listener *does* answer and only '
+          'this app is reset, then it is THE APP.',
+    '127' || '2' =>
+      'THE APP: the distro shell could not run the command this app wrote '
+          '(exit $code — command not found, or an option curl would not '
+          'parse). The command string did not survive quoting, which is '
+          'exactly what this test exists to catch.',
+    _ =>
+      'UNCLASSIFIED (curl exit $code). Read the output below before deciding '
+          'whether this is the machine or the app.',
+  };
+  return '$blame\n\nProbe output:\n$probe';
+}
+
+/// One command inside the default distribution, **without** throwing on a
+/// non-zero exit. [_wsl]'s counterpart for the diagnosis path, where the exit
+/// code is the answer rather than a broken fixture.
+Future<String> _wslRaw(List<String> arguments) async {
+  final result = await Process.run('wsl.exe', ['-e', ...arguments]);
+  return '${result.stdout}${result.stderr}'.trim();
 }
 
 /// Why this suite cannot run here, or null when it can.
