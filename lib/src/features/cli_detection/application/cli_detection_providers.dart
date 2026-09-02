@@ -272,7 +272,7 @@ final cliStoreSyncRunnerProvider = Provider<Future<void> Function()>((ref) {
 
 /// Every tracked pane, in the shape adoption reads them.
 ///
-/// Read-only over the terminal workspace's own published state: adoption never
+/// Read-only over the terminal layout's own published state: adoption never
 /// holds a pane, opens one or changes one.
 List<AdoptablePane> adoptablePanes(Ref ref) {
   final controller = ref.read(terminalSessionsControllerProvider.notifier);
