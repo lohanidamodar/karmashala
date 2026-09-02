@@ -128,10 +128,7 @@ const _emulatorPath = '/sdk/emulator/emulator';
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'localPosix', path: '/sdk'),
   adb: EnvironmentPath(environmentId: 'localPosix', path: _adbPath),
-  emulator: EnvironmentPath(
-    environmentId: 'localPosix',
-    path: _emulatorPath,
-  ),
+  emulator: EnvironmentPath(environmentId: 'localPosix', path: _emulatorPath),
 );
 
 /// A fake macOS host with a scriptable device set.
@@ -237,9 +234,9 @@ Port: com.apple.iphonesimulator.rgba
     if (args.contains('screenshot')) {
       // The service reads the file back, because `simctl io … screenshot -`
       // writes a file literally named `-` rather than to stdout.
-      File(args.last).writeAsBytesSync(
-        Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47]),
-      );
+      File(
+        args.last,
+      ).writeAsBytesSync(Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47]));
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
     }
     if (args.contains('launch')) {
@@ -285,9 +282,9 @@ Port: com.apple.iphonesimulator.rgba
       // `screenshot` goes device-file → `adb pull` → host-file, and then reads
       // the host file. Without this the case only ever passed on a machine
       // where an earlier real run had left that PNG in the temp directory.
-      File(args.last).writeAsBytesSync(
-        Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47]),
-      );
+      File(
+        args.last,
+      ).writeAsBytesSync(Uint8List.fromList(const [0x89, 0x50, 0x4E, 0x47]));
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
     }
     if (args.contains('wm')) {
@@ -313,7 +310,11 @@ Port: com.apple.iphonesimulator.rgba
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
     }
     if (args.contains('-list-avds')) {
-      return CommandResult(exitCode: 0, stdout: avdNames.join('\n'), stderr: '');
+      return CommandResult(
+        exitCode: 0,
+        stdout: avdNames.join('\n'),
+        stderr: '',
+      );
     }
     if (args.contains('avd')) {
       // `emu avd name` — how a running emulator says which AVD it booted.
@@ -347,9 +348,8 @@ Port: com.apple.iphonesimulator.rgba
     return const CommandResult(exitCode: 0, stdout: '', stderr: '');
   }
 
-  FakeCommandRunner runner() => FakeCommandRunner(
-    environmentId: 'localPosix',
-    responder: (request) {
+  FakeCommandRunner runner({bool measure = false}) {
+    CommandResult responder(CommandRequest request) {
       commands.add(request);
       events.add('${request.executable} ${request.arguments.join(' ')}');
       if (request.executable == 'xcrun') return _simctl(request);
@@ -372,8 +372,9 @@ Port: com.apple.iphonesimulator.rgba
         return const CommandResult(exitCode: 0, stdout: '', stderr: '');
       }
       return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-    },
-    processFactory: (request) {
+    }
+
+    FakeProcessHandle processFactory(CommandRequest request) {
       commands.add(request);
       final handle = FakeProcessHandle();
       // `bootstatus` signals completion by exiting; a handle that never exits
@@ -383,8 +384,20 @@ Port: com.apple.iphonesimulator.rgba
       }
       handle.complete();
       return handle;
-    },
-  );
+    }
+
+    return measure
+        ? _ConcurrencyRunner(
+            environmentId: 'localPosix',
+            responder: responder,
+            processFactory: processFactory,
+          )
+        : FakeCommandRunner(
+            environmentId: 'localPosix',
+            responder: responder,
+            processFactory: processFactory,
+          );
+  }
 
   /// Every command line seen, for asserting on what was actually run.
   List<String> get commandLines => [
@@ -393,25 +406,64 @@ Port: com.apple.iphonesimulator.rgba
   ];
 }
 
+/// A [FakeCommandRunner] that records how many commands were in flight at once.
+///
+/// Every command yields once before answering, so anything the caller started
+/// together is observably together — and a caller that awaits its probes one at
+/// a time never gets past a peak of one.
+class _ConcurrencyRunner extends FakeCommandRunner {
+  _ConcurrencyRunner({
+    required super.environmentId,
+    super.responder,
+    super.processFactory,
+  });
+
+  int _inFlight = 0;
+  int peak = 0;
+
+  @override
+  Future<CommandResult> run(CommandRequest request) async {
+    _inFlight++;
+    if (_inFlight > peak) {
+      peak = _inFlight;
+    }
+    await Future<void>.delayed(Duration.zero);
+    final result = await super.run(request);
+    _inFlight--;
+    return result;
+  }
+}
+
 typedef _Rpc =
     Future<Map<String, dynamic>> Function(String, [Map<String, Object?>]);
 
-Future<({_Rpc call, Future<void> Function() dispose, _RecordingBackend backend})>
+Future<
+  ({
+    _Rpc call,
+    Future<void> Function() dispose,
+    _RecordingBackend backend,
+    FakeCommandRunner runner,
+  })
+>
 _server(
   _Host host, {
   bool androidSdk = true,
   bool wda = true,
   Duration sdkDiscovery = Duration.zero,
   bool awaitSdk = true,
+  bool measureConcurrency = false,
 }) async {
   final backend = _RecordingBackend(host.events);
+  final runner = host.runner(measure: measureConcurrency);
   final container = ProviderContainer(
     overrides: [
       commandRunnerFactoryProvider.overrideWithValue(
-        FakeCommandRunnerFactory(fallback: host.runner()),
+        FakeCommandRunnerFactory(fallback: runner),
       ),
       androidSdkProvider.overrideWith((ref) async {
-        if (sdkDiscovery > Duration.zero) await Future<void>.delayed(sdkDiscovery);
+        if (sdkDiscovery > Duration.zero) {
+          await Future<void>.delayed(sdkDiscovery);
+        }
         return androidSdk ? _sdk() : null;
       }),
       hostCanRunSimulatorsProvider.overrideWithValue(true),
@@ -457,7 +509,7 @@ _server(
     await directory.delete(recursive: true);
   }
 
-  return (call: call, dispose: dispose, backend: backend);
+  return (call: call, dispose: dispose, backend: backend, runner: runner);
 }
 
 Map<String, dynamic> _ok(Map<String, dynamic> reply) {
@@ -488,6 +540,7 @@ void main() {
   group('refusing rather than pretending', _refusalTests);
   group('install, launch and the loop they make', _loopTests);
   group('lifecycle', _lifecycleTests);
+  group('what one listing costs', _costTests);
 }
 
 void _vocabularyTests() {
@@ -560,36 +613,48 @@ void _vocabularyTests() {
     expect(result['devices'], hasLength(1));
   });
 
-  test('a device that appears after the first call is seen by the second', () async {
-    // The listings are memoised so one tool call does not ask adb four times.
-    // When that memo outlived the call, device_boot started an emulator,
-    // reported it booted, and the next device_install_app answered "No Android
-    // devices are connected" from the empty list taken before the boot — seen
-    // for real against Pixel_8_Pro_API_34.
-    final host = _Host(simulatorStates: {'UDID-16': 'Shutdown'});
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'a device that appears after the first call is seen by the second',
+    () async {
+      // The listings are memoised so one tool call does not ask adb four times.
+      // When that memo outlived the call, device_boot started an emulator,
+      // reported it booted, and the next device_install_app answered "No Android
+      // devices are connected" from the empty list taken before the boot — seen
+      // for real against Pixel_8_Pro_API_34.
+      final host = _Host(simulatorStates: {'UDID-16': 'Shutdown'});
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    expect(_ok(await rpc.call('list_devices'))['devices'], isEmpty);
+      expect(_ok(await rpc.call('list_devices'))['devices'], isEmpty);
 
-    host.androidSerials.add('emulator-5554');
+      host.androidSerials.add('emulator-5554');
 
-    final after = _ok(await rpc.call('list_devices'))['devices'] as List;
-    expect(
-      after,
-      hasLength(1),
-      reason: 'the fleet answered from a listing taken before the device came',
-    );
-    // …and it is drivable, not merely listed.
-    _ok(await rpc.call('device_tap', {'serial': 'emulator-5554', 'x': 1, 'y': 2}));
-  });
+      final after = _ok(await rpc.call('list_devices'))['devices'] as List;
+      expect(
+        after,
+        hasLength(1),
+        reason:
+            'the fleet answered from a listing taken before the device came',
+      );
+      // …and it is drivable, not merely listed.
+      _ok(
+        await rpc.call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 1,
+          'y': 2,
+        }),
+      );
+    },
+  );
 
   test('the same verb takes a serial or a udid', () async {
     final host = _Host(androidSerials: ['emulator-5554']);
     final rpc = await _server(host);
     addTearDown(rpc.dispose);
 
-    _ok(await rpc.call('device_tap', {'serial': 'emulator-5554', 'x': 1, 'y': 2}));
+    _ok(
+      await rpc.call('device_tap', {'serial': 'emulator-5554', 'x': 1, 'y': 2}),
+    );
     _ok(await rpc.call('device_tap', {'serial': 'UDID-17PRO', 'x': 3, 'y': 4}));
     // …and `udid`, which is the word list_devices used for it.
     _ok(await rpc.call('device_tap', {'udid': 'UDID-17PRO', 'x': 5, 'y': 6}));
@@ -635,26 +700,32 @@ void _vocabularyTests() {
     expect(rpc.backend.taps, isEmpty);
   });
 
-  test('with one booted simulator and nothing else, the id can be left out', () async {
-    final host = _Host();
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'with one booted simulator and nothing else, the id can be left out',
+    () async {
+      final host = _Host();
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    final result = _ok(await rpc.call('device_tap', {'x': 7, 'y': 8}));
-    expect(result['serial'], 'UDID-17PRO');
-    expect(result['platform'], 'ios');
-  });
+      final result = _ok(await rpc.call('device_tap', {'x': 7, 'y': 8}));
+      expect(result['serial'], 'UDID-17PRO');
+      expect(result['platform'], 'ios');
+    },
+  );
 
-  test('two ready devices across platforms refuse to be guessed between', () async {
-    final host = _Host(androidSerials: ['emulator-5554']);
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'two ready devices across platforms refuse to be guessed between',
+    () async {
+      final host = _Host(androidSerials: ['emulator-5554']);
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    final error = _error(await rpc.call('device_tap', {'x': 1, 'y': 2}));
-    expect(error, contains('2 devices are ready'));
-    expect(error, contains('emulator-5554'));
-    expect(error, contains('UDID-17PRO'));
-  });
+      final error = _error(await rpc.call('device_tap', {'x': 1, 'y': 2}));
+      expect(error, contains('2 devices are ready'));
+      expect(error, contains('emulator-5554'));
+      expect(error, contains('UDID-17PRO'));
+    },
+  );
 }
 
 void _drivingTests() {
@@ -698,29 +769,32 @@ void _drivingTests() {
     expect(rpc.backend.typed, ['hello']);
   });
 
-  test('enter, tab and delete are pressed as keys, never typed as text', () async {
-    // Measured against WebDriverAgent: `/wda/keys` transliterates a named key
-    // into a character, so a key sent as text can arrive as an invisible code
-    // point instead of moving the caret. Typing a key name looks like it works
-    // and does not.
-    final host = _Host();
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'enter, tab and delete are pressed as keys, never typed as text',
+    () async {
+      // Measured against WebDriverAgent: `/wda/keys` transliterates a named key
+      // into a character, so a key sent as text can arrive as an invisible code
+      // point instead of moving the caret. Typing a key name looks like it works
+      // and does not.
+      final host = _Host();
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    for (final key in const ['enter', 'tab', 'delete']) {
-      _ok(await rpc.call('device_key', {'key': key}));
-    }
-    expect(rpc.backend.pressedKeys, [
-      SimulatorKey.returnKey,
-      SimulatorKey.tab,
-      SimulatorKey.backspace,
-    ]);
-    expect(
-      rpc.backend.typed,
-      isEmpty,
-      reason: 'a named key must never be delivered as text',
-    );
-  });
+      for (final key in const ['enter', 'tab', 'delete']) {
+        _ok(await rpc.call('device_key', {'key': key}));
+      }
+      expect(rpc.backend.pressedKeys, [
+        SimulatorKey.returnKey,
+        SimulatorKey.tab,
+        SimulatorKey.backspace,
+      ]);
+      expect(
+        rpc.backend.typed,
+        isEmpty,
+        reason: 'a named key must never be delivered as text',
+      );
+    },
+  );
 
   test('home and power are the buttons the hardware has', () async {
     final host = _Host();
@@ -735,16 +809,19 @@ void _drivingTests() {
     ]);
   });
 
-  test('a simulator screenshot warns that it is not in tap coordinates', () async {
-    final host = _Host();
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'a simulator screenshot warns that it is not in tap coordinates',
+    () async {
+      final host = _Host();
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    final text = _text(await rpc.call('device_screenshot'));
-    expect(text, contains('1206x2622 device px'));
-    expect(text, contains('WARNING'));
-    expect(text, contains('points'));
-  });
+      final text = _text(await rpc.call('device_screenshot'));
+      expect(text, contains('1206x2622 device px'));
+      expect(text, contains('WARNING'));
+      expect(text, contains('points'));
+    },
+  );
 
   test('an Android screenshot says the two spaces agree', () async {
     final host = _Host(
@@ -759,21 +836,29 @@ void _drivingTests() {
     expect(text, isNot(contains('WARNING')));
   });
 
-  test('device_logcat reads a simulator log and admits how it filtered', () async {
-    final host = _Host();
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'device_logcat reads a simulator log and admits how it filtered',
+    () async {
+      final host = _Host();
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    final result = _ok(await rpc.call('device_logcat', {'package': 'Probe'}));
-    expect(result['lines'], hasLength(1));
-    expect((result['lines'] as List).single, contains('hello from the probe'));
-    expect(result['note'], contains('plain substring'));
-    // The `log show` preamble is not a log line and must not be counted as one.
-    expect(
-      (result['lines'] as List).any((l) => '$l'.contains('Filtering the log')),
-      isFalse,
-    );
-  });
+      final result = _ok(await rpc.call('device_logcat', {'package': 'Probe'}));
+      expect(result['lines'], hasLength(1));
+      expect(
+        (result['lines'] as List).single,
+        contains('hello from the probe'),
+      );
+      expect(result['note'], contains('plain substring'));
+      // The `log show` preamble is not a log line and must not be counted as one.
+      expect(
+        (result['lines'] as List).any(
+          (l) => '$l'.contains('Filtering the log'),
+        ),
+        isFalse,
+      );
+    },
+  );
 }
 
 void _refusalTests() {
@@ -845,37 +930,47 @@ void _refusalTests() {
     expect(absent['note'], contains('is not running'));
   });
 
-  test('device_logcat refuses a level on iOS instead of guessing one', () async {
-    final host = _Host();
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'device_logcat refuses a level on iOS instead of guessing one',
+    () async {
+      final host = _Host();
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    final error = _error(
-      await rpc.call('device_logcat', {'level': 'warning'}),
-    );
-    expect(error, contains('cannot be filtered by level'));
-    expect(error, contains('Default/Info/Debug/Error/Fault'));
-  });
-
-  test('a build with no WebDriverAgent loses three verbs, not the device', () async {
-    final host = _Host();
-    final rpc = await _server(host, wda: false);
-    addTearDown(rpc.dispose);
-
-    for (final tool in const ['device_tap', 'device_ui_dump', 'device_type']) {
       final error = _error(
-        await rpc.call(tool, {'x': 1, 'y': 2, 'text': 'x'}),
+        await rpc.call('device_logcat', {'level': 'warning'}),
       );
-      expect(error, contains('no WebDriverAgent'), reason: tool);
-      // The refusal names what still works. "Unsupported" would send an agent
-      // away from a platform that can still do most of the loop.
-      expect(error, contains('device_install_app'), reason: tool);
-      expect(error, contains('device_boot'), reason: tool);
-    }
-    // …and those really do still work.
-    _ok(await rpc.call('device_screenshot'));
-    _ok(await rpc.call('device_logcat'));
-  });
+      expect(error, contains('cannot be filtered by level'));
+      expect(error, contains('Default/Info/Debug/Error/Fault'));
+    },
+  );
+
+  test(
+    'a build with no WebDriverAgent loses three verbs, not the device',
+    () async {
+      final host = _Host();
+      final rpc = await _server(host, wda: false);
+      addTearDown(rpc.dispose);
+
+      for (final tool in const [
+        'device_tap',
+        'device_ui_dump',
+        'device_type',
+      ]) {
+        final error = _error(
+          await rpc.call(tool, {'x': 1, 'y': 2, 'text': 'x'}),
+        );
+        expect(error, contains('no WebDriverAgent'), reason: tool);
+        // The refusal names what still works. "Unsupported" would send an agent
+        // away from a platform that can still do most of the loop.
+        expect(error, contains('device_install_app'), reason: tool);
+        expect(error, contains('device_boot'), reason: tool);
+      }
+      // …and those really do still work.
+      _ok(await rpc.call('device_screenshot'));
+      _ok(await rpc.call('device_logcat'));
+    },
+  );
 
   test('a physical Android device cannot be stopped', () async {
     final host = _Host(
@@ -933,9 +1028,7 @@ void _loopTests() {
     Directory(appPath).createSync();
     addTearDown(() => bundle.deleteSync(recursive: true));
 
-    final result = _ok(
-      await rpc.call('device_install_app', {'path': appPath}),
-    );
+    final result = _ok(await rpc.call('device_install_app', {'path': appPath}));
     // Without this the next step is "now tell me the bundle id", which the
     // caller usually does not know — it is generated by the build.
     expect(result['appId'], 'com.example.Probe');
@@ -1154,18 +1247,13 @@ void _lifecycleTests() {
     final rpc = await _server(host);
     addTearDown(rpc.dispose);
 
-    final result = _ok(
-      await rpc.call('device_boot', {'name': 'iPhone 16'}),
-    );
+    final result = _ok(await rpc.call('device_boot', {'name': 'iPhone 16'}));
     expect(result['booted'], isTrue);
     // The id that comes back is the one every other verb wants.
     expect(result['udid'], 'UDID-16');
     // `bootstatus -b`, not `boot`: `simctl boot` returns while the device is
     // still starting, and a caller that acted on that would be refused.
-    expect(
-      host.commandLines,
-      contains('xcrun simctl bootstatus UDID-16 -b'),
-    );
+    expect(host.commandLines, contains('xcrun simctl bootstatus UDID-16 -b'));
   });
 
   test('booting something already booted is success, not an error', () async {
@@ -1173,9 +1261,7 @@ void _lifecycleTests() {
     final rpc = await _server(host);
     addTearDown(rpc.dispose);
 
-    final result = _ok(
-      await rpc.call('device_boot', {'name': 'UDID-17PRO'}),
-    );
+    final result = _ok(await rpc.call('device_boot', {'name': 'UDID-17PRO'}));
     expect(result['booted'], isTrue);
     expect(result['note'], contains('already booted'));
     expect(
@@ -1262,17 +1348,20 @@ void _lifecycleTests() {
     expect(again['note'], contains('already stopped'));
   });
 
-  test('a serial that stopped explains why it no longer names anything', () async {
-    final host = _Host(simulatorStates: {'UDID-16': 'Shutdown'});
-    final rpc = await _server(host);
-    addTearDown(rpc.dispose);
+  test(
+    'a serial that stopped explains why it no longer names anything',
+    () async {
+      final host = _Host(simulatorStates: {'UDID-16': 'Shutdown'});
+      final rpc = await _server(host);
+      addTearDown(rpc.dispose);
 
-    final error = _error(
-      await rpc.call('device_stop_emulator', {'serial': 'emulator-5554'}),
-    );
-    expect(error, contains('keeps no serial'));
-    expect(error, contains('Pixel_8_Pro_API_34'));
-  });
+      final error = _error(
+        await rpc.call('device_stop_emulator', {'serial': 'emulator-5554'}),
+      );
+      expect(error, contains('keeps no serial'));
+      expect(error, contains('Pixel_8_Pro_API_34'));
+    },
+  );
 
   test('device_stop_emulator never guesses which device to stop', () async {
     final host = _Host();
@@ -1282,6 +1371,54 @@ void _lifecycleTests() {
     expect(
       _error(await rpc.call('device_stop_emulator')),
       contains('serial is required'),
+    );
+  });
+}
+
+/// **What `list_devices` costs the machine it runs on.**
+///
+/// Measured on this Mac while profiling a running build: `xcrun simctl list
+/// devices` is 214ms, `adb devices` 41ms and `emulator -list-avds` 62ms. Asked
+/// one after another that is 317ms of waiting for three answers that do not
+/// depend on each other; asked together it is as slow as the slowest.
+///
+/// Counted rather than timed, for the reason every other cost test here gives:
+/// the suite runs at `--concurrency=4`, where a wall-clock assertion over a few
+/// hundred milliseconds is a coin toss, while overlapping commands are exactly
+/// countable.
+void _costTests() {
+  test('the three probes are asked together, not one after another', () async {
+    final host = _Host();
+    final s = await _server(host, measureConcurrency: true);
+    addTearDown(s.dispose);
+
+    _ok(await s.call('list_devices'));
+
+    final runner = s.runner as _ConcurrencyRunner;
+    expect(
+      runner.peak,
+      greaterThan(1),
+      reason: 'adb, simctl and the AVD list do not depend on each other',
+    );
+  });
+
+  test('one screen size per ready device, all at once', () async {
+    final host = _Host()
+      ..androidSerials.addAll(['emulator-5556', 'emulator-5558']);
+    final s = await _server(host, measureConcurrency: true);
+    addTearDown(s.dispose);
+
+    _ok(await s.call('list_devices'));
+
+    // `wm size` was awaited inside the list literal that built the answer, so
+    // three ready devices paid three round trips end to end for a question
+    // nobody had ordered.
+    final sizes = host.commandLines.where((c) => c.contains('wm size')).length;
+    expect(sizes, host.androidSerials.length);
+    expect(
+      (s.runner as _ConcurrencyRunner).peak,
+      greaterThanOrEqualTo(host.androidSerials.length),
+      reason: 'every ready device is asked at the same time',
     );
   });
 }

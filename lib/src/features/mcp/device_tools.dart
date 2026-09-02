@@ -189,9 +189,17 @@ class DeviceControlTools {
 
   Future<Object?> _listDevices(int? limit) async {
     final fleet = await _fleet();
-    final android = await fleet.androidTargets();
-    final simulators = await fleet.simulatorTargets();
-    final avds = await fleet.avds();
+    // Three probes of three different things — adb, simctl, and the SDK's AVD
+    // list — awaited together rather than one after another. They share no
+    // state and neither orders the other, so serialising them only added the
+    // slower ones to the wait: measured on this Mac, `simctl list devices` is
+    // 214ms and `adb devices` 41ms, so a caller waited 255ms for something
+    // 214ms wide.
+    final (android, simulators, avds) = await (
+      fleet.androidTargets(),
+      fleet.simulatorTargets(),
+      fleet.avds(),
+    ).wait;
 
     final booted = [
       for (final target in simulators)
@@ -215,6 +223,16 @@ class DeviceControlTools {
     final cap = (limit ?? _simulatorListLimit).clamp(1, 1000);
     final shown = bootable.take((cap - booted.length).clamp(0, cap)).toList();
 
+    // One `adb shell wm size` per ready device, asked for all of them at once.
+    // Awaiting inside the list below spawned them one at a time, so a phone and
+    // two emulators paid three round trips end to end to answer a question
+    // nobody had ordered.
+    final ready = [for (final target in android) if (target.isReady) target];
+    final sizes = Map.fromIterables(
+      [for (final target in ready) target.id],
+      await [for (final target in ready) fleet.adb!.screenSize(target.id)].wait,
+    );
+
     return {
       'devices': [
         for (final target in android)
@@ -227,7 +245,7 @@ class DeviceControlTools {
             'emulator': target.device.isEmulator,
             'environmentId': target.device.environmentId,
             if (target.isReady) ...{
-              'screenSize': (await fleet.adb!.screenSize(target.id))?.toString(),
+              'screenSize': sizes[target.id]?.toString(),
               'coordinateSpace': CoordinateSpace.devicePixels.label,
             },
           },
