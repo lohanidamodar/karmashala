@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/devices/domain/simulator_slimming.dart';
 import 'package:karmashala/src/features/devices/domain/ios_simulator.dart';
 
 import '../../support/fake_command_runner.dart';
+import 'package:karmashala/src/features/devices/application/device_providers.dart';
 
 IosSimulator _sim(String udid, String name, SimulatorState state) =>
     IosSimulator(
@@ -48,6 +49,8 @@ class _StubBackend implements WdaBackend {
 }
 
 void main() {
+  group('starting with or without a window', _headlessTests);
+
   group('slimming on start', _slimmingTests);
 
   group('a host that cannot have simulators', () {
@@ -190,10 +193,15 @@ class _RecordingSlimming implements SimulatorSlimmingService {
 /// Records the boots, so a test can tell "slimmed then booted" from "booted".
 class _RecordingSimctl implements SimctlService {
   final List<String> booted = [];
+  final List<String> windowsOpened = [];
 
   @override
   Future<void> bootAndWait(String udid, {Duration? timeout}) async =>
       booted.add(udid);
+
+  @override
+  Future<void> showSimulatorWindow(String udid) async =>
+      windowsOpened.add(udid);
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>
@@ -288,4 +296,62 @@ void _slimmingTests() {
 
     expect(slimming.calls.single.except, isEmpty);
   });
+}
+
+/// Whether a started device gets a window of its own.
+///
+/// One switch, opposite mechanics. An AVD's window is the default and
+/// `-no-window` takes it away; an iOS simulator booted through `simctl` has no
+/// window at all, because Simulator.app is a separate application that attaches
+/// to a booted device. So on iOS the switch does not suppress a window — it
+/// opens one — and the risk is wiring it the way round that reads naturally
+/// from the Android side and is backwards here.
+void _headlessTests() {
+  ProviderContainer containerWith({required bool headless, required _RecordingSimctl simctl}) {
+    final container = ProviderContainer(
+      overrides: [
+        commandRunnerFactoryProvider.overrideWithValue(
+          FakeCommandRunnerFactory(),
+        ),
+        hostCanRunSimulatorsProvider.overrideWithValue(true),
+        iosSimulatorsProvider.overrideWith((ref) async => const []),
+        simctlServiceProvider.overrideWithValue(simctl),
+        slimmingOnStartProvider.overrideWithValue(false),
+        headlessDeviceProvider.overrideWith(() => _FixedHeadless(headless)),
+      ],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  test('headless boots the device and opens no window', () async {
+    final simctl = _RecordingSimctl();
+    final container = containerWith(headless: true, simctl: simctl);
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(simctl.booted, ['UDID']);
+    expect(
+      simctl.windowsOpened,
+      isEmpty,
+      reason: 'simctl opens none by itself, and none was asked for',
+    );
+  });
+
+  test('turning it off opens the Simulator window as well', () async {
+    final simctl = _RecordingSimctl();
+    final container = containerWith(headless: false, simctl: simctl);
+
+    await container.read(simulatorTransitionsProvider.notifier).boot('UDID');
+
+    expect(simctl.booted, ['UDID'], reason: 'still booted first');
+    expect(simctl.windowsOpened, ['UDID']);
+  });
+}
+
+class _FixedHeadless extends HeadlessDevice {
+  _FixedHeadless(this._value);
+  final bool _value;
+  @override
+  bool build() => _value;
 }

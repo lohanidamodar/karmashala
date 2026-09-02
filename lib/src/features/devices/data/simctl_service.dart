@@ -163,6 +163,28 @@ class SimctlService {
     tolerate: 'current state: booted',
   );
 
+  /// Brings up Simulator.app so the booted device has a window of its own.
+  ///
+  /// Booting through `simctl` is **already headless**: it starts the device but
+  /// opens no UI, which is why this pane can mirror it without a second window
+  /// in the way. Showing one is therefore an extra step rather than something
+  /// to suppress — the opposite of the Android emulator, where a window is the
+  /// default and `-no-window` takes it away.
+  ///
+  /// `open -a Simulator` attaches to whatever is already booted, so this runs
+  /// after the boot rather than instead of it. Fire-and-forget: the window is a
+  /// convenience, and a device that is up and mirrored here is not less usable
+  /// because its window did not open.
+  Future<void> showSimulatorWindow(String udid) async {
+    try {
+      await runner.start(
+        const CommandRequest(executable: 'open', arguments: ['-a', 'Simulator']),
+      );
+    } on Object {
+      // Nothing here is worth failing a boot over.
+    }
+  }
+
   /// Boots [udid] if needed and waits until the system has finished booting.
   ///
   /// Goes through [CommandRunner.start] rather than `run` so the wait can be

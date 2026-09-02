@@ -6,6 +6,7 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../environments/domain/local_environment.dart';
 import '../../settings/application/settings_controller.dart';
+import 'device_providers.dart';
 import '../data/simctl_service.dart';
 import '../data/simulator_slimming_service.dart';
 import '../data/wda_backend.dart';
@@ -214,6 +215,13 @@ class SimulatorTransitions extends Notifier<Set<String>> {
   Future<void> boot(String udid) => _run(udid, (simctl) async {
     await _slim(udid);
     await simctl.bootAndWait(udid);
+    // Only when the user asked for a window. `simctl boot` opens none, so this
+    // is the step that *adds* one — the mirror image of the emulator's
+    // `-no-window`, which takes one away. The pane mirrors the device either
+    // way; the window is for the things only Simulator.app can do.
+    if (!ref.read(headlessDeviceProvider)) {
+      await simctl.showSimulatorWindow(udid);
+    }
   });
 
   /// Writes the device's `disabled.plist` before it is booted.
