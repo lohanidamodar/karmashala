@@ -8,6 +8,14 @@ library;
 import '../client/relay_candidates.dart';
 import '../protocol.dart';
 
+/// The one attention word that means "a prompt is waiting on a person".
+///
+/// Named because three places now turn on it — the snapshot the host serves,
+/// the arbiter that refuses a second answer, and the phone's own retiring of
+/// a stale approval card — and a typo in any of them would leave an approval
+/// that cannot be answered or one that cannot be dismissed.
+const String kAttentionNeedsApproval = 'needs_approval';
+
 /// What one session looks like from a phone: `sessions.list` rows and the
 /// `session.changed` event share this shape.
 class RemoteSessionSnapshot {
@@ -43,7 +51,7 @@ class RemoteSessionSnapshot {
 
   final bool archived;
 
-  /// `needs_approval`, `failed`, or null for "nothing waiting".
+  /// [kAttentionNeedsApproval], `failed`, or null for "nothing waiting".
   final String? attention;
 
   /// `DeliveryStage.name`, or null for "could not tell" — which is a
@@ -103,13 +111,18 @@ class RemoteSessionSnapshot {
   /// this reads the cached checkout stat and deliberately starts no git.
   final String? branch;
 
-  RemoteSessionSnapshot copyWith({String? attention, String? stage}) =>
-      RemoteSessionSnapshot(
+  /// [clearAttention] because "nothing is waiting" is a value a null argument
+  /// cannot express, and an approval being answered is exactly that move.
+  RemoteSessionSnapshot copyWith({
+    String? attention,
+    String? stage,
+    bool clearAttention = false,
+  }) => RemoteSessionSnapshot(
         sessionId: sessionId,
         title: title,
         status: status,
         archived: archived,
-        attention: attention ?? this.attention,
+        attention: clearAttention ? null : (attention ?? this.attention),
         stage: stage ?? this.stage,
         repositoryId: repositoryId,
         repositoryName: repositoryName,
@@ -363,6 +376,74 @@ class RemoteApprovalRequest {
       denyLabel: json['deny'] is String ? json['deny']! as String : null,
     );
   }
+}
+
+/// How an approval stopped waiting, as far as the host can honestly say.
+///
+/// [approved] and [denied] are stated only for an answer this host applied on
+/// the asking device's behalf — it pressed the key, so it knows which. Every
+/// other route (the desktop's own card, a second paired phone, the agent
+/// giving up) is [elsewhere]: the host observes that the request is gone, not
+/// what was chosen, and inventing the decision would be a claim it cannot
+/// back.
+enum RemoteApprovalOutcome {
+  approved('approved'),
+  denied('denied'),
+  elsewhere('elsewhere');
+
+  const RemoteApprovalOutcome(this.wire);
+
+  final String wire;
+
+  /// Unknown wording from a newer host reads as [elsewhere]: something
+  /// happened and the card must go, which is the part that matters.
+  static RemoteApprovalOutcome parse(Object? wire) =>
+      _byWire[wire] ?? RemoteApprovalOutcome.elsewhere;
+
+  static final Map<Object?, RemoteApprovalOutcome> _byWire = {
+    for (final o in RemoteApprovalOutcome.values) o.wire: o,
+  };
+}
+
+/// What `approval.resolved` carries.
+///
+/// Correlated by session, because that is how the protocol correlates an
+/// approval: `approval.requested` carries no id of its own, and a session has
+/// at most one prompt waiting at a time — the phone's `approvalId` is a local
+/// label it mints for its own card, and has never been on the wire.
+class RemoteApprovalResolved {
+  const RemoteApprovalResolved({
+    required this.sessionId,
+    this.outcome = RemoteApprovalOutcome.elsewhere,
+  });
+
+  final String sessionId;
+  final RemoteApprovalOutcome outcome;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'outcome': outcome.wire,
+  };
+
+  static RemoteApprovalResolved fromJson(Map<String, Object?> json) {
+    final sessionId = json['sessionId'];
+    if (sessionId is! String) {
+      throw const ProtocolException('bad approval resolution');
+    }
+    return RemoteApprovalResolved(
+      sessionId: sessionId,
+      outcome: RemoteApprovalOutcome.parse(json['outcome']),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteApprovalResolved &&
+      other.sessionId == sessionId &&
+      other.outcome == outcome;
+
+  @override
+  int get hashCode => Object.hash(sessionId, outcome);
 }
 
 /// What `host.status` carries on connect — and, since Loop 83, again whenever

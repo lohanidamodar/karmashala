@@ -164,4 +164,97 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Allow'), findsNothing);
     expect(find.textContaining('not granted approval rights'), findsOneWidget);
   });
+
+  group('an approval answered elsewhere', () {
+    // Seen on the phone, 2026-09-02: the card stayed live and actionable for a
+    // decision the desktop had already made, because the protocol told the
+    // phone when a request appeared and never when it went away.
+
+    testWidgets('takes the card away and says why', (tester) async {
+      final fake = gateway(approvals: const {'s1': approval});
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+      expect(find.text('Claude Code is waiting for you'), findsOneWidget);
+
+      fake.resolveApproval('s1');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Claude Code is waiting for you'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Allow'), findsNothing);
+      // Not a silent disappearance: a card that just vanishes reads as a
+      // request that was dropped.
+      expect(
+        find.text('That request was already answered on the desktop.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets("and this phone's own answer says which way it went", (
+      tester,
+    ) async {
+      final fake = gateway(approvals: const {'s1': approval});
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Deny'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Declined.'), findsOneWidget);
+    });
+
+    testWidgets('a screen that was never shown one stays quiet', (
+      tester,
+    ) async {
+      final fake = gateway();
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+      await tester.pump();
+
+      fake.resolveApproval('s1');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('at a 200% text scale the card still goes', (tester) async {
+      final fake = gateway(approvals: const {'s1': approval});
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+        textScale: 2.0,
+      );
+      await tester.pump();
+      // Pre-existing and NOT this change's: at 200% the card's own column
+      // overflows its footer by 34px. Taken here so the pump below starts
+      // clean — the point of this case is that the card goes and takes the
+      // overflow with it, not that the card fits.
+      expect(tester.takeException(), isNotNull);
+
+      fake.resolveApproval('s1');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Claude Code is waiting for you'), findsNothing);
+      expect(
+        find.text('That request was already answered on the desktop.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

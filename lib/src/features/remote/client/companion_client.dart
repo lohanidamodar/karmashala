@@ -73,6 +73,12 @@ class ApprovalRequestedEvent extends CompanionEvent {
   final RemoteApprovalRequest request;
 }
 
+/// The approval for a session stopped waiting — see [FrameType.approvalResolved].
+class ApprovalResolvedEvent extends CompanionEvent {
+  const ApprovalResolvedEvent(this.resolution);
+  final RemoteApprovalResolved resolution;
+}
+
 class HostStatusEvent extends CompanionEvent {
   const HostStatusEvent(this.status);
   final RemoteHostStatus status;
@@ -333,6 +339,14 @@ class CompanionClient {
           () => _emit(
             ApprovalRequestedEvent(
               RemoteApprovalRequest.fromJson(envelope.payload),
+            ),
+          ),
+        );
+      case FrameType.approvalResolved:
+        _tolerant(
+          () => _emit(
+            ApprovalResolvedEvent(
+              RemoteApprovalResolved.fromJson(envelope.payload),
             ),
           ),
         );

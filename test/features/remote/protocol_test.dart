@@ -184,6 +184,7 @@ void main() {
         'session.changed',
         'transcript.appended',
         'approval.requested',
+        'approval.resolved',
         'host.status',
         'pairing.revoked',
         'result',

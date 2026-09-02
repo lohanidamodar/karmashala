@@ -67,6 +67,12 @@ class HostSessionApi {
   final Set<String> _subscribed = <String>{};
   final Map<String, int> _transcriptCursors = <String, int>{};
 
+  /// Sessions this device has been told are waiting on it, and not yet told
+  /// are done. Kept so [reconcileApproval] can retire a card the phone is
+  /// still showing — including one it was shown before a reconnect, since a
+  /// runtime outlives its links.
+  final Set<String> _announcedApprovals = <String>{};
+
   /// When each watched session may next be read, on [_uptime]'s scale.
   ///
   /// A poll costs one full transcript read, and a transcript can be very large
@@ -228,7 +234,30 @@ class HostSessionApi {
               'decision must be approve or deny',
             );
           }
+          // The host is the arbiter, and this is the reverse race: the
+          // desktop (or a second phone) answered a moment ago, this answer
+          // was already in flight, and applying it would type a key into
+          // whatever prompt is there NOW. Refused on the same fact the
+          // desktop's own card is drawn from — the session's attention — so
+          // a refusal here means the desktop would show no card either.
+          if (!_awaitingApproval(sessionId)) {
+            throw const RemoteApiRefusal(
+              // Not a new error code: `tryParse` on an older companion
+              // answers null for a wire word it has never seen, and this
+              // refusal is one a phone must be able to read.
+              ErrorCode.badRequest,
+              'this approval has already been answered',
+            );
+          }
           final pressed = await bindings.answerApproval(sessionId, decision);
+          // Told, not inferred — and told before the result, so the phone
+          // that asked has the outcome even if it stops listening after it.
+          await _sendApprovalResolved(
+            sessionId,
+            decision == 'approve'
+                ? RemoteApprovalOutcome.approved
+                : RemoteApprovalOutcome.denied,
+          );
           await _result(envelope.id, {'pressed': pressed});
         case FrameType.notificationsRegister:
           final token = _requireString(envelope, 'token');
@@ -273,6 +302,7 @@ class HostSessionApi {
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:
         case FrameType.approvalRequested:
+        case FrameType.approvalResolved:
         case FrameType.hostStatus:
         case FrameType.pairingRevoked:
         case FrameType.result:
@@ -327,6 +357,10 @@ class HostSessionApi {
   }
 
   Future<void> _pushSnapshot(String sessionId) async {
+    // Before the dedupe below, and before the early return for a session the
+    // host no longer holds: retiring a card the phone is still showing must
+    // not depend on the snapshot having changed shape.
+    await reconcileApproval(sessionId);
     final base = bindings.sessionById(sessionId);
     if (base == null) return;
     final snapshot = await _withStage(base);
@@ -420,7 +454,53 @@ class HostSessionApi {
     } on Object {
       request = RemoteApprovalRequest(sessionId: sessionId);
     }
-    await _send(FrameType.approvalRequested, payload: request.toJson());
+    // Remembered only once it went out, so a card the phone never got is not
+    // one this api will later try to retire.
+    if (await _send(FrameType.approvalRequested, payload: request.toJson())) {
+      _announcedApprovals.add(sessionId);
+    }
+  }
+
+  /// Retires an approval this device was told about and is no longer waiting.
+  ///
+  /// Watches the host's own state rather than any one answer path, which is
+  /// what makes it route-independent: the desktop's card, a second paired
+  /// phone and an agent that gave up all end in the same place — the session
+  /// stops asking. Nothing here can say *which*, and it does not pretend to.
+  ///
+  /// Runs from [_pushSnapshot], so it happens on the sweep and again on every
+  /// `session.subscribe` — a phone that was asleep when the answer happened
+  /// is told the moment it comes back and re-subscribes.
+  Future<void> reconcileApproval(String sessionId) async {
+    if (!_announcedApprovals.contains(sessionId)) return;
+    if (_awaitingApproval(sessionId)) return;
+    await _sendApprovalResolved(sessionId, RemoteApprovalOutcome.elsewhere);
+  }
+
+  /// Whether the desktop would draw its own card for this session right now.
+  ///
+  /// Read from the snapshot the rest of this api already serves, so "the host
+  /// says it is waiting" is one fact with one source, not two that can drift.
+  bool _awaitingApproval(String sessionId) =>
+      bindings.sessionById(sessionId)?.attention == kAttentionNeedsApproval;
+
+  Future<void> _sendApprovalResolved(
+    String sessionId,
+    RemoteApprovalOutcome outcome,
+  ) async {
+    if (!device.capabilities.has(Capability.approve)) return;
+    // Forgotten only once the phone has it: a dropped frame must leave the
+    // card in the set, or the next sweep would decide there was nothing to
+    // retire and the phone would keep it forever.
+    if (await _send(
+      FrameType.approvalResolved,
+      payload: RemoteApprovalResolved(
+        sessionId: sessionId,
+        outcome: outcome,
+      ).toJson(),
+    )) {
+      _announcedApprovals.remove(sessionId);
+    }
   }
 
   String _requireString(Envelope envelope, String key) {

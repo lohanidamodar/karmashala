@@ -227,6 +227,7 @@ void main() {
 
     test('a bindings refusal carries its own code', () async {
       final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
       harness.fake.approvalRefusal = const RemoteApiRefusal(
         ErrorCode.notFound,
         'no live terminal',
@@ -267,6 +268,7 @@ void main() {
 
     test('approval.answer reports the key that was pressed', () async {
       final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
 
       await harness.request(
         FrameType.approvalAnswer,
@@ -932,6 +934,174 @@ void main() {
 
       expect(page.messages.first.text, literal);
       expect(page.messages.last.text, angled);
+    });
+  });
+
+  group('an approval that stops waiting is said so', () {
+    // Seen on the phone, 2026-09-02: a card below the chat still offering
+    // approve and deny for a decision the desktop had already made. The
+    // protocol told the phone when a request appeared and never when it went
+    // away, so answering it anywhere else left the card orphaned.
+
+    Future<Harness> waiting() async {
+      final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
+      harness.fake.approvals['s1'] = const RemoteApprovalRequest(
+        sessionId: 's1',
+        evidence: ['Allow Bash? (y/n)'],
+        approveLabel: 'Yes',
+      );
+      await harness.api.pushApprovalRequested('s1');
+      return harness;
+    }
+
+    List<SentFrame> resolutions(Harness harness) => [
+      for (final frame in harness.sent)
+        if (frame.type == FrameType.approvalResolved) frame,
+    ];
+
+    test('answered on the desktop, the phone is told on the next sweep',
+        () async {
+      final harness = await waiting();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      expect(resolutions(harness), isEmpty, reason: 'still waiting');
+
+      // The desktop's own card was pressed: the session stops asking. That is
+      // the whole signal — the host cannot see which button, and does not say.
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+      await harness.api.pushSessionsChanged();
+
+      final resolved = RemoteApprovalResolved.fromJson(
+        resolutions(harness).single.payload,
+      );
+      expect(resolved.sessionId, 's1');
+      expect(resolved.outcome, RemoteApprovalOutcome.elsewhere);
+    });
+
+    test('and said once, not on every sweep after it', () async {
+      final harness = await waiting();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      await harness.api.pushSessionsChanged();
+      await harness.api.pushSessionsChanged();
+      await harness.api.pushSessionsChanged();
+
+      expect(resolutions(harness), hasLength(1));
+    });
+
+    test('a phone that was away is told when it subscribes again', () async {
+      final harness = await waiting();
+      // Off the link for the whole of it: the answer happens, and the frame
+      // that would have carried it has nowhere to go.
+      harness.delivers = false;
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+      await harness.api.pushSessionsChanged();
+      expect(resolutions(harness), isEmpty);
+
+      harness.delivers = true;
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+
+      expect(resolutions(harness), hasLength(1));
+    });
+
+    test('a dropped resolution is repeated, never written off', () async {
+      final harness = await waiting();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      harness.delivers = false;
+      await harness.api.pushSessionsChanged();
+      expect(
+        harness.dropped.where((f) => f.type == FrameType.approvalResolved),
+        hasLength(1),
+      );
+
+      harness.delivers = true;
+      await harness.api.pushSessionsChanged();
+      expect(resolutions(harness), hasLength(1));
+    });
+
+    test('the phone that answers is told which way it went', () async {
+      final harness = await waiting();
+
+      await harness.request(
+        FrameType.approvalAnswer,
+        payload: const {'sessionId': 's1', 'decision': 'deny'},
+      );
+
+      final resolved = RemoteApprovalResolved.fromJson(
+        resolutions(harness).single.payload,
+      );
+      // Stated, because this host pressed the key and knows.
+      expect(resolved.outcome, RemoteApprovalOutcome.denied);
+      expect(harness.last.type, FrameType.result);
+    });
+
+    test('a second answer to a settled approval is refused, not applied',
+        () async {
+      final harness = await waiting();
+      harness.fake.setAwaitingApproval('s1', waiting: false);
+
+      await harness.request(
+        FrameType.approvalAnswer,
+        payload: const {'sessionId': 's1', 'decision': 'approve'},
+      );
+
+      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+      expect(
+        harness.last.payload['message'],
+        'this approval has already been answered',
+      );
+      // The point of refusing: nothing was typed into whatever prompt is
+      // there now.
+      expect(harness.fake.approvalAnswers, isEmpty);
+    });
+
+    test('a device that cannot approve hears neither half', () async {
+      final viewer = Harness(
+        capabilities: CapabilitySet.of(const [Capability.viewSessions]),
+      );
+      viewer.fake.setAwaitingApproval('s1');
+      await viewer.api.pushApprovalRequested('s1');
+      await viewer.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      viewer.fake.setAwaitingApproval('s1', waiting: false);
+      await viewer.api.pushSessionsChanged();
+
+      expect(
+        viewer.sent.where(
+          (f) =>
+              f.type == FrameType.approvalRequested ||
+              f.type == FrameType.approvalResolved,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('a session that was never asking says nothing', () async {
+      final harness = Harness();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.api.pushSessionsChanged();
+
+      expect(resolutions(harness), isEmpty);
     });
   });
 }
