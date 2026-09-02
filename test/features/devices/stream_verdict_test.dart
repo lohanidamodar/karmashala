@@ -22,6 +22,7 @@ StreamVerdict? _judge({
   Duration? sinceInput,
   int unansweredInputs = 0,
   bool framesSeen = true,
+  bool watching = true,
 }) => judgeStream(
   StreamClocks(
     sinceFrame: sinceFrame,
@@ -30,6 +31,7 @@ StreamVerdict? _judge({
     sinceInput: sinceInput,
     unansweredInputs: unansweredInputs,
     framesSeen: framesSeen,
+    watching: watching,
   ),
   stallTimeout: _stall,
 );
@@ -90,6 +92,21 @@ void main() {
         _judge(
           sinceFrame: const Duration(milliseconds: 100),
           sinceDelivery: null,
+        )?.state,
+        DeviceStreamState.live,
+      );
+    });
+
+    test('a window nobody can see is not accused of being behind', () {
+      // A minimised window may stop taking frames, which looks exactly like a
+      // player that has seized up. Restarting a stream nobody is looking at,
+      // over and over, would be the old loop somewhere it could not even be
+      // seen happening.
+      expect(
+        _judge(
+          sinceFrame: const Duration(milliseconds: 100),
+          sinceDelivery: const Duration(minutes: 4),
+          watching: false,
         )?.state,
         DeviceStreamState.live,
       );

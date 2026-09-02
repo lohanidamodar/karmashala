@@ -96,6 +96,9 @@ class LiveFrameMark {
 
   /// The device answered: a frame arrived.
   void noteAnswered() => unansweredInputs = 0;
+
+  /// Whether the picture is on screen. See [StreamClocks.watching].
+  bool watching = true;
 }
 
 /// How close together two input events have to be to count as one interaction.
@@ -140,6 +143,7 @@ class StreamClocks {
     required this.sinceInput,
     required this.unansweredInputs,
     required this.framesSeen,
+    this.watching = true,
   });
 
   /// Since a frame was decoded out of the socket.
@@ -167,6 +171,15 @@ class StreamClocks {
   /// Whether any frame has ever decoded. Before that the start path is still
   /// reporting and the watchdog has nothing to add.
   final bool framesSeen;
+
+  /// Whether the picture is on screen at all.
+  ///
+  /// A minimised window is the case this exists for. The player may stop
+  /// taking frames when nothing is being drawn, which is indistinguishable
+  /// from a player that has seized up — and restarting a stream nobody is
+  /// looking at, over and over, would be the old loop in a place where nobody
+  /// could even see it happening.
+  final bool watching;
 }
 
 /// One tick's conclusion.
@@ -224,7 +237,7 @@ StreamVerdict? judgeStream(
 
   if (clocks.sinceFrame <= stallTimeout) {
     final delivery = clocks.sinceDelivery;
-    if (delivery != null && delivery > stallTimeout) {
+    if (clocks.watching && delivery != null && delivery > stallTimeout) {
       return StreamVerdict(
         DeviceStreamState.stalled,
         'The device is sending frames but the picture has not updated for '
@@ -366,6 +379,11 @@ class DeviceStreamSession {
   /// is perfectly well, while a device being tapped that sends no frames is a
   /// live view that has stopped working.
   void noteInput() => mark.noteInput();
+
+  /// Tells the stream whether its picture is on screen at all, so a window
+  /// nobody can see is not accused of being behind. See
+  /// [StreamClocks.watching].
+  void setWatched(bool value) => mark.watching = value;
 
   Future<void> stop() => onStop();
 }
@@ -811,6 +829,7 @@ class DeviceStreamService {
           sinceInput: mark.lastInputUs == 0 ? null : age(mark.lastInputUs),
           unansweredInputs: mark.unansweredInputs,
           framesSeen: mark.frames > 0,
+          watching: mark.watching,
         ),
         stallTimeout: stallTimeout,
         inputGrace: inputAnswerGrace,

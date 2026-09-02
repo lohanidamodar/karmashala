@@ -75,7 +75,8 @@ class DevicePane extends ConsumerStatefulWidget {
   ConsumerState<DevicePane> createState() => _DevicePaneState();
 }
 
-class _DevicePaneState extends ConsumerState<DevicePane> {
+class _DevicePaneState extends ConsumerState<DevicePane>
+    with WidgetsBindingObserver {
   Player? _player;
   VideoController? _video;
   DeviceStreamSession? _session;
@@ -148,7 +149,25 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
   final Set<String> _booting = <String>{};
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// A minimised window is not a stalled player.
+  ///
+  /// `inactive` is deliberately still watching: an unfocused window is one the
+  /// user can see perfectly well, and often the whole point of a live view.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _session?.setWatched(
+      state == AppLifecycleState.resumed || state == AppLifecycleState.inactive,
+    );
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _reconnectTimer?.cancel();
     _disposeSession();
     _releaseHeldPicture();
@@ -293,6 +312,11 @@ class _DevicePaneState extends ConsumerState<DevicePane> {
     // Only for the device already on screen. Another device's last frame is
     // not a stale picture of this one — it is the wrong phone.
     final retainPicture = _session?.serial == device.serial && _player != null;
+    // A hold that is not being renewed belongs to a stream that is not coming
+    // back — another device, or a start that was overtaken. Only `_starting`
+    // keeps it off the screen, and that is too thin a thread for a frame that
+    // would be labelled with the wrong device's name.
+    if (!retainPicture) unawaited(_releaseHeldPicture());
     setState(() {
       _starting = true;
       _holdingPicture = retainPicture;
