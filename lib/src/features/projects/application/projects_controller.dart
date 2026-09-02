@@ -318,6 +318,11 @@ class ProjectsController extends Notifier<List<Project>> {
     }
   }
 
+  /// Re-reads the project rows. Public because the one mutation that does not
+  /// go through this controller — filing a project under a workspace — still
+  /// has to reach everything watching the list.
+  void refreshFromStore() => _refresh();
+
   void _refresh() => state = ref.read(projectDaoProvider).getAll();
 }
 
