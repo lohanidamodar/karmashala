@@ -94,6 +94,7 @@ class SessionLaunchRequest {
     this.parentLink,
     this.forkExternalSessionId,
     this.permissionOverride,
+    this.modelOverride,
     this.view,
     this.externalTerminal,
   });
@@ -166,6 +167,15 @@ class SessionLaunchRequest {
   /// Unused by any in-app path; kept so "the setting decides" stays true by
   /// inspection rather than by convention.
   final PermissionMode? permissionOverride;
+
+  /// The model this launch should record and run under, or null to leave the
+  /// session's own choice — and, failing that, the default — alone.
+  ///
+  /// Parallel to [permissionOverride] and read the same way: null does not mean
+  /// "no model", it means "this caller is not deciding". A resume that passed a
+  /// resolved value here would overwrite the choice the model chip made, which
+  /// is precisely the bug `Session.permissionMode` documents having had.
+  final String? modelOverride;
 
   /// Forced rendering, or `null` to take the agent's default.
   final SessionView? view;

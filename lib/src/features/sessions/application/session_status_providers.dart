@@ -37,6 +37,33 @@ final agentSessionStatusProvider = StreamProvider.autoDispose
           ref.watch(sessionStatusRegistryProvider).reportsFor(sessionId),
     );
 
+/// **One session's status, read synchronously, for a decision being made now.**
+///
+/// A function behind a provider rather than a `family`, and the shape is the
+/// point. A `Provider.family` caches per key, so a caller that only ever
+/// `read`s it would go on being handed the first answer forever — which for a
+/// question whose whole value is that it is current is worse than not asking.
+/// A function is computed at the moment of the call and cached nowhere.
+///
+/// It exists for [SessionLauncher.setModel], which must never type a slash
+/// command into an agent that is mid-turn, and it is a provider rather than a
+/// direct registry read so a test can put a session into a state without
+/// standing up the status pipeline that produces one.
+///
+/// Answers [AgentActivityStatus.unknown] for a session the registry has never
+/// seen — an imported row, one in somebody else's terminal, an agent nobody has
+/// taught us to read — and callers must treat that as "not safe to type into",
+/// never as "probably idle".
+final sessionActivityLookupProvider =
+    Provider<AgentActivityStatus Function(String sessionId)>(
+      (ref) => (sessionId) =>
+          ref
+              .read(sessionStatusRegistryProvider)
+              .reportForOpenId(sessionId)
+              ?.status ??
+          AgentActivityStatus.unknown,
+    );
+
 /// The bottom rows of the pane [session] runs in, or nothing.
 ///
 /// Empty — rather than absent — for a session with no live pane, so the status

@@ -51,6 +51,8 @@ typedef MigrationStep = void Function(Database db);
 ///   past at 14:32.
 /// * **v26** — whether each stored terminal pane had a process behind it when
 ///   it was written, so a restart can put back what was running.
+/// * **v28** — the model picker: a session carries its own model id, the way
+///   it has carried its own permission mode since v11.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -79,6 +81,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   25: _migrateToV25,
   26: _migrateToV26,
   27: _migrateToV27,
+  28: _migrateToV28,
 };
 
 /// Was this pane running when its row was written?
@@ -1076,4 +1079,17 @@ void _migrateToV27(Database db) {
   db.execute(
     'ALTER TABLE sessions ADD COLUMN title_by_user INTEGER NOT NULL DEFAULT 0;',
   );
+}
+
+/// A session carries its own model, so the model chip has somewhere to write
+/// and the launcher has one place to read.
+///
+/// Nullable and undefaulted, exactly like `permission_mode` in v11 and for the
+/// same reason: null is a **value** here, not a missing one. It means "nobody
+/// chose a model for this session", which is what every row written before this
+/// column is truthfully in — and the state a user must be able to go back to
+/// once they have picked. Defaulting existing rows to any model id would be a
+/// claim about what they ran under that nothing in the database can support.
+void _migrateToV28(Database db) {
+  db.execute('ALTER TABLE sessions ADD COLUMN model_id TEXT;');
 }
