@@ -24,8 +24,10 @@ import '../domain/workspace.dart';
 class WorkspacesDialog extends ConsumerStatefulWidget {
   const WorkspacesDialog({super.key});
 
-  static Future<void> show(BuildContext context) =>
-      showDialog<void>(context: context, builder: (_) => const WorkspacesDialog());
+  static Future<void> show(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => const WorkspacesDialog(),
+  );
 
   @override
   ConsumerState<WorkspacesDialog> createState() => _WorkspacesDialogState();
