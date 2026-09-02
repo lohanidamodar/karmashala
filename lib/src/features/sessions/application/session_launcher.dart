@@ -841,17 +841,61 @@ class SessionLauncher {
           workingDirectoryNotice,
         ),
       };
-      _bump();
+      _publish(_whatALaunchMoved(request, id, reused: reused != null));
       return result;
     } catch (_) {
       // The row must not outlive a launch that never happened — that is exactly
       // the "session created as a side effect nothing observes" the audit found,
       // wearing the opposite hat.
       dao.updateStatus(id, SessionStatus.failed);
-      _bump();
+      // The same word as the success path: the row still appeared, and it is
+      // still this one row that moved. A failed launch must reach every list
+      // that draws it, and nothing else.
+      _publish(_whatALaunchMoved(request, id, reused: reused != null));
       rethrow;
     }
   }
+
+  /// What a launch actually moved, named rather than shouted.
+  ///
+  /// This used to be a bare `bump()` — [SessionChange.everything], the word for
+  /// a caller that cannot say what changed. A launch can: one row appeared,
+  /// started, and claimed a pane. The difference is the whole of the owner's
+  /// *"starting new session is heavy and laggy too"*, because the coarse word
+  /// raises `SessionSignals.broadcasts`, which is the floor under **every**
+  /// per-row watcher — and the Explorer builds one
+  /// [sessionWhereaboutsProvider] per drawn card. So creating one session
+  /// re-read every session's row and re-scanned the screen of every dead pane,
+  /// synchronously, on the UI isolate, inside the frame:
+  /// `session_start_cost_test.dart` measured 158 statements, 35 screen scans
+  /// and 39 rebuilds at a hundred sessions against 26, 2 and 6 at one.
+  ///
+  /// Naming the row leaves `broadcasts` alone, so the ninety-nine cards that
+  /// did not change stay asleep. Every kind that any watcher of the *list*
+  /// reads is still published, which is what keeps the new row appearing
+  /// everywhere it must — see the second half of that test.
+  SessionChange _whatALaunchMoved(
+    SessionLaunchRequest request,
+    String id, {
+    required bool reused,
+  }) => SessionChange(
+    sessionId: id,
+    kinds: {
+      // A create grows the list. A resume reuses a row already in it — but
+      // every watcher of the list watches membership anyway, so this is the
+      // only kind the two cases differ on.
+      if (!reused) SessionChangeKind.membership,
+      SessionChangeKind.status,
+      // The row claimed a pane, and a new session was just given its
+      // conversation id — which is what hides the imported record for it.
+      SessionChangeKind.placement,
+      // Only a launch that carried a decision wrote a per-session policy.
+      if (request.permissionOverride != null) SessionChangeKind.settings,
+      // A created worktree is a checkout the picker has to start offering,
+      // and the picker watches nothing else.
+      if (request.useWorktree) SessionChangeKind.workspace,
+    },
+  );
 
   /// The row [request] should continue rather than duplicate, or `null` when
   /// this launch genuinely creates a session.
@@ -1189,10 +1233,6 @@ class SessionLauncher {
     if (instance == null || !instance.liveness.value.isLive) return null;
     return instance.terminal;
   }
-
-  /// The coarse word, for a launch: it mints a row, writes a status, claims a
-  /// pane and may learn a conversation id, all at once.
-  void _bump() => _ref.read(sessionsRevisionProvider.notifier).bump();
 
   void _publish(SessionChange change) =>
       _ref.read(sessionsRevisionProvider.notifier).changed(change);

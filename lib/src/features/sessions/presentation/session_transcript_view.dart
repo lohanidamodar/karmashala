@@ -59,8 +59,28 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// path and a description.
   final _subagents = <int, SubagentRef>{};
 
+  /// Held rather than read in [dispose]: `ref` is unusable once the element is
+  /// on its way out, and the draft has to be parked exactly then.
+  late final ComposerDrafts _drafts;
+
+  /// Set before the draft is parked, because parking it notifies this widget's
+  /// own listener on the same provider and `ref` is dead by then.
+  bool _leaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _drafts = ref.read(composerDraftProvider.notifier);
+  }
+
   @override
   void dispose() {
+    // The workbench unmounts the conversation when it moves to another session
+    // (see `_conversationFor`), so half-typed text is parked where the next
+    // mount already looks for it rather than thrown away.
+    _leaving = true;
+    final draft = _composer.text;
+    if (draft.trim().isNotEmpty) _drafts.queue(widget.sessionId, draft);
     _composer.dispose();
     super.dispose();
   }
@@ -72,9 +92,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// of routing a note through here is that the user reads it first, and then
   /// presses Enter on the ordinary `continueSession` path.
   void _takeQueuedNote() {
-    final queued = ref
-        .read(composerDraftProvider.notifier)
-        .take(widget.sessionId);
+    if (_leaving) return;
+    final queued = _drafts.take(widget.sessionId);
     if (queued == null || queued.isEmpty) return;
     final existing = _composer.text.trimRight();
     _composer.text = existing.isEmpty ? queued : '$existing\n\n$queued';
