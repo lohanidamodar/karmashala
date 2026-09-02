@@ -1402,6 +1402,22 @@ void _costTests() {
     );
   });
 
+  test('resolving a device with no id asks both platforms at once', () async {
+    final host = _Host();
+    final s = await _server(host, measureConcurrency: true);
+    addTearDown(s.dispose);
+
+    // Every `device_*` call that does not name a device comes through
+    // `DeviceFleet.all()`, and the fleet is rebuilt per operation on purpose —
+    // "who is plugged in right now" is meant to be perishable. So a serial
+    // resolution added `adb devices` to `simctl list devices` on every tap,
+    // keystroke and screenshot of a driving session, not once per session.
+    _ok(await s.call('device_screenshot', {'id': 'emulator-5554'}));
+    final resolving = (s.runner as _ConcurrencyRunner).peak;
+
+    expect(resolving, greaterThan(1));
+  });
+
   test('one screen size per ready device, all at once', () async {
     final host = _Host()
       ..androidSerials.addAll(['emulator-5556', 'emulator-5558']);
@@ -1420,5 +1436,24 @@ void _costTests() {
       greaterThanOrEqualTo(host.androidSerials.length),
       reason: 'every ready device is asked at the same time',
     );
+  });
+
+  test('and one per running simulator, the same way', () async {
+    // The iOS branch of the same listing did not get the fix its Android twin
+    // did, two blocks above it in the same function: `simctl io <udid>
+    // enumerate` was awaited inside the list literal, one round trip at a time.
+    final host = _Host(
+      simulatorStates: {'UDID-17PRO': 'Booted', 'UDID-16': 'Booted'},
+    );
+    final s = await _server(host, measureConcurrency: true);
+    addTearDown(s.dispose);
+
+    _ok(await s.call('list_devices'));
+
+    final enumerates = host.commandLines
+        .where((c) => c.contains('io ') && c.contains('enumerate'))
+        .length;
+    expect(enumerates, 2, reason: 'one per running simulator');
+    expect((s.runner as _ConcurrencyRunner).peak, greaterThan(1));
   });
 }

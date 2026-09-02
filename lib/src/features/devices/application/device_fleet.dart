@@ -136,10 +136,21 @@ class DeviceFleet {
   }
 
   /// Every device on this machine, Android first.
-  Future<List<DeviceTarget>> all() async => [
-    ...await androidTargets(),
-    ...await simulatorTargets(),
-  ];
+  ///
+  /// The two probes are started together. They are separate tools asking about
+  /// separate id namespaces, and this is the path `driverFor` takes for every
+  /// `device_*` call that does not name a device — which is most of them — so
+  /// serialising it added `adb devices` (41ms here) to `simctl list devices`
+  /// (214ms) on every tap, every keystroke and every screenshot in a driving
+  /// session. The fleet is rebuilt per operation on purpose, so the cost is
+  /// paid every time rather than once.
+  Future<List<DeviceTarget>> all() async {
+    final (android, simulators) = await (
+      androidTargets(),
+      simulatorTargets(),
+    ).wait;
+    return [...android, ...simulators];
+  }
 
   /// Everything that could be driven now.
   Future<List<DeviceTarget>> ready() async => [
