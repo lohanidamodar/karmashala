@@ -44,6 +44,108 @@ class TerminalPainter {
   /// corpus 4x *slower* than per-cell painting).
   final _runCache = LruMap<_RunKey, Paragraph>(maximumSize: 10240);
 
+  /// How many *new* run paragraphs [paintLine] may lay out in one frame before
+  /// it stops laying out and paints the rest of that frame's misses cell by
+  /// cell instead. See [beginFrame] for why there is a budget at all.
+  ///
+  /// 48 is picked from the cost of a miss, not from taste. Instrumenting the
+  /// miss branch (`tool/benchmark/paint_stream_bench.dart`) gives
+  /// ~11 us of fixed `ParagraphBuilder` + `build` + `layout` overhead per
+  /// paragraph plus ~0.19 us per character, so a 200-column run costs ~49 us
+  /// and a ~11-column `ls` entry ~23 us. 48 long runs is therefore ~2.4 ms —
+  /// about a seventh of the 16.67 ms frame, small enough to leave room for the
+  /// rest of the app's paint, and large enough that a full 200x50 viewport of
+  /// one-run-per-line output (the plain-log case, 50 runs) converges to fully
+  /// batched in two frames.
+  static const maxRunLayoutsPerFrame = 48;
+
+  /// Remaining layouts in the current frame. Starts full so that a
+  /// [TerminalPainter] driven directly — by a test, or by anything that does
+  /// not call [beginFrame] — still batches its first frame.
+  int _runLayoutBudget = maxRunLayoutsPerFrame;
+
+  /// Number of run paragraphs laid out since [resetPaintCounters].
+  ///
+  /// Exposed because this is the quantity the painter's cost is made of: at
+  /// ~11-49 us apiece it is 90-93% of the time [paintLine] spends on a frame
+  /// whose content changed. `test/terminal/perf/paint_layout_cost_test.dart`
+  /// asserts on it rather than on wall clock.
+  @visibleForTesting
+  int runParagraphsLaidOut = 0;
+
+  /// Number of runs painted cell by cell because the frame's layout budget was
+  /// already spent. Counted so a test can tell "the budget held" apart from
+  /// "there was nothing to lay out".
+  @visibleForTesting
+  int runsDeferredToCells = 0;
+
+  /// Number of *cell* paragraphs laid out since [resetPaintCounters].
+  ///
+  /// The claim that makes the fallback in [_drawRun] worth taking is that
+  /// [_paragraphCache] hits where [_runCache] cannot, because its key is
+  /// (code point, colours, flags) rather than a whole run's text — a few
+  /// hundred live entries for real output against one per distinct run.
+  /// `paint_layout_cost_test.dart` asserts on this counter so the claim is
+  /// pinned by a number and not by the comment above it.
+  @visibleForTesting
+  int cellParagraphsLaidOut = 0;
+
+  @visibleForTesting
+  void resetPaintCounters() {
+    runParagraphsLaidOut = 0;
+    runsDeferredToCells = 0;
+    cellParagraphsLaidOut = 0;
+  }
+
+  /// Called once per frame, before the frame's first [paintLine].
+  ///
+  /// A terminal's paint cost is dominated by laying out paragraphs for text it
+  /// has never seen before, and the frames where that happens are exactly the
+  /// frames that are already busy: a screenful of new output arrives, every run
+  /// on every line misses [_runCache], and the painter lays out one paragraph
+  /// per run before it may draw anything. Measured on a full 200x50 viewport of
+  /// freshly arrived `ls --color`-shaped output (`stream colour 50 lines/frame`
+  /// in `tool/benchmark/paint_stream_bench.dart`): 686 layouts per frame,
+  /// 15.6 ms of the frame's 16.7 ms inside the miss branch, zero cache hits.
+  /// That is the whole frame budget spent on text that will have scrolled away
+  /// in a second.
+  ///
+  /// So the budget is refilled here rather than being unlimited. Runs past the
+  /// budget are painted cell by cell out of [_paragraphCache], whose key is
+  /// (code point, colours, flags) rather than the run's text — a key space of a
+  /// few hundred entries for real output, so it hits essentially always: the
+  /// same colour-streaming frame records 19 880 per-cell hits and *zero*
+  /// per-cell layouts. Painting a run out of that cache costs ~0.17 us per
+  /// cell, which beats laying the run out at any run length.
+  ///
+  /// What the budget costs is draw calls, and only until the screen settles:
+  /// a run that misses today is laid out on a later frame and batched from then
+  /// on, so a screen that stops changing converges to exactly the same drawing
+  /// the unbudgeted painter did. It is the transient that is bounded, and
+  /// `tool/benchmark/raster_cost_bench.dart` prices it: rasterising a viewport
+  /// cell by cell instead of by runs costs 1.9-3.1 ms more, on the raster
+  /// thread, against 13.7 ms saved on the UI thread. Each visible pane has its
+  /// own painter and so its own budget, which is the intended shape — four
+  /// split panes all filling with new output at once cost 4 x 2.4 ms of layout
+  /// rather than 4 x 15.6 ms.
+  ///
+  /// Ruled out on the way here, so nobody re-measures them:
+  ///
+  /// * **Hoisting the style objects out of the miss branch.** `toTextStyle` +
+  ///   `getParagraphStyle` + `getTextStyle` (which copies a 14-entry font
+  ///   fallback list) looks like the allocation to kill, but it is ~1.5 us of a
+  ///   ~16 us miss. Worth ~10%, not the 5x.
+  /// * **Growing or re-keying [_runCache].** The hit rate on a streaming
+  ///   viewport is not low, it is *zero* — the key is the run's text and the
+  ///   text is new. No cache size and no cheaper key changes that.
+  /// * **Dropping run batching and always painting per cell.** That is the 1.9
+  ///   to 3.1 ms of extra raster work above, paid on *every* frame including
+  ///   the ones where nothing changed, and it is what the batching was
+  ///   introduced to remove.
+  void beginFrame() {
+    _runLayoutBudget = maxRunLayoutsPerFrame;
+  }
+
   TerminalStyle get textStyle => _textStyle;
   TerminalStyle _textStyle;
   set textStyle(TerminalStyle value) {
@@ -303,7 +405,15 @@ class TerminalPainter {
 
       if (charWidth != 1) {
         if (runLength > 0) {
-          _flushTextRun(canvas, offset, runStart, runLength, runCell, runText);
+          _flushTextRun(
+            canvas,
+            offset,
+            line,
+            runStart,
+            runLength,
+            runCell,
+            runText,
+          );
           runLength = 0;
         }
         paintCellForeground(
@@ -319,7 +429,15 @@ class TerminalPainter {
 
       if (cellData.content & CellContent.codepointMask == 0) {
         if (runLength > 0) {
-          _flushTextRun(canvas, offset, runStart, runLength, runCell, runText);
+          _flushTextRun(
+            canvas,
+            offset,
+            line,
+            runStart,
+            runLength,
+            runCell,
+            runText,
+          );
           runLength = 0;
         }
         continue;
@@ -340,7 +458,15 @@ class TerminalPainter {
       }
 
       if (runLength > 0) {
-        _flushTextRun(canvas, offset, runStart, runLength, runCell, runText);
+        _flushTextRun(
+          canvas,
+          offset,
+          line,
+          runStart,
+          runLength,
+          runCell,
+          runText,
+        );
       }
       runStart = i;
       runCell.foreground = cellData.foreground;
@@ -351,7 +477,15 @@ class TerminalPainter {
     }
 
     if (runLength > 0) {
-      _flushTextRun(canvas, offset, runStart, runLength, runCell, runText);
+      _flushTextRun(
+        canvas,
+        offset,
+        line,
+        runStart,
+        runLength,
+        runCell,
+        runText,
+      );
     }
   }
 
@@ -359,6 +493,7 @@ class TerminalPainter {
   void _flushTextRun(
     Canvas canvas,
     Offset offset,
+    BufferLine line,
     int startColumn,
     int length,
     CellData runCell,
@@ -374,7 +509,11 @@ class TerminalPainter {
     }
     _drawRun(
       canvas,
+      offset,
       runOffset,
+      line,
+      startColumn,
+      length,
       runText.toString(),
       runCell.foreground,
       runCell.background,
@@ -383,10 +522,29 @@ class TerminalPainter {
     runText.clear();
   }
 
-  /// Lays out (or reuses) and draws one run of same-styled text.
+  /// Draws one run of same-styled text: reusing its [Paragraph] if one is
+  /// cached, laying one out if this frame can still afford to, and otherwise
+  /// painting the run cell by cell.
+  ///
+  /// The three-way choice, rather than upstream's "look up, else lay out", is
+  /// the point of the change. A cache keyed on the run's *text* cannot hit on
+  /// text the terminal has never printed, and printing text it has never
+  /// printed is what a terminal does. Measured over 40 frames of a 200x50
+  /// viewport being filled with fresh `ls --color`-shaped lines
+  /// (`stream colour 50 lines/frame` in `tool/benchmark/paint_stream_bench.dart`):
+  /// 27 440 layouts, **zero** hits, 15.6 ms of each 16.7 ms frame spent inside
+  /// this method. The same corpus held still repaints in 462 us. The cache was
+  /// never broken — it is irrelevant on exactly the frames that drop.
+  ///
+  /// See [beginFrame] for the budget, and [_paintRunPerCell] for why the third
+  /// branch is both cheap and pixel-exact.
   void _drawRun(
     Canvas canvas,
-    Offset offset,
+    Offset lineOffset,
+    Offset runOffset,
+    BufferLine line,
+    int startColumn,
+    int length,
     String text,
     int foreground,
     int background,
@@ -403,34 +561,89 @@ class TerminalPainter {
 
     final key = (runText, foreground, background, flags, _textScaler);
 
-    var paragraph = _runCache[key];
-    if (paragraph == null) {
-      var color = flags & CellFlags.inverse == 0
-          ? resolveForegroundColor(foreground)
-          : resolveBackgroundColor(background);
-
-      if (flags & CellFlags.faint != 0) {
-        color = color.withOpacity(0.5);
-      }
-
-      final style = _textStyle.toTextStyle(
-        color: color,
-        bold: flags & CellFlags.bold != 0,
-        italic: flags & CellFlags.italic != 0,
-        underline: flags & CellFlags.underline != 0,
-      );
-
-      final builder = ParagraphBuilder(style.getParagraphStyle());
-      builder.pushStyle(style.getTextStyle(textScaler: _textScaler));
-      builder.addText(runText);
-
-      paragraph = builder.build();
-      paragraph.layout(const ParagraphConstraints(width: double.infinity));
-      _runCache[key] = paragraph;
+    final cached = _runCache[key];
+    if (cached != null) {
+      canvas.drawParagraph(cached, runOffset);
+      return;
     }
 
-    canvas.drawParagraph(paragraph, offset);
+    if (_runLayoutBudget <= 0) {
+      runsDeferredToCells++;
+      _paintRunPerCell(canvas, lineOffset, line, startColumn, length);
+      return;
+    }
+    _runLayoutBudget--;
+    runParagraphsLaidOut++;
+
+    var color = flags & CellFlags.inverse == 0
+        ? resolveForegroundColor(foreground)
+        : resolveBackgroundColor(background);
+
+    if (flags & CellFlags.faint != 0) {
+      color = color.withOpacity(0.5);
+    }
+
+    final style = _textStyle.toTextStyle(
+      color: color,
+      bold: flags & CellFlags.bold != 0,
+      italic: flags & CellFlags.italic != 0,
+      underline: flags & CellFlags.underline != 0,
+    );
+
+    final builder = ParagraphBuilder(style.getParagraphStyle());
+    builder.pushStyle(style.getTextStyle(textScaler: _textScaler));
+    builder.addText(runText);
+
+    final paragraph = builder.build();
+    paragraph.layout(const ParagraphConstraints(width: double.infinity));
+    _runCache[key] = paragraph;
+
+    canvas.drawParagraph(paragraph, runOffset);
   }
+
+  /// Paints `[startColumn, startColumn + length)` of [line] one cell at a time,
+  /// which is what [_drawRun] falls back to when the frame's layout budget is
+  /// spent.
+  ///
+  /// This is not an approximation of the batched path, it is the path the
+  /// batched one is *held to*: `test/terminal/perf/pixel_equivalence_test.dart`
+  /// rasterises whole viewports both ways and requires the bytes to match, so a
+  /// run drawn cell by cell after its merged background rect is already down is
+  /// the same picture as the same run drawn as one paragraph. Colour, faint,
+  /// bold, italic, inverse and the underline-on-space substitution are all
+  /// re-derived inside [paintCellForeground] from the same four cell words, so
+  /// nothing about the style is duplicated here and nothing can drift out of
+  /// step with the run path.
+  ///
+  /// Only cells a run was allowed to contain reach this loop — single width,
+  /// non-zero code point — so unlike [paintLinePerCell] it needs no
+  /// double-width skipping and can never paint a trailing half-cell.
+  void _paintRunPerCell(
+    Canvas canvas,
+    Offset lineOffset,
+    BufferLine line,
+    int startColumn,
+    int length,
+  ) {
+    final cellWidth = _cellSize.width;
+    final cell = _fallbackCell;
+    for (var i = 0; i < length; i++) {
+      final column = startColumn + i;
+      line.getCellData(column, cell);
+      paintCellForeground(
+        canvas,
+        lineOffset.translate(column * cellWidth, 0),
+        cell,
+      );
+    }
+  }
+
+  /// Scratch cell for [_paintRunPerCell], held on the painter rather than
+  /// allocated per call: the fallback is the *busy* frame's path, and on a
+  /// 200x50 viewport of unseen output it would otherwise allocate one
+  /// [CellData] per run, hundreds a frame, exactly when the frame has no time
+  /// to spare. The painter is never re-entered, so one scratch cell is enough.
+  final _fallbackCell = CellData.empty();
 
   /// The original, unbatched per-cell paint loop, retained verbatim so the
   /// pixel-equivalence test can prove the batched [paintLine] draws exactly the
@@ -503,6 +716,7 @@ class TerminalPainter {
         char = String.fromCharCode(0xA0);
       }
 
+      cellParagraphsLaidOut++;
       paragraph = _paragraphCache.performAndCacheLayout(
         char,
         style,

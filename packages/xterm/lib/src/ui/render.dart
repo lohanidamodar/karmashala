@@ -444,6 +444,17 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     return _painter.cellSize;
   }
 
+  /// The painter this render object draws with.
+  ///
+  /// Exposed only so a test can prove [paint] calls
+  /// [TerminalPainter.beginFrame]. Without that call the painter's per-frame
+  /// layout budget is never refilled and the first screenful of new output
+  /// permanently switches it to per-cell drawing — a failure mode that no
+  /// painter-level test can see, because the perf harness refills the budget
+  /// itself.
+  @visibleForTesting
+  TerminalPainter get painter => _painter;
+
   @override
   void paint(PaintingContext context, Offset offset) {
     _paint(context, offset);
@@ -452,6 +463,10 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   void _paint(PaintingContext context, Offset offset) {
     final canvas = context.canvas;
+
+    // The painter meters how much paragraph layout it is willing to do in one
+    // frame, and "one frame" is this call. See TerminalPainter.beginFrame.
+    _painter.beginFrame();
 
     final lines = _terminal.buffer.lines;
     final charHeight = _painter.cellSize.height;

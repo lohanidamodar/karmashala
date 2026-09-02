@@ -22,6 +22,7 @@ void paintViewport(
   Terminal terminal, {
   bool perCell = false,
 }) {
+  painter.beginFrame();
   final lines = terminal.buffer.lines;
   final height = painter.cellSize.height;
   final count = terminal.viewHeight < lines.length
@@ -84,8 +85,36 @@ void paintViewportPerCellTwoPass(
 }
 
 /// Exact number of draw calls needed to paint one full viewport frame.
-int countDrawOps(Terminal terminal, {bool perCell = false}) {
+///
+/// [settled] is the number the per-corpus budgets are stated against: the
+/// painter meters how much paragraph layout it will do in one frame
+/// (`TerminalPainter.beginFrame`), so a screen that has just appeared is drawn
+/// partly cell by cell and reaches its batched draw-call count over the next
+/// few frames instead of on the first one. Repainting until no frame lays out
+/// anything new is what "the terminal is sitting there showing this" means, and
+/// it is the state a draw-call budget is about.
+///
+/// Pass `settled: false` for the first frame after the content appeared — the
+/// transient. It is bounded too, by `paint_layout_cost_test.dart`, but by the
+/// per-cell painter's count rather than by the batched budget.
+int countDrawOps(
+  Terminal terminal, {
+  bool perCell = false,
+  bool settled = true,
+}) {
   final painter = makePainter();
+  if (settled) {
+    // 64 frames is far more than any corpus needs (the worst, colorizedLs at
+    // 878 runs, converges in 19), and the loop exits as soon as a frame lays
+    // nothing out, so this costs nothing for the corpora that settle at once.
+    for (var frame = 0; frame < 64; frame++) {
+      painter.resetPaintCounters();
+      final warm = PictureRecorder();
+      paintViewport(painter, Canvas(warm), terminal, perCell: perCell);
+      warm.endRecording().dispose();
+      if (painter.runParagraphsLaidOut == 0) break;
+    }
+  }
   final recorder = PictureRecorder();
   final canvas = CountingCanvas(Canvas(recorder));
   paintViewport(painter, canvas, terminal, perCell: perCell);
