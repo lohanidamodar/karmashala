@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../todos/domain/project_scope.dart';
 import '../data/note_dao.dart';
 import '../domain/note.dart';
 
@@ -29,9 +31,17 @@ class NotesController extends Notifier<List<Note>> {
 
   /// Keeps [body] **exactly as given**. Callers pass the message's own words;
   /// nothing here trims a conversation into a gist. See [Note].
+  ///
+  /// An unspecified [projectId] follows the source repository's project, which
+  /// is the whole reason capturing from a transcript files anything at all.
+  /// [inheritProjectFromSource] is how a caller says *file this under nothing*
+  /// — the one thing a nullable `String` cannot say for itself, since null
+  /// there already means "you decide".
   Note capture({
     required String body,
     String? title,
+    String? projectId,
+    bool inheritProjectFromSource = true,
     String? sourceSessionId,
     String? sourceRepositoryId,
     int? sourceMessageOrdinal,
@@ -42,6 +52,9 @@ class NotesController extends Notifier<List<Note>> {
       id: _newId(now),
       title: title,
       body: body,
+      projectId:
+          projectId ??
+          (inheritProjectFromSource ? _projectOf(sourceRepositoryId) : null),
       sourceSessionId: sourceSessionId,
       sourceRepositoryId: sourceRepositoryId,
       sourceMessageOrdinal: sourceMessageOrdinal,
@@ -54,9 +67,25 @@ class NotesController extends Notifier<List<Note>> {
     return note;
   }
 
+  /// The project a note captured from [repositoryId] belongs to.
+  ///
+  /// Filing follows the repository because a repository belongs to exactly one
+  /// project, so this is a lookup rather than a guess — the same rule the v33
+  /// backfill applied to every note taken before the column existed.
+  String? _projectOf(String? repositoryId) => repositoryId == null
+      ? null
+      : ref.read(repositoryDaoProvider).getById(repositoryId)?.projectId;
+
   /// Applies the user's edit. An empty title clears it, putting the note back
-  /// to being named by its first line.
-  void edit(String id, {required String body, String? title}) {
+  /// to being named by its first line. [projectId] is the filing the dialog
+  /// came back with — null means "no project", which is a choice, so this is
+  /// the one field an edit can clear by leaving it out.
+  void edit(
+    String id, {
+    required String body,
+    String? title,
+    String? projectId,
+  }) {
     final index = state.indexWhere((n) => n.id == id);
     if (index == -1) return;
     final trimmedTitle = title?.trim();
@@ -64,14 +93,34 @@ class NotesController extends Notifier<List<Note>> {
         ? null
         : trimmedTitle;
     final now = ref.read(clockProvider).nowUtc();
-    _dao.update(id, body: body, title: named, updatedAt: now);
+    _dao.update(
+      id,
+      body: body,
+      title: named,
+      projectId: projectId,
+      updatedAt: now,
+    );
     final updated = state[index].copyWith(
       body: body,
       title: named,
       clearTitle: named == null,
+      projectId: projectId,
+      clearProjectId: projectId == null,
       updatedAt: now,
     );
     state = [...state]..[index] = updated;
+  }
+
+  /// Files [id] under [projectId], or unfiles it when that is null. The one
+  /// write that leaves `updated_at` alone: filing is not editing.
+  void setProject(String id, String? projectId) {
+    final index = state.indexWhere((n) => n.id == id);
+    if (index == -1) return;
+    _dao.setProject(id, projectId);
+    state = [...state]..[index] = state[index].copyWith(
+      projectId: projectId,
+      clearProjectId: projectId == null,
+    );
   }
 
   void delete(String id) {
@@ -93,4 +142,19 @@ class NotesController extends Notifier<List<Note>> {
 
 final notesProvider = NotifierProvider<NotesController, List<Note>>(
   NotesController.new,
+);
+
+/// Which project's notes the panel is showing. Its own controller rather than
+/// one shared with Todos: the two panels are looked at for different reasons,
+/// and a filter set in one silently narrowing the other is a surprise nobody
+/// asked for.
+class NoteScopeController extends Notifier<ProjectScope> {
+  @override
+  ProjectScope build() => ProjectScope.all;
+
+  void select(ProjectScope scope) => state = scope;
+}
+
+final noteScopeProvider = NotifierProvider<NoteScopeController, ProjectScope>(
+  NoteScopeController.new,
 );

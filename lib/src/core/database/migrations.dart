@@ -64,6 +64,8 @@ typedef MigrationStep = void Function(Database db);
 /// * **v33** — saved command snippets: the commands the user keeps, each
 ///   optionally tagged with the shell it is written for, so a WSL one-liner is
 ///   never offered in a PowerShell pane.
+/// * **v34** — todos, and the project a todo or a note is filed under. Both
+///   nullable: filed under nothing is an ordinary todo, not an unfinished one.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -98,6 +100,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   31: _migrateToV31,
   32: _migrateToV32,
   33: _migrateToV33,
+  34: _migrateToV34,
 };
 
 /// Was this pane running when its row was written?
@@ -1399,5 +1402,88 @@ void _migrateToV33(Database db) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+  ''');
+}
+
+/// Todos, and the project a todo or a note is filed under.
+///
+/// **Six columns, and not one of them is a feature.** The ask was for *simple*
+/// todos, so what is here is identity, the line of text, whether it is done,
+/// the association that was asked for, the order that was asked for, and when
+/// it was written. No due date, no priority, no label, no assignee, no
+/// recurrence — every one of those is a box to fill in before the list works,
+/// and a todo list nobody has to learn beats a task manager nobody opens.
+///
+/// **`done_at` rather than a `done` flag.** It is the same boolean — null is
+/// open — and it also answers "when did I finish that", which a `0` cannot and
+/// which nothing else in the row records. A flag would throw the fact away and
+/// save nothing.
+///
+/// **`position` earns its column because the request named it**: "a line of
+/// text, done or not, ordered". Ordering by `created_at` would be *an* order
+/// but not the user's, and the row that most needs to move to the top is
+/// exactly the one that has sat there longest. Dense integers, renumbered on a
+/// move, rather than fractional indices: the list is tens of rows, the
+/// renumber is one transaction, and float midpoints exhaust their precision in
+/// a way that is silent when it happens.
+///
+/// **`project_id` is nullable on both tables and stays nullable.** A todo filed
+/// under nothing is an ordinary todo, not a row waiting to be fixed — the same
+/// argument v31 makes for `projects.workspace_id`, and the foreign key is
+/// `ON DELETE SET NULL` for the same reason it is there. Deleting a project
+/// must lose the *filing*, never the writing: a project is deleted when the
+/// work is over, and "the work is over" is exactly when the leftover note
+/// saying what went wrong is worth the most. A cascade would turn "I am done
+/// with this checkout" into "and delete everything I wrote about it".
+///
+/// **Why a foreign key here when `notes.source_session_id` deliberately has
+/// none.** Those columns record where a note *came from*, and what they name
+/// may never have been a row of ours — an imported CLI session, a transcript we
+/// only read. `project_id` records where the user *filed* it, and a project is
+/// a row this app creates and deletes. A dangling origin is honest history
+/// ("from a session that is gone"); a dangling filing is a menu entry that
+/// draws a blank.
+///
+/// **The one `UPDATE`, and why it is not the data movement v31 refused.** Every
+/// note captured from a session already records that session's repository, and
+/// a repository belongs to exactly one project — so the project a note was
+/// written in is a fact *this database already holds*, not the guess v31 would
+/// have had to make about thirty-one projects. The statement writes only into
+/// the column created two statements above it, so there is nothing it can
+/// overwrite: one `ALTER TABLE` ago that column did not exist. Without it every
+/// real note the owner has would land unfiled on the day the filter shipped,
+/// and the feature would look broken by its own first impression.
+void _migrateToV34(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS todos (
+      id         TEXT PRIMARY KEY,
+      body       TEXT NOT NULL,
+      done_at    TEXT,
+      project_id TEXT REFERENCES projects (id) ON DELETE SET NULL,
+      position   INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  ''');
+  // The list is read whole and split in memory, so this index serves exactly
+  // one query: the `SET NULL` fan-out when a project is deleted. That is
+  // enough — without it, deleting a project scans every todo ever written.
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_todos_project ON todos (project_id);',
+  );
+  // `REFERENCES` is legal on `ADD COLUMN` because the default is NULL, which
+  // is also what every existing note gets until the backfill below.
+  db.execute(
+    'ALTER TABLE notes ADD COLUMN project_id TEXT '
+    'REFERENCES projects (id) ON DELETE SET NULL;',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_notes_project ON notes (project_id);',
+  );
+  db.execute('''
+    UPDATE notes SET project_id = (
+      SELECT project_id FROM repositories
+       WHERE repositories.id = notes.source_repository_id
+    )
+    WHERE source_repository_id IS NOT NULL;
   ''');
 }

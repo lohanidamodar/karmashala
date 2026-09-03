@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../notes/application/notes_providers.dart';
+import '../notes/domain/note.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/domain/inbox_item.dart';
+import '../sessions/application/session_providers.dart';
+import 'todo_tools.dart';
 
 /// What is written down, and what is waiting.
 ///
@@ -30,11 +33,15 @@ class AttentionControlTools {
 
   Future<Object?> call(String name, Map<String, dynamic> args) async =>
       switch (name) {
-        'notes_list' => _notesList(args['sessionId'] as String?),
+        'notes_list' => _notesList(
+          args['sessionId'] as String?,
+          projectId: args['projectId'] as String?,
+        ),
         'note_add' => _noteAdd(
           body: (args['body'] as String?) ?? '',
           title: args['title'] as String?,
           sessionId: args['sessionId'] as String? ?? callerSessionId,
+          projectId: args['projectId'] as String?,
         ),
         'note_delete' => _noteDelete(args['id'] as String?),
         'inbox_list' => _inboxList(includeSeen: args['includeSeen'] == true),
@@ -43,10 +50,24 @@ class AttentionControlTools {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  Object? _notesList(String? sessionId) {
-    final notes = _container
-        .read(noteDaoProvider)
-        .list(sessionId: sessionId);
+  /// The notes, optionally narrowed to one session and one project.
+  ///
+  /// `projectId` follows the same convention as the todo tools: an id filters
+  /// to that project, the literal `'none'` filters to the notes filed under no
+  /// project, and omitting it means all of them. A string argument cannot
+  /// otherwise carry the difference between "not given" and "explicitly
+  /// nothing", and both are things a caller means.
+  Object? _notesList(String? sessionId, {String? projectId}) {
+    final notes = <Note>[
+      for (final note in _container
+          .read(noteDaoProvider)
+          .list(sessionId: sessionId))
+        if (projectId == null ||
+            (projectId == TodoControlTools.unfiled
+                ? note.projectId == null
+                : note.projectId == projectId))
+          note,
+    ];
     return <String, Object?>{
       // Whether the panel is switched on. A caller adding notes into a surface
       // nobody can see deserves to know that, and it is not a reason to refuse.
@@ -57,6 +78,7 @@ class AttentionControlTools {
             'id': note.id,
             'title': note.displayTitle,
             'body': note.body,
+            'projectId': note.projectId,
             'sourceSessionId': note.sourceSessionId,
             'sourceRepositoryId': note.sourceRepositoryId,
             'createdAt': note.createdAt.toIso8601String(),
@@ -75,16 +97,33 @@ class AttentionControlTools {
     required String body,
     String? title,
     String? sessionId,
+    String? projectId,
   }) {
     if (body.trim().isEmpty) {
       throw ArgumentError('body is required and cannot be blank.');
     }
+    // Which project it lands under: an explicit id wins, `'none'` files it
+    // nowhere, and an omitted argument lets `NotesController.capture` follow
+    // the session's own repository — the rule the v33 backfill used for every
+    // note taken before the column existed.
+    final repositoryId = sessionId == null
+        ? null
+        : _container.read(sessionDaoProvider).getById(sessionId)?.repositoryId;
+    final unfiled = projectId == TodoControlTools.unfiled;
     final note = _container
         .read(notesProvider.notifier)
-        .capture(body: body, title: title, sourceSessionId: sessionId);
+        .capture(
+          body: body,
+          title: title,
+          sourceSessionId: sessionId,
+          sourceRepositoryId: repositoryId,
+          projectId: unfiled ? null : projectId,
+          inheritProjectFromSource: !unfiled,
+        );
     return <String, Object?>{
       'id': note.id,
       'title': note.displayTitle,
+      'projectId': note.projectId,
       'sourceSessionId': note.sourceSessionId,
       'createdAt': note.createdAt.toIso8601String(),
     };
@@ -312,13 +351,22 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
     'name': 'notes_list',
     'description':
         'The notes kept in Karmashala, newest first. Pass sessionId to see '
-        'only the ones captured from one session.',
+        'only the ones captured from one session, and projectId to see only '
+        'the ones filed under one project — or the literal "none" for the '
+        'ones filed under no project.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'sessionId': {
           'type': 'string',
           'description': 'Only notes captured from this session.',
+        },
+        'projectId': {
+          'type': 'string',
+          'description':
+              'Only notes filed under this project (list_projects has the '
+              'ids), or "none" for only the ones filed under no project. '
+              'Omit for all of them.',
         },
       },
     },
@@ -334,6 +382,7 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
               'id': {'type': 'string'},
               'title': {'type': 'string'},
               'body': {'type': 'string'},
+              'projectId': {'type': ['string', 'null']},
               'sourceSessionId': {'type': ['string', 'null']},
               'sourceRepositoryId': {'type': ['string', 'null']},
               'createdAt': {'type': 'string'},
@@ -352,7 +401,8 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
         'Write a note. The body is kept EXACTLY as given — nothing here trims '
         'it to a gist — so pass the words that should survive, not a summary '
         'of them. Attributed to the calling session unless sessionId names '
-        'another.',
+        'another, and filed under that session\'s project unless projectId '
+        'says otherwise.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -367,6 +417,13 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
           'description':
               'Which session this came from. Defaults to the calling session.',
         },
+        'projectId': {
+          'type': 'string',
+          'description':
+              'Which project to file it under (list_projects has the ids), or '
+              '"none" for no project. Defaults to the project of the session '
+              'it came from.',
+        },
       },
       'required': ['body'],
     },
@@ -375,6 +432,7 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
       'properties': {
         'id': {'type': 'string'},
         'title': {'type': 'string'},
+        'projectId': {'type': ['string', 'null']},
         'sourceSessionId': {'type': ['string', 'null']},
         'createdAt': {'type': 'string'},
       },

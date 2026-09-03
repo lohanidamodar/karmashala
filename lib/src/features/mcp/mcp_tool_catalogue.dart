@@ -149,6 +149,16 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       // states: a snippet the user saved with submit=true runs on insertion,
       // and a client deciding whether to confirm cannot see which one this is.
       'snippet_insert': McpToolAnnotations(destructive: true),
+      // Todos: the one list a person and an agent both write to.
+      'todos_list': McpToolAnnotations.read,
+      'todo_add': McpToolAnnotations(),
+      // Sets one field and only that field. Idempotent — finishing a finished
+      // todo leaves the same todo. **Not** destructive: the row is still there
+      // afterwards, and `done: false` puts it back, which is exactly the undo
+      // `destructiveHint` says does not exist. Same call as
+      // `review_thread_status`.
+      'todo_done': McpToolAnnotations(idempotent: true),
+      'todo_delete': McpToolAnnotations(destructive: true),
 
       // Notes and the inbox.
       'notes_list': McpToolAnnotations.read,

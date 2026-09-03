@@ -423,9 +423,9 @@ All of it is open-world. Nothing here is confined to this machine.
   McpGuide(
     topic: 'records',
     summary:
-        'Notes, the inbox and the decision record: what is append-only and '
-        'what disappears.',
-    prefixes: <String>['note', 'inbox_'],
+        'Todos, notes, the inbox and the decision record: what is written, '
+        'what is observed, and what disappears.',
+    prefixes: <String>['note', 'todo', 'inbox_'],
     extraTools: <String>['decision_record'],
     body: '''
 **The decision record only ever grows.**
@@ -442,6 +442,22 @@ which one you have, so the annotation describes the destructive case.
 
 `note_delete` removes a note with no undo. `note_add` appends. `notes_list`
 and `inbox_list` change nothing.
+
+**Todos and the inbox look alike and are opposites.** The inbox is *observed*:
+the app puts a row there when it notices an agent waiting or a check going red,
+and it takes the row away itself when the condition ends. The todo list is
+*written*: nothing appears in it unless a person or an agent wrote it, and
+nothing leaves until somebody ticks it off or deletes it. So `inbox_list`
+answers "what is happening right now", and `todos_list` answers "what did we
+decide still has to happen" — reach for the second when work outlives your turn.
+
+`todo_done` finishes a todo without removing it, and `done: false` reopens it;
+`todo_delete` is the one here with no undo. Tick off only what you actually
+finished — a person reads this list and will not check.
+
+A todo or a note is filed under a project, or under nothing. Both are ordinary:
+pass `projectId: "none"` when you mean *no project*, omit it to follow the
+calling session's own project, and pass an id from `list_projects` to say which.
 ''',
   ),
 ];

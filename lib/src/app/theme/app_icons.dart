@@ -427,6 +427,12 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData listChecks = IconData(
+    0xeadc,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData listMagnifyingGlass = IconData(
     0xebe0,
     fontFamily: 'PhosphorRegular',

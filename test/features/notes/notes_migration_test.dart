@@ -24,7 +24,7 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 33);
+    expect(db.schemaVersion, 34);
   });
 
   test('v21 adds notes to an existing database without touching it', () {
