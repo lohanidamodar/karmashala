@@ -18,6 +18,8 @@ import 'package:path/path.dart' as p;
 /// throwaway `HOME`, not off a document. The payloads are copied from that
 /// run's log verbatim.
 void main() {
+  _absentStoreTests();
+
   const installer = AgentHookInstaller();
   const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
   final antigravity = AgentRegistry.builtIn.byId('antigravity')!;
@@ -249,3 +251,61 @@ void main() {
 }
 
 Future<void> _replaceButChangeNothing(File staged, File destination) async {}
+
+/// An agent whose store home is not on this machine.
+///
+/// The Antigravity *IDE* lives in `~/.gemini/antigravity`, its *CLI* in
+/// `~/.gemini/antigravity-cli`; having the first and not the second is an
+/// ordinary Mac. The installer used to try anyway and throw
+/// `PathNotFoundException: .../karmashala-agent-hook.sh.karmashala-tmp` on
+/// every launch, because the callback script lives *inside* the store home and
+/// the guard that was supposed to cover this read "create the store home if the
+/// store home exists".
+void _absentStoreTests() {
+  const installer = AgentHookInstaller();
+  const endpoint = AgentHookEndpoint(port: 4242, token: 'tok');
+  final antigravity = AgentRegistry.builtIn.byId('antigravity')!;
+
+  late Directory home;
+  setUp(() {
+    home = Directory.systemTemp.createTempSync('karmashala_agyabsent_');
+    // Deliberately NOT created: this is a machine without the CLI installed.
+  });
+  tearDown(() => home.deleteSync(recursive: true));
+
+  String missingStore() => p.join(home.path, '.gemini', 'antigravity-cli');
+
+  test('installing for an agent that is not installed reports false, '
+      'rather than throwing', () async {
+    late final bool installed;
+    expect(
+      () async => installed = await installer.install(
+        descriptor: antigravity,
+        storeHome: missingStore(),
+        endpoint: endpoint,
+        environment: EnvironmentKind.localPosix,
+      ),
+      returnsNormally,
+    );
+    await pumpEventQueue();
+    expect(installed, isFalse);
+  });
+
+  test('and writes nothing into a home the agent does not have', () async {
+    await installer.install(
+      descriptor: antigravity,
+      storeHome: missingStore(),
+      endpoint: endpoint,
+      environment: EnvironmentKind.localPosix,
+    );
+
+    // Creating the directory would be the other wrong answer: an empty agent
+    // home in somebody's `~` for a tool they never installed.
+    expect(Directory(missingStore()).existsSync(), isFalse);
+    expect(
+      Directory(p.join(home.path, '.gemini')).existsSync(),
+      isFalse,
+      reason: 'nothing at all should be created for an absent agent',
+    );
+  });
+}

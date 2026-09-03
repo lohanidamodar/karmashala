@@ -34,6 +34,7 @@ import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
 import 'session_working_directory.dart';
+import '../../environments/domain/environment_label.dart';
 
 /// Rename/delete operations available for **every** session in the app — native
 /// engine sessions and imported CLI sessions alike. Imported operations also
@@ -319,7 +320,7 @@ class SessionActions {
         .toList();
     if (installs.isEmpty) {
       throw StateError(
-        'No ${session.cli} installation in ${session.environmentId}. '
+        'No ${session.cli} installation in ${describeEnvironmentId(session.environmentId)}. '
         'Run "Discover agents" in Settings first.',
       );
     }
@@ -563,7 +564,8 @@ class SessionActions {
       throw StateError('The agent for this session is not installed.');
     }
     _refuseWhatCannotResume(installation.agentId, session.externalSessionId);
-    final workingDirectory = sessionWorkingDirectoryOf(_ref, session) ?? repo.path;
+    final workingDirectory =
+        sessionWorkingDirectoryOf(_ref, session) ?? repo.path;
     return shellCommandLine(
       agentExecutable: installation.executable.path,
       cli: installation.agentId,
@@ -602,7 +604,7 @@ class SessionActions {
         .getByEnvironment(repo.path.environmentId);
     if (installs.isEmpty) {
       throw StateError(
-        'No agent installed in ${repo.path.environmentId}. '
+        'No agent installed in ${describeEnvironmentId(repo.path.environmentId)}. '
         'Run "Discover agents" in Settings.',
       );
     }

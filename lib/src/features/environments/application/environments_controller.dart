@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/environment_label.dart';
 import '../domain/execution_environment.dart';
+import '../domain/local_environment.dart';
 import 'environment_discovery_provider.dart';
 import 'environment_providers.dart';
 
@@ -48,5 +49,12 @@ final environmentLabelForIdProvider = Provider.family<String, String>((
   for (final env in ref.watch(environmentsControllerProvider)) {
     if (env.id == environmentId) return environmentLabel(env) ?? environmentId;
   }
+  // The local host is the one id whose raw form is a *wrong* answer rather than
+  // an unhelpful one: [localHostEnvironmentId] is the literal `windows` on every
+  // platform, so a Mac whose environment list has not loaded yet labelled its
+  // agents "windows". It is also the id most likely to be asked about early,
+  // because every locally discovered agent installation points at it. The host
+  // can answer for itself without waiting for the list.
+  if (environmentId == localHostEnvironmentId) return localHostEnvironmentName;
   return environmentId;
 });

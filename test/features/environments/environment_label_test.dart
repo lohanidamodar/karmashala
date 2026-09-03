@@ -5,6 +5,7 @@
 library;
 
 import 'package:karmashala/src/features/environments/domain/environment_label.dart';
+import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -41,6 +42,25 @@ void main() {
         'WSL · Ubuntu',
         reason: 'the row still carries a name; only an empty one is useless',
       );
+    });
+  });
+
+  group('describeEnvironmentId', () {
+    test('names the local host rather than printing its database key', () {
+      // The key is the literal `windows` on every platform. Printing it raw is
+      // how a Mac's New session dialog offered `codex · windows`, and how the
+      // hook installer warned it could not install hooks "in windows".
+      expect(
+        describeEnvironmentId(localHostEnvironmentId),
+        localHostEnvironmentName,
+      );
+      expect(describeEnvironmentId(localHostEnvironmentId), isNot('windows'));
+    });
+
+    test('leaves any other id alone', () {
+      // Only the local host has a key that lies. An SSH row's id is at least a
+      // handle on the thing.
+      expect(describeEnvironmentId('ssh-build-box'), 'ssh-build-box');
     });
   });
 }

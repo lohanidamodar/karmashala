@@ -12,6 +12,7 @@ import '../domain/agent_ids.dart';
 import '../domain/agent_registry.dart';
 import '../domain/agent_usage.dart';
 import 'claude_auth_service.dart';
+import '../../environments/domain/environment_label.dart';
 
 /// Raised when a usage lookup cannot complete.
 class UsageException implements Exception {
@@ -90,7 +91,7 @@ class AgentUsageService {
     }
     if (store == null) {
       throw UsageException(
-        'Could not locate the store for ${installation.environmentId}.',
+        'Could not locate the store for ${describeEnvironmentId(installation.environmentId)}.',
       );
     }
 

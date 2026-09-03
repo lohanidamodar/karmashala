@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/features/snippets/application/snippet_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
@@ -27,6 +28,19 @@ import '../terminal/fake_instance.dart';
 /// republishes it — which is why the button is unconditional and asks nothing.
 /// The empty case is answered inside the picker instead.
 void main() {
+  // One case below finds the button by its tooltip, which carries the chord
+  // spelled for the host: `Ctrl+Shift+S` on Windows and Linux, `⇧⌘S` on macOS.
+  // Naming one spelling means pinning the platform it belongs to, the same way
+  // `attention_inbox_shell_test.dart` does and for the same reason — what is
+  // under test here is what the button *does*, which is the same everywhere.
+  // Without this the file passed on Windows, where it was written, and failed
+  // on every Mac with `Found 0 widgets`.
+  final hostCommandKeyIsMeta = commandKeyIsMeta;
+  setUp(() => commandKeyIsMeta = false);
+  // Restored because this is a process-wide global and the file does not own
+  // it: a later suite in the same isolate must see the host's own answer.
+  tearDownAll(() => commandKeyIsMeta = hostCommandKeyIsMeta);
+
   late CountingDatabase db;
   late ProviderContainer container;
 

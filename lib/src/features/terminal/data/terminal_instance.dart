@@ -531,7 +531,16 @@ class PtyTerminalInstance
       exitCode: _pty.exitCode,
       // The whole tree, not just the pid: see killWindowsProcessTree.
       pid: _exited ? null : _pid,
-    );
+    // Release the pty itself once the process behind it is gone. Killing the
+    // child does not close the master descriptor — the pane's fd and its
+    // reader thread outlive it, and a long session accumulates one of each per
+    // pane until the app quits. Profiling on 2026-09-03 measured 10 stranded
+    // descriptors after 6 closed panes; macOS gives a Finder-launched app a
+    // soft limit of 256.
+    //
+    // After the reap rather than before, so `shutdownProcess` still has a live
+    // pty to ask for `exitCode` while it waits for the child to go quietly.
+    ).whenComplete(_pty.destroy);
   }
 }
 

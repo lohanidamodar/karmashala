@@ -7,6 +7,7 @@ import '../../../app/widgets/desktop_dialog.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/domain/agent_installation.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -200,7 +201,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     DropdownMenuItem(
                       value: i,
                       child: Text(
-                        '${i.agentId} · ${i.environmentId}'
+                        '${i.agentId} · '
+                        // Not the raw id: it is the literal `windows` on every
+                        // platform, so this dropdown offered `codex · windows`
+                        // on a Mac.
+                        '${ref.watch(environmentLabelForIdProvider(i.environmentId))}'
                         '${i.version == null ? '' : ' (${i.version})'}',
                         overflow: TextOverflow.ellipsis,
                       ),
