@@ -21,6 +21,8 @@ import 'src/core/util/clock.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
 import 'src/features/environments/data/environment_discovery_service.dart';
+import 'src/features/env_secrets/application/env_secrets_controller.dart';
+import 'src/features/env_secrets/data/env_vault.dart';
 import 'src/features/environments/data/execution_environment_dao.dart';
 import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
@@ -86,13 +88,32 @@ Future<void> main() async {
   }
   logger.info('Discovered ${discovered.length} execution environment(s).');
 
+  // The user's environment variables, from a folder restricted to this
+  // account. Awaited rather than fired off, because `restoreLivePanes` can
+  // re-launch panes as soon as the container exists and a pane that started
+  // half a second before its variables loaded would silently lack them.
+  // Reading is one small file; `load()` never throws, so a vault that cannot be
+  // opened costs an empty overlay and a banner in settings, not a failed
+  // launch.
+  final envVault = await EnvVault.open(logger: logger);
+  await envVault.load();
+
   final container = ProviderContainer(
-    overrides: [databaseProvider.overrideWithValue(database)],
+    overrides: [
+      databaseProvider.overrideWithValue(database),
+      envVaultProvider.overrideWithValue(envVault),
+    ],
   );
 
   // The persisted diagnostics preferences: debug mode's root level, the buffer
   // bound, and whether the file is written at all.
   container.read(settingsControllerProvider.notifier).applyDiagnostics();
+
+  // Built eagerly for one reason: constructing it installs the redaction rule
+  // that keeps this session's secret values out of the log. Waiting for the
+  // first pane to build it lazily would leave a window in which a value could
+  // reach the log file unredacted.
+  container.read(envSecretsControllerProvider);
 
   // First run (or if it has never completed): probe every environment for
   // installed agents once, in the background so it doesn't delay window show.

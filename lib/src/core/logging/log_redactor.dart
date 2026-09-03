@@ -15,6 +15,32 @@ class RedactionRule {
   /// point of redaction is a log you can still read.
   final String replacement;
 
+  /// One rule that redacts a fixed set of [values] wherever they appear, or
+  /// null when there is nothing to redact.
+  ///
+  /// Unlike every other rule this one keys off the *value* rather than the
+  /// shape of the text around it, which is what makes it able to catch a secret
+  /// nobody thought to name like one — the `named secret` rule below finds
+  /// `ACME_DEPLOY_TOKEN=…` because of the word "token", and would miss
+  /// `ACME_PAT=…` entirely.
+  ///
+  /// Longest first, so a secret that contains a shorter one is replaced whole
+  /// rather than leaving its tail behind.
+  static RedactionRule? literalValues(
+    Iterable<String> values, {
+    required String name,
+    required String replacement,
+  }) {
+    final sorted = values.where((v) => v.isNotEmpty).toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    if (sorted.isEmpty) return null;
+    return RedactionRule(
+      name: name,
+      pattern: RegExp(sorted.map(RegExp.escape).join('|')),
+      replacement: replacement,
+    );
+  }
+
   String apply(String input) => input.replaceAllMapped(pattern, (match) {
     var out = replacement;
     for (var group = match.groupCount; group >= 1; group--) {
@@ -41,12 +67,24 @@ class LogRedactor {
 
   final List<RedactionRule> rules;
 
+  /// Rules the running app installs, on top of the shipped [rules].
+  ///
+  /// Mutable because what they protect is: the user's own environment secrets
+  /// are not known at construction and change while the app runs. Replaced
+  /// wholesale by `EnvSecretsController` rather than appended to, so a deleted
+  /// secret stops being matched. Empty in every test that does not set it, and
+  /// an empty list costs one loop that does nothing.
+  List<RedactionRule> extraRules = const [];
+
   /// [input] with every rule applied, in order. Idempotent: redacting an
   /// already-redacted line is a no-op, so a re-capture cannot mangle text.
   String apply(String input) {
     if (input.isEmpty) return input;
     var out = input;
     for (final rule in rules) {
+      out = rule.apply(out);
+    }
+    for (final rule in extraRules) {
       out = rule.apply(out);
     }
     return out;

@@ -843,6 +843,12 @@ bool shellIntegrationApplies({
 /// The production [TerminalInstanceFactory]: builds a [PtyLaunch] for the profile
 /// and spawns a [PtyTerminalInstance], degrading to an [ErrorTerminalInstance]
 /// (whose buffer shows the failure) if the PTY cannot be created.
+///
+/// [environmentOverlay] is the user's own environment variables, resolved
+/// **once here** and never on the keystroke path. It is not part of
+/// [TerminalInstanceFactory] because a fake factory has no environment to
+/// resolve; `terminalInstanceFactoryProvider` closes over the resolver and
+/// passes it in.
 TerminalInstance createPtyTerminalInstance({
   required String id,
   required TerminalProfile profile,
@@ -851,6 +857,7 @@ TerminalInstance createPtyTerminalInstance({
   bool shellIntegration = false,
   AgentPaneLaunch? agentLaunch,
   Terminal? adoptTerminal,
+  Map<String, String> environmentOverlay = const {},
 }) {
   // An agent pane runs the agent CLI itself, so the shell profile is not
   // consulted at all — the launch is built from the agent's registry descriptor
@@ -874,6 +881,7 @@ TerminalInstance createPtyTerminalInstance({
         agentLaunch,
         hostIsWindows: Platform.isWindows,
       ),
+      environment: environmentOverlay,
     );
     title = agentLaunch.title ?? agentLaunch.agentId;
     profileId = agentLaunch.profileId;
@@ -887,6 +895,7 @@ TerminalInstance createPtyTerminalInstance({
       ),
       workingDirectory: workingDirectory,
       shellIntegration: integrate,
+      environment: environmentOverlay,
     );
     title = profile.label;
     profileId = profile.id;

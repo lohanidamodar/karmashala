@@ -47,6 +47,18 @@ class PtyLaunch {
     ),
   );
 
+  /// Names the launch **without any environment value**.
+  ///
+  /// [environment] carries the user's secrets. The inherited default —
+  /// `Instance of 'PtyLaunch'` — was already safe, and this is not an
+  /// improvement on it for readability so much as a way to stop the safe
+  /// version being replaced later by a helpful one that interpolates the map.
+  /// A test asserts no value appears here.
+  @override
+  String toString() =>
+      'PtyLaunch($executable, ${arguments.length} argument(s), '
+      '${environment.length} environment variable(s))';
+
   static bool _mapEquals(Map<String, String> a, Map<String, String> b) {
     if (a.length != b.length) return false;
     for (final entry in a.entries) {
@@ -81,11 +93,15 @@ class PtyLaunch {
 /// it. It defaults to `false` and, when false, every launch is byte-identical to
 /// what shipped before shell integration existed — a shell that cannot be
 /// integrated must behave exactly as it always did.
+/// [environment] is the user's own variables, resolved once at launch by
+/// `terminalInstanceFactoryProvider`. It is empty for every caller that does
+/// not pass it, which keeps every existing launch byte-identical.
 PtyLaunch ptyLaunchFor(
   TerminalProfile profile, {
   LaunchContext? context,
   String? workingDirectory,
   bool shellIntegration = false,
+  Map<String, String> environment = const {},
 }) {
   final target =
       context ?? LaunchContext.forProfile(profile, hostIsWindows: true);
@@ -97,6 +113,7 @@ PtyLaunch ptyLaunchFor(
       return PtyLaunch(
         executable: target.posixShell ?? '/bin/bash',
         workingDirectory: workingDirectory,
+        environment: environment,
       );
     case ShellContextKind.powerShell:
       // Still spawned directly, and still *nested* because of it: PowerShell's
@@ -122,6 +139,7 @@ PtyLaunch ptyLaunchFor(
           ],
         ],
         workingDirectory: workingDirectory,
+        environment: environment,
       );
     // A shell profile never names a bare executable; the Windows-native shell
     // is `cmd.exe`, so both spellings land here.
@@ -133,6 +151,7 @@ PtyLaunch ptyLaunchFor(
       return PtyLaunch(
         executable: 'cmd.exe',
         workingDirectory: workingDirectory,
+        environment: environment,
       );
     case ShellContextKind.wsl:
       // Through `cmd.exe /c` for the reason [throughCommandPrompt] documents:
@@ -166,8 +185,33 @@ PtyLaunch ptyLaunchFor(
         '-d',
         distro,
         if (workingDirectory != null) ...['--cd', workingDirectory],
-      ]);
+      ], environment: withWslEnv(environment));
   }
+}
+
+/// [environment] plus the `WSLENV` that makes it cross into a distribution.
+///
+/// A Win32 variable reaches a WSL child **only** if `WSLENV` names it, so this
+/// is the one place the list is built and the three WSL launch paths all go
+/// through it rather than each spelling it out.
+///
+/// `/u` on every name — Win32 → WSL, no path translation. Never `/p`: a value
+/// that happens to look like a path (an API base URL, a token with slashes)
+/// would be rewritten on the way in, silently.
+///
+/// **The names are visible; the values are not.** `WSLENV` is an ordinary
+/// variable, so inside the distribution `echo $WSLENV` prints the name of every
+/// variable carried in. That is inherent to the mechanism, and the settings
+/// page says so rather than leaving it to be discovered.
+///
+/// Returns [environment] unchanged when it is empty, so a launch that carries
+/// nothing is byte-identical to what it was before this existed.
+Map<String, String> withWslEnv(Map<String, String> environment) {
+  if (environment.isEmpty) return environment;
+  return {
+    ...environment,
+    'WSLENV': environment.keys.map((k) => '$k/u').join(':'),
+  };
 }
 
 /// Whether `cmd.exe` would rewrite any part of [command] while parsing it.
@@ -222,8 +266,18 @@ PtyLaunch throughCommandPrompt(
 /// A derived port base rides along beside it for the same reason and by the same
 /// route: the thing that has to read it is a script the agent runs, which is a
 /// grandchild too. See [kSessionPortBaseEnvironmentVariable].
-PtyLaunch agentPtyLaunchFor(AgentPaneLaunch launch, {LaunchContext? context}) =>
-    wrapForPty(
+///
+/// [environment] is the user's own variables. They are layered **under** the
+/// session plumbing on purpose: `KARMASHALA_SESSION_ID` and the port base are
+/// how the pane reaches its own MCP bridge, so a user variable must never be
+/// able to displace one. (`envNameRefusal` also refuses the `KARMASHALA_`
+/// prefix outright, so this ordering is the second of two guards rather than
+/// the only one.)
+PtyLaunch agentPtyLaunchFor(
+  AgentPaneLaunch launch, {
+  LaunchContext? context,
+  Map<String, String> environment = const {},
+}) => wrapForPty(
       ShellCommand(
         executable: launch.executable,
         // `commandArguments`, not `arguments`: the MCP flags are rebuilt for
@@ -231,6 +285,7 @@ PtyLaunch agentPtyLaunchFor(AgentPaneLaunch launch, {LaunchContext? context}) =>
         arguments: launch.commandArguments,
         workingDirectory: launch.workingDirectory,
         environment: {
+          ...environment,
           if (launch.sessionId != null) ...{
             kSessionIdEnvironmentVariable: launch.sessionId!,
             // Beside the id and through the same `WSLENV` plumbing — the
@@ -352,11 +407,7 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
             '--',
             ...command.parts,
           ],
-          environment: {
-            ...command.environment,
-            if (command.environment.isNotEmpty)
-              'WSLENV': command.environment.keys.map((k) => '$k/u').join(':'),
-          },
+          environment: withWslEnv(command.environment),
         );
       }
       return PtyLaunch(
@@ -380,12 +431,8 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         ].map(quoteWindowsCommandArgument).toList(),
         // wsl.exe sets the child's directory itself, so the host process must not
         // also be pointed at a Linux path it cannot resolve.
-        environment: {
-          ...command.environment,
-          // A Win32 variable only crosses into the distro if `WSLENV` names it.
-          if (command.environment.isNotEmpty)
-            'WSLENV': command.environment.keys.map((k) => '$k/u').join(':'),
-        },
+        // A Win32 variable only crosses into the distro if `WSLENV` names it.
+        environment: withWslEnv(command.environment),
       );
   }
 }

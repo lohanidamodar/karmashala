@@ -73,6 +73,16 @@ enum SettingsSectionId {
     'discover',
     'installations',
   ]),
+  environmentVariables('Environment variables', AppIcons.code, [
+    'env',
+    'env var',
+    'environment variable',
+    'secret',
+    'secrets',
+    'token',
+    'api key',
+    'credential',
+  ]),
   ssh('SSH', AppIcons.globe, ['hosts', 'known hosts', 'keys', 'remote build']),
   remote('Remote access', AppIcons.deviceMobile, [
     'companion',

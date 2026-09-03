@@ -8,6 +8,7 @@ import '../../../core/logging/app_logger.dart';
 import '../../../core/widgets/keyboard_capture.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../env_secrets/application/env_secrets_controller.dart';
 import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -46,9 +47,36 @@ final restoreLivePanesProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).restoreLivePanes,
 );
 
-/// The production factory: each pane is backed by a real ConPTY.
+/// The production factory: each pane is backed by a real ConPTY, carrying the
+/// user's environment variables.
+///
+/// The overlay is `ref.read` **inside** the closure rather than watched outside
+/// it, which is what makes "a changed variable applies to the next pane, not to
+/// the ones already running" true — and it is resolved once per launch, so the
+/// per-keystroke path is untouched.
+///
+/// Every one of the five call sites goes through this provider, so this is the
+/// only place the overlay has to be introduced.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
-  (ref) => createPtyTerminalInstance,
+  (ref) =>
+      ({
+        required String id,
+        required TerminalProfile profile,
+        String? workingDirectory,
+        String? restoredScrollback,
+        bool shellIntegration = false,
+        AgentPaneLaunch? agentLaunch,
+        Terminal? adoptTerminal,
+      }) => createPtyTerminalInstance(
+        id: id,
+        profile: profile,
+        workingDirectory: workingDirectory,
+        restoredScrollback: restoredScrollback,
+        shellIntegration: shellIntegration,
+        agentLaunch: agentLaunch,
+        adoptTerminal: adoptTerminal,
+        environmentOverlay: ref.read(terminalEnvOverlayProvider),
+      ),
 );
 
 /// One tab: a tree of regions and which pane has focus.
