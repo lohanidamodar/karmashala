@@ -17,14 +17,28 @@ import 'session_working_directory.dart';
 /// the control server binds whatever port it can get, and the URL's last path
 /// segment is a credential minted for this process. So they are built at each
 /// launch and never stored — see [AgentPaneLaunch.mcpArguments].
+/// A config-file agent is pointed at a **file**, and the file is what says how
+/// to reach the app — a URL for an agent that shares this loopback, a `command`
+/// spawning the stdio bridge for one inside a WSL distribution, which has no
+/// address of ours to dial. So the flag is gated on the file, not on a URL that
+/// such a session deliberately does not have. An inline-URL agent has nothing
+/// but the URL and is still gated on it.
 List<String> agentMcpArguments(
   AgentDescriptor? descriptor, {
   String? url,
   String? configPath,
-}) => url == null || url.isEmpty
-    ? const []
-    : descriptor?.launch.mcp.argumentsFor(url: url, configPath: configPath) ??
-          const [];
+}) {
+  final support = descriptor?.launch.mcp;
+  if (support == null) return const [];
+  if (support.needsConfigFile) {
+    return configPath == null || configPath.isEmpty
+        ? const []
+        : support.argumentsFor(url: url, configPath: configPath);
+  }
+  return url == null || url.isEmpty
+      ? const []
+      : support.argumentsFor(url: url, configPath: configPath);
+}
 
 /// How a session will reach Karmashala's own tools, or `null` when it will not.
 ///

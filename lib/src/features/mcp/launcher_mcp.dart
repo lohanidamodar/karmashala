@@ -12,10 +12,11 @@ import 'package:path/path.dart' as p;
 ///   (see `LauncherControlServer.mcpUrlFor`). This is the form the app writes,
 ///   through `SessionMcpConfigs.write`.
 /// * **`command`** — the agent spawns `karmashala_mcp.exe`, which translates
-///   stdio MCP into the app's private `/rpc` envelope. Nothing in the app
-///   configures this; it is offered to a user who wants to point an agent at
-///   Karmashala by hand, and the Tools settings page reports whether the
-///   executable is there to point at.
+///   stdio MCP into the app's private `/rpc` envelope. Offered to a user who
+///   wants to point an agent at Karmashala by hand, and the Tools settings page
+///   reports whether the executable is there to point at — **and it is the form
+///   an agent inside WSL is given**, because it is the only one that reaches
+///   the app without crossing a network. See [commandServerEntry].
 ///
 /// **There are no pre-approval lists here.** Two once were — every served tool,
 /// and the read-only subset — and neither had a consumer. Wiring one would have
@@ -53,4 +54,39 @@ class LauncherMcp {
     'type': 'http',
     'url': url,
   };
+
+  /// A `mcpServers` entry that spawns the stdio bridge at [executablePath].
+  ///
+  /// **This is how an agent inside a WSL2 distribution reaches the app**, and
+  /// the reason is that it is not a network path at all. A distribution has its
+  /// own network namespace: `127.0.0.1` there is its own loopback, and the host
+  /// side of the Hyper-V virtual switch — the one address of ours it can name —
+  /// accepts the connection and then resets the first data segment on the
+  /// owner's machine, for a bare PowerShell listener as readily as for this
+  /// app. But a *Windows* program launched over WSL interop runs on Windows:
+  /// it dials the app's owner-only unix socket the way any local process does.
+  /// Measured from inside the owner's distribution: the whole tool surface,
+  /// 75 tools, in 42 ms, while `curl` at the switch address was reset.
+  ///
+  /// So [executablePath] is this app's own bridge, spelled the way the agent
+  /// names it — `/mnt/c/…` for a WSL agent, translated by the caller.
+  ///
+  /// **No credential appears here**, and that is a gain rather than a gap. The
+  /// HTTP form carries a per-session token in its URL because an HTTP request
+  /// has nothing else to identify itself with. The bridge reads the handshake
+  /// token from the application-support directory this app already locks to the
+  /// owner, and learns *which session* it belongs to from
+  /// `KARMASHALA_SESSION_ID`, which the app stamps on the agent process it
+  /// spawns — so the identity is measured off the real process tree rather than
+  /// declared by the model, and no token is written into a config file at all.
+  ///
+  /// The environment crosses because the pane launch names the variable in
+  /// `WSLENV`; `agentPtyLaunchFor` already does that, and its comment already
+  /// says it is for "a grandchild — the MCP bridge the agent spawns".
+  static Map<String, Object?> commandServerEntry(String executablePath) =>
+      <String, Object?>{
+        'type': 'stdio',
+        'command': executablePath,
+        'args': const <String>[],
+      };
 }

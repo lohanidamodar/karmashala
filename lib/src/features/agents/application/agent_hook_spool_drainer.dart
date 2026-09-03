@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import '../../../core/process/wsl_distributions.dart';
 import '../data/agent_hook_spool.dart';
 
 /// One environment's spool directory, as this app can name it.
@@ -32,34 +33,10 @@ Future<Set<String>> wslRunningDistributions() async {
   try {
     final result = await Process.run('wsl.exe', ['-l', '--running', '-q']);
     if (result.exitCode != 0) return const {};
-    return parseWslDistributionList('${result.stdout}');
+    return parseWslDistributions('${result.stdout}').toSet();
   } on Object {
     return const {};
   }
-}
-
-/// The distribution names in `wsl.exe -l -q` output, however it came out.
-///
-/// **`wsl.exe` does not always answer in the same encoding**, and that is a
-/// measurement rather than a worry: within one run on the owner's machine, two
-/// calls a second apart produced `archlinux` once and, the other time, its
-/// UTF-16LE bytes read back by a single-byte decoder — every character followed
-/// by a NUL. Compare a name taken from one call against a set taken from the
-/// other and nothing matches, silently, which is the shape of failure this
-/// whole change exists to stop.
-///
-/// So there is one parse and everything that asks the question uses it. NUL,
-/// carriage return and padding come out; nothing else about the line is
-/// assumed.
-Set<String> parseWslDistributionList(String stdout) {
-  final names = <String>{};
-  for (final line in stdout.split('\n')) {
-    // A character class rather than three `replaceAll`s so the NUL is an
-    // escape in a raw string: a literal one in source is invisible in review.
-    final name = line.replaceAll(RegExp(r'[\x00\r ]'), '');
-    if (name.isNotEmpty) names.add(name);
-  }
-  return names;
 }
 
 /// Polls the spool directories WSL agents write their hook payloads into.

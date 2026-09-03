@@ -7,7 +7,6 @@ import 'package:path/path.dart' as p;
 import '../../core/process/path_translator.dart';
 import '../environments/domain/environment_kind.dart';
 import '../environments/domain/execution_environment.dart';
-import 'launcher_mcp.dart';
 
 /// Everything one launching session needs to reach the app's own MCP endpoint.
 ///
@@ -15,14 +14,25 @@ import 'launcher_mcp.dart';
 /// agent's environment can dial, and [configPath] is spelled in that agent's
 /// path namespace. Nothing downstream translates either again.
 class SessionMcpAccess {
-  const SessionMcpAccess({required this.url, this.configPath});
+  const SessionMcpAccess({this.url, this.configPath})
+    : assert(
+        url != null || configPath != null,
+        'an access with neither an address nor a file says nothing',
+      );
 
   /// The endpoint URL, carrying this session's own credential in its last path
-  /// segment. See `LauncherControlServer.mcpUrlFor`.
-  final String url;
+  /// segment — or `null` when this environment has **no HTTP address of ours it
+  /// can dial**. See `LauncherControlServer.mcpUrlFor`.
+  ///
+  /// Null is not the same as "no tools". An agent inside WSL is pointed at the
+  /// stdio bridge through [configPath] instead, which reaches the app without a
+  /// network; what it has no use for is a URL. An agent whose convention is
+  /// *only* a URL (Codex's `-c mcp_servers.karmashala.url=…`) does lose its
+  /// tools there, and that is reported rather than papered over.
+  final String? url;
 
-  /// The config file naming that URL, or null when the agent's convention takes
-  /// the URL directly and never opens a file.
+  /// The config file describing the server, or null when the agent's convention
+  /// takes the URL directly and never opens a file.
   final String? configPath;
 }
 
@@ -112,18 +122,28 @@ class SessionMcpConfigs {
     }
   }
 
-  /// Writes [sessionId]'s config and returns its **Windows** path, or `null` if
-  /// it could not be written.
+  /// Writes [sessionId]'s config around [entry] and returns its **Windows**
+  /// path, or `null` if it could not be written.
+  ///
+  /// [entry] is the `mcpServers.karmashala` value — `LauncherMcp.httpServerEntry`
+  /// for an agent that shares a loopback with this process, or
+  /// `LauncherMcp.commandServerEntry` for one inside a WSL distribution, which
+  /// has no address of ours it can dial. The caller picks; this only writes,
+  /// because which transport an environment gets is a property of the
+  /// environment and not of the file format.
   ///
   /// Synchronous because the pane launch is: `SessionLauncher._startInPane`
   /// returns a result rather than a future, and a launch that has to await a
   /// 200-byte write to open a terminal tab is a worse trade than this line.
-  String? write({required String sessionId, required String url}) {
+  String? write({
+    required String sessionId,
+    required Map<String, Object?> entry,
+  }) {
     try {
       final file = File(p.join(directory.path, _fileNameFor(sessionId)));
       file.writeAsStringSync(
         jsonEncode({
-          'mcpServers': {'karmashala': LauncherMcp.httpServerEntry(url)},
+          'mcpServers': {'karmashala': entry},
         }),
         flush: true,
       );

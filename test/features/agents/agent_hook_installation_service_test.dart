@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/logging/app_logger.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_installation_service.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 
 import 'package:karmashala/src/features/agents/data/agent_hook_installer.dart';
 import 'package:karmashala/src/features/agents/domain/agent_hook_endpoint.dart';
@@ -97,6 +98,93 @@ void main() {
       homesByAgentId: {'claudeCode': claudeHome.path},
     ),
   ]);
+
+  /// **A machine with no WSL, pinned end to end.**
+  ///
+  /// Every measurement behind the spool transport was taken on Windows against
+  /// a real distribution, and this app also ships on macOS and Linux where none
+  /// of it exists — no distribution, no `\\wsl.localhost` share, no interop. So
+  /// the absence case is asserted rather than assumed, because a regression
+  /// here would be invisible on the machine the work was done on and obvious on
+  /// the owner's Mac.
+  ///
+  /// What must hold: a local store keeps the loopback HTTP transport it has
+  /// today, byte for byte; nothing spooling is created beside it; and the
+  /// drainer is handed an empty list, which runs no timer and therefore never
+  /// reaches for a share that is not there.
+  group('a machine with no WSL is untouched by any of this', () {
+    test('a local store keeps the URL-and-token endpoint file', () async {
+      final service = containerWith(
+        localStore(),
+      ).read(agentHookInstallationServiceProvider);
+
+      await service.installAll(endpoint);
+
+      final written = endpointFile().readAsStringSync();
+      expect(written, contains('url=http://127.0.0.1:4242/agent-hook'));
+      expect(written, contains('token=tok'));
+      expect(
+        written,
+        isNot(contains('spool=')),
+        reason:
+            'the spool is for an environment that cannot dial us, and a local '
+            'agent is a child process on this very machine',
+      );
+    });
+
+    test('nothing spooling is created beside a local store', () async {
+      final service = containerWith(
+        localStore(),
+      ).read(agentHookInstallationServiceProvider);
+
+      await service.installAll(endpoint);
+
+      final left = claudeHome
+          .listSync()
+          .map((e) => p.basename(e.path))
+          .where((name) => name.contains('spool'))
+          .toList();
+      expect(left, isEmpty, reason: 'left behind: $left');
+    });
+
+    test('the drainer is given nothing, and so polls nothing', () async {
+      final service = containerWith(
+        localStore(),
+      ).read(agentHookInstallationServiceProvider);
+
+      final report = AgentHookInstallationReport(
+        await service.installAll(endpoint),
+      );
+
+      expect(report.spoolSources, isEmpty);
+
+      // The lifecycle owner hands exactly this to the drainer. An empty list
+      // has to *stop* it rather than run it over nothing: a macOS host would
+      // otherwise wake every 400 ms for the life of the process to discover
+      // there is nothing to read.
+      var asked = 0;
+      final drainer = AgentHookSpoolDrainer(
+        onEvent: (_) => fail('there is nothing to drain'),
+        runningDistributions: () async {
+          asked++;
+          return const {};
+        },
+      );
+      addTearDown(drainer.dispose);
+
+      drainer.watch(report.spoolSources);
+      await drainer.drainOnce();
+
+      expect(drainer.sources, isEmpty);
+      expect(
+        asked,
+        0,
+        reason:
+            'off Windows there is no `wsl.exe` to ask, and asking would be a '
+            'ProcessException every tick',
+      );
+    });
+  });
 
   test('installs, then uninstalls exactly what it installed', () async {
     // The user's own hook, which has to survive both directions untouched.

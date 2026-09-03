@@ -224,11 +224,20 @@ class AgentMcpSupport {
   /// not a flag with an empty value: the file could not be written, and a flag
   /// naming a file that is not there is a launch that fails where the launch
   /// without it would have succeeded.
-  List<String> argumentsFor({required String url, String? configPath}) =>
+  ///
+  /// [url] is nullable for the same reason, one environment further along. A
+  /// config-file agent inside a WSL distribution is pointed at a *file* that
+  /// spawns the stdio bridge, because no address this app binds is reachable
+  /// from there — so there is no URL to hand it, and that is a working launch
+  /// rather than a missing value. An [AgentMcpStyle.inlineUrl] agent has
+  /// nothing but the URL and gets nothing without one.
+  List<String> argumentsFor({String? url, String? configPath}) =>
       switch (style) {
         AgentMcpStyle.configFile =>
           configPath == null ? const [] : ['$flag=$configPath'],
-        AgentMcpStyle.inlineUrl => [flag, '$urlKey=$url'],
+        AgentMcpStyle.inlineUrl => url == null || url.isEmpty
+            ? const []
+            : [flag, '$urlKey=$url'],
         AgentMcpStyle.unsupported => const [],
       };
 

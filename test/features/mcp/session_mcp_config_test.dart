@@ -51,6 +51,7 @@ void main() async {
     HandshakePermissions? permissions,
     String? bridgeFile,
     String? configDirectory,
+    File? Function()? bridgeExecutable,
   }) async {
     final db = AppDatabase.memory();
     addTearDown(db.close);
@@ -60,7 +61,14 @@ void main() async {
         databaseProvider.overrideWithValue(db),
       ],
     );
-    final server = LauncherControlServer(container, permissions: permissions);
+    final server = LauncherControlServer(
+      container,
+      permissions: permissions,
+      // Absent unless a case says otherwise, which is also the honest default:
+      // nothing puts `karmashala_mcp.exe` beside the test runner, and nothing
+      // currently puts it beside the installed app either.
+      bridgeExecutable: bridgeExecutable ?? () => null,
+    );
     await server.start(
       bridgeFilePath: p.join(tmp.path, bridgeFile ?? 'mcp_bridge.json'),
       socketDirectory: p.join(tmp.path, 'ipc'),
@@ -131,6 +139,142 @@ void main() async {
     );
   });
 
+  /// Which **transport** the entry in that file describes, which is a different
+  /// question from what the file is called.
+  ///
+  /// A WSL2 distribution has its own network namespace: `127.0.0.1` there is
+  /// its own loopback, and the host side of the Hyper-V virtual switch — the
+  /// one address of ours it can name — accepts the connection and resets the
+  /// first data segment on the owner's machine, for a bare PowerShell listener
+  /// as readily as for this app. So an agent there is pointed at the stdio
+  /// bridge instead, which is a *Windows* program launched over WSL interop and
+  /// therefore reaches this process the way any local one does.
+  ///
+  /// **Every case below also pins what must not change.** The bridge is offered
+  /// to `EnvironmentKind.wsl` and to nothing else, so a Windows pane, a macOS
+  /// host and a Linux host keep the loopback URL they have today whether or not
+  /// a bridge executable happens to exist beside the app.
+  group('which transport the entry describes', () {
+    /// A stand-in for `karmashala_mcp.exe` sitting beside the app.
+    File bridgeAt(String name) {
+      final exe = File(p.join(tmp.path, name))..writeAsStringSync('');
+      return exe;
+    }
+
+    test('a WSL session is given the bridge, and no URL to dial', () async {
+      final server = await startServer(
+        bridgeExecutable: () => bridgeAt('karmashala_mcp.exe'),
+      );
+
+      final access = server.accessFor(
+        sessionId: 's1',
+        environment: wslEnv(),
+        withConfigFile: true,
+      )!;
+
+      final entry = entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'));
+      expect(entry['type'], 'stdio');
+      // Spelled the way the agent names it: `C:\…` is not a path inside a
+      // distribution, and a command it cannot run is worse than no server.
+      expect(entry['command'], startsWith('/mnt/'));
+      expect(entry['command'], isNot(contains(r'\')));
+      expect(entry['command'], endsWith('/karmashala_mcp.exe'));
+      // And nothing that looks like an address, because there is none to dial
+      // — not in the file, and not handed onward to build a flag out of.
+      expect(entry.containsKey('url'), isFalse);
+      expect(access.url, isNull);
+    }, skip: skipWslPath);
+
+    test('no credential is written into that entry', () async {
+      // The HTTP form carries a per-session token in its URL because an HTTP
+      // request has nothing else to identify itself with. The bridge reads the
+      // handshake token from the directory this app already locks to the owner
+      // and learns which session it is from `KARMASHALA_SESSION_ID`, stamped on
+      // the agent process — so identity is measured off the real process tree
+      // and no secret goes into a config file at all.
+      final server = await startServer(
+        bridgeExecutable: () => bridgeAt('karmashala_mcp.exe'),
+      );
+
+      server.accessFor(
+        sessionId: 's1',
+        environment: wslEnv(),
+        withConfigFile: true,
+      );
+
+      final raw = File(
+        p.join(tmp.path, 'mcp', 'session-s1.json'),
+      ).readAsStringSync();
+      expect(raw, isNot(contains(server.callers.tokenFor('s1'))));
+      expect(raw, isNot(contains('token')));
+    }, skip: skipWslPath);
+
+    test('with no bridge beside the app it falls back to the URL', () async {
+      // The bridge is a separate executable that may simply not be there. The
+      // fallback is exactly today's behaviour — which works on a machine whose
+      // switch is open, and is honestly reported as broken on one whose is not.
+      final server = await startServer();
+
+      final access = server.accessFor(
+        sessionId: 's1',
+        environment: wslEnv(),
+        withConfigFile: true,
+      )!;
+
+      final entry = entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'));
+      expect(entry['type'], 'http');
+      expect(entry['url'], access.url);
+      expect(access.url, startsWith('http://${wslStandIn.address}:'));
+    }, skip: skipWslPath);
+
+    test('a Windows session keeps the loopback URL, bridge or not', () async {
+      // The Windows-native path is not what this change is for, and a Windows
+      // pane already shares this process's loopback. Asserted *with* a bridge
+      // present so the selection is provably by environment and not by
+      // whichever file happens to be on disk.
+      final withBridge = await startServer(
+        bridgeExecutable: () => bridgeAt('karmashala_mcp.exe'),
+      );
+
+      final access = withBridge.accessFor(
+        sessionId: 's1',
+        environment: windowsEnv(),
+        withConfigFile: true,
+      )!;
+
+      final entry = entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'));
+      expect(entry['type'], 'http');
+      expect(entry['url'], access.url);
+      expect(access.url, startsWith('http://127.0.0.1:'));
+    });
+
+    test('a macOS or Linux session keeps the loopback URL, bridge or not', () async {
+      // **The cross-platform guarantee, pinned.** There is no WSL on a Mac and
+      // none on a Linux desktop, so `localPosix` must be untouched by every
+      // part of this — no bridge, no spool, no share. It is asserted with a
+      // bridge present for the same reason as the Windows case above: the
+      // transport is chosen by `EnvironmentKind`, so a file appearing beside
+      // the app cannot move a POSIX host onto a Windows-only path.
+      final server = await startServer(
+        bridgeExecutable: () => bridgeAt('karmashala_mcp'),
+      );
+
+      final access = server.accessFor(
+        sessionId: 's1',
+        environment: posixEnv(),
+        withConfigFile: true,
+      )!;
+
+      final entry = entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'));
+      expect(entry['type'], 'http');
+      expect(entry['url'], access.url);
+      expect(access.url, startsWith('http://127.0.0.1:'));
+      // And the file is named the way the agent already knows it: a POSIX host
+      // shares this filesystem, so there is nothing to translate.
+      expect(access.configPath, p.join(tmp.path, 'mcp', 'session-s1.json'));
+    });
+  });
+
   group('the file an agent is asked to open', () {
     test('a Windows session is given a Windows path', () async {
       final server = await startServer();
@@ -187,11 +331,11 @@ void main() async {
 
       expect(one.configPath, isNot(two.configPath));
       expect(
-        server.callers.sessionFor(Uri.parse(one.url).pathSegments.last),
+        server.callers.sessionFor(Uri.parse(one.url!).pathSegments.last),
         's1',
       );
       expect(
-        server.callers.sessionFor(Uri.parse(two.url).pathSegments.last),
+        server.callers.sessionFor(Uri.parse(two.url!).pathSegments.last),
         's2',
       );
     });

@@ -330,6 +330,36 @@ class McpBridgeSection extends ConsumerWidget {
               ),
             ],
           ),
+          // What the bridge's absence costs a session *inside WSL*, which is
+          // not obvious from the line above and is the case where it actually
+          // decides something. A distribution has no address of this app it can
+          // dial — `127.0.0.1` there is its own, and the WSL switch address is
+          // reset for data on some machines — so a WSL session is normally
+          // pointed at the bridge over interop. Without one it falls back to
+          // that switch URL, which is the behaviour that shipped and which
+          // silently gives a WSL agent no tools wherever the switch is shut.
+          if (!available) ...[
+            const SizedBox(height: Insets.xs),
+            Row(
+              children: [
+                Icon(
+                  AppIcons.warningCircle,
+                  size: Chrome.icon,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(width: Insets.xs),
+                Expanded(
+                  child: Text(
+                    'Sessions inside WSL fall back to the WSL switch address '
+                    'for tools. Where that address is blocked — a Hyper-V '
+                    'firewall or endpoint security resets it on some machines '
+                    '— those sessions get no Karmashala tools at all.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ],
           // The other half of "can an agent drive this app": the bridge being
           // installed says nothing about whether the app is willing to answer
           // it. When hardening fails the server withholds privileged RPC

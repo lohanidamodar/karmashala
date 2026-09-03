@@ -50,6 +50,7 @@ import 'control_server_status.dart';
 import 'device_tools.dart';
 import 'handshake_file_permissions.dart';
 import 'instructions_tools.dart';
+import 'launcher_mcp.dart';
 import 'mcp_caller_registry.dart';
 import 'mcp_http_endpoint.dart';
 import 'mcp_protocol.dart';
@@ -179,11 +180,20 @@ class LauncherControlServer implements SessionMcp {
     this._container, {
     AppLogger? logger,
     HandshakePermissions? permissions,
+    File? Function()? bridgeExecutable,
   }) : _logger = logger ?? AppLogger.named('mcp-control'),
-       _permissions = permissions ?? const SystemHandshakePermissions();
+       _permissions = permissions ?? const SystemHandshakePermissions(),
+       _bridgeExecutable =
+           bridgeExecutable ?? const LauncherMcp().bridgeExecutable;
 
   final ProviderContainer _container;
   final AppLogger _logger;
+
+  /// Resolves the stdio bridge that ships beside the app, or `null` when it is
+  /// not there. Injectable because whether that file exists is what decides a
+  /// WSL session's whole transport, and a test cannot put an executable next to
+  /// the test runner.
+  final File? Function() _bridgeExecutable;
 
   /// How the owner-only boundary is applied. Injectable because the failure
   /// path *is* the security contract: `icacls` cannot be made to fail on
@@ -285,18 +295,62 @@ class LauncherControlServer implements SessionMcp {
     required bool withConfigFile,
   }) {
     final url = mcpUrlFor(sessionId, environment: environment.kind);
-    if (url == null) return null;
-    if (!withConfigFile) return SessionMcpAccess(url: url);
+    // An agent whose convention is the URL itself has nothing else to be
+    // given: there is no file for it to read a `command` out of.
+    if (!withConfigFile) {
+      return url == null ? null : SessionMcpAccess(url: url);
+    }
+    final entry = _serverEntryFor(environment.kind, url);
+    if (entry == null) return null;
     final windowsPath = _sessionConfigs?.write(
       sessionId: sessionId,
-      url: url,
+      entry: entry,
     );
     if (windowsPath == null) return null;
     final agentPath = agentConfigPathFor(windowsPath, environment.kind);
     // A file the agent cannot name is a flag pointing at nothing, which is a
     // worse launch than the one that passes no flag at all.
     if (agentPath == null) return null;
-    return SessionMcpAccess(url: url, configPath: agentPath);
+    // The address is reported only when the file actually names one. A session
+    // whose config spawns the bridge is not dialling anything, and handing its
+    // URL onward would invite a caller to build a flag pointing at an address
+    // that this session does not use and, on the owner's machine, that nothing
+    // answers on.
+    final describesUrl = entry['url'] != null;
+    return SessionMcpAccess(
+      url: describesUrl ? url : null,
+      configPath: agentPath,
+    );
+  }
+
+  /// The `mcpServers.karmashala` entry for an agent in [environment], or `null`
+  /// when there is nothing truthful to write.
+  ///
+  /// **Only [EnvironmentKind.wsl] is treated differently, and only downwards
+  /// into a fallback.** A distribution has no address of ours it can dial —
+  /// `127.0.0.1` there is its own, and the switch address is reset for data on
+  /// the owner's machine — so it is pointed at the stdio bridge, which is a
+  /// *Windows* program launched over WSL interop and therefore reaches this
+  /// process the way any local one does. Everything else keeps the loopback URL
+  /// byte for byte, which is what makes this change invisible to a Windows
+  /// pane, to a macOS host and to a Linux one.
+  ///
+  /// The fallback matters because the bridge is a separate executable that may
+  /// simply not be beside the app. When it is missing the answer is the switch
+  /// URL — today's behaviour, which works on a machine whose switch is open and
+  /// is honestly reported as broken on one whose switch is not.
+  Map<String, Object?>? _serverEntryFor(EnvironmentKind environment, String? url) {
+    if (environment == EnvironmentKind.wsl) {
+      final bridge = _bridgeExecutable()?.path;
+      // Spelled the way the agent names it. `null` here is a UNC install
+      // directory, which has no `/mnt/` form — the same reason
+      // `agentConfigPathFor` can answer null for the config file itself.
+      final agentPath = bridge == null
+          ? null
+          : agentConfigPathFor(bridge, environment);
+      if (agentPath != null) return LauncherMcp.commandServerEntry(agentPath);
+    }
+    return url == null ? null : LauncherMcp.httpServerEntry(url);
   }
 
   /// `host:port` for an agent in [environment], or null when there is none.

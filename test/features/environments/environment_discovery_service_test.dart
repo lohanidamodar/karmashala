@@ -1,4 +1,5 @@
 import 'package:karmashala/src/core/process/command_runner.dart';
+import 'package:karmashala/src/core/process/wsl_distributions.dart';
 import 'package:karmashala/src/features/environments/data/environment_discovery_service.dart';
 import 'package:karmashala/src/features/environments/domain/local_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,6 +47,36 @@ void main() {
 
     test('keeps distribution names containing spaces', () {
       expect(parseWslDistributions('Docker Desktop\n'), ['Docker Desktop']);
+    });
+  });
+
+  group('one parse, shared by everything that asks', () {
+    /// The drainer skips a distribution that is not in the running set, so it
+    /// compares a name it parsed against a name environment discovery stored.
+    /// If those two disagree the skip is permanent and silent — no error, no
+    /// log, just a distribution whose agents never report status again.
+    ///
+    /// This is not hypothetical: the running-set reader briefly carried a
+    /// second parser that stripped every space, which turns `Docker Desktop`
+    /// into `DockerDesktop` and makes the comparison below fail while both
+    /// halves look correct in isolation.
+    test('a name with a space survives the running-set reader', () {
+      const running = 'Docker Desktop\r\nUbuntu\r\n';
+      const listed = 'Docker Desktop\r\nUbuntu\r\n';
+
+      final stored = parseWslDistributions(listed);
+      final live = parseWslDistributions(running).toSet();
+
+      expect(stored, ['Docker Desktop', 'Ubuntu']);
+      for (final name in stored) {
+        expect(
+          live.contains(name),
+          isTrue,
+          reason:
+              'the drainer would skip "$name" for the life of the process, '
+              'without saying so',
+        );
+      }
     });
   });
 
