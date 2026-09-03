@@ -223,6 +223,76 @@ class TerminalActions {
     );
   }
 
+  /// Shows what a restart brought back as history, and offers to continue it —
+  /// one session, or all of them.
+  ///
+  /// Reached from the toolbar's badge and from quick open, and from nowhere
+  /// per-tab: this is a question about the whole window, and a tab menu could
+  /// only ever answer it for one tab.
+  Future<void> showRestoredSessions(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    // The container, not this [WidgetRef]. Quick open pops itself *before*
+    // running the command it was asked for, so by the time a resume finishes
+    // the widget this ref belongs to may be gone — and the bulk verb outlives
+    // even the dialog, by design. A container is the app's, not a widget's.
+    final container = ProviderScope.containerOf(context, listen: false);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => Consumer(
+        builder: (context, ref, _) {
+          // Watched, so a row leaves the list the moment its pane comes up —
+          // the same live shape [showBackgroundSessions] has.
+          final panes = ref.watch(restoredAgentPanesProvider);
+          final state = ref.watch(terminalSessionsControllerProvider);
+          final sessions = ref.read(
+            terminalSessionsControllerProvider.notifier,
+          );
+          return RestoredSessionsDialog(
+            sessions: [
+              for (final paneId in panes)
+                RestoredSession(
+                  paneId: paneId,
+                  title: sessions.titleForPane(paneId),
+                  workingDirectory: state.directoryOf(paneId),
+                ),
+            ],
+            // Deliberately leaves the dialog open: with four sessions listed,
+            // resuming them one at a time is a thing somebody might actually
+            // want, and the row disappears as its pane comes up.
+            onResume: (paneId) async {
+              final result = await container
+                  .read(explorerActionsProvider)
+                  .resumeRestoredPane(paneId);
+              final message = result.message;
+              if (message != null) {
+                messenger.showSnackBar(SnackBar(content: Text(message)));
+              }
+            },
+            onResumeAll: () {
+              // Closed first, and then the work: the panes come up over several
+              // frames and the point of spreading them is that the user can
+              // watch it happen rather than watch a dialog.
+              Navigator.of(context).pop();
+              _resumeAllRestored(container, messenger);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _resumeAllRestored(
+    ProviderContainer container,
+    ScaffoldMessengerState messenger,
+  ) async {
+    final report = await container
+        .read(explorerActionsProvider)
+        .resumeAllRestoredPanes();
+    final message = report.message;
+    if (message == null) return;
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> showCommands(BuildContext context) async {
     final instance = focusedInstance();
     if (instance == null) return;
@@ -703,11 +773,40 @@ class TerminalToolbar extends ConsumerWidget {
     final hasTabs = ref.watch(
       terminalSessionsControllerProvider.select((s) => s.tabs.isNotEmpty),
     );
+    // Only the number, through a `select`, for the reason the background count
+    // is read the same way: this row sits above a terminal somebody types into
+    // all day and must not wake for anything smaller than a change it draws.
+    final restoredCount = ref.watch(
+      restoredAgentPanesProvider.select((panes) => panes.length),
+    );
     final hasCommands = actions.focusedBlocks().isNotEmpty;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Conditional, like the background badge beside it and unlike the
+        // snippets button — a control that is always here is one the tab strip
+        // has to find room for at every window width, and `workbench.dart`
+        // records what adding an unconditional one to this end cost: 8.8px of
+        // overflow at 640 wide. There is also nothing to say when a restart
+        // left nothing dormant, which is nearly always.
+        if (restoredCount > 0)
+          IconButton(
+            tooltip:
+                '$restoredCount restored session'
+                '${restoredCount == 1 ? '' : 's'} — nothing running in '
+                '${restoredCount == 1 ? 'it' : 'them'}',
+            icon: Badge.count(
+              count: restoredCount,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              textColor: Theme.of(context).colorScheme.onPrimary,
+              // Not the history clock the Commands button beside it uses: two
+              // identical icons in one row are one icon as far as the eye is
+              // concerned. This one is about starting them again.
+              child: const Icon(AppIcons.playCircle, size: Chrome.icon),
+            ),
+            onPressed: () => actions.showRestoredSessions(context),
+          ),
         if (backgroundCount > 0)
           IconButton(
             tooltip:

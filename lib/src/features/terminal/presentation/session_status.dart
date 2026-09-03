@@ -207,6 +207,147 @@ class BackgroundSessionsDialog extends StatelessWidget {
   }
 }
 
+/// One pane holding restored agent history, as [RestoredSessionsDialog] shows
+/// it.
+///
+/// A view model rather than a domain type: everything in it is already known to
+/// the controller, and joining it here keeps the dialog from asking three
+/// questions per row while it builds.
+class RestoredSession {
+  const RestoredSession({
+    required this.paneId,
+    required this.title,
+    this.workingDirectory,
+  });
+
+  final String paneId;
+  final String title;
+  final String? workingDirectory;
+}
+
+/// The sessions a restart brought back as history, and the one button that
+/// continues all of them.
+///
+/// The owner: *"when I exited I had 4 tabs open; when I came back I had to
+/// start each tab one by one — give me an easy button to resume all active
+/// tabs."* A bare toolbar button could have done that, and would have been
+/// worse: resuming four agents is four processes and four conversations
+/// reopened, and a control that does that much has to say **which** sessions it
+/// is about to touch before it touches them. So the toolbar opens this, the
+/// list is the answer to "which", and *Resume all* sits in the actions row —
+/// the same place [BackgroundSessionsDialog] puts *End all*, for the same
+/// reason.
+class RestoredSessionsDialog extends StatelessWidget {
+  const RestoredSessionsDialog({
+    required this.sessions,
+    required this.onResume,
+    required this.onResumeAll,
+    super.key,
+  });
+
+  final List<RestoredSession> sessions;
+  final ValueChanged<String> onResume;
+  final VoidCallback onResumeAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Restored sessions'),
+      contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
+      // Both lines, for the reason [BackgroundSessionsDialog] measured them:
+      // without them a list long enough to scroll leaves its lower rows with no
+      // keyboard route to their own buttons.
+      scrollable: true,
+      content: SizedBox(
+        width: 520,
+        child: sessions.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.all(Insets.lg),
+                child: Text(
+                  'Nothing came back as history. A session that was open when '
+                  'the app last closed appears here until it is resumed.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              )
+            : FocusTraversalGroup(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        Insets.lg,
+                        0,
+                        Insets.lg,
+                        Insets.sm,
+                      ),
+                      // What it costs, said before it is spent rather than
+                      // discovered afterwards.
+                      child: Text(
+                        'Each of these is a conversation with nothing running '
+                        'behind it. Resuming one starts its agent again and '
+                        'picks the transcript up where it stopped. They come '
+                        'back one at a time, so the window keeps drawing.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    for (final session in sessions)
+                      _RestoredRow(
+                        session: session,
+                        onResume: () => onResume(session.paneId),
+                      ),
+                  ],
+                ),
+              ),
+      ),
+      actions: [
+        if (sessions.isNotEmpty)
+          TextButton(
+            onPressed: onResumeAll,
+            child: Text(
+              'Resume all (${sessions.length})',
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RestoredRow extends StatelessWidget {
+  const _RestoredRow({required this.session, required this.onResume});
+
+  final RestoredSession session;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final where = session.workingDirectory;
+    return ListTile(
+      dense: true,
+      leading: Icon(
+        AppIcons.clockCounterClockwise,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+      title: Text(session.title, style: theme.textTheme.bodyMedium),
+      // The same three words the tab dot and the pane bar use, so a session
+      // named here is recognisable as the one showing that dot.
+      subtitle: Text(
+        where == null ? 'Restored — not running' : 'Restored — $where',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall,
+      ),
+      trailing: TextButton(onPressed: onResume, child: const Text('Resume')),
+    );
+  }
+}
+
 class _SessionRow extends StatelessWidget {
   const _SessionRow({
     required this.session,

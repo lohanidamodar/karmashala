@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/util/frame_yield.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/antigravity_resume_providers.dart';
 import '../../agents/data/antigravity_session_resume.dart';
@@ -258,6 +259,64 @@ class ExplorerActions {
       );
     }
     return openNative(sessionId);
+  }
+
+  /// Resumes every pane holding restored agent history, one pane per frame.
+  ///
+  /// The answer to *"give me an easy button to resume all active tabs"*, and
+  /// the reason it is not a `for` loop over [resumeRestoredPane]:
+  ///
+  /// * **A frame between panes.** Four resumes back to back are one unbroken
+  ///   block of main-isolate work and the window is frozen for the sum of it.
+  ///   See [frameYieldProvider] for why the wait is a frame and not a guessed
+  ///   delay.
+  /// * **One layout save for all of them.** Each resume ends in a full
+  ///   structural write; [TerminalSessionsController.withOneLayoutSave] holds
+  ///   them and writes once at the end, the way [closeTabs] does for a bulk
+  ///   close.
+  ///
+  /// The pane list is taken **once**, before anything starts: each resume
+  /// claims the pane it was offered, so re-asking mid-loop would only be able
+  /// to disagree with itself.
+  ///
+  /// Refusals are counted rather than thrown. One session that cannot be
+  /// resumed is not a reason to leave the other three dormant, and it is not
+  /// something the user can act on in the middle of a bulk verb — but it is
+  /// something they must be told about at the end, or the button silently did
+  /// less than it said.
+  Future<({int resumed, int refused, String? message})>
+  resumeAllRestoredPanes() async {
+    final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
+    final panes = terminals.restoredAgentPanes();
+    if (panes.isEmpty) return (resumed: 0, refused: 0, message: null);
+    final yieldFrame = _ref.read(frameYieldProvider);
+    return terminals.withOneLayoutSave(() async {
+      var resumed = 0;
+      final refusals = <String>[];
+      for (var i = 0; i < panes.length; i++) {
+        if (i > 0) await yieldFrame();
+        final result = await resumeRestoredPane(panes[i]);
+        if (result.outcome == ExplorerOutcome.resumed ||
+            result.outcome == ExplorerOutcome.reattached) {
+          resumed++;
+        } else {
+          refusals.add(result.message ?? 'One session could not be resumed.');
+        }
+      }
+      return (
+        resumed: resumed,
+        refused: refusals.length,
+        message: switch (refusals.length) {
+          0 => null,
+          // One refusal gets its own words; several would be a wall of them, so
+          // the count leads and the first stands as the example.
+          1 => refusals.single,
+          _ =>
+            '${refusals.length} sessions could not be resumed. '
+                '${refusals.first}',
+        },
+      );
+    });
   }
 
   /// Opens an imported CLI session: reattach when we are already running that

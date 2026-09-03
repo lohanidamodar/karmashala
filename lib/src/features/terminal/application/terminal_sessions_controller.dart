@@ -326,6 +326,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// cannot touch a disposed pane. See [_afterFrame].
   bool _disposed = false;
 
+  /// How many [withOneLayoutSave] calls are in flight, and whether anything
+  /// inside them has asked for a structural save. Counted rather than a flag so
+  /// a bulk verb calling another still writes once, at the outermost end.
+  int _heldLayoutSaves = 0;
+  bool _layoutSaveOwed = false;
+
   @override
   TerminalSessionsState build() {
     ref.onDispose(() {
@@ -1217,6 +1223,35 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     persistStructure();
   }
 
+  /// Every pane in a tab holding **restored agent history**: a session that was
+  /// open when the app was last closed, rebuilt from disk with nothing running
+  /// behind it.
+  ///
+  /// What "resume all" acts on, and what the toolbar counts. In tab order and
+  /// then in each tab's own pane order, so a bulk resume walks them the way the
+  /// user laid them out rather than the way a hash map happens to.
+  ///
+  /// **Detached panes are deliberately absent.** A session with no tab belongs
+  /// to the background list and is reopened from [BackgroundSessionsDialog];
+  /// counting it here as well would put one session in two dialogs, each
+  /// offering a different verb for it.
+  ///
+  /// Shell panes are absent for the reason `shouldResumeRatherThanRestart`
+  /// gives: there is no conversation to continue in one, and its Start button
+  /// already does the right thing on its own.
+  List<String> restoredAgentPanes() => [
+    for (final tab in _tabs)
+      for (final paneId in tab.layout.panes)
+        if (_isRestoredAgentPane(paneId)) paneId,
+  ];
+
+  bool _isRestoredAgentPane(String paneId) {
+    final instance = _instances[paneId];
+    return instance != null &&
+        instance.agentLaunch != null &&
+        instance.liveness.value == PaneLiveness.restored;
+  }
+
   /// Starts a process in [paneId], replaying whatever is already in its buffer
   /// above the new one.
   ///
@@ -1404,7 +1439,50 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// ([ScrollbackAutosave.catchUpSoon]), so the text lands about a second
   /// later. And nothing here can lose a *tab*: the shape is written now,
   /// synchronously, every time.
-  void persistStructure() => _persist(refreshScrollback: false);
+  void persistStructure() {
+    if (_heldLayoutSaves > 0) {
+      _layoutSaveOwed = true;
+      return;
+    }
+    _persist(refreshScrollback: false);
+  }
+
+  /// Holds the structural save until [body] finishes, then writes it once.
+  ///
+  /// The shape [closeTabs] has, for a bulk verb whose steps belong to somebody
+  /// else. Resuming four restored sessions is four passes through
+  /// [startAgentInPane], and each of those ends in a full [persistStructure] —
+  /// the whole layout, every tab, synchronously — so one thing the user asked
+  /// for once would be four layout writes and four fsyncs. This makes it one,
+  /// whatever the count, exactly as closing twenty tabs is one.
+  ///
+  /// **The publish is deliberately *not* held.** Starting a pane releases its
+  /// instance and adopts a new one, and it is the publish that tells the pane's
+  /// view to stop rendering the object that has just been disposed — see
+  /// [terminalPaneInstanceProvider] for what that looked like the last time it
+  /// did not happen. Inside one synchronous call the gap does not exist; across
+  /// the frame a bulk resume yields between panes it does, and a mounted view
+  /// holding a disposed `FocusNode` would be a crash rather than a saving. So
+  /// each pane publishes as it comes up — which is also what lets the user
+  /// watch them arrive — and the expensive half, the layout write, is the half
+  /// that happens once.
+  ///
+  /// [persistLayout] is not held: it is the teardown save, and a quit inside a
+  /// bulk verb must still write everything on the way out.
+  Future<T> withOneLayoutSave<T>(Future<T> Function() body) async {
+    _heldLayoutSaves++;
+    try {
+      return await body();
+    } finally {
+      _heldLayoutSaves--;
+      if (_heldLayoutSaves == 0 && _layoutSaveOwed) {
+        _layoutSaveOwed = false;
+        // A container disposed while the body was in flight has already written
+        // its final layout; reading a provider off a dead `ref` would throw.
+        if (!_disposed) _persist(refreshScrollback: false);
+      }
+    }
+  }
 
   void _persist({required bool refreshScrollback}) {
     final dao = _dao();
@@ -2355,6 +2433,28 @@ final terminalDetachedProvider = Provider<List<DetachedSession>>(
   (ref) =>
       ref.watch(terminalSessionsControllerProvider.select((s) => s.detached)),
 );
+
+/// The panes a resume is offered for — see
+/// [TerminalSessionsController.restoredAgentPanes].
+///
+/// Watches the tab shape and the liveness projection, and nothing else: a
+/// pane's agent-ness is fixed for the life of its instance, and an instance is
+/// only ever adopted or released alongside a liveness change, so those two
+/// moving is exactly the condition that can change this answer. Both are
+/// identity-compared views the controller rebuilds only when they change (see
+/// `_tabsMutated` and friends), so this recomputes on a layout change rather
+/// than on every publish.
+///
+/// A consumer that only wants the number `select`s `length` off it, which is
+/// what keeps the tab strip from rebuilding while somebody types.
+final restoredAgentPanesProvider = Provider<List<String>>((ref) {
+  ref.watch(
+    terminalSessionsControllerProvider.select((s) => (s.tabs, s.liveness)),
+  );
+  return ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .restoredAgentPanes();
+});
 
 /// Whether one pane has a process behind it.
 ///

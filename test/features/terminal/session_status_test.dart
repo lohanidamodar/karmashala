@@ -205,6 +205,75 @@ void main() {
       );
     });
 
+    /// The bulk control, and the two things it must not be: always there, or a
+    /// button that starts four agents without saying which four.
+    testWidgets('the toolbar offers a resume only once a restart has left '
+        'something dormant', (tester) async {
+      final container = panelContainer();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+
+      await pumpPanel(tester, container);
+      expect(find.byTooltip(_restoredTooltip(1)), findsNothing);
+      expect(find.byTooltip(_restoredTooltip(2)), findsNothing);
+
+      final panes = [
+        for (var i = 0; i < 2; i++)
+          controller
+              .openAgentTab(
+                AgentPaneLaunch(
+                  agentId: 'claudeCode',
+                  executable: 'claude',
+                  workingDirectory: r'C:\ws',
+                  sessionId: 'sess-$i',
+                  title: 'Earlier work $i',
+                ),
+              )
+              .paneId,
+      ];
+      // A shell left dormant beside them, which is not what this counts.
+      controller.openTab(TerminalProfile.commandPrompt);
+      final shell = container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes
+          .single;
+      for (final paneId in [...panes, shell]) {
+        (controller.instanceFor(paneId)! as FakeTerminalInstance)
+                .livenessNotifier
+                .value =
+            PaneLiveness.restored;
+      }
+      await tester.pump();
+
+      expect(find.byTooltip(_restoredTooltip(2)), findsOneWidget);
+
+      await tester.tap(find.byTooltip(_restoredTooltip(2)));
+      await tester.pumpAndSettle();
+
+      // Scoped to the dialog: these sessions are named on their tab chips too,
+      // and finding one there would prove nothing about the list.
+      Finder inDialog(Finder finder) => find.descendant(
+        of: find.byType(RestoredSessionsDialog),
+        matching: finder,
+      );
+      expect(find.text('Restored sessions'), findsOneWidget);
+      expect(inDialog(find.text('Earlier work 0')), findsOneWidget);
+      expect(inDialog(find.text('Earlier work 1')), findsOneWidget);
+      expect(
+        find.text('Resume all (2)'),
+        findsOneWidget,
+        reason: 'the bulk verb lives in the dialog, beside the list it acts on',
+      );
+      // The shell is dormant too, and is not this dialog's business: its own
+      // Start button already does the right thing.
+      expect(inDialog(find.textContaining('PowerShell')), findsNothing);
+      expect(inDialog(find.text('Resume')), findsNWidgets(2));
+    });
+
     testWidgets('the tab bar shows nothing until a session is detached', (
       tester,
     ) async {
@@ -373,3 +442,8 @@ void main() {
     });
   });
 }
+
+/// The toolbar badge's tooltip, spelled the way the strip spells it.
+String _restoredTooltip(int count) =>
+    '$count restored session${count == 1 ? '' : 's'} — nothing running in '
+    '${count == 1 ? 'it' : 'them'}';

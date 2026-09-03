@@ -1,6 +1,7 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/core/util/frame_yield.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -18,6 +19,7 @@ import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,8 +75,17 @@ AppDatabase seededDatabase() {
 /// A container over [db]. The id prefix is a parameter because a second
 /// container over the same database is what a restart *is*, and two generators
 /// counting from zero would hand out ids the first run already used.
-ProviderContainer containerOver(AppDatabase db, {String idPrefix = 's-'}) =>
-    ProviderContainer(
+///
+/// [layoutDao] and [frameYield] are the two seams a bulk resume is counted
+/// through — named rather than a list of overrides because Riverpod's
+/// `Override` is a sealed type its public library does not export, so it
+/// cannot be written down as a parameter type.
+ProviderContainer containerOver(
+  AppDatabase db, {
+  String idPrefix = 's-',
+  TerminalLayoutDao? layoutDao,
+  Future<void> Function()? frameYield,
+}) => ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -91,6 +102,10 @@ ProviderContainer containerOver(AppDatabase db, {String idPrefix = 's-'}) =>
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
+        if (layoutDao != null)
+          terminalLayoutDaoProvider.overrideWithValue(layoutDao),
+        if (frameYield != null)
+          frameYieldProvider.overrideWithValue(frameYield),
       ],
     );
 

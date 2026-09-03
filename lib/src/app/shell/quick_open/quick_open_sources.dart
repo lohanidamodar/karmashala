@@ -31,6 +31,7 @@ import '../../../features/snippets/presentation/snippet_dialogs.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../../features/terminal/presentation/pane_group_strip.dart';
+import '../../../features/terminal/presentation/terminal_panel.dart';
 import '../../../features/todos/application/todos_providers.dart';
 import '../../../features/workspaces/application/workspaces_controller.dart';
 import '../../../features/workspaces/domain/workspace_scope.dart';
@@ -225,6 +226,7 @@ class QuickOpenSources {
         keywords: const ['tabs', 'terminal', 'switch', 'window'],
         onSelect: () => TabPicker.show(context, terminalTabEntries),
       ),
+      ..._restoredSessionCommands(),
       // Moving a tab into a split, and taking a pane back out, are drags —
       // and a feature reachable only by dragging is one some people cannot
       // reach at all. Same two verbs, no mouse. Listed only when they have
@@ -273,6 +275,40 @@ class QuickOpenSources {
         icon: AppIcons.gearSix,
         keywords: const ['preferences', 'options'],
         onSelect: () => SettingsScreen.show(context),
+      ),
+    ];
+  }
+
+  /// The keyboard's way to the sessions a restart left dormant.
+  ///
+  /// Listed only when there are some, by the rule [_splitCommands] states: a
+  /// command that is always offered and usually inert is noise in a palette
+  /// this size. It is inert most of the time by design — a window whose
+  /// sessions are all running has nothing to resume — and this is exactly the
+  /// day it is not.
+  ///
+  /// It opens the dialog rather than resuming outright, because that is where
+  /// the list of what is about to be started lives, and starting four agents
+  /// is not something to do from a single keystroke without showing which.
+  List<QuickOpenItem> _restoredSessionCommands() {
+    final count = ref.read(restoredAgentPanesProvider).length;
+    if (count == 0) return const [];
+    return [
+      _command(
+        'Resume restored sessions…',
+        subtitle:
+            '$count session${count == 1 ? '' : 's'} came back as history with '
+            'nothing running',
+        icon: AppIcons.playCircle,
+        keywords: const [
+          'resume',
+          'restored',
+          'restart',
+          'continue',
+          'dormant',
+          'sessions',
+        ],
+        onSelect: () => TerminalActions(ref).showRestoredSessions(context),
       ),
     ];
   }
