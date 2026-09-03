@@ -26,6 +26,8 @@ import '../../../features/settings/presentation/settings_screen.dart';
 import '../../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../../features/terminal/presentation/empty_pane_region.dart';
 import '../../../features/terminal/presentation/pane_group_strip.dart';
+import '../../../features/workspaces/application/workspaces_controller.dart';
+import '../../../features/workspaces/domain/workspace_scope.dart';
 import '../../theme/app_icons.dart';
 import '../shell_state.dart';
 import '../side_panel.dart';
@@ -43,6 +45,10 @@ import 'repo_file_index.dart';
 /// outrank an exactly-matched command, which is what a large prior would do.
 const _sessionWeight = 24.0;
 const _workspaceWeight = 14.0;
+
+/// Just under a project: a context is *how the projects are listed*, so on an
+/// empty palette it should be visible without displacing the things you open.
+const _contextWeight = 12.0;
 const _githubWeight = 10.0;
 const _branchWeight = 8.0;
 const _agentWeight = 4.0;
@@ -84,6 +90,7 @@ class QuickOpenSources {
     Set<String> changedPaths = const {},
   }) => [
     ..._commands(),
+    ..._contexts(),
     ..._workspace(),
     ..._sessions(),
     ..._openTabs(),
@@ -253,6 +260,78 @@ class QuickOpenSources {
                 TabPicker.show(context, (ref) => regionsMovableTo(ref, pane)),
           ),
       ],
+    ];
+  }
+
+  // --- contexts -----------------------------------------------------------
+
+  /// Switching the project list's context, from the palette.
+  ///
+  /// A context is a filter, and a filter you have to find a menu for is a
+  /// filter you leave switched on. These are the same three answers the scope
+  /// bar offers — everything, one context, the ones in none — reachable by
+  /// typing their names.
+  ///
+  /// **"All projects" is one of them, and is listed first.** Getting back to
+  /// everything is the move people make most, and a way out that is harder to
+  /// reach than the way in is how a project ends up looking lost.
+  List<QuickOpenItem> _contexts() {
+    final workspaces = ref.read(workspacesControllerProvider);
+    if (workspaces.isEmpty) return const [];
+    final scope = ref.read(workspaceScopeProvider);
+    final counts = ref.read(workspaceProjectCountsProvider);
+    final scopes = ref.read(workspaceScopeProvider.notifier);
+
+    QuickOpenItem item({
+      required String id,
+      required String title,
+      required String subtitle,
+      required IconData icon,
+      required bool current,
+      required WorkspaceScope target,
+    }) => QuickOpenItem(
+      id: 'context/$id',
+      group: QuickOpenGroup.contexts,
+      title: title,
+      subtitle: subtitle,
+      // Said rather than implied: the palette is the one place you can pick the
+      // filter you are already looking at, and doing so must not look broken.
+      detail: current ? 'Showing' : null,
+      icon: icon,
+      keywords: const ['context', 'filter'],
+      weight: _contextWeight,
+      onSelect: () => dismiss(() => scopes.select(target)),
+    );
+
+    return [
+      item(
+        id: 'all',
+        title: 'All projects',
+        subtitle: 'Show every project, in any context',
+        icon: AppIcons.treeStructure,
+        current: scope.isAll,
+        target: WorkspaceScope.all,
+      ),
+      for (final workspace in workspaces)
+        item(
+          id: workspace.id,
+          title: workspace.name,
+          subtitle: describeWorkspace(
+            workspace,
+            projectCount: counts[workspace.id] ?? 0,
+          ),
+          icon: AppIcons.folder,
+          current: scope.workspaceId == workspace.id,
+          target: WorkspaceScope.of(workspace.id),
+        ),
+      item(
+        id: 'none',
+        title: 'No context',
+        subtitle: 'Only the projects filed under nothing',
+        icon: AppIcons.minusCircle,
+        current: scope.unassignedOnly,
+        target: WorkspaceScope.unassigned,
+      ),
     ];
   }
 
