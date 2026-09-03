@@ -90,9 +90,15 @@ class McpBridgeProbe {
 
   final File? Function() _locate;
 
-  /// How long the handshake is given. Generous: the bridge is a compiled Dart
-  /// program with no I/O to do before it answers, and the whole round trip is
-  /// tens of milliseconds — anything approaching this is already a fault.
+  /// How long the handshake is given.
+  ///
+  /// **Measured 2026-09-03 against the compiled bridge on the owner's Windows
+  /// machine: 121 ms median, 111-125 ms warm, 875 ms on the first spawn of a
+  /// freshly written executable.** Almost all of it is process start; the
+  /// bridge answers `initialize` out of its own code without touching the app.
+  /// Five seconds is therefore forty times the worst warm case and six times a
+  /// cold one, so a timeout here is a real fault rather than a slow disk — and
+  /// it is still short enough that a wedged bridge does not hold the panel.
   final Duration timeout;
 
   /// The `initialize` request, as a client would send it.

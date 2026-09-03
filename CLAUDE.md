@@ -714,6 +714,11 @@ handshake. Four verdicts, because they need four different responses:
 | not found | nothing beside the app to spawn; WSL sessions then fall back to the switch address | warning |
 | spawned but not answering | started, then no reply / not MCP / exited first | failed |
 
+**Measured 2026-09-03 on the owner's machine: 121 ms median** (111-125 ms
+warm, 875 ms for the first spawn of a freshly compiled executable), almost all
+of it process start. The timeout is 5 s, and the panel shows each row's real
+cost beside it so re-running is an informed choice.
+
 `initialize` rather than `tools/list` on purpose. The bridge answers
 `initialize` out of its own code, so the verdict is about the bridge alone;
 whether the **app** will answer it is already reported, without spawning
