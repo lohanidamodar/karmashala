@@ -20,6 +20,7 @@ class ModelChipView {
     required this.label,
     required this.qualifier,
     required this.tooltip,
+    required this.origin,
     required this.alarming,
     required this.options,
     required this.selectedId,
@@ -36,6 +37,13 @@ class ModelChipView {
   final String? qualifier;
 
   final String tooltip;
+
+  /// Where the model came from, as a sentence: a choice made for this session,
+  /// or the Settings default followed live. Carried as its own field rather
+  /// than only baked into [tooltip] so [SessionModelMark] can say the same
+  /// thing — one wording, so the control and the fact beside it cannot describe
+  /// the same session's model differently.
+  final String origin;
 
   /// Whether the state is one to notice: an agent that cannot be told which
   /// model to run. Nothing else is tinted.
@@ -108,6 +116,7 @@ ModelChipView modelChipViewFor(SessionModelState state) {
     qualifier: state.modelId == null
         ? null
         : (current?.fitLabel ?? (state.inherited ? 'default' : null)),
+    origin: origin,
     tooltip: [
       current?.model.label ?? state.modelId ?? 'Agent default',
       origin,
@@ -334,6 +343,120 @@ class SessionModelChip extends ConsumerWidget {
     maxLabelWidth: maxLabelWidth,
   );
 }
+
+/// The model a session is **set to** run on, drawn as a fact rather than as a
+/// control.
+///
+/// `SessionVerdictMark`'s neighbour in the delivery state line, and the reason
+/// there are two model presentations rather than one. [SessionModelChip] is the
+/// thing that *changes* the model: bordered, pressable, a caret, capped at 72px
+/// on the session bar and dropped altogether when that bar is under ~820px,
+/// because a control has to compete for room with the delivery actions. This is
+/// only the name, in the quiet line of facts above them, at every width. Both
+/// take their words from [modelChipViewFor], so the two can never name the same
+/// session's model differently.
+///
+/// **What it claims.** What Karmashala has this session set to — the id the
+/// next launch puts on the command line, and the id a live `/model` was sent
+/// for.
+///
+/// **What it refuses to claim.** That this is what the CLI is running now.
+/// Nothing in the app reads a model back out of an agent, and two ordinary
+/// things put the record ahead of the process:
+///
+/// * a `/model` typed into the pane by the user or by the agent, which nothing
+///   tells us about; and
+/// * a change recorded while the agent could not be told — mid-turn, or an
+///   agent like Codex whose `/model` opens a picker and takes no argument, so a
+///   pick only ever applies at the next launch.
+///
+/// Neither is detectable without matching text out of the terminal, which is
+/// the most fragile thing in this app and not worth a status line. So the mark
+/// says what it is instead of guessing: the tooltip names the limit that
+/// applies to *this* agent, and the face carries no word — no "now", no
+/// "running", no "active" — that would promise liveness.
+///
+/// It therefore draws **only a model we actually named**. A session on an
+/// agent's own default (no id anywhere, no `--model` passed) draws nothing, and
+/// so does an agent that takes no model flag at all. In both, the honest answer
+/// is that we do not know what it is running, and `default` sitting in a line
+/// of facts between a stage and a branch would read as one.
+class SessionModelMark extends ConsumerWidget {
+  const SessionModelMark({
+    required this.sessionId,
+    this.maxWidth = 140,
+    super.key,
+  });
+
+  /// Builds of the mark, counted so a cost test can prove that an unrelated
+  /// session signal does not reach it and a model change does.
+  @visibleForTesting
+  static int debugBuildCount = 0;
+
+  final String sessionId;
+
+  /// How much room the model's name may take before it ellipsises. The line
+  /// this sits in wraps rather than shrinks, so an uncapped
+  /// `Gemini 3.7 Flash (Medium)` next to a long branch name costs the bar a
+  /// whole extra run.
+  final double maxWidth;
+
+  /// Whether [state] names a model this mark is willing to draw.
+  ///
+  /// Static, because it is the *host's* test as much as the mark's: the state
+  /// line asks it to decide whether to put a mark in its `Wrap` at all. A
+  /// zero-sized child there would still take a `spacing` on each side and leave
+  /// a double gap exactly where the model was not — and a session with no model
+  /// named is the ordinary case, not the rare one.
+  static bool namesAModel(SessionModelState? state) =>
+      state != null && state.modelId != null && state.support.isSupported;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    SessionModelMark.debugBuildCount++;
+    final state = ref.watch(sessionModelProvider(sessionId));
+    if (!namesAModel(state)) return const SizedBox.shrink();
+    final view = modelChipViewFor(state!);
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Tooltip(
+      message: [view.label, view.origin, _modelMarkLimit(state)].join('\n'),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(AppIcons.robot, size: Chrome.iconSmall, color: muted),
+          const SizedBox(width: 4),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Text(
+              view.label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(color: muted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The one thing the mark will not vouch for, worded for the agent it is about.
+///
+/// Two sentences rather than one hedge, for the reason `ModelDeferral` gives
+/// about its four values: "a `/model` you typed is not read back" and "this CLI
+/// only takes its model at launch" are different limits, and telling a Codex
+/// user the first would send them looking for a live switch that does not
+/// exist.
+String _modelMarkLimit(SessionModelState state) => state.support.switchesLive
+    ? '${state.agentName} is never asked what it is running, so this is what '
+          'the session is set to. A /model typed into the terminal, or a '
+          'change recorded while the agent was mid-turn, leaves this ahead of '
+          'the process.'
+    : '${state.agentName} takes its model at launch and is never asked what it '
+          'is running, so this is what the next launch uses — a change made '
+          'since this session started is not true of the process now.';
 
 /// [ModelChip] following the focused session. The status bar's chip.
 ///

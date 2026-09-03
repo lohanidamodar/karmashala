@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../agents/application/session_model_providers.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../explorer/application/checkout.dart';
 import '../../git/application/remote_links.dart';
@@ -25,6 +26,7 @@ import '../domain/delivery_action.dart';
 import '../domain/delivery_stage.dart';
 import '../domain/session_delivery.dart';
 import 'continue_with_dialog.dart';
+import 'model_chip.dart';
 
 /// One strip, above the message box, carrying a session's whole delivery
 /// lifecycle: where the work stands, and the next sensible thing to do with it.
@@ -444,24 +446,55 @@ class _DeliveryState extends StatelessWidget {
 /// the strip decides whether there are *actions*, this decides whether there
 /// are *facts*, and with neither the bar is left with the two controls at its
 /// ends, which is what it drew before either of them had anything to say.
+///
+/// This host, and only this one, also carries the session's model — see
+/// [SessionModelMark] for what that mark does and does not claim. The strip
+/// above the composer does not: the same session's model is a chip in the chip
+/// row a few pixels below it there, and a second reading of it in the line
+/// above would be exactly the duplication this line was pulled out to avoid.
+/// The session bar's own chip is not that neighbour, because it is dropped
+/// whenever the bar is under ~820px — which is where "what is this thinking
+/// with" was hardest to answer.
 class DeliveryStateLine extends ConsumerWidget {
   const DeliveryStateLine({required this.sessionId, super.key});
+
+  /// Builds of the line, counted so a cost test can prove that a model change
+  /// repaints the mark *inside* it and not the line around it — the whole
+  /// point of selecting a bool here and leaving the name to the mark.
+  @visibleForTesting
+  static int debugBuildCount = 0;
 
   final String sessionId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    DeliveryStateLine.debugBuildCount++;
     // `.value` for the reason [DeliveryStrip.build] gives: a refresh must not
     // take the line away and move everything laid out around it.
     final delivery = ref.watch(sessionDeliveryProvider(sessionId)).value;
     if (delivery == null) return const SizedBox.shrink();
+    // Whether there is a model to name, and nothing more. The name itself is
+    // the mark's own subscription, so a model change repaints the mark and not
+    // this line; selected down to a bool, this moves at most twice in a
+    // session's life. It is asked here rather than left to the mark because a
+    // mark that drew nothing would still take a `spacing` on each side of
+    // itself and leave a double gap where the model was not — and a session
+    // with no model named is the ordinary case, not the rare one.
+    final hasModel = ref.watch(
+      sessionModelProvider(sessionId).select(SessionModelMark.namesAModel),
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 2, bottom: Insets.xs),
       child: Wrap(
         spacing: Insets.sm,
         runSpacing: Insets.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
-        children: _deliveryFacts(context, delivery, sessionId),
+        children: _deliveryFacts(
+          context,
+          delivery,
+          sessionId,
+          withModel: hasModel,
+        ),
       ),
     );
   }
@@ -472,11 +505,18 @@ class DeliveryStateLine extends ConsumerWidget {
 /// A list rather than a widget because both hosts wrap them in a [Wrap] of
 /// their own: nested, the whole state would break to a run of its own long
 /// before it had run out of room.
+///
+/// [withModel] is the one thing the two hosts disagree about, and it is passed
+/// rather than decided here because the answer is about the *host*: only the
+/// session bar has no model of its own within reach. See [DeliveryStateLine].
+/// The caller has already established there is a model worth a mark — a mark
+/// that drew nothing would still cost the run two gaps.
 List<Widget> _deliveryFacts(
   BuildContext context,
   SessionDelivery delivery,
-  String sessionId,
-) {
+  String sessionId, {
+  bool withModel = false,
+}) {
   final theme = Theme.of(context);
   final semantic = SemanticColors.of(context);
   final label = theme.textTheme.labelSmall;
@@ -528,6 +568,11 @@ List<Widget> _deliveryFacts(
           ),
         ],
       ),
+    // After the branch, because the two are the neighbouring halves of "where
+    // is this work and what is doing it", and because the line's existing scan
+    // order — how far, whether it was checked, where it lives — is the one
+    // people already read.
+    if (withModel) SessionModelMark(sessionId: sessionId),
     if (delivery.lineLabel case final lines?) Text(lines, style: muted),
     if (delivery.isDirty)
       Text('${delivery.dirtyFiles} uncommitted', style: muted),
