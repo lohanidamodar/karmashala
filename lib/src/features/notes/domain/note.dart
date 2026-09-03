@@ -40,7 +40,7 @@ class Note {
   /// from*: filing is the user's and can be changed, origin is a fact about
   /// the past and cannot. A note captured from a session starts filed under
   /// that session's project because the database already knows which one that
-  /// is, and the v32 backfill applied the same rule to every note taken before
+  /// is, and the v33 backfill applied the same rule to every note taken before
   /// this column existed.
   final String? projectId;
 

@@ -70,7 +70,7 @@ class NotesController extends Notifier<List<Note>> {
   /// The project a note captured from [repositoryId] belongs to.
   ///
   /// Filing follows the repository because a repository belongs to exactly one
-  /// project, so this is a lookup rather than a guess — the same rule the v32
+  /// project, so this is a lookup rather than a guess — the same rule the v33
   /// backfill applied to every note taken before the column existed.
   String? _projectOf(String? repositoryId) => repositoryId == null
       ? null

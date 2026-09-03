@@ -38,7 +38,7 @@ class Todo {
   final int position;
 
   /// When it was ticked off, or null while it is still open. The boolean and
-  /// the fact in one column — see the v32 migration.
+  /// the fact in one column — see the v33 migration.
   final DateTime? doneAt;
 
   final DateTime createdAt;

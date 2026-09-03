@@ -10,17 +10,24 @@ import '../../projects/domain/project.dart';
 import '../application/workspaces_controller.dart';
 import '../domain/workspace.dart';
 
-/// Create, rename, delete and assign — the four verbs a context has, and
+/// Create, rename, describe, delete and assign — the verbs a context has, and
 /// nothing else.
 ///
 /// Deliberately *not* a management page. There is no navigation to a context,
 /// no per-context screen and no ordering: a context is a filter over the
-/// project list, so the only things worth doing to one are naming it and
-/// saying which projects are in it.
+/// project list, so the only things worth doing to one are saying what it is
+/// and which projects are in it.
 ///
 /// Both destructive-ish steps confirm **in place** rather than in a second
 /// dialog: a dialog over a dialog at 720x560 covers the list you were reading,
 /// and the confirmation here is one sentence long.
+///
+/// **Why the project list is a `const` child.** The owner reported that
+/// creating a context lagged, and the measurement said why: adding a context
+/// rebuilt all 31 project rows, none of which had changed. A `const` widget is
+/// `identical` across the parent's rebuilds, so the framework skips its subtree
+/// entirely — the contexts half and the projects half of this dialog now redraw
+/// independently. See `workspace_write_cost_test.dart`.
 class WorkspacesDialog extends ConsumerStatefulWidget {
   const WorkspacesDialog({super.key});
 
@@ -35,16 +42,18 @@ class WorkspacesDialog extends ConsumerStatefulWidget {
 
 class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
   final _newController = TextEditingController();
-  final _renameController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
 
-  String? _renamingId;
+  String? _editingId;
   String? _confirmingDeleteId;
   String? _error;
 
   @override
   void dispose() {
     _newController.dispose();
-    _renameController.dispose();
+    _nameController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
@@ -68,11 +77,16 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
     });
   }
 
-  void _commitRename(String id) {
-    final name = _renameController.text.trim();
+  void _commitEdit(String id) {
     _run(() {
-      ref.read(workspacesControllerProvider.notifier).rename(id, name);
-      _renamingId = null;
+      ref
+          .read(workspacesControllerProvider.notifier)
+          .edit(
+            id,
+            name: _nameController.text,
+            description: _descriptionController.text,
+          );
+      _editingId = null;
     });
   }
 
@@ -80,7 +94,7 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final workspaces = ref.watch(workspacesControllerProvider);
-    final projects = ref.watch(projectsControllerProvider);
+    final counts = ref.watch(workspaceProjectCountsProvider);
 
     return AlertDialog(
       title: const DesktopDialogTitle(
@@ -151,7 +165,7 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           for (final workspace in workspaces)
-                            _workspaceRow(workspace),
+                            _workspaceRow(workspace, counts),
                           const Divider(height: Insets.xl),
                           Padding(
                             padding: const EdgeInsets.only(bottom: Insets.xs),
@@ -160,8 +174,11 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
                               style: theme.textTheme.labelLarge,
                             ),
                           ),
-                          for (final project in projects)
-                            _projectRow(project, workspaces),
+                          // `const`, and that is the fix for the reported lag:
+                          // a new context leaves this instance identical, so
+                          // the framework never asks the project rows to
+                          // rebuild.
+                          const _ProjectsSection(),
                         ],
                       ),
                     ),
@@ -192,31 +209,52 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
     return (media.size.height - chrome).clamp(160.0, 340.0);
   }
 
-  Widget _workspaceRow(Workspace workspace) {
+  Widget _workspaceRow(Workspace workspace, Map<String, int> counts) {
     final theme = Theme.of(context);
-    if (_renamingId == workspace.id) {
+    if (_editingId == workspace.id) {
+      // Name and description stacked rather than side by side: at the 200px
+      // this dialog can be squeezed to, two fields on one row are two fields
+      // nobody can read.
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _renameController,
-                autofocus: true,
-                decoration: const InputDecoration(isDense: true),
-                onSubmitted: (_) => _commitRename(workspace.id),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Name',
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _commitEdit(workspace.id),
+                  ),
+                ),
+                const SizedBox(width: Insets.sm),
+                IconButton(
+                  tooltip: 'Save context',
+                  icon: const Icon(AppIcons.check, size: Chrome.icon),
+                  onPressed: () => _commitEdit(workspace.id),
+                ),
+                IconButton(
+                  tooltip: 'Cancel edit',
+                  icon: const Icon(AppIcons.x, size: Chrome.icon),
+                  onPressed: () => setState(() => _editingId = null),
+                ),
+              ],
+            ),
+            const SizedBox(height: Insets.xs),
+            TextField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                hintText: 'What this context is for. Optional.',
+                isDense: true,
               ),
-            ),
-            const SizedBox(width: Insets.sm),
-            IconButton(
-              tooltip: 'Save name',
-              icon: const Icon(AppIcons.check, size: Chrome.icon),
-              onPressed: () => _commitRename(workspace.id),
-            ),
-            IconButton(
-              tooltip: 'Cancel rename',
-              icon: const Icon(AppIcons.x, size: Chrome.icon),
-              onPressed: () => setState(() => _renamingId = null),
+              onSubmitted: (_) => _commitEdit(workspace.id),
             ),
           ],
         ),
@@ -267,20 +305,38 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
           ),
           const SizedBox(width: Insets.sm),
           Expanded(
-            child: Text(
-              workspace.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  workspace.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                Text(
+                  describeWorkspace(
+                    workspace,
+                    projectCount: counts[workspace.id] ?? 0,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
           IconButton(
-            tooltip: 'Rename ${workspace.name}',
+            tooltip: 'Edit ${workspace.name}',
             icon: const Icon(AppIcons.pencilSimple, size: Chrome.icon),
             onPressed: () => setState(() {
-              _renamingId = workspace.id;
+              _editingId = workspace.id;
               _confirmingDeleteId = null;
-              _renameController.text = workspace.name;
+              _nameController.text = workspace.name;
+              _descriptionController.text = workspace.description ?? '';
             }),
           ),
           IconButton(
@@ -288,22 +344,57 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
             icon: const Icon(AppIcons.trash, size: Chrome.icon),
             onPressed: () => setState(() {
               _confirmingDeleteId = workspace.id;
-              _renamingId = null;
+              _editingId = null;
             }),
           ),
         ],
       ),
     );
   }
+}
 
-  /// One project, and the context it is in. The picker is the assign verb:
-  /// there is nowhere else in the app to move a project between contexts.
-  Widget _projectRow(Project project, List<Workspace> workspaces) {
+/// Every project, and the context it is in.
+///
+/// Its own widget, with no fields and a `const` constructor, so the dialog
+/// above can rebuild — a new context, an error banner, an inline editor — with
+/// this subtree untouched. It watches the *project* list and nothing else; a
+/// row's dependency on the context list is one name, narrowed per row in
+/// [_ProjectRow].
+class _ProjectsSection extends ConsumerWidget {
+  const _ProjectsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (final project in ref.watch(projectsControllerProvider))
+        _ProjectRow(project: project),
+    ],
+  );
+}
+
+/// One project, and the context it is in. The picker is the assign verb — the
+/// same one the Explorer's right-click menu calls.
+class _ProjectRow extends ConsumerWidget {
+  const _ProjectRow({required this.project});
+
+  final Project project;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final current = workspaces
-        .where((w) => w.id == project.workspaceId)
-        .map((w) => w.name)
-        .firstOrNull;
+    // The *name of this project's own context*, and nothing else about the
+    // list. Creating, renaming or deleting some other context leaves this
+    // value alone, so this row is not rebuilt — which is what makes the
+    // section above it genuinely free.
+    final current = ref.watch(
+      workspacesControllerProvider.select(
+        (workspaces) => workspaces
+            .where((w) => w.id == project.workspaceId)
+            .map((w) => w.name)
+            .firstOrNull,
+      ),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       child: Row(
@@ -320,6 +411,9 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
           PopupMenuButton<String>(
             tooltip: 'Context for ${project.name}',
             position: PopupMenuPosition.under,
+            // Read when the menu opens, not when the row is drawn: the row
+            // must not subscribe to the whole context list to offer a picker
+            // nobody has clicked yet.
             itemBuilder: (context) => [
               DesktopMenuItem(
                 value: '',
@@ -327,7 +421,7 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
                 icon: AppIcons.minusCircle,
                 selected: project.workspaceId == null,
               ),
-              for (final workspace in workspaces)
+              for (final workspace in ref.read(workspacesControllerProvider))
                 DesktopMenuItem(
                   value: workspace.id,
                   label: workspace.name,

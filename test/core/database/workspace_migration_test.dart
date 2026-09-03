@@ -56,10 +56,10 @@ Database _populatedV30() {
 }
 
 void main() {
-  test('v31 is the head and the keys stay contiguous', () {
+  test('v33 is the head and the keys stay contiguous', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    expect(db.schemaVersion, 32);
+    expect(db.schemaVersion, 33);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
@@ -103,10 +103,44 @@ void main() {
       for (final row in db.query('PRAGMA table_info(workspaces);'))
         row['name']! as String: row,
     };
-    expect(workspaceColumns.keys, {'id', 'name', 'created_at'});
+    expect(workspaceColumns.keys, {'id', 'name', 'description', 'created_at'});
     for (final required in const ['name', 'created_at']) {
       expect(workspaceColumns[required]!['notnull'], 1, reason: required);
     }
+    expect(
+      workspaceColumns['description']!['notnull'],
+      0,
+      reason: 'a context nobody has described is complete, not half-filled-in',
+    );
+  });
+
+  test('v32 adds the description to an existing database, empty', () {
+    // The v32 half of the same promise v31 made: the owner's contexts and the
+    // projects filed under them come out the other side untouched, and the
+    // column arrives holding the only thing the migration knows — nothing.
+    final db = _populatedV30();
+    addTearDown(db.close);
+    schemaMigrations[31]!(db);
+    db.execute(
+      "INSERT INTO workspaces (id, name, created_at) "
+      "VALUES ('w1', 'PopupBits', '2026-09-01T00:00:00.000Z');",
+    );
+    db.execute("UPDATE projects SET workspace_id = 'w1' WHERE id = 'p-0';");
+
+    schemaMigrations[32]!(db);
+
+    final workspaces = db.select('SELECT * FROM workspaces;');
+    expect(workspaces.length, 1);
+    expect(workspaces.first['name'], 'PopupBits');
+    expect(workspaces.first['description'], isNull);
+    expect(
+      db
+          .select("SELECT workspace_id FROM projects WHERE id = 'p-0';")
+          .single['workspace_id'],
+      'w1',
+      reason: 'the grouping survives the upgrade',
+    );
+    expect(db.select('SELECT * FROM projects;').length, 3);
   });
 
   test('two contexts cannot share a name, whatever the case', () {

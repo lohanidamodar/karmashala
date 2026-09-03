@@ -368,8 +368,14 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                           // element to whichever tab shifted into its slot.
                           key: ValueKey(tab.id),
                           layout: tab.layout,
-                          onResize: (splitId, index, delta) =>
-                              _resize(tab, splitId, index, delta),
+                          // Already a share of the split it belongs to — see
+                          // [PaneResizeCallback]. It used to be pixels this
+                          // divided by the *panel's* longest side, which is
+                          // neither the split's axis nor its box: in a 1440x560
+                          // window a top/bottom divider moved 36 px for every
+                          // 100 the pointer did.
+                          onResize: (splitId, index, share) =>
+                              _sessions.resizePane(tab.id, splitId, index, share),
                           regionBuilder: (group) =>
                               _buildRegion(group, tab, tab.id == activeTabId),
                         ),
@@ -379,14 +385,6 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
         ],
       ),
     );
-  }
-
-  /// Turns a pixel drag into a share of the split's own extent.
-  void _resize(TerminalTab tab, String splitId, int index, double delta) {
-    final box = context.findRenderObject() as RenderBox?;
-    final extent = box == null ? 0.0 : box.size.longestSide;
-    if (extent <= 0) return;
-    _sessions.resizePane(tab.id, splitId, index, delta / extent);
   }
 
   /// One region: its header, and the one pane it is showing.

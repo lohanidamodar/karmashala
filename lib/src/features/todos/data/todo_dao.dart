@@ -2,7 +2,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/database/row_mapping.dart';
 import '../domain/todo.dart';
 
-/// Data-access for the `todos` table (v32). Hand-written SQL, no codegen.
+/// Data-access for the `todos` table (v33). Hand-written SQL, no codegen.
 class TodoDao {
   TodoDao(this._db);
 

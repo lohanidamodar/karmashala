@@ -4,7 +4,7 @@ import 'package:karmashala/src/core/database/migrations.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// Applies every migration up to and including [upTo], the way `AppDatabase`
-/// does, so a *pre-v32* database can be populated and then migrated.
+/// does, so a *pre-v33* database can be populated and then migrated.
 Database _migratedTo(int upTo) {
   final db = sqlite3.openInMemory();
   final versions = schemaMigrations.keys.where((v) => v <= upTo).toList()
@@ -43,11 +43,11 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 32);
+    expect(db.schemaVersion, 33);
   });
 
-  test('v32 adds todos and the notes filing, and touches nothing else', () {
-    final db = _migratedTo(31);
+  test('v33 adds todos and the notes filing, and touches nothing else', () {
+    final db = _migratedTo(32);
     addTearDown(db.close);
     _seedProject(db);
     db.execute(
@@ -61,7 +61,7 @@ void main() {
       reason: 'todos must not exist before its own migration',
     );
 
-    schemaMigrations[32]!(db);
+    schemaMigrations[33]!(db);
 
     expect(
       db.select('PRAGMA table_info(todos);').map((r) => r['name']).toList(),
@@ -84,11 +84,11 @@ void main() {
     }
   });
 
-  test('v32 files an existing note under its repository’s project', () {
+  test('v33 files an existing note under its repository’s project', () {
     // The backfill. A note captured from a session already recorded that
     // session's repository, and a repository belongs to exactly one project —
     // so this is a lookup the database can already do, not a guess.
-    final db = _migratedTo(31);
+    final db = _migratedTo(32);
     addTearDown(db.close);
     _seedProject(db);
     _seedProject(db, project: 'p-2');
@@ -110,7 +110,7 @@ void main() {
       "'2026-08-01T00:00:00.000Z', '2026-08-01T00:00:00.000Z');",
     );
 
-    schemaMigrations[32]!(db);
+    schemaMigrations[33]!(db);
 
     final filed = {
       for (final row in db.select('SELECT id, project_id FROM notes;'))
@@ -123,7 +123,7 @@ void main() {
     // `ON DELETE SET NULL`, not `CASCADE`. A project is deleted when the work
     // is over, and that is exactly when the note saying what went wrong is
     // worth the most.
-    final db = _migratedTo(32);
+    final db = _migratedTo(33);
     addTearDown(db.close);
     db.execute('PRAGMA foreign_keys = ON;');
     _seedProject(db);
@@ -152,7 +152,7 @@ void main() {
     // The other half of the foreign key. Filing is a claim about a row this
     // app owns, unlike `source_session_id`, which may name an imported
     // session that was never a row of ours.
-    final db = _migratedTo(32);
+    final db = _migratedTo(33);
     addTearDown(db.close);
     db.execute('PRAGMA foreign_keys = ON;');
     expect(

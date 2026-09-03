@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
 import 'package:karmashala/src/features/git/application/remote_links.dart';
@@ -15,6 +17,8 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/delivery_update_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_archive_service.dart';
 import 'package:karmashala/src/features/sessions/application/session_handoff_service.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/application/session_signals.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/delivery_action.dart';
 import 'package:karmashala/src/features/sessions/domain/session.dart';
@@ -22,12 +26,14 @@ import 'package:karmashala/src/features/sessions/domain/session_delivery.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
+import 'package:karmashala/src/features/sessions/presentation/model_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/window_matrix.dart';
 import '../terminal/fake_instance.dart';
 
 /// The delivery strip.
@@ -688,5 +694,293 @@ void main() {
     expect(find.text('Run tests'), findsNothing);
     expect(find.text('Archive worktree'), findsNothing);
     expect(find.text('View PR'), findsOneWidget);
+  });
+
+  // ---------------------------------------------------------------------------
+  // The model, as a fact rather than a control. See [SessionModelMark].
+  // ---------------------------------------------------------------------------
+
+  /// The state line with a container the test can write through, so a model can
+  /// be changed the way the app changes it — `SessionLauncher.setModel` — rather
+  /// than by rebuilding the tree around a different value.
+  ProviderContainer lineContainer({
+    SessionDelivery delivery = const SessionDelivery(
+      branch: 'session/fix-the-login',
+      baseBranch: 'origin/main',
+      hasWorktree: true,
+    ),
+  }) {
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        sessionDeliveryProvider.overrideWith((ref, _) async => delivery),
+        sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
+        sessionActionsProvider.overrideWith(
+          (ref) => _RecordingActions(ref, recorder),
+        ),
+        sessionArchiveServiceProvider.overrideWith(
+          (ref) => _RecordingArchive(ref, recorder),
+        ),
+        deliveryUpdateServiceProvider.overrideWith(
+          (ref) => _RecordingUpdate(ref, recorder),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  Widget line(ProviderContainer container, {String sessionId = 's1'}) =>
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(body: DeliveryStateLine(sessionId: sessionId)),
+        ),
+      );
+
+  /// Everything the mark says on hover. Found through its own glyph, so a
+  /// tooltip belonging to the branch link cannot be read by mistake.
+  String modelTooltip(WidgetTester tester) => tester
+      .widget<Tooltip>(
+        find.ancestor(
+          of: find.byIcon(AppIcons.robot),
+          matching: find.byType(Tooltip),
+        ),
+      )
+      .message!;
+
+  /// A session on [agentId] with [model] recorded against it.
+  void seedSession(String id, {required String agentId, String? model}) {
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(id: 'i-$id', agentId: agentId));
+    SessionDao(db).insert(
+      Session(
+        id: id,
+        repositoryId: 'r1',
+        agentInstallationId: 'i-$id',
+        title: 'Session $id',
+        useWorktree: false,
+        status: SessionStatus.idle,
+        createdAt: testTime,
+      ),
+    );
+    if (model != null) SessionDao(db).updateModel(id, model);
+  }
+
+  testWidgets('a session that named no model is not given one', (tester) async {
+    final container = lineContainer();
+    await tester.pumpWidget(line(container));
+    await tester.pumpAndSettle();
+
+    // The line is drawn — the branch proves it — and says nothing whatever
+    // about a model. No `--model` was passed, so what the agent picked for
+    // itself is not something this app knows, and `default` sitting between a
+    // stage and a branch would read as an answer to a question nobody asked it.
+    expect(find.text('session/fix-the-login'), findsOneWidget);
+    expect(find.byIcon(AppIcons.robot), findsNothing);
+  });
+
+  testWidgets('the model the launcher resolves is named, and claims no more', (
+    tester,
+  ) async {
+    SessionDao(db).updateModel('s1', 'opus');
+    final container = lineContainer();
+    await tester.pumpWidget(line(container));
+    await tester.pumpAndSettle();
+
+    // The descriptor's label, and the same answer `effectiveModelFor` hands the
+    // command line: there is no second resolution here to drift from it.
+    expect(find.text('Opus'), findsOneWidget);
+    expect(
+      container.read(sessionLauncherProvider).effectiveModelFor('s1')!.modelId,
+      'opus',
+    );
+
+    final tooltip = modelTooltip(tester);
+    expect(tooltip, contains('Opus'));
+    expect(tooltip, contains('Set for this session'));
+    // The refusal, which is the whole reason the mark is shaped this way.
+    expect(tooltip, contains('never asked what it is running'));
+    expect(tooltip, contains('A /model typed into the terminal'));
+    // And nothing on the face that promises liveness — the words the request
+    // asked for and the record cannot support.
+    expect(find.textContaining('active'), findsNothing);
+    expect(find.textContaining('now'), findsNothing);
+  });
+
+  testWidgets('an agent that only takes its model at launch says so instead', (
+    tester,
+  ) async {
+    seedSession('s2', agentId: AgentIds.codex, model: 'gpt-5.6-sol');
+    final container = lineContainer();
+    await tester.pumpWidget(line(container, sessionId: 's2'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('GPT-5.6-Sol'), findsOneWidget);
+    final tooltip = modelTooltip(tester);
+    expect(tooltip, contains('takes its model at launch'));
+    expect(tooltip, contains('not true of the process now'));
+    // Not the live sentence. Codex's `/model` opens a picker and takes no
+    // argument, so telling a Codex user that a typed `/model` goes unseen would
+    // send them looking for a live switch that does not exist.
+    expect(tooltip, isNot(contains('A /model typed into the terminal')));
+  });
+
+  testWidgets('an agent nobody has recorded a model flag for is not named', (
+    tester,
+  ) async {
+    // The row still holds an id — set by an older build, or by hand — and the
+    // mark still refuses it: with no descriptor there is no flag to pass, so
+    // whatever that CLI is running is not this.
+    seedSession('s3', agentId: 'mystery', model: 'something-someone-typed');
+    final container = lineContainer();
+    await tester.pumpWidget(line(container, sessionId: 's3'));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(AppIcons.robot), findsNothing);
+    expect(find.text('something-someone-typed'), findsNothing);
+  });
+
+  testWidgets('a model change repaints the mark and not the line', (
+    tester,
+  ) async {
+    SessionDao(db).updateModel('s1', 'opus');
+    final container = lineContainer();
+    await tester.pumpWidget(line(container));
+    await tester.pumpAndSettle();
+
+    DeliveryStateLine.debugBuildCount = 0;
+    SessionModelMark.debugBuildCount = 0;
+    // Between two named models, which is exactly what the line's own
+    // subscription — the bool "is there a model to name at all" — does not move.
+    container.read(sessionLauncherProvider).setModel('s1', 'sonnet');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sonnet'), findsOneWidget);
+    expect(SessionModelMark.debugBuildCount, 1);
+    expect(
+      DeliveryStateLine.debugBuildCount,
+      0,
+      reason:
+          'the stage, the verdict, the branch and the counts know nothing '
+          'about a model and must not repaint for one',
+    );
+  });
+
+  testWidgets('the first model a session is given costs the line one build', (
+    tester,
+  ) async {
+    // The one model signal the line does subscribe to, and it moves at most
+    // twice in a session's life. It has to: a `Wrap` charges `spacing` on both
+    // sides of a child that drew nothing, so whether there is a mark has to be
+    // known before the children are built rather than by the mark itself.
+    final container = lineContainer();
+    await tester.pumpWidget(line(container));
+    await tester.pumpAndSettle();
+
+    DeliveryStateLine.debugBuildCount = 0;
+    container.read(sessionLauncherProvider).setModel('s1', 'opus');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Opus'), findsOneWidget);
+    expect(DeliveryStateLine.debugBuildCount, 1);
+  });
+
+  testWidgets('a rename reaches neither the line nor the mark', (tester) async {
+    // The CLI store sweep renames rows on a timer, without the user doing
+    // anything at all — the narrowing `sessionModelProvider` was written for.
+    SessionDao(db).updateModel('s1', 'opus');
+    final container = lineContainer();
+    await tester.pumpWidget(line(container));
+    await tester.pumpAndSettle();
+
+    DeliveryStateLine.debugBuildCount = 0;
+    SessionModelMark.debugBuildCount = 0;
+    container
+        .read(sessionsRevisionProvider.notifier)
+        .changed(const SessionChange.renamed('s1'));
+    await tester.pumpAndSettle();
+
+    expect(SessionModelMark.debugBuildCount, 0);
+    expect(DeliveryStateLine.debugBuildCount, 0);
+  });
+
+  testWidgets(
+    'a long model name beside a long branch name survives the matrix',
+    (tester) async {
+      // The two labels in this line whose width nobody can predict, at their
+      // worst and together: a model id this build has never heard of (drawn
+      // raw, because dropping it would leave the line naming a model the
+      // session is not on) beside a branch name of the shape the app's own
+      // worktrees make.
+      SessionDao(
+        db,
+      ).updateModel('s1', 'claude-opus-4-6-20260115-extended-thinking');
+      final container = lineContainer(
+        delivery: const SessionDelivery(
+          branch: 'agent/2026-09-03-delivery-strip-model-fact-long-branch-name',
+          baseBranch: 'origin/main',
+          hasRemote: true,
+          dirtyFiles: 2,
+          aheadOfBase: 3,
+          hasWorktree: true,
+        ),
+      );
+
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => line(container),
+        because:
+            'the model is a second unpredictable label in a line that already '
+            'had one',
+      );
+    },
+  );
+
+  testWidgets('the facts and the actions still hold together at 720', (
+    tester,
+  ) async {
+    // The session bar's two rows, which is where the risk actually is: this
+    // strip's own history is `Commit` stranded up beside the branch name when
+    // facts and actions shared one run. They do not share one now, and a fact
+    // added above them must not put them back together.
+    SessionDao(
+      db,
+    ).updateModel('s1', 'claude-opus-4-6-20260115-extended-thinking');
+    final container = lineContainer(
+      delivery: const SessionDelivery(
+        branch: 'agent/2026-09-03-delivery-strip-model-fact-long-branch-name',
+        baseBranch: 'origin/main',
+        hasRemote: true,
+        dirtyFiles: 2,
+        aheadOfBase: 3,
+        hasWorktree: true,
+      ),
+    );
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  DeliveryStateLine(sessionId: 's1'),
+                  DeliveryStrip(sessionId: 's1', hostedOnTerminal: true),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      because: 'the session bar is a line of facts over a row of controls',
+    );
   });
 }

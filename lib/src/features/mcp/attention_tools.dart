@@ -104,7 +104,7 @@ class AttentionControlTools {
     }
     // Which project it lands under: an explicit id wins, `'none'` files it
     // nowhere, and an omitted argument lets `NotesController.capture` follow
-    // the session's own repository — the rule the v32 backfill used for every
+    // the session's own repository — the rule the v33 backfill used for every
     // note taken before the column existed.
     final repositoryId = sessionId == null
         ? null

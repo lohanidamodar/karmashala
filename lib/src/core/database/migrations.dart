@@ -59,7 +59,9 @@ typedef MigrationStep = void Function(Database db);
 ///   file's *content* rather than to a row of whatever diff was on screen.
 /// * **v31** — workspaces: the level *above* project, so ~31 projects across
 ///   four unrelated contexts can be narrowed to the one being worked in.
-/// * **v32** — todos, and the project a todo or a note is filed under. Both
+/// * **v32** — what a context is *for*, in the user's own words: the one thing
+///   a bare name in a picker cannot carry.
+/// * **v33** — todos, and the project a todo or a note is filed under. Both
 ///   nullable: filed under nothing is an ordinary todo, not an unfinished one.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
@@ -94,6 +96,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   30: _migrateToV30,
   31: _migrateToV31,
   32: _migrateToV32,
+  33: _migrateToV33,
 };
 
 /// Was this pane running when its row was written?
@@ -1342,6 +1345,26 @@ void _migrateToV31(Database db) {
   );
 }
 
+/// What a context is *for*, in the user's own words.
+///
+/// A name is enough to pick a context and not enough to remember one: "Appwrite"
+/// is either the projects that run against the owner's own Appwrite or the ones
+/// that use the SDK, and only the person who made it knows which. One nullable
+/// column carries that sentence to every picker of contexts — the scope bar, the
+/// project's own right-click menu, the palette.
+///
+/// **Nullable, and staying nullable.** Nobody is going to write a sentence
+/// before they are allowed to group two projects, so a context without a
+/// description is complete rather than half-filled-in, and every surface falls
+/// back to something it can say for free (how many projects are in it).
+///
+/// **Additive, like v31.** No table is rewritten and no row is touched: the
+/// live database upgrades with every context intact and every description
+/// empty, which is exactly what it knows.
+void _migrateToV32(Database db) {
+  db.execute('ALTER TABLE workspaces ADD COLUMN description TEXT;');
+}
+
 /// Todos, and the project a todo or a note is filed under.
 ///
 /// **Six columns, and not one of them is a feature.** The ask was for *simple*
@@ -1390,7 +1413,7 @@ void _migrateToV31(Database db) {
 /// overwrite: one `ALTER TABLE` ago that column did not exist. Without it every
 /// real note the owner has would land unfiled on the day the filter shipped,
 /// and the feature would look broken by its own first impression.
-void _migrateToV32(Database db) {
+void _migrateToV33(Database db) {
   db.execute('''
     CREATE TABLE IF NOT EXISTS todos (
       id         TEXT PRIMARY KEY,

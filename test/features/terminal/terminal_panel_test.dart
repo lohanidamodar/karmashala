@@ -276,4 +276,66 @@ void main() {
     );
     expect(find.text('No terminal open'), findsNothing);
   });
+
+  /// The report was "resizing doesn't work as expected", with a wide, short
+  /// pane. The divider fell behind the pointer by the ratio of the window's
+  /// long side to the split's own extent, so it was worst exactly here: at
+  /// 1440x560 a top/bottom divider moved 36 px for every 100 the mouse did,
+  /// and at 720x900 a left/right one moved 164 for every 200.
+  ///
+  /// End-to-end on purpose. `pane_layout_view_test.dart` pins the share the
+  /// divider reports; this pins the only thing the user can see, which is where
+  /// the line ends up.
+  group('a divider follows the pointer', () {
+    Future<double> dragBy(
+      WidgetTester tester,
+      Size window,
+      SplitAxis axis,
+      Offset by,
+    ) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = window;
+      addTearDown(tester.view.reset);
+      final container = panelContainer();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      controller.openTab(TerminalProfile.powerShell);
+      controller.splitPaneWith(axis, TerminalProfile.commandPrompt);
+
+      await pumpPanel(tester, container);
+
+      final before = tester.getCenter(find.byType(PaneDivider));
+      await tester.drag(find.byType(PaneDivider), by);
+      await tester.pump();
+      final after = tester.getCenter(find.byType(PaneDivider));
+      return axis == SplitAxis.horizontal
+          ? after.dx - before.dx
+          : after.dy - before.dy;
+    }
+
+    testWidgets('down, in a wide short window', (tester) async {
+      expect(
+        await dragBy(
+          tester,
+          const Size(1440, 560),
+          SplitAxis.vertical,
+          const Offset(0, 100),
+        ),
+        closeTo(100, 1),
+      );
+    });
+
+    testWidgets('across, in a tall narrow window', (tester) async {
+      expect(
+        await dragBy(
+          tester,
+          const Size(720, 900),
+          SplitAxis.horizontal,
+          const Offset(200, 0),
+        ),
+        closeTo(200, 1),
+      );
+    });
+  });
 }

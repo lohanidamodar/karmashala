@@ -95,7 +95,7 @@ class TodoControlTools {
   ///
   /// An explicit id wins; `'none'` means file it nowhere; and an omitted
   /// argument follows the **calling session's** project, which is the same
-  /// rule `note_add` uses for attribution and the same rule the v32 backfill
+  /// rule `note_add` uses for attribution and the same rule the v33 backfill
   /// used for existing notes. An agent working in a checkout is working in
   /// exactly one project, and making it look that up to say what it already
   /// knows would mostly get todos filed nowhere.

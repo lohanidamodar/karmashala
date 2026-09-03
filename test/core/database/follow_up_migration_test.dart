@@ -17,13 +17,13 @@ Database _migratedTo(int upTo) {
 }
 
 void main() {
-  test('the head is v31 and the keys stay contiguous', () {
+  test('the head is v33 and the keys stay contiguous', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 32);
+    expect(db.schemaVersion, 33);
   });
 
   test('v25 gives a session somewhere to record what it left', () {
