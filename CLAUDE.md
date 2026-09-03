@@ -701,3 +701,106 @@ are selected by `EnvironmentKind` rather than by a platform check, so a macOS or
 Linux build never reaches a spool, a share or an interop spawn. The absence case
 is pinned by tests rather than assumed — see "a machine with no WSL is untouched
 by any of this" in `agent_hook_installation_service_test.dart`.
+---
+
+## 19. System health — measured, on demand, with its age
+
+**Quick open → "Check system health"**, and the same reading appears in
+Settings → Tools. It replaces a panel that read
+
+```dart
+available ? 'Tools available — the MCP bridge is installed.' : ...
+```
+
+where `available` was `File.existsSync`. On 2026-09-03 that sentence was on
+screen for over an hour while every agent session on this machine had lost
+every Karmashala tool — WSL's interop handler had disappeared, so nothing could
+*spawn* the perfectly good file the panel had found. A confident false statement
+costs more than an admission of ignorance; `build_identity.dart`,
+`DeviceCapability` and `AgentStatusReport.evidence` were already written that
+way, and this panel now is too.
+
+### The rules it is built to
+
+| Rule | How it is enforced |
+| --- | --- |
+| Never claim health that was not observed | `HealthLevel.unknown`, ordered above `healthy`, with its own icon and the neutral colour. Before a check runs the panel says nothing has been checked. |
+| Show the age of a reading | `SystemHealthReport.checkedAt`, rendered with `describeAge` — the helper `AgentStatusReport.evidenceAt` exists for. |
+| Probes cost processes; never on a timer | `SystemHealthController.refresh()` runs when the panel opens and when the user asks. Nothing polls. |
+| Say what to do about it | `SystemCheck.remedy` and `remedyCommand`, offered to copy. |
+| One reading, not two | Panel and Settings read one `systemHealthProvider`. `environmentHealthProvider` was deleted for this reason. |
+
+### The MCP bridge is probed, not stat-ed
+
+`McpBridgeProbe` spawns `karmashala_mcp` and completes a real `initialize`
+handshake. Four verdicts, because they need four different responses:
+
+| Verdict | Means | Level |
+| --- | --- | --- |
+| answering | spawned and finished the handshake | healthy |
+| present but unspawnable | the file is there and the OS refused it — 2026-09-03, three times | failed |
+| not found | nothing beside the app to spawn; WSL sessions then fall back to the switch address | warning |
+| spawned but not answering | started, then no reply / not MCP / exited first | failed |
+
+**Measured 2026-09-03 on the owner's machine: 121 ms median** (111-125 ms
+warm, 875 ms for the first spawn of a freshly compiled executable), almost all
+of it process start. The timeout is 5 s, and the panel shows each row's real
+cost beside it so re-running is an informed choice.
+
+`initialize` rather than `tools/list` on purpose. The bridge answers
+`initialize` out of its own code, so the verdict is about the bridge alone;
+whether the **app** will answer it is already reported, without spawning
+anything, by `ControlServerStatus`, which knows *which* hardening step failed.
+The two rows are the whole path and cannot contradict each other.
+
+**The bridge row speaks for this host only.** The app spawns the bridge
+natively; a session inside WSL spawns the same file over WSL interop, which is
+a different mechanism and can be broken while this one is fine. That is what
+the interop row is for, and the bridge row's remedy points at it rather than
+absorbing its explanation.
+
+### WSL interop is one row that explains a class of failures
+
+Interop is a `binfmt_misc` registration inside the distribution handing every
+`MZ` file to `/init`. When it goes, `posix_spawn` of any `.exe` fails with
+`ENOEXEC` — the MCP bridge, `cmd.exe`, any Windows build tool, all at once.
+Checked in plain `sh`; both `WSLInterop` and the newer `WSLInterop-late` count;
+output with no completion marker reads as **unknown**, never as *missing*,
+because a distribution that did not answer is our blind spot and not its fault.
+
+The repair, which is what WSL itself does at start-up and does not survive a
+`wsl --shutdown`:
+
+```bash
+sudo sh -c 'echo ":WSLInterop:M::MZ::/init:PF" > /proc/sys/fs/binfmt_misc/register'
+```
+
+This is the *machine*, not the app — the same distinction §18 draws for
+`live_wsl_hook_test.dart`, and the panel words it that way. §18's measured
+table of what crosses between Windows and WSL is still the reference for the
+transports themselves; nothing here re-derives it.
+
+### What is deliberately not checked, and why
+
+- **A client's MCP connection.** Claude Code binds its servers when it starts
+  and owns those processes. This app can speak for its own bridge and its own
+  endpoint and nothing else. A row claiming otherwise would be the same lie in
+  a new place.
+- **Network reachability.** Nothing here needs the internet, and a probe of
+  someone else's host reports their weather.
+- **A second git/SSH opinion.** Already measured per environment by
+  `EnvironmentHealthService`, in the same panel.
+- **CPU and memory.** No incident has turned on either, and a number with no
+  threshold trains the eye to skip the panel.
+
+### And it does not notify
+
+Health is looked *for*, not pushed. Notifying would need polling, which the
+third rule above forbids for good reason. Worse, the event a user actually
+cares about is their **session** losing its tools, and this app cannot see
+that: the CLI owns its MCP servers. "Your session lost its tools" would be the
+confident false statement this whole change deletes, moved somewhere louder.
+The inbox is per-session by construction as well — `PendingNotification` and
+`InboxItem` both require a `WatchedSession` — so a machine fault has no session
+to file under. Revisit only with something the app *observes* while doing real
+work, never with a poll.
