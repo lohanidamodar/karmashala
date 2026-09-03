@@ -7,13 +7,18 @@ import '../../../app/shell/pane_scaffold.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../../app/widgets/desktop_menu.dart';
 import '../../environments/domain/environment_path.dart';
+import '../../explorer/application/checkout.dart';
+import '../../explorer/application/checkout_picker.dart';
 import '../../git/application/changes_providers.dart';
 import '../../git/domain/git_commit.dart';
 import '../../git/domain/git_worktree.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../repositories/application/repository_providers.dart';
 import '../../repositories/domain/repository.dart';
 import '../../git/presentation/remote_link.dart';
+import '../../git/presentation/worktree_browse.dart';
 import '../../sessions/application/delivery_providers.dart';
 
 /// The browsable `https://` URL for a git remote, or null when there is not one.
@@ -190,21 +195,43 @@ class _RevealButton extends ConsumerWidget {
 
 /// Local Git details for the selected repository: branch, remote, worktrees and
 /// recent commits. Git is authoritative; these read live.
-class _GitDetails extends ConsumerWidget {
+///
+/// Three sections, three widgets. One build used to watch all four providers,
+/// so a `git worktree list` landing repainted the commit log beside it.
+class _GitDetails extends StatelessWidget {
   const _GitDetails();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(theme, 'GIT'),
+        const _BranchAndRemote(),
+        const SizedBox(height: Insets.md),
+        const _Worktrees(),
+        const SizedBox(height: Insets.md),
+        _label(theme, 'RECENT COMMITS'),
+        const _RecentCommits(),
+      ],
+    );
+  }
+}
+
+/// The branch the selected checkout has out, and its remote.
+///
+/// Both describe the **checkout**, not whichever worktree is being read: the
+/// status bar and Quick Open read these too, and browsing a diff must not move
+/// what the bottom of the window says.
+class _BranchAndRemote extends ConsumerWidget {
+  const _BranchAndRemote();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final branch = ref.watch(currentBranchProvider);
     final remote = ref.watch(repoRemoteUrlProvider);
-    final worktrees = ref.watch(repoWorktreesProvider);
-    final commits = ref.watch(recentCommitsProvider);
-    final repoIdForLinks = ref.watch(selectedRepositoryIdProvider);
-    // Commits link to the forge when the remote is known (owner request).
-    final remoteRepo = repoIdForLinks == null
-        ? null
-        : ref.watch(repositoryRemoteProvider(repoIdForLinks));
 
     String textOf(AsyncValue<String?> v, String fallback) => switch (v) {
       AsyncData(:final value) => value ?? fallback,
@@ -218,7 +245,6 @@ class _GitDetails extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label(theme, 'GIT'),
         _kv(
           theme,
           'Branch',
@@ -236,144 +262,424 @@ class _GitDetails extends ConsumerWidget {
           remoteText,
           child: _RemoteValue(remote: remoteText),
         ),
-        const SizedBox(height: Insets.md),
-        _label(theme, 'WORKTREES'),
-        worktrees.when(
-          loading: () => _dim(theme, '…'),
-          error: (_, _) => _dim(theme, 'unavailable'),
-          data: (list) => list.isEmpty
-              ? _dim(theme, 'none')
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final GitWorktree w in list)
-                      _line(
-                        theme,
-                        w.branch ?? '(detached)',
-                        w.path.path,
-                        icon: AppIcons.gitBranch,
-                        // The worktree's own path, environment and all — not
-                        // the repository's environment wearing the worktree's
-                        // text, which is a location nobody promised exists.
-                        action: _RevealButton(dense: true, path: w.path),
-                      ),
-                  ],
-                ),
-        ),
-        const SizedBox(height: Insets.md),
-        _label(theme, 'RECENT COMMITS'),
-        commits.when(
-          loading: () => _dim(theme, '…'),
-          error: (_, _) => _dim(theme, 'unavailable'),
-          data: (list) => list.isEmpty
-              ? _dim(theme, 'none')
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final GitCommit c in list)
-                      _line(
-                        theme,
-                        shortSha(c.sha),
-                        c.subject,
-                        icon: AppIcons.gitDiff,
-                        leadWidget: RemoteLink(
-                          text: shortSha(c.sha),
-                          url: remoteRepo?.commitUrl(c.sha),
-                          style: MonoStyles.small,
-                        ),
-                      ),
-                  ],
-                ),
-        ),
       ],
     );
   }
+}
 
-  static Widget _label(ThemeData theme, String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Text(text, style: theme.textTheme.labelSmall),
-  );
+/// The selected checkout's worktrees — a list, and the thing you steer the
+/// diff with.
+///
+/// **Closed by default once there are more than a few.** The owner had eight in
+/// flight, drawn flat and expanded, and PROJECT and PROJECT ROOT were pushed off
+/// the bottom of a 240px panel. Two or three is not a space problem and opens
+/// itself; more than that is one line until you ask, and then a bounded region
+/// that scrolls inside itself rather than growing without limit.
+class _Worktrees extends ConsumerStatefulWidget {
+  const _Worktrees();
 
-  static Widget _kv(
-    ThemeData theme,
-    String key,
-    String value, {
-    Widget? child,
-    Widget? action,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Row(
+  /// Up to this many, the list is not worth a click.
+  static const openUpTo = 3;
+
+  /// Rows an open list may take before it scrolls inside itself.
+  static const visibleRows = 5;
+
+  @override
+  ConsumerState<_Worktrees> createState() => _WorktreesState();
+}
+
+class _WorktreesState extends ConsumerState<_Worktrees> {
+  /// Null until the user says, so the default can follow the list's length.
+  bool? _open;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final worktrees = ref.watch(repoWorktreesProvider);
+    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final home = ref.watch(selectedCheckoutPathProvider);
+    final viewed = ref.watch(viewedCheckoutProvider);
+    final browsed = ref.watch(browsedWorktreeProvider);
+
+    final list = worktrees.asData?.value ?? const <GitWorktree>[];
+    final open = _open ?? list.length <= _Worktrees.openUpTo;
+
+    Widget row(GitWorktree worktree) => _WorktreeRow(
+      worktree: worktree,
+      repositoryId: repositoryId,
+      home: home,
+      viewed: viewed != null && Checkout(worktree.path) == Checkout(viewed),
+    );
+
+    final body = switch (worktrees) {
+      AsyncData(:final value) when value.isEmpty => _dim(theme, 'none'),
+      AsyncData(:final value) when !open => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Closed, the list still shows the one being read: that is the fact
+          // that would otherwise be invisible from here.
+          for (final worktree in value)
+            if (browsed != null &&
+                Checkout(worktree.path) == Checkout(browsed.path))
+              row(worktree),
+        ],
+      ),
+      AsyncData(:final value) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight:
+              MediaQuery.textScalerOf(context).scale(Chrome.row) *
+              _Worktrees.visibleRows,
+        ),
+        child: ListView.builder(
+          primary: false,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: value.length,
+          itemBuilder: (context, index) => row(value[index]),
+        ),
+      ),
+      AsyncError() => _dim(theme, 'unavailable'),
+      _ => _dim(theme, '…'),
+    };
+
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 64,
-          child: Text(
-            key,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+        _WorktreesHeader(
+          count: list.length,
+          open: open,
+          viewing: browsed?.label,
+          onToggle: list.isEmpty ? null : () => setState(() => _open = !open),
+        ),
+        const WorktreeBrowseNotice(),
+        body,
+      ],
+    );
+  }
+}
+
+/// `WORKTREES · viewing wt-x · 8` — the label, what is being read, and how many
+/// there are, on the one row that opens the list.
+class _WorktreesHeader extends StatelessWidget {
+  const _WorktreesHeader({
+    required this.count,
+    required this.open,
+    required this.viewing,
+    required this.onToggle,
+  });
+
+  final int count;
+  final bool open;
+
+  /// The worktree being read, when it is not the checkout itself.
+  final String? viewing;
+
+  final VoidCallback? onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Tooltip(
+      message: open ? 'Hide the worktrees' : 'Show the worktrees',
+      child: InkWell(
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            children: [
+              Icon(
+                open ? AppIcons.caretDown : AppIcons.caretRight,
+                size: Chrome.iconSmall,
+                color: muted,
+              ),
+              const SizedBox(width: 2),
+              Text('WORKTREES', style: theme.textTheme.labelSmall),
+              Expanded(
+                child: viewing == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(left: Insets.sm),
+                        child: Text(
+                          'viewing $viewing',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+              ),
+              if (count > 0) ...[
+                const SizedBox(width: Insets.xs),
+                Text('$count', style: MonoStyles.small.copyWith(color: muted)),
+              ],
+            ],
           ),
         ),
-        Expanded(
-          child:
-              child ??
-              SelectableText(
-                value,
-                style: MonoStyles.body,
-              ),
-        ),
-        ?action,
-      ],
-    ),
-  );
+      ),
+    );
+  }
+}
 
-  static Widget _line(
-    ThemeData theme,
-    String lead,
-    String rest, {
-    required IconData icon,
-    Widget? action,
-    Widget? leadWidget,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Row(
-      children: [
-        Icon(
-          icon,
-          size: Chrome.iconSmall,
-          color: theme.colorScheme.onSurfaceVariant,
+/// One worktree, and the two verbs it offers.
+///
+/// **Clicking reads it** — the diff, the commit log, nothing else. It writes no
+/// session row and no working directory, so a browse cannot move where an agent
+/// runs or what it resumes from.
+///
+/// **Right-clicking offers the other one**: `CheckoutPicker`, the same call
+/// behind the panel's own picker and the `select_checkout` tool, which points
+/// the Explorer and every scoped panel here and remembers the pick against the
+/// followed session. That one is deliberate, named, and never a side effect of
+/// looking.
+class _WorktreeRow extends ConsumerWidget {
+  const _WorktreeRow({
+    required this.worktree,
+    required this.repositoryId,
+    required this.home,
+    required this.viewed,
+  });
+
+  final GitWorktree worktree;
+  final String? repositoryId;
+
+  /// The selected checkout's own directory, when there is one.
+  final EnvironmentPath? home;
+
+  /// Whether the change surfaces are reading this tree.
+  final bool viewed;
+
+  void _select(BuildContext context, WidgetRef ref) {
+    final projectId = ref.read(selectedProjectIdProvider);
+    // Read on demand rather than watched: this pane has no other use for the
+    // workspace's rows, and subscribing to them would repaint it on a rescan.
+    final rows = projectId == null
+        ? const <Repository>[]
+        : ref.read(repositoryDaoProvider).getByProject(projectId);
+    final match = rows
+        .where((r) => Checkout(r.path) == Checkout(worktree.path))
+        .firstOrNull;
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That worktree is not in this workspace yet — rescan the project '
+            'to add it.',
+          ),
         ),
-        const SizedBox(width: 6),
-        leadWidget ??
+      );
+      return;
+    }
+    ref.read(checkoutPickerProvider).select(match);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final id = repositoryId;
+    final root = home;
+    final isHome = root != null && Checkout(worktree.path) == Checkout(root);
+    final accent = viewed ? theme.colorScheme.primary : null;
+
+    return Tooltip(
+      message:
+          '${worktree.path.path}\n'
+          "Click to read this worktree's changes\n"
+          "Right-click to select it as the session's checkout",
+      child: ContextMenuRegion(
+        menuItems: [
+          DesktopMenuItem<String>(
+            value: 'read',
+            label: 'Read this worktree here',
+            icon: AppIcons.gitDiff,
+            selected: viewed,
+          ),
+          DesktopMenuItem<String>(
+            value: 'select',
+            label: "Select as the session's checkout",
+            icon: AppIcons.bookBookmark,
+          ),
+        ],
+        onSelected: (choice) {
+          if (choice == 'select') {
+            _select(context, ref);
+          } else if (id != null && root != null) {
+            browseWorktree(
+              ref,
+              repositoryId: id,
+              home: root,
+              worktree: worktree,
+            );
+          }
+        },
+        child: InkWell(
+          onTap: id == null || root == null
+              ? null
+              : () => browseWorktree(
+                  ref,
+                  repositoryId: id,
+                  home: root,
+                  worktree: worktree,
+                ),
+          child: _line(
+            theme,
+            worktree.label,
+            isHome ? 'the selected checkout' : worktree.path.path,
+            // Never colour alone: the row being read swaps its glyph too.
+            icon: viewed ? AppIcons.check : AppIcons.gitBranch,
+            iconColor: accent,
+            leadWidget: Text(
+              worktree.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: MonoStyles.small.copyWith(color: accent),
+            ),
+            // The worktree's own path, environment and all — not the
+            // repository's environment wearing the worktree's text, which is a
+            // location nobody promised exists.
+            action: _RevealButton(dense: true, path: worktree.path),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The last eight commits on the tree being read.
+class _RecentCommits extends ConsumerWidget {
+  const _RecentCommits();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final commits = ref.watch(recentCommitsProvider);
+    final repoIdForLinks = ref.watch(selectedRepositoryIdProvider);
+    // Commits link to the forge when the remote is known (owner request).
+    final remoteRepo = repoIdForLinks == null
+        ? null
+        : ref.watch(repositoryRemoteProvider(repoIdForLinks));
+
+    return commits.when(
+      loading: () => _dim(theme, '…'),
+      error: (_, _) => _dim(theme, 'unavailable'),
+      data: (list) => list.isEmpty
+          ? _dim(theme, 'none')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final GitCommit c in list)
+                  _line(
+                    theme,
+                    shortSha(c.sha),
+                    c.subject,
+                    icon: AppIcons.gitDiff,
+                    leadWidget: RemoteLink(
+                      text: shortSha(c.sha),
+                      url: remoteRepo?.commitUrl(c.sha),
+                      style: MonoStyles.small,
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+Widget _label(ThemeData theme, String text) => Padding(
+  padding: const EdgeInsets.only(bottom: 4),
+  child: Text(text, style: theme.textTheme.labelSmall),
+);
+
+Widget _kv(
+  ThemeData theme,
+  String key,
+  String value, {
+  Widget? child,
+  Widget? action,
+}) => Padding(
+  padding: const EdgeInsets.only(bottom: 4),
+  child: Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        width: 64,
+        child: Text(
+          key,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+      Expanded(
+        child:
+            child ??
+            SelectableText(
+              value,
+              style: MonoStyles.body,
+            ),
+      ),
+      ?action,
+    ],
+  ),
+);
+
+Widget _line(
+  ThemeData theme,
+  String lead,
+  String rest, {
+  required IconData icon,
+  Color? iconColor,
+  Widget? action,
+  Widget? leadWidget,
+}) => Padding(
+  padding: const EdgeInsets.only(bottom: 4),
+  child: Row(
+    children: [
+      Icon(
+        icon,
+        size: Chrome.iconSmall,
+        color: iconColor ?? theme.colorScheme.onSurfaceVariant,
+      ),
+      const SizedBox(width: 6),
+      // Flexible, because a worktree branch is as long as an agent's name and
+      // this row is 200px wide: it ellipsises rather than pushing the path off
+      // the edge of the panel.
+      Flexible(
+        child:
+            leadWidget ??
             Text(
               lead,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: MonoStyles.small,
             ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            rest,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-        ?action,
-      ],
-    ),
-  );
-
-  static Widget _dim(ThemeData theme, String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Text(
-      text,
-      style: theme.textTheme.bodySmall?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
-        fontStyle: FontStyle.italic,
       ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          rest,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall,
+        ),
+      ),
+      ?action,
+    ],
+  ),
+);
+
+Widget _dim(ThemeData theme, String text) => Padding(
+  padding: const EdgeInsets.only(bottom: 4),
+  child: Text(
+    text,
+    style: theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+      fontStyle: FontStyle.italic,
     ),
-  );
-}
+  ),
+);
 
 /// The remote, as a link when it names a host a browser can reach and as plain
 /// text when it does not.
