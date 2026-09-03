@@ -170,7 +170,7 @@ class ProjectCard extends StatelessWidget {
             ],
             if (onNewSession != null)
               ExplorerRowAction(
-                tooltip: 'New session in this project',
+                tooltip: 'Start a session here with the default agent',
                 icon: AppIcons.plus,
                 onPressed: onNewSession,
               ),
@@ -299,7 +299,7 @@ class ProjectCard extends StatelessWidget {
           ),
         if (onNewSession != null)
           ExplorerRowAction(
-            tooltip: 'New session in this project',
+            tooltip: 'Start a session here with the default agent',
             icon: AppIcons.plus,
             onPressed: onNewSession,
           ),
