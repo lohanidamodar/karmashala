@@ -65,4 +65,8 @@ ios/fastlane/README.md
 # Loop 27 device-pane decode spike (throwaway, never shipped)
 .spike/
 packages/local_ipc/pubspec.lock
-macos/Vendor/
+# Only the fetched WebDriverAgent blob is ignored, not the whole directory:
+# `copy_wda.sh` is run unconditionally by the Runner's build phase, so
+# ignoring `macos/Vendor/` wholesale made every fresh clone fail the macOS
+# build with `No such file or directory`.
+macos/Vendor/wda/
