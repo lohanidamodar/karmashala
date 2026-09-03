@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/window_matrix.dart';
 import 'verification_harness.dart';
 
 final _t0 = DateTime.utc(2026, 8, 30, 12);
@@ -119,6 +120,25 @@ void main() {
     at: _t0.add(Duration(seconds: ordinal)),
   );
 
+  /// The pane as the shell mounts it, in whichever theme is asked for.
+  Widget pane({
+    required ThemeData theme,
+    VerificationEvidenceReader reader = const _SyncEvidenceReader(),
+  }) => ProviderScope(
+    overrides: [
+      databaseProvider.overrideWithValue(h.db),
+      verificationRootProvider.overrideWithValue(h.root),
+      verificationEvidenceReaderProvider.overrideWithValue(reader),
+      verificationRootReadyProvider.overrideWith((ref) async => h.root),
+      verificationServiceProvider.overrideWithValue(h.service),
+      verificationChangesProvider.overrideWithValue(h.changes),
+    ],
+    child: MaterialApp(
+      theme: theme,
+      home: const Scaffold(body: VerificationPane()),
+    ),
+  );
+
   Future<void> pump(
     WidgetTester tester, {
     VerificationEvidenceReader reader = const _SyncEvidenceReader(),
@@ -133,6 +153,9 @@ void main() {
           // platform channel in a widget test.
           verificationRootReadyProvider.overrideWith((ref) async => h.root),
           verificationServiceProvider.overrideWithValue(h.service),
+          // The same signal the harness's service publishes into, so the pane
+          // follows *that* service rather than watching a stream nothing fires.
+          verificationChangesProvider.overrideWithValue(h.changes),
         ],
         child: MaterialApp(
           theme: AppTheme.light(),
@@ -345,6 +368,71 @@ void main() {
     await tapAndSettle(tester, find.text('unattached'));
 
     expect(find.text('not attached to one'), findsOneWidget);
+  });
+
+  /// **The white panel was the crash, not a colour.**
+  ///
+  /// In a release build a widget that throws while building is replaced by
+  /// Flutter's default `ErrorWidget`, which paints `Color(0xF0C0C0C0)` — near
+  /// white — with its message behind an `assert`. Against the dark theme that
+  /// is exactly what "the verification pane is showing white" was: the pane's
+  /// own `ref.watch(verificationRunsProvider)` was throwing `ProviderException`
+  /// (see `verification_root_ordering_test.dart` for why). Nothing in this
+  /// feature draws an unthemed colour at all.
+  ///
+  /// These pin the other half of that sentence: with the throw gone the pane
+  /// draws real lettering in the dark, and it does so at every window size.
+  group('in the dark', () {
+    Future<void> pumpDark(WidgetTester tester) async {
+      await tester.pumpWidget(pane(theme: AppTheme.dark()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    testWidgets('the empty state is lettering, not a blank rectangle', (
+      tester,
+    ) async {
+      await pumpDark(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Nothing verified yet'), findsOneWidget);
+    });
+
+    testWidgets('a run, its verdict and its evidence all draw', (tester) async {
+      seed(
+        id: 'run-dark',
+        title: 'a run read at night',
+        verdict: VerificationVerdict.fail,
+        reason: 'the button did nothing',
+        sessionId: 's-1',
+        producedBySessionId: 's-2',
+        steps: [step(1, 'Clicked #save', ok: false, detail: 'covered')],
+        files: {'console.txt': '[error] boom'},
+      );
+
+      await pumpDark(tester);
+      await tapAndSettle(tester, find.text('a run read at night'));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('the button did nothing'), findsOneWidget);
+      expect(find.text('FAIL'), findsWidgets);
+      expect(find.text('covered'), findsOneWidget);
+    });
+
+    testWidgets('and the pane survives the window matrix', (tester) async {
+      seed(
+        id: 'run-matrix',
+        title: 'a run at every window size',
+        verdict: VerificationVerdict.pass,
+        steps: [step(1, 'Navigated'), step(2, 'Clicked Save')],
+      );
+
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => pane(theme: AppTheme.dark()),
+        because: "the runs list is the panel's narrowest column",
+      );
+    });
   });
 
   group('formatting', () {

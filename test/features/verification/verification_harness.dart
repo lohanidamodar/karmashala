@@ -141,6 +141,7 @@ class VerificationHarness {
       store,
       browserOf: () => browser.service,
       adbOf: () => adb.service,
+      changes: changes,
       now: now,
       newId: newId ?? _sequentialId,
     );
@@ -152,6 +153,12 @@ class VerificationHarness {
   late final VerificationArtifactStore store;
   late final VerificationService service;
 
+  /// The signal the service publishes into, held here so a widget test can
+  /// override `verificationChangesProvider` with the same one. Without that the
+  /// pane would watch a different signal from the service it is given and stop
+  /// following a run live — which is the whole point of the stream.
+  final changes = VerificationChangeSignal();
+
   final browser = FakeBrowser();
   final adb = FakeAdb();
 
@@ -160,6 +167,7 @@ class VerificationHarness {
 
   Future<void> dispose() async {
     await service.dispose();
+    await changes.dispose();
     db.close();
     if (root.existsSync()) root.deleteSync(recursive: true);
   }
