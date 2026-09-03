@@ -73,6 +73,9 @@ void main() {
             ],
           ),
           recentCommitsProvider.overrideWith((ref) async => const []),
+          // No worktrees, so the header's picker draws nothing and no
+          // `git worktree list` is started for a fixture repository.
+          repoWorktreesProvider.overrideWith((ref) async => const []),
           selectedRepositoryIdProvider.overrideWith(_FixedRepository.new),
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
