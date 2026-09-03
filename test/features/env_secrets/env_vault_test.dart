@@ -165,7 +165,15 @@ void main() {
           'enabled': true,
           'enc': 'none',
           'variables': [
-            {'id': 'bad', 'name': '9NOT VALID', 'value': 'x'},
+            // Readable, but not a valid variable: the name starts with a
+            // digit. Deliberately *decryptable* — a record that will not
+            // decrypt is the lost-key case and has the opposite behaviour
+            // (see local_key_cipher_test.dart).
+            {
+              'id': 'bad',
+              'name': '9NOT VALID',
+              'value': base64.encode(utf8.encode('x')),
+            },
             {
               'id': 'good',
               'name': 'KEEP_ME',

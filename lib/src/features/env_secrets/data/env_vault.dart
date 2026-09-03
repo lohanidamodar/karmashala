@@ -15,6 +15,7 @@ import '../../../core/logging/app_logger.dart';
 import '../../mcp/handshake_file_permissions.dart';
 import '../domain/env_variable.dart';
 import 'env_value_cipher.dart';
+import 'local_key_cipher.dart';
 
 /// Raised when the vault refuses to store something rather than storing it
 /// less well than promised.
@@ -81,6 +82,20 @@ class EnvVault {
 
   EnvVaultData _data = EnvVaultData.empty;
 
+  /// Set when the vault on disk could not be fully understood — unparseable,
+  /// written by a cipher this build does not have, or holding records this
+  /// build's key cannot open.
+  ///
+  /// While it is set, [save] refuses. Without it, a vault whose key was lost
+  /// would load as "no variables", and the very next edit would write that
+  /// emptiness over values that were merely unreadable — turning a recoverable
+  /// problem into a destroyed one.
+  bool _readOnly = false;
+
+  /// Whether the vault is refusing writes because what is on disk could not be
+  /// read. The settings page offers "Try again" rather than an editor.
+  bool get isReadOnly => _readOnly;
+
   /// The last loaded or saved state. Never null; an unreadable vault is
   /// [EnvVaultData.unavailable], not an exception thrown at a caller who only
   /// wanted to open a shell.
@@ -92,12 +107,28 @@ class EnvVault {
   /// The directory the vault lives in, under application support.
   static const String directoryName = 'secrets';
 
-  /// The real vault: `<application support>/secrets/env.json`, hardened.
-  static Future<EnvVault> open({
-    EnvValueCipher cipher = const PlaintextEnvValueCipher(),
-    AppLogger? logger,
-  }) async {
+  /// The real vault: `<application support>/secrets/env.json`, hardened, with
+  /// its values encrypted under a key kept in the local (non-roaming)
+  /// directory.
+  ///
+  /// The cipher is chosen here rather than passed in, because the choice is not
+  /// a preference: it is whichever protection this machine can actually
+  /// provide. If the key cannot be created or read — a read-only cache
+  /// directory, a filesystem with no ACLs — the vault falls back to file
+  /// permissions only and **says so** through [EnvVaultData.protection], which
+  /// the settings page renders. A silent downgrade would be the one thing worse
+  /// than no encryption.
+  static Future<EnvVault> open({AppLogger? logger}) async {
     final support = await getApplicationSupportDirectory();
+    EnvValueCipher cipher;
+    try {
+      cipher = await LocalKeyEnvValueCipher.open(logger: logger);
+    } on Object catch (error) {
+      logger?.warning(
+        'Environment vault will use file permissions only: $error',
+      );
+      cipher = const PlaintextEnvValueCipher();
+    }
     return EnvVault(
       directory: Directory(p.join(support.path, directoryName)),
       cipher: cipher,
@@ -112,6 +143,7 @@ class EnvVault {
   /// Never throws. Every failure becomes an [EnvVaultData] that says what is
   /// wrong and injects nothing.
   Future<EnvVaultData> load() async {
+    _readOnly = false;
     if (_directory == null) return _data = EnvVaultData.empty;
     var canStoreSecrets = false;
     try {
@@ -148,6 +180,7 @@ class EnvVault {
       json = decoded;
     } on Object catch (error) {
       _logger?.warning('Environment vault could not be parsed: $error');
+      _readOnly = true;
       return _data = EnvVaultData.unavailable(
         'The environment variables file could not be read, so none are being '
         'loaded. Nothing has been overwritten.',
@@ -164,6 +197,7 @@ class EnvVault {
         'Environment vault was written with cipher "$storedCipher"; this build '
         'has "${_cipher.id}".',
       );
+      _readOnly = true;
       return _data = EnvVaultData.unavailable(
         'These environment variables were saved by a different version of '
         'Karmashala and cannot be read by this one. Nothing has been changed.',
@@ -174,6 +208,11 @@ class EnvVault {
     final rows = json['variables'];
     final variables = <EnvVariable>[];
     var skipped = 0;
+    // Counted apart from [skipped] because the two mean opposite things. A
+    // malformed record is one bad row to drop; a record that will not decrypt
+    // means the *key* is gone, every value is still there on disk, and the one
+    // thing that must not happen is writing over them.
+    var undecryptable = 0;
     if (rows is List) {
       for (final row in rows) {
         if (row is! Map<String, dynamic>) {
@@ -181,10 +220,16 @@ class EnvVault {
           continue;
         }
         final stored = row['value'];
-        final value = stored is String ? await _cipher.unwrap(stored) : null;
-        final variable = value == null
-            ? null
-            : EnvVariable.fromJson(row, value);
+        if (stored is! String) {
+          skipped++;
+          continue;
+        }
+        final value = await _cipher.unwrap(stored);
+        if (value == null) {
+          undecryptable++;
+          continue;
+        }
+        final variable = EnvVariable.fromJson(row, value);
         if (variable == null) {
           skipped++;
           continue;
@@ -196,6 +241,20 @@ class EnvVault {
       // The count, never the rows: a malformed row's own contents are exactly
       // what must not reach a log line.
       _logger?.warning('Environment vault: $skipped record(s) ignored.');
+    }
+    if (undecryptable > 0) {
+      _logger?.warning(
+        'Environment vault: $undecryptable record(s) could not be decrypted; '
+        'refusing to overwrite them.',
+      );
+      _readOnly = true;
+      return _data = EnvVaultData.unavailable(
+        '$undecryptable saved environment ${undecryptable == 1 ? 'variable' : 'variables'} '
+        'could not be decrypted — the key that protects them is missing or has '
+        'changed. They are still on disk and Karmashala will not overwrite '
+        'them, but it cannot recover them either: remove and re-enter them.',
+        canStoreSecrets: canStoreSecrets,
+      );
     }
     _logger?.info(
       'Environment vault loaded ${variables.length} variable(s) '
@@ -225,6 +284,12 @@ class EnvVault {
     if (_directory == null) {
       throw const EnvVaultRefusal(
         'There is nowhere to save environment variables in this session.',
+      );
+    }
+    if (_readOnly) {
+      throw const EnvVaultRefusal(
+        'The saved environment variables could not be read, so Karmashala will '
+        'not write over them.',
       );
     }
     if (!_data.canStoreSecrets && next.variables.any((v) => v.secret)) {
