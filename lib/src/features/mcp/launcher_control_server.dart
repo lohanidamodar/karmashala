@@ -343,7 +343,10 @@ class LauncherControlServer implements SessionMcp {
   /// simply not be beside the app. When it is missing the answer is the switch
   /// URL — today's behaviour, which works on a machine whose switch is open and
   /// is honestly reported as broken on one whose switch is not.
-  Map<String, Object?>? _serverEntryFor(EnvironmentKind environment, String? url) {
+  Map<String, Object?>? _serverEntryFor(
+    EnvironmentKind environment,
+    String? url,
+  ) {
     if (environment == EnvironmentKind.wsl) {
       final bridge = _bridgeExecutable()?.path;
       // Spelled the way the agent names it. `null` here is a UNC install
@@ -364,9 +367,8 @@ class LauncherControlServer implements SessionMcp {
     return switch (environment) {
       EnvironmentKind.windowsNative ||
       EnvironmentKind.localPosix => '127.0.0.1:${server.port}',
-      EnvironmentKind.wsl => _wslHost == null
-          ? null
-          : '${_wslHost!.address}:${server.port}',
+      EnvironmentKind.wsl =>
+        _wslHost == null ? null : '${_wslHost!.address}:${server.port}',
       EnvironmentKind.ssh => null,
     };
   }
@@ -440,8 +442,7 @@ class LauncherControlServer implements SessionMcp {
     bool useLocalSocket = true,
     String? socketDirectory,
     String? sessionConfigDirectory,
-    Future<InternetAddress?> Function() wslHostAddress =
-        resolveWslHostAddress,
+    Future<InternetAddress?> Function() wslHostAddress = resolveWslHostAddress,
     bool? hostCanHaveWsl,
     int preferredPort = preferredControlPort,
     Duration retryWslEvery = wslRetryInterval,
@@ -603,10 +604,11 @@ class LauncherControlServer implements SessionMcp {
       return await HttpServer.bind(InternetAddress.loopbackIPv4, preferred);
     } on SocketException catch (error) {
       _logger.info(
-        'Port $preferred is taken, so this run uses an ephemeral '
-        'one. Agents inside WSL will not be able to reach this server: the '
-        'Hyper-V firewall rule the installer wrote names that one port. '
-        '($error)',
+        controlPortFallbackMessage(
+          preferred,
+          error,
+          hostIsWindows: Platform.isWindows,
+        ),
       );
       return HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     }
@@ -1808,7 +1810,7 @@ class LauncherControlServer implements SessionMcp {
       'Unknown permissionMode "$raw" for $agentId. One of: '
       '${PermissionRisk.values.map((m) => m.name).join(', ')}'
       '${support != null && support.isKnown ? ', or one of '
-          '${support.selections().map((s) => s.canonical).join(', ')}' : ''}.',
+                '${support.selections().map((s) => s.canonical).join(', ')}' : ''}.',
     );
   }
 
@@ -2352,3 +2354,26 @@ class _HardeningFailure implements Exception {
   @override
   String toString() => detail;
 }
+
+/// What to log when the fixed control port is taken and an ephemeral one is
+/// used instead.
+///
+/// Falling back is not a failure — everything works on any port. What is lost
+/// is reachability from inside WSL, because the fixed port exists so the
+/// Hyper-V firewall rule the installer writes can name it.
+///
+/// That consequence is Windows-only, and [hostIsWindows] is why this is a
+/// function rather than a string: a WSL environment is only ever created when
+/// the host is Windows, so on a Mac the sentence pointed its owner at
+/// machinery that cannot exist there. Found while converting the "run this on
+/// a Mac" backlog items.
+String controlPortFallbackMessage(
+  int port,
+  Object error, {
+  required bool hostIsWindows,
+}) =>
+    'Port $port is taken, so this run uses an ephemeral one.'
+    '${hostIsWindows ? ' Agents inside WSL will not be able to reach this '
+              'server: the Hyper-V firewall rule the installer wrote names that '
+              'one port.' : ''}'
+    ' ($error)';
