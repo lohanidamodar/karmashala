@@ -19,6 +19,7 @@ import '../domain/android_device.dart';
 import '../domain/ios_simulator.dart';
 import '../domain/device_input.dart';
 import 'android_slimming_dialog.dart';
+import 'device_files_dialog.dart';
 import 'device_section_header.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
@@ -1707,6 +1708,16 @@ class _DeviceList extends ConsumerWidget {
                     key: Key('preview-${device.serial}'),
                     label: 'Live preview',
                     onPressed: () => onPreview(device),
+                  ),
+                // Reading the device's storage, and moving files either way.
+                // Its own dialog because it is a browse rather than a verb —
+                // see `DeviceFilesDialog`, which asks the driver what roots it
+                // can reach rather than starting at `/`.
+                if (device.isReady)
+                  _RowAction(
+                    key: Key('files-${device.serial}'),
+                    label: 'Files',
+                    onPressed: () => DeviceFilesDialog.show(context, device),
                   ),
                 // Only emulators: `emu kill` talks to the emulator console, so
                 // on a phone it could only ever fail.

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import '../../../core/logging/app_logger.dart';
 import '../domain/device_driver.dart';
+import '../domain/device_files.dart';
 import '../domain/device_input.dart';
 import '../domain/device_target.dart';
 import '../domain/simulator_backend.dart';
@@ -72,6 +73,13 @@ class SimulatorDeviceDriver implements DeviceDriver {
   @override
   String? missingReason(DeviceCapability capability) {
     if (can(capability)) return null;
+    // Files are missing for a different reason from everything else, and one
+    // that no backend would fix — fetching WebDriverAgent does not give this
+    // app a usbmuxd client. Answering the WDA sentence here would send someone
+    // to run `fetch_wda.sh` for a capability it cannot supply.
+    if (capability == DeviceCapability.files) {
+      return kIosFileAccessUnsupported;
+    }
     // The only way to be missing something here is to have no backend, and the
     // message says what remains rather than "unsupported" — an agent that reads
     // "unsupported" concludes iOS is a dead end, when in fact it can still
@@ -388,4 +396,45 @@ class SimulatorDeviceDriver implements DeviceDriver {
     return 'Shut down, not erased — its apps and data are still there for the '
         'next boot. device_boot brings it back.';
   }
+
+  // ---------------------------------------------------------------------------
+  // Files — declared unsupported, and every one of these says so.
+  //
+  // Not stubbed out with an empty list anywhere: an empty root list and an
+  // empty directory both read as "this device has no files on it", which is a
+  // confident false statement, and the whole point of [DeviceCapability] is to
+  // make the difference sayable. `kIosFileAccessUnsupported` carries the reason
+  // *and* what a later implementation would do — a simulator is a directory on
+  // this Mac, a real iPhone needs a usbmuxd client — so the next person picking
+  // this up is not guessing. It is written once and shared with the pane's
+  // disabled control, so the two cannot drift.
+  // ---------------------------------------------------------------------------
+
+  Never _noFiles() => throw const DeviceRefusal(kIosFileAccessUnsupported);
+
+  @override
+  Future<List<DeviceFileRoot>> fileRoots() async => _noFiles();
+
+  @override
+  Future<DeviceDirectoryListing> listDirectory(String path) async => _noFiles();
+
+  @override
+  Future<DeviceFileEntry?> stat(String path) async => _noFiles();
+
+  @override
+  Future<DeviceFileTransfer> pullFile({
+    required String devicePath,
+    required String hostPath,
+  }) async => _noFiles();
+
+  @override
+  Future<DeviceFileTransfer> pushFile({
+    required String hostPath,
+    required String devicePath,
+    bool overwrite = false,
+  }) async => _noFiles();
+
+  @override
+  Future<void> deletePath(String path, {bool recursive = false}) async =>
+      _noFiles();
 }

@@ -1,7 +1,9 @@
 import '../domain/device_driver.dart';
+import '../domain/device_files.dart';
 import '../domain/device_input.dart';
 import '../domain/device_target.dart';
 import '../domain/logcat_entry.dart';
+import 'adb_file_parsing.dart';
 import 'adb_service.dart';
 
 /// [DeviceDriver] over adb, for a phone or an emulator.
@@ -42,6 +44,7 @@ class AdbDeviceDriver implements DeviceDriver {
     DeviceCapability.logs,
     DeviceCapability.installApp,
     DeviceCapability.appLifecycle,
+    DeviceCapability.files,
     if (target.device.isEmulator) DeviceCapability.powerOff,
   };
 
@@ -197,6 +200,162 @@ class AdbDeviceDriver implements DeviceDriver {
   @override
   Future<void> terminateApp(String appId) =>
       adb.forceStopPackage(_serial, appId);
+
+  // ---------------------------------------------------------------------------
+  // Files
+  // ---------------------------------------------------------------------------
+
+  /// Three places, and the list is short on purpose.
+  ///
+  /// It would be easy to offer a dozen — Download, DCIM, Movies — but those are
+  /// *inside* `/sdcard` and a browser can walk to them in one click. What earns
+  /// a row here is a place you cannot reach from another one, or a place whose
+  /// rules differ:
+  ///
+  /// * **`/sdcard`** is where a person's own files are, and the only root that
+  ///   is both readable and writable on an ordinary device.
+  /// * **`/data/local/tmp`** is the shell user's own scratch space. It is the
+  ///   one writable spot outside shared storage on a device with scoped
+  ///   storage, which is why this app already stages screenshots and the scrcpy
+  ///   server there.
+  /// * **`/`** is offered read-only and honestly labelled. Most of it is
+  ///   readable — `/system`, `/proc`, `/vendor` — and a developer chasing a
+  ///   path from a stack trace needs it. `/data` underneath it is not, and says
+  ///   so when opened rather than appearing empty.
+  ///
+  /// An app's own directory is deliberately **not** a root: reaching it needs
+  /// `run-as <package>` against a debuggable build, and this driver does not do
+  /// that. Half-supporting it — offering the path and failing on most devices —
+  /// would be worse than the refusal, which at least names the missing piece.
+  @override
+  Future<List<DeviceFileRoot>> fileRoots() async => const [
+    DeviceFileRoot(
+      path: '/sdcard',
+      label: 'Shared storage',
+      description:
+          'Photos, Downloads, and anything an app wrote where you can see it. '
+          'Readable and writable.',
+      writable: true,
+    ),
+    DeviceFileRoot(
+      path: '/data/local/tmp',
+      label: 'Shell scratch space',
+      description:
+          'The shell user\'s own directory. Writable on every Android version, '
+          'and where a file goes when nowhere else will take it.',
+      writable: true,
+    ),
+    DeviceFileRoot(
+      path: '/',
+      label: 'Whole filesystem (read-only)',
+      description:
+          'System partitions, /proc and /vendor. Most of /data needs root and '
+          'says so when you open it — an app\'s own directory needs '
+          '`run-as`, which this build does not do.',
+      writable: false,
+    ),
+  ];
+
+  @override
+  Future<DeviceDirectoryListing> listDirectory(String path) =>
+      adb.listDirectory(_serial, path);
+
+  @override
+  Future<DeviceFileEntry?> stat(String path) => adb.statPath(_serial, path);
+
+  @override
+  Future<DeviceFileTransfer> pullFile({
+    required String devicePath,
+    required String hostPath,
+  }) async {
+    // Asked first so a directory is refused by name. `adb pull` of a directory
+    // *works* — it copies the tree — and this surface offers one file at a
+    // time, so silently pulling a hundred files because the user's click landed
+    // on a folder is not a favour.
+    final entry = await adb.statPath(_serial, devicePath);
+    if (entry == null) {
+      throw DeviceRefusal('There is nothing at $devicePath on $_serial.');
+    }
+    if (entry.isDirectory) {
+      throw DeviceRefusal(
+        '$devicePath is a directory. This copies one file at a time — open it '
+        'and pick a file, or use `adb pull` yourself for the whole tree.',
+      );
+    }
+    return adb.pullFile(
+      _serial,
+      devicePath: devicePath,
+      hostPath: hostPath,
+    );
+  }
+
+  @override
+  Future<DeviceFileTransfer> pushFile({
+    required String hostPath,
+    required String devicePath,
+    bool overwrite = false,
+  }) async {
+    final existing = await adb.statPath(_serial, devicePath);
+    var destination = devicePath;
+    String? note;
+    if (existing != null && existing.isDirectory) {
+      // `adb push file dir` already does this, and doing it here as well is
+      // what lets the overwrite check below see the *real* destination. Without
+      // it, pushing into a folder that already holds a file of that name
+      // replaced it while reporting nothing.
+      destination = devicePathJoin(devicePath, _hostBasename(hostPath));
+      note =
+          '$devicePath is a directory, so it went in as '
+          '${devicePathBasename(destination)}.';
+      final inside = await adb.statPath(_serial, destination);
+      if (inside != null && !overwrite) {
+        throw DeviceRefusal(_overwriteRefusal(destination, inside));
+      }
+    } else if (existing != null && !overwrite) {
+      throw DeviceRefusal(_overwriteRefusal(destination, existing));
+    }
+    final moved = await adb.pushFile(
+      _serial,
+      hostPath: hostPath,
+      devicePath: destination,
+    );
+    return DeviceFileTransfer(
+      devicePath: moved.devicePath,
+      hostPath: moved.hostPath,
+      bytes: moved.bytes,
+      note: note,
+    );
+  }
+
+  @override
+  Future<void> deletePath(String path, {bool recursive = false}) async {
+    final entry = await adb.statPath(_serial, path);
+    if (entry == null) {
+      throw DeviceRefusal('There is nothing at $path on $_serial to delete.');
+    }
+    if (entry.isDirectory && !recursive) {
+      throw DeviceRefusal(
+        '$path is a directory. Deleting one takes everything inside it and '
+        'there is no undo, so it has to be asked for explicitly.',
+      );
+    }
+    await adb.removePath(_serial, path, recursive: recursive);
+  }
+
+  String _overwriteRefusal(String path, DeviceFileEntry existing) =>
+      '$path already exists on $_serial'
+      '${existing.sizeBytes == null ? '' : ' (${existing.sizeBytes} bytes'
+            '${existing.modifiedLabel == null ? '' : ', '
+                  '${existing.modifiedLabel}'})'}. '
+      'Nothing was copied. Ask again with overwrite to replace it — there is '
+      'no undo on the device.';
+
+  /// The last segment of a **host** path, either separator, because this app
+  /// runs on Windows and the file the user picked came from a Windows dialog.
+  static String _hostBasename(String path) {
+    final cut = path.lastIndexOf(RegExp(r'[/\\]'));
+    return cut < 0 ? path : path.substring(cut + 1);
+  }
 
   @override
   Future<String> powerOff() async {
