@@ -275,15 +275,28 @@ class TerminalLayoutDao {
             : jsonEncode(pane.agentLaunch!.toJson());
         final wasLive = intFromBool(pane.wasLive);
         final storedPane = storedPanes[pane.id];
-        if (storedPane == null ||
+        // The scrollback column is asked about **separately** from the other
+        // eight, because it is the only expensive one: a pane holds up to
+        // [kDurableScrollbackMaxBytes] of SGR-dense text and the rest of the
+        // row is ids, ordinals and a title. Writing them together meant any
+        // one of them moving rewrote the text as well — and the very first
+        // structural save of every run does exactly that, because a pane that
+        // was running when the app closed comes back **restored**, so
+        // `was_live` flips 1 -> 0 for every one of them at once. Measured on
+        // four restored agent panes at the durable cap: 1 MB of scrollback
+        // rewritten to record four booleans.
+        final scrollbackChanged =
+            storedPane == null || _scrollbackChanged(pane);
+        final metadataChanged =
+            storedPane == null ||
             storedPane['tab_id'] != tab.id ||
             storedPane['ordinal'] != j ||
             storedPane['profile_id'] != pane.profileId ||
             storedPane['title'] != pane.title ||
             storedPane['working_directory'] != pane.workingDirectory ||
             storedPane['launch_command'] != launch ||
-            storedPane['was_live'] != wasLive ||
-            _scrollbackChanged(pane)) {
+            storedPane['was_live'] != wasLive;
+        if (scrollbackChanged) {
           _db.execute(
             'INSERT INTO terminal_panes (id, tab_id, ordinal, profile_id, '
             'title, working_directory, scrollback, launch_command, was_live, '
@@ -312,7 +325,30 @@ class TerminalLayoutDao {
           );
           written[pane.id] = pane.scrollback;
         } else {
-          // Skipped because the record already matches, so it carries over.
+          // The store already holds this pane's text, so only the cheap
+          // columns are written and the text column is left exactly as it is.
+          // The row certainly exists — [_scrollbackChanged] answers "changed"
+          // for a pane this dao has no record of — so an UPDATE is enough.
+          if (metadataChanged) {
+            _db.execute(
+              'UPDATE terminal_panes SET tab_id = ?, ordinal = ?, '
+              'profile_id = ?, title = ?, working_directory = ?, '
+              'launch_command = ?, was_live = ?, updated_at = ? WHERE id = ?;',
+              [
+                tab.id,
+                j,
+                pane.profileId,
+                pane.title,
+                pane.workingDirectory,
+                launch,
+                wasLive,
+                now,
+                pane.id,
+              ],
+            );
+          }
+          // Nothing was written to the text column either way, so the record
+          // carries over.
           written[pane.id] = _writtenScrollback[pane.id]!;
         }
       }

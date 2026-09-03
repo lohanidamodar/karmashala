@@ -40,6 +40,7 @@ void main() {
     String tabId,
     String paneId, {
     String scrollback = 'some output',
+    bool wasLive = false,
   }) => StoredTerminalPane(
     id: paneId,
     tabId: tabId,
@@ -47,14 +48,15 @@ void main() {
     title: 'PowerShell',
     workingDirectory: r'C:\ws',
     scrollback: scrollback,
+    wasLive: wasLive,
   );
 
   /// A one-pane tab, the ordinary shape of a restored layout.
-  StoredTerminalTab tab(String id) => StoredTerminalTab(
+  StoredTerminalTab tab(String id, {bool wasLive = false}) => StoredTerminalTab(
     id: id,
     layout: PaneLayout.single('$id-p1'),
     focusedPaneId: '$id-p1',
-    panes: [pane(id, '$id-p1')],
+    panes: [pane(id, '$id-p1', wasLive: wasLive)],
   );
 
   /// The same tab after a split — one more pane, one changed layout. This is
@@ -118,6 +120,80 @@ void main() {
         hasLength(1),
         reason: 'row writes must not grow with the layout: $rowsWritten',
       );
+    });
+  });
+
+  group('the scrollback column', () {
+    test('is left alone when only the cheap columns moved', () {
+      // The first structural save of **every** run is this shape. A pane that
+      // was running when the app closed comes back restored, so `was_live`
+      // flips 1 -> 0 for every one of them at once — and the whole row used to
+      // be rewritten to record it, carrying up to
+      // `kDurableScrollbackMaxBytes` of text per pane. Measured on four
+      // restored agent panes at the durable cap: 1 MB written for four
+      // booleans, ~2.8 ms of the ~10 ms a Start press cost.
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      final dao = TerminalLayoutDao(db);
+      dao.saveLayout([
+        tab('t0', wasLive: true),
+        tab('t1', wasLive: true),
+      ], activeTabId: 't0');
+      db.reset();
+
+      dao.saveLayout([tab('t0'), tab('t1')], activeTabId: 't0');
+
+      expect(
+        db.layoutWrites,
+        2,
+        reason: 'one statement per pane whose was_live moved, and no more',
+      );
+      expect(
+        db.scrollbackWrites,
+        0,
+        reason:
+            'nothing about the text changed, so the expensive column must not '
+            'be part of the statement that records a boolean',
+      );
+      // The record is still correct in both directions.
+      final loaded = dao.loadLayout();
+      expect(loaded.tabs.map((t) => t.panes.single.wasLive), [false, false]);
+      expect(
+        loaded.tabs.map((t) => t.panes.single.scrollback),
+        ['some output', 'some output'],
+      );
+    });
+
+    test('is written when the text itself moved, metadata or not', () {
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      final dao = TerminalLayoutDao(db);
+      dao.saveLayout([tab('t0', wasLive: true)], activeTabId: 't0');
+      db.reset();
+
+      dao.saveLayout([
+        StoredTerminalTab(
+          id: 't0',
+          layout: PaneLayout.single('t0-p1'),
+          focusedPaneId: 't0-p1',
+          panes: [pane('t0', 't0-p1', scrollback: 'more output')],
+        ),
+      ], activeTabId: 't0');
+
+      expect(db.scrollbackWrites, 1);
+      expect(dao.loadLayout().tabs.single.panes.single.scrollback, 'more output');
+      expect(dao.loadLayout().tabs.single.panes.single.wasLive, isFalse);
+    });
+
+    test('a pane the store has never seen is written in full', () {
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      final dao = TerminalLayoutDao(db);
+
+      dao.saveLayout([tab('t0')], activeTabId: 't0');
+
+      expect(db.scrollbackWrites, 1);
+      expect(dao.loadLayout().tabs.single.panes.single.scrollback, 'some output');
     });
   });
 
@@ -535,6 +611,44 @@ void main() {
       );
     });
 
+    test('the first save of a run rewrites no pane it merely read back', () {
+      // The shape of the report, end to end. Every pane that was running when
+      // the app closed comes back **restored**, so the first structural save
+      // of the run has `was_live` moving on all of them at once — and that
+      // save used to carry every pane's whole scrollback with it.
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      TerminalLayoutDao(db).saveLayout([
+        for (var i = 0; i < 20; i++) tab('t$i', wasLive: true),
+      ], activeTabId: 't0');
+
+      final container = fakeTerminalContainer(
+        database: db,
+        // So every pane comes back dormant, including the active tab's:
+        // what is being counted here is the metadata flip, not the restart.
+        restoreLivePanes: false,
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      db.reset();
+
+      controller.persistStructure();
+
+      expect(
+        db.layoutWrites,
+        20,
+        reason: 'one statement per pane that stopped being live',
+      );
+      expect(
+        db.scrollbackWrites,
+        0,
+        reason:
+            'not one of these panes has output the store has not already got',
+      );
+    });
+
     test('closing a tab writes only the delete it is', () {
       final (:db, :controller, :container) = restored(20);
       final tabs = container.read(terminalSessionsControllerProvider).tabs;
@@ -574,6 +688,13 @@ class _CountingDatabase extends AppDatabase {
             !sql.contains('_backup') &&
             (sql.contains('terminal_tabs') || sql.contains('terminal_panes')),
       )
+      .length;
+
+  /// Writes that carry a pane's scrollback text. The expensive column, and the
+  /// one a structural save is meant to touch only when the text moved — a
+  /// statement that does not name it cannot have written it.
+  int get scrollbackWrites => statements
+      .where((sql) => !sql.contains('_backup') && sql.contains('scrollback'))
       .length;
 
   /// Writes against the backup mirrors, plus the metadata stamp that goes with
