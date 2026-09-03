@@ -3,7 +3,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/presentation/model_picker.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/presentation/agents_pages.dart';
+import 'package:karmashala/src/features/settings/presentation/default_model_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

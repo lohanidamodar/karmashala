@@ -11,7 +11,7 @@ import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
 import 'package:karmashala/src/features/agents/domain/claude_account.dart';
 import 'package:karmashala/src/features/agents/domain/claude_auth_snapshot.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/settings/presentation/agents_pages.dart';
+import 'package:karmashala/src/features/settings/presentation/claude_accounts_section.dart';
 
 import '../../support/fixtures.dart';
 

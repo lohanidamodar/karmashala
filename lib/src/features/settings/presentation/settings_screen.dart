@@ -13,6 +13,7 @@ import '../../ssh/presentation/ssh_hosts_section.dart';
 import 'agents_pages.dart';
 import 'diagnostics_page.dart';
 import 'general_pages.dart';
+import 'permissions_page.dart';
 import 'settings_nav.dart';
 import 'terminal_pages.dart';
 import 'tools_page.dart';

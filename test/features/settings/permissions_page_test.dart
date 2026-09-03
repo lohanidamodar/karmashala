@@ -1,6 +1,6 @@
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
-import 'package:karmashala/src/features/settings/presentation/agents_pages.dart';
+import 'package:karmashala/src/features/settings/presentation/permissions_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
