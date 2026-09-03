@@ -36,12 +36,40 @@ import 'explorer_sections_view.dart';
 import 'session_rows.dart';
 import 'session_selection_bar.dart';
 import '../../workspaces/application/workspaces_controller.dart';
+import '../../workspaces/domain/workspace.dart';
+import '../../workspaces/presentation/new_context_dialog.dart';
 import '../../workspaces/presentation/workspace_scope_bar.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
+
+/// The prefix a "put this project in a context" menu value carries, so one
+/// `startsWith` tells them from the row's other verbs — the shape `new-with:`
+/// already uses for agents.
+const _contextAction = 'context:';
+
+/// The two choices in that list that are not a context id. Neither can collide
+/// with one: an id is generated, and these are spelled without the prefix.
+const _noContext = 'none';
+const _newContext = 'new';
+
+/// What a project row's menu needs, read once by [ExplorerPanel]'s build.
+///
+/// Project menus are built **eagerly**, one per row, so anything resolved
+/// inside the row loop is resolved once per project. That is not hypothetical:
+/// `_agentMenuItems` asked the database which agents were installed *per row*,
+/// so drawing 31 projects issued 31 identical queries on every rebuild of a
+/// pane that rebuilds whenever a session moves. [installations] is that answer,
+/// memoised per environment — two queries on the owner's machine, not
+/// thirty-one — and the contexts beside it are one in-memory list and one pass
+/// over the project rows already in memory.
+typedef _RowMenuFacts = ({
+  List<Workspace> workspaces,
+  Map<String, int> counts,
+  Map<String, List<AgentInstallation>> installations,
+});
 
 /// The unified left pane: **Project → Session**, and deliberately nothing else.
 ///
@@ -325,6 +353,22 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               )
               .toList();
 
+    // Everything the project rows' menus need, resolved once for the whole
+    // list rather than once per row — see [_RowMenuFacts].
+    final agentDao = ref.read(agentInstallationDaoProvider);
+    final installations = <String, List<AgentInstallation>>{};
+    for (final project in projects) {
+      installations.putIfAbsent(
+        project.root.environmentId,
+        () => agentDao.getByEnvironment(project.root.environmentId),
+      );
+    }
+    final menuFacts = (
+      workspaces: ref.watch(workspacesControllerProvider),
+      counts: ref.watch(workspaceProjectCountsProvider),
+      installations: installations,
+    );
+
     final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final syncing = ref.watch(sessionSyncingProvider) > 0;
     // Only whether the mode is on, never the ticked set: this panel builds
@@ -361,7 +405,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           // sitting above the two results it found is the answer to a question
           // nobody asked.
           if (query.isEmpty) ...explorerSectionNodes(ref),
-          for (final project in projects) ..._projectNodes(project),
+          for (final project in projects) ..._projectNodes(project, menuFacts),
         ],
       );
     }
@@ -451,7 +495,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   // --- rows ------------------------------------------------------------------
 
   /// The rows for one project: its card, then (when expanded) its tree.
-  List<Widget> _projectNodes(Project project) {
+  ///
+  /// [contexts] is read once by [build] rather than per row — see there.
+  List<Widget> _projectNodes(Project project, _RowMenuFacts menu) {
     final selectedProjectId = ref.watch(selectedProjectIdProvider);
     final pinned = ref.watch(
       settingsControllerProvider.select((s) => s.isPinned(project.id)),
@@ -482,7 +528,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             label: 'New session…',
             icon: AppIcons.chatCircleDots,
           ),
-          ..._agentMenuItems(project.root.environmentId),
+          ..._agentMenuItems(menu.installations[project.root.environmentId]),
           DesktopMenuItem(
             value: 'copy-cmd',
             label: 'Copy new-session command',
@@ -500,6 +546,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             icon: AppIcons.folderOpen,
           ),
           ..._pathMenuItems(project.root),
+          ..._contextMenuItems(project, menu),
           const DesktopMenuDivider(),
           DesktopMenuItem(
             value: 'pin',
@@ -539,6 +586,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             } else {
               _startSession(repository: repo, installation: installation);
             }
+            return;
+          }
+          if (action.startsWith(_contextAction)) {
+            _applyContextAction(project, action);
             return;
           }
           switch (action) {
@@ -686,17 +737,100 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       ),
   ];
 
+  // --- contexts ---------------------------------------------------------------
+
+  /// Which context this project is in, offered as the list of contexts it could
+  /// be in instead.
+  ///
+  /// **Moving is one gesture, not two.** Every choice — including *No context* —
+  /// is a row in the same list, so changing a project's context is one click on
+  /// the answer rather than "remove from this one" followed by "add to that
+  /// one". [WorkspacesController.assign] is a single `UPDATE`, so there is no
+  /// moment in between where the project belongs nowhere.
+  ///
+  /// **Leaving a context never leaves the workspace.** *No context* unassigns
+  /// and stops; the row above it, "Remove from workspace", is the destructive
+  /// one and stays where it is, in the destructive block, drawn in the error
+  /// colour. Two verbs that sound alike are kept apart by what they say and by
+  /// where they sit.
+  List<PopupMenuEntry<String>> _contextMenuItems(
+    Project project,
+    _RowMenuFacts menu,
+  ) => [
+    const DesktopMenuDivider(),
+    for (final workspace in menu.workspaces)
+      DesktopMenuDetailItem(
+        value: '$_contextAction${workspace.id}',
+        label: workspace.name,
+        // What the context is for, or how big it is — the line that tells two
+        // similarly named contexts apart at the moment of choosing.
+        detail: describeWorkspace(
+          workspace,
+          projectCount: menu.counts[workspace.id] ?? 0,
+        ),
+        detailMaxLines: 1,
+        icon: AppIcons.folder,
+        selected: project.workspaceId == workspace.id,
+      ),
+    if (project.workspaceId != null)
+      DesktopMenuItem(
+        value: '$_contextAction$_noContext',
+        label: 'No context',
+        icon: AppIcons.minusCircle,
+      ),
+    DesktopMenuItem(
+      value: '$_contextAction$_newContext',
+      label: menu.workspaces.isEmpty
+          ? 'Add to a new context…'
+          : 'Move to a new context…',
+      icon: AppIcons.folderPlus,
+    ),
+  ];
+
+  /// Files [project] where the menu said, and says what happened.
+  Future<void> _applyContextAction(Project project, String action) async {
+    final target = action.substring(_contextAction.length);
+    final controller = ref.read(workspacesControllerProvider.notifier);
+    if (target == _noContext) {
+      controller.assign(project.id, null);
+      // Named in full, because the menu's other leaving verb deletes the
+      // project and this one must not be mistaken for it.
+      _say('"${project.name}" is no longer in a context. It is still here.');
+      return;
+    }
+    if (target == _newContext) {
+      final created = await NewContextDialog.show(
+        context,
+        forProjectNamed: project.name,
+      );
+      if (created == null) return;
+      controller.assign(project.id, created.id);
+      _say('Moved "${project.name}" to ${created.name}.');
+      return;
+    }
+    if (project.workspaceId == target) return;
+    controller.assign(project.id, target);
+    final name = ref
+        .read(workspacesControllerProvider)
+        .where((w) => w.id == target)
+        .map((w) => w.name)
+        .firstOrNull;
+    if (name != null) _say('Moved "${project.name}" to $name.');
+  }
+
   // --- shared menu fragments --------------------------------------------------
 
   /// `New session with <agent>` for every agent installed where the row lives.
   ///
   /// Only offered when there is a choice to make: with one installation the `+`
   /// already uses it, and a menu item that repeats a button teaches nothing.
-  List<PopupMenuEntry<String>> _agentMenuItems(String environmentId) {
-    final installations = ref
-        .read(agentInstallationDaoProvider)
-        .getByEnvironment(environmentId);
-    if (installations.length < 2) return const [];
+  ///
+  /// [installations] is the answer for this row's environment, read once for
+  /// the whole list — see [_RowMenuFacts]. It used to be one query per row.
+  List<PopupMenuEntry<String>> _agentMenuItems(
+    List<AgentInstallation>? installations,
+  ) {
+    if (installations == null || installations.length < 2) return const [];
     return [
       for (final installation in installations)
         DesktopMenuItem(
