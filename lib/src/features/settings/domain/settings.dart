@@ -107,6 +107,7 @@ class Settings {
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
     this.notesEnabled = true,
+    this.hideEmptySections = true,
     this.debugMode = kDefaultDebugMode,
     this.logVerbosity = LogVerbosity.normal,
     this.logToFile = true,
@@ -318,6 +319,17 @@ class Settings {
   /// now" an irreversible decision.
   final bool notesEnabled;
 
+  /// Whether the Explorer folds away a saved section that currently holds
+  /// nothing.
+  ///
+  /// On by default. A seeded section is written collapsed and stays that way,
+  /// so a group with nothing in it costs a full row and says nothing — three
+  /// of them above the tree was the complaint this setting answers. Off
+  /// restores the always-present rows, and with them the property
+  /// `explorer_sections_cost_test.dart` names: with every section folded shut
+  /// the matching graph is not mounted at all.
+  final bool hideEmptySections;
+
   /// Whether debug mode is on: the root logger drops to `ALL` and the Logs
   /// panel appears on the side-panel rail.
   ///
@@ -389,6 +401,7 @@ class Settings {
     double? uiTextScale,
     double? terminalFontSize,
     bool? notesEnabled,
+    bool? hideEmptySections,
     bool? debugMode,
     LogVerbosity? logVerbosity,
     bool? logToFile,
@@ -445,6 +458,7 @@ class Settings {
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
     notesEnabled: notesEnabled ?? this.notesEnabled,
+    hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     debugMode: debugMode ?? this.debugMode,
     logVerbosity: logVerbosity ?? this.logVerbosity,
     logToFile: logToFile ?? this.logToFile,
@@ -508,6 +522,7 @@ class Settings {
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
     'notesEnabled': notesEnabled,
+    'hideEmptySections': hideEmptySections,
     'debugMode': debugMode,
     'logVerbosity': logVerbosity.name,
     'logToFile': logToFile,
@@ -657,6 +672,9 @@ class Settings {
       notesEnabled: json['notesEnabled'] is bool
           ? json['notesEnabled'] as bool
           : true,
+      hideEmptySections: json['hideEmptySections'] is bool
+          ? json['hideEmptySections'] as bool
+          : true,
       debugMode: json['debugMode'] is bool
           ? json['debugMode'] as bool
           : kDefaultDebugMode,
@@ -709,6 +727,7 @@ class Settings {
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
       other.notesEnabled == notesEnabled &&
+      other.hideEmptySections == hideEmptySections &&
       other.debugMode == debugMode &&
       other.logVerbosity == logVerbosity &&
       other.logToFile == logToFile &&
@@ -761,6 +780,7 @@ class Settings {
       // at `Object.hash`'s limit of 20 arguments.
       Object.hash(
         androidSlimming,
+        hideEmptySections,
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
         Object.hashAllUnordered(

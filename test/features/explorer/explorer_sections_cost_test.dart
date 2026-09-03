@@ -11,7 +11,9 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +46,18 @@ import '../terminal/fake_instance.dart';
 ///    nothing. The candidate sweep, the fact table and the assignment are all
 ///    `autoDispose` and reachable only from an expanded section's body, so with
 ///    the sidebar folded shut none of them exist.
+/// 3. **What hiding an empty section costs, since it is not nothing.** "Is this
+///    section empty" is the same match as "what is in it", so
+///    `Settings.hideEmptySections` — on by default — mounts that graph for a
+///    sidebar nobody has opened, and claim 2 holds only with the filter off.
+///    What the filter buys back is three rows of the user's sidebar that said
+///    nothing; what it costs is exactly the bill an open section already paid
+///    and not a statement more: the same three sweeps, still flat in the size
+///    of the workspace, still no subprocess, still nothing per rebuild — and
+///    **not the delivery heartbeat**, which stays gated on a section actually
+///    having rows on screen. That last one is not a micro-optimisation: it is
+///    the difference between the Explorer being open and the app running a
+///    two-minute timer.
 /// The three unfiltered sweeps `sectionCandidatesProvider` makes — the only
 /// statements saved sections added to the app.
 bool _isSectionSweep(String sql) =>
@@ -176,10 +190,16 @@ void main() {
   });
 
   group('a collapsed section', () {
+    /// [hideEmpty] is `Settings.hideEmptySections`. **It is the whole subject
+    /// of this group**, because it is the one thing that decides whether the
+    /// matching graph is mounted for a sidebar nobody has opened: with it off,
+    /// nothing below the collapse gate exists; with it on, the sidebar has to
+    /// match in order to know which headers are worth a row.
     Future<ProviderContainer> pump(
       WidgetTester tester,
-      CountingDatabase db,
-    ) async {
+      CountingDatabase db, {
+      bool hideEmpty = false,
+    }) async {
       tester.view.physicalSize = const Size(460, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -197,6 +217,9 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setHideEmptySections(hideEmpty);
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -333,6 +356,154 @@ void main() {
         reason:
             'ten times the sessions must not be ten times the queries: '
             '${small.statements} vs ${large.statements}',
+      );
+    });
+  });
+
+  /// **The price of the empty filter, counted rather than argued about.**
+  ///
+  /// This is the group that would catch the regression the feature is one
+  /// mistake away from: asking whether a section is empty *per section*, or
+  /// *per rebuild*, or by going and measuring something. All three would show
+  /// up here as a number that moved.
+  ///
+  /// Measured as a **difference** rather than as an absolute, because the
+  /// Explorer's own tree sweeps the same three tables to draw itself and the
+  /// question here is not what the panel costs — it is what turning the filter
+  /// on adds to that.
+  group('hiding empty sections', () {
+    /// Mounts the panel and reports what deciding what to draw cost, counted
+    /// from the frame the widget went up.
+    Future<({ProviderContainer container, int sweeps, int cards})> pump(
+      WidgetTester tester,
+      int count, {
+      required bool hideEmpty,
+    }) async {
+      tester.view.physicalSize = const Size(460, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final db = seed(count);
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+          ),
+          agentSessionStatusProvider.overrideWith(
+            (ref, id) => const Stream<AgentStatusReport>.empty(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setHideEmptySections(hideEmpty);
+      db.reset();
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (
+        container: container,
+        sweeps: db.statements.where(_isSectionSweep).length,
+        cards: tester.widgetList(find.byType(SessionCard)).length,
+      );
+    }
+
+    final on = <int, int>{};
+    final off = <int, int>{};
+
+    for (final count in scale) {
+      testWidgets('over $count sessions, filter off', (tester) async {
+        final result = await pump(tester, count, hideEmpty: false);
+        off[count] = result.sweeps;
+        // Every seeded section is there, folded shut and saying nothing about
+        // what it holds — the shape this feature shipped in.
+        expect(find.text('Pinned'), findsOneWidget);
+        expect(find.text('Checks failing'), findsOneWidget);
+        expect(find.text('Ended in failure'), findsOneWidget);
+      });
+
+      testWidgets('over $count sessions, filter on', (tester) async {
+        final result = await pump(tester, count, hideEmpty: true);
+        on[count] = result.sweeps;
+
+        // A third of the workspace failed, so exactly one seeded section has
+        // anything in it — and the filter really did take the other three off
+        // the sidebar rather than merely being switched on.
+        expect(find.text('Ended in failure'), findsOneWidget);
+        expect(find.text('Checks failing'), findsNothing);
+        expect(find.text('Awaiting input'), findsNothing);
+        expect(find.text('Pinned'), findsNothing);
+        expect(
+          result.cards,
+          0,
+          reason:
+              'knowing a section is not empty is not the same as drawing it: '
+              'the surviving header is still folded shut',
+        );
+        expect(
+          result.container.exists(deliveryPollProvider),
+          isFalse,
+          reason:
+              "the Explorer being open must not start the app's delivery "
+              'heartbeat — the filter needs to know what is empty, not to '
+              'keep asking',
+        );
+      });
+    }
+
+    test('costs three sweeps, and the same three at a hundred as at one', () {
+      expect(on.keys, containsAll(scale));
+      expect(off.keys, containsAll(scale));
+      // ignore: avoid_print
+      print('SECTION-FILTER sweeps on=$on off=$off');
+      expect(
+        off.values.toSet().length,
+        1,
+        reason: 'the panel itself is flat to begin with: $off',
+      );
+      for (final count in scale) {
+        expect(
+          on[count]! - off[count]!,
+          3,
+          reason:
+              'deciding which sections are worth a row reads the three tables '
+              'once each and no more, at $count sessions: '
+              '${on[count]} against ${off[count]}',
+        );
+      }
+    });
+
+    testWidgets('and nothing at all on a sidebar nobody has touched', (
+      tester,
+    ) async {
+      final result = await pump(tester, 100, hideEmpty: true);
+      final db = result.container.read(databaseProvider) as CountingDatabase;
+      db.reset();
+
+      // A second of frames over a sidebar where nothing moved. The filter's
+      // answer is a memoised provider, so re-reading it is what a rebuilding
+      // widget does and it must cost nothing.
+      for (var frame = 0; frame < 180; frame++) {
+        result.container.read(explorerSectionLayoutProvider);
+      }
+      await tester.pump();
+
+      // ignore: avoid_print
+      print('SECTION-FILTER idle statements=${db.count}');
+      expect(
+        db.statements,
+        isEmpty,
+        reason:
+            'a filter that re-queried per rebuild is the whole regression '
+            'this file exists to catch: ${db.statements}',
       );
     });
   });

@@ -32,15 +32,23 @@ import 'session_rows.dart';
 /// contribute *siblings* to the same list, and the sliver goes on doing its
 /// job.
 ///
-/// **A collapsed section costs nothing.** Not "a little": nothing. It
-/// contributes one header widget, watches no facts, matches no rule and mounts
-/// none of [explorerSectionAssignmentProvider]'s graph — the candidate sweep,
-/// the fact table and the assignment are all `autoDispose` and reachable only
-/// from the branch below. That is why a collapsed header shows no count: a
-/// count *is* a match over the whole workspace, and paying for one the user
-/// cannot see is exactly the cost this feature promised not to add.
+/// **A collapsed section costs nothing, when the sidebar is not filtering.**
+/// Not "a little": nothing. It contributes one header widget, watches no facts,
+/// matches no rule and mounts none of [explorerSectionAssignmentProvider]'s
+/// graph — the candidate sweep, the fact table and the assignment are all
+/// `autoDispose` and reachable only from the branch below. That is why a
+/// collapsed header shows no count: a count *is* a match over the whole
+/// workspace.
+///
+/// **And why hiding an empty section has a price.** "Is this section empty" is
+/// that same match, so [Settings.hideEmptySections] — on by default — mounts
+/// the graph for as long as the Explorer is on screen. It buys back three rows
+/// that said nothing, for the bill an open section already paid: three sweeps
+/// on a change to the session list, none per rebuild, no subprocess. See
+/// [explorerSectionLayoutProvider], which is the one place that trade is made,
+/// and `explorer_sections_cost_test.dart`, which pins both halves of it.
 List<Widget> explorerSectionNodes(WidgetRef ref) {
-  final sections = ref.watch(explorerSectionsProvider);
+  final sections = ref.watch(explorerSectionLayoutProvider).shown;
   if (sections.isEmpty) return const [];
 
   final nodes = <Widget>[];

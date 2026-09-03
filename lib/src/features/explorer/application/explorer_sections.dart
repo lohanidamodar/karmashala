@@ -148,14 +148,21 @@ final explorerSectionsProvider =
       ExplorerSectionsController.new,
     );
 
-/// Whether any section is open, and therefore whether matching happens at all.
+/// Whether any section is open, and therefore whether a section has rows on
+/// screen.
 ///
-/// The gate the scale claim rests on. Everything below this line — the
-/// candidate sweep, the fact table, the assignment — is `autoDispose` and
-/// reachable only from an expanded section's body, so a sidebar whose sections
-/// are all folded shut runs none of it. It is the same bargain the Explorer
-/// already makes with a collapsed project, and
+/// The gate the scale claim rests on. With [Settings.hideEmptySections] off,
+/// everything below this line — the candidate sweep, the fact table, the
+/// assignment — is `autoDispose` and reachable only from an expanded section's
+/// body, so a sidebar whose sections are all folded shut runs none of it. It is
+/// the same bargain the Explorer already makes with a collapsed project, and
 /// `explorer_panel_scale_test.dart` holds it to the same standard.
+///
+/// With the filter on, [explorerSectionLayoutProvider] mounts that graph to ask
+/// which sections are empty — and this is then what keeps the *heartbeat* out
+/// of it. See [explorerSectionFactsProvider]: matching to draw rows refreshes
+/// on the delivery poll; matching to decide whether a folded header is worth a
+/// row does not.
 final anySectionExpandedProvider = Provider<bool>(
   (ref) => ref.watch(
     explorerSectionsProvider.select(
@@ -305,16 +312,28 @@ final sectionCandidatesProvider = Provider.autoDispose<List<SectionCandidate>>((
 ///
 /// **And the one place that bargain has an edge.** `ref.exists` is a question,
 /// not a subscription: a checkout measured *after* this provider was built is
-/// invisible to it until something rebuilds it. So it also watches
-/// [deliveryPollProvider] — the app's existing delivery heartbeat, one timer
-/// for the whole app, two minutes while the window has focus and a bump when
-/// focus comes back. Not a timer of this feature's own, and the right cadence
-/// by construction: it is exactly how often the facts underneath a section can
-/// change at all.
+/// invisible to it until something rebuilds it. So a section with rows on
+/// screen also watches [deliveryPollProvider] — the app's existing delivery
+/// heartbeat, one timer for the whole app, two minutes while the window has
+/// focus and a bump when focus comes back. Not a timer of this feature's own,
+/// and the right cadence by construction: it is exactly how often the facts
+/// underneath a section can change at all.
+///
+/// **Only for a section with rows on screen**, though, and that gate matters
+/// now that [explorerSectionLayoutProvider] reaches this to ask whether a
+/// *folded* section is empty. Merely having the Explorer open must not start
+/// the app's delivery heartbeat — it never has, and a widget test that pumps
+/// the panel would be left holding a two-minute periodic timer. Emptiness
+/// stays fresh without it: [deliveryAttentionProvider] is a notifier that every
+/// delivery strip writes its reading into (see `sessionDeliveryProvider`), so
+/// a checkout going red wakes this whether or not the heartbeat is running.
+/// What the folded case gives up is the re-read of a `_warm` entry that
+/// changed with nothing to announce it — a staler answer to "is this empty",
+/// corrected the moment anything else moves.
 final explorerSectionFactsProvider = Provider.autoDispose<List<SectionFacts>>((
   ref,
 ) {
-  ref.watch(deliveryPollProvider);
+  if (ref.watch(anySectionExpandedProvider)) ref.watch(deliveryPollProvider);
   final candidates = ref.watch(sectionCandidatesProvider);
   // One read of each ambient map, outside the loop: these are whole-app state,
   // not per-session state, and reading them per candidate would turn a fold
@@ -445,3 +464,89 @@ final explorerSectionMembersProvider = Provider.autoDispose
         ),
       ),
     );
+
+/// **What the sidebar actually draws, and what it is holding back.**
+///
+/// A section that matches nothing still costs a full row, and a row that says
+/// "Checks failing" beside no failing checks is the sidebar spending the user's
+/// vertical space to tell them nothing. So an empty section folds away — and
+/// [ExplorerSectionLayout.hidden] is what the header's filter toggle counts, so
+/// the feature says out loud that it is holding something back rather than
+/// vanishing silently.
+///
+/// **Only a *collapsed* empty section is hidden.** An open one is a section the
+/// user is looking at, and [emptySectionMessage] is the answer to the question
+/// they opened it to ask — "nothing matches" and "nothing has been measured
+/// yet" are different situations, and a group that disappeared mid-glance would
+/// answer neither.
+class ExplorerSectionLayout {
+  const ExplorerSectionLayout({required this.shown, required this.hidden});
+
+  /// The sections to draw, in sidebar order.
+  final List<ExplorerSection> shown;
+
+  /// How many were folded away for being empty.
+  final int hidden;
+
+  /// Value equality, and it is the point of this class rather than a record:
+  /// the assignment underneath is rebuilt on every delivery heartbeat, and a
+  /// layout that was never equal to the last one would rebuild the whole
+  /// Explorer every two minutes to draw the same sidebar.
+  @override
+  bool operator ==(Object other) {
+    if (other is! ExplorerSectionLayout) return false;
+    if (other.hidden != hidden || other.shown.length != shown.length) {
+      return false;
+    }
+    for (var i = 0; i < shown.length; i++) {
+      if (other.shown[i] != shown[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(hidden, Object.hashAll(shown));
+}
+
+/// Which sections survive the empty filter.
+///
+/// **The one place the cost of this filter is paid.** Asking whether a section
+/// is empty *is* matching it — there is no cheaper question, which is why a
+/// collapsed header has never shown a count — so with
+/// [Settings.hideEmptySections] on, [explorerSectionAssignmentProvider] and the
+/// graph under it are mounted for as long as the Explorer is on screen. What
+/// that costs is pinned by `explorer_sections_cost_test.dart` and is the same
+/// bill an open section already paid: three unfiltered sweeps on a change to
+/// the session list, none per rebuild, and no subprocess ever.
+///
+/// With the setting **off** the provider never reads the assignment, so the
+/// original bargain is intact and unchanged: a sidebar folded shut mounts none
+/// of the matching graph.
+///
+/// `autoDispose`, so a workspace whose Explorer pane is closed pays nothing at
+/// all.
+final explorerSectionLayoutProvider =
+    Provider.autoDispose<ExplorerSectionLayout>((ref) {
+      final sections = ref.watch(explorerSectionsProvider);
+      final hideEmpty = ref.watch(
+        settingsControllerProvider.select((s) => s.hideEmptySections),
+      );
+      if (!hideEmpty || sections.isEmpty) {
+        return ExplorerSectionLayout(shown: sections, hidden: 0);
+      }
+      final assignment = ref.watch(explorerSectionAssignmentProvider);
+      final shown = <ExplorerSection>[];
+      var hidden = 0;
+      for (final section in sections) {
+        final members = assignment[section.id];
+        if (section.collapsed && (members == null || members.isEmpty)) {
+          hidden++;
+          continue;
+        }
+        shown.add(section);
+      }
+      return ExplorerSectionLayout(
+        shown: List.unmodifiable(shown),
+        hidden: hidden,
+      );
+    });

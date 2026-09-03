@@ -61,6 +61,15 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Whether the Explorer folds away a saved section holding nothing.
+  ///
+  /// A filter, not a deletion: a hidden section is still saved, still matches,
+  /// and comes back the moment something lands in it.
+  void setHideEmptySections(bool value) {
+    state = state.copyWith(hideEmptySections: value);
+    _save();
+  }
+
   void setThemeMode(AppThemeMode mode) {
     state = state.copyWith(themeMode: mode);
     _save();

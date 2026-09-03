@@ -152,6 +152,11 @@ void main() {
         name: 'Releases',
         rule: BranchGlobRule('release/*'),
       );
+      // Opened, because the delivery heartbeat below is what a section with
+      // rows *on screen* rides — see [explorerSectionFactsProvider]. A folded
+      // section is refreshed by `deliveryAttentionProvider` instead, which is
+      // what every strip reading in the app actually writes to.
+      sections.setCollapsed(releases.id, false);
       await container.pump();
 
       // Nothing has looked at this checkout, so nothing knows its branch — and
@@ -222,6 +227,7 @@ void main() {
         name: 'Releases',
         rule: BranchGlobRule('release/*'),
       );
+      controller.setCollapsed(releases.id, false);
       container.listen(
         checkoutDeliveryProvider(const Checkout(repoPath)),
         (_, _) {},
@@ -270,27 +276,43 @@ void main() {
   });
 
   group('the sidebar', () {
-    Future<void> pump(WidgetTester tester, AppDatabase db) async {
+    /// [hideEmpty] is `Settings.hideEmptySections`, and it is a parameter
+    /// rather than the default because the two halves of this group need
+    /// opposite answers: what a section *says* is only visible with the filter
+    /// off, and what the filter *does* is only visible with it on.
+    Future<ProviderContainer> pump(
+      WidgetTester tester,
+      AppDatabase db, {
+      bool hideEmpty = true,
+    }) async {
       tester.view.physicalSize = const Size(460, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
+      final container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+          ),
+          agentSessionStatusProvider.overrideWith(
+            (ref, id) => const Stream<AgentStatusReport>.empty(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setHideEmptySections(hideEmpty);
       await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            ...fakeTerminalOverrides(database: db),
-            clockProvider.overrideWithValue(FixedClock(testTime)),
-            commandRunnerFactoryProvider.overrideWithValue(
-              FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
-            ),
-            agentSessionStatusProvider.overrideWith(
-              (ref, id) => const Stream<AgentStatusReport>.empty(),
-            ),
-          ],
+        UncontrolledProviderScope(
+          container: container,
           child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
         ),
       );
       await tester.pumpAndSettle();
+      return container;
     }
 
     testWidgets('opens a section and says which project each row is in', (
@@ -321,7 +343,7 @@ void main() {
     testWidgets('an open, empty section explains itself', (tester) async {
       final db = seed(failed: 0);
       addTearDown(db.close);
-      await pump(tester, db);
+      await pump(tester, db, hideEmpty: false);
 
       await tester.tap(find.text('Checks failing'));
       await tester.pumpAndSettle();
@@ -346,6 +368,121 @@ void main() {
       await tester.tap(find.text('Ended in failure'));
       await tester.pumpAndSettle();
       expect(find.text('Failed 0'), findsNothing);
+    });
+  });
+
+  /// **What the sidebar does with a section that holds nothing.**
+  ///
+  /// The complaint this answers, in the owner's words: three collapsed rows
+  /// saying "Checks failing", "Awaiting input" and "Ended in failure" above the
+  /// tree, each costing a full row whether or not it had anything in it.
+  group('the empty filter', () {
+    Future<ProviderContainer> pump(WidgetTester tester, AppDatabase db) async {
+      tester.view.physicalSize = const Size(460, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+          ),
+          agentSessionStatusProvider.overrideWith(
+            (ref, id) => const Stream<AgentStatusReport>.empty(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    testWidgets('folds away the sections holding nothing, and only those', (
+      tester,
+    ) async {
+      final db = seed();
+      addTearDown(db.close);
+      await pump(tester, db);
+
+      // One failed session, so exactly one of the four seeded sections has
+      // anything to say. The other three cost nothing at all.
+      expect(find.text('Ended in failure'), findsOneWidget);
+      expect(find.text('Checks failing'), findsNothing);
+      expect(find.text('Awaiting input'), findsNothing);
+      expect(find.text('Pinned'), findsNothing);
+    });
+
+    testWidgets('says how many it is holding back, and gives them back', (
+      tester,
+    ) async {
+      final db = seed();
+      addTearDown(db.close);
+      final container = await pump(tester, db);
+
+      // The toggle is the whole of the feature's discoverability: a section
+      // nobody can see is a section nobody can learn about, so the button
+      // admits to the three it is hiding rather than leaving the sidebar
+      // looking as though sections were never there.
+      expect(find.byTooltip('Show 3 empty sections'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Show 3 empty sections'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pinned'), findsOneWidget);
+      expect(find.text('Checks failing'), findsOneWidget);
+      expect(find.text('Ended in failure'), findsOneWidget);
+      expect(
+        container.read(settingsControllerProvider).hideEmptySections,
+        isFalse,
+        reason: 'the choice is a setting, so it survives a restart',
+      );
+    });
+
+    testWidgets('a section comes back the moment something lands in it', (
+      tester,
+    ) async {
+      final db = seed();
+      addTearDown(db.close);
+      final container = await pump(tester, db);
+      expect(find.text('Pinned'), findsNothing);
+
+      container.read(settingsControllerProvider.notifier).togglePinnedSession(
+        'r0',
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Pinned'),
+        findsOneWidget,
+        reason: 'hidden is a filter over live membership, not a deletion',
+      );
+    });
+
+    testWidgets('an open section stays open even with nothing in it', (
+      tester,
+    ) async {
+      final db = seed(failed: 0);
+      addTearDown(db.close);
+      final container = await pump(tester, db);
+
+      // Opened by hand — the user is looking at it, and the sentence under it
+      // is the answer they opened it for. Pulling it out from under them mid
+      // -glance would answer nothing.
+      container
+          .read(explorerSectionsProvider.notifier)
+          .setCollapsed('section-checks-failing', false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Checks failing'), findsOneWidget);
+      expect(find.textContaining('Delivery strip'), findsOneWidget);
     });
   });
 }
