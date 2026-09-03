@@ -267,11 +267,12 @@ class QuickOpenSources {
         onSelect: () => ref.read(terminalMaximizedProvider.notifier).toggle(),
       ),
       _command(
-        'Check environment health',
+        'Check system health',
         subtitle: Platform.isWindows
-            ? 'Windows, WSL, SSH, Git and coding agents'
-            : 'Shells, SSH, Git and coding agents',
+            ? 'MCP bridge, WSL interop, Android tooling, disk, environments'
+            : 'MCP bridge, Android tooling, disk, environments',
         icon: AppIcons.checkCircle,
+        keywords: const ['mcp', 'bridge', 'wsl', 'interop', 'disk', 'adb'],
         onSelect: () => EnvironmentHealthDialog.show(context),
       ),
       _command(
