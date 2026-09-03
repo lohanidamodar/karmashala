@@ -7,7 +7,10 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/domain/environment_path.dart';
+import 'package:karmashala/src/core/process/wsl_interop.dart';
 import 'package:karmashala/src/features/environments/application/environment_health.dart';
+import 'package:karmashala/src/features/environments/application/system_health.dart';
+import 'package:karmashala/src/features/environments/application/system_health_service.dart';
 import 'package:karmashala/src/features/environments/presentation/environment_health_dialog.dart';
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
@@ -47,6 +50,7 @@ import '../features/terminal/fake_instance.dart';
 import '../support/fake_command_runner.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
+import '../support/system_health_fakes.dart';
 import '../support/window_matrix.dart';
 
 /// The minimum-window and accessibility matrix, applied to the surfaces the
@@ -442,26 +446,61 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         ...noProcessOverrides(),
-        // Checking health really runs `git --version` per environment; the
-        // dialog only needs rows to lay out.
-        environmentHealthProvider.overrideWith(
-          (ref) async => [
-            EnvironmentHealth(
-              environment: windowsEnv(),
-              level: HealthLevel.healthy,
-              summary: 'Ready',
-              installations: const [],
-              gitVersion: 'git version 2.45.1.windows.1',
+        // Checking health really spawns processes — `git --version` per
+        // environment, the MCP bridge, a WSL shell; the dialog only needs rows
+        // to lay out, so it is handed a finished report.
+        systemHealthProvider.overrideWith(
+          () => FixedSystemHealthController(
+            SystemHealthReport(
+              checkedAt: DateTime.utc(2026, 9, 3, 12),
+              checks: const [
+                SystemCheck(
+                  id: SystemCheckId.mcpBridge,
+                  title: 'MCP bridge',
+                  level: HealthLevel.failed,
+                  summary:
+                      'Present but unspawnable — the file is beside the app '
+                      'and this machine refused to start it.',
+                  detail: r'C:\Program Files\Karmashala\karmashala_mcp.exe',
+                  remedy:
+                      'A refused spawn is the machine, not the app: security '
+                      'software holding the file, or a half-written install.',
+                  took: Duration(milliseconds: 84),
+                ),
+                SystemCheck(
+                  id: SystemCheckId.wslInterop,
+                  title: 'WSL → Windows interop (Ubuntu)',
+                  level: HealthLevel.failed,
+                  summary:
+                      'Gone — no interop handler is registered, so every '
+                      'Windows program a session here spawns fails with '
+                      'ENOEXEC.',
+                  remedy:
+                      'This is the machine, not the app, and it takes out '
+                      'everything at once.',
+                  remedyCommand: kWslInteropRepairCommand,
+                  took: Duration(milliseconds: 310),
+                ),
+              ],
+              environments: [
+                EnvironmentHealth(
+                  environment: windowsEnv(),
+                  level: HealthLevel.healthy,
+                  summary: 'Ready',
+                  installations: const [],
+                  gitVersion: 'git version 2.45.1.windows.1',
+                ),
+                EnvironmentHealth(
+                  environment: wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'),
+                  level: HealthLevel.failed,
+                  summary:
+                      'git is not installed in this distribution, so worktrees '
+                      'cannot be created here',
+                  installations: const [],
+                ),
+              ],
             ),
-            EnvironmentHealth(
-              environment: wslEnv(id: 'wsl:Ubuntu', distro: 'Ubuntu'),
-              level: HealthLevel.failed,
-              summary:
-                  'git is not installed in this distribution, so worktrees '
-                  'cannot be created here',
-              installations: const [],
-            ),
-          ],
+          ),
         ),
       ],
     );
