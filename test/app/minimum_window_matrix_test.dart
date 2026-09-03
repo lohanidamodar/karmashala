@@ -498,6 +498,27 @@ void main() {
       );
     });
 
+    testWidgets('the permissions section, with Codex\'s two axes', (
+      tester,
+    ) async {
+      // The section that grew: a per-agent card now draws one dropdown per
+      // axis per purpose, so Codex's card is **four** controls rather than
+      // two, and their labels are the CLI's own words rather than three short
+      // shared ones. Four dropdowns across do not fit 720x560, which is why
+      // the card wraps — and this is what proves it does.
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          prepared(),
+          const SettingsScreen(initialSection: SettingsSectionId.permissions),
+        ),
+        matrix: const [...windowMatrix, desktopLargeText],
+        because:
+            'a two-axis agent draws four permission dropdowns, and they must '
+            'wrap rather than overflow at the minimum window and at 125% text',
+      );
+    });
+
     testWidgets('the diagnostics section, watch-set readout and all', (
       tester,
     ) async {
