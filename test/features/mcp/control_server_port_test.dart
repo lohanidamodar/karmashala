@@ -25,6 +25,8 @@ import '../../support/fixtures.dart';
 /// three other files that also start servers, and a test that raced them for
 /// one global port passed or failed on who got there first.
 void main() {
+  _fallbackMessageTests();
+
   late Directory tmp;
 
   setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_port_'));
@@ -119,5 +121,44 @@ void main() {
       contains('-LocalPorts $preferredControlPort'),
       reason: 'the firewall rule must name the port the server binds',
     );
+  });
+}
+
+/// What the fallback says, and to whom.
+///
+/// From the "run this on a Mac" backlog pass: this line was found in a Mac's
+/// log telling its owner that "agents inside WSL will not be able to reach
+/// this server". A WSL environment is only ever created when the host is
+/// Windows, so on a Mac that names machinery which cannot exist — the reader
+/// is sent looking for a problem they do not have.
+void _fallbackMessageTests() {
+  group('the ephemeral-port fallback message', () {
+    test('warns about WSL on Windows, where the consequence is real', () {
+      final message = controlPortFallbackMessage(
+        preferredControlPort,
+        'SocketException: address already in use',
+        hostIsWindows: true,
+      );
+      expect(message, contains('ephemeral'));
+      expect(message, contains('WSL'));
+      expect(message, contains('firewall'));
+    });
+
+    test('and says nothing about WSL anywhere else', () {
+      final message = controlPortFallbackMessage(
+        preferredControlPort,
+        'SocketException: address already in use',
+        hostIsWindows: false,
+      );
+      expect(message, contains('ephemeral'));
+      expect(
+        message,
+        isNot(contains('WSL')),
+        reason: 'a Mac has no WSL environment to lose',
+      );
+      // Still says what happened and why, which is the part that travels.
+      expect(message, contains('$preferredControlPort'));
+      expect(message, contains('already in use'));
+    });
   });
 }

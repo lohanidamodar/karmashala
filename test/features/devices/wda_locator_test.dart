@@ -66,6 +66,39 @@ void main() {
     expect(found, isNull);
   });
 
+  test('the pinned version travels with the runner', () {
+    // The runner is a built binary tied to one version, so "which build is
+    // this?" is the first question when it will not attach to a simulator —
+    // and the field report could not answer it, because the failure said only
+    // that nothing came up.
+    final app = plant('K.app/Contents/Resources/wda');
+    File(
+      p.join(p.dirname(app), '.wda-version'),
+    ).writeAsStringSync('v16.12.0 arm64\n');
+
+    final found = WdaLocator(
+      hostIsMacOs: true,
+      resolvedExecutable: p.join(tmp.path, 'K.app', 'Contents', 'MacOS', 'K'),
+      workingDirectory: p.join(tmp.path, 'nowhere'),
+    ).locate();
+
+    expect(found?.version, 'v16.12.0 arm64');
+  });
+
+  test('and a bundle with no marker is still usable, just unnamed', () {
+    // Absent is not an error: a runner assembled by hand works fine.
+    plant('K.app/Contents/Resources/wda');
+
+    final found = WdaLocator(
+      hostIsMacOs: true,
+      resolvedExecutable: p.join(tmp.path, 'K.app', 'Contents', 'MacOS', 'K'),
+      workingDirectory: p.join(tmp.path, 'nowhere'),
+    ).locate();
+
+    expect(found, isNotNull);
+    expect(found!.version, isNull);
+  });
+
   test('no runner anywhere is null, not an exception', () {
     expect(
       WdaLocator(

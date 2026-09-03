@@ -62,6 +62,19 @@ class UiBounds {
     return c.x >= 0 && c.y >= 0 && c.x < screen.width && c.y < screen.height;
   }
 
+  /// Whether this node spans nearly the whole screen on both axes.
+  ///
+  /// The shape of a scrim: Android puts a clickable node called `Dismiss`
+  /// behind every modal dialog, covering the display, and tapping it dismisses
+  /// the dialog in front. Nothing a caller names by text is legitimately this
+  /// big, so it is a reason to refuse rather than a ranking signal.
+  ///
+  /// 90% on each axis, not on area: a bottom sheet's barrier can leave a
+  /// sliver of one edge uncovered and is still a barrier, while an ordinary
+  /// full-width row is nowhere near 90% of the *height*.
+  bool coversMostOf(DeviceScreenSize screen, {double fraction = 0.9}) =>
+      width >= screen.width * fraction && height >= screen.height * fraction;
+
   /// The original `[l,t][r,b]` form, so a caller can echo exactly what the
   /// device reported.
   String get raw => '[$left,$top][$right,$bottom]';

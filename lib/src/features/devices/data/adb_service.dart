@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -418,12 +419,32 @@ class AdbService {
     );
     final output = '${result.stdout}\n${result.stderr}';
     if (!result.ok || output.contains('Failure [')) {
+      // A full /data reports as `IOException: Requested internal only, but not
+      // enough space`, which names neither the partition nor the remedy. The
+      // number is worth one extra call on a path that has already failed.
+      var advice = '';
+      if (installFailedForSpace(output)) {
+        final df = await runner.run(
+          _forDevice(serial, ['shell', 'df', '/data']),
+        );
+        final use = dataPartitionUse(df.stdout);
+        advice =
+            '\nThe device is out of space${use == null ? '' : ' (/data is $use full)'}. '
+            'Free some and retry: `adb -s $serial shell pm trim-caches 2G`, or '
+            'uninstall an app you are not using — note that uninstalling wipes '
+            'that app\'s data.';
+      }
       final error = StateError(
         'adb install failed on $serial: '
-        '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}',
+        '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}'
+        '$advice',
       );
       _report(
-        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: summary,
+        ).failed(error),
       );
       throw error;
     }
@@ -444,7 +465,11 @@ class AdbService {
         '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}',
       );
       _report(
-        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: summary,
+        ).failed(error),
       );
       throw error;
     }
@@ -481,7 +506,11 @@ class AdbService {
         '${output.trim().isEmpty ? 'exit ${result.exitCode}' : output.trim()}',
       );
       _report(
-        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: summary,
+        ).failed(error),
       );
       throw error;
     }
@@ -505,7 +534,11 @@ class AdbService {
         'am force-stop failed on $serial: ${result.stderr.trim()}',
       );
       _report(
-        DeviceAction(verb: verb, serial: serial, summary: summary).failed(error),
+        DeviceAction(
+          verb: verb,
+          serial: serial,
+          summary: summary,
+        ).failed(error),
       );
       throw error;
     }
@@ -690,9 +723,7 @@ class AdbService {
       );
       throw error;
     }
-    _report(
-      DeviceAction(verb: 'appearance', serial: serial, summary: summary),
-    );
+    _report(DeviceAction(verb: 'appearance', serial: serial, summary: summary));
   }
 
   /// Opens a URL — a web link, or a custom scheme to reach a deep link in an
@@ -914,4 +945,35 @@ class AdbService {
     }
     return false;
   }
+}
+
+/// Whether an `adb install` failure is about free space rather than the APK.
+///
+/// The wording varies by API level — the package installer says
+/// `INSUFFICIENT_STORAGE`, the newer one wraps an `IOException: Requested
+/// internal only, but not enough space` — so this matches on the idea rather
+/// than on one string.
+bool installFailedForSpace(String output) {
+  final upper = output.toUpperCase();
+  return upper.contains('INSUFFICIENT_STORAGE') ||
+      upper.contains('NOT ENOUGH SPACE') ||
+      upper.contains('NO SPACE LEFT');
+}
+
+/// The `Use%` column for `/data` out of `df` output, e.g. `92%`.
+///
+/// Returns null rather than guessing when the layout is not the expected one:
+/// a wrong number in an error message is worse than no number.
+String? dataPartitionUse(String dfOutput) {
+  for (final line in const LineSplitter().convert(dfOutput)) {
+    if (!line.contains('/data')) continue;
+    final columns = line.trim().split(RegExp(r'\s+'));
+    for (final column in columns) {
+      if (column.endsWith('%') &&
+          int.tryParse(column.substring(0, column.length - 1)) != null) {
+        return column;
+      }
+    }
+  }
+  return null;
 }

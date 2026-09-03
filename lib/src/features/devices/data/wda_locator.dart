@@ -11,12 +11,23 @@ const String kWdaBundleId = 'com.facebook.WebDriverAgentRunner.xctrunner';
 
 /// Where a usable WebDriverAgent runner was found, and how.
 class WdaLocation {
-  const WdaLocation({required this.appPath, required this.source});
+  const WdaLocation({
+    required this.appPath,
+    required this.source,
+    this.version,
+  });
 
   /// The `.app` bundle `simctl install` is given.
   final String appPath;
 
   final WdaSource source;
+
+  /// What `tool/vendor/fetch_wda.sh` recorded beside the bundle, e.g.
+  /// `v16.12.0 arm64`, or null when the marker is missing.
+  ///
+  /// Carried because the runner is a *built binary* pinned to one version, so
+  /// "which one" is the first question when it will not attach to a simulator.
+  final String? version;
 }
 
 enum WdaSource {
@@ -61,21 +72,37 @@ class WdaLocator {
         p.join(p.dirname(macOsDir), 'Resources', 'wda', bundle),
         WdaSource.bundled,
       ),
-      (
-        p.join(_cwd, 'macos', 'Vendor', 'wda', bundle),
-        WdaSource.workingTree,
-      ),
+      (p.join(_cwd, 'macos', 'Vendor', 'wda', bundle), WdaSource.workingTree),
     ];
 
     for (final (path, source) in candidates) {
       try {
         if (Directory(path).existsSync()) {
-          return WdaLocation(appPath: path, source: source);
+          return WdaLocation(
+            appPath: path,
+            source: source,
+            version: _versionBeside(path),
+          );
         }
       } on FileSystemException {
         continue;
       }
     }
     return null;
+  }
+
+  /// The `.wda-version` marker the fetch script writes next to the bundle.
+  ///
+  /// Absent is not an error: a bundle assembled by hand still works, it just
+  /// cannot say which build it is.
+  String? _versionBeside(String bundlePath) {
+    try {
+      final marker = File(p.join(p.dirname(bundlePath), '.wda-version'));
+      if (!marker.existsSync()) return null;
+      final text = marker.readAsStringSync().trim();
+      return text.isEmpty ? null : text;
+    } on FileSystemException {
+      return null;
+    }
   }
 }

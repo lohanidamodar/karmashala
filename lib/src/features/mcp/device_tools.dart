@@ -90,7 +90,11 @@ class DeviceControlTools {
           (args['x'] as num?)?.round(),
           (args['y'] as num?)?.round(),
         ),
-        'device_type' => _deviceType(_id(args), args['text'] as String?),
+        'device_type' => _deviceType(
+          _id(args),
+          args['text'] as String?,
+          submit: args['submit'] == true,
+        ),
         'device_key' => _deviceKey(_id(args), args['key'] as String?),
         'device_logcat' => _deviceLogcat(
           id: _id(args),
@@ -382,7 +386,11 @@ class DeviceControlTools {
     };
   }
 
-  Future<Object?> _deviceType(String? id, String? text) async {
+  Future<Object?> _deviceType(
+    String? id,
+    String? text, {
+    bool submit = false,
+  }) async {
     if (text == null) throw ArgumentError('text is required.');
     final driver = await _driverThatCan(
       id,
@@ -390,8 +398,29 @@ class DeviceControlTools {
       DeviceCapability.input,
     );
     await driver.type(text);
+    if (!submit) {
+      return {
+        'typed': text,
+        'serial': driver.target.id,
+        'platform': driver.target.platform.name,
+      };
+    }
+    // A real Enter key rather than the IME's action. A view that handles its
+    // own key events — a Flutter `TextInputClient`, an embedded terminal —
+    // receives committed text but never the action, so an IME-only submit is a
+    // silent no-op there and the reply still says "typed". Pressing the key is
+    // what the caller would have done next anyway.
+    if (!driver.can(DeviceCapability.keys)) {
+      throw DeviceRefusal(
+        'device_type(submit: true): ${driver.missingReason(DeviceCapability.keys)!} '
+        'The text was typed; send the newline yourself.',
+      );
+    }
+    final press = await driver.pressKey(DeviceKey.enter);
     return {
       'typed': text,
+      'submitted': true,
+      'submittedAs': press.how,
       'serial': driver.target.id,
       'platform': driver.target.platform.name,
     };
@@ -746,10 +775,27 @@ class DeviceControlTools {
       '',
       rendered.listing.isEmpty ? '(nothing matched)' : rendered.listing,
       '',
+      // Said here rather than only in the tool description, because the moment
+      // it is needed is the moment a dump has come back looking complete and
+      // empty.
+      ...?_canvasHint(tree, screen),
       'Tap one with device_tap_element(text: "…"), which re-reads the screen '
           'and hits the element itself. The coordinates above also work with '
           'device_tap.',
     ]);
+  }
+
+  /// One line warning that the screen is painted, not composed of widgets.
+  List<String>? _canvasHint(UiHierarchy tree, DeviceScreenSize? screen) {
+    final node = canvasLikeNode(tree, screen);
+    if (node == null) return null;
+    return [
+      'NOTE: ${describeUiNode(node, screen: screen)} is a large view with no '
+          'text of its own — a custom-painted surface (Flutter CustomPaint, a '
+          'canvas game, a terminal) exposes nothing to this dump. Read its '
+          'content with device_screenshot instead of dumping again.',
+      '',
+    ];
   }
 
   Future<Object?> _deviceFindElements({
@@ -873,6 +919,22 @@ class DeviceControlTools {
         '${describeUiNode(element, screen: screen)}',
       );
     }
+    // A node covering nearly the whole screen is a scrim or a modal barrier,
+    // never the thing anybody meant. Android exposes one as a clickable node
+    // called "Dismiss" spanning the display, directly behind the dialog whose
+    // button the caller asked for — so tapping it closes the dialog and throws
+    // away the state under test, and the reply would read like a success.
+    // Refused rather than ranked down: there is no query for which the right
+    // answer is the barrier.
+    if (screen != null && bounds.coversMostOf(screen)) {
+      throw DeviceRefusal(
+        'The best match is ${describeUiNode(element, screen: screen)}, which '
+        'covers the whole $screen screen. That is a scrim or a modal barrier, '
+        'and tapping one dismisses whatever is in front of it. Name the '
+        'control you want instead — if it has gone, the screen has moved on:\n'
+        '${renderUiElements(interestingNodes(tree), screen: screen, limit: 60).listing}',
+      );
+    }
     if (screen != null && !bounds.centerIsOnScreen(screen)) {
       throw DeviceRefusal(
         'The matched element is off screen at ${bounds.raw} on a $screen '
@@ -888,10 +950,27 @@ class DeviceControlTools {
       'Tapped (${point.x}, ${point.y}) ${read.space.label} on '
           '${describeUiNode(element, screen: screen)}',
       'Device ${driver.target.id}, ${read.app ?? 'unknown app'}'
-          '${matches.length == 1 ? '' : ', chosen from ${matches.length} matches'}.'
+          '${matches.length == 1 ? '' : ', chosen from ${matches.length} matches'}'
+          // The runner-up by name: reading "chosen from 2" is what tells you a
+          // pick went wrong, and saying which one lost turns that into a
+          // diagnosis without a second round trip.
+          '${_runnerUp(matches, element, screen)}.'
           '${element.enabled ? '' : ' NOTE: this element is disabled.'}',
       'Take a screenshot or dump again to confirm what changed.',
     ]);
+  }
+
+  /// ` (also: …)` naming the best match that was not taken, or empty.
+  String _runnerUp(
+    List<UiNode> matches,
+    UiNode chosen,
+    DeviceScreenSize? screen,
+  ) {
+    for (final node in matches) {
+      if (identical(node, chosen)) continue;
+      return ' (also: ${describeUiNode(node, screen: screen)})';
+    }
+    return '';
   }
 
   /// The matches numbered, so the caller can pass `index`.
@@ -984,13 +1063,22 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'Type text into whatever field currently has focus, on Android or on '
         'an iOS simulator. Tap the field first. Android escapes shell '
         'characters for you; iOS types through XCUITest, so anything the '
-        'keyboard can produce travels as itself.',
+        'keyboard can produce travels as itself. Pass submit to press Enter '
+        'after the text, which is what runs a command or sends a form.',
     'inputSchema': {
       'type': 'object',
       'properties': {
         'serial': {'type': 'string'},
         'udid': {'type': 'string', 'description': 'Alias for serial.'},
         'text': {'type': 'string'},
+        'submit': {
+          'type': 'boolean',
+          'description':
+              'Press Enter after typing. A real key press, not the keyboard\'s '
+              'own action button, so it also reaches views that handle their '
+              'own keys — a Flutter text field, an embedded terminal. The '
+              'reply says submitted: true only when the key actually went.',
+        },
       },
       'required': ['text'],
     },
@@ -1177,7 +1265,10 @@ const List<Map<String, dynamic>> deviceControlToolSchemas = [
         'coordinates read off an image are guesswork, and on iOS the image is '
         'in a different unit from the tap. By default only nodes that carry '
         'text or accept input are listed; pass full=true for every node, '
-        'including layout containers.',
+        'including layout containers. Custom-painted views — Flutter '
+        'CustomPaint, canvas games, embedded terminals — expose no text here '
+        'at all and appear as one empty View; read those with '
+        'device_screenshot rather than dumping again.',
     'inputSchema': {
       'type': 'object',
       'properties': {

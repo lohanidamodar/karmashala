@@ -164,6 +164,8 @@ String _error(Map<String, dynamic> reply) {
 }
 
 void main() {
+  _fieldReportFixes();
+
   group('tool registration', () {
     test('the three tree tools are advertised to the bridge', () {
       final names = [
@@ -561,5 +563,150 @@ void main() {
         contains(equals(['-s', 'emulator-5554', 'emu', 'kill'])),
       );
     });
+  });
+}
+
+/// A modal dialog over Android's full-screen barrier.
+///
+/// The shape from the field report: the barrier is a clickable node called
+/// `Dismiss` spanning the display, sitting directly behind the button somebody
+/// asked for. Tapping it closes the dialog and destroys the state under test.
+const _scrimXml =
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<hierarchy rotation="0">'
+    '<node index="0" class="android.widget.FrameLayout" '
+    'package="com.example.app" bounds="[0,0][1080,2400]">'
+    '<node index="0" content-desc="Dismiss" class="android.view.View" '
+    'package="com.example.app" clickable="true" enabled="true" '
+    'bounds="[0,0][1080,2400]" />'
+    '<node index="1" text="Trust and connect" class="android.widget.Button" '
+    'package="com.example.app" clickable="true" enabled="true" '
+    'bounds="[640,1820][1080,1970]" />'
+    '</node>'
+    '</hierarchy>';
+
+/// A Flutter terminal: one big painted view that reports no text at all.
+const _canvasXml =
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<hierarchy rotation="0">'
+    '<node index="0" class="android.widget.FrameLayout" '
+    'package="com.example.app" bounds="[0,0][1080,2400]">'
+    '<node index="0" content-desc="Back" class="android.widget.Button" '
+    'package="com.example.app" clickable="true" enabled="true" '
+    'bounds="[20,180][148,280]" />'
+    '<node index="1" class="android.view.View" package="com.example.app" '
+    'enabled="true" bounds="[0,320][1080,2260]" />'
+    '</node>'
+    '</hierarchy>';
+
+void _fieldReportFixes() {
+  group('device_type submit', () {
+    test(
+      'presses a real Enter, so a view that handles its own keys gets it',
+      () async {
+        // The field report: `submit: true` was accepted, the reply said
+        // "typed", and nothing ran — the parameter did not exist, so it was
+        // dropped in silence. An IME action would not have been enough either:
+        // a Flutter TextInputClient or an embedded terminal receives committed
+        // text but never the action.
+        final runner = _adbRunner();
+        final server = await _server(runner);
+        addTearDown(server.dispose);
+
+        final reply = await server.call('device_type', {
+          'serial': 'emulator-5554',
+          'text': 'uname -s',
+          'submit': true,
+        });
+        expect(reply['ok'], isTrue, reason: '${reply['error']}');
+        final result = reply['result'] as Map;
+        expect(result['submitted'], isTrue);
+
+        final sent = runner.requests
+            .map((r) => r.arguments.join(' '))
+            .where((a) => a.contains('input'))
+            .toList();
+        expect(
+          sent.any(
+            (a) => a.contains('keyevent') && a.contains('KEYCODE_ENTER'),
+          ),
+          isTrue,
+          reason: 'expected a real key press, not an IME action; sent: $sent',
+        );
+      },
+    );
+
+    test('and says nothing about submitting when it was not asked', () async {
+      final server = await _server(_adbRunner());
+      addTearDown(server.dispose);
+
+      final reply = await server.call('device_type', {
+        'serial': 'emulator-5554',
+        'text': 'uname -s',
+      });
+      expect((reply['result'] as Map).containsKey('submitted'), isFalse);
+    });
+  });
+
+  test('device_tap_element refuses a full-screen scrim', () async {
+    final server = await _server(_adbRunner(dumpXml: _scrimXml));
+    addTearDown(server.dispose);
+
+    final error = _error(
+      await server.call('device_tap_element', {
+        'serial': 'emulator-5554',
+        'contentDesc': 'Dismiss',
+      }),
+    );
+    expect(error, contains('covers the whole'));
+    expect(
+      error,
+      contains('Trust and connect'),
+      reason: 'the listing should show what is actually on screen',
+    );
+  });
+
+  test('device_tap_element names the runner-up it did not take', () async {
+    final server = await _server(_adbRunner());
+    addTearDown(server.dispose);
+
+    // "Settings" is also a substring of "Search settings", so this tap is
+    // chosen from two. Reading which one lost is how a bad pick gets
+    // diagnosed without a second round trip.
+    final text = _text(
+      await server.call('device_tap_element', {
+        'serial': 'emulator-5554',
+        'text': 'Settings',
+      }),
+    );
+    expect(text, contains('chosen from 2 matches'));
+    expect(text, contains('also:'));
+    expect(text, contains('Search settings'));
+  });
+
+  test(
+    'device_ui_dump says when the screen is painted, not composed',
+    () async {
+      final server = await _server(_adbRunner(dumpXml: _canvasXml));
+      addTearDown(server.dispose);
+
+      final text = _text(
+        await server.call('device_ui_dump', {'serial': 'emulator-5554'}),
+      );
+      // Without this the dump reads like a success — "2 of 3 nodes" — rather
+      // than a blind spot, and the next move is to dump again.
+      expect(text, contains('custom-painted'));
+      expect(text, contains('device_screenshot'));
+    },
+  );
+
+  test('and stays quiet on a screen that really is made of widgets', () async {
+    final server = await _server(_adbRunner());
+    addTearDown(server.dispose);
+
+    final text = _text(
+      await server.call('device_ui_dump', {'serial': 'emulator-5554'}),
+    );
+    expect(text, isNot(contains('custom-painted')));
   });
 }
