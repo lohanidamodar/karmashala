@@ -18,6 +18,7 @@ import '../../sessions/application/session_working_directory.dart';
 import '../../sessions/domain/session.dart';
 import '../../sessions/domain/session_launch.dart';
 import '../../sessions/domain/session_resume.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 
 /// What clicking a card or a `+` actually did.
 enum ExplorerOutcome {
@@ -221,6 +222,42 @@ class ExplorerActions {
     } catch (error) {
       return ExplorerResult(ExplorerOutcome.failed, message: _say(error));
     }
+  }
+
+  /// Resumes the session whose **restored** pane is [paneId].
+  ///
+  /// The terminal's own way in, for the button on a dormant agent pane's status
+  /// bar. It is deliberately [openNative] and not a second implementation: the
+  /// pane says which session it is holding history for, and every question
+  /// after that — is one of our processes already on this conversation, did a
+  /// previous resume leave a twin row, will this agent share a conversation at
+  /// all, is there a CLI id to resume in the first place — has exactly one
+  /// answer in this app and it is the one above.
+  ///
+  /// **Nothing is started here.** `SessionLauncher` looks for a pane still
+  /// marked `PaneLiveness.restored` and runs its newly built `--resume` in it,
+  /// so this pane is the one the launch is about to claim; giving it a process
+  /// first would take it away from the resume and leave two terminals for one
+  /// session. See `shouldResumeRatherThanRestart`.
+  ///
+  /// A pane with no session behind it is not an error worth a dialog — an agent
+  /// pane opened outside a session row has nothing to resume, and saying so is
+  /// the whole answer.
+  Future<ExplorerResult> resumeRestoredPane(String paneId) async {
+    final sessionId = _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId)
+        ?.agentLaunch
+        ?.sessionId;
+    if (sessionId == null) {
+      return const ExplorerResult(
+        ExplorerOutcome.failed,
+        message:
+            'This terminal is not one of our sessions, so there is no '
+            'conversation to continue in it.',
+      );
+    }
+    return openNative(sessionId);
   }
 
   /// Opens an imported CLI session: reattach when we are already running that

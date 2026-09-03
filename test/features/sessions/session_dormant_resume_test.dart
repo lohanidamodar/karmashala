@@ -18,6 +18,7 @@ import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,6 +49,9 @@ const _sharing = AgentDescriptor(
   launch: AgentLaunchSpec(
     permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--resume'),
+    // So a session started with an opening prompt records that prompt, which
+    // is what pressing Start used to run a second time.
+    prompt: AgentPromptSupport.positional(),
     allowsConcurrentResume: true,
   ),
 );
@@ -94,6 +98,7 @@ ProviderContainer containerOver(AppDatabase db, {String idPrefix = 's-'}) =>
 Future<String> startSession(
   ProviderContainer container, {
   String externalId = 'ext-1',
+  String? firstMessage,
 }) async {
   final launched = await container
       .read(sessionLauncherProvider)
@@ -103,6 +108,7 @@ Future<String> startSession(
           installation: agentInstallation(agentId: 'sharing'),
           title: 'Earlier work',
           purpose: SessionPurpose.newSession,
+          firstMessage: firstMessage,
         ),
       );
   container
@@ -253,5 +259,102 @@ void main() {
     expect(launcher.reveal(sessionId), isFalse);
     // But it is a pane, and it is this session's.
     expect(launcher.dormantPaneFor(sessionId), paneOf(next, sessionId));
+  });
+
+  /// The button on the pane itself.
+  ///
+  /// Everything above resumes from a *session* — a row clicked in the Explorer,
+  /// a name picked in quick open. The pane bar asks the same question from the
+  /// other end ("this terminal, whatever it is holding") and used to answer it
+  /// with `startPane`, which re-executes the recorded command line. For a
+  /// session first launched with an opening prompt that is the prompt again: a
+  /// new conversation, a turn spent, tools run, while the transcript the user
+  /// came back for stays on disk.
+  group('the pane bar', () {
+    test('resumes a restored agent pane instead of running its opening '
+        'prompt again', () async {
+      final db = seededDatabase();
+      addTearDown(db.close);
+
+      final first = containerOver(db);
+      final sessionId = await startSession(
+        first,
+        firstMessage: 'summarise yesterday',
+      );
+      final paneId = paneOf(first, sessionId);
+      final terminals = first.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      expect(
+        terminals.instanceFor(paneId)!.agentLaunch!.arguments,
+        contains('summarise yesterday'),
+        reason: 'the recorded line is the one Start used to re-run',
+      );
+      terminals.instanceFor(paneId)!.terminal.write('what happened\r\n');
+      terminals.persistLayout();
+      first.dispose();
+
+      final next = containerOver(db, idPrefix: 't-');
+      addTearDown(next.dispose);
+      expect(
+        next.read(terminalSessionsControllerProvider).livenessOf(paneId),
+        PaneLiveness.restored,
+      );
+
+      final result = await next
+          .read(explorerActionsProvider)
+          .resumeRestoredPane(paneId);
+
+      expect(result.outcome, ExplorerOutcome.resumed);
+      final started =
+          next
+                  .read(terminalSessionsControllerProvider.notifier)
+                  .instanceFor(paneId)!
+              as FakeTerminalInstance;
+      expect(started.agentLaunch!.arguments, containsAllInOrder([
+        '--resume',
+        'ext-1',
+      ]));
+      expect(
+        started.agentLaunch!.arguments,
+        isNot(contains('summarise yesterday')),
+        reason:
+            'this is the whole bug: the opening prompt is not something to '
+            'run again on the way back into a conversation',
+      );
+      // And the pane the resume was looking for is the pane it ran in, so the
+      // user still has one terminal for one session.
+      expect(
+        next.read(terminalSessionsControllerProvider).tabs.single.layout.panes,
+        [paneId],
+      );
+      expect(started.restored, contains('what happened'));
+    });
+
+    test('says so when the pane is not one of our sessions', () async {
+      final db = seededDatabase();
+      addTearDown(db.close);
+      final container = containerOver(db);
+      addTearDown(container.dispose);
+
+      // An agent pane with no session row behind it — nothing to continue, and
+      // a silent no-op would be indistinguishable from a broken button.
+      final opened = container
+          .read(terminalSessionsControllerProvider.notifier)
+          .openAgentTab(
+            const AgentPaneLaunch(
+              agentId: 'sharing',
+              executable: 'sharing',
+              workingDirectory: r'C:\ws',
+            ),
+          );
+
+      final result = await container
+          .read(explorerActionsProvider)
+          .resumeRestoredPane(opened.paneId);
+
+      expect(result.outcome, ExplorerOutcome.failed);
+      expect(result.message, contains('not one of our sessions'));
+    });
   });
 }

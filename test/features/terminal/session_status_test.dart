@@ -1,5 +1,6 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_layout.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
 import 'package:karmashala/src/features/terminal/domain/terminal_profile.dart';
@@ -22,12 +23,17 @@ String paneOf(ProviderContainer container, String tabId) => container
 
 void main() {
   group('PaneStatusBar', () {
-    Future<void> pump(WidgetTester tester, PaneLiveness liveness) {
+    Future<void> pump(
+      WidgetTester tester,
+      PaneLiveness liveness, {
+      bool resumes = false,
+    }) {
       return tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: PaneStatusBar(
               liveness: liveness,
+              resumes: resumes,
               workingDirectory: r'C:\ws',
               onStart: () {},
             ),
@@ -54,6 +60,20 @@ void main() {
 
       expect(find.textContaining('Session ended'), findsOneWidget);
       expect(find.text('Restart'), findsOneWidget);
+    });
+
+    testWidgets('a restored pane that resumes says so, and says nothing '
+        'different about the history', (tester) async {
+      await pump(tester, PaneLiveness.restored, resumes: true);
+
+      // The sentence is the same one — the pane really is restored history
+      // either way. Only the verb changes, because only the verb was wrong.
+      expect(
+        find.textContaining('Restored history — nothing is running here'),
+        findsOneWidget,
+      );
+      expect(find.text('Resume'), findsOneWidget);
+      expect(find.text('Start'), findsNothing);
     });
   });
 
@@ -106,6 +126,83 @@ void main() {
 
       expect(find.byType(PaneStatusBar), findsOneWidget);
       expect(find.text('Restart'), findsOneWidget);
+    });
+
+    /// Which of the two verbs the button runs, from the panel rather than from
+    /// the rule — because the rule being right is no use if the bar asks it a
+    /// different question than the button does.
+    testWidgets('a restored agent pane offers a resume, and pressing it '
+        'starts no process here', (tester) async {
+      final container = panelContainer();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final opened = controller.openAgentTab(
+        const AgentPaneLaunch(
+          agentId: 'claudeCode',
+          executable: 'claude',
+          // Recorded exactly as a fresh conversation records itself: the
+          // opening prompt is *in* the durable arguments.
+          arguments: ['--session-id', 'sess-1', 'summarise yesterday'],
+          workingDirectory: r'C:\ws',
+          sessionId: 'sess-1',
+          title: 'Earlier work',
+        ),
+      );
+      final instance =
+          controller.instanceFor(opened.paneId)! as FakeTerminalInstance;
+      instance.livenessNotifier.value = PaneLiveness.restored;
+
+      await pumpPanel(tester, container);
+      expect(find.text('Resume'), findsOneWidget);
+
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // There is no session row in this container, so the resume refuses — and
+      // what it must not do on the way out is fall back to re-running the
+      // recorded line, which is what `startPane` would have done.
+      expect(
+        controller.instanceFor(opened.paneId),
+        same(instance),
+        reason: 'the pane was not released and rebuilt around a new process',
+      );
+      expect(
+        container.read(terminalSessionsControllerProvider).livenessOf(
+          opened.paneId,
+        ),
+        PaneLiveness.restored,
+      );
+      expect(find.byType(SnackBar), findsOneWidget);
+    });
+
+    testWidgets('a restored shell pane still starts what it recorded', (
+      tester,
+    ) async {
+      final container = panelContainer();
+      final controller = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final tabId = controller.openTab(TerminalProfile.powerShell);
+      final pane = paneOf(container, tabId);
+      final instance = controller.instanceFor(pane)! as FakeTerminalInstance;
+      instance.livenessNotifier.value = PaneLiveness.restored;
+
+      await pumpPanel(tester, container);
+      // Re-running `pwsh` in the directory it was in is not an approximation
+      // of what the user wants; it is what they want.
+      expect(find.text('Start'), findsOneWidget);
+      expect(find.text('Resume'), findsNothing);
+
+      await tester.tap(find.text('Start'));
+      await tester.pump();
+
+      expect(controller.instanceFor(pane), isNot(same(instance)));
+      expect(
+        container.read(terminalSessionsControllerProvider).livenessOf(pane),
+        PaneLiveness.live,
+      );
     });
 
     testWidgets('the tab bar shows nothing until a session is detached', (

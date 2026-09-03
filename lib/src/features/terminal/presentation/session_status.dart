@@ -15,12 +15,26 @@ class PaneStatusBar extends StatelessWidget {
   const PaneStatusBar({
     required this.liveness,
     required this.onStart,
+    this.resumes = false,
     this.workingDirectory,
     super.key,
   });
 
   final PaneLiveness liveness;
   final String? workingDirectory;
+
+  /// Whether pressing the button continues the stored conversation rather than
+  /// running the pane's recorded command line again — `shouldResumeRatherThan
+  /// Restart`, which only an agent pane holding restored history satisfies.
+  ///
+  /// It changes one word, and the word is the point. The sentence beside it is
+  /// unchanged — the pane really is "restored history — nothing is running
+  /// here" either way — but *Start* is what made re-running the opening prompt
+  /// look like correct behaviour, because starting is exactly what it did. What
+  /// the button does now is pick the transcript back up, and the only honest
+  /// name for that is the one every other resume in the app already uses.
+  final bool resumes;
+
   final VoidCallback onStart;
 
   @override
@@ -30,11 +44,12 @@ class PaneStatusBar extends StatelessWidget {
     final label = restored
         ? 'Restored history — nothing is running here'
         : 'Session ended';
+    final action = restored ? (resumes ? 'Resume' : 'Start') : 'Restart';
     final where = workingDirectory;
 
     return Semantics(
       container: true,
-      label: '$label. ${restored ? "Start" : "Restart"} this session.',
+      label: '$label. $action this session.',
       child: Material(
         color: theme.colorScheme.surfaceContainerHigh,
         child: Padding(
@@ -61,7 +76,7 @@ class PaneStatusBar extends StatelessWidget {
               TextButton.icon(
                 onPressed: onStart,
                 icon: const Icon(AppIcons.play, size: Chrome.iconAction),
-                label: Text(restored ? 'Start' : 'Restart'),
+                label: Text(action),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
                   textStyle: theme.textTheme.labelMedium,

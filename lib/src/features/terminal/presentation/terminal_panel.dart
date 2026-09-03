@@ -7,6 +7,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/domain/environment_kind.dart';
+import '../../explorer/application/explorer_actions.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
@@ -23,6 +24,7 @@ import '../domain/mounted_tabs.dart';
 import '../domain/terminal_palette.dart';
 import '../domain/pane_layout.dart';
 import '../domain/pane_liveness.dart';
+import '../domain/pane_restart.dart';
 import '../domain/terminal_profile.dart';
 import '../../../app/shell/quick_open/quick_open.dart';
 import '../../../app/shell/shell_shortcuts.dart';
@@ -159,6 +161,39 @@ class TerminalActions {
       line: line,
       lineCount: instance.terminal.buffer.lines.length,
     );
+  }
+
+  /// What the button on a dormant pane's status bar does.
+  ///
+  /// One button, two verbs, and the routing between them is
+  /// [shouldResumeRatherThanRestart] rather than anything decided here: a
+  /// restored **agent** pane is a stored conversation and gets a real resume,
+  /// everything else re-runs the line it recorded. The bar says which by
+  /// reading the same rule, so the word on the button and the code behind it
+  /// cannot drift apart.
+  ///
+  /// The refusal is shown rather than swallowed. A resume that cannot happen —
+  /// an agent that never named its conversation, a repository since removed —
+  /// leaves the pane exactly as it was, and a button that appears to do nothing
+  /// is indistinguishable from a broken one.
+  Future<void> startOrResumePane(BuildContext context, String paneId) async {
+    final instance = _sessions.instanceFor(paneId);
+    if (instance == null) return;
+    if (!shouldResumeRatherThanRestart(
+      liveness: instance.liveness.value,
+      isAgentPane: instance.agentLaunch != null,
+    )) {
+      _sessions.startPane(paneId);
+      return;
+    }
+    final result = await ref
+        .read(explorerActionsProvider)
+        .resumeRestoredPane(paneId);
+    final message = result.message;
+    if (message == null || !context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   /// Shows what is still running with no tab, and lets the user bring one back
@@ -478,17 +513,20 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                   terminalPaneLivenessProvider(paneId),
                 );
                 if (liveness.isLive) return const SizedBox.shrink();
+                // The pane's *current* instance for the same reason the view
+                // below takes one: a restart replaces it, and a bar quoting the
+                // released one would name the directory of the session before
+                // last if the new process also stopped.
+                final live =
+                    ref.watch(terminalPaneInstanceProvider(paneId)) ?? instance;
                 return PaneStatusBar(
                   liveness: liveness,
-                  // The pane's *current* instance for the same reason the view
-                  // below takes one: a restart replaces it, and a bar quoting
-                  // the released one would name the directory of the session
-                  // before last if the new process also stopped.
-                  workingDirectory:
-                      (ref.watch(terminalPaneInstanceProvider(paneId)) ??
-                              instance)
-                          .workingDirectory,
-                  onStart: () => _sessions.startPane(paneId),
+                  workingDirectory: live.workingDirectory,
+                  resumes: shouldResumeRatherThanRestart(
+                    liveness: liveness,
+                    isAgentPane: live.agentLaunch != null,
+                  ),
+                  onStart: () => _actions.startOrResumePane(context, paneId),
                 );
               },
             ),

@@ -69,3 +69,41 @@ bool shouldRestartOnActivate({
   required bool wasLive,
   required bool isAgentPane,
 }) => enabled && wasLive && !isAgentPane;
+
+/// Whether the button on a dormant pane's status bar should **resume the
+/// session** rather than re-run the command line the pane recorded.
+///
+/// The two are not variations on each other, and the button used to run the
+/// wrong one. `TerminalSessionsController.startPane` re-executes
+/// [PaneLiveness.restored] history's own recorded arguments — which for a
+/// session first launched with an opening prompt *is that prompt again*: a new
+/// conversation, a turn spent, tools run, while the transcript the user came
+/// back for stays on disk. The owner's report is the shape of it: "when I
+/// exited I had 4 tabs open; when I came back I had to start each tab one by
+/// one". What they wanted from each of those buttons was the conversation, not
+/// a re-run.
+///
+/// So a restored **agent** pane routes to `SessionLauncher` instead, which
+/// builds a *new* `--resume` command line and — this is the part that makes it
+/// one terminal rather than two — looks for a pane still marked
+/// [PaneLiveness.restored] to run it in. That is the same pane. The caller must
+/// therefore hand the pane over rather than claim it: starting a process here
+/// first would take the pane away from the resume that is looking for it, the
+/// hazard the library comment above names from the launch side.
+///
+/// Everything else keeps re-running its record, because for everything else
+/// that is right:
+///
+/// * **A shell pane** — restored or exited. Re-running `pwsh` in the directory
+///   it was in is not an approximation of what the user wants, it *is* what
+///   they want, and there is no conversation to continue. This is almost
+///   certainly why the agent case went unnoticed for so long: the button was
+///   correct for the panes people press it on most.
+/// * **An agent pane that ran and exited** — "Session ended · Restart". Its
+///   buffer belongs to this run of the app rather than to disk, and re-running
+///   the line that produced it is a defensible retry. `dormantPaneFor` draws
+///   the same line for the same reason.
+bool shouldResumeRatherThanRestart({
+  required PaneLiveness liveness,
+  required bool isAgentPane,
+}) => liveness == PaneLiveness.restored && isAgentPane;

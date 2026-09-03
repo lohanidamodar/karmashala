@@ -58,6 +58,36 @@ void main() {
     });
   });
 
+  group('shouldResumeRatherThanRestart', () {
+    test('only a restored agent pane resumes', () {
+      expect(
+        shouldResumeRatherThanRestart(
+          liveness: PaneLiveness.restored,
+          isAgentPane: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('a shell is re-run in both states, and so is a dead agent', () {
+      for (final kept in [
+        (liveness: PaneLiveness.restored, isAgentPane: false),
+        (liveness: PaneLiveness.exited, isAgentPane: false),
+        (liveness: PaneLiveness.exited, isAgentPane: true),
+        (liveness: PaneLiveness.live, isAgentPane: true),
+      ]) {
+        expect(
+          shouldResumeRatherThanRestart(
+            liveness: kept.liveness,
+            isAgentPane: kept.isAgentPane,
+          ),
+          isFalse,
+          reason: '$kept re-runs what it recorded',
+        );
+      }
+    });
+  });
+
   group('a pane that was live at close', () {
     test('comes back running, with its history above the new process', () {
       final db = AppDatabase.memory();
