@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 import '../widgets/desktop_dialog.dart';
+import 'karmashala_about_dialog.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
 import 'side_panel_state.dart';
@@ -571,8 +572,19 @@ class _DesktopMenuBar extends ConsumerWidget {
           menuChildren: [
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.gearSix),
+              // `Ctrl+,` / `⌘,` is the settings chord on every platform, and
+              // unlike most Ctrl keys it is not one a shell claims — see
+              // `commandActivator`'s comment on why Ctrl+C and Ctrl+V had to
+              // change shape instead of swapping a modifier.
+              shortcut: commandActivator(LogicalKeyboardKey.comma),
               onPressed: () => SettingsScreen.show(context),
               child: const Text('Settings'),
+            ),
+            const Divider(height: 1),
+            MenuItemButton(
+              leadingIcon: const Icon(AppIcons.info),
+              onPressed: () => KarmashalaAboutDialog.show(context),
+              child: const Text('About Karmashala'),
             ),
           ],
           child: const Text('Tools'),
