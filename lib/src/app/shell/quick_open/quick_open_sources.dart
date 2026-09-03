@@ -877,19 +877,33 @@ class QuickOpenSources {
     )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// **The notifier is resolved before the `await`, and has to be.**
+  ///
+  /// [dismiss] pops the palette *before* running the action, so by the time the
+  /// user presses Save in the editor — several frames and a whole typing
+  /// session later — `_QuickOpenState` is long unmounted. Riverpod 3's
+  /// `ConsumerStatefulElement._assertNotDisposed` **throws** on `ref.read` then;
+  /// it is a real `throw` and not an assert, so a release build does it too.
+  /// The add never ran, the snippet was never written to the dao and never
+  /// entered state, and the user's snippet was *lost* rather than stale — which
+  /// is why waiting for a refresh never brought it back. Through the terminal
+  /// toolbar's snippet button, this is the most discoverable way to add one.
+  ///
+  /// Same discipline as [_openFile] above, which hoists its messenger for the
+  /// same reason: after an `await`, nothing that belongs to the widget is
+  /// still there to ask.
   Future<void> _newSnippet(SnippetTarget? target) async {
+    final snippets = ref.read(commandSnippetsProvider.notifier);
     final draft = await SnippetEditorDialog.show(
       context,
       suggestedShellId: target?.shellId,
     );
     if (draft == null) return;
-    ref
-        .read(commandSnippetsProvider.notifier)
-        .add(
-          label: draft.label,
-          command: draft.command,
-          shellId: draft.shellId,
-          submit: draft.submit,
-        );
+    snippets.add(
+      label: draft.label,
+      command: draft.command,
+      shellId: draft.shellId,
+      submit: draft.submit,
+    );
   }
 }
