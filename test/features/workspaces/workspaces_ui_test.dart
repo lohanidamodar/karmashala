@@ -181,15 +181,57 @@ void main() {
       expect(find.textContaining('already exists'), findsOneWidget);
       expect(container.read(workspacesControllerProvider).length, 1);
 
-      await tester.tap(find.byTooltip('Rename Personal'));
+      await tester.tap(find.byTooltip('Edit Personal'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField).last, 'Personal projects');
-      await tester.tap(find.byTooltip('Save name'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Name'),
+        'Personal projects',
+      );
+      await tester.tap(find.byTooltip('Save context'));
       await tester.pumpAndSettle();
       expect(
         container.read(workspacesControllerProvider).single.name,
         'Personal projects',
       );
+    });
+
+    testWidgets('describes a context, and empties the description again', (
+      tester,
+    ) async {
+      final personal = container
+          .read(workspacesControllerProvider.notifier)
+          .create('Personal');
+      await tester.pumpWidget(dialogApp());
+      await tester.pumpAndSettle();
+      // With nothing said, the row says the one thing it knows for free.
+      expect(find.text('0 projects'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Edit Personal'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Description'),
+        'Everything I run for myself',
+      );
+      await tester.tap(find.byTooltip('Save context'));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(workspacesControllerProvider).single.description,
+        'Everything I run for myself',
+      );
+      expect(find.text('Everything I run for myself'), findsOneWidget);
+
+      // Emptying the field removes the sentence and keeps the context.
+      await tester.tap(find.byTooltip('Edit Personal'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Description'), '');
+      await tester.tap(find.byTooltip('Save context'));
+      await tester.pumpAndSettle();
+
+      final after = container.read(workspacesControllerProvider).single;
+      expect(after.id, personal.id);
+      expect(after.description, isNull);
+      expect(find.text('0 projects'), findsOneWidget);
     });
 
     testWidgets('deleting confirms in place and keeps the projects', (

@@ -10,13 +10,28 @@ class WorkspaceDao {
 
   void insert(Workspace workspace) {
     _db.execute(
-      'INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?);',
-      [workspace.id, workspace.name, isoFromDate(workspace.createdAt)],
+      'INSERT INTO workspaces (id, name, description, created_at) '
+      'VALUES (?, ?, ?, ?);',
+      [
+        workspace.id,
+        workspace.name,
+        workspace.description,
+        isoFromDate(workspace.createdAt),
+      ],
     );
   }
 
-  void rename(String id, String name) {
-    _db.execute('UPDATE workspaces SET name = ? WHERE id = ?;', [name, id]);
+  /// The name and the description in **one** statement.
+  ///
+  /// They are edited together — the dialog's inline editor shows both fields at
+  /// once — so writing them separately would make one user action two writes
+  /// and leave a window in which the row held half of it.
+  void updateDetails(String id, {required String name, String? description}) {
+    _db.execute('UPDATE workspaces SET name = ?, description = ? WHERE id = ?;', [
+      name,
+      description,
+      id,
+    ]);
   }
 
   /// Removes the workspace. Its projects are **kept** and become unassigned —
@@ -41,6 +56,7 @@ class WorkspaceDao {
   Workspace _fromRow(Map<String, Object?> row) => Workspace(
     id: row['id']! as String,
     name: row['name']! as String,
+    description: row['description'] as String?,
     createdAt: dateFromIso(row['created_at']),
   );
 }

@@ -18,6 +18,12 @@ import 'workspaces_dialog.dart';
 /// schema and the code keep `workspace`; the reader gets the word the owner
 /// used when asking for this.
 ///
+/// **The context stays a filter, and this bar is where it lives.** It sits
+/// directly above the tree, so a context *is* at the top of the Explorer — as a
+/// view of the list rather than as a level you enter. A level would tax every
+/// interaction underneath it and would make "show me everything" a place you
+/// have to navigate back to; here it is one click, always in the same spot.
+///
 /// One dense row, [Chrome.row] high, on the same gutter as the search field
 /// under it: at 720x560 the Explorer is a narrow column and a second slab of
 /// chrome would cost a project row.
@@ -35,20 +41,25 @@ class WorkspaceScopeBar extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final scope = ref.watch(workspaceScopeProvider);
     final workspaces = ref.watch(workspacesControllerProvider);
+    final counts = ref.watch(workspaceProjectCountsProvider);
 
-    final named = workspaces
+    final current = workspaces
         .where((w) => w.id == scope.workspaceId)
-        .map((w) => w.name)
         .firstOrNull;
     final label = scope.isAll
         ? 'All projects'
         : scope.unassignedOnly
         ? 'No context'
-        : named ?? 'All projects';
+        : current?.name ?? 'All projects';
     final narrowed = !scope.isAll;
 
     return PopupMenuButton<String>(
-      tooltip: 'Filter projects by context',
+      // What the narrowed-to context is *for*, where there is nowhere to draw
+      // it: the bar is one line and the name has to carry it. It is also the
+      // control's accessible name, so Narrator reads the same words.
+      tooltip: current?.description == null
+          ? 'Filter projects by context'
+          : '${current!.name} — ${current.description}',
       position: PopupMenuPosition.under,
       itemBuilder: (context) => [
         DesktopMenuItem(
@@ -59,9 +70,17 @@ class WorkspaceScopeBar extends ConsumerWidget {
         ),
         if (workspaces.isNotEmpty) const DesktopMenuDivider(),
         for (final workspace in workspaces)
-          DesktopMenuItem(
+          // Two lines, because a name alone does not say what a context is for
+          // — and the answer, or its size when nobody has said, is exactly one
+          // short line long.
+          DesktopMenuDetailItem(
             value: workspace.id,
             label: workspace.name,
+            detail: describeWorkspace(
+              workspace,
+              projectCount: counts[workspace.id] ?? 0,
+            ),
+            detailMaxLines: 1,
             icon: AppIcons.folder,
             selected: scope.workspaceId == workspace.id,
           ),

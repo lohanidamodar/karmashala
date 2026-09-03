@@ -14,6 +14,7 @@ enum QuickOpenGroup {
   tabs('Open tabs'),
   sessions('Sessions'),
   workspace('Projects & repositories'),
+  contexts('Contexts'),
   files('Files'),
   branches('Branches'),
   github('GitHub'),

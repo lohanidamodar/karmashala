@@ -13,8 +13,16 @@ void main() {
   late WorkspaceDao dao;
   late ProjectDao projects;
 
-  Workspace workspace({String id = 'w1', String name = 'PopupBits'}) =>
-      Workspace(id: id, name: name, createdAt: testTime);
+  Workspace workspace({
+    String id = 'w1',
+    String name = 'PopupBits',
+    String? description,
+  }) => Workspace(
+    id: id,
+    name: name,
+    description: description,
+    createdAt: testTime,
+  );
 
   setUp(() {
     db = AppDatabase.memory();
@@ -40,12 +48,25 @@ void main() {
     ]);
   });
 
-  test('rename changes only the name', () {
-    dao.insert(workspace());
-    dao.rename('w1', 'PopupBits Ltd');
+  test('updateDetails changes the name and the description, and nothing else', () {
+    dao.insert(workspace(description: 'The shipped apps'));
+    dao.updateDetails('w1', name: 'PopupBits Ltd', description: 'Ships');
     final loaded = dao.getById('w1')!;
     expect(loaded.name, 'PopupBits Ltd');
+    expect(loaded.description, 'Ships');
     expect(loaded.createdAt, testTime);
+  });
+
+  test('a description round-trips, and a null one stays null', () {
+    dao.insert(workspace(description: 'Everything I run for myself'));
+    dao.insert(workspace(id: 'w2', name: 'Games'));
+    expect(dao.getById('w1')!.description, 'Everything I run for myself');
+    expect(dao.getById('w2')!.description, isNull);
+
+    // Emptying the field removes the sentence; the context stays.
+    dao.updateDetails('w1', name: 'PopupBits');
+    expect(dao.getById('w1')!.description, isNull);
+    expect(dao.getById('w1')!.name, 'PopupBits');
   });
 
   test('a duplicate name is refused whatever the case', () {
