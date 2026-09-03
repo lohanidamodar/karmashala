@@ -18,7 +18,6 @@ import '../../features/environments/presentation/environment_health_dialog.dart'
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
-import '../../features/git/application/changes_providers.dart';
 import '../../features/notes/application/notes_providers.dart';
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/projects/application/projects_controller.dart';
@@ -459,7 +458,6 @@ class _DesktopMenuBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedRepo = ref.watch(selectedRepositoryIdProvider);
     final shell = ref.watch(shellControllerProvider);
     final panel = ref.watch(sidePanelProvider);
     final zen = ref.watch(terminalMaximizedProvider);
@@ -481,9 +479,9 @@ class _DesktopMenuBar extends ConsumerWidget {
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.chatCircleDots),
               shortcut: commandActivator(LogicalKeyboardKey.keyN),
-              onPressed: selectedRepo == null
-                  ? null
-                  : () => NewSessionDialog.show(context),
+              // Never disabled: the dialog chooses where the session runs, so
+              // it no longer needs the app to be pointed anywhere first.
+              onPressed: () => NewSessionDialog.show(context),
               child: const Text('New session'),
             ),
             const Divider(height: 1),

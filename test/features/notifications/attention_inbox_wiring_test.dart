@@ -92,6 +92,28 @@ void main() {
     ),
   );
 
+  test('an item carries the agent\'s own words, like the toast does', () {
+    // The inbox is the panel you open *because* you missed the toast. It
+    // showing less than the toast did was the wrong way round.
+    controller().apply(
+      InboxUpdate(
+        watched: {key},
+        news: [(session: watched, reason: NotificationReason.needsInput)],
+        details: {key: 'Claude needs your permission to use Bash'},
+      ),
+    );
+
+    expect(
+      container.read(attentionInboxProvider).items.single.detail,
+      'Claude needs your permission to use Bash',
+    );
+  });
+
+  test('and says nothing rather than something invented', () {
+    finished();
+    expect(container.read(attentionInboxProvider).items.single.detail, isNull);
+  });
+
   test('the attention count is the inbox\'s unseen count', () {
     expect(container.read(attentionCountProvider), 0);
     finished();

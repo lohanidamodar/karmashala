@@ -86,7 +86,8 @@ import '../domain/terminal_links.dart';
 /// a pane, so at most one exists no matter how many panes are open.
 ///
 /// With Ctrl held, the hovered pane pays — only when the pointer crosses into a
-/// different cell — one flatten of the hovered row (plus its wrapped
+/// different cell — one read of the cell's own hyperlink id, and then, only if
+/// that came back empty, one flatten of the hovered row (plus its wrapped
 /// continuation rows, at most [kMaxWrappedRows] either side), two regex passes
 /// over that text, and at most one `FileSystemEntity.type` per distinct
 /// candidate, memoised until the pointer leaves the pane. The `[Image #6]` scan
@@ -100,14 +101,34 @@ import '../domain/terminal_links.dart';
 /// anchored to the buffer, so it stays on its text as output scrolls, and there
 /// is at most one of them.
 ///
-/// ## OSC 8 is not honoured yet
+/// ## OSC 8
 ///
-/// xterm2 does record `OSC 8` hyperlinks — the parser calls `setHyperlink` and
-/// the painter takes an `activeHyperlinkId` — but nothing here reads them yet,
-/// so a hyperlinked label is still found only by the text scan below. That is a
-/// gap to close rather than a limitation of the dependency; it costs nothing in
-/// practice today, because an agent that emits `OSC 8` almost always uses the
-/// URL itself as the label.
+/// A program can also say outright that a run of cells is a link, rather than
+/// leaving it to be recognised: `OSC 8` puts a URI on the cells themselves, and
+/// the label over them can be anything — `docs`, an issue title, a filename.
+/// The text scan cannot find those, because there is nothing link-shaped to
+/// find.
+///
+/// It is **not a second mechanism**. [_resolveAt] asks the buffer first — one
+/// attribute read, cheaper than the flatten and the two regex passes it stands
+/// in front of — and what comes back is the same [TerminalLink] with a
+/// [UrlTarget] the scan would have produced, so the hint, the cursor, the click
+/// slop and `openUrl` are all reached by exactly one path. Only http and https
+/// are offered, the same rule the scan follows and for the same reason: the URI
+/// is written by whatever the program was piping.
+///
+/// The one thing it does differently is the affordance. A cell carrying a
+/// hyperlink id is already underlined by xterm2's own painter while Ctrl is
+/// held, so this draws no [TerminalController.underline] over it — a second
+/// rule on the same text, anchored by hand, for something the package is
+/// already drawing exactly.
+///
+/// That underline is the package's and does not know about the scheme rule, so
+/// a `vscode://` hyperlink is still underlined and still shows a hand while
+/// Ctrl is down, and a click on it does nothing. Left as it is on purpose:
+/// suppressing it means either teaching the terminal package this app's trust
+/// policy, or drawing our own rule and doubling it up on every link that *is*
+/// accepted. Opening the thing would be the actual bug.
 class TerminalPaneView extends ConsumerStatefulWidget {
   const TerminalPaneView({
     required this.instance,
@@ -338,8 +359,17 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     if (cell == _lastCell) return;
     _lastCell = cell;
 
-    final buffer = widget.instance.terminal.buffer;
+    final terminal = widget.instance.terminal;
+    final buffer = terminal.buffer;
     if (cell.y >= buffer.lines.length) return _clearLink();
+    // Asked first, and answered from the cell's own attributes: a program that
+    // said "this is a link" outranks a guess about what the text looks like,
+    // and saying so costs less than the scan below.
+    final hyperlink = osc8LinkAt(terminal, cell.y, cell.x);
+    if (hyperlink != null) {
+      if (hyperlink == _link) return;
+      return _showHyperlink(hyperlink);
+    }
     final line = linkLineAt(buffer, cell.y);
     final link = linkAt(line, cell.y, cell.x);
     if (link == null) {
@@ -471,9 +501,24 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     });
   }
 
+  /// Offers an `OSC 8` hyperlink, without drawing a rule under it.
+  ///
+  /// The cells carry the id, so xterm2's painter is already underlining them
+  /// and already showing a hand — see the class doc. All that is left for this
+  /// side is the hint and what a Ctrl+click reaches, which is the same path
+  /// every other target takes.
+  void _showHyperlink(TerminalLink link) {
+    _dropUnderline();
+    setState(() {
+      _link = link;
+      _resolved = null;
+      _imageRef = null;
+    });
+  }
+
   /// The underline itself, shared by both kinds of target.
   void _highlightSpan(int startRow, int startColumn, int endRow, int endColumn) {
-    _highlight?.dispose();
+    _dropUnderline();
     final buffer = widget.instance.terminal.buffer;
     // A rule under the text, not a wash over it: the link has to stay as
     // readable as the output around it. `underline` is xterm2's own API for
@@ -486,10 +531,14 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     );
   }
 
-  /// Drops the underline, keeping the "this cell has been answered" memory.
-  void _clearLink() {
+  void _dropUnderline() {
     _highlight?.dispose();
     _highlight = null;
+  }
+
+  /// Drops the underline, keeping the "this cell has been answered" memory.
+  void _clearLink() {
+    _dropUnderline();
     if (_link == null && _imageRef == null) return;
     setState(() {
       _link = null;

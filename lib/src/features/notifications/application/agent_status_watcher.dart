@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../agents/domain/agent_status.dart';
 import '../domain/agent_session_key.dart';
 import '../domain/agent_status_transition.dart';
+import '../domain/evidence_line.dart';
 import '../domain/inbox_item.dart';
 import '../domain/notification_policy.dart';
 import '../domain/notification_request.dart';
@@ -141,6 +142,7 @@ class AgentStatusWatcher {
       final attention = <AgentSessionKey, SessionAttention>{};
       final seen = <AgentSessionKey>{};
       final news = <({WatchedSession session, NotificationReason reason})>[];
+      final details = <AgentSessionKey, String>{};
 
       for (final entry in cycle.entries) {
         seen.add(entry.key);
@@ -150,6 +152,7 @@ class AgentStatusWatcher {
           focused: focused,
           visible: visible,
           news: news,
+          details: details,
         );
         if (waiting != null) attention[entry.key] = waiting;
       }
@@ -170,6 +173,7 @@ class AgentStatusWatcher {
           waiting: attention.values.toList(growable: false),
           watched: seen,
           news: news,
+          details: details,
         ),
       );
     } finally {
@@ -192,12 +196,14 @@ class AgentStatusWatcher {
   void applyHookChange(SessionStatusEntry entry) {
     if (_disposed) return;
     final news = <({WatchedSession session, NotificationReason reason})>[];
+    final details = <AgentSessionKey, String>{};
     final waiting = _judge(
       entry,
       settings: readSettings(),
       focused: isWindowFocused(),
       visible: visibleSessionIds(),
       news: news,
+      details: details,
     );
     if (waiting == null) {
       _attention.remove(entry.key);
@@ -210,6 +216,7 @@ class AgentStatusWatcher {
         waiting: waiting == null ? const [] : [waiting],
         watched: {entry.key},
         news: news,
+        details: details,
       ),
     );
   }
@@ -226,6 +233,7 @@ class AgentStatusWatcher {
     required bool focused,
     required Set<String> visible,
     required List<({WatchedSession session, NotificationReason reason})> news,
+    required Map<AgentSessionKey, String> details,
   }) {
     final session = entry.session;
     final report = entry.report;
@@ -237,12 +245,18 @@ class AgentStatusWatcher {
       from: previous,
       to: report.status,
       source: report.source,
+      waiting: report.waiting,
     );
 
     // What happened, before anything about whether to interrupt. The inbox
     // takes this; the toast takes the gated form below.
     final reason = policy.newsIn(transition).reason;
     if (reason != null) news.add((session: session, reason: reason));
+    // The inbox is the panel you open *because* you missed the toast, so it
+    // gets the same words the toast got rather than less.
+    if (evidenceLine(report.evidence) case final line?) {
+      details[session.key] = line;
+    }
 
     final decision = policy.decide(
       NotificationContext(
@@ -258,6 +272,7 @@ class AgentStatusWatcher {
           session: session,
           reason: decision.reason!,
           evidence: report.evidence,
+          waiting: report.waiting,
         ),
       );
     }

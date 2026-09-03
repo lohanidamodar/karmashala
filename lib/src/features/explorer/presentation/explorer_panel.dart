@@ -28,6 +28,7 @@ import '../application/checkout.dart';
 import '../application/explorer_actions.dart';
 import '../application/project_tree.dart';
 import '../application/session_diff_stat.dart';
+import '../application/checkout_picker.dart';
 import '../application/session_forest.dart';
 import '../application/session_selection.dart';
 import 'explorer_row.dart';
@@ -40,6 +41,7 @@ import '../../workspaces/domain/workspace.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
 import '../../workspaces/presentation/workspace_scope_bar.dart';
 import '../../sessions/application/session_actions.dart';
+import '../../sessions/application/session_defaults.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/domain/session.dart';
 import '../../settings/application/settings_controller.dart';
@@ -222,17 +224,66 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (message != null) _say(message);
   }
 
-  /// The dialog path — a title, an agent, a worktree, an external terminal.
+  /// Where a session started *at the project* runs: the first checkout the
+  /// picker would offer — parents before worktrees, and whatever the followed
+  /// session is working in first of all — falling back to any row at all for a
+  /// project git has not classified yet.
+  ///
+  /// One rule, so the `+` and the dialog beside it cannot land in two different
+  /// clones of the same project.
+  Repository? _defaultCheckoutOf(Project project) =>
+      ref.read(checkoutsInProjectProvider(project.id)).firstOrNull ??
+      ref.read(repositoryDaoProvider).getByProject(project.id).firstOrNull;
+
+  /// The `+` on a project row: **starts** a session, with no dialog at all.
+  ///
+  /// The owner's words: *"the plus icon on a project in the Explorer should
+  /// start a new session with defaults, without dialogs"*. The defaults are
+  /// [SessionDefaults] — the same ones the dialog opens on — so the two doors
+  /// cannot start different agents.
+  ///
+  /// **When the defaults are not enough, the dialog opens instead.** No
+  /// checkout to run in, or no agent installed where it would run: this button
+  /// spends tokens and runs an agent, so it must never guess at something
+  /// nobody asked for, and the dialog is where the missing piece is named and
+  /// can be filled in.
+  Future<void> _startWithDefaults(Project project) async {
+    final repository = _defaultCheckoutOf(project);
+    final defaults = repository == null
+        ? null
+        : ref.read(sessionDefaultsProvider).forCheckout(repository);
+    if (defaults == null || !defaults.isComplete) {
+      _newSessionDialog(project, repository: repository);
+      return;
+    }
+    // The card the session appears on has to be on screen: a start nobody can
+    // see is indistinguishable from a dead click.
+    if (ref.read(selectedProjectIdProvider) != project.id) {
+      ref.read(selectedProjectIdProvider.notifier).select(project.id);
+    }
+    setState(() => _expandedProjects.add(project.id));
+    await _startSession(
+      repository: repository!,
+      installation: defaults.installation,
+    );
+  }
+
+  /// The dialog path — a title, a destination, an agent, a worktree, an
+  /// external terminal.
   void _newSessionDialog(Project project, {Repository? repository}) {
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     setState(() => _expandedProjects.add(project.id));
-    final repo =
-        repository ??
-        ref.read(repositoryDaoProvider).getByProject(project.id).firstOrNull;
+    final repo = repository ?? _defaultCheckoutOf(project);
     if (repo == null) {
+      // Still a refusal, and deliberately: the dialog opens on the app's
+      // current selection, so opening it here would point it at whichever
+      // *other* project was last selected — a worse answer than a sentence
+      // naming the real problem.
       _say('This project has no Git repositories to run in.');
       return;
     }
+    // The dialog opens on the selection, so this is what points it at the
+    // project whose row was clicked.
     ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
     NewSessionDialog.show(context);
   }
@@ -369,7 +420,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       installations: installations,
     );
 
-    final selectedRepoId = ref.watch(selectedRepositoryIdProvider);
     final syncing = ref.watch(sessionSyncingProvider) > 0;
     // Only whether the mode is on, never the ticked set: this panel builds
     // every row of every expanded project, so watching the selection itself
@@ -446,13 +496,10 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               onPressed: _showDetected,
             ),
             IconButton(
-              tooltip: selectedRepoId == null
-                  ? 'Select a repository first'
-                  : 'New session',
+              // The dialog asks where; nothing has to be selected for it to.
+              tooltip: 'New session',
               icon: const Icon(AppIcons.chatCircleDots),
-              onPressed: selectedRepoId == null
-                  ? null
-                  : () => NewSessionDialog.show(context),
+              onPressed: () => NewSessionDialog.show(context),
             ),
             IconButton(
               tooltip: 'New project',
@@ -520,7 +567,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         pinned: pinned,
         summary: summary,
         onTap: () => _toggleProject(project),
-        onNewSession: () => _newSessionDialog(project),
+        // Starts one; the menu below is where the dialog lives.
+        onNewSession: () => _startWithDefaults(project),
         onTogglePin: () => _togglePin(project),
         menuItems: [
           DesktopMenuItem(

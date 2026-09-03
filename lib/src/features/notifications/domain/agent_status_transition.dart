@@ -12,6 +12,7 @@ class AgentStatusTransition {
     required this.from,
     required this.to,
     required this.source,
+    this.waiting = AgentWaitKind.unrecorded,
   });
 
   final AgentSessionKey session;
@@ -27,6 +28,16 @@ class AgentStatusTransition {
   /// us. A state file is something we polled, and it may have been sitting in
   /// its current shape for hours.
   final AgentStatusSource source;
+
+  /// What the agent is waiting *on*, when the source could tell.
+  ///
+  /// [AgentActivityStatus.awaitingApproval] answers "is the user being held
+  /// up", which is deliberately true for Claude Code's 60-second idle nudge as
+  /// well as for a permission prompt. It does not answer "is there something to
+  /// approve", and a surface that says there is when there is not sends the
+  /// user to look for a button that was never drawn. That is the difference
+  /// this carries.
+  final AgentWaitKind waiting;
 
   @override
   String toString() =>

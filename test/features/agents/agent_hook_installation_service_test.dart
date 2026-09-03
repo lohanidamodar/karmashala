@@ -112,6 +112,35 @@ void main() {
   /// today, byte for byte; nothing spooling is created beside it; and the
   /// drainer is handed an empty list, which runs no timer and therefore never
   /// reaches for a share that is not there.
+  test('an agent that is not installed here is skipped, not blamed', () async {
+    // The real shape: a Mac with the Antigravity IDE (`~/.gemini/antigravity`)
+    // but not its CLI (`~/.gemini/antigravity-cli`). There is no agent here to
+    // hook, which is the one way `install` can answer `false` without anything
+    // being wrong — and it was reported as though something were, on every
+    // launch: "Wrote antigravity hooks in macOS but the config does not carry
+    // them ... another process rewriting <path> is the usual cause."
+    final missing = p.join(claudeHome.path, 'not-installed', 'antigravity-cli');
+
+    final results = await containerWith(
+      _StubLocator([
+        CliStore(
+          environmentId: localEnvironmentId(),
+          homesByAgentId: {'claudeCode': missing},
+        ),
+      ]),
+    ).read(agentHookInstallationServiceProvider).installAll(endpoint);
+
+    final row = results.single;
+    expect(row.installed, isFalse);
+    expect(
+      row.skippedBecause,
+      'the agent is not installed in this environment',
+      reason: 'not "something else rewrote the config", which is a defect',
+    );
+    // And nothing was created for an agent that is not here.
+    expect(Directory(missing).existsSync(), isFalse);
+  });
+
   group('a machine with no WSL is untouched by any of this', () {
     test('a local store keeps the URL-and-token endpoint file', () async {
       final service = containerWith(
@@ -395,66 +424,69 @@ void main() {
       expect(spoolDir().existsSync(), isFalse);
     });
 
-    test('a hook left by an earlier run is removed, not left to fail', () async {
-      // The owner upgraded, and every prompt in their session printed
-      // `curl: (52) Empty reply from server` followed by a failed hook. The
-      // entry was written by an older build — a noisier command, and an
-      // address that no longer answers — and skipping only ever decided what
-      // *not* to write, so nothing in the app could reach in and clear it.
-      // An unreachable environment must end this sweep with none of our hooks
-      // in it, not with a stale one nobody can remove. SSH is what
-      // unreachable means now: another machine, no loopback and no shared
-      // filesystem either.
-      final (locator, ssh) = sshStore();
-      settings().writeAsStringSync(
-        jsonEncode({
-          'hooks': {
-            'SessionEnd': [
-              {
-                'hooks': [
-                  {
-                    'type': 'command',
-                    'command':
-                        'curl -sS -m 2 -X POST --data-binary @- '
-                        '"http://172.18.240.1:9999/agent-hook'
-                        '?marker=$agentHookMarker"',
-                  },
-                ],
-              },
-            ],
-            'UserPromptSubmit': [
-              {
-                'hooks': [
-                  {'type': 'command', 'command': 'echo mine'},
-                ],
-              },
-            ],
-          },
-        }),
-      );
+    test(
+      'a hook left by an earlier run is removed, not left to fail',
+      () async {
+        // The owner upgraded, and every prompt in their session printed
+        // `curl: (52) Empty reply from server` followed by a failed hook. The
+        // entry was written by an older build — a noisier command, and an
+        // address that no longer answers — and skipping only ever decided what
+        // *not* to write, so nothing in the app could reach in and clear it.
+        // An unreachable environment must end this sweep with none of our hooks
+        // in it, not with a stale one nobody can remove. SSH is what
+        // unreachable means now: another machine, no loopback and no shared
+        // filesystem either.
+        final (locator, ssh) = sshStore();
+        settings().writeAsStringSync(
+          jsonEncode({
+            'hooks': {
+              'SessionEnd': [
+                {
+                  'hooks': [
+                    {
+                      'type': 'command',
+                      'command':
+                          'curl -sS -m 2 -X POST --data-binary @- '
+                          '"http://172.18.240.1:9999/agent-hook'
+                          '?marker=$agentHookMarker"',
+                    },
+                  ],
+                },
+              ],
+              'UserPromptSubmit': [
+                {
+                  'hooks': [
+                    {'type': 'command', 'command': 'echo mine'},
+                  ],
+                },
+              ],
+            },
+          }),
+        );
 
-      final results = await containerWith(
-        locator,
-      ).read(agentHookInstallationServiceProvider).installAll(endpoint);
+        final results = await containerWith(
+          locator,
+        ).read(agentHookInstallationServiceProvider).installAll(endpoint);
 
-      final claude = results.singleWhere((r) => r.environmentId == ssh.id);
-      expect(claude.installed, isFalse);
-      expect(
-        claude.skippedBecause,
-        contains('left here by an earlier run was removed'),
-      );
-      final raw = settings().readAsStringSync();
-      expect(
-        raw,
-        isNot(contains(agentHookMarker)),
-        reason: 'the entry that was failing on every prompt is gone',
-      );
-      expect(
-        raw,
-        contains('echo mine'),
-        reason: "the user's own hook is not ours to remove",
-      );
-    });
+        final claude = results.singleWhere((r) => r.environmentId == ssh.id);
+        expect(claude.installed, isFalse);
+        expect(
+          claude.skippedBecause,
+          contains('left here by an earlier run was removed'),
+        );
+        final raw = settings().readAsStringSync();
+        expect(
+          raw,
+          isNot(contains(agentHookMarker)),
+          reason: 'the entry that was failing on every prompt is gone',
+        );
+        expect(
+          raw,
+          contains('echo mine'),
+          reason: "the user's own hook is not ours to remove",
+        );
+      },
+    );
 
     test('an unreachable Codex store gets no script either', () async {
       // Codex is the one agent whose callback address lives in a **file we
@@ -537,9 +569,9 @@ void main() {
       expect(spoolDir().existsSync(), isTrue);
       // A payload that was written but never drained, so the removal has to
       // take a non-empty directory with it.
-      File(p.join(spoolDir().path, '1234-0.json')).writeAsStringSync(
-        'agent=claudeCode\nevent=Stop\n\n{"session_id":"s"}',
-      );
+      File(
+        p.join(spoolDir().path, '1234-0.json'),
+      ).writeAsStringSync('agent=claudeCode\nevent=Stop\n\n{"session_id":"s"}');
 
       await service.installAll(
         const AgentHookEndpoint(port: 5555, token: 'tok2'),
@@ -618,7 +650,10 @@ void main() {
         contains('spool=$agentHookMarker.spool'),
       );
       for (var launch = 0; launch < 10; launch++) {
-        expect(endpointFile().readAsStringSync(), isNot(contains('tok$launch')));
+        expect(
+          endpointFile().readAsStringSync(),
+          isNot(contains('tok$launch')),
+        );
       }
     });
 
@@ -729,7 +764,9 @@ void main() {
     // Two stores, and the first cannot be read. The walk has to finish, the
     // reachable store has to be written, and the broken file has to be left
     // exactly as it was — it is somebody's real settings.json.
-    final broken = Directory.systemTemp.createTempSync('karmashala_hooksvc_bad_');
+    final broken = Directory.systemTemp.createTempSync(
+      'karmashala_hooksvc_bad_',
+    );
     addTearDown(() => broken.deleteSync(recursive: true));
     final brokenConfig = File(p.join(broken.path, 'settings.json'));
     brokenConfig.writeAsStringSync('{ not json');

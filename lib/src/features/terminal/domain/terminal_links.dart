@@ -241,6 +241,91 @@ TerminalLinkLine linkLineAt(
   );
 }
 
+/// The `OSC 8` hyperlink covering ([row], [column]) of [terminal]'s active
+/// buffer, as **the same [TerminalLink] the text scan produces**, or null when
+/// there is none there.
+///
+/// The two ways of finding a link meet here rather than beside each other. The
+/// text scan reads what was printed and guesses; `OSC 8` is the program saying
+/// what it meant, per cell, and answering it costs one attribute read instead
+/// of a row flatten and two regex passes. But everything downstream — the
+/// affordance, the hint, what a Ctrl+click reaches — should not care which of
+/// the two found the link, so this returns the same shape and [TerminalLink]
+/// gains no fifth case.
+///
+/// Two things it does not do, both deliberate:
+///
+/// * **Only http and https**, exactly as the text scan does above, and for the
+///   same reason: an `OSC 8` URI is written by whatever the program was piping,
+///   which is as untrusted as its stdout. Anything else — `file://`, a custom
+///   scheme — is left to the text scan below, which is no loss in the common
+///   case, because a program that hyperlinks a path (`ls --hyperlink`) uses the
+///   path itself as the label and the scan finds it as a path.
+/// * **No underline of its own.** The cell carries the id, so xterm2's painter
+///   already draws the active hyperlink underlined and turns the cursor into a
+///   hand. Anchoring a second rule over the same text would be two mechanisms
+///   drawing one affordance.
+///
+/// The span is walked in **cells**, which is what the text scan needs
+/// [TerminalLinkLine]'s character-to-cell mapping for: a run of cells sharing
+/// one hyperlink id is already in the coordinates a highlight wants. It follows
+/// a wrapped run across rows the same way [linkLineAt] does, and is bounded the
+/// same way.
+TerminalLink? osc8LinkAt(
+  Terminal terminal,
+  int row,
+  int column, {
+  int maxRows = kMaxWrappedRows,
+}) {
+  final id = terminal.hyperlinkIdAt(CellOffset(column, row));
+  if (id == 0) return null;
+  final url = _httpUrl(terminal.hyperlinkAt(CellOffset(column, row)) ?? '');
+  if (url == null) return null;
+
+  final lines = terminal.buffer.lines;
+  var startRow = row;
+  var startColumn = column;
+  while (true) {
+    if (startColumn > 0 &&
+        lines[startRow].getHyperlinkId(startColumn - 1) == id) {
+      startColumn--;
+      continue;
+    }
+    if (startColumn > 0 || startRow == 0) break;
+    if (!lines[startRow].isWrapped || row - (startRow - 1) > maxRows) break;
+    final above = lines[startRow - 1];
+    if (above.length == 0 || above.getHyperlinkId(above.length - 1) != id) {
+      break;
+    }
+    startRow--;
+    startColumn = above.length - 1;
+  }
+
+  var endRow = row;
+  var endColumn = column + 1;
+  while (true) {
+    final line = lines[endRow];
+    if (endColumn < line.length && line.getHyperlinkId(endColumn) == id) {
+      endColumn++;
+      continue;
+    }
+    if (endColumn < line.length || endRow + 1 >= lines.length) break;
+    final below = lines[endRow + 1];
+    if (!below.isWrapped || (endRow + 1) - row > maxRows) break;
+    if (below.length == 0 || below.getHyperlinkId(0) != id) break;
+    endRow++;
+    endColumn = 1;
+  }
+
+  return TerminalLink(
+    target: UrlTarget(url),
+    startRow: startRow,
+    startColumn: startColumn,
+    endRow: endRow,
+    endColumn: endColumn,
+  );
+}
+
 /// What a URL is allowed to be made of.
 ///
 /// Everything up to whitespace or a delimiter that cannot appear in one:
@@ -414,19 +499,25 @@ int _countOf(String text, String char, int end) {
   return count;
 }
 
-/// The absolute http(s) URL [text] means, or null when it is not one.
+/// The absolute http(s) URL scanned [text] means, or null when it is not one.
+///
+/// A bare `www.…` is what the scan may hand over, and it means https. An
+/// `OSC 8` URI is not run through this: a program writing the sequence wrote a
+/// scheme or wrote nothing usable.
+String? _resolveUrl(String text) => _httpUrl(
+  text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
+);
+
+/// [text] if it is an absolute http(s) URL, and null otherwise.
 ///
 /// A host is required, so a bare `http://` left over from a truncated line does
 /// not become a clickable nothing. A *dotted* host is not required, because
 /// `http://localhost:3000` is what half the dev servers an agent starts print,
 /// and so is a bare IP.
-String? _resolveUrl(String text) {
-  final absolute = text.toLowerCase().startsWith('www.')
-      ? 'https://$text'
-      : text;
-  final uri = Uri.tryParse(absolute);
+String? _httpUrl(String text) {
+  final uri = Uri.tryParse(text);
   if (uri == null) return null;
   if (uri.scheme != 'http' && uri.scheme != 'https') return null;
   if (uri.host.isEmpty) return null;
-  return absolute;
+  return text;
 }

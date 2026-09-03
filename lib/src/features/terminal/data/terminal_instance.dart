@@ -11,7 +11,6 @@ import '../domain/agent_pane_launch.dart';
 import '../domain/enter_key_encoding.dart';
 import '../domain/ingest_tier.dart';
 import '../domain/launch_context.dart';
-import '../domain/mouse_wheel_reporter.dart';
 import '../domain/osc_router.dart';
 import '../domain/pane_liveness.dart';
 import '../domain/scrollback_limits.dart';
@@ -281,12 +280,13 @@ class PtyTerminalInstance
     // one. Handlers are set either way rather than only on the fresh path: the
     // two are the same values, and a branch here is a branch that can drift.
     terminal = (adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines))
-      // The wheel's button ids, which stock xterm 4.0.0 got wrong badly enough
-      // to stop tmux scrolling — see [KarmashalaMouseHandler], which xterm2 now
-      // agrees with rather than needing.
-      ..mouseHandler = const KarmashalaMouseHandler()
-      // ...and encodes every modified Enter as a bare CR, so Shift+Enter is
-      // indistinguishable from submit.
+      // The package's own mouse handler, which reports the wheel by the xterm
+      // spec's ids — see `mouse_wheel_wire_format_test.dart`. Stock xterm 4.0.0
+      // did not, and a handler of ours corrected it; xterm2 needs no correcting.
+      //
+      // `KarmashalaInputHandler` is still ours: the package encodes every
+      // modified Enter as a bare CR, so Shift+Enter is indistinguishable from
+      // submit.
       ..inputHandler = const KarmashalaInputHandler()
       // The pane owns xterm's single OSC slot for its whole life and fans it
       // out, because two unrelated things read it — OSC 133 command blocks,
@@ -829,7 +829,6 @@ class DormantTerminalInstance
   Terminal _buildTerminal() {
     _bufferBuilt = true;
     final built = Terminal(maxLines: kLiveScrollbackMaxLines)
-      ..mouseHandler = const KarmashalaMouseHandler()
       ..inputHandler = const KarmashalaInputHandler();
     final hint = gridHint;
     if (hint != null) {

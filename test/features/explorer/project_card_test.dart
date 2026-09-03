@@ -161,7 +161,7 @@ void main() {
       // permanent button on every row was the clutter the owner reported. It
       // comes back under the pointer.
       await pump(tester, width: 200);
-      expect(find.byTooltip('New session in this project'), findsOneWidget);
+      expect(find.byTooltip('Start a session here with the default agent'), findsOneWidget);
       expect(find.byTooltip('Project actions'), findsNothing);
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);

@@ -33,7 +33,13 @@ void main() {
       container.read(terminalSearchControllerProvider);
 
   int highlightCount() =>
-      sessions.instanceFor(paneId)!.controller.highlights.length;
+      sessions.instanceFor(paneId)!.controller.searchHighlights.length;
+
+  /// Which painted hit xterm2 gives `searchHitBackgroundCurrent` to, or -1 when
+  /// none is painted. This is what makes the selected match tellable from the
+  /// rest, so it is asserted rather than left to the colour.
+  int currentHighlight() =>
+      sessions.instanceFor(paneId)!.controller.currentSearchHighlight;
 
   test('open then query reports the match count and selects the first', () {
     search()
@@ -45,6 +51,7 @@ void main() {
     expect(state().matchCount, 2);
     expect(state().currentIndex, 0);
     expect(highlightCount(), 2);
+    expect(currentHighlight(), 0);
   });
 
   test('next and previous wrap around', () {
@@ -59,6 +66,22 @@ void main() {
 
     search().previous();
     expect(state().currentIndex, 1, reason: 'wraps back past the first');
+  });
+
+  test('stepping moves which highlight is the current one', () {
+    // The colour is xterm2's; what this pins is that the selected match keeps
+    // its own one as the selection moves, which is the whole point of a find
+    // bar with a next button.
+    search()
+      ..open(paneId)
+      ..setQuery('alpha');
+    expect(currentHighlight(), 0);
+
+    search().next();
+    expect(currentHighlight(), 1);
+
+    search().next();
+    expect(currentHighlight(), 0, reason: 'wrapped, and so did the colour');
   });
 
   test('case sensitivity narrows the results', () {
@@ -109,6 +132,20 @@ void main() {
     expect(state().matchCount, greaterThan(500));
     expect(state().truncated, isTrue);
     expect(highlightCount(), lessThanOrEqualTo(500));
+    expect(currentHighlight(), 0);
+
+    // Past the cap the window slides rather than staying on the first 500: the
+    // hit the user stepped to must not be the one thing on screen with no
+    // colour on it.
+    search().previous();
+
+    expect(state().currentIndex, 599, reason: 'wrapped to the last hit');
+    expect(highlightCount(), 500, reason: 'still capped');
+    expect(
+      currentHighlight(),
+      499,
+      reason: 'and it is the last one painted, not a hit 500 rows above',
+    );
   });
 
   test('close drops every highlight', () {

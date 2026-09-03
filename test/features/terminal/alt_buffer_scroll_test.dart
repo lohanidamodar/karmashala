@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/domain/mouse_wheel_reporter.dart';
 import 'package:xterm2/xterm.dart';
 
 /// Switch to the alternate screen buffer, which is where tmux, vim, less and
@@ -21,8 +20,7 @@ Future<(Terminal, List<String>)> _pumpPane(
   ScrollController? scrollController,
 }) async {
   // Configured exactly as PtyTerminalInstance configures a real pane.
-  final terminal = Terminal(maxLines: 1000)
-    ..mouseHandler = const KarmashalaMouseHandler();
+  final terminal = Terminal(maxLines: 1000);
   final output = <String>[];
   terminal.onOutput = output.add;
 
