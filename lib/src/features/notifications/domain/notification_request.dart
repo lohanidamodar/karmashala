@@ -1,3 +1,4 @@
+import 'evidence_line.dart';
 import 'notification_policy.dart';
 import 'watched_session.dart';
 
@@ -121,25 +122,13 @@ class NotificationCoalescer {
 
   /// The session, and what the agent said about it when it said anything.
   ///
-  /// Quoted in screen order and never picked apart: deciding which row is "the
-  /// question" would be guessing at a TUI's layout, and a wrong guess
-  /// misdescribes what the user is about to authorise. A clip at the end is
-  /// honest about being a clip; choosing a middle is not.
-  ///
   /// No evidence means the label alone, exactly as before. A toast that
   /// invented a description would be worse than one that admits it has none.
   String _body(PendingNotification event) {
-    final quoted = event.evidence
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .join(' · ');
-    if (quoted.isEmpty) return event.session.label;
-    // Runes, not code units: clipping mid-surrogate would emit a broken glyph.
-    final runes = quoted.runes.toList();
-    final clipped = runes.length > maxQuoted
-        ? '${String.fromCharCodes(runes.take(maxQuoted)).trimRight()}…'
-        : quoted;
-    return '${event.session.label} — $clipped';
+    final quoted = evidenceLine(event.evidence, max: maxQuoted);
+    return quoted == null
+        ? event.session.label
+        : '${event.session.label} — $quoted';
   }
 
   String _headline(NotificationReason reason) => switch (reason) {

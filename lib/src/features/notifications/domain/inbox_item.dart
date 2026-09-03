@@ -1,4 +1,5 @@
 import 'agent_session_key.dart';
+import 'evidence_line.dart';
 import 'notification_policy.dart';
 import 'session_attention.dart';
 import 'watched_session.dart';
@@ -202,6 +203,7 @@ class InboxUpdate {
     this.waiting = const [],
     this.watched = const {},
     this.news = const [],
+    this.details = const {},
   });
 
   /// Sessions whose *current* status is a condition needing the user.
@@ -214,6 +216,11 @@ class InboxUpdate {
 
   /// News since the last poll, ungated by settings or focus.
   final List<({WatchedSession session, NotificationReason reason})> news;
+
+  /// The agent's own words for a session this poll looked at, keyed by its
+  /// session. Absent for a source that quoted nothing, which is the normal
+  /// case — see [evidenceLine].
+  final Map<AgentSessionKey, String> details;
 }
 
 /// How many **event** items the attention inbox keeps.
@@ -360,7 +367,14 @@ class AttentionInbox {
       }
       // Already added by the news half of this same update.
       if (!addedIds.add(id)) return;
-      added.add(InboxItem(session: session, kind: kind, at: now));
+      added.add(
+        InboxItem(
+          session: session,
+          kind: kind,
+          at: now,
+          detail: update.details[session.key],
+        ),
+      );
     }
 
     // News first, so an event and the state that confirms it are one item.
