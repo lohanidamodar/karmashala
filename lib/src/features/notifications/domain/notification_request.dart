@@ -3,10 +3,18 @@ import 'watched_session.dart';
 
 /// One notification-worthy event, waiting to be delivered.
 class PendingNotification {
-  const PendingNotification({required this.session, required this.reason});
+  const PendingNotification({
+    required this.session,
+    required this.reason,
+    this.evidence = const [],
+  });
 
   final WatchedSession session;
   final NotificationReason reason;
+
+  /// The agent's own words, when the source that reported this carried any.
+  /// Empty is the normal case — see [AgentStatusReport.evidence].
+  final List<String> evidence;
 
   @override
   String toString() => 'PendingNotification($session, ${reason.name})';
@@ -61,10 +69,13 @@ class NotificationPayload {
 /// is concerned, so it becomes one toast that names them, not three that fight
 /// for the same corner of the screen.
 class NotificationCoalescer {
-  const NotificationCoalescer({this.maxNamed = 3});
+  const NotificationCoalescer({this.maxNamed = 3, this.maxQuoted = 120});
 
   /// How many sessions a summary names before it falls back to "+N more".
   final int maxNamed;
+
+  /// How much of the agent's own words a single-session toast carries.
+  final int maxQuoted;
 
   NotificationRequest? summarize(List<PendingNotification> events) {
     if (events.isEmpty) return null;
@@ -82,7 +93,7 @@ class NotificationCoalescer {
       final only = unique.single;
       return NotificationRequest(
         title: _headline(only.reason),
-        body: only.session.label,
+        body: _body(only),
         payload: NotificationPayload(
           openId: only.session.openId,
           imported: only.session.imported,
@@ -106,6 +117,29 @@ class NotificationCoalescer {
     // A summary covers several sessions, so clicking it opens the app rather
     // than guessing which one was meant.
     return NotificationRequest(title: title, body: body);
+  }
+
+  /// The session, and what the agent said about it when it said anything.
+  ///
+  /// Quoted in screen order and never picked apart: deciding which row is "the
+  /// question" would be guessing at a TUI's layout, and a wrong guess
+  /// misdescribes what the user is about to authorise. A clip at the end is
+  /// honest about being a clip; choosing a middle is not.
+  ///
+  /// No evidence means the label alone, exactly as before. A toast that
+  /// invented a description would be worse than one that admits it has none.
+  String _body(PendingNotification event) {
+    final quoted = event.evidence
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .join(' · ');
+    if (quoted.isEmpty) return event.session.label;
+    // Runes, not code units: clipping mid-surrogate would emit a broken glyph.
+    final runes = quoted.runes.toList();
+    final clipped = runes.length > maxQuoted
+        ? '${String.fromCharCodes(runes.take(maxQuoted)).trimRight()}…'
+        : quoted;
+    return '${event.session.label} — $clipped';
   }
 
   String _headline(NotificationReason reason) => switch (reason) {

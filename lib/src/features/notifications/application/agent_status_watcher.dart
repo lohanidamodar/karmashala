@@ -253,7 +253,13 @@ class AgentStatusWatcher {
       ),
     );
     if (decision.shouldNotify) {
-      onNotify(PendingNotification(session: session, reason: decision.reason!));
+      onNotify(
+        PendingNotification(
+          session: session,
+          reason: decision.reason!,
+          evidence: report.evidence,
+        ),
+      );
     }
 
     final kind = AttentionKind.forStatus(report.status);

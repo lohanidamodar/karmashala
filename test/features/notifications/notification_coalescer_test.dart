@@ -11,6 +11,7 @@ PendingNotification _event(
   NotificationReason reason, {
   String? label,
   bool imported = true,
+  List<String> evidence = const [],
 }) => PendingNotification(
   session: WatchedSession(
     key: AgentSessionKey('claudeCode', id),
@@ -19,6 +20,7 @@ PendingNotification _event(
     imported: imported,
   ),
   reason: reason,
+  evidence: evidence,
 );
 
 void main() {
@@ -36,6 +38,60 @@ void main() {
     final payload = NotificationPayload.decode(request.payload)!;
     expect(payload.openId, 'row-a');
     expect(payload.imported, isTrue);
+  });
+
+  test('one event says what the agent asked for, when it said', () {
+    // "Agent needs your approval" over a session name tells a user to go and
+    // look; it does not tell them what they are about to authorise.
+    final request = _coalescer.summarize([
+      _event(
+        'a',
+        NotificationReason.needsInput,
+        label: 'Fix login',
+        evidence: const ['Claude needs your permission to use Bash'],
+      ),
+    ])!;
+
+    expect(
+      request.body,
+      'Fix login \u2014 Claude needs your permission to use Bash',
+    );
+  });
+
+  test('a quoted screen keeps its own order and is never picked apart', () {
+    final request = _coalescer.summarize([
+      _event(
+        'a',
+        NotificationReason.needsInput,
+        label: 'Fix login',
+        evidence: const ['  Run this command?  ', '', 'rm -rf build/'],
+      ),
+    ])!;
+
+    expect(request.body, 'Fix login \u2014 Run this command? \u00b7 rm -rf build/');
+  });
+
+  test('a long quote is clipped at the end, not the middle', () {
+    final request = _coalescer.summarize([
+      _event(
+        'a',
+        NotificationReason.needsInput,
+        label: 'S',
+        evidence: [List.filled(80, 'ab').join()],
+      ),
+    ])!;
+
+    expect(request.body, startsWith('S \u2014 abab'));
+    expect(request.body, endsWith('\u2026'));
+    expect(request.body.length, lessThan(140));
+  });
+
+  test('no evidence leaves the body exactly as it was', () {
+    final request = _coalescer.summarize([
+      _event('a', NotificationReason.finished, label: 'Fix login'),
+    ])!;
+
+    expect(request.body, 'Fix login');
   });
 
   test('three agents finishing at once are one notification', () {
