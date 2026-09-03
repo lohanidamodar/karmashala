@@ -4,6 +4,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../follow_ups/application/follow_up_inbox.dart';
 import '../../follow_ups/application/follow_up_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_status_providers.dart';
 import '../domain/inbox_item.dart';
 import 'notification_providers.dart';
 
@@ -27,6 +29,11 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
   @override
   AttentionInbox build() {
     ref.listen(selectedSessionIdProvider, (_, _) => _syncViewed());
+    // Going to the tab is looking at it. The selection above is only ever set
+    // by the Explorer, quick open and the inbox itself — clicking a tab sets
+    // nothing — so without this an item retired "on viewing" never retired for
+    // the most ordinary way of arriving at a session.
+    ref.listen(foregroundTerminalPaneIdsProvider, (_, _) => _syncViewed());
     ref.listen(selectedImportedSessionIdProvider, (_, _) => _syncViewed());
     ref.listen(windowFocusedProvider, (_, _) => _syncViewed());
     ref.listen(openFollowUpsProvider, (_, next) {
@@ -74,11 +81,24 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
 
   void _syncViewed() {
     if (!ref.read(windowFocusedProvider)) return;
+    // Nothing listed is nothing to retire, and asking what is on screen costs
+    // a scan of the sessions table. `session_start_cost_test` counts it.
+    if (state.items.isEmpty) return;
     final open = <String>{};
     final native = ref.read(selectedSessionIdProvider);
     if (native != null) open.add(native);
     final imported = ref.read(selectedImportedSessionIdProvider);
     if (imported != null) open.add(imported);
+    // Targeted, not the whole placement map. Four providers already re-read
+    // every session row when the list changes shape, and `session_start_cost
+    // _test` asserts a fifth does not appear — so this asks about the panes on
+    // screen and nothing else.
+    final panes = ref.read(foregroundTerminalPaneIdsProvider);
+    if (panes.isNotEmpty) {
+      for (final row in ref.read(sessionDaoProvider).getByPaneIds(panes)) {
+        open.add(row.id);
+      }
+    }
     if (open.isEmpty) return;
     state = state.viewed(open);
   }

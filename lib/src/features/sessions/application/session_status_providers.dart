@@ -86,6 +86,32 @@ final placedSessionIdsProvider = Provider<Map<String, String>>((ref) {
   return ref.read(sessionDaoProvider).paneSessionIds();
 });
 
+/// The panes on screen in the terminal right now.
+///
+/// Pane ids, not session ids, and deliberately: resolving them costs a scan of
+/// the sessions table, and the attention inbox — the only caller — has nothing
+/// to retire while it holds no items. `session_start_cost_test` counts that
+/// scan and fails if a start pays for it.
+///
+/// The visible panes are selected as a joined string rather than a set: a
+/// `Set` compares by identity, so selecting one would rebuild on every publish
+/// the controller makes, which is the cost the tab strip's own providers exist
+/// to avoid.
+final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
+  // Asked through `exists`, never built: the inbox must not be the thing that
+  // constructs the terminal controller. Building it starts the scrollback
+  // autosave timer, which is why every container that merely reads the inbox
+  // would otherwise inherit a pending timer.
+  if (!ref.exists(terminalSessionsControllerProvider)) return const [];
+  if (!ref.watch(terminalVisibleProvider)) return const [];
+  final joined = ref.watch(
+    terminalSessionsControllerProvider.select(
+      (state) => state.activeTab?.layout.visiblePanes.join('\u0000') ?? '',
+    ),
+  );
+  return joined.isEmpty ? const [] : joined.split('\u0000');
+});
+
 /// **What the agent in pane [paneId] is doing**, or null when that is not a
 /// question about this pane.
 ///

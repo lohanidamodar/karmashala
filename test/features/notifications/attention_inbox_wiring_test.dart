@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
@@ -24,6 +25,19 @@ import '../../support/fixtures.dart';
 
 /// The inbox wired to the app: what marks an item seen, and the single count
 /// the status bar, the rail and the tray all read.
+
+/// The terminal's foreground panes, driven by hand so the listener under test
+/// sees a real change rather than a fixed override. The pane is resolved to a
+/// session through the real `placedSessionIdsProvider` and the real row.
+class _ForegroundPanes extends Notifier<List<String>> {
+  @override
+  List<String> build() => const [];
+  void show(List<String> paneIds) => state = paneIds;
+}
+
+final _foregroundProvider =
+    NotifierProvider<_ForegroundPanes, List<String>>(_ForegroundPanes.new);
+
 void main() {
   late AppDatabase db;
   late ProviderContainer container;
@@ -43,10 +57,14 @@ void main() {
     RepositoryDao(db).insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1'));
+    SessionDao(db).updatePaneId('s1', 'pane-1');
     container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
+        foregroundTerminalPaneIdsProvider.overrideWith(
+          (ref) => ref.watch(_foregroundProvider),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -100,6 +118,36 @@ void main() {
 
     container.read(windowFocusedProvider.notifier).set(true);
     expect(container.read(attentionCountProvider), 0);
+  });
+
+  test('going to the session\'s terminal tab clears its finished turn', () {
+    // The selection above is only ever set by the Explorer, quick open and the
+    // inbox. Clicking a tab sets nothing, so before this the most ordinary way
+    // of arriving at a session retired nothing.
+    finished();
+    expect(container.read(attentionCountProvider), 1);
+
+    container.read(_foregroundProvider.notifier).show(['pane-1']);
+
+    expect(container.read(attentionInboxProvider).items, isEmpty);
+    expect(container.read(attentionCountProvider), 0);
+  });
+
+  test('a tab on screen behind another window is not being looked at', () {
+    container.read(windowFocusedProvider.notifier).set(false);
+    container.read(_foregroundProvider.notifier).show(['pane-1']);
+    finished();
+
+    expect(container.read(attentionCountProvider), 1);
+  });
+
+  test('an approval in the tab you are looking at still stands', () {
+    // Looking at an approval prompt does not answer it, so it retires on the
+    // condition clearing and not on being seen.
+    waiting();
+    container.read(_foregroundProvider.notifier).show(['pane-1']);
+
+    expect(container.read(attentionInboxProvider).items, hasLength(1));
   });
 
   test('an approval you looked at goes quiet but stays listed', () {
