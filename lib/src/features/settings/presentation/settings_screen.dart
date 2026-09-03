@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/shell/app_shell.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
 import '../../notes/presentation/notes_settings_section.dart';
 import '../../remote/presentation/remote_access_section.dart';
@@ -165,6 +166,7 @@ class _SectionContent extends StatelessWidget {
     // CLI on the Windows host and on a build box are two independent
     // installations.
     SettingsSectionId.environments => const EnvironmentsSection(),
+    SettingsSectionId.environmentVariables => const EnvSecretsPage(),
     SettingsSectionId.ssh => const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [SshHostsSection(), KnownHostsSection()],
