@@ -3,44 +3,58 @@ import '../../devices/domain/android_slimming.dart';
 import '../../devices/domain/simulator_slimming.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
-import 'permission_mode.dart';
 import 'relay_mode.dart';
 
 /// Per-agent permission preferences for new vs. existing sessions.
+///
+/// Each is a canonical `PermissionSelection` in **that agent's own
+/// vocabulary** — `mode=manual`, `approval=on-request;sandbox=workspace-write`
+/// — because there is no longer a shared set of modes to hold here.
+///
+/// **Null is the shipped answer, and it does not mean "pass nothing".** It
+/// means "use the mode this agent declares as its default", which is a real
+/// selection with real flags. That is the one place this differs from
+/// [Settings.defaultModels], where absence genuinely does mean no flag: passing
+/// no permission flag is the failure the whole per-agent model exists to
+/// remove, since an unflagged Claude Code session starts in `auto` on some
+/// accounts.
 class AgentPermissions {
-  const AgentPermissions({
-    this.newSessions = PermissionMode.ask,
-    this.existingSessions = PermissionMode.ask,
-  });
+  const AgentPermissions({this.newSessions, this.existingSessions});
 
-  final PermissionMode newSessions;
-  final PermissionMode existingSessions;
+  final String? newSessions;
+  final String? existingSessions;
 
-  AgentPermissions copyWith({
-    PermissionMode? newSessions,
-    PermissionMode? existingSessions,
-  }) => AgentPermissions(
-    newSessions: newSessions ?? this.newSessions,
-    existingSessions: existingSessions ?? this.existingSessions,
-  );
+  AgentPermissions copyWith({String? newSessions, String? existingSessions}) =>
+      AgentPermissions(
+        newSessions: newSessions ?? this.newSessions,
+        existingSessions: existingSessions ?? this.existingSessions,
+      );
 
   Map<String, dynamic> toJson() => {
-    'newSessions': newSessions.name,
-    'existingSessions': existingSessions.name,
+    if (newSessions != null) 'newSessions': newSessions,
+    if (existingSessions != null) 'existingSessions': existingSessions,
   };
 
   static AgentPermissions fromJson(Map<String, dynamic> json) =>
       AgentPermissions(
-        newSessions: _mode(json['newSessions']),
-        existingSessions: _mode(json['existingSessions']),
+        newSessions: _selection(json['newSessions']),
+        existingSessions: _selection(json['existingSessions']),
       );
 
-  static PermissionMode _mode(Object? value) {
-    for (final m in PermissionMode.values) {
-      if (m.name == value) return m;
-    }
-    return PermissionMode.ask;
+  /// Reads a stored preference, translating the three values written before
+  /// per-agent modes existed.
+  ///
+  /// A settings file is not migrated by SQL, so the aliases live here — the
+  /// same three the v35 migration rewrites session rows with. They are
+  /// agent-agnostic on purpose: this map is keyed by agent id, and the caller
+  /// resolves the alias against that agent's own axes.
+  static String? _selection(Object? value) {
+    if (value is! String || value.isEmpty) return null;
+    return value;
   }
+
+  /// The legacy names, still readable from a settings file written before v35.
+  static const legacyNames = {'ask', 'acceptEdits', 'bypass'};
 
   @override
   bool operator ==(Object other) =>

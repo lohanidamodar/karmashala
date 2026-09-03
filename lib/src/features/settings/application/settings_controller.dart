@@ -6,7 +6,6 @@ import '../../../core/logging/diagnostics_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/diagnostics_settings.dart';
-import '../domain/permission_mode.dart';
 import '../domain/relay_mode.dart';
 import '../domain/settings.dart';
 
@@ -252,7 +251,7 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setNewSessionPermission(String agentId, PermissionMode mode) {
+  void setNewSessionPermission(String agentId, String mode) {
     state = state.withPermissions(
       agentId,
       state.permissionsFor(agentId).copyWith(newSessions: mode),
@@ -260,7 +259,7 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  void setExistingSessionPermission(String agentId, PermissionMode mode) {
+  void setExistingSessionPermission(String agentId, String mode) {
     state = state.withPermissions(
       agentId,
       state.permissionsFor(agentId).copyWith(existingSessions: mode),

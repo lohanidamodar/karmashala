@@ -4,52 +4,79 @@ import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/generic_agent_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 
 const _spec = AgentLaunchSpec(
   baseArguments: ['--headless'],
-  permissionModes: {
-    PermissionMode.ask: PermissionModeMapping.exact([]),
-    PermissionMode.bypass: PermissionModeMapping.exact(['--trust']),
-  },
+  permission: testPermissionSupport,
   resume: AgentResume.flag('--continue'),
 );
 
-AgentLaunch _launch(PermissionMode mode, String? resume) => AgentLaunch(
+/// [selection] resolved against [spec], the way the caller that holds the
+/// descriptor resolves it before an adapter ever sees it.
+ResolvedPermission _resolved(AgentLaunchSpec spec, PermissionSelection? selection) =>
+    ResolvedPermission.of(spec.permission, selection);
+
+AgentLaunch _launch(ResolvedPermission permission, String? resume) => AgentLaunch(
   workingDirectory: repository().path,
   installation: agentInstallation(
     agentId: 'roverCli',
     path: r'C:\bin\rover.exe',
   ),
-  permissionMode: mode,
+  permission: permission,
   resumeSessionId: resume,
 );
 
 void main() {
   group('genericLaunchArgs', () {
     test('are exactly what the descriptor declares', () {
-      expect(genericLaunchArgs(_spec, _launch(PermissionMode.bypass, 'sid')), [
-        '--headless',
-        '--trust',
-        '--continue',
-        'sid',
-      ]);
-      expect(genericLaunchArgs(_spec, _launch(PermissionMode.ask, null)), [
-        '--headless',
-      ]);
+      expect(
+        genericLaunchArgs(
+          _spec,
+          _launch(_resolved(_spec, bypassSelection), 'sid'),
+        ),
+        ['--headless', '--bypass', '--continue', 'sid'],
+      );
+      expect(
+        genericLaunchArgs(_spec, _launch(_resolved(_spec, askSelection), null)),
+        ['--headless', '--mode', 'ask'],
+      );
+    });
+
+    test('"enforce nothing" adds nothing, and is not the default', () {
+      // The state the carry rule produces when every mode an agent has is more
+      // permissive than what was asked for. It has to stay distinguishable
+      // from a *null* selection, which means "nobody chose" and does pass the
+      // declared default's flags.
+      expect(
+        genericLaunchArgs(
+          _spec,
+          _launch(_resolved(_spec, PermissionSelection.empty), null),
+        ),
+        ['--headless'],
+      );
+      expect(
+        genericLaunchArgs(_spec, _launch(_resolved(_spec, null), null)),
+        ['--headless', '--mode', 'ask'],
+      );
     });
 
     test('an agent with no launch spec runs bare', () {
+      // Including its permission: a descriptor that declares no modes resolves
+      // every selection to nothing, so asking for a bypass still contributes no
+      // flags rather than handing an unknown CLI a flag invented for another.
+      const bare = AgentLaunchSpec();
       expect(
         genericLaunchArgs(
-          const AgentLaunchSpec(),
-          _launch(PermissionMode.bypass, 'sid'),
+          bare,
+          _launch(_resolved(bare, bypassSelection), 'sid'),
         ),
         isEmpty,
       );
@@ -95,11 +122,11 @@ void main() {
     );
 
     expect(adapter.agentId, 'roverCli');
-    adapter.start(_launch(PermissionMode.bypass, null));
+    adapter.start(_launch(_resolved(_spec, bypassSelection), null));
     await Future<void>.delayed(Duration.zero);
 
     final req = runner.startRequests.single;
     expect(req.executable, r'C:\bin\rover.exe');
-    expect(req.arguments, ['--headless', '--trust']);
+    expect(req.arguments, ['--headless', '--bypass']);
   });
 }

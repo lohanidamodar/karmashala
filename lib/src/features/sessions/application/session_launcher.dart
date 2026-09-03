@@ -18,7 +18,7 @@ import '../../git/application/git_providers.dart';
 import '../../mcp/session_mcp.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/data/pty_launch.dart';
@@ -267,27 +267,45 @@ class SessionLauncher {
   /// next one of those answerable from a log instead of a repro.
   static final _log = AppLogger.named('sessions.launch');
 
-  /// The single permission-mode resolution in the app.
+  /// The single permission resolution in the app.
   ///
-  /// The engine's own `PermissionMode.ask` default was dead code — every caller
-  /// overrode it — so the safe default was not a backstop. It is one here:
-  /// nothing else reads `permissionsFor`.
+  /// Two steps, and both have to happen here: [resolveSessionPermission] says
+  /// *which stored preference wins* (the session's own, or the per-agent
+  /// default), and the agent's own [AgentPermissionSupport] says what that
+  /// string means — filling in its default, translating a pre-v35 name, and
+  /// turning the result into flags. Neither half can answer alone: the
+  /// precedence rule is the same for every agent and the vocabulary is not.
   ///
-  /// The rule itself lives in [resolveSessionPermission] rather than here, so
-  /// the composer chip, the launch path and the handoff read one statement of
-  /// it instead of three agreeing ones. A caller holding a session row passes
-  /// its [sessionMode]; one that has no session yet (a shell command for a
-  /// project, a brand-new launch) leaves it null and gets the default for
-  /// [purpose].
-  PermissionMode permissionFor(
+  /// A caller holding a session row passes its [sessionMode]; one that has no
+  /// session yet (a shell command for a project, a brand-new launch) leaves it
+  /// null and gets the default for [purpose].
+  PermissionSelection permissionFor(
     String agentId,
     SessionPurpose purpose, {
-    PermissionMode? sessionMode,
-  }) => resolveSessionPermission(
-    sessionMode: sessionMode,
-    defaults: _ref.read(settingsControllerProvider).permissionsFor(agentId),
-    purpose: purpose,
-  ).mode;
+    String? sessionMode,
+  }) {
+    final stored = resolveSessionPermission(
+      sessionMode: sessionMode,
+      defaults: _ref.read(settingsControllerProvider).permissionsFor(agentId),
+      purpose: purpose,
+    ).stored;
+    final support = _ref.read(agentRegistryProvider).byId(agentId)?.launch.permission;
+    return support?.resolveStored(stored) ?? PermissionSelection.empty;
+  }
+
+  /// The same, already turned into the flags a launch passes.
+  ResolvedPermission resolvedPermissionFor(
+    String agentId,
+    SessionPurpose purpose, {
+    String? sessionMode,
+  }) {
+    final support = _ref.read(agentRegistryProvider).byId(agentId)?.launch.permission;
+    if (support == null || !support.isKnown) return ResolvedPermission.none;
+    return ResolvedPermission.of(
+      support,
+      permissionFor(agentId, purpose, sessionMode: sessionMode),
+    );
+  }
 
   /// The mode [sessionId] will run under on its next launch or resume, and the
   /// agent it will be handed to.
@@ -298,7 +316,12 @@ class SessionLauncher {
   /// the session made no choice and is tracking the setting live, which the
   /// control has to be able to say out loud rather than showing the resolved
   /// value as if this session had picked it.
-  ({PermissionMode mode, AgentDescriptor? descriptor, bool inherited})?
+  ({
+    PermissionSelection selection,
+    AgentDescriptor? descriptor,
+    bool inherited,
+    bool unrecognised,
+  })?
   effectivePermissionFor(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return null;
@@ -313,15 +336,27 @@ class SessionLauncher {
           .permissionsFor(installation.agentId),
       purpose: SessionPurpose.existingSession,
     );
+    final descriptor = _ref
+        .read(agentRegistryProvider)
+        .byId(installation.agentId);
+    final support = descriptor?.launch.permission;
+    // A row written by a newer build can name a value this one has never heard
+    // of. `resolveStored` substitutes the agent's default for it, which is the
+    // only thing it can do — there are no arguments to pass for a mode we do
+    // not know — but doing that *silently* would be the claim this whole area
+    // exists to remove, so the fact travels with the answer.
+    final stored = PermissionSelection.parse(resolved.stored);
     return (
-      mode: resolved.mode,
-      descriptor: _ref.read(agentRegistryProvider).byId(installation.agentId),
+      selection:
+          support?.resolveStored(resolved.stored) ?? PermissionSelection.empty,
+      descriptor: descriptor,
       inherited: resolved.followsDefault,
+      unrecognised: (support?.unknownAxes(stored) ?? const []).isNotEmpty,
     );
   }
 
   /// Records the mode [sessionId] should run under from its next launch on, or
-  /// with a null [mode] that it should follow the global default again.
+  /// with a null [selection] that it should follow the per-agent default again.
   ///
   /// Deliberately **does not touch the running process**. Every agent here
   /// takes its permission policy from its command line at startup; none of them
@@ -336,8 +371,10 @@ class SessionLauncher {
   /// rather than a flag here, because the two acts are not comparable — writing
   /// a row is cheap and reversible, and ending an agent that may be mid-turn is
   /// neither, so it must never happen as a side effect of recording a choice.
-  void setPermissionMode(String sessionId, PermissionMode? mode) {
-    _ref.read(sessionDaoProvider).updatePermissionMode(sessionId, mode);
+  void setPermissionMode(String sessionId, PermissionSelection? selection) {
+    _ref
+        .read(sessionDaoProvider)
+        .updatePermissionMode(sessionId, selection?.canonical);
     // One row's own policy. Only the chip that draws it is watching.
     _publish(SessionChange.reconfigured(sessionId));
   }
@@ -351,7 +388,7 @@ class SessionLauncher {
   /// **Null is still an answer, and still the shipped one.** "Let the agent
   /// choose" is a setting a user can hold on purpose: no model flag is passed
   /// and the CLI starts on whatever it is configured to use. Widening it to
-  /// some invented model name would be the failure `PermissionModeMapping`
+  /// some invented model name would be the failure `AgentPermissionValue`
   /// documents in the other direction — a claim that a session is running on a
   /// particular model when nothing was ever passed to make that true.
   ///
@@ -1004,7 +1041,8 @@ class SessionLauncher {
     // request that named a mode), otherwise the row's own choice. Null means
     // nobody ever chose, and the setting answers — live, so changing it moves
     // this session and every other that never chose.
-    final chosenMode = request.permissionOverride ?? reused?.permissionMode;
+    final chosenMode =
+        request.permissionOverride?.canonical ?? reused?.permissionMode;
     final permissionMode = permissionFor(
       request.installation.agentId,
       request.purpose,
@@ -1128,7 +1166,7 @@ class SessionLauncher {
           // `copyWith` keeps the row's own mode when this is null, which is
           // the point: a resume must not overwrite a choice, and must not
           // freeze a session that never made one.
-          permissionMode: request.permissionOverride,
+          permissionMode: request.permissionOverride?.canonical,
           modelId: request.modelOverride,
           workingDirectory: recordDirectory ? workingDirectory : null,
         ) ??
@@ -1167,7 +1205,7 @@ class SessionLauncher {
           // effective mode is not lost by leaving this null: it is
           // [resolveSessionPermission] of this row and the live setting, which
           // is the same answer the chip and the next launch compute.
-          permissionMode: request.permissionOverride,
+          permissionMode: request.permissionOverride?.canonical,
           // Only what was **chosen**, for the reason above: a launch that
           // stamped the resolved model here would freeze this session on
           // whichever model Settings named today.
@@ -1183,7 +1221,7 @@ class SessionLauncher {
       // resume, and it would also stamp a default onto a session that is
       // deliberately following one.
       if (request.permissionOverride != null) {
-        dao.updatePermissionMode(id, request.permissionOverride);
+        dao.updatePermissionMode(id, request.permissionOverride!.canonical);
       }
       if (request.modelOverride != null) {
         dao.updateModel(id, request.modelOverride);
@@ -1321,7 +1359,7 @@ class SessionLauncher {
     Session session,
     SessionLaunchRequest request,
     AgentDescriptor? descriptor,
-    PermissionMode permissionMode,
+    PermissionSelection permissionMode,
     String? modelId,
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
@@ -1386,7 +1424,7 @@ class SessionLauncher {
     // be looking at two terminals for one session.
     _log.info(
       'Started ${session.id} in a pane: agent=${request.installation.agentId} '
-      'mode=${permissionMode.name} model=${modelId ?? 'agent default'} '
+      'mode=${permissionMode.canonical} model=${modelId ?? 'agent default'} '
       'pane=${opened.paneId} '
       'resumed=${resumedTab != null} '
       'conversation=${request.resumeExternalSessionId ?? 'new'} '
@@ -1408,7 +1446,7 @@ class SessionLauncher {
     Session session,
     SessionLaunchRequest request,
     AgentDescriptor? descriptor,
-    PermissionMode permissionMode,
+    PermissionSelection permissionMode,
     String? modelId,
     EnvironmentPath workingDirectory,
     bool assignsOwnId,
@@ -1643,7 +1681,7 @@ class SessionLauncher {
 /// shapes come out of one call.
 List<String> agentPaneArguments(
   AgentDescriptor? descriptor,
-  PermissionMode permissionMode, {
+  PermissionSelection permissionMode, {
   String? modelId,
   String? sessionId,
   String? resumeSessionId,
@@ -1661,11 +1699,11 @@ List<String> agentPaneArguments(
     // here is variadic — Claude's config flag is deliberately one
     // `--flag=value` token — so nothing downstream can be swallowed.
     ...agentMcpArguments(descriptor, url: mcpUrl, configPath: mcpConfigPath),
-    ...?launch?.permissionArgumentsFor(permissionMode),
+    ...?launch?.permission.argumentsFor(permissionMode),
     // Beside the permission flags and for the same reason: a global option, so
     // it has to be left of Codex's `resume`/`fork` subcommand. Nothing is
     // emitted for a null model or an agent that takes none.
-    ...?launch?.modelArgumentsFor(modelId),
+    ...?launch?.model.argumentsFor(modelId),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),

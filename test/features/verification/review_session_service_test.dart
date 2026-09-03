@@ -5,12 +5,12 @@ import 'package:karmashala/src/features/sessions/application/session_launcher.da
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_lineage.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/review_session_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../fanout/fanout_harness.dart';
 import '../terminal/fake_instance.dart';
 
@@ -149,7 +149,7 @@ void main() {
     test('every target carries the capped review permission', () async {
       final offer = service().offerFor(await work());
       for (final target in offer.targets) {
-        expect(target.permission.mode, PermissionMode.ask);
+        expect(target.permission.selection, askSelection);
         expect(target.permission.summary, contains(target.agentName));
       }
     });
@@ -166,7 +166,7 @@ void main() {
       expect(row.parentSessionId, subject);
       expect(row.parentLink, SessionLink.spawn);
       expect(row.agentInstallationId, flakyInstall.id);
-      expect(row.permissionMode, PermissionMode.ask);
+      expect(row.permissionMode, askStored);
       expect(row.title, contains('Fix the parser'));
     });
 

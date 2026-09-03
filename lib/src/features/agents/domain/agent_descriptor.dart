@@ -1,5 +1,5 @@
 import '../../environments/domain/environment_kind.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../settings/domain/permission_risk.dart';
 import 'agent_kind.dart';
 import 'agent_permission_support.dart';
 import 'agent_status.dart';
@@ -581,69 +581,29 @@ class AgentDiscoveryRules {
   final List<String> versionArguments;
 }
 
-/// How faithfully one [PermissionMode] survives translation into an agent's own
-/// command line.
+/// How faithfully a [PermissionRisk] survives being carried onto an agent.
 ///
-/// A property of the **descriptor's declared data**, never of the agent's name:
-/// the UI derives what it offers from this, so a user-authored descriptor and a
-/// built-in one are read by exactly the same rule.
+/// This used to describe the *picker*: a shared three-value mode had to be
+/// translated per agent, and the translation could be lossy. It no longer is —
+/// each agent declares its own modes in its own words
+/// ([AgentPermissionSupport]), so anything a picker offers is exact by
+/// construction.
+///
+/// What remains genuinely lossy is the **carry**: a handoff resolves a rung for
+/// one agent and hands it to another that may have nothing at that rung. So the
+/// fidelity lives on `CarriedPermission` now, which is the one place a mode
+/// really is translated.
 enum PermissionModeFit {
-  /// The CLI has this mode and we ask for it by name. What the user picked is
-  /// what runs.
+  /// The target has a mode at exactly the requested rung.
   exact,
 
-  /// The nearest thing the CLI offers, and it is *not* the same thing.
+  /// The target's nearest mode is **safer** than what was asked for. Not the
+  /// same thing, and never the other direction.
   approximate,
 
-  /// The CLI cannot be told. Nothing is passed and the agent's own default
-  /// applies — which we have not verified, so we do not claim it.
+  /// The target has nothing at or below the requested rung, or no declared
+  /// modes at all.
   none,
-}
-
-/// One permission mode's translation into an agent's command line, together
-/// with how faithful that translation is.
-///
-/// **The fidelity is declared beside the arguments rather than inferred from
-/// them**, because the two cases that produce an empty argument list are
-/// opposites and no amount of inspecting the list separates them:
-///
-/// * Claude Code's `ask` is empty because prompting for everything *is* the
-///   CLI's default — the mode is exact and needs no flag.
-/// * Antigravity's `acceptEdits` was empty because we have no idea how to ask
-///   for it — the mode does not map at all.
-///
-/// Loop 31 §4 named the second the worse of the two silent no-ops, and named
-/// `ask` as the sharpest case of it: selecting the *safest* mode and silently
-/// getting the agent's unverified default is a worse failure than selecting the
-/// most dangerous mode and silently getting the safest behaviour. Its
-/// recommendation (option C) was to stop offering what cannot happen.
-///
-/// So a mode a descriptor cannot express is **absent from the map**, not present
-/// with an empty list, and [PermissionModeFit.none] is what absence reads as.
-class PermissionModeMapping {
-  /// The CLI has this mode and [arguments] name it. [note] is optional and is
-  /// for the exact mapping that still deserves a word — an empty argument list
-  /// that is empty *because the CLI already behaves this way*.
-  const PermissionModeMapping.exact(this.arguments, {this.note})
-    : fit = PermissionModeFit.exact;
-
-  /// The closest this CLI comes, which is not the same thing.
-  ///
-  /// [note] is **required**: an approximation whose shape the user cannot see is
-  /// worse than an honest refusal, because they will read the mode's own label
-  /// and believe it.
-  const PermissionModeMapping.approximate(this.arguments, {required this.note})
-    : fit = PermissionModeFit.approximate;
-
-  /// What goes on the command line. May be empty for an [exact] mapping whose
-  /// agent already defaults to that behaviour.
-  final List<String> arguments;
-
-  final PermissionModeFit fit;
-
-  /// Plain words about what this mode actually does to *this* agent, shown
-  /// beside the mode wherever it is offered.
-  final String? note;
 }
 
 /// Whether an agent can still find a conversation when it is asked to resume it
@@ -703,7 +663,6 @@ class AgentResumeLocality {
 class AgentLaunchSpec {
   const AgentLaunchSpec({
     this.baseArguments = const [],
-    this.permissionModes = const {},
     this.permission = const AgentPermissionSupport.unknown(),
     this.resume = const AgentResume.unsupported(),
     this.interactiveResume = const AgentResume.unsupported(),
@@ -721,19 +680,6 @@ class AgentLaunchSpec {
   });
 
   final List<String> baseArguments;
-
-  /// How each [PermissionMode] is expressed to this agent.
-  ///
-  /// **A mode this agent cannot be put into is omitted**, never mapped to an
-  /// empty list — see [PermissionModeMapping]. Everything the UI offers comes
-  /// from the keys of this map.
-  ///
-  /// **Being replaced by [permission].** A shared three-value mode cannot say
-  /// that Claude Code has six, that Codex's approval policy and sandbox are
-  /// separate dimensions, or that one of Codex's approval values exists in
-  /// 0.145.0 and not in 0.151.0. It is still what the launch path reads while
-  /// the call sites move over.
-  final Map<PermissionMode, PermissionModeMapping> permissionModes;
 
   /// This agent's own permission vocabulary, in its own words.
   ///
@@ -821,42 +767,6 @@ class AgentLaunchSpec {
   /// they always did; what widened underneath them is the *how*.
   bool get acceptsPromptArgument => prompt.isSupported;
 
-  /// The arguments for [mode], or nothing when this agent cannot be told.
-  ///
-  /// Unchanged in shape and meaning for every launch call site: a mode the
-  /// descriptor cannot express still contributes no arguments, because there is
-  /// nothing truthful to contribute. What changed around it is that the UI no
-  /// longer *offers* such a mode — see [permissionFitFor] and
-  /// [expressiblePermissionModes].
-  List<String> permissionArgumentsFor(PermissionMode mode) =>
-      permissionModes[mode]?.arguments ?? const [];
-
-  /// How faithfully [mode] maps onto this agent; [PermissionModeFit.none] when
-  /// the descriptor does not declare it.
-  PermissionModeFit permissionFitFor(PermissionMode mode) =>
-      permissionModes[mode]?.fit ?? PermissionModeFit.none;
-
-  /// The descriptor's own words about what [mode] does to this agent, or `null`
-  /// when it has nothing to add.
-  String? permissionNoteFor(PermissionMode mode) => permissionModes[mode]?.note;
-
-  /// The modes this agent can actually be put into, in [PermissionMode]'s own
-  /// order (safest first).
-  ///
-  /// This is the list a permission control should offer. It is derived from the
-  /// declared mappings and from nothing else, so an agent added tomorrow —
-  /// built-in or user-authored — is answered by the same rule as the three that
-  /// ship today.
-  /// The arguments that put [modelId] on this agent's command line, or nothing
-  /// when it cannot be told. Shaped like [permissionArgumentsFor] so the launch
-  /// path reads one kind of answer for both.
-  List<String> modelArgumentsFor(String? modelId) =>
-      model.argumentsFor(modelId);
-
-  List<PermissionMode> get expressiblePermissionModes => [
-    for (final mode in PermissionMode.values)
-      if (permissionModes.containsKey(mode)) mode,
-  ];
 }
 
 /// The on-disk layout of an agent's session store.

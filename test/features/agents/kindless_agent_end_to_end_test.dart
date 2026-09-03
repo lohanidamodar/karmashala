@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/agents/data/generic_agent_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
@@ -17,13 +18,13 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_repository_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 
 /// An agent that exists only as data: a registry entry with **no `AgentKind`
 /// member**, so nothing about it is hardcoded anywhere in the app.
@@ -33,16 +34,17 @@ const _rover = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact([]),
-      PermissionMode.acceptEdits: PermissionModeMapping.exact(['--auto-edit']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
+    permission: testPermissionSupport,
     resume: AgentResume.flag('--continue'),
   ),
 );
 
 const _registry = AgentRegistry([_rover]);
+
+/// [selection] resolved against Rover's own declared modes — the step the
+/// caller that holds the descriptor performs before any adapter sees a launch.
+ResolvedPermission _permission(PermissionSelection selection) =>
+    ResolvedPermission.of(_rover.launch.permission, selection);
 
 void main() {
   test(
@@ -90,16 +92,22 @@ void main() {
         stored.id,
       );
 
-      // 3. SETTINGS — it can be the default agent and hold its own permissions.
+      // 3. SETTINGS — it can be the default agent and hold its own permissions,
+      //    stored in *its own* vocabulary rather than a shared enum's.
       final settings = Settings(defaultAgent: stored.agentId).withPermissions(
         stored.agentId,
-        const AgentPermissions(newSessions: PermissionMode.acceptEdits),
+        const AgentPermissions(newSessions: acceptEditsStored),
       );
       final restoredSettings = Settings.fromJson(settings.toJson());
       expect(restoredSettings.defaultAgent, 'roverCli');
       expect(
         restoredSettings.permissionsFor('roverCli').newSessions,
-        PermissionMode.acceptEdits,
+        acceptEditsStored,
+      );
+      // And that stored string resolves back to a mode this agent really has.
+      expect(
+        _rover.launch.permission.resolveStored(acceptEditsStored),
+        acceptEditsSelection,
       );
 
       // 4. SESSION CREATION — the engine resolves the adapter by agent id.
@@ -124,7 +132,7 @@ void main() {
         repository: repository(),
         installation: stored,
         title: 'Rover run',
-        permissionMode: PermissionMode.acceptEdits,
+        permission: _permission(acceptEditsSelection),
       );
 
       expect(resolved, ['roverCli']);
@@ -139,27 +147,29 @@ void main() {
 
   test('its launch arguments come from the descriptor, not from code', () {
     final descriptor = _registry.byId('roverCli')!;
-    AgentLaunch launch(PermissionMode mode, String? resume) => AgentLaunch(
-      workingDirectory: repository().path,
-      installation: agentInstallation(agentId: 'roverCli'),
-      permissionMode: mode,
-      resumeSessionId: resume,
-    );
+    AgentLaunch launch(PermissionSelection selection, String? resume) =>
+        AgentLaunch(
+          workingDirectory: repository().path,
+          installation: agentInstallation(agentId: 'roverCli'),
+          permission: ResolvedPermission.of(
+            descriptor.launch.permission,
+            selection,
+          ),
+          resumeSessionId: resume,
+        );
 
+    expect(genericLaunchArgs(descriptor.launch, launch(askSelection, null)), [
+      '--headless',
+      '--mode',
+      'ask',
+    ]);
     expect(
-      genericLaunchArgs(descriptor.launch, launch(PermissionMode.ask, null)),
-      ['--headless'],
+      genericLaunchArgs(descriptor.launch, launch(acceptEditsSelection, null)),
+      ['--headless', '--mode', 'acceptEdits'],
     );
     expect(
-      genericLaunchArgs(
-        descriptor.launch,
-        launch(PermissionMode.acceptEdits, null),
-      ),
-      ['--headless', '--auto-edit'],
-    );
-    expect(
-      genericLaunchArgs(descriptor.launch, launch(PermissionMode.bypass, 'x1')),
-      ['--headless', '--trust-me', '--continue', 'x1'],
+      genericLaunchArgs(descriptor.launch, launch(bypassSelection, 'x1')),
+      ['--headless', '--bypass', '--continue', 'x1'],
     );
   });
 

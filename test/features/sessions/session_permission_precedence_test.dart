@@ -14,7 +14,8 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
+import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,21 +24,61 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// An agent that expresses all three modes exactly, so a flag on the command
-/// line names the winning mode with nothing else in the way.
+/// An agent with one flag per mode, so a flag on the command line names the
+/// winning mode with nothing else in the way.
 const _rover = AgentDescriptor(
   id: 'roverCli',
   displayName: 'Rover CLI',
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-      PermissionMode.acceptEdits: PermissionModeMapping.exact(['--edits']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
+    permission: AgentPermissionSupport.axes(
+      evidence: 'test fixture',
+      axes: [
+        AgentPermissionAxis(
+          id: 'mode',
+          label: 'Mode',
+          description: 'test',
+          defaultValueId: 'careful',
+          values: [
+            AgentPermissionValue(
+              id: 'careful',
+              label: 'Careful',
+              shortLabel: 'Careful',
+              description: 'Asks first.',
+              arguments: ['--careful'],
+              permits: PermissionRisk.ask,
+              evidence: 'test fixture',
+            ),
+            AgentPermissionValue(
+              id: 'edits',
+              label: 'Edits',
+              shortLabel: 'Edits',
+              description: 'Writes without asking.',
+              arguments: ['--edits'],
+              permits: PermissionRisk.acceptEdits,
+              evidence: 'test fixture',
+            ),
+            AgentPermissionValue(
+              id: 'trust',
+              label: 'Trust me',
+              shortLabel: 'Trust',
+              description: 'Everything, without asking.',
+              arguments: ['--trust-me'],
+              permits: PermissionRisk.bypass,
+              isDangerous: true,
+              evidence: 'test fixture',
+            ),
+          ],
+        ),
+      ],
+    ),
     interactiveResume: AgentResume.flag('--continue'),
   ),
 );
+
+const _careful = PermissionSelection({'mode': 'careful'});
+const _edits = PermissionSelection({'mode': 'edits'});
+const _trust = PermissionSelection({'mode': 'trust'});
 
 /// The real [SettingsController] over the in-memory database, deliberately: the
 /// question these tests ask is what happens **when the global default changes**
@@ -67,11 +108,16 @@ const _rover = AgentDescriptor(
 extension on ProviderContainer {
   SessionLauncher get launcher => read(sessionLauncherProvider);
 
-  void setDefaults({PermissionMode? forNew, PermissionMode? forExisting}) {
+  void setDefaults({
+    PermissionSelection? forNew,
+    PermissionSelection? forExisting,
+  }) {
     final settings = read(settingsControllerProvider.notifier);
-    if (forNew != null) settings.setNewSessionPermission('roverCli', forNew);
+    if (forNew != null) {
+      settings.setNewSessionPermission('roverCli', forNew.canonical);
+    }
     if (forExisting != null) {
-      settings.setExistingSessionPermission('roverCli', forExisting);
+      settings.setExistingSessionPermission('roverCli', forExisting.canonical);
     }
   }
 
@@ -84,11 +130,11 @@ extension on ProviderContainer {
 
 /// A stopped session with a CLI id, which is exactly what the resume path
 /// reuses rather than duplicating.
-void seedStopped(AppDatabase db, {PermissionMode? mode}) {
+void seedStopped(AppDatabase db, {PermissionSelection? mode}) {
   SessionDao(db).insert(
     session(id: 'src', status: SessionStatus.completed).copyWith(
       externalSessionId: 'cli-1',
-      permissionMode: mode,
+      permissionMode: mode?.canonical,
     ),
   );
 }
@@ -124,7 +170,7 @@ void main() {
     final h = harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    h.container.setDefaults(forNew: PermissionMode.bypass);
+    h.container.setDefaults(forNew: _trust);
 
     final launched = await h.container.launcher.launch(
       SessionLaunchRequest(
@@ -132,14 +178,14 @@ void main() {
         installation: agentInstallation(agentId: 'roverCli'),
         title: 'Careful',
         purpose: SessionPurpose.newSession,
-        permissionOverride: PermissionMode.ask,
+        permissionOverride: _careful,
       ),
     );
 
     expect(h.container.argumentsOf(launched.paneId!), contains('--careful'));
     expect(
       SessionDao(h.db).getById(launched.session.id)!.permissionMode,
-      PermissionMode.ask,
+      _careful.canonical,
     );
   });
 
@@ -147,8 +193,8 @@ void main() {
     final h = harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    h.container.setDefaults(forExisting: PermissionMode.bypass);
-    seedStopped(h.db, mode: PermissionMode.ask);
+    h.container.setDefaults(forExisting: _trust);
+    seedStopped(h.db, mode: _careful);
 
     final launched = await resume(h.container);
 
@@ -163,19 +209,19 @@ void main() {
       'cli-1',
     ]);
     // And it must not have overwritten the choice on its way past.
-    expect(SessionDao(h.db).getById('src')!.permissionMode, PermissionMode.ask);
+    expect(SessionDao(h.db).getById('src')!.permissionMode, _careful.canonical);
   });
 
   test('changing the global default does not move a session that chose', () {
     final h = harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    seedStopped(h.db, mode: PermissionMode.acceptEdits);
+    seedStopped(h.db, mode: _edits);
 
-    h.container.setDefaults(forExisting: PermissionMode.bypass);
+    h.container.setDefaults(forExisting: _trust);
 
     final effective = h.container.launcher.effectivePermissionFor('src')!;
-    expect(effective.mode, PermissionMode.acceptEdits);
+    expect(effective.selection, _edits);
     expect(effective.inherited, isFalse);
   });
 
@@ -185,17 +231,17 @@ void main() {
     addTearDown(h.container.dispose);
     seedStopped(h.db);
 
-    h.container.setDefaults(forExisting: PermissionMode.acceptEdits);
+    h.container.setDefaults(forExisting: _edits);
     expect(
-      h.container.launcher.effectivePermissionFor('src')!.mode,
-      PermissionMode.acceptEdits,
+      h.container.launcher.effectivePermissionFor('src')!.selection,
+      _edits,
     );
 
     // Live, not sampled once: a session with no choice of its own follows the
     // setting wherever it goes.
-    h.container.setDefaults(forExisting: PermissionMode.bypass);
+    h.container.setDefaults(forExisting: _trust);
     final effective = h.container.launcher.effectivePermissionFor('src')!;
-    expect(effective.mode, PermissionMode.bypass);
+    expect(effective.selection, _trust);
     expect(effective.inherited, isTrue);
   });
 
@@ -203,7 +249,7 @@ void main() {
     final h = harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    h.container.setDefaults(forNew: PermissionMode.acceptEdits);
+    h.container.setDefaults(forNew: _edits);
 
     final launched = await startNew(h.container);
 
@@ -217,10 +263,10 @@ void main() {
       isNull,
     );
 
-    h.container.setDefaults(forExisting: PermissionMode.bypass);
+    h.container.setDefaults(forExisting: _trust);
     expect(
-      h.container.launcher.effectivePermissionFor(launched.session.id)!.mode,
-      PermissionMode.bypass,
+      h.container.launcher.effectivePermissionFor(launched.session.id)!.selection,
+      _trust,
     );
   });
 
@@ -229,7 +275,7 @@ void main() {
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
     seedStopped(h.db);
-    h.container.setDefaults(forExisting: PermissionMode.acceptEdits);
+    h.container.setDefaults(forExisting: _edits);
 
     final launched = await resume(h.container);
 
@@ -244,9 +290,9 @@ void main() {
   test('the choice survives a restart', () async {
     final first = harness();
     addTearDown(first.db.close);
-    first.container.setDefaults(forExisting: PermissionMode.bypass);
+    first.container.setDefaults(forExisting: _trust);
     seedStopped(first.db);
-    first.container.launcher.setPermissionMode('src', PermissionMode.ask);
+    first.container.launcher.setPermissionMode('src', _careful);
     first.container.dispose();
 
     // A new container over the same database is what a restart is: settings
@@ -255,7 +301,7 @@ void main() {
     addTearDown(second.container.dispose);
 
     final effective = second.container.launcher.effectivePermissionFor('src')!;
-    expect(effective.mode, PermissionMode.ask);
+    expect(effective.selection, _careful);
     expect(effective.inherited, isFalse);
 
     final launched = await resume(second.container);
@@ -270,8 +316,8 @@ void main() {
     final h = harness();
     addTearDown(h.db.close);
     addTearDown(h.container.dispose);
-    seedStopped(h.db, mode: PermissionMode.ask);
-    h.container.setDefaults(forExisting: PermissionMode.acceptEdits);
+    seedStopped(h.db, mode: _careful);
+    h.container.setDefaults(forExisting: _edits);
 
     // Null is a value here, not a missing argument: "follow the setting" is a
     // state the user can go back to, and without this the first pick would be
@@ -280,7 +326,7 @@ void main() {
 
     expect(SessionDao(h.db).getById('src')!.permissionMode, isNull);
     final effective = h.container.launcher.effectivePermissionFor('src')!;
-    expect(effective.mode, PermissionMode.acceptEdits);
+    expect(effective.selection, _edits);
     expect(effective.inherited, isTrue);
   });
 }

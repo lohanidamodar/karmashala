@@ -6,6 +6,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -18,7 +19,6 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +27,7 @@ import 'package:logging/logging.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
 /// An agent that exists only as a registry entry: no `AgentKind`, no protocol
@@ -38,10 +39,7 @@ const _rover = AgentDescriptor(
   binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--continue'),
   ),
 );
@@ -54,9 +52,7 @@ const _talkative = AgentDescriptor(
   launch: AgentLaunchSpec(
     baseArguments: ['--headless'],
     prompt: AgentPromptSupport.positional(),
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-    },
+    permission: testPermissionSupport,
   ),
 );
 
@@ -134,7 +130,7 @@ void main() {
       final instance = controller.instanceFor(result.paneId!)!;
       final launch = instance.agentLaunch!;
       expect(launch.agentId, 'roverCli');
-      expect(launch.arguments, ['--careful']);
+      expect(launch.arguments, ['--mode', 'ask']);
       expect(launch.sessionId, stored.id);
       expect(launch.workingDirectory, repository().path.path);
       // Protocol arguments never reach an interactive launch.
@@ -148,8 +144,8 @@ void main() {
       settings: settings.withPermissions(
         'roverCli',
         const AgentPermissions(
-          newSessions: PermissionMode.ask,
-          existingSessions: PermissionMode.bypass,
+          newSessions: askStored,
+          existingSessions: bypassStored,
         ),
       ),
     );
@@ -159,11 +155,11 @@ void main() {
 
     expect(
       launcher.permissionFor('roverCli', SessionPurpose.newSession),
-      PermissionMode.ask,
+      askSelection,
     );
     expect(
       launcher.permissionFor('roverCli', SessionPurpose.existingSession),
-      PermissionMode.bypass,
+      bypassSelection,
     );
 
     // The sharpest divergence the audit found: a resume used to be started
@@ -182,7 +178,7 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(resumed.paneId!)!;
     expect(instance.agentLaunch!.arguments, [
-      '--trust-me',
+      '--bypass',
       '--continue',
       'external-1',
     ]);
@@ -193,8 +189,8 @@ void main() {
       settings: const Settings().withPermissions(
         'roverCli',
         const AgentPermissions(
-          newSessions: PermissionMode.ask,
-          existingSessions: PermissionMode.bypass,
+          newSessions: askStored,
+          existingSessions: bypassStored,
         ),
       ),
     );
@@ -202,7 +198,7 @@ void main() {
     addTearDown(h.container.dispose);
     final launcher = h.container.read(sessionLauncherProvider);
 
-    SessionLaunchRequest request({PermissionMode? override}) =>
+    SessionLaunchRequest request({PermissionSelection? override}) =>
         SessionLaunchRequest(
           repository: repository(),
           installation: agentInstallation(agentId: 'roverCli'),
@@ -223,13 +219,13 @@ void main() {
     );
 
     final chosen = await launcher.launch(
-      request(override: PermissionMode.bypass),
+      request(override: bypassSelection),
     );
     // A caller that resolved a mode for this session *is* a choice, and it is
     // recorded so the next resume runs under it.
     expect(
       SessionDao(h.db).getById(chosen.session.id)!.permissionMode,
-      PermissionMode.bypass,
+      bypassStored,
     );
   });
 
@@ -237,7 +233,7 @@ void main() {
     final h = harness(
       settings: const Settings().withPermissions(
         'roverCli',
-        const AgentPermissions(existingSessions: PermissionMode.bypass),
+        const AgentPermissions(existingSessions: bypassStored),
       ),
     );
     addTearDown(h.db.close);
@@ -258,20 +254,20 @@ void main() {
     // `bypass`, so a resolver that re-read the setting would silently escalate
     // a deliberately careful session to full autonomy on its next resume. It
     // must not.
-    launcher.setPermissionMode(id, PermissionMode.ask);
+    launcher.setPermissionMode(id, askSelection);
     expect(
       launcher.permissionFor(
         'roverCli',
         SessionPurpose.existingSession,
         sessionMode: SessionDao(h.db).getById(id)!.permissionMode,
       ),
-      PermissionMode.ask,
+      askSelection,
     );
 
     // And it reads back as the session's own rather than as an inherited
     // default, which is the difference the control has to be able to show.
     final effective = launcher.effectivePermissionFor(id)!;
-    expect(effective.mode, PermissionMode.ask);
+    expect(effective.selection, askSelection);
     expect(effective.inherited, isFalse);
     expect(effective.descriptor?.id, 'roverCli');
   });
@@ -280,7 +276,7 @@ void main() {
     final h = harness(
       settings: const Settings().withPermissions(
         'roverCli',
-        const AgentPermissions(existingSessions: PermissionMode.acceptEdits),
+        const AgentPermissions(existingSessions: acceptEditsStored),
       ),
     );
     addTearDown(h.db.close);
@@ -305,7 +301,7 @@ void main() {
       isNull,
     );
     final effective = launcher.effectivePermissionFor(launched.session.id)!;
-    expect(effective.mode, PermissionMode.acceptEdits);
+    expect(effective.selection, acceptEditsSelection);
     // Null is "never recorded", not a defaulted `ask` — the control says
     // "inherited" rather than claiming the session chose this.
     expect(effective.inherited, isTrue);
@@ -818,7 +814,7 @@ void main() {
     final h = harness(
       settings: const Settings().withPermissions(
         'roverCli',
-        const AgentPermissions(existingSessions: PermissionMode.ask),
+        const AgentPermissions(existingSessions: askStored),
       ),
     );
     addTearDown(h.db.close);
@@ -840,13 +836,14 @@ void main() {
     final id = started.session.id;
     final firstPane = started.paneId!;
     expect(terminals.instanceFor(firstPane)!.agentLaunch!.arguments, [
-      '--careful',
+      '--mode',
+      'ask',
       '--continue',
       'external-1',
     ]);
 
     // Exactly what the chip does: write the row, then ask for the restart.
-    launcher.setPermissionMode(id, PermissionMode.bypass);
+    launcher.setPermissionMode(id, bypassSelection);
     final restarted = await launcher.restartSession(id);
 
     // One session, not two. A restart that minted a second row would leave the
@@ -866,7 +863,7 @@ void main() {
     // And the whole point — the new flags are on a command line, which is the
     // only place any of these CLIs reads a permission policy from.
     expect(terminals.instanceFor(restarted.paneId!)!.agentLaunch!.arguments, [
-      '--trust-me',
+      '--bypass',
       '--continue',
       'external-1',
     ]);
@@ -876,7 +873,7 @@ void main() {
     final h = harness(
       settings: const Settings().withPermissions(
         'roverCli',
-        const AgentPermissions(existingSessions: PermissionMode.bypass),
+        const AgentPermissions(existingSessions: bypassStored),
       ),
     );
     addTearDown(h.db.close);
@@ -908,7 +905,7 @@ void main() {
           .instanceFor(restarted.paneId!)!
           .agentLaunch!
           .arguments,
-      ['--trust-me', '--continue', 'external-2'],
+      ['--bypass', '--continue', 'external-2'],
     );
   });
 

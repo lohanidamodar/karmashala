@@ -2,7 +2,6 @@ import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 AgentDescriptor _descriptor(String id) => AgentRegistry.builtIn.byId(id)!;
@@ -105,16 +104,20 @@ void main() {
     const retiredCodexApprovals = ['on-failure', 'untrusted'];
 
     test('no built-in descriptor passes a retired codex approval value', () {
-      final launch = _descriptor(AgentIds.codex).launch;
-      for (final mode in PermissionMode.values) {
+      final support = _descriptor(AgentIds.codex).launch.permission;
+      // Every selection the agent declares, rather than the three values of a
+      // shared enum. The retired values lived on the approval axis, and the
+      // whole axis — in every combination with the sandbox — is what has to be
+      // swept for them now.
+      for (final selection in support.selections()) {
         for (final retired in retiredCodexApprovals) {
           expect(
-            launch.permissionArgumentsFor(mode),
+            support.argumentsFor(selection),
             isNot(contains(retired)),
             reason:
                 'codex-cli rejects "$retired" outright and refuses to start, '
-                'so $mode would make the agent unlaunchable rather than '
-                'differently governed.',
+                'so ${selection.canonical} would make the agent unlaunchable '
+                'rather than differently governed.',
           );
         }
       }

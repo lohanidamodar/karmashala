@@ -5,10 +5,8 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../app/widgets/desktop_dialog.dart';
 import '../../../app/widgets/desktop_menu.dart';
-import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_permission_options.dart';
-import '../../agents/presentation/permission_mode_picker.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 import '../application/session_signals.dart';
@@ -36,28 +34,33 @@ import '../application/session_signals.dart';
 ///   under the new flags, on the same conversation — and it never performs one
 ///   without saying what a restart costs: the turn in flight, and the tokens
 ///   the next message spends re-sending the conversation.
-/// One row of the permission menu: a mode to set for this session, or the
-/// Settings default to hand it back to.
+/// One row of the permission menu: a value to set on one axis, or the Settings
+/// default to hand the whole session back to.
 ///
-/// A type of its own rather than a nullable [PermissionMode] because
+/// A type of its own rather than a nullable selection because
 /// `PopupMenuButton` reads a null selection as a *dismissal* and never calls
 /// `onSelected` for it — so "follow the default" written as a null value would
 /// have looked right and done nothing.
 @immutable
 class PermissionChoice {
-  const PermissionChoice(this.mode);
+  const PermissionChoice(this.axisId, this.valueId);
 
   /// Follow the per-agent default in Settings, live.
-  static const followDefault = PermissionChoice(null);
+  static const followDefault = PermissionChoice(null, null);
 
-  final PermissionMode? mode;
+  /// Which axis this row belongs to, or null for [followDefault]. Two axes may
+  /// name values alike, so the value id alone is not an answer.
+  final String? axisId;
+  final String? valueId;
 
   @override
   bool operator ==(Object other) =>
-      other is PermissionChoice && other.mode == mode;
+      other is PermissionChoice &&
+      other.axisId == axisId &&
+      other.valueId == valueId;
 
   @override
-  int get hashCode => mode.hashCode;
+  int get hashCode => Object.hash(axisId, valueId);
 }
 
 class PermissionModeChip extends ConsumerWidget {
@@ -77,20 +80,39 @@ class PermissionModeChip extends ConsumerWidget {
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final options = permissionOptionsFor(effective.descriptor);
-    final current = options.firstWhere((o) => o.mode == effective.mode);
+    final agentName = effective.descriptor?.displayName ?? 'This agent';
+    final support = effective.descriptor?.launch.permission;
+    final known = support != null && support.isKnown;
+    final axes = permissionAxisOptionsFor(
+      effective.descriptor,
+      selection: effective.selection,
+      agentName: agentName,
+    );
 
-    // Colour carries meaning only: a mode we cannot enforce and a bypass are
-    // both things the user should notice, and nothing else is tinted.
-    final alarming =
-        current.fit == PermissionModeFit.none || current.mode.isDangerous;
-    final foreground = alarming ? scheme.error : scheme.onSurfaceVariant;
+    // Colour carries meaning only: an agent we cannot govern and a selection
+    // that bypasses everything are both things the user should notice, and
+    // nothing else is tinted.
+    final dangerous = known && support.isDangerous(effective.selection);
+    final foreground = !known || dangerous
+        ? scheme.error
+        : scheme.onSurfaceVariant;
+    final label = known
+        ? describeSelectionShort(support, effective.selection)
+        : 'Not established';
 
     return PopupMenuButton<PermissionChoice>(
       tooltip: '',
       position: PopupMenuPosition.over,
       onSelected: (choice) =>
-          _apply(context, ref, launcher, choice.mode, current),
+          _apply(
+            context,
+            ref,
+            launcher,
+            choice,
+            effective.selection,
+            support,
+            agentName,
+          ),
       itemBuilder: (context) => [
         // First, and its own row: handing the session back to the Settings
         // default is where every session starts and the only state that follows
@@ -101,28 +123,45 @@ class PermissionModeChip extends ConsumerWidget {
           value: PermissionChoice.followDefault,
           selected: effective.inherited,
           label: 'Follow the Settings default',
-          detail:
-              'Currently ${current.mode.label.toLowerCase()} for '
-              '${current.agentName}. Changing that setting changes this '
-              'session too.',
+          detail: known
+              ? 'Currently ${describeSelection(support, effective.selection)} '
+                    'for $agentName. Changing that setting changes this '
+                    'session too.'
+              : unknownAgentReason(agentName),
         ),
         const DesktopMenuDivider(),
-        for (final option in options)
+        if (!known)
           DesktopMenuDetailItem<PermissionChoice>(
-            value: PermissionChoice(option.mode),
-            enabled: option.isSelectable,
-            selected: !effective.inherited && option.mode == current.mode,
-            label: option.mode.label,
-            badge: option.fitLabel,
-            badgeColor: permissionFitColour(
-              Theme.of(context).colorScheme,
-              option.fit,
-            ),
-            detail: option.summary,
-          ),
+            value: const PermissionChoice(null, null),
+            enabled: false,
+            label: 'No permission modes established',
+            detail: unknownAgentReason(agentName),
+          )
+        else
+          for (final axis in axes) ...[
+            // Only when there is more than one. Codex has two — a sandbox and
+            // an approval policy — and a flat list would imply they are one
+            // question with seven answers rather than two with three and four.
+            if (axes.length > 1) DesktopMenuHeader<PermissionChoice>(axis.label),
+            for (final option in axis.options)
+              DesktopMenuDetailItem<PermissionChoice>(
+                value: PermissionChoice(axis.id, option.id),
+                enabled: option.isSelectable,
+                selected: !effective.inherited && option.id == axis.selectedId,
+                label: option.label,
+                detail: option.summary,
+              ),
+            if (axis != axes.last) const DesktopMenuDivider(),
+          ],
       ],
       child: Tooltip(
-        message: _tooltip(current, inherited: effective.inherited),
+        message: _tooltip(
+          support,
+          effective.selection,
+          agentName: agentName,
+          inherited: effective.inherited,
+          unrecognised: effective.unrecognised,
+        ),
         child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: Insets.sm,
@@ -144,25 +183,38 @@ class PermissionModeChip extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                _iconFor(current.fit, current.mode),
+                !known
+                    ? AppIcons.warningCircle
+                    : dangerous
+                    ? AppIcons.warning
+                    : AppIcons.check,
                 size: Chrome.iconSmall,
                 color: foreground,
               ),
               const SizedBox(width: Insets.xs),
-              // The mode's own name is the last thing to be given up, so it is
-              // rigid and the qualifiers below are not.
-              Text(
-                current.mode.shortLabel,
-                style: theme.textTheme.labelSmall?.copyWith(color: foreground),
+              // The mode's own name is what the chip is for, so it gives up its
+              // tail before the row does. Codex's two axes make this longer
+              // than the three short words it used to hold ("Workspace · On
+              // request"), which is why it is Flexible rather than rigid.
+              Flexible(
+                child: Text(
+                  label,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: foreground,
+                  ),
+                ),
               ),
-              // Both qualifiers are on the chip, not only in the tooltip.
-              // "Accept edits" that is really Codex's sandbox has to look
-              // different from one that really is accept-edits, and a mode this
-              // session is merely *following* has to look different from one it
-              // chose — neither is discoverable by hovering.
+              // A mode this session is merely *following* has to look different
+              // from one it chose, and that is not discoverable by hovering.
               for (final qualifier in [
                 if (effective.inherited) 'default',
-                if (current.fit != PermissionModeFit.exact) current.fitLabel,
+                // A mode this build does not name, substituted down to the
+                // agent's default. Said on the face of the chip rather than
+                // only on hover: the user set something else, and the control
+                // must not show the substitute as if it were their choice.
+                if (effective.unrecognised) 'unrecognised',
               ]) ...[
                 const SizedBox(width: Insets.xs),
                 Flexible(
@@ -186,33 +238,58 @@ class PermissionModeChip extends ConsumerWidget {
     );
   }
 
-  static IconData _iconFor(PermissionModeFit fit, PermissionMode mode) =>
-      switch (fit) {
-        PermissionModeFit.none => AppIcons.warningCircle,
-        PermissionModeFit.approximate => AppIcons.info,
-        PermissionModeFit.exact =>
-          mode.isDangerous ? AppIcons.warning : AppIcons.check,
-      };
-
-  String _tooltip(AgentPermissionOption current, {required bool inherited}) {
+  String _tooltip(
+    AgentPermissionSupport? support,
+    PermissionSelection selection, {
+    required String agentName,
+    required bool inherited,
+    required bool unrecognised,
+  }) {
+    if (support == null || !support.isKnown) {
+      return unknownAgentReason(agentName);
+    }
     // "Following" rather than "inherited": inheriting sounds like something
     // that happened once, and the whole point of this state is that it is live
     // — change the setting and this session changes with it.
     final origin = inherited
-        ? 'Following the ${current.agentName} default in Settings, so it '
-              'changes when that setting does.'
+        ? 'Following the $agentName default in Settings, so it changes when '
+              'that setting does.'
         : 'Set for this session, and it stays set when the Settings default '
               'changes.';
-    return '${current.mode.label}\n$origin\n${current.summary}';
+    if (unrecognised) {
+      return '${describeSelection(support, selection)}\n'
+          'This session was set to a mode this build of Karmashala does not '
+          'name — by a newer build, or by hand. It runs under the '
+          '$agentName default shown here instead.';
+    }
+    final detail = describeSelectionDetail(support, selection) ?? '';
+    return '${describeSelection(support, selection)}\n$origin\n$detail';
   }
 
   Future<void> _apply(
     BuildContext context,
     WidgetRef ref,
     SessionLauncher launcher,
-    PermissionMode? mode,
-    AgentPermissionOption current,
+    PermissionChoice choice,
+    PermissionSelection currentSelection,
+    AgentPermissionSupport? support,
+    String agentName,
   ) async {
+    // One axis changes; the rest of the selection is carried through unchanged,
+    // so picking a sandbox never silently resets the approval policy beside it.
+    final selection = choice.axisId == null || support == null
+        ? null
+        : support.normalise(
+            PermissionSelection({
+              ...support.normalise(currentSelection).values,
+              choice.axisId!: choice.valueId!,
+            }),
+          );
+    final dangerous =
+        selection != null && (support?.isDangerous(selection) ?? false);
+    final label = selection == null || support == null
+        ? ''
+        : describeSelection(support, selection);
     // The session's own bar rather than `ScaffoldMessenger`. Everything said
     // below is true of this session and false of the others open beside it, and
     // a snackbar says it across the bottom of the window with nothing naming
@@ -225,31 +302,32 @@ class PermissionModeChip extends ConsumerWidget {
     // Writing first and offering to undo would be a different promise: the
     // session would already be recorded as bypassing prompts, and the next
     // resume from anywhere else in the app would honour it.
-    if (mode != null && mode.isDangerous) {
+    if (dangerous) {
       final confirmed = await _confirmDangerous(
         context,
-        mode: mode,
-        option: current,
+        label: label,
+        detail: describeSelectionDetail(support!, selection) ?? '',
+        agentName: agentName,
         restarts: running,
       );
       if (confirmed != true) return;
     }
 
-    launcher.setPermissionMode(sessionId, mode);
+    launcher.setPermissionMode(sessionId, selection);
 
     // The dialog above already said what a restart costs and the user said yes
     // to it, so this is the restart — not a second prompt for the same answer.
-    if (mode != null && mode.isDangerous && running) {
-      await _restart(notices, launcher, savedLabel: mode.label);
+    if (dangerous && running) {
+      await _restart(notices, launcher, savedLabel: label);
       return;
     }
 
     // Only claim what happened. A live agent was started with the old flags and
     // there is no documented way to re-govern any of these CLIs mid-session, so
     // saying anything else here would be the lie this control exists to remove.
-    final what = mode == null
-        ? 'Following the ${current.agentName} default in Settings'
-        : mode.label;
+    final what = selection == null
+        ? 'Following the $agentName default in Settings'
+        : label;
     notices.post(
       sessionId,
       SessionNotice(
@@ -322,7 +400,7 @@ class PermissionModeChip extends ConsumerWidget {
   /// user cannot see coming:
   ///
   /// * bypass itself, which is the reason the mode is marked
-  ///   [PermissionMode.isDangerous] and is the only one the chip's colour
+  ///   `AgentPermissionSupport.isDangerous` and is the only one the chip's colour
   ///   already hints at;
   /// * the restart, because the flags are only read at startup — an agent
   ///   part-way through a turn is killed with that turn, and the resume picks
@@ -339,8 +417,9 @@ class PermissionModeChip extends ConsumerWidget {
   /// there teaches the user to click through the next one.
   Future<bool?> _confirmDangerous(
     BuildContext context, {
-    required PermissionMode mode,
-    required AgentPermissionOption option,
+    required String label,
+    required String detail,
+    required String agentName,
     required bool restarts,
   }) {
     return showDialog<bool>(
@@ -354,7 +433,7 @@ class PermissionModeChip extends ConsumerWidget {
           scrollable: true,
           title: DesktopDialogTitle(
             icon: AppIcons.warning,
-            title: '${mode.label}?',
+            title: '$label?',
             subtitle: restarts
                 ? 'This restarts the session.'
                 : 'This applies the next time the session runs.',
@@ -366,11 +445,18 @@ class PermissionModeChip extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${option.agentName} will make every file edit and run '
-                  'every command without asking. You will not be prompted, '
-                  'and nothing here can stop a command the agent has already '
-                  'decided to run.',
+                  '$agentName will make every file edit and run every command '
+                  'without asking. You will not be prompted, and nothing here '
+                  'can stop a command the agent has already decided to run.',
                 ),
+                // The agent's own words for what was picked. For Codex this is
+                // the pair — a sandbox and an approval policy that are each
+                // unremarkable and together leave nothing in the way — and the
+                // user has no other way to see that is what they chose.
+                if (detail.isNotEmpty) ...[
+                  const SizedBox(height: Insets.md),
+                  Text(detail),
+                ],
                 if (restarts) ...[
                   const SizedBox(height: Insets.md),
                   Text(
@@ -404,7 +490,7 @@ class PermissionModeChip extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(true),
               // Says what the button does, not that it agrees: "OK" on a
               // dialog offering three consequences names none of them.
-              child: Text(restarts ? 'Restart in bypass' : 'Use bypass'),
+              child: Text(restarts ? 'Restart in $label' : 'Use $label'),
             ),
           ],
         );

@@ -1,11 +1,12 @@
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/permission_carry.dart';
 import 'package:karmashala/src/features/cli_detection/domain/agent_command_line.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// What Karmashala is allowed to claim about Antigravity.
@@ -48,48 +49,66 @@ void main() {
     });
   });
 
-  group('permission modes, all three read off agy --help', () {
-    test('every mode maps, and maps exactly', () {
-      final launch = descriptor.launch;
-      expect(launch.expressiblePermissionModes, PermissionMode.values);
-      for (final mode in PermissionMode.values) {
-        expect(
-          launch.permissionFitFor(mode),
-          PermissionModeFit.exact,
-          reason: mode.name,
-        );
+  group('permission modes, all read off agy --help', () {
+    final support = descriptor.launch.permission;
+
+    test('every mode is declared, and each says where it was read', () {
+      // `expressiblePermissionModes` and `permissionFitFor` went with the
+      // shared three-value enum. There is no translation left for this
+      // descriptor to be faithful *to* — the modes are the CLI's own — so what
+      // "maps exactly" has become is "is declared at all, with the line it was
+      // read off beside it".
+      expect(support.isKnown, isTrue);
+      expect(support.evidence, contains('agy'));
+      expect([for (final value in support.axes.single.values) value.id], [
+        'plan',
+        'prompt',
+        'accept-edits',
+        'skip-permissions',
+      ]);
+      for (final value in support.axes.single.values) {
+        expect(value.evidence, contains('agy'), reason: value.id);
       }
     });
 
     test('ask is the unflagged default, and says so', () {
-      // The one empty argument list in this descriptor that is *exact* rather
-      // than absent: `--dangerously-skip-permissions` is documented as the way
-      // to stop the CLI prompting, so prompting is what it does unflagged.
-      expect(
-        descriptor.launch.permissionArgumentsFor(PermissionMode.ask),
-        isEmpty,
-      );
-      expect(descriptor.launch.permissionNoteFor(PermissionMode.ask), isNotNull);
+      // The one empty argument list in this descriptor that is *declared*
+      // rather than absent: `--dangerously-skip-permissions` is documented as
+      // the way to stop the CLI prompting, so prompting is what it does
+      // unflagged. Being the axis default is what makes that emptiness a claim
+      // rather than a gap.
+      final axis = support.axes.single;
+      expect(axis.defaultValueId, 'prompt');
+      expect(axis.valueFor('prompt')!.arguments, isEmpty);
+      expect(axis.valueFor('prompt')!.evidence, isNotEmpty);
+      expect(support.argumentsFor(support.defaultSelection), isEmpty);
+      // And it is still not the *other* thing that passes no flags: an empty
+      // selection enforces nothing, this one names a mode.
+      expect(support.defaultSelection, isNot(PermissionSelection.empty));
     });
 
     test('accept-edits and bypass name the documented flags', () {
-      expect(descriptor.launch.permissionArgumentsFor(PermissionMode.acceptEdits), [
-        '--mode',
-        'accept-edits',
-      ]);
-      expect(descriptor.launch.permissionArgumentsFor(PermissionMode.bypass), [
-        '--dangerously-skip-permissions',
-      ]);
+      expect(
+        support.argumentsFor(const PermissionSelection({'mode': 'accept-edits'})),
+        ['--mode', 'accept-edits'],
+      );
+      expect(
+        support.argumentsFor(
+          const PermissionSelection({'mode': 'skip-permissions'}),
+        ),
+        ['--dangerously-skip-permissions'],
+      );
     });
 
     test('the invented flags are gone from every mode', () {
       // `--yolo` was the only mode this agent claimed to support and is not a
       // flag the CLI has, so the single mode it offered was the one that would
       // have failed — and it was the dangerous one.
-      for (final mode in PermissionMode.values) {
+      for (final selection in support.selections()) {
         expect(
-          descriptor.launch.permissionArgumentsFor(mode),
+          support.argumentsFor(selection),
           isNot(contains('--yolo')),
+          reason: selection.canonical,
         );
       }
       expect(descriptor.launch.baseArguments, isNot(contains('--stdio')));
@@ -267,19 +286,24 @@ void main() {
   group('the permission-carry rule still holds', () {
     test('a careful session handed here is enforced, not escalated', () {
       // Antigravity used to be the agent this rule was written against, as the
-      // one whose only expressible mode was bypass. Now that `ask` maps
-      // exactly, the carry is better than a fallback — but it must still never
-      // arrive at bypass.
-      final carried = carryPermission(PermissionMode.ask, descriptor);
-      expect(carried.mode, PermissionMode.ask);
+      // one whose only expressible mode was bypass. Now that it declares a
+      // prompt-every-time mode the carry is better than a fallback — but it
+      // must still never arrive at bypass.
+      final carried = carryPermission(PermissionRisk.ask, descriptor);
+      expect(carried.selection, const PermissionSelection({'mode': 'prompt'}));
+      expect(carried.risk, PermissionRisk.ask);
       expect(carried.fit, PermissionModeFit.exact);
       expect(carried.enforced, isTrue);
       expect(carried.changed, isFalse);
     });
 
     test('a bypass session is not silently made safer or more dangerous', () {
-      final carried = carryPermission(PermissionMode.bypass, descriptor);
-      expect(carried.mode, PermissionMode.bypass);
+      final carried = carryPermission(PermissionRisk.bypass, descriptor);
+      expect(
+        carried.selection,
+        const PermissionSelection({'mode': 'skip-permissions'}),
+      );
+      expect(carried.risk, PermissionRisk.bypass);
       expect(carried.fit, PermissionModeFit.exact);
     });
   });

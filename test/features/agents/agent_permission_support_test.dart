@@ -214,6 +214,106 @@ void main() {
     });
   });
 
+  group('"enforce nothing" is not "use the default"', () {
+    final support = supportFor('claudeCode');
+
+    test('an empty selection passes no flags and survives a round trip', () {
+      // The two states look alike and must never behave alike. A *null*
+      // selection means "nobody chose, use the declared default" and does pass
+      // flags; an *empty* one is the carry rule's answer when every mode an
+      // agent has is more permissive than what the user asked for, and passing
+      // the default there would silently widen the very case the rule narrows.
+      expect(support.argumentsFor(null), isNotEmpty);
+      expect(support.argumentsFor(PermissionSelection.empty), isEmpty);
+      expect(support.riskOf(PermissionSelection.empty), isNull);
+      expect(support.isDangerous(PermissionSelection.empty), isFalse);
+      // Through a session row / the settings file / the wire and back.
+      expect(PermissionSelection.empty.canonical, 'none');
+      expect(
+        PermissionSelection.parse(PermissionSelection.empty.canonical),
+        PermissionSelection.empty,
+      );
+      expect(
+        support.resolveStored(PermissionSelection.empty.canonical),
+        PermissionSelection.empty,
+      );
+      // And a genuinely absent preference still resolves to the default.
+      expect(support.resolveStored(null), support.defaultSelection);
+    });
+  });
+
+  group('legacy names written before v35', () {
+    test('every agent translates all three, matching the v35 migration', () {
+      // The migration rewrites session rows; this table is what reads a
+      // settings file, which no SQL touches. They must agree.
+      const expected = {
+        'claudeCode': {
+          'ask': 'mode=manual',
+          'acceptEdits': 'mode=acceptEdits',
+          'bypass': 'mode=bypassPermissions',
+        },
+        'antigravity': {
+          'ask': 'mode=prompt',
+          'acceptEdits': 'mode=accept-edits',
+          'bypass': 'mode=skip-permissions',
+        },
+        'codex': {
+          'ask': 'approval=on-request;sandbox=workspace-write',
+          'acceptEdits': 'approval=on-request;sandbox=workspace-write',
+          'bypass': 'approval=on-request;sandbox=bypass-all',
+        },
+      };
+      for (final entry in expected.entries) {
+        final support = supportFor(entry.key);
+        expect(support.legacyAliases, entry.value, reason: entry.key);
+        for (final legacy in entry.value.keys) {
+          expect(
+            support.resolveStored(legacy).canonical,
+            entry.value[legacy],
+            reason: '${entry.key}/$legacy',
+          );
+        }
+      }
+    });
+
+    test('Claude Code and Antigravity keep their exact old flags', () {
+      // Argument-preserving for two of the three: no migrated session's
+      // command line changes by a character.
+      final claude = supportFor('claudeCode');
+      expect(claude.argumentsFor(claude.resolveStored('ask')), [
+        '--permission-mode',
+        'manual',
+      ]);
+      expect(claude.argumentsFor(claude.resolveStored('bypass')), [
+        '--permission-mode',
+        'bypassPermissions',
+      ]);
+      final agy = supportFor('antigravity');
+      expect(agy.argumentsFor(agy.resolveStored('ask')), isEmpty);
+      expect(agy.argumentsFor(agy.resolveStored('acceptEdits')), [
+        '--mode',
+        'accept-edits',
+      ]);
+    });
+
+    test('Codex ask gains a sandbox flag, and that is the only change', () {
+      // The one cell that changes, by one added flag. It used to send only
+      // `--ask-for-approval on-request`, which the old descriptor itself
+      // documented as not being an ask-every-time.
+      final codex = supportFor('codex');
+      expect(codex.argumentsFor(codex.resolveStored('ask')), [
+        '--sandbox',
+        'workspace-write',
+        '--ask-for-approval',
+        'on-request',
+      ]);
+      expect(
+        codex.argumentsFor(codex.resolveStored('bypass')),
+        ['--dangerously-bypass-approvals-and-sandbox'],
+      );
+    });
+  });
+
   group('PermissionSelection', () {
     test('round-trips through its canonical form', () {
       const selection = PermissionSelection({

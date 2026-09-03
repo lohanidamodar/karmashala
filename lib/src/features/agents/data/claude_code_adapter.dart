@@ -4,7 +4,6 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
-import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_ids.dart';
 import 'streaming_agent_session.dart';
@@ -18,14 +17,10 @@ List<String> claudeLaunchArgs(AgentLaunch launch) => [
   '--output-format',
   'stream-json',
   '--verbose',
-  ...switch (launch.permissionMode) {
-    // Not empty: an unflagged session starts in `auto` on Pro/Max/Team
-    // accounts, which reviews actions with a classifier instead of asking.
-    // Kept in step with the descriptor, which carries the evidence.
-    PermissionMode.ask => const ['--permission-mode', 'manual'],
-    PermissionMode.acceptEdits => const ['--permission-mode', 'acceptEdits'],
-    PermissionMode.bypass => const ['--permission-mode', 'bypassPermissions'],
-  },
+  // Resolved from the descriptor rather than restated here. This used to be a
+  // second copy of the flag table, kept honest only by a golden test; the
+  // descriptor is now the only place that knows Claude Code's six modes.
+  ...launch.permission.arguments,
   if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
   if (launch.mcpConfigPath != null) ...['--mcp-config', launch.mcpConfigPath!],
   // No `--allowedTools`. It was here, always empty, and the only list that

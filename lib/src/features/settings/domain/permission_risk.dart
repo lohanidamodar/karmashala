@@ -68,3 +68,10 @@ enum PermissionRisk {
     return null;
   }
 }
+
+/// The rung names, as a `const` list.
+///
+/// The MCP tool schemas are one `const` structure built at load time, and a
+/// `for` over `PermissionRisk.values` is not a constant expression. Kept beside
+/// the enum, and pinned to it by a test, so the two cannot drift.
+const permissionRiskNames = ['readOnly', 'ask', 'acceptEdits', 'autoRun', 'bypass'];

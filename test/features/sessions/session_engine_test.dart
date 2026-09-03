@@ -5,8 +5,8 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/agents/data/fake_agent_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -21,6 +21,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 
 void main() {
   late AppDatabase db;
@@ -71,6 +72,7 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'Work',
+      permission: ResolvedPermission.none,
     );
     await waitForEvents(session.id, 2);
 
@@ -89,6 +91,7 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'Work',
+      permission: ResolvedPermission.none,
     );
     await waitForEvents(session.id, 2);
 
@@ -109,11 +112,13 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'One',
+      permission: ResolvedPermission.none,
     );
     final s2 = await engine.start(
       repository: repository(),
       installation: agentInstallation(),
       title: 'Two',
+      permission: ResolvedPermission.none,
     );
     await waitForEvents(s1.id, 2);
     await waitForEvents(s2.id, 2);
@@ -132,6 +137,7 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'Work',
+      permission: ResolvedPermission.none,
     );
     await waitForEvents(session.id, 2);
 
@@ -152,6 +158,7 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'Multi',
+      permission: ResolvedPermission.none,
       additionalRepositories: [repository(id: 'r2', name: 'api')],
     );
 
@@ -167,10 +174,13 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'Resume',
-      permissionMode: PermissionMode.bypass,
+      permission: ResolvedPermission.of(testPermissionSupport, bypassSelection),
       resumeSessionId: 'ext-123',
     );
-    expect(adapter.captured!.permissionMode, PermissionMode.bypass);
+    // The selection *and* the flags it resolved to, because the adapter is
+    // handed both and cannot look either up.
+    expect(adapter.captured!.permission.selection, bypassSelection);
+    expect(adapter.captured!.permission.arguments, ['--bypass']);
     expect(adapter.captured!.resumeSessionId, 'ext-123');
   });
 
@@ -183,6 +193,7 @@ void main() {
       repository: repository(),
       installation: agentInstallation(),
       title: 'Work',
+      permission: ResolvedPermission.none,
     );
     final done = engine.whenDone(session.id);
     await done;

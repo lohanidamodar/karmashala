@@ -56,10 +56,10 @@ Database _populatedV30() {
 }
 
 void main() {
-  test('v33 is the head and the keys stay contiguous', () {
+  test('v35 is the head and the keys stay contiguous', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    expect(db.schemaVersion, 34);
+    expect(db.schemaVersion, 35);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);

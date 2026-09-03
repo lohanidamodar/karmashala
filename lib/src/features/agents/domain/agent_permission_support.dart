@@ -95,9 +95,22 @@ class AgentPermissionAxis {
 class PermissionSelection {
   const PermissionSelection(this.values);
 
-  /// The empty selection: nothing chosen, for an agent whose modes have never
-  /// been established. Contributes no arguments and claims nothing.
+  /// **Enforce nothing**: no flags at all, and no claim about what the agent
+  /// will do.
+  ///
+  /// Distinct from a *null* selection, which means "nobody chose, use this
+  /// agent's declared default" and does pass flags. Two states that look alike
+  /// and must not behave alike: this one is what the carry rule produces when
+  /// every mode an agent has is more permissive than what the user asked for,
+  /// and resolving it to the default would silently widen exactly the case the
+  /// rule exists to narrow.
+  ///
+  /// It has a canonical spelling of its own — `none` — so it survives a round
+  /// trip through a session row, the settings file and the wire.
   static const empty = PermissionSelection({});
+
+  /// What [empty] is stored and transmitted as.
+  static const noneToken = 'none';
 
   /// Axis id to value id.
   final Map<String, String> values;
@@ -112,6 +125,7 @@ class PermissionSelection {
   /// Sorted by axis id rather than by declaration order so the string is stable
   /// even if an axis is later reordered on the descriptor.
   String get canonical {
+    if (values.isEmpty) return noneToken;
     final keys = values.keys.toList()..sort();
     return [for (final key in keys) '$key=${values[key]}'].join(';');
   }
@@ -122,6 +136,7 @@ class PermissionSelection {
     if (raw == null) return null;
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return null;
+    if (trimmed == noneToken) return empty;
     final parsed = <String, String>{};
     for (final pair in trimmed.split(';')) {
       final split = pair.indexOf('=');
@@ -139,7 +154,7 @@ class PermissionSelection {
   int get hashCode => canonical.hashCode;
 
   @override
-  String toString() => canonical.isEmpty ? 'PermissionSelection()' : canonical;
+  String toString() => canonical;
 }
 
 /// The permission vocabulary of one agent CLI.
@@ -153,15 +168,27 @@ class AgentPermissionSupport {
   const AgentPermissionSupport.axes({
     required this.axes,
     required this.evidence,
+    this.legacyAliases = const {},
   });
 
   /// Nobody has established this agent's modes. **The default**, and what a
   /// registry-only agent gets: no mode is offered, the picker says so in one
   /// disabled row, and the launch passes no permission flags rather than
   /// claiming a policy we have not seen.
-  const AgentPermissionSupport.unknown() : axes = const [], evidence = '';
+  const AgentPermissionSupport.unknown()
+    : axes = const [],
+      evidence = '',
+      legacyAliases = const {};
 
   final List<AgentPermissionAxis> axes;
+
+  /// The three shared modes this agent's rows were written with before v35,
+  /// each mapped to the selection that sends the same flags.
+  ///
+  /// The v35 migration rewrites the *session* rows; this table is what reads a
+  /// **settings file**, which no SQL migration touches. The two must agree, and
+  /// a test holds them to it.
+  final Map<String, String> legacyAliases;
 
   /// The CLI version and command output the whole vocabulary was read off.
   final String evidence;
@@ -192,6 +219,9 @@ class AgentPermissionSupport {
   /// that mean the same thing compare equal.
   PermissionSelection normalise(PermissionSelection? selection) {
     if (!isKnown) return PermissionSelection.empty;
+    // "Enforce nothing" stays itself. Only a *null* selection means "use the
+    // declared default"; filling this one in would widen it.
+    if (selection != null && selection.isEmpty) return PermissionSelection.empty;
     final chosen = <String, String>{
       for (final axis in axes)
         axis.id:
@@ -208,6 +238,7 @@ class AgentPermissionSupport {
   /// The command line for [selection], in axis order, skipping superseded axes.
   List<String> argumentsFor(PermissionSelection? selection) {
     if (!isKnown) return const [];
+    if (selection != null && selection.isEmpty) return const [];
     final resolved = normalise(selection);
     final superseded = supersededBy(resolved);
     return [
@@ -230,6 +261,7 @@ class AgentPermissionSupport {
   /// and [PermissionRisk.ask] would be a guess about an unverified default.
   PermissionRisk? riskOf(PermissionSelection? selection) {
     if (!isKnown) return null;
+    if (selection != null && selection.isEmpty) return null;
     final resolved = normalise(selection);
     final superseded = supersededBy(resolved);
     PermissionRisk? risk;
@@ -251,6 +283,7 @@ class AgentPermissionSupport {
   /// nothing at all in the way.
   bool isDangerous(PermissionSelection? selection) {
     if (!isKnown) return false;
+    if (selection != null && selection.isEmpty) return false;
     if (riskOf(selection) == PermissionRisk.bypass) return true;
     final resolved = normalise(selection);
     final superseded = supersededBy(resolved);
@@ -296,6 +329,21 @@ class AgentPermissionSupport {
     return out;
   }
 
+  /// What a stored string means: a canonical selection, one of the three
+  /// pre-v35 names, or nothing at all.
+  ///
+  /// Null resolves to [defaultSelection] — **not** to an empty selection.
+  /// "Nobody chose" means "use this agent's declared default", which has real
+  /// flags; passing none is the failure the per-agent model exists to remove.
+  PermissionSelection resolveStored(String? stored) {
+    if (!isKnown) return PermissionSelection.empty;
+    if (stored == null || stored.isEmpty) return defaultSelection;
+    if (stored == PermissionSelection.noneToken) return PermissionSelection.empty;
+    final alias = legacyAliases[stored];
+    if (alias != null) return normalise(PermissionSelection.parse(alias));
+    return normalise(PermissionSelection.parse(stored));
+  }
+
   /// The axes of [selection] whose stored value this build does not name.
   ///
   /// [normalise] substitutes the axis default for one, which is the only thing
@@ -311,4 +359,34 @@ class AgentPermissionSupport {
           axis.id,
     ];
   }
+}
+
+/// A selection together with the arguments it produces.
+///
+/// The adapters take this rather than a bare [PermissionSelection] because they
+/// are handed a launch, not a registry: `claudeLaunchArgs` cannot look a
+/// descriptor up, and the three of them used to each carry their own copy of
+/// the flag table, kept honest only by a golden test. One resolution, done
+/// where the descriptor is in hand, removes the copies.
+class ResolvedPermission {
+  const ResolvedPermission({required this.selection, required this.arguments});
+
+  /// Resolves [selection] against [support], filling in defaults.
+  factory ResolvedPermission.of(
+    AgentPermissionSupport support,
+    PermissionSelection? selection,
+  ) => ResolvedPermission(
+    selection: support.normalise(selection),
+    arguments: support.argumentsFor(selection),
+  );
+
+  /// Nothing chosen and nothing passed — an agent whose modes have never been
+  /// established. Not a mode: the absence of one.
+  static const none = ResolvedPermission(
+    selection: PermissionSelection.empty,
+    arguments: [],
+  );
+
+  final PermissionSelection selection;
+  final List<String> arguments;
 }

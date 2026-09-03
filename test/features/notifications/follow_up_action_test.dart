@@ -5,6 +5,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
 import 'package:karmashala/src/features/agents/domain/agent_installation.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/agents/domain/agent_status.dart';
 import 'package:karmashala/src/features/agents/domain/permission_carry.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -25,13 +26,14 @@ import 'package:karmashala/src/features/sessions/domain/handoff_packet.dart';
 import 'package:karmashala/src/features/sessions/domain/session_fork.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/sessions/presentation/continue_with_dialog.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/settings/domain/permission_risk.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../../support/window_matrix.dart';
 
 /// Acting on a follow-up from the attention inbox.
@@ -49,9 +51,7 @@ const _prompting = AgentDescriptor(
   displayName: 'Prompting CLI',
   binaries: AgentBinaries(windows: ['p'], posix: ['p']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-    },
+    permission: testPermissionSupport,
     prompt: AgentPromptSupport.positional(),
     fork: AgentForkSupport.native(
       resume: AgentResume.flag('--resume'),
@@ -73,7 +73,7 @@ HandoffTarget _target(AgentDescriptor descriptor, {required String id}) =>
       ),
       descriptor: descriptor,
       agentName: descriptor.displayName,
-      permission: carryPermission(PermissionMode.ask, descriptor),
+      permission: carryPermission(PermissionRisk.ask, descriptor),
       isSameAgent: false,
     );
 
@@ -92,7 +92,7 @@ class _RecordingService extends SessionHandoffService {
     required String instruction,
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) async {
     handoffs.add((
       sessionId: sessionId,
@@ -107,7 +107,7 @@ class _RecordingService extends SessionHandoffService {
     String instruction = '',
     List<String> unresolvedTasks = const [],
     bool intoNewWorktree = false,
-    PermissionMode? permissionMode,
+    PermissionSelection? permissionMode,
   }) async {
     forks.add(sessionId);
     return SessionLaunchResult(session: session());

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/features/agents/data/codex_adapter.dart';
 import 'package:karmashala/src/features/agents/domain/agent_adapter.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/sessions/domain/session_event_types.dart';
@@ -10,6 +12,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+
+/// What a session that has chosen nothing runs under: this agent's declared
+/// default, resolved through the registry the launcher would have used.
+final _support = AgentRegistry.builtIn.byId('codex')!.launch.permission;
+final _defaultPermission = ResolvedPermission.of(
+  _support,
+  _support.defaultSelection,
+);
 
 void main() {
   group('parseCodexMessage', () {
@@ -123,6 +133,10 @@ void main() {
       adapter.start(
         AgentLaunch(
           workingDirectory: repository().path,
+          // Resolved by the caller now, not defaulted by the adapter: the
+          // adapters hold no flag table of their own any more, so a launch
+          // that names no permission passes none.
+          permission: _defaultPermission,
           installation: agentInstallation(
             agentId: AgentIds.codex,
             path: r'C:\bin\codex.exe',
@@ -133,8 +147,18 @@ void main() {
 
       final req = runner.startRequests.single;
       expect(req.executable, r'C:\bin\codex.exe');
-      // Default permission (ask) maps to an on-request approval flag.
-      expect(req.arguments, ['app-server', '--ask-for-approval', 'on-request']);
+      // Codex's declared default is **both** axes, which is the one command
+      // line v35 changes: it used to send `--ask-for-approval on-request` and
+      // no `--sandbox` at all, leaving whatever `~/.codex/config.toml` said in
+      // charge. The approval policy is unchanged; the sandbox is now explicit
+      // and matches Codex's own default.
+      expect(req.arguments, [
+        'app-server',
+        '--sandbox',
+        'workspace-write',
+        '--ask-for-approval',
+        'on-request',
+      ]);
       expect(req.workingDirectory!.path, r'C:\src\demo\app');
     });
   });

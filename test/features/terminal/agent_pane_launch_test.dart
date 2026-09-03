@@ -4,11 +4,26 @@ import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
 import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_mcp_arguments.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/domain/launch_context.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/permission_fixtures.dart';
+
+/// The modes these launches run under, in each CLI's own vocabulary, read back
+/// from the canonical strings a session row holds. There is no shared enum to
+/// name them with any more: "ask" is `--permission-mode manual` to Claude Code,
+/// an unflagged session to Antigravity, and a sandbox plus an approval policy
+/// to Codex.
+final _claudeAsk = PermissionSelection.parse(claudeAskStored)!;
+final _claudeAcceptEdits = PermissionSelection.parse(claudeAcceptEditsStored)!;
+final _claudeBypass = PermissionSelection.parse(claudeBypassStored)!;
+final _codexDefault = PermissionSelection.parse(codexDefaultStored)!;
+final _codexBypass = PermissionSelection.parse(codexBypassStored)!;
+final _antigravityAsk = PermissionSelection.parse(antigravityAskStored)!;
+const _antigravityAcceptEdits = PermissionSelection({'mode': 'accept-edits'});
 
 /// Decodes what `powershell.exe -EncodedCommand` expects: base64 of UTF-16LE.
 String decodePowerShellCommand(String encoded) {
@@ -540,7 +555,7 @@ void main() {
       final descriptor = registry.byId(AgentIds.claudeCode);
       final external = agentPaneArguments(
         descriptor,
-        PermissionMode.acceptEdits,
+        _claudeAcceptEdits,
         sessionId: 'uuid',
         prompt: 'hello',
         mcpUrl: url,
@@ -551,7 +566,7 @@ void main() {
         executable: 'claude',
         arguments: agentPaneArguments(
           descriptor,
-          PermissionMode.acceptEdits,
+          _claudeAcceptEdits,
           sessionId: 'uuid',
           prompt: 'hello',
         ),
@@ -569,11 +584,11 @@ void main() {
       // a human's screen — and Claude Code rejects it outside `--print` anyway.
       final args = agentPaneArguments(
         registry.byId(AgentIds.claudeCode),
-        PermissionMode.ask,
+        _claudeAsk,
       );
       expect(args, isNot(contains('stream-json')));
       expect(
-        agentPaneArguments(registry.byId(AgentIds.codex), PermissionMode.ask),
+        agentPaneArguments(registry.byId(AgentIds.codex), _codexDefault),
         isNot(contains('app-server')),
       );
     });
@@ -582,7 +597,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.claudeCode),
-          PermissionMode.acceptEdits,
+          _claudeAcceptEdits,
           sessionId: 'uuid-here',
         ),
         ['--permission-mode', 'acceptEdits', '--session-id', 'uuid-here'],
@@ -594,7 +609,7 @@ void main() {
       // create, the other one to continue.
       final args = agentPaneArguments(
         registry.byId(AgentIds.claudeCode),
-        PermissionMode.ask,
+        _claudeAsk,
         sessionId: 'ours',
         resumeSessionId: 'theirs',
       );
@@ -605,7 +620,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.codex),
-          PermissionMode.bypass,
+          _codexBypass,
           resumeSessionId: 'sid',
         ),
         ['--dangerously-bypass-approvals-and-sandbox', 'resume', 'sid'],
@@ -616,10 +631,10 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.codex),
-          PermissionMode.ask,
+          _codexDefault,
           sessionId: 'uuid',
         ),
-        ['--ask-for-approval', 'on-request'],
+        ['--sandbox', 'workspace-write', '--ask-for-approval', 'on-request'],
       );
     });
 
@@ -627,7 +642,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.claudeCode),
-          PermissionMode.ask,
+          _claudeAsk,
           prompt: '  do the thing  ',
         ),
         ['--permission-mode', 'manual', 'do the thing'],
@@ -638,10 +653,16 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.codex),
-          PermissionMode.ask,
+          _codexDefault,
           prompt: '  do the thing  ',
         ),
-        ['--ask-for-approval', 'on-request', 'do the thing'],
+        [
+          '--sandbox',
+          'workspace-write',
+          '--ask-for-approval',
+          'on-request',
+          'do the thing',
+        ],
       );
     });
 
@@ -651,7 +672,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.antigravity),
-          PermissionMode.ask,
+          _antigravityAsk,
           prompt: '  do the thing  ',
         ),
         ['--prompt-interactive', 'do the thing'],
@@ -660,7 +681,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.antigravity),
-          PermissionMode.acceptEdits,
+          _antigravityAcceptEdits,
           resumeSessionId: 'c1',
           prompt: 'carry on',
         ),
@@ -681,14 +702,14 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.antigravity),
-          PermissionMode.ask,
+          _antigravityAsk,
         ),
         isEmpty,
       );
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.antigravity),
-          PermissionMode.ask,
+          _antigravityAsk,
           prompt: '   ',
         ),
         isEmpty,
@@ -707,7 +728,7 @@ void main() {
         executable: 'agy',
         arguments: agentPaneArguments(
           registry.byId(AgentIds.antigravity),
-          PermissionMode.ask,
+          _antigravityAsk,
           prompt: prompt,
         ),
       );
@@ -727,7 +748,7 @@ void main() {
       // Not handed a stray argument it might read as a subcommand, and not
       // handed another agent's permission flag.
       expect(
-        agentPaneArguments(null, PermissionMode.bypass, prompt: 'hello'),
+        agentPaneArguments(null, _claudeBypass, prompt: 'hello'),
         isEmpty,
       );
     });
@@ -749,7 +770,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.claudeCode),
-          PermissionMode.ask,
+          _claudeAsk,
           sessionId: 'uuid',
           prompt: 'do the thing',
           mcpUrl: url,
@@ -772,7 +793,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.claudeCode),
-          PermissionMode.ask,
+          _claudeAsk,
           mcpUrl: url,
           mcpConfigPath: configPath,
         ),
@@ -785,13 +806,15 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.codex),
-          PermissionMode.ask,
+          _codexDefault,
           resumeSessionId: 'sid',
           mcpUrl: url,
         ),
         [
           '-c',
           'mcp_servers.karmashala.url=$url',
+          '--sandbox',
+          'workspace-write',
           '--ask-for-approval',
           'on-request',
           'resume',
@@ -806,7 +829,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.antigravity),
-          PermissionMode.acceptEdits,
+          _antigravityAcceptEdits,
           mcpUrl: url,
           mcpConfigPath: configPath,
         ),
@@ -816,7 +839,7 @@ void main() {
 
     test('an agent nobody has checked is launched exactly as before', () {
       expect(
-        agentPaneArguments(null, PermissionMode.ask, mcpUrl: url),
+        agentPaneArguments(null, _claudeAsk, mcpUrl: url),
         isEmpty,
       );
     });
@@ -825,7 +848,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.claudeCode),
-          PermissionMode.ask,
+          _claudeAsk,
         ),
         isNot(contains(startsWith('--mcp-config'))),
       );
@@ -838,7 +861,7 @@ void main() {
       expect(
         agentPaneArguments(
           registry.byId(AgentIds.claudeCode),
-          PermissionMode.ask,
+          _claudeAsk,
           mcpUrl: url,
         ),
         ['--permission-mode', 'manual'],

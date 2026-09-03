@@ -21,7 +21,6 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/domain/session_launch.dart';
 import 'package:karmashala/src/features/sessions/domain/session_status.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/domain/pane_liveness.dart';
@@ -33,6 +32,7 @@ import '../../support/fake_cli_store_locator.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 
 /// The owner's report: *"when resuming last active tabs after restarting the
@@ -59,9 +59,7 @@ const _claudeish = AgentDescriptor(
   displayName: 'Claudeish',
   binaries: AgentBinaries(windows: ['claudeish'], posix: ['claudeish']),
   launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--ask']),
-    },
+    permission: testPermissionSupport,
     interactiveResume: AgentResume.flag('--resume'),
     sessionIdAssignment: AgentSessionIdAssignment.flag('--session-id'),
     allowsConcurrentResume: true,

@@ -1,6 +1,6 @@
 import '../../environments/domain/environment_path.dart';
-import '../../settings/domain/permission_mode.dart';
 import 'agent_installation.dart';
+import 'agent_permission_support.dart';
 
 /// A normalized event emitted by an agent, before it is persisted.
 ///
@@ -22,7 +22,7 @@ class AgentLaunch {
   const AgentLaunch({
     required this.workingDirectory,
     required this.installation,
-    this.permissionMode = PermissionMode.ask,
+    this.permission = ResolvedPermission.none,
     this.resumeSessionId,
     this.mcpConfigPath,
     this.appendSystemPrompt,
@@ -35,9 +35,13 @@ class AgentLaunch {
   /// The specific agent installation to launch.
   final AgentInstallation installation;
 
-  /// How much the agent may do without prompting (mapped to CLI flags). Defaults
-  /// to the safe [PermissionMode.ask].
-  final PermissionMode permissionMode;
+  /// The mode this run launches under, already resolved into flags.
+  ///
+  /// Resolved by the caller, which holds the descriptor; the adapters are
+  /// handed a launch and cannot look one up. Defaults to
+  /// [ResolvedPermission.none] — no selection and no flags — which is what an
+  /// agent whose modes have never been established gets.
+  final ResolvedPermission permission;
 
   /// When resuming an existing CLI session, its id; otherwise `null`.
   final String? resumeSessionId;

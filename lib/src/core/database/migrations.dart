@@ -66,6 +66,11 @@ typedef MigrationStep = void Function(Database db);
 ///   never offered in a PowerShell pane.
 /// * **v34** — todos, and the project a todo or a note is filed under. Both
 ///   nullable: filed under nothing is an ordinary todo, not an unfinished one.
+/// * **v35** — a session's permission mode in **its agent's own vocabulary**:
+///   `ask`/`acceptEdits`/`bypass` become a canonical selection over that
+///   agent's declared axes, because a shared three-value enum cannot say that
+///   Claude Code has six modes or that Codex's sandbox and approval policy are
+///   two separate dimensions.
 final Map<int, MigrationStep> schemaMigrations = {
   1: _migrateToV1,
   2: _migrateToV2,
@@ -101,6 +106,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   32: _migrateToV32,
   33: _migrateToV33,
   34: _migrateToV34,
+  35: _migrateToV35,
 };
 
 /// Was this pane running when its row was written?
@@ -1486,4 +1492,65 @@ void _migrateToV34(Database db) {
     )
     WHERE source_repository_id IS NOT NULL;
   ''');
+}
+
+/// Per-agent permission modes: a session records the mode in **its agent's own
+/// vocabulary** instead of a shared three-value enum.
+///
+/// The column keeps its name and its type. What changes is what the string
+/// means: `ask` / `acceptEdits` / `bypass` become a canonical selection over
+/// that agent's declared axes — `mode=manual` for Claude Code,
+/// `approval=on-request;sandbox=workspace-write` for Codex. A NULL is left
+/// NULL: it means "this session never chose" and still does.
+///
+/// **The rewrite is argument-preserving for two of the three agents.** Claude
+/// Code and Antigravity map one-for-one onto the flags they already sent, so no
+/// migrated session's command line changes by a character:
+///
+///   ask         -> --permission-mode manual     / (no flag)
+///   acceptEdits -> --permission-mode acceptEdits / --mode accept-edits
+///   bypass      -> --permission-mode bypassPermissions
+///                                                / --dangerously-skip-permissions
+///
+/// **Codex's `ask` is the one cell that changes, by one added flag.** It used
+/// to send `--ask-for-approval on-request` and no `--sandbox` at all, which the
+/// descriptor itself documented as *not* an ask-every-time. It now sends
+/// `--sandbox workspace-write --ask-for-approval on-request` — the same
+/// approval policy, plus an explicit sandbox that matches Codex's own default.
+///
+/// **The caveat, for whoever finds this next:** a user whose
+/// `~/.codex/config.toml` sets a different `sandbox_mode` was previously having
+/// that honoured, because we passed no `--sandbox`. After this they get
+/// `workspace-write` from the command line, which wins. That is deliberate —
+/// the alternative was declaring a "Codex's own default" value whose
+/// permissiveness we cannot state — but it is a real behaviour change for that
+/// user, and the fix if it ever matters is a declared sandbox value that passes
+/// no flag, once somebody has established what it permits.
+///
+/// Nothing is dropped, renamed or deleted: one `UPDATE` over one text column,
+/// safe to run with the app open.
+void _migrateToV35(Database db) {
+  // (agent id, legacy value, canonical selection). The selections are the
+  // canonical form `AgentPermissionSupport.normalise` produces — axis ids in
+  // alphabetical order, and a superseded axis reset to its default, which is
+  // why Codex's bypass still names `approval=on-request`.
+  const rewrites = [
+    ('claudeCode', 'ask', 'mode=manual'),
+    ('claudeCode', 'acceptEdits', 'mode=acceptEdits'),
+    ('claudeCode', 'bypass', 'mode=bypassPermissions'),
+    ('antigravity', 'ask', 'mode=prompt'),
+    ('antigravity', 'acceptEdits', 'mode=accept-edits'),
+    ('antigravity', 'bypass', 'mode=skip-permissions'),
+    ('codex', 'ask', 'approval=on-request;sandbox=workspace-write'),
+    ('codex', 'acceptEdits', 'approval=on-request;sandbox=workspace-write'),
+    ('codex', 'bypass', 'approval=on-request;sandbox=bypass-all'),
+  ];
+  for (final (agentId, legacy, selection) in rewrites) {
+    db.execute(
+      'UPDATE sessions SET permission_mode = ? '
+      'WHERE permission_mode = ? AND agent_installation_id IN '
+      '(SELECT id FROM agent_installations WHERE agent_kind = ?);',
+      [selection, legacy, agentId],
+    );
+  }
 }

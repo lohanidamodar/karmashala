@@ -4,7 +4,6 @@ import '../../../core/process/command_runner.dart';
 import '../../../core/process/command_runner_factory.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../sessions/domain/session_event_types.dart';
-import '../../settings/domain/permission_mode.dart';
 import '../domain/agent_adapter.dart';
 import '../domain/agent_ids.dart';
 import 'streaming_agent_session.dart';
@@ -14,23 +13,11 @@ import 'streaming_agent_session.dart';
 /// testable; the wire shape is a provisional contract.
 List<String> codexLaunchArgs(AgentLaunch launch) => [
   'app-server',
-  ...switch (launch.permissionMode) {
-    PermissionMode.ask => const ['--ask-for-approval', 'on-request'],
-    // Kept in step with the descriptor, which carries the evidence. Two
-    // approval values have already been retired out from under this line —
-    // `on-failure` (rejected by 0.145.0) and `untrusted` (removed in 0.151.0) —
-    // and each time the agent refused to launch rather than running under a
-    // weaker policy.
-    PermissionMode.acceptEdits => const [
-      '--sandbox',
-      'workspace-write',
-      '--ask-for-approval',
-      'on-request',
-    ],
-    PermissionMode.bypass => const [
-      '--dangerously-bypass-approvals-and-sandbox',
-    ],
-  },
+  // Resolved from the descriptor, which is where Codex's two axes and the
+  // versions they were read off live. Two approval values have already been
+  // retired out from under a hardcoded line here — `on-failure` and
+  // `untrusted` — and each time the agent refused to launch.
+  ...launch.permission.arguments,
   if (launch.resumeSessionId != null) ...['--resume', launch.resumeSessionId!],
 ];
 

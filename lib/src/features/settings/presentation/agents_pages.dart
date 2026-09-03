@@ -22,7 +22,8 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
 import 'agent_detection_section.dart';
-import '../domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_options.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../domain/settings.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -247,7 +248,7 @@ class PermissionsPage extends ConsumerWidget {
         children: [
           for (final descriptor in AgentRegistry.builtIn.descriptors)
             _PermissionCard(
-              agentId: descriptor.id,
+              descriptor: descriptor,
               permissions: settings.permissionsFor(descriptor.id),
               onNew: (m) =>
                   controller.setNewSessionPermission(descriptor.id, m),
@@ -262,23 +263,26 @@ class PermissionsPage extends ConsumerWidget {
 
 class _PermissionCard extends StatelessWidget {
   const _PermissionCard({
-    required this.agentId,
+    required this.descriptor,
     required this.permissions,
     required this.onNew,
     required this.onExisting,
   });
 
-  final String agentId;
+  final AgentDescriptor descriptor;
   final AgentPermissions permissions;
-  final ValueChanged<PermissionMode> onNew;
-  final ValueChanged<PermissionMode> onExisting;
+  final ValueChanged<String> onNew;
+  final ValueChanged<String> onExisting;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final support = descriptor.launch.permission;
+    final newSelection = support.resolveStored(permissions.newSessions);
+    final existingSelection = support.resolveStored(permissions.existingSessions);
     final dangerous =
-        permissions.newSessions.isDangerous ||
-        permissions.existingSessions.isDangerous;
+        support.isDangerous(newSelection) ||
+        support.isDangerous(existingSelection);
     return Card(
       margin: const EdgeInsets.only(bottom: Insets.sm),
       child: Padding(
@@ -286,27 +290,51 @@ class _PermissionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_agentLabel(agentId), style: theme.textTheme.titleSmall),
+            Text(descriptor.displayName, style: theme.textTheme.titleSmall),
             const SizedBox(height: Insets.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: _modeDropdown(
-                    'New sessions',
-                    permissions.newSessions,
-                    onNew,
-                  ),
+            if (!support.isKnown)
+              // The disabled-with-a-reason rule, at the one place a default is
+              // set: an agent whose modes nobody has established offers no
+              // dropdowns rather than three that would do nothing.
+              Text(
+                unknownAgentReason(descriptor.displayName),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
                 ),
-                const SizedBox(width: Insets.md),
-                Expanded(
-                  child: _modeDropdown(
-                    'Existing sessions',
-                    permissions.existingSessions,
-                    onExisting,
-                  ),
+              )
+            else ...[
+              // One picker per axis per purpose. Codex has two axes, so its
+              // card draws four controls — which is why this wraps instead of
+              // sitting in a Row: four dropdowns across do not fit the 720px
+              // minimum window, let alone at 1.3x text.
+              for (final (label, selection, onChanged) in [
+                ('New sessions', newSelection, onNew),
+                ('Existing sessions', existingSelection, onExisting),
+              ]) ...[
+                Text(label, style: theme.textTheme.labelSmall),
+                const SizedBox(height: Insets.xs),
+                Wrap(
+                  spacing: Insets.md,
+                  runSpacing: Insets.sm,
+                  children: [
+                    for (final axis in permissionAxisOptionsFor(
+                      descriptor,
+                      selection: selection,
+                    ))
+                      SizedBox(
+                        width: 260,
+                        child: _axisDropdown(
+                          axis,
+                          selection,
+                          support,
+                          onChanged,
+                        ),
+                      ),
+                  ],
                 ),
+                const SizedBox(height: Insets.sm),
               ],
-            ),
+            ],
             const SizedBox(height: Insets.xs),
             // Says which way the precedence runs, because the natural reading
             // of a settings screen is the opposite one: these are the modes a
@@ -333,8 +361,9 @@ class _PermissionCard extends StatelessWidget {
                     const SizedBox(width: Insets.xs),
                     Expanded(
                       child: Text(
-                        'Bypass skips all permission prompts. Use only in '
-                        'trusted repositories.',
+                        'This default lets ${descriptor.displayName} act with '
+                        'nothing in the way. Use it only in trusted '
+                        'repositories.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.error,
                         ),
@@ -349,21 +378,39 @@ class _PermissionCard extends StatelessWidget {
     );
   }
 
-  Widget _modeDropdown(
-    String label,
-    PermissionMode value,
-    ValueChanged<PermissionMode> onChanged,
+  /// One axis of one purpose. Writing back the **whole** selection rather than
+  /// the changed axis keeps the other axis where the user left it — a sandbox
+  /// picked here must not silently reset the approval policy beside it.
+  Widget _axisDropdown(
+    AgentPermissionAxisOptions axis,
+    PermissionSelection selection,
+    AgentPermissionSupport support,
+    ValueChanged<String> onChanged,
   ) {
-    return DropdownButtonFormField<PermissionMode>(
-      initialValue: value,
+    return DropdownButtonFormField<String>(
+      initialValue: axis.selectedId,
       isExpanded: true,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(labelText: axis.label),
       items: [
-        for (final mode in PermissionMode.values)
-          DropdownMenuItem(value: mode, child: Text(mode.label)),
+        for (final option in axis.options)
+          DropdownMenuItem(
+            value: option.id,
+            enabled: option.isSelectable,
+            child: Text(option.label, overflow: TextOverflow.ellipsis),
+          ),
       ],
-      onChanged: (m) {
-        if (m != null) onChanged(m);
+      onChanged: (picked) {
+        if (picked == null) return;
+        onChanged(
+          support
+              .normalise(
+                PermissionSelection({
+                  ...support.normalise(selection).values,
+                  axis.id: picked,
+                }),
+              )
+              .canonical,
+        );
       },
     );
   }

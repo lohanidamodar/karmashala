@@ -1,33 +1,22 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/theme/app_icons.dart';
 import 'package:karmashala/src/app/theme/design_tokens.dart';
 import 'package:karmashala/src/app/widgets/desktop_menu.dart';
-import 'package:karmashala/src/features/agents/domain/agent_descriptor.dart';
-import 'package:karmashala/src/features/agents/domain/agent_permission_options.dart';
+import 'package:karmashala/src/features/agents/domain/agent_ids.dart';
+import 'package:karmashala/src/features/agents/domain/agent_permission_support.dart';
+import 'package:karmashala/src/features/agents/domain/agent_registry.dart';
 import 'package:karmashala/src/features/agents/presentation/permission_mode_picker.dart';
-import 'package:karmashala/src/features/settings/domain/permission_mode.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
-/// Expresses two of the three modes, which is the shape that makes the
-/// selectable rule visible.
-const _forker = AgentDescriptor(
-  id: 'forker',
-  displayName: 'Forker CLI',
-  binaries: AgentBinaries(windows: ['f'], posix: ['f']),
-  launch: AgentLaunchSpec(
-    permissionModes: {
-      PermissionMode.ask: PermissionModeMapping.exact(['--careful']),
-      PermissionMode.bypass: PermissionModeMapping.exact(['--trust-me']),
-    },
-  ),
-);
 
 void main() {
-  PermissionMode? picked;
+  final claude = AgentRegistry.builtIn.byId(AgentIds.claudeCode);
+  final codex = AgentRegistry.builtIn.byId(AgentIds.codex);
+  PermissionSelection? picked;
 
   Future<void> pump(
     WidgetTester tester, {
-    PermissionMode selected = PermissionMode.ask,
+    required dynamic descriptor,
+    PermissionSelection? selection,
   }) async {
     picked = null;
     await tester.pumpWidget(
@@ -35,9 +24,10 @@ void main() {
         home: Scaffold(
           body: Center(
             child: PermissionModePicker(
-              options: permissionOptionsFor(_forker),
-              selected: selected,
-              onChanged: (mode) => picked = mode,
+              descriptor: descriptor,
+              selection:
+                  selection ?? descriptor.launch.permission.defaultSelection,
+              onChanged: (s) => picked = s,
             ),
           ),
         ),
@@ -48,58 +38,130 @@ void main() {
   testWidgets('shows the selected mode and hands back the one picked', (
     tester,
   ) async {
-    await pump(tester);
+    await pump(tester, descriptor: claude);
     expect(find.text('Ask'), findsOneWidget);
 
     await tester.tap(find.byType(PermissionModePicker));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Bypass (full autonomy)'));
+    await tester.tap(find.text('Plan mode'));
     await tester.pumpAndSettle();
 
-    expect(picked, PermissionMode.bypass);
+    // The whole selection comes back, not just the changed axis, so no caller
+    // has to merge one itself.
+    expect(picked, const PermissionSelection({'mode': 'plan'}));
   });
 
-  testWidgets('a mode the agent cannot be told is listed, not selectable', (
+  testWidgets('offers all six of Claude Code\'s modes, none disabled', (
     tester,
   ) async {
-    await pump(tester);
+    // The point of the change: three of these could not be expressed at all
+    // under the shared enum, and none of them needs a disabled row now,
+    // because every row is one of the CLI's own modes.
+    await pump(tester, descriptor: claude);
     await tester.tap(find.byType(PermissionModePicker));
     await tester.pumpAndSettle();
 
-    // Loop 31 §4 option C: shown with the reason rather than hidden, so the
-    // user is not left hunting for the mode that went missing.
-    expect(find.text('Accept edits'), findsOneWidget);
-    expect(find.textContaining('takes no flag for this'), findsOneWidget);
+    for (final label in [
+      'Plan mode',
+      "Don't ask",
+      'Ask every time',
+      'Accept edits',
+      'Automatic',
+      'Bypass (full autonomy)',
+    ]) {
+      expect(find.text(label), findsOneWidget, reason: label);
+    }
     expect(
       tester
-          .widget<DesktopMenuDetailItem<PermissionMode>>(
-            find.widgetWithText(
-              DesktopMenuDetailItem<PermissionMode>,
-              'Accept edits',
-            ),
+          .widgetList<DesktopMenuDetailItem<PermissionAxisChoice>>(
+            find.byType(DesktopMenuDetailItem<PermissionAxisChoice>),
           )
-          .enabled,
-      isFalse,
+          .every((item) => item.enabled),
+      isTrue,
     );
+  });
+
+  testWidgets('Codex draws two labelled groups, not one flat list', (
+    tester,
+  ) async {
+    // A sandbox and an approval policy are separate questions, and the request
+    // that produced this control was explicitly that they not be flattened.
+    await pump(tester, descriptor: codex);
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SANDBOX'), findsOneWidget);
+    expect(find.text('APPROVAL POLICY'), findsOneWidget);
+    expect(find.text('Read-only'), findsOneWidget);
+    expect(find.text('Never ask'), findsOneWidget);
+  });
+
+  testWidgets('a superseded axis is listed, disabled, and says why', (
+    tester,
+  ) async {
+    // The disabled-with-a-reason affordance, doing its remaining real job:
+    // Codex's bypass flag replaces the approval policy, so those rows are
+    // shown with the reason rather than hidden.
+    await pump(
+      tester,
+      descriptor: codex,
+      selection: const PermissionSelection({
+        'sandbox': 'bypass-all',
+        'approval': 'on-request',
+      }),
+    );
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('nothing set here is passed'), findsWidgets);
+    final approvalRow = tester.widget<DesktopMenuDetailItem<PermissionAxisChoice>>(
+      find.widgetWithText(DesktopMenuDetailItem<PermissionAxisChoice>, 'Never ask'),
+    );
+    expect(approvalRow.enabled, isFalse);
+  });
+
+  testWidgets('an agent with no established modes says so, in one row', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: PermissionModePicker(
+              descriptor: null,
+              selection: PermissionSelection.empty,
+              onChanged: _ignore,
+              agentName: 'Mystery CLI',
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Not established'), findsOneWidget);
+
+    await tester.tap(find.byType(PermissionModePicker));
+    await tester.pumpAndSettle();
+    expect(find.text('No permission modes established'), findsOneWidget);
+    expect(find.textContaining('Mystery CLI'), findsOneWidget);
   });
 
   testWidgets('the rows are the house two-line menu row', (tester) async {
     // They were a `Row`/`Column` of their own inside a plain `PopupMenuItem`,
     // beside menus built from `DesktopMenuItem` — a different gutter and
     // Material's own label size.
-    await pump(tester);
+    await pump(tester, descriptor: claude);
     await tester.tap(find.byType(PermissionModePicker));
     await tester.pumpAndSettle();
 
     expect(
-      find.byType(DesktopMenuDetailItem<PermissionMode>),
-      findsNWidgets(PermissionMode.values.length),
+      find.byType(DesktopMenuDetailItem<PermissionAxisChoice>),
+      findsNWidgets(6),
     );
     // Selected is the checked one, and only it. (The chip's own face carries a
     // check too, so the search is confined to the menu.)
     expect(
       find.descendant(
-        of: find.byType(DesktopMenuDetailItem<PermissionMode>),
+        of: find.byType(DesktopMenuDetailItem<PermissionAxisChoice>),
         matching: find.byIcon(AppIcons.check),
       ),
       findsOneWidget,
@@ -108,7 +170,7 @@ void main() {
       tester
           .getSize(
             find.widgetWithText(
-              DesktopMenuDetailItem<PermissionMode>,
+              DesktopMenuDetailItem<PermissionAxisChoice>,
               'Bypass (full autonomy)',
             ),
           )
@@ -116,15 +178,6 @@ void main() {
       greaterThanOrEqualTo(Chrome.menuRowTall),
     );
   });
-
-  testWidgets('a selection the agent cannot express is flagged, not hidden', (
-    tester,
-  ) async {
-    // The state a carried mode lands in when the target has no equivalent:
-    // nothing is passed and the agent's own default applies, and the control
-    // has to say that rather than quietly showing a mode that is not in force.
-    await pump(tester, selected: PermissionMode.acceptEdits);
-    expect(find.text('Accept edits'), findsOneWidget);
-    expect(find.text('· not enforced'), findsOneWidget);
-  });
 }
+
+void _ignore(PermissionSelection _) {}

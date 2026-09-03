@@ -2,7 +2,7 @@ import '../../agents/domain/agent_descriptor.dart';
 import '../../agents/domain/agent_installation.dart';
 import '../../environments/domain/environment_path.dart';
 import '../../repositories/domain/repository.dart';
-import '../../settings/domain/permission_mode.dart';
+import '../../agents/domain/agent_permission_support.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import 'session_lineage.dart';
 
@@ -62,7 +62,7 @@ SessionView defaultViewFor(AgentDescriptor? descriptor) =>
 /// Loop 33's audit found permission mode resolved in eight places with three
 /// different answers — the sharpest being a *new* session started under the
 /// "existing sessions" preference. This enum is the fix: callers say what they
-/// are doing, and exactly one place turns that into a [PermissionMode].
+/// are doing, and exactly one place turns that into a selection.
 enum SessionPurpose {
   /// A conversation that does not exist yet, whatever it is seeded with.
   newSession,
@@ -175,7 +175,7 @@ class SessionLaunchRequest {
   /// Escape hatch for a caller that genuinely knows better than the setting.
   /// Unused by any in-app path; kept so "the setting decides" stays true by
   /// inspection rather than by convention.
-  final PermissionMode? permissionOverride;
+  final PermissionSelection? permissionOverride;
 
   /// The model this launch should record and run under, or null to leave the
   /// session's own choice — and, failing that, the default — alone.
